@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -87,7 +88,7 @@ export default function AppNav({ businessName }: { businessName?: string }) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center gap-6 h-14">
         {/* Logo */}
         <Link href="/dashboard" className="flex items-center gap-2 flex-shrink-0">
-          <img src="/nwi-logo.png" alt="National Wrench Index Suite™" className="h-8 w-auto" />
+          <Image src="/nwi-logo.png" alt="National Wrench Index Suite™" width={1096} height={602} className="h-8 w-auto" priority />
         </Link>
 
         {businessName && (
