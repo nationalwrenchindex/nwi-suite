@@ -1,3 +1,4 @@
+import { Suspense } from 'react'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import AppNav from '@/components/layout/AppNav'
@@ -25,7 +26,9 @@ export default async function BillingPage() {
   return (
     <div className="min-h-dvh bg-dark flex flex-col">
       <AppNav businessName={profile.business_name} />
-      <BillingClient subscription={subscription} plans={PLANS} />
+      <Suspense fallback={null}>
+        <BillingClient subscription={subscription} plans={PLANS} />
+      </Suspense>
     </div>
   )
 }

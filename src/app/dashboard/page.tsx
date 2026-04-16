@@ -359,8 +359,8 @@ export default async function DashboardPage() {
   }
 
   // ── Derived KPIs ──
-  const todayJobs        = (todayJobsRaw ?? []) as TodayJob[]
-  const outstandingInvs  = (outstandingInvoicesRaw ?? []) as OutstandingInvoice[]
+  const todayJobs        = (todayJobsRaw ?? []) as unknown as TodayJob[]
+  const outstandingInvs  = (outstandingInvoicesRaw ?? []) as unknown as OutstandingInvoice[]
   const revenueMTD       = (paidInvoicesRaw ?? []).reduce((s, inv) => s + Number(inv.total), 0)
   const outstandingTotal = outstandingInvs.reduce((s, inv) => s + Number(inv.total), 0)
   const overdueCount     = outstandingInvs.filter(i => i.status === 'overdue' || (i.due_date && i.due_date < todayStr)).length
