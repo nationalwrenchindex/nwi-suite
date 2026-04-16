@@ -268,7 +268,7 @@ export default function BillingClient({
   // Handle redirect-back from Stripe
   useEffect(() => {
     if (searchParams.get('success') === 'true') {
-      setToast({ type: 'success', msg: 'Subscription activated! Welcome to NWI Suite.' })
+      setToast({ type: 'success', msg: 'Subscription activated! Welcome to National Wrench Index Suite.' })
     } else if (searchParams.get('canceled') === 'true') {
       setToast({ type: 'error', msg: 'Checkout was cancelled. No charge was made.' })
     }

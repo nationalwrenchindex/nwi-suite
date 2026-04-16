@@ -12,13 +12,6 @@ interface NavItem {
   active: boolean
 }
 
-function WrenchIcon() {
-  return (
-    <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-    </svg>
-  )
-}
 
 export default function AppNav({ businessName }: { businessName?: string }) {
   const pathname = usePathname()
@@ -93,13 +86,8 @@ export default function AppNav({ businessName }: { businessName?: string }) {
     <header className="border-b border-dark-border bg-dark-card sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center gap-6 h-14">
         {/* Logo */}
-        <Link href="/dashboard" className="flex items-center gap-2.5 flex-shrink-0">
-          <div className="w-7 h-7 bg-orange rounded-md flex items-center justify-center">
-            <WrenchIcon />
-          </div>
-          <span className="font-condensed font-bold text-white text-sm tracking-widest hidden md:block">
-            NWI
-          </span>
+        <Link href="/dashboard" className="flex items-center gap-2 flex-shrink-0">
+          <img src="/nwi-logo.png" alt="National Wrench Index Suite™" className="h-8 w-auto" />
         </Link>
 
         {businessName && (

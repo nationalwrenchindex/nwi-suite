@@ -6,7 +6,7 @@ import BillingClient from '@/components/billing/BillingClient'
 import { getSubscription } from '@/lib/subscription'
 import { PLANS } from '@/lib/stripe'
 
-export const metadata = { title: 'Billing — NWI Suite' }
+export const metadata = { title: 'Billing — National Wrench Index Suite' }
 
 export default async function BillingPage() {
   const supabase = await createClient()

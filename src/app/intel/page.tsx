@@ -4,7 +4,7 @@ import AppNav from '@/components/layout/AppNav'
 import IntelClient from '@/components/intel/IntelClient'
 import { getModuleAccess } from '@/lib/subscription'
 
-export const metadata = { title: 'Intel Hub' }
+export const metadata = { title: 'Intel Hub — National Wrench Index Suite' }
 
 export default async function IntelPage() {
   const supabase = await createClient()

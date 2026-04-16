@@ -5,7 +5,7 @@ import AppNav from '@/components/layout/AppNav'
 import { STATUS_CONFIG, formatTime } from '@/lib/scheduler'
 import type { JobStatus } from '@/types/jobs'
 
-export const metadata = { title: 'Dashboard — NWI Suite' }
+export const metadata = { title: 'Dashboard — National Wrench Index Suite' }
 
 // ─── Local types ──────────────────────────────────────────────────────────────
 

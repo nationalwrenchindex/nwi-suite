@@ -1,24 +1,7 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Account',
-}
-
-// Shared wrench SVG icon
-function WrenchIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.75}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-    </svg>
-  )
+  title: 'National Wrench Index Suite',
 }
 
 const FEATURES = [
@@ -43,17 +26,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           {/* Logo */}
           <div>
             <div className="flex items-center gap-3 mb-12">
-              <div className="w-10 h-10 bg-orange rounded-lg flex items-center justify-center flex-shrink-0">
-                <WrenchIcon className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <p className="font-condensed font-bold text-white text-xl leading-tight tracking-wider">
-                  NATIONAL WRENCH INDEX
-                </p>
-                <p className="text-white/50 text-xs tracking-widest uppercase">
-                  Pro Suite
-                </p>
-              </div>
+              <img src="/nwi-logo.png" alt="National Wrench Index Suite™" className="h-12 w-auto" />
             </div>
 
             <h2 className="font-condensed font-bold text-white text-4xl xl:text-5xl leading-tight mb-4">
@@ -95,12 +68,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       <div className="flex-1 flex flex-col overflow-y-auto">
         {/* Mobile logo strip */}
         <div className="lg:hidden flex items-center gap-3 p-5 border-b border-dark-border">
-          <div className="w-8 h-8 bg-orange rounded-md flex items-center justify-center">
-            <WrenchIcon className="w-4 h-4 text-white" />
-          </div>
-          <p className="font-condensed font-bold text-white text-lg tracking-wider">
-            NATIONAL WRENCH INDEX
-          </p>
+          <img src="/nwi-logo.png" alt="National Wrench Index Suite™" className="h-8 w-auto" />
         </div>
 
         <div className="flex-1 flex items-start justify-center p-6 sm:p-10">

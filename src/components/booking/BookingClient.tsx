@@ -610,7 +610,7 @@ function BookingHeader({ bizName, profile }: { bizName: string; profile: PublicP
         </div>
         <div className="hidden sm:flex flex-col items-end">
           <p className="text-white/20 text-[9px] uppercase tracking-widest">Powered by</p>
-          <p className="font-condensed font-bold text-white/40 text-xs tracking-wide">NWI SUITE</p>
+          <p className="font-condensed font-bold text-white/40 text-xs tracking-wide">NATIONAL WRENCH INDEX SUITE</p>
         </div>
       </div>
     </header>

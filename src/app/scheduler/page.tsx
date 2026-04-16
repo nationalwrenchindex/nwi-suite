@@ -4,7 +4,7 @@ import AppNav from '@/components/layout/AppNav'
 import SchedulerClient from '@/components/scheduler/SchedulerClient'
 import { getModuleAccess } from '@/lib/subscription'
 
-export const metadata = { title: 'Scheduler' }
+export const metadata = { title: 'Scheduler — National Wrench Index Suite' }
 
 export default async function SchedulerPage() {
   const supabase = await createClient()

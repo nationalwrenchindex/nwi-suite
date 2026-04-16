@@ -57,7 +57,7 @@ function LoginForm() {
           WELCOME BACK
         </h1>
         <p className="text-white/50 text-sm">
-          Sign in to your National Wrench Index account.
+          Sign in to your National Wrench Index Suite&#8482; account.
         </p>
       </div>
 
