@@ -95,11 +95,10 @@ function JobCard({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function CalendarTab({ onBookJob }: { onBookJob: () => void }) {
-  const today = new Date()
-  const [viewYear,  setViewYear]  = useState(today.getFullYear())
-  const [viewMonth, setViewMonth] = useState(today.getMonth()) // 0-based
+  const [viewYear,  setViewYear]  = useState(() => new Date().getFullYear())
+  const [viewMonth, setViewMonth] = useState(() => new Date().getMonth()) // 0-based
   const [calendar,  setCalendar]  = useState<CalendarData>({})
-  const [selected,  setSelected]  = useState<string>(todayStr())
+  const [selected,  setSelected]  = useState<string>(() => todayStr())
   const [loading,   setLoading]   = useState(true)
   const [error,     setError]     = useState<string | null>(null)
 
@@ -171,7 +170,7 @@ export default function CalendarTab({ onBookJob }: { onBookJob: () => void }) {
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => { setViewYear(today.getFullYear()); setViewMonth(today.getMonth()); setSelected(todayStr()) }}
+              onClick={() => { const t = new Date(); setViewYear(t.getFullYear()); setViewMonth(t.getMonth()); setSelected(todayStr()) }}
               className="text-xs text-orange hover:text-orange-light transition-colors border border-orange/30 rounded-lg px-2 py-1"
             >
               Today

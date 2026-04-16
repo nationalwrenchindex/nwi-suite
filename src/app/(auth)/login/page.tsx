@@ -57,7 +57,10 @@ function LoginForm() {
           WELCOME BACK
         </h1>
         <p className="text-white/50 text-sm">
-          Sign in to your National Wrench Index Suite&#8482; account.
+          Sign in to your{' '}
+          <span style={{ color: '#FF6600' }}>National</span>{' '}
+          <span style={{ color: '#2969B0' }}>Wrench Index</span>{' '}
+          Suite&#8482; account.
         </p>
       </div>
 

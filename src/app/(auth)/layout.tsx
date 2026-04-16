@@ -1,5 +1,4 @@
 import type { Metadata } from 'next'
-import Image from 'next/image'
 
 export const metadata: Metadata = {
   title: 'National Wrench Index Suite',
@@ -26,8 +25,9 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <div className="relative z-10 flex flex-col justify-between h-full p-10">
           {/* Logo */}
           <div>
-            <div className="flex items-center gap-3 mb-12">
-              <Image src="/nwi-logo.png" alt="National Wrench Index Suite™" width={1096} height={602} className="h-12 w-auto" priority />
+            <div className="mb-12">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/nwi-logo.png" alt="National Wrench Index Suite™" className="h-14 w-auto" />
             </div>
 
             <h2 className="font-condensed font-bold text-white text-4xl xl:text-5xl leading-tight mb-4">
@@ -68,8 +68,9 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
       {/* ── Right form panel ── */}
       <div className="flex-1 flex flex-col overflow-y-auto">
         {/* Mobile logo strip */}
-        <div className="lg:hidden flex items-center gap-3 p-5 border-b border-dark-border">
-          <Image src="/nwi-logo.png" alt="National Wrench Index Suite™" width={1096} height={602} className="h-8 w-auto" />
+        <div className="lg:hidden flex items-center gap-3 p-4 border-b border-dark-border bg-white">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/nwi-logo.png" alt="National Wrench Index Suite™" className="h-8 w-auto" />
         </div>
 
         <div className="flex-1 flex items-start justify-center p-6 sm:p-10">

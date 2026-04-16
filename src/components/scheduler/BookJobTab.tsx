@@ -17,23 +17,23 @@ interface FormState {
   internal_notes: string
 }
 
-const todayStr = new Date().toISOString().slice(0, 10)
-
-const DEFAULT_FORM: FormState = {
-  job_date:                   todayStr,
-  job_time:                   '',
-  service_type:               '',
-  custom_service:             '',
-  customer_id:                '',
-  vehicle_id:                 '',
-  location_address:           '',
-  estimated_duration_minutes: '60',
-  notes:                      '',
-  internal_notes:             '',
+function makeDefaultForm(): FormState {
+  return {
+    job_date:                   new Date().toISOString().slice(0, 10),
+    job_time:                   '',
+    service_type:               '',
+    custom_service:             '',
+    customer_id:                '',
+    vehicle_id:                 '',
+    location_address:           '',
+    estimated_duration_minutes: '60',
+    notes:                      '',
+    internal_notes:             '',
+  }
 }
 
 export default function BookJobTab({ onSuccess }: { onSuccess: () => void }) {
-  const [form,      setForm]      = useState<FormState>(DEFAULT_FORM)
+  const [form,      setForm]      = useState<FormState>(makeDefaultForm)
   const [customers, setCustomers] = useState<CustomerWithVehicles[]>([])
   const [loading,   setLoading]   = useState(false)
   const [custLoad,  setCustLoad]  = useState(true)
@@ -108,7 +108,7 @@ export default function BookJobTab({ onSuccess }: { onSuccess: () => void }) {
       }
 
       setSuccess(true)
-      setForm(DEFAULT_FORM)
+      setForm(makeDefaultForm())
       setTimeout(() => {
         setSuccess(false)
         onSuccess()
