@@ -119,14 +119,26 @@ Provide the complete technical guide for this specific vehicle and job.`
 
   let guide: TechGuide
   try {
-    // Strip any accidental markdown code fences
-    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
-    guide = JSON.parse(cleaned)
+    let text = raw.trim()
+
+    // Strip markdown code fences wherever they appear (not just anchored to start/end)
+    text = text.replace(/^```(?:json|JSON)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
+
+    // Extract the outermost JSON object — handles any preamble/postamble text Claude adds
+    const firstBrace = text.indexOf('{')
+    const lastBrace  = text.lastIndexOf('}')
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      text = text.slice(firstBrace, lastBrace + 1)
+    }
+
+    console.log('[tech-guide] Attempting JSON parse, extracted length:', text.length)
+    guide = JSON.parse(text)
   } catch (err) {
-    console.error('[tech-guide] JSON parse failed. Raw response (first 800 chars):', raw.slice(0, 800))
-    console.error('[tech-guide] Parse error:', err)
+    console.error('[tech-guide] JSON parse failed.')
+    console.error('[tech-guide] Raw Claude response (full):', raw)
+    console.error('[tech-guide] Parse error:', err instanceof Error ? err.message : err)
     return NextResponse.json(
-      { error: 'AI returned an unexpected format. Try again.' },
+      { error: `AI response could not be parsed: ${err instanceof Error ? err.message : 'JSON parse error'}` },
       { status: 502 },
     )
   }
