@@ -78,7 +78,7 @@ Provide the complete technical guide for this specific vehicle and job.`
         'content-type':      'application/json',
       },
       body: JSON.stringify({
-        model:      'claude-sonnet-4-5',
+        model:      'claude-sonnet-4-5-20250514',
         max_tokens: 2048,
         system:     SYSTEM_PROMPT,
         messages:   [{ role: 'user', content: userMessage }],
