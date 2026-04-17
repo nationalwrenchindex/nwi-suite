@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import type {
   QWVehicle,
   SelectedJob,
@@ -167,6 +167,190 @@ function CategoryIcon({ id, className }: { id: string; className?: string }) {
   }
 }
 
+// ─── VIN Camera Scanner ──────────────────────────────────────────────────────
+
+const VIN_RE = /^[A-HJ-NPR-Z0-9]{17}$/
+const ZXING_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/@zxing/library/0.21.3/umd/index.min.js'
+
+function VINScanner({
+  onScan,
+  onCancel,
+}: {
+  onScan:   (vin: string) => void
+  onCancel: () => void
+}) {
+  const videoRef  = useRef<HTMLVideoElement>(null)
+  const readerRef = useRef<any>(null)
+  const [phase, setPhase] = useState<'loading' | 'scanning' | 'found' | 'error'>('loading')
+  const [msg,   setMsg]   = useState('Loading scanner…')
+
+  useEffect(() => {
+    let alive = true
+
+    async function init() {
+      // Lazy-load ZXing UMD from cdnjs only when scanner opens
+      if (!(window as any).ZXing) {
+        await new Promise<void>((resolve, reject) => {
+          const s   = document.createElement('script')
+          s.src     = ZXING_CDN
+          s.onload  = () => resolve()
+          s.onerror = () => reject(new Error('ZXing library failed to load from CDN'))
+          document.head.appendChild(s)
+        })
+      }
+
+      if (!alive) return
+
+      const ZXing = (window as any).ZXing
+      const hints = new Map()
+      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+        ZXing.BarcodeFormat.CODE_39,
+        ZXing.BarcodeFormat.CODE_128,
+      ])
+
+      const reader = new ZXing.BrowserMultiFormatReader(hints)
+      readerRef.current = reader
+
+      setPhase('scanning')
+      setMsg('Point the camera at the VIN barcode on the door jamb sticker')
+
+      await reader.decodeFromConstraints(
+        {
+          audio: false,
+          video: {
+            facingMode: { ideal: 'environment' },
+            width:      { ideal: 1920 },
+            height:     { ideal: 1080 },
+          },
+        },
+        videoRef.current!,
+        (result: any) => {
+          if (!alive || !result) return
+          // Strip any non-VIN characters the barcode may include
+          const raw  = result.getText().trim().toUpperCase()
+          const text = raw.replace(/[^A-HJ-NPR-Z0-9]/g, '')
+          if (VIN_RE.test(text)) {
+            setPhase('found')
+            setMsg(`VIN detected: ${text}`)
+            reader.reset()
+            alive = false
+            onScan(text)
+          }
+        },
+      )
+    }
+
+    init().catch(err => {
+      if (!alive) return
+      const name = (err as any)?.name ?? ''
+      if (name === 'NotAllowedError') {
+        setPhase('error')
+        setMsg('Camera access denied. Allow camera access in browser settings and try again.')
+      } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+        setPhase('error')
+        setMsg('No camera found on this device.')
+      } else {
+        setPhase('error')
+        setMsg((err as any)?.message ?? 'Scanner failed to start.')
+      }
+    })
+
+    return () => {
+      alive = false
+      try { readerRef.current?.reset() } catch { /* ignore */ }
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function dismiss() {
+    try { readerRef.current?.reset() } catch { /* ignore */ }
+    onCancel()
+  }
+
+  return (
+    <>
+      <style>{`
+        @keyframes qw-scanline {
+          0%, 100% { top: 2px; }
+          50%       { top: calc(100% - 4px); }
+        }
+      `}</style>
+
+      <div className="fixed inset-0 z-50 bg-black overflow-hidden">
+        {/* Live camera feed fills entire background */}
+        <video
+          ref={videoRef}
+          muted
+          playsInline
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+
+        {/* Semi-transparent dim layer + all UI */}
+        <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center gap-6 px-6">
+
+          {/* Guide label */}
+          <p className="text-white/50 text-xs uppercase tracking-widest font-medium">
+            {phase === 'loading' ? 'Initializing camera…' : 'Align barcode within frame'}
+          </p>
+
+          {/* Scan frame — wide & short for barcode orientation */}
+          <div className="relative" style={{ width: 300, height: 108 }}>
+            {/* Corner brackets */}
+            <span style={{ position:'absolute', top:0,    left:0,  width:24, height:24, borderTop:'3px solid #FF6600',    borderLeft:'3px solid #FF6600'  }} />
+            <span style={{ position:'absolute', top:0,    right:0, width:24, height:24, borderTop:'3px solid #FF6600',    borderRight:'3px solid #FF6600' }} />
+            <span style={{ position:'absolute', bottom:0, left:0,  width:24, height:24, borderBottom:'3px solid #FF6600', borderLeft:'3px solid #FF6600'  }} />
+            <span style={{ position:'absolute', bottom:0, right:0, width:24, height:24, borderBottom:'3px solid #FF6600', borderRight:'3px solid #FF6600' }} />
+
+            {/* Scan line — only visible while actively scanning */}
+            {phase === 'scanning' && (
+              <div style={{
+                position:   'absolute',
+                left:        6,
+                right:       6,
+                height:      2,
+                background: 'linear-gradient(90deg, transparent, #FF6600 30%, #FF6600 70%, transparent)',
+                boxShadow:  '0 0 8px 2px rgba(255,102,0,0.55)',
+                animation:  'qw-scanline 1.6s ease-in-out infinite',
+              }} />
+            )}
+          </div>
+
+          {/* Status indicator */}
+          <div className="flex flex-col items-center gap-3 max-w-xs text-center">
+            {phase === 'loading' && (
+              <div className="w-6 h-6 border-2 border-orange border-t-transparent rounded-full animate-spin" />
+            )}
+            {phase === 'found' && (
+              <div className="w-8 h-8 rounded-full bg-success/20 border border-success/40 flex items-center justify-center">
+                <svg className="w-4 h-4 text-success" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </div>
+            )}
+            <p className={`text-sm leading-relaxed ${
+              phase === 'error' ? 'text-danger' :
+              phase === 'found' ? 'text-success font-medium' :
+              'text-white/70'
+            }`}>
+              {msg}
+            </p>
+          </div>
+
+          <p className="text-white/25 text-xs text-center leading-relaxed" style={{ maxWidth: 240 }}>
+            Reads Code 39 &amp; Code 128 barcodes on door jamb VIN stickers
+          </p>
+
+          <button
+            onClick={dismiss}
+            className="px-8 py-3 border border-white/25 hover:border-white/50 text-white/70 hover:text-white rounded-xl text-sm font-medium transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </>
+  )
+}
+
 // ─── Tab 1: Vehicle ───────────────────────────────────────────────────────────
 
 function VehicleTab({
@@ -182,6 +366,7 @@ function VehicleTab({
   const [loading,      setLoading]      = useState(false)
   const [error,        setError]        = useState<string | null>(null)
   const [manual,       setManual]       = useState(false)
+  const [showScanner,  setShowScanner]  = useState(false)
   const [manYear,      setManYear]      = useState(vehicle?.year  ?? '')
   const [manMake,      setManMake]      = useState(vehicle?.make  ?? '')
   const [manModel,     setManModel]     = useState(vehicle?.model ?? '')
@@ -195,8 +380,8 @@ function VehicleTab({
       .catch(() => {})
   }, [])
 
-  async function decodeVin() {
-    const v = vin.trim().toUpperCase()
+  async function decodeVin(vinOverride?: string) {
+    const v = (vinOverride ?? vin).trim().toUpperCase()
     if (v.length !== 17) { setError('VIN must be exactly 17 characters.'); return }
     setLoading(true); setError(null)
     try {
@@ -211,6 +396,13 @@ function VehicleTab({
     }
   }
 
+  function handleScanResult(scannedVin: string) {
+    setShowScanner(false)
+    setVin(scannedVin)
+    setManual(false)
+    decodeVin(scannedVin)
+  }
+
   function applyManual() {
     if (!manYear || !manMake || !manModel) { setError('Year, make and model are required.'); return }
     setError(null)
@@ -219,21 +411,41 @@ function VehicleTab({
 
   return (
     <div className="space-y-6">
+      {/* VIN camera scanner overlay — rendered at top level so it covers full screen */}
+      {showScanner && (
+        <VINScanner
+          onScan={handleScanResult}
+          onCancel={() => setShowScanner(false)}
+        />
+      )}
+
       {/* VIN Entry */}
       {!manual && (
         <div className="nwi-card">
           <p className="text-white/40 text-xs uppercase tracking-widest mb-3">Enter VIN</p>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap sm:flex-nowrap">
             <input
-              className="nwi-input flex-1 font-mono tracking-widest uppercase"
+              className="nwi-input flex-1 font-mono tracking-widest uppercase min-w-0"
               placeholder="17-character VIN"
               maxLength={17}
               value={vin}
               onChange={e => setVin(e.target.value.toUpperCase())}
               onKeyDown={e => e.key === 'Enter' && decodeVin()}
             />
+            {/* Scan VIN button */}
             <button
-              onClick={decodeVin}
+              onClick={() => { setError(null); setShowScanner(true) }}
+              className="flex items-center gap-1.5 px-3 py-2 border border-orange/40 hover:border-orange/70 bg-orange/10 hover:bg-orange/20 text-orange text-sm font-medium rounded-lg transition-colors whitespace-nowrap"
+              title="Scan VIN barcode with camera"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+              </svg>
+              <span className="hidden xs:inline">Scan</span>
+            </button>
+            <button
+              onClick={() => decodeVin()}
               disabled={loading || vin.length !== 17}
               className="px-4 py-2 bg-orange hover:bg-orange-hover disabled:opacity-40 text-white font-condensed font-bold text-sm rounded-lg transition-colors whitespace-nowrap"
             >
