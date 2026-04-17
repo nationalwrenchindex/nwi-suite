@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import type { Subscription } from '@/lib/subscription'
-import { MODULE_LABELS, type PlanTier } from '@/lib/stripe'
+import { MODULE_LABELS, type PlanTier } from '@/lib/stripe-plans'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

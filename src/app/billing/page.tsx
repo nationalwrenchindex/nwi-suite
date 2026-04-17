@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import AppNav from '@/components/layout/AppNav'
 import BillingClient from '@/components/billing/BillingClient'
 import { getSubscription } from '@/lib/subscription'
-import { PLANS } from '@/lib/stripe'
+import { PLANS } from '@/lib/stripe-plans'
 
 export const metadata = { title: 'Billing — National Wrench Index Suite' }
 
