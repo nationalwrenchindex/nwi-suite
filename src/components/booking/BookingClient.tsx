@@ -96,8 +96,10 @@ function MiniCalendar({
   onSelect: (date: string) => void
   workingHours: WorkingHours | null
 }) {
-  const [year, setYear]   = useState(() => new Date().getFullYear())
-  const [month, setMonth] = useState(() => new Date().getMonth())
+  const [year, setYear]     = useState(() => new Date().getFullYear())
+  const [month, setMonth]   = useState(() => new Date().getMonth())
+  const [todayDate, setTodayDate] = useState('')
+  useEffect(() => setTodayDate(toDateStr(new Date())), [])
   const grid = buildCalendarGrid(year, month)
   const label = monthLabel(year, month)
 
@@ -150,7 +152,7 @@ function MiniCalendar({
           const enabled = isEnabled(day)
           const dateStr = toDateStr(new Date(year, month, day))
           const isSel   = selected === dateStr
-          const isToday = toDateStr(new Date()) === dateStr
+          const isToday = !!todayDate && todayDate === dateStr
           return (
             <button
               key={i}

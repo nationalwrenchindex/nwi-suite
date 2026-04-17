@@ -98,7 +98,8 @@ export default function CalendarTab({ onBookJob }: { onBookJob: () => void }) {
   const [viewYear,  setViewYear]  = useState(() => new Date().getFullYear())
   const [viewMonth, setViewMonth] = useState(() => new Date().getMonth()) // 0-based
   const [calendar,  setCalendar]  = useState<CalendarData>({})
-  const [selected,  setSelected]  = useState<string>(() => todayStr())
+  const [selected,  setSelected]  = useState('')
+  const [todayS,    setTodayS]    = useState('')
   const [loading,   setLoading]   = useState(true)
   const [error,     setError]     = useState<string | null>(null)
 
@@ -120,6 +121,13 @@ export default function CalendarTab({ onBookJob }: { onBookJob: () => void }) {
   useEffect(() => {
     fetchMonth(viewYear, viewMonth)
   }, [viewYear, viewMonth, fetchMonth])
+
+  // Set today's date after mount to avoid SSR/client hydration mismatch
+  useEffect(() => {
+    const t = todayStr()
+    setSelected(t)
+    setTodayS(t)
+  }, [])
 
   function prevMonth() {
     if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11) }
@@ -144,7 +152,6 @@ export default function CalendarTab({ onBookJob }: { onBookJob: () => void }) {
   }
 
   const grid    = buildCalendarGrid(viewYear, viewMonth)
-  const todayS  = todayStr()
   const dayJobs = calendar[selected] ?? []
 
   return (
@@ -274,10 +281,10 @@ export default function CalendarTab({ onBookJob }: { onBookJob: () => void }) {
           <div className="flex items-center justify-between mb-4">
             <div>
               <p className="text-white/40 text-xs uppercase tracking-widest">
-                {new Date(selected + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' })}
+                {selected ? new Date(selected + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' }) : ''}
               </p>
               <p className="font-condensed font-bold text-xl text-white tracking-wide">
-                {new Date(selected + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                {selected ? new Date(selected + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }) : ''}
               </p>
             </div>
             <span className={`font-condensed font-bold text-2xl ${dayJobs.length > 0 ? 'text-orange' : 'text-white/20'}`}>
