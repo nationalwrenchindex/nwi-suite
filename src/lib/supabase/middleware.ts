@@ -39,12 +39,13 @@ export async function updateSession(request: NextRequest) {
     path.startsWith('/update-password')
 
   const isProtected =
-    path.startsWith('/dashboard')  ||
-    path.startsWith('/onboarding') ||
-    path.startsWith('/scheduler')  ||
-    path.startsWith('/intel')      ||
-    path.startsWith('/financials') ||
-    path.startsWith('/billing')
+    path.startsWith('/dashboard')    ||
+    path.startsWith('/onboarding')   ||
+    path.startsWith('/scheduler')    ||
+    path.startsWith('/intel')        ||
+    path.startsWith('/financials')   ||
+    path.startsWith('/billing')      ||
+    path.startsWith('/quickwrench')
 
   // Unauthenticated user trying to access a protected route
   if (!user && isProtected) {

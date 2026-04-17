@@ -605,8 +605,19 @@ export default async function DashboardPage() {
         {/* ── Module navigation ── */}
         <div>
           <p className="text-white/30 text-xs uppercase tracking-widest mb-3">Quick Access</p>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             {[
+              {
+                href: '/quickwrench',
+                label: 'QUICKWRENCH',
+                sub: 'Parts · Specs · Quotes',
+                accent: 'orange' as const,
+                icon: (
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                  </svg>
+                ),
+              },
               {
                 href: '/scheduler',
                 label: 'SCHEDULER',
