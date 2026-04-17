@@ -43,8 +43,10 @@ export async function POST(req: NextRequest) {
 
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
+    console.error('[tech-guide] ANTHROPIC_API_KEY is not set in environment variables')
     return NextResponse.json({ error: 'AI service not configured.' }, { status: 503 })
   }
+  console.log('[tech-guide] API key prefix:', apiKey.slice(0, 14) + '…')
 
   let body: TechGuideRequest
   try {
@@ -78,7 +80,7 @@ Provide the complete technical guide for this specific vehicle and job.`
         'content-type':      'application/json',
       },
       body: JSON.stringify({
-        model:      'claude-sonnet-4-5-20250514',
+        model:      'claude-sonnet-4-5-20250514', // exact versioned model ID
         max_tokens: 2048,
         system:     SYSTEM_PROMPT,
         messages:   [{ role: 'user', content: userMessage }],

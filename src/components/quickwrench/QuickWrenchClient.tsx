@@ -181,6 +181,8 @@ function VINScanner({
 }) {
   const videoRef  = useRef<HTMLVideoElement>(null)
   const readerRef = useRef<any>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const rafRef    = useRef<number>(0)
   const [phase, setPhase] = useState<'loading' | 'scanning' | 'found' | 'error'>('loading')
   const [msg,   setMsg]   = useState('Loading scanner…')
 
@@ -188,7 +190,7 @@ function VINScanner({
     let alive = true
 
     async function init() {
-      // Lazy-load ZXing UMD from cdnjs only when scanner opens
+      // ── 1. Lazy-load ZXing UMD from cdnjs ──────────────────────────────
       if (!(window as any).ZXing) {
         await new Promise<void>((resolve, reject) => {
           const s   = document.createElement('script')
@@ -198,46 +200,76 @@ function VINScanner({
           document.head.appendChild(s)
         })
       }
-
       if (!alive) return
 
+      // ── 2. Request camera stream via getUserMedia directly ─────────────
+      // Using getUserMedia explicitly (not delegating to ZXing) so we can
+      // set video.srcObject ourselves and guarantee the feed is visible.
+      let stream: MediaStream
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { ideal: 'environment' },
+            width:      { ideal: 1280 },
+            height:     { ideal: 720 },
+          },
+        })
+      } catch (err) {
+        throw err // caught below for user-facing error messages
+      }
+      streamRef.current = stream
+      if (!alive) { stream.getTracks().forEach(t => t.stop()); return }
+
+      // ── 3. Wire stream into video element and start playback ───────────
+      const video = videoRef.current!
+      video.srcObject = stream
+      video.setAttribute('playsinline', 'true')
+      video.muted = true
+      await video.play()
+      if (!alive) return
+
+      setPhase('scanning')
+      setMsg('Point the camera at the VIN barcode on the door jamb sticker')
+
+      // ── 4. Set up ZXing reader for canvas-based frame decoding ─────────
       const ZXing = (window as any).ZXing
       const hints = new Map()
       hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
         ZXing.BarcodeFormat.CODE_39,
         ZXing.BarcodeFormat.CODE_128,
       ])
-
       const reader = new ZXing.BrowserMultiFormatReader(hints)
       readerRef.current = reader
 
-      setPhase('scanning')
-      setMsg('Point the camera at the VIN barcode on the door jamb sticker')
+      const canvas = document.createElement('canvas')
+      const ctx    = canvas.getContext('2d')!
 
-      await reader.decodeFromConstraints(
-        {
-          audio: false,
-          video: {
-            facingMode: { ideal: 'environment' },
-            width:      { ideal: 1920 },
-            height:     { ideal: 1080 },
-          },
-        },
-        videoRef.current!,
-        (result: any) => {
-          if (!alive || !result) return
-          // Strip any non-VIN characters the barcode may include
-          const raw  = result.getText().trim().toUpperCase()
-          const text = raw.replace(/[^A-HJ-NPR-Z0-9]/g, '')
-          if (VIN_RE.test(text)) {
-            setPhase('found')
-            setMsg(`VIN detected: ${text}`)
-            reader.reset()
-            alive = false
-            onScan(text)
-          }
-        },
-      )
+      // ── 5. rAF decode loop — capture frame → ZXing canvas decode ───────
+      function scanFrame() {
+        if (!alive) return
+        if (video.readyState >= video.HAVE_ENOUGH_DATA && video.videoWidth > 0) {
+          canvas.width  = video.videoWidth
+          canvas.height = video.videoHeight
+          ctx.drawImage(video, 0, 0)
+          try {
+            const result = reader.decodeFromCanvas(canvas)
+            if (result) {
+              const raw  = result.getText().trim().toUpperCase()
+              const text = raw.replace(/[^A-HJ-NPR-Z0-9]/g, '')
+              if (VIN_RE.test(text)) {
+                alive = false
+                setPhase('found')
+                setMsg(`VIN detected: ${text}`)
+                onScan(text)
+                return // stop loop
+              }
+            }
+          } catch { /* NotFoundException on every non-match — expected */ }
+        }
+        rafRef.current = requestAnimationFrame(scanFrame)
+      }
+      rafRef.current = requestAnimationFrame(scanFrame)
     }
 
     init().catch(err => {
@@ -245,10 +277,13 @@ function VINScanner({
       const name = (err as any)?.name ?? ''
       if (name === 'NotAllowedError') {
         setPhase('error')
-        setMsg('Camera access denied. Allow camera access in browser settings and try again.')
+        setMsg('Camera access denied. Allow camera access in your browser settings and try again.')
       } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
         setPhase('error')
         setMsg('No camera found on this device.')
+      } else if (name === 'NotReadableError' || name === 'TrackStartError') {
+        setPhase('error')
+        setMsg('Camera is in use by another app. Close it and try again.')
       } else {
         setPhase('error')
         setMsg((err as any)?.message ?? 'Scanner failed to start.')
@@ -257,12 +292,14 @@ function VINScanner({
 
     return () => {
       alive = false
-      try { readerRef.current?.reset() } catch { /* ignore */ }
+      cancelAnimationFrame(rafRef.current)
+      try { streamRef.current?.getTracks().forEach(t => t.stop()) } catch { /* ignore */ }
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function dismiss() {
-    try { readerRef.current?.reset() } catch { /* ignore */ }
+    cancelAnimationFrame(rafRef.current)
+    try { streamRef.current?.getTracks().forEach(t => t.stop()) } catch { /* ignore */ }
     onCancel()
   }
 
