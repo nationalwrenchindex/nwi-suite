@@ -95,8 +95,12 @@ function JobCard({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function CalendarTab({ onBookJob }: { onBookJob: () => void }) {
-  const [viewYear,  setViewYear]  = useState(() => new Date().getFullYear())
-  const [viewMonth, setViewMonth] = useState(() => new Date().getMonth()) // 0-based
+  // All date-dependent state starts as safe no-date placeholders.
+  // The mount effect sets real values client-side, preventing any
+  // server/client hydration mismatch from timezone differences.
+  const [mounted,   setMounted]   = useState(false)
+  const [viewYear,  setViewYear]  = useState(0)
+  const [viewMonth, setViewMonth] = useState(0)
   const [calendar,  setCalendar]  = useState<CalendarData>({})
   const [selected,  setSelected]  = useState('')
   const [todayS,    setTodayS]    = useState('')
@@ -119,14 +123,16 @@ export default function CalendarTab({ onBookJob }: { onBookJob: () => void }) {
   }, [])
 
   useEffect(() => {
-    fetchMonth(viewYear, viewMonth)
-  }, [viewYear, viewMonth, fetchMonth])
-
-  // Set today's date after mount to avoid SSR/client hydration mismatch
-  useEffect(() => {
-    const t = todayStr()
-    setSelected(t)
-    setTodayS(t)
+    const d = new Date()
+    const year  = d.getFullYear()
+    const month = d.getMonth()
+    setViewYear(year)
+    setViewMonth(month)
+    setSelected(todayStr())
+    setTodayS(todayStr())
+    setMounted(true)
+    fetchMonth(year, month)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   function prevMonth() {
@@ -149,6 +155,12 @@ export default function CalendarTab({ onBookJob }: { onBookJob: () => void }) {
       // Refresh the current month
       await fetchMonth(viewYear, viewMonth)
     }
+  }
+
+  // Render a neutral skeleton during SSR — avoids comparing date-dependent
+  // HTML between server (UTC) and client (local timezone).
+  if (!mounted) {
+    return <div className="h-64 animate-pulse rounded-xl bg-dark-card/50" />
   }
 
   const grid    = buildCalendarGrid(viewYear, viewMonth)

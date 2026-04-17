@@ -211,7 +211,7 @@ function ActiveSubscriptionView({
         </div>
 
         {subscription.current_period_end && (
-          <p className="text-white/25 text-xs mt-4 pt-4 border-t border-dark-border">
+          <p className="text-white/25 text-xs mt-4 pt-4 border-t border-dark-border" suppressHydrationWarning>
             {subscription.cancel_at_period_end
               ? `⚠️ Cancels on ${fmtPeriodEnd(subscription.current_period_end)}`
               : `Renews on ${fmtPeriodEnd(subscription.current_period_end)}`}
