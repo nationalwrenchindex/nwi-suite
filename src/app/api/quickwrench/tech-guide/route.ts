@@ -78,7 +78,7 @@ Provide the complete technical guide for this specific vehicle and job.`
         'content-type':      'application/json',
       },
       body: JSON.stringify({
-        model:      'claude-sonnet-4-20250514',
+        model:      'claude-sonnet-4-5',
         max_tokens: 2048,
         system:     SYSTEM_PROMPT,
         messages:   [{ role: 'user', content: userMessage }],
@@ -86,16 +86,33 @@ Provide the complete technical guide for this specific vehicle and job.`
     })
 
     if (!claudeRes.ok) {
-      const err = await claudeRes.text()
-      console.error('[tech-guide] Claude API error:', err)
-      return NextResponse.json({ error: 'AI service error. Try again.' }, { status: 502 })
+      const errBody = await claudeRes.text()
+      console.error(
+        `[tech-guide] Claude API HTTP ${claudeRes.status} ${claudeRes.statusText}:`,
+        errBody,
+      )
+      let detail = ''
+      try { detail = JSON.parse(errBody)?.error?.message ?? errBody } catch { detail = errBody }
+      return NextResponse.json(
+        { error: `AI service error (HTTP ${claudeRes.status}): ${detail}` },
+        { status: 502 },
+      )
     }
 
     const claudeData = await claudeRes.json()
+    console.log('[tech-guide] Claude response id:', claudeData.id, 'stop_reason:', claudeData.stop_reason)
     raw = claudeData.content?.[0]?.text ?? ''
+
+    if (!raw) {
+      console.error('[tech-guide] Empty text in Claude response:', JSON.stringify(claudeData))
+      return NextResponse.json({ error: 'AI returned an empty response. Try again.' }, { status: 502 })
+    }
   } catch (err) {
-    console.error('[tech-guide] fetch failed:', err)
-    return NextResponse.json({ error: 'AI service unavailable.' }, { status: 502 })
+    console.error('[tech-guide] fetch threw:', err)
+    return NextResponse.json(
+      { error: `AI service unreachable: ${err instanceof Error ? err.message : String(err)}` },
+      { status: 502 },
+    )
   }
 
   let guide: TechGuide
@@ -104,8 +121,12 @@ Provide the complete technical guide for this specific vehicle and job.`
     const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim()
     guide = JSON.parse(cleaned)
   } catch (err) {
-    console.error('[tech-guide] JSON parse failed. Raw:', raw.slice(0, 500), err)
-    return NextResponse.json({ error: 'AI returned an unexpected format. Try again.' }, { status: 502 })
+    console.error('[tech-guide] JSON parse failed. Raw response (first 800 chars):', raw.slice(0, 800))
+    console.error('[tech-guide] Parse error:', err)
+    return NextResponse.json(
+      { error: 'AI returned an unexpected format. Try again.' },
+      { status: 502 },
+    )
   }
 
   return NextResponse.json({ guide })
