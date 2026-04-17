@@ -36,10 +36,10 @@ function KpiCard({ label, value, sub, accent }: KpiCardProps) {
 }
 
 export default function OverviewTab() {
-  const today = new Date()
-  const defaultMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`
-
-  const [month,    setMonth]    = useState(defaultMonth)
+  const [month,    setMonth]    = useState(() => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+  })
   const [overview, setOverview] = useState<FinancialsOverview | null>(null)
   const [loading,  setLoading]  = useState(true)
   const [error,    setError]    = useState<string | null>(null)

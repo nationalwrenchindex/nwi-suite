@@ -71,14 +71,14 @@ export default function ExpensesTab() {
   const [toDate,     setToDate]     = useState('')
 
   // Form
-  const [form, setForm] = useState({
+  const [form, setForm] = useState(() => ({
     expense_date: today(),
     category:     'parts' as ExpenseCategory,
     description:  '',
     amount:       '',
     vendor:       '',
     notes:        '',
-  })
+  }))
 
   // ── Fetch expenses ──
   const fetchExpenses = useCallback(async (cat: string, from: string, to: string) => {

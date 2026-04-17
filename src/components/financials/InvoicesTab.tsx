@@ -83,7 +83,7 @@ export default function InvoicesTab() {
   const [payMethodMap, setPayMethodMap] = useState<Record<string, PaymentMethod>>({})
 
   // ── New invoice form state ──
-  const [form, setForm] = useState({
+  const [form, setForm] = useState(() => ({
     invoice_number:  genInvoiceNumber(),
     invoice_date:    today(),
     due_date:        '',
@@ -94,7 +94,7 @@ export default function InvoicesTab() {
     notes:           '',
     terms:           'Payment due upon receipt.',
     status:          'draft' as InvoiceStatus,
-  })
+  }))
 
   // ── Computed totals ──
   const subtotal = form.line_items.reduce((s, l) => s + l.total, 0)

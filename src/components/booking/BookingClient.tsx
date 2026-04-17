@@ -96,15 +96,15 @@ function MiniCalendar({
   onSelect: (date: string) => void
   workingHours: WorkingHours | null
 }) {
-  const today     = new Date()
-  const [year, setYear]   = useState(today.getFullYear())
-  const [month, setMonth] = useState(today.getMonth())
+  const [year, setYear]   = useState(() => new Date().getFullYear())
+  const [month, setMonth] = useState(() => new Date().getMonth())
   const grid = buildCalendarGrid(year, month)
   const label = monthLabel(year, month)
 
   function isEnabled(day: number): boolean {
     const d = new Date(year, month, day)
-    if (d < new Date(today.getFullYear(), today.getMonth(), today.getDate())) return false
+    const now = new Date()
+    if (d < new Date(now.getFullYear(), now.getMonth(), now.getDate())) return false
     if (!workingHours) return true
     const dayName = DAY_NAMES[d.getDay()]
     return workingHours[dayName]?.enabled ?? false
@@ -150,7 +150,7 @@ function MiniCalendar({
           const enabled = isEnabled(day)
           const dateStr = toDateStr(new Date(year, month, day))
           const isSel   = selected === dateStr
-          const isToday = toDateStr(today) === dateStr
+          const isToday = toDateStr(new Date()) === dateStr
           return (
             <button
               key={i}
