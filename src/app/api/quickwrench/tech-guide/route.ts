@@ -59,7 +59,7 @@ Provide the complete technical guide for this specific vehicle and job.`
       },
       body: JSON.stringify({
         model:      'claude-sonnet-4-6',
-        max_tokens: 400,
+        max_tokens: 1200,
         system:     SYSTEM_PROMPT,
         messages:   [{ role: 'user', content: userMessage }],
       }),
