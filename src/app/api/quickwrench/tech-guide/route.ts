@@ -7,40 +7,12 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import type { TechGuideRequest, TechGuide } from '@/types/quickwrench'
 
-const SYSTEM_PROMPT = `You are a master automotive technician with 20+ years of experience.
+const SYSTEM_PROMPT = `You are an automotive technician. Respond ONLY with raw JSON — no markdown, no backticks, no preamble. First character must be {, last must be }.
 
-CRITICAL OUTPUT RULES — YOU MUST FOLLOW THESE EXACTLY:
-- Your ENTIRE response must be a single raw JSON object.
-- Do NOT use markdown. Do NOT use backticks. Do NOT use triple backticks or \`\`\`json fences.
-- Do NOT write any preamble, explanation, or text before or after the JSON.
-- Do NOT include "Here is..." or "Sure," or any natural language of any kind.
-- The very first character of your response must be { and the very last character must be }.
+Schema (all fields required):
+{"difficulty":"Easy|Moderate|Hard|Expert","labor_hours":number,"overview":"1 sentence","torque_specs":[{"component":"","spec":""}],"repair_steps":[""],"special_tools":[{"name":""}],"warnings":[""],"parts_needed":[{"name":"","qty":number,"price_estimate":number}]}
 
-Return this exact shape:
-{
-  "difficulty": "Easy" | "Moderate" | "Hard" | "Expert",
-  "labor_hours": number,
-  "overview": "2-3 sentences describing the job and what it involves",
-  "torque_specs": [
-    { "component": "string", "spec": "string", "notes": "string (optional)" }
-  ],
-  "repair_steps": ["string", ...],
-  "special_tools": [
-    { "name": "string", "notes": "string (optional)" }
-  ],
-  "warnings": ["string", ...],
-  "parts_needed": [
-    { "name": "string", "part_number_hint": "string", "qty": number, "price_estimate": number }
-  ]
-}
-
-Additional rules:
-- Be specific to the exact vehicle year/make/model/engine
-- Include real torque specs in ft-lbs or Nm
-- List steps numbered and detailed enough for a professional technician
-- price_estimate should be realistic aftermarket retail pricing in USD
-- labor_hours should be flat-rate book time
-- Include all common replacement parts (not just primary parts)`
+Limits: max 3 torque_specs, max 5 repair_steps, max 3 special_tools, max 3 warnings, max 4 parts_needed. Be concise.`
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -87,7 +59,7 @@ Provide the complete technical guide for this specific vehicle and job.`
       },
       body: JSON.stringify({
         model:      'claude-sonnet-4-6',
-        max_tokens: 2048,
+        max_tokens: 400,
         system:     SYSTEM_PROMPT,
         messages:   [{ role: 'user', content: userMessage }],
       }),
