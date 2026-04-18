@@ -99,7 +99,7 @@ export default function AppNav({ businessName }: { businessName?: string }) {
         <Link href="/dashboard" className="flex-shrink-0">
           <div className="bg-white rounded-lg px-2 py-1">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/nwi-logo.png" alt="National Wrench Index Suite™" className="h-7 w-auto block" />
+            <img src="/nwi-logo.png" alt="National Wrench Index Suite™" className="h-12 w-auto block" />
           </div>
         </Link>
 
