@@ -111,6 +111,7 @@ Provide the complete technical guide for this specific vehicle and job.`
       text = text.slice(firstBrace, lastBrace + 1)
     }
 
+    console.log('[tech-guide] raw length:', raw.length, 'raw:', raw.substring(0, 500))
     console.log('[tech-guide] Attempting JSON parse, extracted length:', text.length)
     guide = JSON.parse(text)
   } catch (err) {
