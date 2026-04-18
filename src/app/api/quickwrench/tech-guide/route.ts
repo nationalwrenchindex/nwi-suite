@@ -10,9 +10,9 @@ import type { TechGuideRequest, TechGuide } from '@/types/quickwrench'
 const SYSTEM_PROMPT = `You are an automotive technician. Respond ONLY with raw JSON — no markdown, no backticks, no preamble. First character must be {, last must be }.
 
 Schema (all fields required):
-{"difficulty":"Easy|Moderate|Hard|Expert","labor_hours":number,"overview":"1 sentence","torque_specs":[{"component":"","spec":""}],"repair_steps":[""],"special_tools":[{"name":""}],"warnings":[""],"parts_needed":[{"name":"","qty":number,"price_estimate":number}]}
+{"torque":[{"part":"","spec":""}],"steps":[""],"tools":[""],"warning":"","hours":1,"parts":[""]}
 
-Limits: max 3 torque_specs, max 5 repair_steps, max 3 special_tools, max 3 warnings, max 4 parts_needed. Be concise.`
+Limits: max 3 torque, max 5 steps, max 3 tools, 1 warning sentence, max 4 parts. Be concise.`
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -59,7 +59,7 @@ Provide the complete technical guide for this specific vehicle and job.`
       },
       body: JSON.stringify({
         model:      'claude-sonnet-4-6',
-        max_tokens: 1200,
+        max_tokens: 2000,
         system:     SYSTEM_PROMPT,
         messages:   [{ role: 'user', content: userMessage }],
       }),

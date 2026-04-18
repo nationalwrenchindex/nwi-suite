@@ -128,14 +128,17 @@ function supplierPrices(estimate: number) {
   }
 }
 
-function enrichParts(raw: TechGuide['parts_needed']): PartWithSuppliers[] {
-  return raw.map((p, i) => ({
-    ...p,
-    id:               `part-${i}-${p.name.slice(0, 8).replace(/\s/g, '')}`,
+function enrichParts(raw: string[]): PartWithSuppliers[] {
+  return raw.map((name, i) => ({
+    name,
+    part_number_hint: '',
+    qty:              1,
+    price_estimate:   0,
+    id:               `part-${i}-${name.slice(0, 8).replace(/\s/g, '')}`,
     included:         true,
     selected_supplier: 'orielly' as Supplier,
-    custom_price:     p.price_estimate,
-    ...supplierPrices(p.price_estimate),
+    custom_price:     0,
+    ...supplierPrices(0),
   }))
 }
 
@@ -701,13 +704,6 @@ function TechGuideTab({
   onRetry:   () => void
   onNext:    () => void
 }) {
-  const DIFF_COLORS: Record<string, string> = {
-    Easy:    'bg-success/15 text-success border-success/30',
-    Moderate:'bg-orange/15 text-orange border-orange/30',
-    Hard:    'bg-danger/15 text-danger border-danger/30',
-    Expert:  'bg-purple-500/15 text-purple-400 border-purple-500/30',
-  }
-
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-4">
@@ -735,8 +731,6 @@ function TechGuideTab({
 
   if (!techGuide) return null
 
-  const diffColor = DIFF_COLORS[techGuide.difficulty] ?? DIFF_COLORS.Moderate
-
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -747,29 +741,17 @@ function TechGuideTab({
           </p>
           <h2 className="font-condensed font-bold text-xl text-white tracking-wide">{job?.name}</h2>
         </div>
-        <div className="flex items-center gap-2">
-          <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${diffColor}`}>
-            {techGuide.difficulty}
-          </span>
-          <span className="bg-white/5 border border-white/10 rounded-full px-3 py-1 text-xs text-white/60">
-            {techGuide.labor_hours}h flat rate
-          </span>
-        </div>
+        <span className="bg-white/5 border border-white/10 rounded-full px-3 py-1 text-xs text-white/60">
+          {techGuide.hours}h flat rate
+        </span>
       </div>
-
-      {/* Overview */}
-      {techGuide.overview && (
-        <div className="nwi-card border-blue/20 bg-blue/5">
-          <p className="text-white/70 text-sm leading-relaxed">{techGuide.overview}</p>
-        </div>
-      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Repair Steps */}
         <div className="nwi-card">
           <p className="text-white/40 text-xs uppercase tracking-widest mb-3">Repair Steps</p>
           <ol className="space-y-2">
-            {techGuide.repair_steps.map((step, i) => (
+            {techGuide.steps.map((step, i) => (
               <li key={i} className="flex gap-3">
                 <span className="flex-shrink-0 w-5 h-5 rounded-full bg-orange/15 border border-orange/30 flex items-center justify-center text-orange text-[10px] font-bold mt-0.5">
                   {i + 1}
@@ -782,16 +764,13 @@ function TechGuideTab({
 
         <div className="space-y-4">
           {/* Torque Specs */}
-          {techGuide.torque_specs.length > 0 && (
+          {techGuide.torque.length > 0 && (
             <div className="nwi-card">
               <p className="text-white/40 text-xs uppercase tracking-widest mb-3">Torque Specs</p>
               <div className="space-y-2">
-                {techGuide.torque_specs.map((ts, i) => (
+                {techGuide.torque.map((ts, i) => (
                   <div key={i} className="flex items-start justify-between gap-3 py-1.5 border-b border-dark-border last:border-0">
-                    <div>
-                      <p className="text-white text-sm">{ts.component}</p>
-                      {ts.notes && <p className="text-white/30 text-xs">{ts.notes}</p>}
-                    </div>
+                    <p className="text-white text-sm">{ts.part}</p>
                     <span className="font-condensed font-bold text-orange text-sm whitespace-nowrap flex-shrink-0">
                       {ts.spec}
                     </span>
@@ -802,29 +781,24 @@ function TechGuideTab({
           )}
 
           {/* Special Tools */}
-          {techGuide.special_tools.length > 0 && (
+          {techGuide.tools.length > 0 && (
             <div className="nwi-card">
               <p className="text-white/40 text-xs uppercase tracking-widest mb-3">Special Tools</p>
               <div className="flex flex-wrap gap-2">
-                {techGuide.special_tools.map((t, i) => (
+                {techGuide.tools.map((t, i) => (
                   <div key={i} className="bg-dark-input border border-dark-border rounded-lg px-3 py-1.5">
-                    <p className="text-white text-xs font-medium">{t.name}</p>
-                    {t.notes && <p className="text-white/30 text-[10px]">{t.notes}</p>}
+                    <p className="text-white text-xs font-medium">{t}</p>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* Warnings */}
-          {techGuide.warnings.length > 0 && (
+          {/* Warning */}
+          {techGuide.warning && (
             <div className="nwi-card border-danger/20 bg-danger/5">
-              <p className="text-danger/70 text-xs uppercase tracking-widest mb-2">⚠ Warnings</p>
-              <ul className="space-y-1.5">
-                {techGuide.warnings.map((w, i) => (
-                  <li key={i} className="text-white/60 text-xs leading-relaxed">• {w}</li>
-                ))}
-              </ul>
+              <p className="text-danger/70 text-xs uppercase tracking-widest mb-2">⚠ Warning</p>
+              <p className="text-white/60 text-xs leading-relaxed">• {techGuide.warning}</p>
             </div>
           )}
         </div>
@@ -1029,7 +1003,7 @@ function QuoteTab({
   const [error,         setError]         = useState<string | null>(null)
 
   const includedParts = parts.filter(p => p.included)
-  const laborHours    = techGuide?.labor_hours ?? job?.hours ?? 0
+  const laborHours    = techGuide?.hours ?? job?.hours ?? 0
 
   const partsBase  = includedParts.reduce((s, p) => s + partPrice(p) * p.qty, 0)
   const partsMarkup = partsBase * (markupPct / 100)
@@ -1273,7 +1247,7 @@ export default function QuickWrenchClient() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Failed to load tech guide')
       setTechGuide(json.guide)
-      setParts(enrichParts(json.guide.parts_needed ?? []))
+      setParts(enrichParts(json.guide.parts ?? []))
     } catch (e) {
       setGuideError(e instanceof Error ? e.message : 'Unknown error')
     } finally {

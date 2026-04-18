@@ -36,17 +36,18 @@ export interface SelectedJob {
 
 // ─── Tech guide ───────────────────────────────────────────────────────────────
 
-export type Difficulty = 'Easy' | 'Moderate' | 'Hard' | 'Expert'
-
 export interface TorqueSpec {
-  component: string
-  spec:      string
-  notes?:    string
+  part: string
+  spec: string
 }
 
-export interface SpecialTool {
-  name:   string
-  notes?: string
+export interface TechGuide {
+  torque:  TorqueSpec[]
+  steps:   string[]
+  tools:   string[]
+  warning: string
+  hours:   number
+  parts:   string[]
 }
 
 export interface RawPart {
@@ -54,17 +55,6 @@ export interface RawPart {
   part_number_hint:  string
   qty:               number
   price_estimate:    number
-}
-
-export interface TechGuide {
-  difficulty:    Difficulty
-  labor_hours:   number
-  overview:      string
-  torque_specs:  TorqueSpec[]
-  repair_steps:  string[]
-  special_tools: SpecialTool[]
-  warnings:      string[]
-  parts_needed:  RawPart[]
 }
 
 // ─── Parts with supplier pricing ─────────────────────────────────────────────
