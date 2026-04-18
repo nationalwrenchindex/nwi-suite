@@ -8,7 +8,13 @@ import { createClient } from '@/lib/supabase/server'
 import type { TechGuideRequest, TechGuide } from '@/types/quickwrench'
 
 const SYSTEM_PROMPT = `You are a master automotive technician with 20+ years of experience.
-When given a vehicle and job, respond ONLY with valid JSON — no markdown, no extra text.
+
+CRITICAL OUTPUT RULES — YOU MUST FOLLOW THESE EXACTLY:
+- Your ENTIRE response must be a single raw JSON object.
+- Do NOT use markdown. Do NOT use backticks. Do NOT use triple backticks or \`\`\`json fences.
+- Do NOT write any preamble, explanation, or text before or after the JSON.
+- Do NOT include "Here is..." or "Sure," or any natural language of any kind.
+- The very first character of your response must be { and the very last character must be }.
 
 Return this exact shape:
 {
@@ -28,7 +34,7 @@ Return this exact shape:
   ]
 }
 
-Rules:
+Additional rules:
 - Be specific to the exact vehicle year/make/model/engine
 - Include real torque specs in ft-lbs or Nm
 - List steps numbered and detailed enough for a professional technician
@@ -80,7 +86,7 @@ Provide the complete technical guide for this specific vehicle and job.`
         'content-type':      'application/json',
       },
       body: JSON.stringify({
-        model:      'claude-sonnet-4-5-20250929',
+        model:      'claude-sonnet-4-6',
         max_tokens: 2048,
         system:     SYSTEM_PROMPT,
         messages:   [{ role: 'user', content: userMessage }],
@@ -119,12 +125,14 @@ Provide the complete technical guide for this specific vehicle and job.`
 
   let guide: TechGuide
   try {
+    console.log('[tech-guide] Raw Claude response:\n', raw)
+
     let text = raw.trim()
 
-    // Strip markdown code fences wherever they appear (not just anchored to start/end)
-    text = text.replace(/^```(?:json|JSON)?\s*/m, '').replace(/\s*```\s*$/m, '').trim()
+    // Strip all markdown code fences (handles ```json, ```JSON, ``` variants anywhere in the text)
+    text = text.replace(/```(?:json|JSON)?\s*/g, '').replace(/```/g, '').trim()
 
-    // Extract the outermost JSON object — handles any preamble/postamble text Claude adds
+    // Extract the outermost JSON object — handles any remaining preamble/postamble text
     const firstBrace = text.indexOf('{')
     const lastBrace  = text.lastIndexOf('}')
     if (firstBrace !== -1 && lastBrace > firstBrace) {
@@ -135,7 +143,6 @@ Provide the complete technical guide for this specific vehicle and job.`
     guide = JSON.parse(text)
   } catch (err) {
     console.error('[tech-guide] JSON parse failed.')
-    console.error('[tech-guide] Raw Claude response (full):', raw)
     console.error('[tech-guide] Parse error:', err instanceof Error ? err.message : err)
     return NextResponse.json(
       { error: `AI response could not be parsed: ${err instanceof Error ? err.message : 'JSON parse error'}` },
