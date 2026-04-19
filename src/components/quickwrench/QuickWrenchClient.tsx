@@ -320,8 +320,10 @@ function VINScanner({
         <video
           ref={videoRef}
           muted
+          autoPlay
           playsInline
           className="absolute inset-0 w-full h-full object-cover"
+          style={{ objectFit: 'cover', width: '100%', height: '100%' }}
         />
 
         {/* Semi-transparent dim layer + all UI */}
@@ -366,13 +368,27 @@ function VINScanner({
                 </svg>
               </div>
             )}
-            <p className={`text-sm leading-relaxed ${
-              phase === 'error' ? 'text-danger' :
-              phase === 'found' ? 'text-success font-medium' :
-              'text-white/70'
-            }`}>
-              {msg}
-            </p>
+            {phase === 'error' && msg.includes('denied') ? (
+              <div className="bg-danger/10 border border-danger/30 rounded-xl p-4 text-left max-w-xs">
+                <p className="text-danger font-semibold text-sm mb-2">Camera Permission Denied</p>
+                <p className="text-white/70 text-xs leading-relaxed mb-3">
+                  To use the VIN scanner, allow camera access in your browser settings:
+                </p>
+                <ol className="text-white/60 text-xs space-y-1 list-decimal list-inside leading-relaxed">
+                  <li>Tap the lock/info icon in your browser&apos;s address bar</li>
+                  <li>Find &ldquo;Camera&rdquo; and set it to &ldquo;Allow&rdquo;</li>
+                  <li>Reload the page and tap Scan again</li>
+                </ol>
+              </div>
+            ) : (
+              <p className={`text-sm leading-relaxed ${
+                phase === 'error' ? 'text-danger' :
+                phase === 'found' ? 'text-success font-medium' :
+                'text-white/70'
+              }`}>
+                {msg}
+              </p>
+            )}
           </div>
 
           <p className="text-white/25 text-xs text-center leading-relaxed" style={{ maxWidth: 240 }}>
@@ -589,6 +605,16 @@ function VehicleTab({
           </div>
         </div>
       )}
+
+      {/* Full-width CTA */}
+      {vehicle && (
+        <button
+          onClick={onNext}
+          className="w-full py-4 bg-orange hover:bg-orange-hover text-white font-condensed font-bold text-base tracking-wide rounded-xl transition-colors"
+        >
+          Continue to Job Type →
+        </button>
+      )}
     </div>
   )
 }
@@ -668,18 +694,20 @@ function JobTypeTab({
       )}
 
       {selectedJob && (
-        <div className="flex items-center justify-between px-4 py-3 bg-orange/10 border border-orange/30 rounded-xl">
-          <div>
-            <p className="text-white font-medium text-sm">{selectedJob.name}</p>
-            <p className="text-orange text-xs">{selectedJob.hours}h flat rate</p>
+        <>
+          <div className="flex items-center justify-between px-4 py-3 bg-orange/10 border border-orange/30 rounded-xl">
+            <div>
+              <p className="text-white font-medium text-sm">{selectedJob.name}</p>
+              <p className="text-orange text-xs">{selectedJob.hours}h flat rate</p>
+            </div>
           </div>
           <button
             onClick={onNext}
-            className="px-5 py-2 bg-orange hover:bg-orange-hover text-white font-condensed font-bold text-sm rounded-lg transition-colors"
+            className="w-full py-4 bg-orange hover:bg-orange-hover text-white font-condensed font-bold text-base tracking-wide rounded-xl transition-colors"
           >
-            Get Tech Guide →
+            Get Tech Guide + Parts →
           </button>
-        </div>
+        </>
       )}
     </div>
   )
@@ -808,14 +836,12 @@ function TechGuideTab({
         AI-generated specifications for reference only. Results may omit vehicle-specific steps or torque values. Always verify against OEM service documentation before beginning work. National Wrench Index assumes no liability for inaccuracies.
       </p>
 
-      <div className="flex justify-end">
-        <button
-          onClick={onNext}
-          className="px-6 py-2.5 bg-orange hover:bg-orange-hover text-white font-condensed font-bold text-sm tracking-wide rounded-lg transition-colors"
-        >
-          View Parts List →
-        </button>
-      </div>
+      <button
+        onClick={onNext}
+        className="w-full py-4 bg-orange hover:bg-orange-hover text-white font-condensed font-bold text-base tracking-wide rounded-xl transition-colors"
+      >
+        View Parts List →
+      </button>
     </div>
   )
 }
@@ -967,13 +993,13 @@ function PartsTab({
         ))}
       </div>
 
-      <div className="flex items-center justify-between pt-2">
-        <div className="text-white/40 text-sm">
+      <div className="pt-2 space-y-3">
+        <div className="text-white/40 text-sm text-right">
           Parts subtotal: <span className="text-white font-medium">{fmt(partsTotal)}</span>
         </div>
         <button
           onClick={onNext}
-          className="px-6 py-2.5 bg-orange hover:bg-orange-hover text-white font-condensed font-bold text-sm tracking-wide rounded-lg transition-colors"
+          className="w-full py-4 bg-orange hover:bg-orange-hover text-white font-condensed font-bold text-base tracking-wide rounded-xl transition-colors"
         >
           Build Quote →
         </button>
@@ -1296,8 +1322,37 @@ export default function QuickWrenchClient() {
     setActiveTab(t => Math.min(t + 1, TABS.length - 1))
   }
 
+  const STEP_LABELS = ['Vehicle', 'Job Type', 'Tech Guide', 'Parts', 'Quote']
+
   return (
     <div className="space-y-5">
+      {/* ── Step progress indicator ── */}
+      <div className="flex items-center gap-0">
+        {STEP_LABELS.map((label, i) => {
+          const isActive   = i === activeTab
+          const isComplete = (i === 0 && !!vehicle) || (i === 1 && !!selectedJob) || (i === 2 && !!techGuide) || (i === 3 && parts.length > 0)
+          return (
+            <div key={i} className="flex items-center flex-1 last:flex-none">
+              <div className="flex flex-col items-center gap-1 flex-shrink-0">
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-colors ${
+                  isActive   ? 'bg-orange border-orange text-white' :
+                  isComplete ? 'bg-success border-success text-white' :
+                               'bg-transparent border-white/20 text-white/30'
+                }`}>
+                  {isComplete && !isActive ? '✓' : i + 1}
+                </div>
+                <span className={`text-[9px] font-medium whitespace-nowrap hidden sm:block ${
+                  isActive ? 'text-orange' : isComplete ? 'text-success' : 'text-white/25'
+                }`}>{label}</span>
+              </div>
+              {i < STEP_LABELS.length - 1 && (
+                <div className={`flex-1 h-0.5 mx-1 transition-colors ${isComplete ? 'bg-success/50' : 'bg-white/10'}`} />
+              )}
+            </div>
+          )
+        })}
+      </div>
+
       {/* ── Tab navigation ── */}
       <div className="flex items-center gap-1 overflow-x-auto pb-1">
         {TABS.map((tab, i) => {
