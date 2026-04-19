@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import DiagnosticTools from './DiagnosticTools'
 import type {
   QWVehicle,
   SelectedJob,
@@ -1431,6 +1432,9 @@ export default function QuickWrenchClient() {
           />
         )}
       </div>
+
+      {/* ── Diagnostic Tools ── */}
+      <DiagnosticTools vehicle={vehicle} />
     </div>
   )
 }
