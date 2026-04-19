@@ -173,7 +173,6 @@ function CategoryIcon({ id, className }: { id: string; className?: string }) {
 // ─── VIN Camera Scanner ──────────────────────────────────────────────────────
 
 const VIN_RE = /^[A-HJ-NPR-Z0-9]{17}$/
-const ZXING_CDN = 'https://cdnjs.cloudflare.com/ajax/libs/@zxing/library/0.21.3/umd/index.min.js'
 
 function VINScanner({
   onScan,
@@ -183,48 +182,31 @@ function VINScanner({
   onCancel: () => void
 }) {
   const videoRef  = useRef<HTMLVideoElement>(null)
-  const readerRef = useRef<any>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const rafRef    = useRef<number>(0)
   const [phase, setPhase] = useState<'loading' | 'scanning' | 'found' | 'error'>('loading')
-  const [msg,   setMsg]   = useState('Loading scanner…')
+  const [msg,   setMsg]   = useState('Starting camera…')
 
   useEffect(() => {
     let alive = true
 
     async function init() {
-      // ── 1. Lazy-load ZXing UMD from cdnjs ──────────────────────────────
-      if (!(window as any).ZXing) {
-        await new Promise<void>((resolve, reject) => {
-          const s   = document.createElement('script')
-          s.src     = ZXING_CDN
-          s.onload  = () => resolve()
-          s.onerror = () => reject(new Error('ZXing library failed to load from CDN'))
-          document.head.appendChild(s)
-        })
+      // ── 1. Check for native BarcodeDetector support ────────────────────
+      if (!('BarcodeDetector' in window)) {
+        setPhase('error')
+        setMsg('unsupported')
+        return
       }
-      if (!alive) return
 
-      // ── 2. Request camera stream via getUserMedia directly ─────────────
-      // Using getUserMedia explicitly (not delegating to ZXing) so we can
-      // set video.srcObject ourselves and guarantee the feed is visible.
-      let stream: MediaStream
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: {
-            facingMode: { ideal: 'environment' },
-            width:      { ideal: 1280 },
-            height:     { ideal: 720 },
-          },
-        })
-      } catch (err) {
-        throw err // caught below for user-facing error messages
-      }
+      // ── 2. Request rear camera ─────────────────────────────────────────
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: false,
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
+      })
       streamRef.current = stream
       if (!alive) { stream.getTracks().forEach(t => t.stop()); return }
 
-      // ── 3. Wire stream into video element and start playback ───────────
+      // ── 3. Start video playback ────────────────────────────────────────
       const video = videoRef.current!
       video.srcObject = stream
       video.setAttribute('playsinline', 'true')
@@ -235,40 +217,28 @@ function VINScanner({
       setPhase('scanning')
       setMsg('Point the camera at the VIN barcode on the door jamb sticker')
 
-      // ── 4. Set up ZXing reader for canvas-based frame decoding ─────────
-      const ZXing = (window as any).ZXing
-      const hints = new Map()
-      hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
-        ZXing.BarcodeFormat.CODE_39,
-        ZXing.BarcodeFormat.CODE_128,
-      ])
-      const reader = new ZXing.BrowserMultiFormatReader(hints)
-      readerRef.current = reader
+      // ── 4. BarcodeDetector scan loop ───────────────────────────────────
+      const detector = new (window as any).BarcodeDetector({
+        formats: ['code_39', 'code_128'],
+      })
 
-      const canvas = document.createElement('canvas')
-      const ctx    = canvas.getContext('2d')!
-
-      // ── 5. rAF decode loop — capture frame → ZXing canvas decode ───────
-      function scanFrame() {
+      async function scanFrame() {
         if (!alive) return
         if (video.readyState >= video.HAVE_ENOUGH_DATA && video.videoWidth > 0) {
-          canvas.width  = video.videoWidth
-          canvas.height = video.videoHeight
-          ctx.drawImage(video, 0, 0)
           try {
-            const result = reader.decodeFromCanvas(canvas)
-            if (result) {
-              const raw  = result.getText().trim().toUpperCase()
+            const barcodes = await detector.detect(video)
+            for (const bc of barcodes) {
+              const raw  = bc.rawValue.trim().toUpperCase()
               const text = raw.replace(/[^A-HJ-NPR-Z0-9]/g, '')
               if (VIN_RE.test(text)) {
                 alive = false
                 setPhase('found')
                 setMsg(`VIN detected: ${text}`)
                 onScan(text)
-                return // stop loop
+                return
               }
             }
-          } catch { /* NotFoundException on every non-match — expected */ }
+          } catch { /* detection errors are non-fatal */ }
         }
         rafRef.current = requestAnimationFrame(scanFrame)
       }
@@ -280,7 +250,7 @@ function VINScanner({
       const name = (err as any)?.name ?? ''
       if (name === 'NotAllowedError') {
         setPhase('error')
-        setMsg('Camera access denied. Allow camera access in your browser settings and try again.')
+        setMsg('denied')
       } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
         setPhase('error')
         setMsg('No camera found on this device.')
@@ -357,7 +327,7 @@ function VINScanner({
           </div>
 
           {/* Status indicator */}
-          <div className="flex flex-col items-center gap-3 max-w-xs text-center">
+          <div className="flex flex-col items-center gap-3 w-full max-w-xs text-center">
             {phase === 'loading' && (
               <div className="w-6 h-6 border-2 border-orange border-t-transparent rounded-full animate-spin" />
             )}
@@ -368,31 +338,40 @@ function VINScanner({
                 </svg>
               </div>
             )}
-            {phase === 'error' && msg.includes('denied') ? (
-              <div className="bg-danger/10 border border-danger/30 rounded-xl p-4 text-left max-w-xs">
+            {phase === 'error' && msg === 'denied' && (
+              <div className="bg-danger/10 border border-danger/30 rounded-xl p-4 text-left w-full">
                 <p className="text-danger font-semibold text-sm mb-2">Camera Permission Denied</p>
                 <p className="text-white/70 text-xs leading-relaxed mb-3">
-                  To use the VIN scanner, allow camera access in your browser settings:
+                  Allow camera access in your browser settings to use the VIN scanner:
                 </p>
                 <ol className="text-white/60 text-xs space-y-1 list-decimal list-inside leading-relaxed">
-                  <li>Tap the lock/info icon in your browser&apos;s address bar</li>
+                  <li>Tap the lock / info icon in your address bar</li>
                   <li>Find &ldquo;Camera&rdquo; and set it to &ldquo;Allow&rdquo;</li>
                   <li>Reload the page and tap Scan again</li>
                 </ol>
               </div>
-            ) : (
-              <p className={`text-sm leading-relaxed ${
-                phase === 'error' ? 'text-danger' :
-                phase === 'found' ? 'text-success font-medium' :
-                'text-white/70'
-              }`}>
-                {msg}
-              </p>
+            )}
+            {phase === 'error' && msg === 'unsupported' && (
+              <div className="bg-white/5 border border-white/15 rounded-xl p-4 text-left w-full">
+                <p className="text-white font-semibold text-sm mb-1">Barcode Scanner Not Supported</p>
+                <p className="text-white/60 text-xs leading-relaxed">
+                  Your browser does not support barcode scanning. Please type or paste the VIN manually — it&apos;s printed on the door jamb sticker and windshield.
+                </p>
+              </div>
+            )}
+            {phase === 'error' && msg !== 'denied' && msg !== 'unsupported' && (
+              <p className="text-danger text-sm leading-relaxed">{msg}</p>
+            )}
+            {(phase === 'loading' || phase === 'scanning') && (
+              <p className="text-white/70 text-sm leading-relaxed">{msg}</p>
+            )}
+            {phase === 'found' && (
+              <p className="text-success font-medium text-sm">{msg}</p>
             )}
           </div>
 
           <p className="text-white/25 text-xs text-center leading-relaxed" style={{ maxWidth: 240 }}>
-            Reads Code 39 &amp; Code 128 barcodes on door jamb VIN stickers
+            Uses built-in browser barcode detection — no external libraries
           </p>
 
           <button
