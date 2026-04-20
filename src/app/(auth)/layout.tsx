@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Link from 'next/link'
 
 export const metadata: Metadata = {
   title: 'National Wrench Index Suite\u2122',
@@ -76,6 +77,12 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <div className="flex-1 flex items-start justify-center p-6 sm:p-10">
           <div className="w-full max-w-md">{children}</div>
         </div>
+
+        <footer className="border-t border-dark-border px-6 py-4 flex items-center justify-center gap-5 text-white/25 text-xs">
+          <span>&copy; {new Date().getFullYear()} National Wrench Index</span>
+          <Link href="/terms"   className="hover:text-white/50 transition-colors">Terms of Service</Link>
+          <Link href="/privacy" className="hover:text-white/50 transition-colors">Privacy Policy</Link>
+        </footer>
       </div>
     </div>
   )
