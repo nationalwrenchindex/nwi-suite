@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import AppNav from '@/components/layout/AppNav'
 import { STATUS_CONFIG, formatTime } from '@/lib/scheduler'
 import type { JobStatus } from '@/types/jobs'
+import DashboardShareButton from '@/components/dashboard/DashboardShareButton'
+import BookingPageCard from '@/components/dashboard/BookingPageCard'
 
 export const metadata = { title: 'Dashboard — National Wrench Index Suite\u2122' }
 
@@ -396,8 +398,8 @@ export default async function DashboardPage() {
                 <p className="text-white/40 text-xs mt-1">📍 {profile.service_area_description}</p>
               )}
             </div>
-            {/* Live summary pills */}
-            <div className="flex flex-wrap gap-2">
+            {/* Live summary pills + share button */}
+            <div className="flex flex-wrap items-start gap-2">
               <div className="bg-white/10 rounded-xl px-3 py-2 text-center min-w-[60px]">
                 <p className="font-condensed font-bold text-xl text-white">{todayJobs.length}</p>
                 <p className="text-white/50 text-[10px] uppercase tracking-wider">Today</p>
@@ -412,6 +414,11 @@ export default async function DashboardPage() {
                 <p className="font-condensed font-bold text-xl text-success">{fmtCurrency(revenueMTD)}</p>
                 <p className="text-white/50 text-[10px] uppercase tracking-wider">MTD</p>
               </div>
+              <DashboardShareButton
+                slug={profile.slug ?? null}
+                businessName={profile.business_name ?? ''}
+                techName={profile.full_name ?? ''}
+              />
             </div>
           </div>
         </div>
@@ -657,18 +664,6 @@ export default async function DashboardPage() {
                   </svg>
                 ),
               },
-              {
-                href: profile.slug ? `/book/${profile.slug}` : '/onboarding',
-                label: 'BOOKING PAGE',
-                sub: profile.slug ? `book/${profile.slug}` : 'Set up your booking URL',
-                accent: 'muted' as const,
-                icon: (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                    <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
-                    <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
-                  </svg>
-                ),
-              },
             ].map(({ href, label, sub, accent, icon }) => {
               const colors = {
                 orange:  { ring: 'hover:border-orange/40 hover:bg-orange/5',  ic: 'bg-orange/10 border-orange/20 text-orange'  },
@@ -689,6 +684,11 @@ export default async function DashboardPage() {
                 </Link>
               )
             })}
+            <BookingPageCard
+              slug={profile.slug ?? null}
+              businessName={profile.business_name ?? ''}
+              techName={profile.full_name ?? ''}
+            />
           </div>
         </div>
 
