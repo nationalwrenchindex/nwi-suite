@@ -22,13 +22,17 @@ interface RecallResult {
   reportDate:     string
 }
 
-interface TSBResult {
-  nhtsa_id:  string
-  oem_id:    string
-  subject:   string
-  component: string
-  dateAdded: string
-  summary:   string
+interface ComplaintDetail {
+  dateOfIncident: string
+  summary:        string
+  crash:          boolean
+  fire:           boolean
+}
+
+interface ComplaintGroup {
+  component:  string
+  count:      number
+  complaints: ComplaintDetail[]
 }
 
 interface FluidSpecs {
@@ -260,25 +264,27 @@ function RecallPanel({ vehicle }: { vehicle: QWVehicle | null }) {
   )
 }
 
-// ─── TSB Panel ────────────────────────────────────────────────────────────────
+// ─── Complaints Panel ─────────────────────────────────────────────────────────
 
-function TSBPanel({ vehicle }: { vehicle: QWVehicle | null }) {
+function ComplaintsPanel({ vehicle }: { vehicle: QWVehicle | null }) {
   const [loading,  setLoading]  = useState(false)
-  const [tsbs,     setTsbs]     = useState<TSBResult[] | null>(null)
+  const [groups,   setGroups]   = useState<ComplaintGroup[] | null>(null)
+  const [total,    setTotal]    = useState(0)
   const [error,    setError]    = useState<string | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!vehicle) return
-    setLoading(true); setError(null); setTsbs(null)
+    setLoading(true); setError(null); setGroups(null)
     try {
       const params = new URLSearchParams({ make: vehicle.make, model: vehicle.model, year: vehicle.year })
       const res    = await fetch(`/api/quickwrench/tsb?${params}`)
       const json   = await res.json()
-      if (!res.ok) throw new Error(json.error ?? 'TSB lookup failed')
-      setTsbs(json.tsbs)
+      if (!res.ok) throw new Error(json.error ?? 'Complaint lookup failed')
+      setGroups(json.groups)
+      setTotal(json.total ?? 0)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load TSBs')
+      setError(e instanceof Error ? e.message : 'Failed to load complaints')
     } finally {
       setLoading(false)
     }
@@ -290,60 +296,83 @@ function TSBPanel({ vehicle }: { vehicle: QWVehicle | null }) {
   if (loading)  return <LoadingSpinner />
   if (error)    return <ErrorCard msg={error} />
 
-  if (tsbs !== null && tsbs.length === 0) {
+  if (groups !== null && groups.length === 0) {
     return (
-      <div className="nwi-card text-center py-8">
-        <p className="text-white/50 text-sm">No TSBs found in NHTSA database for this vehicle.</p>
-        <p className="text-white/25 text-xs mt-1">Not all TSBs are reported to NHTSA — check manufacturer service portals for complete TSB lists.</p>
+      <div className="nwi-card border-success/30 bg-success/5 flex items-center gap-3 py-5">
+        <div className="w-10 h-10 rounded-full bg-success/20 border border-success/40 flex items-center justify-center flex-shrink-0">
+          <svg className="w-5 h-5 text-success" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        </div>
+        <div>
+          <p className="text-success font-semibold text-sm">No NHTSA Complaints on Record</p>
+          <p className="text-white/50 text-xs mt-0.5">
+            {vehicle.year} {vehicle.make} {vehicle.model} has no owner complaints filed with NHTSA.
+          </p>
+        </div>
       </div>
     )
   }
 
   return (
     <div className="space-y-3">
-      {tsbs !== null && (
-        <p className="text-white/40 text-xs">
-          {tsbs.length} TSB{tsbs.length !== 1 ? 's' : ''} found for {vehicle.year} {vehicle.make} {vehicle.model}
-        </p>
+      {groups !== null && (
+        <div className="flex items-center justify-between">
+          <p className="text-white/40 text-xs">
+            {total} owner complaint{total !== 1 ? 's' : ''} · {groups.length} component area{groups.length !== 1 ? 's' : ''} — {vehicle.year} {vehicle.make} {vehicle.model}
+          </p>
+          <span className="text-white/20 text-[10px]">Source: NHTSA</span>
+        </div>
       )}
-      {tsbs?.map((t, i) => {
-        const id = t.nhtsa_id || t.oem_id || String(i)
-        return (
-          <div key={id} className="nwi-card">
-            <button className="w-full text-left" onClick={() => setExpanded(expanded === id ? null : id)}>
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="text-white font-semibold text-sm leading-snug">{t.subject || 'Technical Service Bulletin'}</p>
-                  <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                    {t.oem_id && (
-                      <span className="text-orange text-[10px] font-mono">{t.oem_id}</span>
+      {groups?.map(g => (
+        <div key={g.component} className="nwi-card">
+          <button className="w-full text-left" onClick={() => setExpanded(expanded === g.component ? null : g.component)}>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="flex-shrink-0 w-7 h-7 rounded-full bg-orange/15 border border-orange/30 flex items-center justify-center font-condensed font-bold text-orange text-xs">
+                  {g.count}
+                </span>
+                <p className="text-white font-semibold text-sm truncate">{g.component}</p>
+              </div>
+              <svg
+                className={`w-4 h-4 text-white/40 flex-shrink-0 transition-transform ${expanded === g.component ? 'rotate-180' : ''}`}
+                fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </div>
+          </button>
+
+          {expanded === g.component && (
+            <div className="mt-3 space-y-3 border-t border-dark-border pt-3">
+              {g.complaints.slice(0, 5).map((c, i) => (
+                <div key={i} className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    {c.dateOfIncident && (
+                      <span className="text-white/30 text-[10px]">{c.dateOfIncident}</span>
                     )}
-                    {t.component && (
-                      <span className="text-blue-light text-[10px]">{t.component}</span>
+                    {c.crash && (
+                      <span className="bg-danger/20 text-danger text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide">Crash</span>
                     )}
-                    {t.dateAdded && (
-                      <span className="text-white/30 text-[10px]">{t.dateAdded}</span>
+                    {c.fire && (
+                      <span className="bg-orange/20 text-orange text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wide">Fire</span>
                     )}
                   </div>
+                  {c.summary && (
+                    <p className="text-white/60 text-xs leading-relaxed line-clamp-3">{c.summary}</p>
+                  )}
+                  {i < Math.min(g.complaints.length, 5) - 1 && (
+                    <div className="border-b border-dark-border pb-2" />
+                  )}
                 </div>
-                <svg
-                  className={`w-4 h-4 text-white/40 flex-shrink-0 mt-0.5 transition-transform ${expanded === id ? 'rotate-180' : ''}`}
-                  fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"
-                >
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
-              </div>
-            </button>
-
-            {expanded === id && t.summary && (
-              <div className="mt-3 border-t border-dark-border pt-3">
-                <p className="text-white/40 text-[10px] uppercase tracking-widest mb-1">Summary</p>
-                <p className="text-white/70 text-xs leading-relaxed">{t.summary}</p>
-              </div>
-            )}
-          </div>
-        )
-      })}
+              ))}
+              {g.complaints.length > 5 && (
+                <p className="text-white/25 text-xs">+{g.complaints.length - 5} more complaints in this category</p>
+              )}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   )
 }
@@ -431,7 +460,7 @@ function FluidSpecsPanel({ vehicle }: { vehicle: QWVehicle | null }) {
 const DIAG_TABS = [
   { id: 'dtc',    label: 'DTC Lookup',      short: 'DTC' },
   { id: 'recall', label: 'Recalls',         short: 'Recalls' },
-  { id: 'tsb',    label: 'TSBs',            short: 'TSBs' },
+  { id: 'tsb',    label: 'Complaints',       short: 'Complaints' },
   { id: 'fluids', label: 'Fluid Specs',     short: 'Fluids' },
 ]
 
@@ -476,7 +505,7 @@ export default function DiagnosticTools({ vehicle }: { vehicle: QWVehicle | null
       <div>
         {activeTab === 'dtc'    && <DTCPanel />}
         {activeTab === 'recall' && <RecallPanel vehicle={vehicle} />}
-        {activeTab === 'tsb'    && <TSBPanel vehicle={vehicle} />}
+        {activeTab === 'tsb'    && <ComplaintsPanel vehicle={vehicle} />}
         {activeTab === 'fluids' && <FluidSpecsPanel vehicle={vehicle} />}
       </div>
     </div>
