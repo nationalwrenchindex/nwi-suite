@@ -42,6 +42,9 @@ const SERVICE_DURATIONS: Record<string, number> = {
 
 const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
 
+// Re-fetch slots after 5 minutes of inactivity (prevents stale same-day selections)
+const SLOTS_STALE_MS = 5 * 60 * 1000
+
 function durationLabel(min: number): string {
   if (min < 60) return `~${min} min`
   const h = Math.floor(min / 60)
@@ -192,10 +195,13 @@ export default function BookingClient({
   const [notes,   setNotes]   = useState('')
 
   // Step 2
-  const [date,  setDate]  = useState<string | null>(null)
-  const [time,  setTime]  = useState<string | null>(null)
-  const [slots, setSlots] = useState<string[]>([])
-  const [slotsLoading, setSlotsLoading] = useState(false)
+  const [date,             setDate]             = useState<string | null>(null)
+  const [time,             setTime]             = useState<string | null>(null)
+  const [slots,            setSlots]            = useState<string[]>([])
+  const [unavailableSlots, setUnavailableSlots] = useState<string[]>([])
+  const [slotsLoading,     setSlotsLoading]     = useState(false)
+  const [slotsLastFetched, setSlotsLastFetched] = useState(0)
+  const [fetchKey,         setFetchKey]         = useState(0)
 
   // Step 3
   const [firstName, setFirstName] = useState('')
@@ -212,18 +218,23 @@ export default function BookingClient({
   const [jobId,      setJobId]      = useState<string | null>(null)
   const [error,      setError]      = useState<string | null>(null)
 
-  // Fetch slots when date changes
+  // Fetch slots when date or fetchKey changes (fetchKey bumped on stale re-select)
   useEffect(() => {
     if (!date) return
     setTime(null)
     setSlots([])
+    setUnavailableSlots([])
     setSlotsLoading(true)
     fetch(`/api/book/${techSlug}?date=${date}`)
       .then(r => r.json())
-      .then(d => setSlots(d.slots ?? []))
-      .catch(() => setSlots([]))
+      .then(d => {
+        setSlots(d.slots ?? [])
+        setUnavailableSlots(d.unavailable ?? [])
+        setSlotsLastFetched(Date.now())
+      })
+      .catch(() => { setSlots([]); setUnavailableSlots([]) })
       .finally(() => setSlotsLoading(false))
-  }, [date, techSlug])
+  }, [date, fetchKey, techSlug])
 
   function canAdvance() {
     if (step === 1) return !!service
@@ -282,6 +293,18 @@ export default function BookingClient({
     } finally {
       setSubmitting(false)
     }
+  }
+
+  // Calendar date selection — re-fetches if the same date is selected after slots went stale
+  function handleDateSelect(d: string) {
+    if (d === date) {
+      if (Date.now() - slotsLastFetched >= SLOTS_STALE_MS) {
+        setFetchKey(k => k + 1)
+      }
+      return
+    }
+    setDate(d)
+    setTime(null)
   }
 
   const bizName = profile.business_name ?? profile.full_name ?? 'Your Technician'
@@ -395,7 +418,7 @@ export default function BookingClient({
 
               <MiniCalendar
                 selected={date}
-                onSelect={d => { setDate(d); setTime(null) }}
+                onSelect={handleDateSelect}
                 workingHours={profile.working_hours}
               />
 
@@ -405,33 +428,55 @@ export default function BookingClient({
                     Available times — {formatDateFull(date)}
                   </p>
 
-                  {slotsLoading ? (
-                    <div className="flex gap-2 flex-wrap">
-                      {[1,2,3,4,5,6].map(i => (
-                        <div key={i} className="w-20 h-9 rounded-lg bg-dark-border/50 animate-pulse" />
-                      ))}
-                    </div>
-                  ) : slots.length === 0 ? (
-                    <p className="text-white/30 text-sm py-4">
-                      No available slots on this date. Please pick another day.
-                    </p>
-                  ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {slots.map(slot => (
-                        <button
-                          key={slot}
-                          onClick={() => setTime(slot)}
-                          className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all ${
-                            time === slot
-                              ? 'border-orange bg-orange/10 text-orange ring-1 ring-orange/30'
-                              : 'border-dark-border text-white/70 hover:border-white/30 hover:text-white'
-                          }`}
-                        >
-                          {formatTime(slot)}
-                        </button>
-                      ))}
-                    </div>
-                  )}
+                  {(() => {
+                    const unavailSet = new Set(unavailableSlots)
+                    const allDisplaySlots = [...unavailableSlots, ...slots].sort((a, b) => {
+                      const [ah, am] = a.split(':').map(Number)
+                      const [bh, bm] = b.split(':').map(Number)
+                      return (ah * 60 + am) - (bh * 60 + bm)
+                    })
+                    return slotsLoading ? (
+                      <div className="flex gap-2 flex-wrap">
+                        {[1,2,3,4,5,6].map(i => (
+                          <div key={i} className="w-20 h-9 rounded-lg bg-dark-border/50 animate-pulse" />
+                        ))}
+                      </div>
+                    ) : allDisplaySlots.length === 0 ? (
+                      <p className="text-white/30 text-sm py-4">
+                        No available slots on this date. Please pick another day.
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {allDisplaySlots.map(slot => {
+                          const isUnavailable = unavailSet.has(slot)
+                          const isSel = time === slot
+                          return (
+                            <button
+                              key={slot}
+                              disabled={isUnavailable}
+                              onClick={() => setTime(slot)}
+                              className={`px-4 py-2 rounded-lg border text-sm font-medium transition-all flex flex-col items-center min-w-[5rem] ${
+                                isUnavailable
+                                  ? 'border-[#4a4a4a] cursor-not-allowed opacity-60'
+                                  : isSel
+                                  ? 'border-orange bg-orange/10 text-orange ring-1 ring-orange/30'
+                                  : 'border-dark-border text-white/70 hover:border-white/30 hover:text-white'
+                              }`}
+                            >
+                              <span className={isUnavailable ? 'line-through text-[#4a4a4a]' : ''}>
+                                {formatTime(slot)}
+                              </span>
+                              {isUnavailable && (
+                                <span className="text-[9px] text-[#4a4a4a] leading-none mt-0.5 no-underline">
+                                  Unavailable
+                                </span>
+                              )}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
             </div>

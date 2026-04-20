@@ -5,8 +5,11 @@ import { SERVICE_TYPES } from '@/lib/scheduler'
 
 type RouteContext = { params: Promise<{ slug: string }> }
 
-// Day name by JS getDay() index
 const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+
+// Configurable defaults — can be moved to a per-tech profile field later
+const DEFAULT_TIMEZONE       = 'America/New_York'
+const BOOKING_BUFFER_MINUTES = 120 // 2-hour same-day lead time
 
 interface DayHours { enabled: boolean; open: string; close: string }
 type WorkingHours = Record<string, DayHours>
@@ -26,9 +29,28 @@ function generateSlots(open: string, close: string): string[] {
   return slots
 }
 
+// Returns today's date string (YYYY-MM-DD) and current minutes-since-midnight in the given timezone
+function getTechNow(tz: string): { dateStr: string; nowMin: number } {
+  const now   = new Date()
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  }).formatToParts(now)
+
+  const get  = (type: string) => parts.find(p => p.type === type)?.value ?? '0'
+  const hour = Number(get('hour'))
+  const min  = Number(get('minute'))
+
+  return {
+    dateStr: `${get('year')}-${get('month')}-${get('day')}`,
+    nowMin:  hour * 60 + min,
+  }
+}
+
 // ─── GET /api/book/[slug] ─────────────────────────────────────────────────────
 // Without ?date → profile + available services
-// With    ?date → available time slots for that date
+// With    ?date → available + unavailable time slots for that date
 export async function GET(request: NextRequest, { params }: RouteContext) {
   const { slug } = await params
   const supabase  = createServiceClient()
@@ -45,14 +67,14 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 
   const date = request.nextUrl.searchParams.get('date')
 
-  // ── Return available slots for a specific date ──
+  // ── Return available + unavailable slots for a specific date ──
   if (date) {
     const wh = (profile.working_hours ?? {}) as WorkingHours
     const dayName = DAY_NAMES[new Date(date + 'T00:00:00').getDay()]
     const daySchedule = wh[dayName]
 
     if (!daySchedule?.enabled) {
-      return NextResponse.json({ slots: [] })
+      return NextResponse.json({ slots: [], unavailable: [] })
     }
 
     const allSlots = generateSlots(daySchedule.open, daySchedule.close)
@@ -66,7 +88,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       .neq('status', 'cancelled')
       .neq('status', 'no_show')
 
-    // Build set of blocked minute-marks
+    // Build set of minute-marks blocked by existing bookings
     const blocked = new Set<number>()
     for (const job of bookedJobs ?? []) {
       if (!job.job_time) continue
@@ -78,12 +100,29 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       }
     }
 
-    const available = allSlots.filter((slot) => {
-      const [h, m] = slot.split(':').map(Number)
-      return !blocked.has(h * 60 + m)
-    })
+    // Cutoff = now + buffer (only applies when date === today in tech's timezone)
+    const { dateStr: todayStr, nowMin } = getTechNow(DEFAULT_TIMEZONE)
+    const cutoffMin = nowMin + BOOKING_BUFFER_MINUTES
 
-    return NextResponse.json({ slots: available })
+    const available: string[]   = []
+    const unavailable: string[] = []
+
+    for (const slot of allSlots) {
+      const [h, m] = slot.split(':').map(Number)
+      const slotMin = h * 60 + m
+
+      if (blocked.has(slotMin)) {
+        // Booked by an existing customer — hide entirely (privacy)
+        continue
+      } else if (date === todayStr && slotMin < cutoffMin) {
+        // Past or within the same-day lead-time buffer — show greyed
+        unavailable.push(slot)
+      } else {
+        available.push(slot)
+      }
+    }
+
+    return NextResponse.json({ slots: available, unavailable })
   }
 
   // ── Return public profile + service list ──
@@ -137,10 +176,25 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
   if (!customer?.first_name || !customer?.last_name || !customer?.phone)
     return NextResponse.json({ error: 'customer first_name, last_name, and phone are required' }, { status: 400 })
 
+  // Server-side time validation — reject past slots and same-day slots inside the buffer
+  const { dateStr: todayStr, nowMin } = getTechNow(DEFAULT_TIMEZONE)
+  const cutoffMin = nowMin + BOOKING_BUFFER_MINUTES
+  const [jh, jm]  = job_time.slice(0, 5).split(':').map(Number)
+  const jobSlotMin = jh * 60 + jm
+
+  if (
+    job_date < todayStr ||
+    (job_date === todayStr && jobSlotMin < cutoffMin)
+  ) {
+    return NextResponse.json(
+      { error: 'This time slot is no longer available. Please select a future time.' },
+      { status: 400 },
+    )
+  }
+
   const techId = profile.id as string
 
   // ── Find or create customer ──
-  // Try to match by phone within this tech's customer list
   const phone = String(customer.phone).replace(/\D/g, '')
   const { data: existingCustomers } = await supabase
     .from('customers')
