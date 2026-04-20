@@ -102,14 +102,9 @@ export default function AppNav({ businessName }: { businessName?: string }) {
           <span className="hidden md:block font-condensed font-bold text-sm leading-tight whitespace-nowrap">
             <span style={{ color: '#FF6600' }}>National</span>{' '}
             <span style={{ color: '#2969B0' }}>Wrench Index</span>
+            <span className="text-white/70">&#8482;</span>
           </span>
         </Link>
-
-        {businessName && (
-          <span className="text-white/30 text-xs hidden lg:block truncate max-w-[160px]">
-            {businessName}
-          </span>
-        )}
 
         {/* Nav items */}
         <nav className="flex items-center gap-1 flex-1 overflow-x-auto hide-scrollbar">
