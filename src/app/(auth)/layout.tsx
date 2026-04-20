@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'National Wrench Index Suite',
+  title: 'National Wrench Index Suite\u2122',
 }
 
 const FEATURES = [

@@ -4,7 +4,7 @@ import AppNav from '@/components/layout/AppNav'
 import FinancialsClient from '@/components/financials/FinancialsClient'
 import { getModuleAccess } from '@/lib/subscription'
 
-export const metadata = { title: 'Financials — National Wrench Index Suite' }
+export const metadata = { title: 'Financials — National Wrench Index Suite\u2122' }
 
 export default async function FinancialsPage() {
   const supabase = await createClient()

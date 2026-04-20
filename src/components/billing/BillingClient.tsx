@@ -268,7 +268,7 @@ export default function BillingClient({
   // Handle redirect-back from Stripe
   useEffect(() => {
     if (searchParams.get('success') === 'true') {
-      setToast({ type: 'success', msg: 'Subscription activated! Welcome to National Wrench Index Suite.' })
+      setToast({ type: 'success', msg: 'Subscription activated! Welcome to National Wrench Index Suite\u2122.' })
     } else if (searchParams.get('canceled') === 'true') {
       setToast({ type: 'error', msg: 'Checkout was cancelled. No charge was made.' })
     }
@@ -354,7 +354,7 @@ export default function BillingClient({
         </h1>
         {!isActive && (
           <p className="text-white/40 text-sm mt-1">
-            Subscribe to unlock NWI modules for your business.
+            Subscribe to unlock National Wrench Index modules for your business.
           </p>
         )}
       </div>

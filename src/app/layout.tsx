@@ -18,8 +18,8 @@ const barlowCondensed = Barlow_Condensed({
 
 export const metadata: Metadata = {
   title: {
-    default: 'National Wrench Index',
-    template: '%s | National Wrench Index',
+    default: 'National Wrench Index\u2122',
+    template: '%s | National Wrench Index\u2122',
   },
   description:
     'The all-in-one platform for mobile automotive professionals — manage jobs, customers, invoices, and grow your business.',

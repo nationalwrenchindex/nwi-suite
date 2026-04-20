@@ -813,7 +813,7 @@ function TechGuideTab({
       </div>
 
       <p className="text-white/25 text-[10px] leading-relaxed">
-        AI-generated specifications for reference only. Results may omit vehicle-specific steps or torque values. Always verify against OEM service documentation before beginning work. National Wrench Index assumes no liability for inaccuracies.
+        AI-generated specifications for reference only. Results may omit vehicle-specific steps or torque values. Always verify against OEM service documentation before beginning work. National Wrench Index&#8482; assumes no liability for inaccuracies.
       </p>
 
       <button

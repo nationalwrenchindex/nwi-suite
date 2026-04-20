@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import AppNav from '@/components/layout/AppNav'
 import QuickWrenchClient from '@/components/quickwrench/QuickWrenchClient'
 
-export const metadata = { title: 'QuickWrench — National Wrench Index Suite' }
+export const metadata = { title: 'National Wrench Index QuickWrench\u2122 — National Wrench Index Suite\u2122' }
 
 export default async function QuickWrenchPage() {
   const supabase = await createClient()
@@ -31,7 +31,7 @@ export default async function QuickWrenchPage() {
               </svg>
             </div>
             <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">
-              QUICKWRENCH
+              National Wrench Index QuickWrench&#8482;
             </h1>
           </div>
           <p className="text-white/40 text-sm">
