@@ -29,10 +29,16 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const url = `https://api.nhtsa.gov/complaints/complaintsByVehicle?make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}&modelYear=${encodeURIComponent(year)}`
+    const makeUpper  = make.toUpperCase()
+    const modelUpper = model.toUpperCase()
+    console.log('[complaints] querying NHTSA:', { make: makeUpper, model: modelUpper, year })
+    const url = `https://api.nhtsa.gov/complaints/complaintsByVehicle?make=${encodeURIComponent(makeUpper)}&model=${encodeURIComponent(modelUpper)}&modelYear=${encodeURIComponent(year)}`
     const res  = await fetch(url, { next: { revalidate: 3600 } })
 
+    console.log('[complaints] NHTSA response status:', res.status)
     if (!res.ok) {
+      const body = await res.text()
+      console.error('[complaints] NHTSA error body:', body)
       return NextResponse.json({ error: `NHTSA API error: ${res.status}` }, { status: 502 })
     }
 
