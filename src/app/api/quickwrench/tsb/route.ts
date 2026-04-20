@@ -31,13 +31,29 @@ export async function GET(req: NextRequest) {
   try {
     const makeUpper  = make.toUpperCase()
     const modelUpper = model.toUpperCase()
-    console.log('[complaints] querying NHTSA:', { make: makeUpper, model: modelUpper, year })
-    const url = `https://api.nhtsa.gov/complaints/complaintsByVehicle?make=${encodeURIComponent(makeUpper)}&model=${encodeURIComponent(modelUpper)}&modelYear=${encodeURIComponent(year)}`
-    const res  = await fetch(url, { next: { revalidate: 3600 } })
+    // Fallback: model with spaces stripped (e.g. "YUKON XL" → "YUKONXL")
+    const modelNoSpaces = modelUpper.replace(/\s+/g, '')
 
-    console.log('[complaints] NHTSA response status:', res.status)
+    function buildUrl(m: string) {
+      return `https://api.nhtsa.gov/complaints/complaintsByVehicle?make=${encodeURIComponent(makeUpper)}&model=${encodeURIComponent(m)}&modelYear=${encodeURIComponent(year!)}`
+    }
 
-    // NHTSA returns 404 when no complaints exist for a vehicle — treat as empty, not an error
+    async function tryFetch(modelVariant: string) {
+      const url = buildUrl(modelVariant)
+      console.log('[complaints] fetching:', url)
+      return fetch(url, { cache: 'no-store' })
+    }
+
+    let res = await tryFetch(modelUpper)
+    console.log('[complaints] attempt 1 status:', res.status, 'model:', modelUpper)
+
+    // Retry with spaces removed if first attempt fails
+    if ((res.status === 400 || res.status === 404) && modelNoSpaces !== modelUpper) {
+      res = await tryFetch(modelNoSpaces)
+      console.log('[complaints] attempt 2 status:', res.status, 'model:', modelNoSpaces)
+    }
+
+    // 404 = no complaints on record — not an error
     if (res.status === 404) {
       console.log('[complaints] 404 = no complaints on record')
       return NextResponse.json({ groups: [], total: 0 })
@@ -51,7 +67,6 @@ export async function GET(req: NextRequest) {
 
     const data = await res.json()
     console.log('[complaints] NHTSA count:', data.Count ?? data.count ?? '?')
-    // Count 0 with 200 = valid empty response
     const raw  = (data.results ?? data.Results ?? []) as any[]
 
     // Group complaints by component, sorted by count descending
