@@ -157,7 +157,10 @@ export default function SignupPage() {
           CREATE ACCOUNT
         </h1>
         <p className="text-white/50 text-sm">
-          Join thousands of mobile pros on the NWI platform.
+          Join thousands of mobile pros on the{' '}
+          <span style={{ color: '#FF6600' }}>National</span>{' '}
+          <span style={{ color: '#2969B0' }}>Wrench Index</span>{' '}
+          platform.
         </p>
       </div>
 

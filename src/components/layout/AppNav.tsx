@@ -96,9 +96,13 @@ export default function AppNav({ businessName }: { businessName?: string }) {
     <header className="border-b border-dark-border bg-dark-card sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center gap-6 h-16 sm:h-14">
         {/* Logo */}
-        <Link href="/dashboard" className="flex-shrink-0">
+        <Link href="/dashboard" className="flex-shrink-0 flex items-center gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/nwi-logo.png" alt="National Wrench Index Suite™" className="h-14 max-w-[180px] sm:h-12 sm:max-w-[200px] w-auto object-contain block" />
+          <span className="hidden md:block font-condensed font-bold text-sm leading-tight whitespace-nowrap">
+            <span style={{ color: '#FF6600' }}>National</span>{' '}
+            <span style={{ color: '#2969B0' }}>Wrench Index</span>
+          </span>
         </Link>
 
         {businessName && (
