@@ -305,7 +305,7 @@ function ComplaintsPanel({ vehicle }: { vehicle: QWVehicle | null }) {
           </svg>
         </div>
         <div>
-          <p className="text-success font-semibold text-sm">No Complaints on Record</p>
+          <p className="text-success font-semibold text-sm">No Known Issues on Record</p>
           <p className="text-white/50 text-xs mt-0.5">
             {vehicle.year} {vehicle.make} {vehicle.model} has no owner complaints filed with NHTSA.
           </p>
@@ -473,7 +473,7 @@ function FluidSpecsPanel({ vehicle }: { vehicle: QWVehicle | null }) {
 const DIAG_TABS = [
   { id: 'dtc',    label: 'DTC Lookup',      short: 'DTC' },
   { id: 'recall', label: 'Recalls',         short: 'Recalls' },
-  { id: 'tsb',    label: 'Complaints',       short: 'Complaints' },
+  { id: 'tsb',    label: 'Known Issues',      short: 'Issues' },
   { id: 'fluids', label: 'Fluid Specs',     short: 'Fluids' },
 ]
 
@@ -513,6 +513,14 @@ export default function DiagnosticTools({ vehicle }: { vehicle: QWVehicle | null
           </button>
         ))}
       </div>
+
+      {/* Panel subtitle */}
+      {activeTab === 'tsb' && (
+        <div>
+          <p className="font-condensed font-bold text-white text-sm tracking-wide">Known Issues</p>
+          <p className="text-white/40 text-xs italic mt-0.5">Common problems reported by owners of this vehicle.</p>
+        </div>
+      )}
 
       {/* Panel content */}
       <div>
