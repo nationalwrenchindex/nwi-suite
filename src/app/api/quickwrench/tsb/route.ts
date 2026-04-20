@@ -36,6 +36,13 @@ export async function GET(req: NextRequest) {
     const res  = await fetch(url, { next: { revalidate: 3600 } })
 
     console.log('[complaints] NHTSA response status:', res.status)
+
+    // NHTSA returns 404 when no complaints exist for a vehicle — treat as empty, not an error
+    if (res.status === 404) {
+      console.log('[complaints] 404 = no complaints on record')
+      return NextResponse.json({ groups: [], total: 0 })
+    }
+
     if (!res.ok) {
       const body = await res.text()
       console.error('[complaints] NHTSA error body:', body)
@@ -43,7 +50,9 @@ export async function GET(req: NextRequest) {
     }
 
     const data = await res.json()
-    const raw  = (data.results ?? []) as any[]
+    console.log('[complaints] NHTSA count:', data.Count ?? data.count ?? '?')
+    // Count 0 with 200 = valid empty response
+    const raw  = (data.results ?? data.Results ?? []) as any[]
 
     // Group complaints by component, sorted by count descending
     const map = new Map<string, { count: number; complaints: ComplaintDetail[] }>()
