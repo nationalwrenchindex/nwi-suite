@@ -270,21 +270,22 @@ function ComplaintsPanel({ vehicle }: { vehicle: QWVehicle | null }) {
   const [loading,  setLoading]  = useState(false)
   const [groups,   setGroups]   = useState<ComplaintGroup[] | null>(null)
   const [total,    setTotal]    = useState(0)
-  const [error,    setError]    = useState<string | null>(null)
+  const [status,   setStatus]   = useState<'found' | 'no_complaints' | 'unavailable' | null>(null)
   const [expanded, setExpanded] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     if (!vehicle) return
-    setLoading(true); setError(null); setGroups(null)
+    setLoading(true); setGroups(null); setStatus(null)
     try {
       const params = new URLSearchParams({ make: vehicle.make, model: vehicle.model, year: vehicle.year })
       const res    = await fetch(`/api/quickwrench/tsb?${params}`)
       const json   = await res.json()
-      if (!res.ok) throw new Error(json.error ?? 'Complaint lookup failed')
-      setGroups(json.groups)
+      setGroups(json.groups ?? [])
       setTotal(json.total ?? 0)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load complaints')
+      setStatus(json.status ?? (res.ok ? 'found' : 'unavailable'))
+    } catch {
+      setGroups([])
+      setStatus('unavailable')
     } finally {
       setLoading(false)
     }
@@ -294,9 +295,8 @@ function ComplaintsPanel({ vehicle }: { vehicle: QWVehicle | null }) {
 
   if (!vehicle) return <NoVehicleNotice />
   if (loading)  return <LoadingSpinner />
-  if (error)    return <ErrorCard msg={error} />
 
-  if (groups !== null && groups.length === 0) {
+  if (status === 'no_complaints') {
     return (
       <div className="nwi-card border-success/30 bg-success/5 flex items-center gap-3 py-5">
         <div className="w-10 h-10 rounded-full bg-success/20 border border-success/40 flex items-center justify-center flex-shrink-0">
@@ -305,11 +305,24 @@ function ComplaintsPanel({ vehicle }: { vehicle: QWVehicle | null }) {
           </svg>
         </div>
         <div>
-          <p className="text-success font-semibold text-sm">No NHTSA Complaints on Record</p>
+          <p className="text-success font-semibold text-sm">No Complaints on Record</p>
           <p className="text-white/50 text-xs mt-0.5">
             {vehicle.year} {vehicle.make} {vehicle.model} has no owner complaints filed with NHTSA.
           </p>
         </div>
+      </div>
+    )
+  }
+
+  if (status === 'unavailable') {
+    return (
+      <div className="nwi-card border-white/10 bg-white/3 flex items-center gap-3 py-5">
+        <div className="w-10 h-10 rounded-full bg-white/5 border border-white/15 flex items-center justify-center flex-shrink-0">
+          <svg className="w-5 h-5 text-white/30" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        </div>
+        <p className="text-white/40 text-sm">Complaints data temporarily unavailable.</p>
       </div>
     )
   }
