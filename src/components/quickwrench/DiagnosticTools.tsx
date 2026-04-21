@@ -44,6 +44,17 @@ interface FluidSpecs {
   notes:         string
 }
 
+interface TireSpecs {
+  tire_size_front:         string | null
+  tire_size_rear:          string | null
+  lug_torque_lb_ft:        number | null
+  bolt_pattern:            string | null
+  tire_pressure_front_psi: number | null
+  tire_pressure_rear_psi:  number | null
+  load_speed_rating:       string | null
+  wheel_size:              string | null
+}
+
 // ─── Shared UI helpers ────────────────────────────────────────────────────────
 
 function LoadingSpinner() {
@@ -468,16 +479,170 @@ function FluidSpecsPanel({ vehicle }: { vehicle: QWVehicle | null }) {
   )
 }
 
+// ─── Tire Specs Panel ─────────────────────────────────────────────────────────
+
+const TIRE_CACHE_PREFIX = 'nwi_tire_specs_v1_'
+const NULL_VALUE        = 'Not specified — refer to door jamb sticker'
+
+type SpecRow = { label: string; value: string | null; note?: string }
+
+function TireSpecsPanel({
+  vehicle,
+  onFindTires,
+}: {
+  vehicle:      QWVehicle | null
+  onFindTires?: (sizes: { front: string | null; rear: string | null }) => void
+}) {
+  const [loading, setLoading] = useState(false)
+  const [specs,   setSpecs]   = useState<TireSpecs | null>(null)
+  const [error,   setError]   = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    if (!vehicle) return
+    setLoading(true); setError(null); setSpecs(null)
+
+    try {
+      const cached = localStorage.getItem(TIRE_CACHE_PREFIX + vehicle.vin)
+      if (cached) {
+        setSpecs(JSON.parse(cached))
+        setLoading(false)
+        return
+      }
+    } catch { /* ignore storage errors */ }
+
+    try {
+      const res  = await fetch('/api/quickwrench/tire-specs', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          year:   vehicle.year,
+          make:   vehicle.make,
+          model:  vehicle.model,
+          trim:   vehicle.trim,
+          engine: vehicle.engine,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Failed to load tire specs')
+      setSpecs(json.specs)
+      try {
+        localStorage.setItem(TIRE_CACHE_PREFIX + vehicle.vin, JSON.stringify(json.specs))
+      } catch { /* ignore storage errors */ }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load tire specs')
+    } finally {
+      setLoading(false)
+    }
+  }, [vehicle])
+
+  useEffect(() => { load() }, [load])
+
+  if (!vehicle) return (
+    <div className="nwi-card border-white/10 text-center py-8">
+      <p className="text-white/40 text-sm">Decode a VIN first to see tire specifications.</p>
+    </div>
+  )
+  if (loading) return <LoadingSpinner />
+  if (error) return (
+    <div className="space-y-3">
+      <div className="nwi-card border-danger/30 bg-danger/5">
+        <p className="text-danger text-sm">Unable to load tire specs right now. Please try again or refer to the vehicle&apos;s door jamb sticker.</p>
+      </div>
+      <button onClick={load} className="text-orange text-xs hover:underline">Try Again</button>
+    </div>
+  )
+  if (!specs) return null
+
+  const sameTire = !specs.tire_size_rear || specs.tire_size_front === specs.tire_size_rear
+  const samePsi  = !specs.tire_pressure_rear_psi || specs.tire_pressure_front_psi === specs.tire_pressure_rear_psi
+
+  const rows: SpecRow[] = [
+    ...(sameTire
+      ? [{ label: 'Factory Tire Size', value: specs.tire_size_front }]
+      : [
+          { label: 'Factory Tire Size (Front)', value: specs.tire_size_front },
+          { label: 'Factory Tire Size (Rear)',  value: specs.tire_size_rear  },
+        ]
+    ),
+    {
+      label: 'Lug Nut Torque',
+      value: specs.lug_torque_lb_ft != null ? `${specs.lug_torque_lb_ft} lb-ft` : null,
+      note:  'Tighten in star pattern. Re-check after 50 miles.',
+    },
+    { label: 'Bolt Pattern', value: specs.bolt_pattern },
+    {
+      label: 'Recommended Pressure (Cold)',
+      value: specs.tire_pressure_front_psi != null
+        ? samePsi
+          ? `${specs.tire_pressure_front_psi} PSI`
+          : `${specs.tire_pressure_front_psi} PSI front / ${specs.tire_pressure_rear_psi} PSI rear`
+        : null,
+    },
+    { label: 'Load/Speed Rating', value: specs.load_speed_rating },
+    { label: 'Wheel Size',        value: specs.wheel_size ? `${specs.wheel_size} inches` : null },
+  ]
+
+  return (
+    <div className="space-y-4">
+      <div className="nwi-card border-blue/20 bg-blue/5">
+        <p className="text-blue-light text-xs uppercase tracking-widest mb-4">
+          OEM Tire Specifications — {vehicle.year} {vehicle.make} {vehicle.model}{vehicle.trim ? ` ${vehicle.trim}` : ''} {vehicle.engine}
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {rows.map(row => (
+            <div key={row.label} className="rounded-lg border border-dark-border bg-[#242424] p-3">
+              <p className="text-[#999] text-xs mb-1">{row.label}</p>
+              {row.value != null ? (
+                <>
+                  <p className="font-condensed font-bold text-white text-base">{row.value}</p>
+                  {row.note && (
+                    <p className="text-white/30 text-[10px] mt-1 leading-relaxed">{row.note}</p>
+                  )}
+                </>
+              ) : (
+                <p className="text-white/30 text-xs italic">{NULL_VALUE}</p>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {onFindTires && (
+        <button
+          onClick={() => onFindTires({ front: specs.tire_size_front, rear: specs.tire_size_rear })}
+          className="flex items-center justify-center gap-2 px-5 py-3 bg-orange hover:bg-orange-hover text-white font-condensed font-bold text-sm tracking-wide rounded-lg transition-colors min-h-[48px] w-full sm:w-auto"
+        >
+          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>
+          </svg>
+          Find Tires for This Vehicle
+        </button>
+      )}
+
+      <p className="text-white/25 text-[10px] italic leading-relaxed">
+        AI-generated specifications for reference only. Always verify against OEM documentation or the vehicle&apos;s door jamb sticker before installation. Tire and wheel specifications can vary by trim level, option package, and production year. National Wrench Index assumes no liability for inaccuracies.
+      </p>
+    </div>
+  )
+}
+
 // ─── Main DiagnosticTools Component ──────────────────────────────────────────
 
 const DIAG_TABS = [
-  { id: 'dtc',    label: 'DTC Lookup',      short: 'DTC' },
-  { id: 'recall', label: 'Recalls',         short: 'Recalls' },
-  { id: 'tsb',    label: 'Known Issues',      short: 'Issues' },
-  { id: 'fluids', label: 'Fluid Specs',     short: 'Fluids' },
+  { id: 'dtc',    label: 'DTC Lookup',  short: 'DTC'    },
+  { id: 'recall', label: 'Recalls',     short: 'Recalls' },
+  { id: 'tsb',    label: 'Known Issues', short: 'Issues' },
+  { id: 'fluids', label: 'Fluid Specs', short: 'Fluids' },
+  { id: 'tires',  label: 'Tire Specs',  short: 'Tires'  },
 ]
 
-export default function DiagnosticTools({ vehicle }: { vehicle: QWVehicle | null }) {
+export default function DiagnosticTools({
+  vehicle,
+  onFindTires,
+}: {
+  vehicle:      QWVehicle | null
+  onFindTires?: (sizes: { front: string | null; rear: string | null }) => void
+}) {
   const [activeTab, setActiveTab] = useState('dtc')
 
   return (
@@ -528,6 +693,7 @@ export default function DiagnosticTools({ vehicle }: { vehicle: QWVehicle | null
         {activeTab === 'recall' && <RecallPanel vehicle={vehicle} />}
         {activeTab === 'tsb'    && <ComplaintsPanel vehicle={vehicle} />}
         {activeTab === 'fluids' && <FluidSpecsPanel vehicle={vehicle} />}
+        {activeTab === 'tires'  && <TireSpecsPanel vehicle={vehicle} onFindTires={onFindTires} />}
       </div>
     </div>
   )

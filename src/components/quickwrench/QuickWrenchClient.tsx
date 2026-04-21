@@ -1289,6 +1289,30 @@ export default function QuickWrenchClient() {
     setParts([])
   }
 
+  function handleFindTires(sizes: { front: string | null; rear: string | null }) {
+    const tireJob: SelectedJob = {
+      category:      'tires_wheels',
+      categoryLabel: 'Tires & Wheels',
+      name:          'Tire Replacement (4 tires)',
+      hours:         2.0,
+    }
+    setSelectedJob(tireJob)
+    setTechGuide(null)
+    setGuideError(null)
+
+    const items: string[] = []
+    const sameTire = !sizes.rear || sizes.front === sizes.rear
+    if (sizes.front) {
+      items.push(sameTire ? `Tires — ${sizes.front}` : `Front Tires — ${sizes.front}`)
+    }
+    if (!sameTire && sizes.rear) {
+      items.push(`Rear Tires — ${sizes.rear}`)
+    }
+    if (items.length === 0) items.push('Tires (check door jamb sticker for size)')
+    setParts(enrichParts(items))
+    setActiveTab(3)
+  }
+
   const canGoTo = (tab: number) => {
     if (tab === 0) return true
     if (tab === 1) return !!vehicle
@@ -1434,7 +1458,7 @@ export default function QuickWrenchClient() {
       </div>
 
       {/* ── Diagnostic Tools ── */}
-      <DiagnosticTools vehicle={vehicle} />
+      <DiagnosticTools vehicle={vehicle} onFindTires={handleFindTires} />
     </div>
   )
 }
