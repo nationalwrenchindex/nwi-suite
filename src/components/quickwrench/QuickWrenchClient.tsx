@@ -995,17 +995,27 @@ function QuoteTab({
   job,
   techGuide,
   parts,
+  initialLaborRate   = 125,
+  initialMarkupPct   = 20,
+  initialTaxPct      = 8.5,
+  initialCustomerName  = '',
+  initialCustomerPhone = '',
 }: {
-  vehicle:   QWVehicle | null
-  job:       SelectedJob | null
-  techGuide: TechGuide | null
-  parts:     PartWithSuppliers[]
+  vehicle:               QWVehicle | null
+  job:                   SelectedJob | null
+  techGuide:             TechGuide | null
+  parts:                 PartWithSuppliers[]
+  initialLaborRate?:     number
+  initialMarkupPct?:     number
+  initialTaxPct?:        number
+  initialCustomerName?:  string
+  initialCustomerPhone?: string
 }) {
-  const [laborRate,     setLaborRate]     = useState(125)
-  const [markupPct,     setMarkupPct]     = useState(20)
-  const [taxPct,        setTaxPct]        = useState(8.5)
-  const [customerName,  setCustomerName]  = useState('')
-  const [customerPhone, setCustomerPhone] = useState('')
+  const [laborRate,     setLaborRate]     = useState(initialLaborRate)
+  const [markupPct,     setMarkupPct]     = useState(initialMarkupPct)
+  const [taxPct,        setTaxPct]        = useState(initialTaxPct)
+  const [customerName,  setCustomerName]  = useState(initialCustomerName)
+  const [customerPhone, setCustomerPhone] = useState(initialCustomerPhone)
   const [saving,        setSaving]        = useState(false)
   const [quoteNumber,   setQuoteNumber]   = useState<string | null>(null)
   const [quoteId,       setQuoteId]       = useState<string | null>(null)
@@ -1283,7 +1293,15 @@ const TABS = [
   { label: 'Quote',      short: '5' },
 ]
 
-export default function QuickWrenchClient() {
+interface LoadedQuoteDefaults {
+  laborRate:    number
+  markupPct:    number
+  taxPct:       number
+  customerName: string
+  customerPhone: string
+}
+
+export default function QuickWrenchClient({ loadQuoteId }: { loadQuoteId?: string }) {
   const [activeTab,    setActiveTab]    = useState(0)
   const [vehicle,      setVehicle]      = useState<QWVehicle | null>(null)
   const [selectedJob,  setSelectedJob]  = useState<SelectedJob | null>(null)
@@ -1291,6 +1309,8 @@ export default function QuickWrenchClient() {
   const [guideLoading, setGuideLoading] = useState(false)
   const [guideError,   setGuideError]   = useState<string | null>(null)
   const [parts,        setParts]        = useState<PartWithSuppliers[]>([])
+  const [quoteDefaults, setQuoteDefaults] = useState<LoadedQuoteDefaults | null>(null)
+  const loadedQuoteRef = useRef<string | null>(null)
 
   const loadTechGuide = useCallback(async (v: QWVehicle, j: SelectedJob) => {
     setGuideLoading(true)
@@ -1311,6 +1331,102 @@ export default function QuickWrenchClient() {
       setGuideLoading(false)
     }
   }, [])
+
+  // Pre-fill all steps when navigated here with ?loadQuoteId=
+  useEffect(() => {
+    if (!loadQuoteId || loadedQuoteRef.current === loadQuoteId) return
+    loadedQuoteRef.current = loadQuoteId
+
+    fetch(`/api/quotes/${loadQuoteId}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(json => {
+        const q = json?.quote
+        if (!q) return
+
+        // Step 1: Vehicle
+        if (q.vehicle) {
+          setVehicle({
+            vin:    q.vehicle.vin  ?? '',
+            year:   String(q.vehicle.year ?? ''),
+            make:   q.vehicle.make,
+            model:  q.vehicle.model,
+            engine: 'N/A',
+          })
+        }
+
+        // Step 2: Job — match category + subtype against the catalog
+        let matchedJob: SelectedJob | null = null
+        if (q.job_category || q.job_subtype) {
+          for (const cat of JOB_CATEGORIES) {
+            if (
+              cat.label.toLowerCase() === q.job_category?.toLowerCase() ||
+              cat.id === q.job_category?.toLowerCase().replace(/[\s&]+/g, '_')
+            ) {
+              const matchJob = cat.jobs.find(j => j.name === q.job_subtype)
+              if (matchJob) {
+                matchedJob = { category: cat.id, categoryLabel: cat.label, name: matchJob.name, hours: matchJob.hours }
+              }
+              break
+            }
+          }
+          // Fallback: use whatever job info is available
+          if (!matchedJob && q.job_subtype) {
+            matchedJob = {
+              category:      q.job_category ?? 'diagnostics',
+              categoryLabel: q.job_category ?? 'Service',
+              name:          q.job_subtype,
+              hours:         q.labor_hours ?? 1,
+            }
+          }
+        }
+        if (matchedJob) setSelectedJob(matchedJob)
+
+        // Step 4: Parts from line items (exclude labor rows)
+        const partItems = (q.line_items ?? []).filter(
+          (li: { description: string }) => !/^labor/i.test(li.description ?? '')
+        )
+        if (partItems.length > 0) {
+          const markup = (q.parts_markup_percent ?? 0) / 100
+          const loadedParts: PartWithSuppliers[] = partItems.map(
+            (li: { description: string; quantity: number; unit_price: number }, i: number) => {
+              const basePrice = markup > 0 ? li.unit_price / (1 + markup) : li.unit_price
+              return {
+                id:               `loaded-${i}-${Date.now()}`,
+                name:             li.description,
+                part_number_hint: '',
+                qty:              li.quantity,
+                price_estimate:   basePrice,
+                included:         true,
+                selected_supplier: 'custom' as Supplier,
+                custom_price:      basePrice,
+                price_autozone:    basePrice,
+                price_orielly:     basePrice,
+                price_napa:        basePrice,
+                price_rockauto:    basePrice,
+              }
+            }
+          )
+          setParts(loadedParts)
+        }
+
+        // Step 5: Pricing defaults
+        setQuoteDefaults({
+          laborRate:    q.labor_rate    ?? 125,
+          markupPct:    q.parts_markup_percent ?? 20,
+          taxPct:       q.tax_percent   ?? 8.5,
+          customerName: q.customer
+            ? `${q.customer.first_name} ${q.customer.last_name}`.trim()
+            : '',
+          customerPhone: q.customer?.phone ?? '',
+        })
+
+        // Navigate to Quote tab
+        setTechGuide(null)
+        setGuideError(null)
+        setActiveTab(4)
+      })
+      .catch(() => {})
+  }, [loadQuoteId])
 
   // Auto-load tech guide when tab 3 becomes active
   useEffect(() => {
@@ -1500,6 +1616,11 @@ export default function QuickWrenchClient() {
             job={selectedJob}
             techGuide={techGuide}
             parts={parts}
+            initialLaborRate={quoteDefaults?.laborRate}
+            initialMarkupPct={quoteDefaults?.markupPct}
+            initialTaxPct={quoteDefaults?.taxPct}
+            initialCustomerName={quoteDefaults?.customerName}
+            initialCustomerPhone={quoteDefaults?.customerPhone}
           />
         )}
       </div>

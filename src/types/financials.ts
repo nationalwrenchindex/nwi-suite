@@ -103,6 +103,7 @@ export interface Quote {
   grand_total: number | null
   notes: string | null
   source: string | null
+  parent_quote_id: string | null
   converted_invoice_id: string | null
   sent_at: string | null
   approved_at: string | null

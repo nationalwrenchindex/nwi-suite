@@ -3,9 +3,14 @@ import { createClient } from '@/lib/supabase/server'
 import AppNav from '@/components/layout/AppNav'
 import QuickWrenchClient from '@/components/quickwrench/QuickWrenchClient'
 
-export const metadata = { title: 'National Wrench Index QuickWrench\u2122 — National Wrench Index Suite\u2122' }
+export const metadata = { title: 'National Wrench Index QuickWrench™ — National Wrench Index Suite™' }
 
-export default async function QuickWrenchPage() {
+export default async function QuickWrenchPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ loadQuoteId?: string }>
+}) {
+  const sp = await searchParams
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 
@@ -38,7 +43,7 @@ export default async function QuickWrenchPage() {
             VIN to customer quote in under 2 minutes. Parts · Specs · Quote.
           </p>
         </div>
-        <QuickWrenchClient />
+        <QuickWrenchClient loadQuoteId={sp.loadQuoteId} />
       </main>
     </div>
   )

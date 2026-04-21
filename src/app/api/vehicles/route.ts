@@ -9,14 +9,20 @@ export async function GET(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const limit = Math.min(parseInt(new URL(request.url).searchParams.get('limit') ?? '10', 10), 50)
+  const sp         = new URL(request.url).searchParams
+  const limit      = Math.min(parseInt(sp.get('limit') ?? '10', 10), 50)
+  const customerId = sp.get('customer_id')
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('vehicles')
     .select('id, year, make, model, vin, customers!inner(user_id)')
     .eq('customers.user_id', user.id)
     .order('created_at', { ascending: false })
     .limit(limit)
+
+  if (customerId) query = query.eq('customer_id', customerId)
+
+  const { data, error } = await query
 
   if (error) {
     console.error('[GET /api/vehicles]', error)
