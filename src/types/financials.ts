@@ -45,6 +45,7 @@ export interface Invoice {
   user_id: string
   job_id: string | null
   customer_id: string | null
+  vehicle_id: string | null
   invoice_number: string
   invoice_date: string         // YYYY-MM-DD
   due_date: string | null
@@ -57,6 +58,9 @@ export interface Invoice {
   status: InvoiceStatus
   payment_method: PaymentMethod | null
   paid_at: string | null
+  source: 'manual' | 'quickwrench' | null
+  job_category: string | null
+  job_subtype: string | null
   notes: string | null
   terms: string | null
   created_at: string

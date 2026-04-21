@@ -7,7 +7,7 @@ const INVOICE_SELECT = `
 `
 
 // ─── GET /api/invoices ────────────────────────────────────────────────────────
-// Query params: status, limit, offset
+// Query params: status, source, limit, offset
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
 
   const sp     = request.nextUrl.searchParams
   const status = sp.get('status')
+  const source = sp.get('source')
   const limit  = Number(sp.get('limit')  ?? 100)
   const offset = Number(sp.get('offset') ?? 0)
 
@@ -30,6 +31,7 @@ export async function GET(request: NextRequest) {
     .range(offset, offset + limit - 1)
 
   if (status) query = query.eq('status', status)
+  if (source) query = query.eq('source', source)
 
   const { data, error } = await query
 
@@ -84,9 +86,12 @@ export async function POST(request: NextRequest) {
       tax_amount:      Number(body.tax_amount      ?? 0),
       discount_amount: Number(body.discount_amount ?? 0),
       total:           Number(body.total),
-      status:          body.status ?? 'draft',
-      notes:           body.notes  ?? null,
-      terms:           body.terms  ?? null,
+      status:          body.status       ?? 'draft',
+      source:          body.source       ?? 'manual',
+      job_category:    body.job_category ?? null,
+      job_subtype:     body.job_subtype  ?? null,
+      notes:           body.notes        ?? null,
+      terms:           body.terms        ?? null,
     })
     .select(INVOICE_SELECT)
     .single()

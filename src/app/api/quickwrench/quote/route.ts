@@ -1,22 +1,16 @@
 // POST /api/quickwrench/quote
-// Saves a completed QuickWrench quote to quickwrench_quotes table.
-// Optionally creates a draft invoice in the invoices table.
-// Optionally sends an SMS to the customer via Twilio.
+// Saves a completed QuickWrench quote.
+// When save_invoice=true, creates a real draft invoice in Financials with
+// customer/vehicle lookup-or-create, sequential invoice number, and source tracking.
 
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import type { QuoteSaveRequest } from '@/types/quickwrench'
 
-function pad2(n: number) { return String(n).padStart(2, '0') }
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function genQuoteNumber() {
-  const d   = new Date()
-  const yy  = String(d.getFullYear()).slice(2)
-  const mm  = pad2(d.getMonth() + 1)
-  const dd  = pad2(d.getDate())
-  const rnd = Math.random().toString(36).slice(2, 5).toUpperCase()
-  return `QW-${yy}${mm}${dd}-${rnd}`
-}
+function pad2(n: number) { return String(n).padStart(2, '0') }
 
 function todayISO() {
   const d = new Date()
@@ -29,24 +23,133 @@ function dueDateISO(daysOut = 14) {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
 }
 
+// Sequential INV-YYYY-XXXX numbering, scoped per user per calendar year.
+async function genInvoiceNumber(supabase: SupabaseClient, userId: string): Promise<string> {
+  const year   = new Date().getFullYear()
+  const prefix = `INV-${year}-`
+
+  const { data } = await supabase
+    .from('invoices')
+    .select('invoice_number')
+    .eq('user_id', userId)
+    .like('invoice_number', `${prefix}%`)
+    .order('invoice_number', { ascending: false })
+    .limit(1)
+
+  let seq = 1
+  if (data && data.length > 0) {
+    const parts  = data[0].invoice_number.split('-')
+    const parsed = parseInt(parts[parts.length - 1], 10)
+    if (!isNaN(parsed)) seq = parsed + 1
+  }
+
+  return `${prefix}${String(seq).padStart(4, '0')}`
+}
+
+// Looks up a customer by phone, or creates one if not found.
+// Returns null if neither name nor phone is provided (walk-up, no info).
+async function resolveCustomer(
+  supabase: SupabaseClient,
+  userId:  string,
+  name:    string,
+  phone:   string,
+): Promise<string | null> {
+  if (!name.trim() && !phone.trim()) return null
+
+  // Try to find by exact phone match first
+  if (phone.trim()) {
+    const { data } = await supabase
+      .from('customers')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('phone', phone.trim())
+      .limit(1)
+    if (data && data.length > 0) return data[0].id
+  }
+
+  // Create new customer record
+  const parts     = name.trim().split(/\s+/)
+  const firstName = parts[0] || 'Walk-up'
+  const lastName  = parts.slice(1).join(' ') || 'Customer'
+
+  const { data: created } = await supabase
+    .from('customers')
+    .insert({ user_id: userId, first_name: firstName, last_name: lastName, phone: phone.trim() || null })
+    .select('id')
+    .single()
+
+  return created?.id ?? null
+}
+
+// Looks up a vehicle by VIN across this user's customers.
+// Creates a new vehicle record if VIN not found and we have a customer.
+async function resolveVehicle(
+  supabase:   SupabaseClient,
+  userId:     string,
+  vin:        string | null | undefined,
+  vehicleData: { year: string; make: string; model: string; trim?: string; engine?: string },
+  customerId: string | null,
+): Promise<string | null> {
+  if (!vin) return null
+
+  // Collect all customer IDs for this user
+  const { data: customerRows } = await supabase
+    .from('customers')
+    .select('id')
+    .eq('user_id', userId)
+
+  if (customerRows && customerRows.length > 0) {
+    const ids = customerRows.map((r: { id: string }) => r.id)
+    const { data: existing } = await supabase
+      .from('vehicles')
+      .select('id')
+      .eq('vin', vin)
+      .in('customer_id', ids)
+      .limit(1)
+    if (existing && existing.length > 0) return existing[0].id
+  }
+
+  // No existing vehicle — create one if we have a customer to attach it to
+  if (!customerId) return null
+
+  const yearInt = vehicleData.year ? parseInt(vehicleData.year, 10) : null
+  const { data: created } = await supabase
+    .from('vehicles')
+    .insert({
+      customer_id: customerId,
+      year:        yearInt && yearInt >= 1900 && yearInt <= 2100 ? yearInt : null,
+      make:        vehicleData.make,
+      model:       vehicleData.model,
+      trim:        vehicleData.trim  || null,
+      vin,
+      engine:      vehicleData.engine || null,
+    })
+    .select('id')
+    .single()
+
+  return created?.id ?? null
+}
+
 async function sendSMS(to: string, body: string) {
   const sid   = process.env.TWILIO_ACCOUNT_SID
   const token = process.env.TWILIO_AUTH_TOKEN
   const from  = process.env.TWILIO_PHONE_NUMBER
   if (!sid || !token || !from) return
 
-  const url = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`
+  const url    = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`
   const params = new URLSearchParams({ To: to, From: from, Body: body })
 
   await fetch(url, {
     method: 'POST',
     headers: {
-      Authorization: `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`,
+      Authorization:  `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`,
       'Content-Type': 'application/x-www-form-urlencoded',
     },
     body: params.toString(),
   })
 }
+
+// ─── Route handler ────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -73,7 +176,7 @@ export async function POST(req: NextRequest) {
     .from('quickwrench_quotes')
     .insert({
       user_id:        user.id,
-      vin:            vehicle.vin || null,
+      vin:            vehicle.vin   || null,
       vehicle_year:   vehicle.year,
       vehicle_make:   vehicle.make,
       vehicle_model:  vehicle.model,
@@ -88,7 +191,7 @@ export async function POST(req: NextRequest) {
       markup_percent,
       tax_amount,
       grand_total,
-      customer_name:  customer_name || null,
+      customer_name:  customer_name  || null,
       customer_phone: customer_phone || null,
       status:         'draft',
     })
@@ -101,17 +204,25 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Optionally create draft invoice ───────────────────────────────────────
-  let invoiceId: string | null = null
+  let invoiceId:     string | null = null
+  let invoiceNumber: string | null = null
+
   if (save_invoice) {
+    // Resolve customer and vehicle records
+    const customerId = await resolveCustomer(supabase, user.id, customer_name ?? '', customer_phone ?? '')
+    const vehicleId  = await resolveVehicle(supabase, user.id, vehicle.vin, vehicle, customerId)
+
+    const invNum = await genInvoiceNumber(supabase, user.id)
+
     const lineItems = [
       ...parts
         .filter((p) => p.included)
         .map((p) => {
           const supplierPrice =
-            p.selected_supplier === 'autozone'  ? p.price_autozone  :
-            p.selected_supplier === 'orielly'   ? p.price_orielly   :
-            p.selected_supplier === 'napa'      ? p.price_napa      :
-            p.selected_supplier === 'rockauto'  ? p.price_rockauto  :
+            p.selected_supplier === 'autozone' ? p.price_autozone :
+            p.selected_supplier === 'orielly'  ? p.price_orielly  :
+            p.selected_supplier === 'napa'     ? p.price_napa     :
+            p.selected_supplier === 'rockauto' ? p.price_rockauto :
             p.custom_price
           const unitPrice = supplierPrice * (1 + markup_percent / 100)
           return {
@@ -129,35 +240,48 @@ export async function POST(req: NextRequest) {
       },
     ]
 
-    const subtotal = lineItems.reduce((s, li) => s + li.total, 0)
-    const taxRate  = subtotal > 0 ? (tax_amount / subtotal) * 100 : 0
+    const subtotal    = lineItems.reduce((s, li) => s + li.total, 0)
+    const taxRate     = subtotal > 0 ? (tax_amount / subtotal) * 100 : 0
     const vehicleLabel = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ')
+
+    let notes = `Vehicle: ${vehicleLabel}`
+    if (vehicle.vin)          notes += ` (VIN: ${vehicle.vin})`
+    if (customer_name?.trim()) notes += `\nCustomer: ${customer_name.trim()}`
+    if (customer_phone?.trim()) notes += customer_name?.trim() ? ` · ${customer_phone.trim()}` : `\nPhone: ${customer_phone.trim()}`
 
     const { data: inv, error: invErr } = await supabase
       .from('invoices')
       .insert({
-        user_id:        user.id,
-        invoice_number: genQuoteNumber(),
-        invoice_date:   todayISO(),
-        due_date:       dueDateISO(14),
-        customer_id:    null,
-        job_id:         null,
-        line_items:     lineItems,
-        subtotal:       Math.round(subtotal * 100) / 100,
-        tax_rate:       Math.round(taxRate * 100) / 100,
-        tax_amount:     Math.round(tax_amount * 100) / 100,
-        discount:       0,
-        total:          Math.round(grand_total * 100) / 100,
-        status:         'draft',
-        notes:          customer_name
-          ? `Customer: ${customer_name}${customer_phone ? ` · ${customer_phone}` : ''}\nVehicle: ${vehicleLabel}`
-          : `Vehicle: ${vehicleLabel}`,
-        terms:          null,
+        user_id:         user.id,
+        invoice_number:  invNum,
+        invoice_date:    todayISO(),
+        due_date:        dueDateISO(14),
+        customer_id:     customerId,
+        vehicle_id:      vehicleId,
+        job_id:          null,
+        line_items:      lineItems,
+        subtotal:        Math.round(subtotal * 100) / 100,
+        tax_rate:        Math.round(taxRate * 100) / 100,
+        tax_amount:      Math.round(tax_amount * 100) / 100,
+        discount_amount: 0,
+        total:           Math.round(grand_total * 100) / 100,
+        status:          'draft',
+        source:          'quickwrench',
+        job_category:    job.categoryLabel,
+        job_subtype:     job.name,
+        notes,
+        terms:           null,
       })
       .select('id')
       .single()
 
-    if (!invErr && inv) invoiceId = inv.id
+    if (invErr) {
+      console.error('[quote] invoice insert failed:', invErr)
+      // Non-fatal — quote was already saved; return partial success
+    } else if (inv) {
+      invoiceId     = inv.id
+      invoiceNumber = invNum
+    }
   }
 
   // ── Optionally send SMS ────────────────────────────────────────────────────
@@ -171,7 +295,7 @@ export async function POST(req: NextRequest) {
         .single()
 
       const vehicleLabel = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ')
-      const bizName = profile?.business_name ?? 'Your technician'
+      const bizName      = profile?.business_name ?? 'Your technician'
 
       const fmt = (n: number) =>
         new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
@@ -197,5 +321,5 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ quote, invoiceId, smsSent })
+  return NextResponse.json({ quote, invoiceId, invoiceNumber, smsSent })
 }

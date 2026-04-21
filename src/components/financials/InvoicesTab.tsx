@@ -56,6 +56,12 @@ const STATUS_FILTERS = [
   { value: 'cancelled', label: 'Cancelled' },
 ]
 
+const SOURCE_FILTERS = [
+  { value: '',             label: 'All Sources' },
+  { value: 'manual',      label: 'Manual' },
+  { value: 'quickwrench', label: 'QuickWrench' },
+]
+
 const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
   { value: 'cash',   label: 'Cash' },
   { value: 'card',   label: 'Card' },
@@ -72,6 +78,7 @@ export default function InvoicesTab() {
   const [invoices,      setInvoices]      = useState<Invoice[]>([])
   const [loading,       setLoading]       = useState(true)
   const [statusFilter,  setStatusFilter]  = useState('')
+  const [sourceFilter,  setSourceFilter]  = useState('')
   const [error,         setError]         = useState<string | null>(null)
   const [showForm,      setShowForm]      = useState(false)
   const [formError,     setFormError]     = useState<string | null>(null)
@@ -102,11 +109,14 @@ export default function InvoicesTab() {
   const total    = Math.max(0, subtotal + taxAmt - form.discount_amount)
 
   // ── Fetch invoices ──
-  const fetchInvoices = useCallback(async (status: string) => {
+  const fetchInvoices = useCallback(async (status: string, source: string) => {
     setLoading(true)
     setError(null)
     try {
-      const url = status ? `/api/invoices?status=${status}` : '/api/invoices'
+      const params = new URLSearchParams()
+      if (status) params.set('status', status)
+      if (source) params.set('source', source)
+      const url  = params.size > 0 ? `/api/invoices?${params}` : '/api/invoices'
       const res  = await fetch(url)
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Failed to load invoices')
@@ -118,7 +128,7 @@ export default function InvoicesTab() {
     }
   }, [])
 
-  useEffect(() => { fetchInvoices(statusFilter) }, [statusFilter, fetchInvoices])
+  useEffect(() => { fetchInvoices(statusFilter, sourceFilter) }, [statusFilter, sourceFilter, fetchInvoices])
 
   // ── Line item helpers ──
   function updateLine(index: number, field: keyof LineItem, value: string | number) {
@@ -222,22 +232,42 @@ export default function InvoicesTab() {
 
   return (
     <div className="space-y-4">
-      {/* Status filter + New Invoice button */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-1 overflow-x-auto">
-          {STATUS_FILTERS.map(f => (
-            <button
-              key={f.value}
-              onClick={() => setStatusFilter(f.value)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
-                statusFilter === f.value
-                  ? 'bg-orange/15 text-orange'
-                  : 'text-white/40 hover:text-white hover:bg-white/5'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
+      {/* Filters + New Invoice button */}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="space-y-1.5">
+          {/* Status filters */}
+          <div className="flex items-center gap-1 overflow-x-auto">
+            {STATUS_FILTERS.map(f => (
+              <button
+                key={f.value}
+                onClick={() => setStatusFilter(f.value)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
+                  statusFilter === f.value
+                    ? 'bg-orange/15 text-orange'
+                    : 'text-white/40 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+          {/* Source filter */}
+          <div className="flex items-center gap-1 overflow-x-auto">
+            <span className="text-white/25 text-[10px] uppercase tracking-widest mr-1">Source</span>
+            {SOURCE_FILTERS.map(f => (
+              <button
+                key={f.value}
+                onClick={() => setSourceFilter(f.value)}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium whitespace-nowrap transition-colors ${
+                  sourceFilter === f.value
+                    ? 'bg-blue/15 text-blue-light'
+                    : 'text-white/30 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
         </div>
         <button
           onClick={() => { setShowForm(v => !v); setFormError(null) }}
@@ -449,7 +479,14 @@ export default function InvoicesTab() {
                 <div key={inv.id}
                   className="grid grid-cols-1 sm:grid-cols-[140px_1fr_120px_90px_100px_44px] gap-2 sm:gap-4 px-5 py-4 hover:bg-white/2 transition-colors items-center">
                   {/* Invoice # */}
-                  <span className="font-mono text-xs text-white truncate">{inv.invoice_number}</span>
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="font-mono text-xs text-white truncate">{inv.invoice_number}</span>
+                    {inv.source === 'quickwrench' && (
+                      <span className="flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded bg-orange/15 text-orange border border-orange/20 uppercase tracking-wide">
+                        QW
+                      </span>
+                    )}
+                  </div>
                   {/* Customer */}
                   <span className="text-white/60 text-sm truncate">{customerName}</span>
                   {/* Date */}
