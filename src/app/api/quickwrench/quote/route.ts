@@ -1,7 +1,7 @@
 // POST /api/quickwrench/quote
 // Saves a completed QuickWrench quote.
-// When save_invoice=true, creates a real draft invoice in Financials with
-// customer/vehicle lookup-or-create, sequential invoice number, and source tracking.
+// Creates a record in the quotes table (not invoices — that happens at Phase 3 conversion).
+// When send_sms=true, sets status='sent', records sent_at, and fires an SMS.
 
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
@@ -10,35 +10,22 @@ import type { QuoteSaveRequest } from '@/types/quickwrench'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function pad2(n: number) { return String(n).padStart(2, '0') }
-
-function todayISO() {
-  const d = new Date()
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
-}
-
-function dueDateISO(daysOut = 14) {
-  const d = new Date()
-  d.setDate(d.getDate() + daysOut)
-  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`
-}
-
-// Sequential INV-YYYY-XXXX numbering, scoped per user per calendar year.
-async function genInvoiceNumber(supabase: SupabaseClient, userId: string): Promise<string> {
+// Sequential QT-YYYY-XXXX numbering, scoped per user per calendar year.
+async function genQuoteNumber(supabase: SupabaseClient, userId: string): Promise<string> {
   const year   = new Date().getFullYear()
-  const prefix = `INV-${year}-`
+  const prefix = `QT-${year}-`
 
   const { data } = await supabase
-    .from('invoices')
-    .select('invoice_number')
+    .from('quotes')
+    .select('quote_number')
     .eq('user_id', userId)
-    .like('invoice_number', `${prefix}%`)
-    .order('invoice_number', { ascending: false })
+    .like('quote_number', `${prefix}%`)
+    .order('quote_number', { ascending: false })
     .limit(1)
 
   let seq = 1
   if (data && data.length > 0) {
-    const parts  = data[0].invoice_number.split('-')
+    const parts  = data[0].quote_number.split('-')
     const parsed = parseInt(parts[parts.length - 1], 10)
     if (!isNaN(parsed)) seq = parsed + 1
   }
@@ -47,7 +34,6 @@ async function genInvoiceNumber(supabase: SupabaseClient, userId: string): Promi
 }
 
 // Looks up a customer by phone, or creates one if not found.
-// Returns null if neither name nor phone is provided (walk-up, no info).
 async function resolveCustomer(
   supabase: SupabaseClient,
   userId:  string,
@@ -56,7 +42,6 @@ async function resolveCustomer(
 ): Promise<string | null> {
   if (!name.trim() && !phone.trim()) return null
 
-  // Try to find by exact phone match first
   if (phone.trim()) {
     const { data } = await supabase
       .from('customers')
@@ -67,7 +52,6 @@ async function resolveCustomer(
     if (data && data.length > 0) return data[0].id
   }
 
-  // Create new customer record
   const parts     = name.trim().split(/\s+/)
   const firstName = parts[0] || 'Walk-up'
   const lastName  = parts.slice(1).join(' ') || 'Customer'
@@ -81,18 +65,16 @@ async function resolveCustomer(
   return created?.id ?? null
 }
 
-// Looks up a vehicle by VIN across this user's customers.
-// Creates a new vehicle record if VIN not found and we have a customer.
+// Looks up a vehicle by VIN; creates one if not found and we have a customer.
 async function resolveVehicle(
-  supabase:   SupabaseClient,
-  userId:     string,
-  vin:        string | null | undefined,
+  supabase:    SupabaseClient,
+  userId:      string,
+  vin:         string | null | undefined,
   vehicleData: { year: string; make: string; model: string; trim?: string; engine?: string },
-  customerId: string | null,
+  customerId:  string | null,
 ): Promise<string | null> {
   if (!vin) return null
 
-  // Collect all customer IDs for this user
   const { data: customerRows } = await supabase
     .from('customers')
     .select('id')
@@ -109,7 +91,6 @@ async function resolveVehicle(
     if (existing && existing.length > 0) return existing[0].id
   }
 
-  // No existing vehicle — create one if we have a customer to attach it to
   if (!customerId) return null
 
   const yearInt = vehicleData.year ? parseInt(vehicleData.year, 10) : null
@@ -120,7 +101,7 @@ async function resolveVehicle(
       year:        yearInt && yearInt >= 1900 && yearInt <= 2100 ? yearInt : null,
       make:        vehicleData.make,
       model:       vehicleData.model,
-      trim:        vehicleData.trim  || null,
+      trim:        vehicleData.trim   || null,
       vin,
       engine:      vehicleData.engine || null,
     })
@@ -168,15 +149,15 @@ export async function POST(req: NextRequest) {
     parts_total, labor_hours, labor_rate, labor_total,
     markup_percent, tax_amount, grand_total,
     customer_name, customer_phone,
-    send_sms, save_invoice,
+    send_sms, save_quote,
   } = body
 
-  // ── Save quote record ──────────────────────────────────────────────────────
-  const { data: quote, error: quoteErr } = await supabase
+  // ── Save raw QuickWrench quote log ─────────────────────────────────────────
+  const { data: qwQuote, error: qwErr } = await supabase
     .from('quickwrench_quotes')
     .insert({
       user_id:        user.id,
-      vin:            vehicle.vin   || null,
+      vin:            vehicle.vin    || null,
       vehicle_year:   vehicle.year,
       vehicle_make:   vehicle.make,
       vehicle_model:  vehicle.model,
@@ -198,21 +179,20 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
 
-  if (quoteErr) {
-    console.error('[quote] insert failed:', quoteErr)
+  if (qwErr) {
+    console.error('[quote] quickwrench_quotes insert failed:', qwErr)
     return NextResponse.json({ error: 'Failed to save quote.' }, { status: 500 })
   }
 
-  // ── Optionally create draft invoice ───────────────────────────────────────
-  let invoiceId:     string | null = null
-  let invoiceNumber: string | null = null
+  // ── Create a Quote record ──────────────────────────────────────────────────
+  let quoteId:     string | null = null
+  let quoteNumber: string | null = null
 
-  if (save_invoice) {
-    // Resolve customer and vehicle records
+  if (save_quote || send_sms) {
     const customerId = await resolveCustomer(supabase, user.id, customer_name ?? '', customer_phone ?? '')
     const vehicleId  = await resolveVehicle(supabase, user.id, vehicle.vin, vehicle, customerId)
 
-    const invNum = await genInvoiceNumber(supabase, user.id)
+    const qtNum = await genQuoteNumber(supabase, user.id)
 
     const lineItems = [
       ...parts
@@ -240,47 +220,63 @@ export async function POST(req: NextRequest) {
       },
     ]
 
-    const subtotal    = lineItems.reduce((s, li) => s + li.total, 0)
-    const taxRate     = subtotal > 0 ? (tax_amount / subtotal) * 100 : 0
+    const partsSubtotal = parts
+      .filter(p => p.included)
+      .reduce((s, p) => {
+        const supplierPrice =
+          p.selected_supplier === 'autozone' ? p.price_autozone :
+          p.selected_supplier === 'orielly'  ? p.price_orielly  :
+          p.selected_supplier === 'napa'     ? p.price_napa     :
+          p.selected_supplier === 'rockauto' ? p.price_rockauto :
+          p.custom_price
+        return s + supplierPrice * p.qty
+      }, 0)
+
     const vehicleLabel = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ')
-
     let notes = `Vehicle: ${vehicleLabel}`
-    if (vehicle.vin)          notes += ` (VIN: ${vehicle.vin})`
+    if (vehicle.vin)           notes += ` (VIN: ${vehicle.vin})`
     if (customer_name?.trim()) notes += `\nCustomer: ${customer_name.trim()}`
-    if (customer_phone?.trim()) notes += customer_name?.trim() ? ` · ${customer_phone.trim()}` : `\nPhone: ${customer_phone.trim()}`
+    if (customer_phone?.trim()) notes += customer_name?.trim()
+      ? ` · ${customer_phone.trim()}`
+      : `\nPhone: ${customer_phone.trim()}`
 
-    const { data: inv, error: invErr } = await supabase
-      .from('invoices')
+    const quoteStatus = send_sms ? 'sent' : 'draft'
+    const now         = new Date().toISOString()
+
+    const { data: qt, error: qtErr } = await supabase
+      .from('quotes')
       .insert({
-        user_id:         user.id,
-        invoice_number:  invNum,
-        invoice_date:    todayISO(),
-        due_date:        dueDateISO(14),
-        customer_id:     customerId,
-        vehicle_id:      vehicleId,
-        job_id:          null,
-        line_items:      lineItems,
-        subtotal:        Math.round(subtotal * 100) / 100,
-        tax_rate:        Math.round(taxRate * 100) / 100,
-        tax_amount:      Math.round(tax_amount * 100) / 100,
-        discount_amount: 0,
-        total:           Math.round(grand_total * 100) / 100,
-        status:          'draft',
-        source:          'quickwrench',
-        job_category:    job.categoryLabel,
-        job_subtype:     job.name,
+        user_id:              user.id,
+        quote_number:         qtNum,
+        status:               quoteStatus,
+        customer_id:          customerId,
+        vehicle_id:           vehicleId,
+        job_category:         job.categoryLabel,
+        job_subtype:          job.name,
+        line_items:           lineItems,
+        labor_hours,
+        labor_rate,
+        parts_subtotal:       Math.round(partsSubtotal * 100) / 100,
+        parts_markup_percent: markup_percent,
+        labor_subtotal:       Math.round(labor_total * 100) / 100,
+        tax_percent:          grand_total > 0
+          ? Math.round(((tax_amount / (grand_total - tax_amount)) * 100) * 100) / 100
+          : 0,
+        tax_amount:           Math.round(tax_amount * 100) / 100,
+        grand_total:          Math.round(grand_total * 100) / 100,
         notes,
-        terms:           null,
+        source:               'quickwrench',
+        sent_at:              send_sms ? now : null,
       })
       .select('id')
       .single()
 
-    if (invErr) {
-      console.error('[quote] invoice insert failed:', invErr)
-      // Non-fatal — quote was already saved; return partial success
-    } else if (inv) {
-      invoiceId     = inv.id
-      invoiceNumber = invNum
+    if (qtErr) {
+      console.error('[quote] quotes insert failed:', qtErr)
+      // Non-fatal — raw log was already saved
+    } else if (qt) {
+      quoteId     = qt.id
+      quoteNumber = qtNum
     }
   }
 
@@ -300,6 +296,10 @@ export async function POST(req: NextRequest) {
       const fmt = (n: number) =>
         new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
 
+      const quoteUrl = quoteId
+        ? `https://tools.nationalwrenchindex.com/quote/${quoteId}`
+        : 'https://tools.nationalwrenchindex.com/quote'
+
       const message = [
         `Hi ${customer_name || 'there'}, here's your service quote from ${bizName}:`,
         '',
@@ -311,15 +311,18 @@ export async function POST(req: NextRequest) {
         `Tax:    ${fmt(tax_amount)}`,
         `TOTAL:  ${fmt(grand_total)}`,
         '',
+        `View your quote: ${quoteUrl}`,
+        '',
         'Reply YES to confirm. Thank you!',
       ].join('\n')
 
       await sendSMS(customer_phone, message)
       smsSent = true
     } catch (err) {
+      // A2P 10DLC may not yet be approved — save the quote anyway, just log the failure
       console.warn('[quote] SMS failed (non-fatal):', err)
     }
   }
 
-  return NextResponse.json({ quote, invoiceId, invoiceNumber, smsSent })
+  return NextResponse.json({ quote: qwQuote, quoteId, quoteNumber, smsSent })
 }

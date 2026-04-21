@@ -1007,7 +1007,8 @@ function QuoteTab({
   const [customerName,  setCustomerName]  = useState('')
   const [customerPhone, setCustomerPhone] = useState('')
   const [saving,        setSaving]        = useState(false)
-  const [invoiceNumber, setInvoiceNumber] = useState<string | null>(null)
+  const [quoteNumber,   setQuoteNumber]   = useState<string | null>(null)
+  const [quoteId,       setQuoteId]       = useState<string | null>(null)
   const [savedHash,     setSavedHash]     = useState('')
   const [sendingSms,    setSendingSms]    = useState(false)
   const [smsSent,       setSmsSent]       = useState(false)
@@ -1028,9 +1029,9 @@ function QuoteTab({
   const quoteHash = `${laborRate}:${markupPct}:${taxPct}:${
     includedParts.map(p => `${p.id}:${p.qty}:${partPrice(p)}`).join(',')
   }`
-  const isSaved = !!invoiceNumber && savedHash === quoteHash
+  const isSaved = !!quoteNumber && savedHash === quoteHash
 
-  async function save(sendSms: boolean, saveInvoice: boolean) {
+  async function save(sendSms: boolean, saveQuote: boolean) {
     if (!vehicle || !job) return
     if (sendSms && !customerPhone) { setError('Enter customer phone to send SMS.'); return }
     setError(null)
@@ -1053,14 +1054,15 @@ function QuoteTab({
           customer_name:  customerName,
           customer_phone: customerPhone,
           send_sms:       sendSms,
-          save_invoice:   saveInvoice,
+          save_quote:     saveQuote,
         }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Save failed')
       if (sendSms) setSmsSent(true)
-      if (saveInvoice && json.invoiceNumber) {
-        setInvoiceNumber(json.invoiceNumber)
+      if (json.quoteNumber) {
+        setQuoteNumber(json.quoteNumber)
+        setQuoteId(json.quoteId ?? null)
         setSavedHash(quoteHash)
       }
     } catch (e) {
@@ -1197,23 +1199,23 @@ function QuoteTab({
 
       {error && <div className="alert-error">{error}</div>}
 
-      {/* Success banner — shown after Save to Financials */}
-      {isSaved && invoiceNumber && (
+      {/* Success banner — shown after Save as Quote */}
+      {isSaved && quoteNumber && (
         <div className="flex items-center gap-3 px-4 py-3 rounded-lg border border-success/30 bg-success/8">
           <svg className="w-4 h-4 text-success flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
             <polyline points="20 6 9 17 4 12" />
           </svg>
           <div className="flex-1 min-w-0">
             <p className="text-success text-sm font-semibold">
-              Draft invoice created — <span className="font-mono">{invoiceNumber}</span>
+              Quote saved — <span className="font-mono">{quoteNumber}</span>
             </p>
             <p className="text-white/40 text-xs mt-0.5">Modify the quote and save again to create a new version.</p>
           </div>
           <a
-            href="/financials"
+            href={`/financials?tab=quotes${quoteId ? `&quote=${quoteId}` : ''}`}
             className="flex-shrink-0 text-xs font-semibold text-blue-light hover:underline whitespace-nowrap"
           >
-            View in Financials →
+            View in Financials &rsaquo; Quotes →
           </a>
         </div>
       )}
@@ -1247,7 +1249,7 @@ function QuoteTab({
                 <polyline points="17 21 17 13 7 13 7 21"/>
                 <polyline points="7 3 7 8 15 8"/>
               </svg>
-              Save to Financials
+              Save as Quote
             </>
           )}
         </button>

@@ -1,13 +1,24 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
+import QuotesTab    from './QuotesTab'
 import OverviewTab  from './OverviewTab'
 import InvoicesTab  from './InvoicesTab'
 import ExpensesTab  from './ExpensesTab'
 
-type Tab = 'overview' | 'invoices' | 'expenses'
+type Tab = 'quotes' | 'overview' | 'invoices' | 'expenses'
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
+  {
+    id: 'quotes',
+    label: 'Quotes',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+        <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5.586a1 1 0 0 1 .707.293l5.414 5.414a1 1 0 0 1 .293.707V19a2 2 0 0 1-2 2z" />
+      </svg>
+    ),
+  },
   {
     id: 'overview',
     label: 'Overview',
@@ -43,7 +54,21 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 ]
 
 export default function FinancialsClient() {
-  const [activeTab, setActiveTab] = useState<Tab>('overview')
+  const searchParams = useSearchParams()
+  const tabParam     = searchParams.get('tab') as Tab | null
+  const quoteParam   = searchParams.get('quote') ?? undefined
+
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    if (tabParam && TABS.some(t => t.id === tabParam)) return tabParam
+    return 'quotes'
+  })
+
+  // Sync if the URL changes (e.g. browser back/forward)
+  useEffect(() => {
+    if (tabParam && TABS.some(t => t.id === tabParam)) {
+      setActiveTab(tabParam)
+    }
+  }, [tabParam])
 
   return (
     <div>
@@ -67,9 +92,10 @@ export default function FinancialsClient() {
         ))}
       </div>
 
-      {activeTab === 'overview'  && <OverviewTab />}
-      {activeTab === 'invoices'  && <InvoicesTab />}
-      {activeTab === 'expenses'  && <ExpensesTab />}
+      {activeTab === 'quotes'   && <QuotesTab initialQuoteId={quoteParam} />}
+      {activeTab === 'overview' && <OverviewTab />}
+      {activeTab === 'invoices' && <InvoicesTab />}
+      {activeTab === 'expenses' && <ExpensesTab />}
     </div>
   )
 }

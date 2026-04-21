@@ -118,6 +118,6 @@ export interface QuoteSaveRequest {
   grand_total:   number
   customer_name: string
   customer_phone: string
-  send_sms:      boolean
-  save_invoice:  boolean
+  send_sms:   boolean
+  save_quote: boolean
 }

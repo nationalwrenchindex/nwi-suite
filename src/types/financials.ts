@@ -1,5 +1,13 @@
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
+export type QuoteStatus =
+  | 'draft'
+  | 'sent'
+  | 'approved'
+  | 'declined'
+  | 'converted'
+  | 'expired'
+
 export type InvoiceStatus =
   | 'draft'
   | 'sent'
@@ -72,6 +80,49 @@ export interface Invoice {
     last_name: string
     phone: string | null
     email: string | null
+  } | null
+}
+
+export interface Quote {
+  id: string
+  user_id: string
+  quote_number: string
+  status: QuoteStatus
+  customer_id: string | null
+  vehicle_id: string | null
+  job_category: string | null
+  job_subtype: string | null
+  line_items: LineItem[]
+  labor_hours: number | null
+  labor_rate: number | null
+  parts_subtotal: number | null
+  parts_markup_percent: number | null
+  labor_subtotal: number | null
+  tax_percent: number | null
+  tax_amount: number | null
+  grand_total: number | null
+  notes: string | null
+  source: string | null
+  converted_invoice_id: string | null
+  sent_at: string | null
+  approved_at: string | null
+  declined_at: string | null
+  converted_at: string | null
+  created_at: string
+  updated_at: string
+  customer?: {
+    id: string
+    first_name: string
+    last_name: string
+    phone: string | null
+    email: string | null
+  } | null
+  vehicle?: {
+    id: string
+    year: number | null
+    make: string
+    model: string
+    vin: string | null
   } | null
 }
 
@@ -158,6 +209,14 @@ export interface ExpenseResponse {
 
 export interface OverviewResponse {
   overview: FinancialsOverview
+}
+
+export interface QuotesResponse {
+  quotes: Quote[]
+}
+
+export interface QuoteResponse {
+  quote: Quote
 }
 
 export interface ApiError {
