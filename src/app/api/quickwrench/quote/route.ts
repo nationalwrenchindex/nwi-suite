@@ -185,8 +185,9 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Create a Quote record ──────────────────────────────────────────────────
-  let quoteId:     string | null = null
-  let quoteNumber: string | null = null
+  let quoteId:      string | null = null
+  let quoteNumber:  string | null = null
+  let publicToken:  string | null = null
 
   if (save_quote || send_sms) {
     const customerId = await resolveCustomer(supabase, user.id, customer_name ?? '', customer_phone ?? '')
@@ -240,8 +241,12 @@ export async function POST(req: NextRequest) {
       ? ` · ${customer_phone.trim()}`
       : `\nPhone: ${customer_phone.trim()}`
 
-    const quoteStatus = send_sms ? 'sent' : 'draft'
-    const now         = new Date().toISOString()
+    const quoteStatus  = send_sms ? 'sent' : 'draft'
+    const now          = new Date().toISOString()
+    publicToken        = send_sms ? crypto.randomUUID().replace(/-/g, '') : null
+    const expiresAt    = send_sms
+      ? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+      : null
 
     const { data: qt, error: qtErr } = await supabase
       .from('quotes')
@@ -267,6 +272,10 @@ export async function POST(req: NextRequest) {
         notes,
         source:               'quickwrench',
         sent_at:              send_sms ? now : null,
+        public_token:         publicToken,
+        times_sent:           send_sms ? 1 : 0,
+        sent_to_phone:        send_sms && customer_phone ? customer_phone.trim() : null,
+        quote_expires_at:     expiresAt,
       })
       .select('id')
       .single()
@@ -296,9 +305,10 @@ export async function POST(req: NextRequest) {
       const fmt = (n: number) =>
         new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
 
-      const quoteUrl = quoteId
-        ? `https://tools.nationalwrenchindex.com/quote/${quoteId}`
-        : 'https://tools.nationalwrenchindex.com/quote'
+      const appUrl   = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tools.nationalwrenchindex.com'
+      const quoteUrl = publicToken
+        ? `${appUrl}/quote/${publicToken}`
+        : `${appUrl}/quote`
 
       const message = [
         `Hi ${customer_name || 'there'}, here's your service quote from ${bizName}:`,

@@ -86,8 +86,11 @@ const DATE_RANGE_FILTERS: { value: string; label: string }[] = [
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
 
-function Toast({ msg, type }: { msg: string; type: 'success' | 'error' }) {
-  const bg = type === 'success' ? 'border-success/40 bg-success/10 text-success' : 'border-danger/40 bg-danger/10 text-danger'
+function Toast({ msg, type }: { msg: string; type: 'success' | 'error' | 'warn' }) {
+  const bg =
+    type === 'success' ? 'border-success/40 bg-success/10 text-success' :
+    type === 'warn'    ? 'border-orange/40 bg-orange/10 text-orange' :
+                         'border-danger/40 bg-danger/10 text-danger'
   return (
     <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] px-5 py-3 rounded-xl border shadow-2xl text-sm font-semibold whitespace-nowrap ${bg}`}>
       {msg}
@@ -166,6 +169,285 @@ function VehicleChangeModal({
   )
 }
 
+// ─── Send Quote Modal ─────────────────────────────────────────────────────────
+
+function SendQuoteModal({
+  quote,
+  isResend,
+  onClose,
+  onSent,
+}: {
+  quote:    Quote
+  isResend: boolean
+  onClose:  () => void
+  onSent:   (updatedQuote: Quote) => void
+}) {
+  const [method,       setMethod]       = useState<'sms' | 'email' | 'link'>('sms')
+  const [phone,        setPhone]        = useState(quote.sent_to_phone ?? quote.customer?.phone ?? '')
+  const [email,        setEmail]        = useState(quote.sent_to_email ?? quote.customer?.email ?? '')
+  const [sending,      setSending]      = useState(false)
+  const [quoteUrl,     setQuoteUrl]     = useState<string | null>(
+    quote.public_token ? `${window.location.origin}/quote/${quote.public_token}` : null
+  )
+  const [copied,       setCopied]       = useState(false)
+  const [qrDataUrl,    setQrDataUrl]    = useState<string | null>(null)
+  const [generatingQr, setGeneratingQr] = useState(false)
+  const [smsWarn,      setSmsWarn]      = useState(false)
+
+  // Pre-load quote URL when switching to link tab if token not yet known
+  useEffect(() => {
+    if (method === 'link' && !quoteUrl) {
+      callSend('link')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [method])
+
+  async function callSend(sendMethod: 'sms' | 'email' | 'link') {
+    setSending(true)
+    try {
+      const res  = await fetch(`/api/quotes/${quote.id}/send`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ method: sendMethod, phone, email }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Send failed')
+
+      if (json.quote_url) setQuoteUrl(json.quote_url)
+
+      if (sendMethod === 'sms' && !json.sms_sent) setSmsWarn(true)
+
+      onSent(json.quote)
+      return json
+    } finally {
+      setSending(false)
+    }
+  }
+
+  async function handleSendSms() {
+    if (!phone.trim()) return
+    setSmsWarn(false)
+    const json = await callSend('sms').catch(() => null)
+    if (json) onClose()
+  }
+
+  async function handleSendEmail() {
+    if (!email.trim()) return
+    await callSend('email').catch(() => null)
+    onClose()
+  }
+
+  async function handleCopyLink() {
+    let url = quoteUrl
+    if (!url) {
+      const json = await callSend('link').catch(() => null)
+      url = json?.quote_url ?? null
+    } else {
+      // Still need to mark as sent if this is a first send via link
+      await fetch(`/api/quotes/${quote.id}/send`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ method: 'link', phone, email }),
+      }).then(r => r.json()).then(j => { if (j.quote) onSent(j.quote) }).catch(() => {})
+    }
+    if (url) {
+      navigator.clipboard.writeText(url).catch(() => {})
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2500)
+    }
+  }
+
+  async function handleGenerateQr() {
+    let url = quoteUrl
+    if (!url) {
+      const json = await callSend('link').catch(() => null)
+      url = json?.quote_url ?? null
+    }
+    if (!url) return
+    setGeneratingQr(true)
+    try {
+      const QRCode  = await import('qrcode')
+      const dataUrl = await QRCode.toDataURL(url, { width: 280, margin: 2, color: { dark: '#ffffff', light: '#1a1a1a' } })
+      setQrDataUrl(dataUrl)
+    } catch (e) {
+      console.error('QR generation failed:', e)
+    } finally {
+      setGeneratingQr(false)
+    }
+  }
+
+  const customerName = quote.customer
+    ? `${quote.customer.first_name} ${quote.customer.last_name}`.trim()
+    : '{Customer}'
+
+  const grandTotal = fmt(quote.grand_total)
+
+  const smsPreviw =
+    `Hi ${customerName}, your quote is ready. Total: ${grandTotal}. ` +
+    `Review and approve: ${quoteUrl ?? '[link will be generated]'} Reply STOP to opt out.`
+
+  const emailPreview =
+    `Subject: Your quote from [Your Business]\n\n` +
+    `Hi ${customerName},\n\nYour quote for service on ${
+      quote.vehicle ? [quote.vehicle.year, quote.vehicle.make, quote.vehicle.model].filter(Boolean).join(' ') : 'your vehicle'
+    } is ready.\n\nTotal: ${grandTotal}\n\nReview and approve: ${quoteUrl ?? '[link will be generated]'}`
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="w-full max-w-lg bg-[#1a1a1a] border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
+          <div>
+            <p className="text-white font-semibold">{isResend ? 'Resend Quote' : 'Send Quote'}</p>
+            <p className="text-white/40 text-xs mt-0.5">{quote.quote_number} · {grandTotal}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-2 text-white/40 hover:text-white rounded-lg hover:bg-white/10 transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Method tabs */}
+        <div className="flex border-b border-white/10">
+          {(['sms', 'email', 'link'] as const).map(m => (
+            <button
+              key={m}
+              onClick={() => setMethod(m)}
+              className={`flex-1 py-3 text-sm font-medium transition-colors ${
+                method === m
+                  ? 'text-white border-b-2 border-orange -mb-px'
+                  : 'text-white/40 hover:text-white/70'
+              }`}
+            >
+              {m === 'sms' ? 'SMS' : m === 'email' ? 'Email' : 'Copy Link'}
+            </button>
+          ))}
+        </div>
+
+        <div className="p-5 space-y-4">
+
+          {/* ── SMS tab ── */}
+          {method === 'sms' && (
+            <>
+              <div>
+                <label className="nwi-label">Customer Phone</label>
+                <input
+                  type="tel"
+                  className="nwi-input"
+                  placeholder="+1 (555) 000-0000"
+                  value={phone}
+                  onChange={e => setPhone(e.target.value)}
+                />
+              </div>
+              <div className="bg-white/5 rounded-xl p-3 space-y-1">
+                <p className="text-white/30 text-[10px] uppercase tracking-widest">SMS Preview</p>
+                <p className="text-white/60 text-xs leading-relaxed">{smsPreviw}</p>
+              </div>
+              {smsWarn && (
+                <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg border border-orange/30 bg-orange/10 text-orange text-xs">
+                  <svg className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                  </svg>
+                  Quote marked as sent. SMS delivery pending A2P approval — please contact the customer directly for now.
+                </div>
+              )}
+              <button
+                onClick={handleSendSms}
+                disabled={sending || !phone.trim()}
+                className="w-full py-3 bg-[#FF6600] hover:bg-orange-600 disabled:opacity-40 text-white font-semibold rounded-xl transition-colors"
+              >
+                {sending ? 'Sending…' : 'Send SMS'}
+              </button>
+            </>
+          )}
+
+          {/* ── Email tab ── */}
+          {method === 'email' && (
+            <>
+              <div>
+                <label className="nwi-label">Customer Email</label>
+                <input
+                  type="email"
+                  className="nwi-input"
+                  placeholder="customer@example.com"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                />
+              </div>
+              <div className="bg-white/5 rounded-xl p-3 space-y-1">
+                <p className="text-white/30 text-[10px] uppercase tracking-widest">Email Preview</p>
+                <p className="text-white/60 text-xs leading-relaxed whitespace-pre-line">{emailPreview}</p>
+              </div>
+              <button
+                onClick={handleSendEmail}
+                disabled={sending || !email.trim()}
+                className="w-full py-3 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-semibold rounded-xl transition-colors"
+              >
+                {sending ? 'Sending…' : 'Send Email'}
+              </button>
+            </>
+          )}
+
+          {/* ── Copy Link tab ── */}
+          {method === 'link' && (
+            <>
+              <div className="space-y-1">
+                <p className="text-white/30 text-[10px] uppercase tracking-widest">Quote URL</p>
+                {quoteUrl ? (
+                  <div className="flex items-center gap-2 bg-white/5 rounded-xl px-3 py-2.5 border border-white/10">
+                    <p className="text-white/70 text-xs font-mono break-all flex-1">{quoteUrl}</p>
+                  </div>
+                ) : sending ? (
+                  <div className="bg-white/5 rounded-xl px-3 py-3 text-white/30 text-xs">
+                    Generating link…
+                  </div>
+                ) : null}
+              </div>
+
+              {quoteUrl && (
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleCopyLink}
+                    disabled={sending}
+                    className="flex-1 py-2.5 border border-white/20 hover:border-white/40 text-white/70 hover:text-white text-sm font-medium rounded-xl transition-colors"
+                  >
+                    {copied ? '✓ Copied!' : 'Copy to Clipboard'}
+                  </button>
+                  <button
+                    onClick={handleGenerateQr}
+                    disabled={generatingQr}
+                    className="flex-1 py-2.5 border border-white/20 hover:border-white/40 text-white/70 hover:text-white text-sm font-medium rounded-xl transition-colors"
+                  >
+                    {generatingQr ? 'Generating…' : 'Generate QR Code'}
+                  </button>
+                </div>
+              )}
+
+              {qrDataUrl && (
+                <div className="flex flex-col items-center gap-2 p-4 bg-white/5 rounded-xl border border-white/10">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={qrDataUrl} alt="Quote QR Code" className="w-48 h-48 rounded-lg" />
+                  <p className="text-white/40 text-xs">Show this to the customer to scan</p>
+                </div>
+              )}
+            </>
+          )}
+
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Detail modal ─────────────────────────────────────────────────────────────
 
 function QuoteDetailModal({
@@ -180,6 +462,7 @@ function QuoteDetailModal({
   onDeleted:  (id: string) => void
 }) {
   const isDraft  = initialQuote.status === 'draft'
+  const isSent   = initialQuote.status === 'sent'
   const isLocked = !isDraft
 
   // ── Derive base prices from stored post-markup unit prices ──────────────────
@@ -229,12 +512,18 @@ function QuoteDetailModal({
   // ── Vehicle change modal ───────────────────────────────────────────────────
   const [showVehicleModal, setShowVehicleModal] = useState(false)
 
+  // ── Phase 2: send / mark modals ────────────────────────────────────────────
+  const [showSendModal,   setShowSendModal]   = useState(false)
+  const [showMarkModal,   setShowMarkModal]   = useState<'approved' | 'declined' | null>(null)
+  const [markNote,        setMarkNote]        = useState('')
+  const [marking,         setMarking]         = useState(false)
+
   // ── UI state ───────────────────────────────────────────────────────────────
   const [saving,            setSaving]            = useState(false)
   const [cloning,           setCloning]           = useState(false)
   const [deleting,          setDeleting]           = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [toast,             setToast]             = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
+  const [toast,             setToast]             = useState<{ msg: string; type: 'success' | 'error' | 'warn' } | null>(null)
   const [validationErr,     setValidationErr]     = useState<string | null>(null)
 
   // ── Dirty detection ────────────────────────────────────────────────────────
@@ -269,10 +558,10 @@ function QuoteDetailModal({
 
   // ── Toast helper ───────────────────────────────────────────────────────────
   const toastRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  function showToast(msg: string, type: 'success' | 'error' = 'success') {
+  function showToast(msg: string, type: 'success' | 'error' | 'warn' = 'success') {
     if (toastRef.current) clearTimeout(toastRef.current)
     setToast({ msg, type })
-    toastRef.current = setTimeout(() => setToast(null), 3500)
+    toastRef.current = setTimeout(() => setToast(null), 4000)
   }
 
   // ── Item editing helpers ───────────────────────────────────────────────────
@@ -404,7 +693,7 @@ function QuoteDetailModal({
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Clone failed')
       showToast(`New version created — ${json.quote.quote_number}`)
-      onUpdated(json.quote)  // open the new clone in the modal
+      onUpdated(json.quote)
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'Failed to create new version', 'error')
     } finally {
@@ -439,6 +728,28 @@ function QuoteDetailModal({
     window.location.href = `/quickwrench?loadQuoteId=${initialQuote.id}`
   }
 
+  // ── Mark Approved / Declined (manual, tech-side) ───────────────────────────
+  async function handleMark(action: 'approved' | 'declined') {
+    setMarking(true)
+    try {
+      const res  = await fetch(`/api/quotes/${initialQuote.id}/respond`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ action, note: markNote || undefined }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Failed to update status')
+      setShowMarkModal(null)
+      setMarkNote('')
+      showToast(`Quote marked as ${action}`)
+      onUpdated(json.quote)
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Failed', 'error')
+    } finally {
+      setMarking(false)
+    }
+  }
+
   // ── Close guard ────────────────────────────────────────────────────────────
   function handleClose() {
     if (isDirty && !window.confirm('You have unsaved changes. Discard?')) return
@@ -455,9 +766,14 @@ function QuoteDetailModal({
 
   const jobDesc = [initialQuote.job_category, initialQuote.job_subtype].filter(Boolean).join(' / ') || '—'
 
-  const timeline: { label: string; ts: string | null }[] = [
+  const timeline: { label: string; ts: string | null; detail?: string }[] = [
     { label: 'Created',   ts: initialQuote.created_at },
-    { label: 'Sent',      ts: initialQuote.sent_at },
+    { label: 'Sent',      ts: initialQuote.sent_at,
+      detail: initialQuote.times_sent && initialQuote.times_sent > 1
+        ? `(sent ${initialQuote.times_sent}x)` : undefined },
+    { label: 'Viewed',    ts: initialQuote.viewed_at,
+      detail: initialQuote.view_count > 0
+        ? `(${initialQuote.view_count} view${initialQuote.view_count !== 1 ? 's' : ''})` : undefined },
     { label: 'Approved',  ts: initialQuote.approved_at },
     { label: 'Declined',  ts: initialQuote.declined_at },
     { label: 'Converted', ts: initialQuote.converted_at },
@@ -618,7 +934,6 @@ function QuoteDetailModal({
                     <span />
                   </div>
 
-                  {/* Existing items */}
                   {items.length === 0 && !addingNew && (
                     <div className="px-4 py-4 text-white/25 text-sm text-center">
                       No parts — add one below or skip if labor-only.
@@ -628,7 +943,6 @@ function QuoteDetailModal({
                   {items.map(li => (
                     <div key={li._id} className="border-b border-white/5 last:border-0">
                       {editingId === li._id ? (
-                        /* Inline edit form */
                         <div className="p-3 space-y-2 bg-orange/5">
                           <input
                             autoFocus
@@ -673,7 +987,6 @@ function QuoteDetailModal({
                           </div>
                         </div>
                       ) : (
-                        /* View row */
                         <div className="grid grid-cols-[1fr_56px_80px_80px_52px] gap-1 items-center px-3 py-2.5 hover:bg-white/[0.03]">
                           <span className="text-white/80 text-sm truncate">{li.description}</span>
                           <span className="text-white/50 text-sm text-right">{li.quantity}</span>
@@ -710,7 +1023,6 @@ function QuoteDetailModal({
                     </div>
                   ))}
 
-                  {/* Add new item row */}
                   {addingNew ? (
                     <div className="p-3 space-y-2 bg-white/5 border-t border-white/10">
                       <input
@@ -770,7 +1082,6 @@ function QuoteDetailModal({
                   )}
                 </div>
               ) : (
-                /* Locked: read-only table */
                 Array.isArray(initialQuote.line_items) && initialQuote.line_items.length > 0 && (
                   <div className="bg-white/5 rounded-xl overflow-hidden">
                     <table className="w-full text-sm">
@@ -905,7 +1216,6 @@ function QuoteDetailModal({
               <p className="text-white/30 text-xs uppercase tracking-widest mb-3">Financial Breakdown</p>
 
               {isDraft ? (
-                /* Live-updating edit-mode breakdown */
                 <>
                   {partsBase > 0 && (
                     <div className="flex justify-between text-sm">
@@ -941,7 +1251,6 @@ function QuoteDetailModal({
                   </div>
                 </>
               ) : (
-                /* Static read-only breakdown from DB values */
                 <>
                   {initialQuote.parts_subtotal != null && (
                     <div className="flex justify-between text-sm">
@@ -995,18 +1304,42 @@ function QuoteDetailModal({
               </div>
             )}
 
-            {/* ── Status timeline (locked) ── */}
+            {/* ── Timeline (locked) ── */}
             {isLocked && timeline.length > 0 && (
               <div className="space-y-2">
                 <p className="text-white/30 text-xs uppercase tracking-widest">Timeline</p>
                 <div className="space-y-1.5">
-                  {timeline.map(({ label, ts }) => (
-                    <div key={label} className="flex items-center justify-between text-sm">
-                      <span className="text-white/50">{label}</span>
-                      <span className="text-white/70">{fmtDateTime(ts)}</span>
+                  {timeline.map(({ label, ts, detail }) => (
+                    <div key={label} className="flex items-center justify-between text-sm gap-2">
+                      <span className="text-white/50">
+                        {label}
+                        {detail && <span className="text-white/30 text-xs ml-1.5">{detail}</span>}
+                      </span>
+                      <span className="text-white/70 text-right">{fmtDateTime(ts)}</span>
                     </div>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* ── Customer decline note ── */}
+            {initialQuote.status === 'declined' && initialQuote.customer_response_note && (
+              <div className="space-y-1">
+                <p className="text-white/30 text-xs uppercase tracking-widest">Customer Note</p>
+                <p className="text-white/60 text-sm italic">&ldquo;{initialQuote.customer_response_note}&rdquo;</p>
+              </div>
+            )}
+
+            {/* ── Sent-to info ── */}
+            {(initialQuote.sent_to_phone || initialQuote.sent_to_email) && (
+              <div className="space-y-1">
+                <p className="text-white/30 text-xs uppercase tracking-widest">Sent To</p>
+                {initialQuote.sent_to_phone && (
+                  <p className="text-white/50 text-sm">{initialQuote.sent_to_phone} (SMS)</p>
+                )}
+                {initialQuote.sent_to_email && (
+                  <p className="text-white/50 text-sm">{initialQuote.sent_to_email} (Email)</p>
+                )}
               </div>
             )}
 
@@ -1014,14 +1347,25 @@ function QuoteDetailModal({
             <div className="flex flex-wrap gap-3 pt-2 border-t border-white/10">
               {isDraft ? (
                 <>
+                  {/* Send Quote (primary for draft) */}
+                  <button
+                    onClick={() => setShowSendModal(true)}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-[#FF6600] hover:bg-orange-600 text-white font-condensed font-bold text-sm tracking-wide rounded-lg transition-colors shadow-md shadow-orange/20"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                    </svg>
+                    Send Quote
+                  </button>
+
                   {/* Save Changes */}
                   <button
                     onClick={handleSave}
                     disabled={saving || grandTotal < 0}
                     className={`flex items-center gap-2 px-5 py-2.5 text-white font-condensed font-bold text-sm tracking-wide rounded-lg transition-all ${
                       isDirty
-                        ? 'bg-orange hover:bg-orange-hover shadow-lg shadow-orange/20'
-                        : 'bg-orange/60 hover:bg-orange/80'
+                        ? 'bg-white/15 hover:bg-white/20 border border-white/20'
+                        : 'bg-white/10 hover:bg-white/15 border border-white/10'
                     } disabled:opacity-40`}
                   >
                     {saving ? (
@@ -1044,7 +1388,6 @@ function QuoteDetailModal({
                     )}
                   </button>
 
-                  {/* Cancel */}
                   {isDirty && (
                     <button
                       onClick={handleCancel}
@@ -1054,7 +1397,6 @@ function QuoteDetailModal({
                     </button>
                   )}
 
-                  {/* Reopen in QuickWrench */}
                   <button
                     onClick={handleReopenInQW}
                     className="flex items-center gap-2 px-4 py-2.5 border border-blue/30 bg-blue/10 hover:bg-blue/20 text-blue-light text-sm font-medium rounded-lg transition-colors"
@@ -1065,7 +1407,6 @@ function QuoteDetailModal({
                     Reopen in QuickWrench
                   </button>
 
-                  {/* Delete */}
                   <button
                     onClick={() => setShowDeleteConfirm(true)}
                     className="ml-auto flex items-center gap-1.5 px-3 py-2.5 text-danger/60 hover:text-danger text-sm rounded-lg transition-colors"
@@ -1077,9 +1418,63 @@ function QuoteDetailModal({
                     Delete
                   </button>
                 </>
+              ) : isSent ? (
+                <>
+                  {/* Mark Approved */}
+                  <button
+                    onClick={() => setShowMarkModal('approved')}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-condensed font-bold text-sm tracking-wide rounded-lg transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                      <polyline points="20 6 9 17 4 12"/>
+                    </svg>
+                    Mark Approved
+                  </button>
+
+                  {/* Mark Declined */}
+                  <button
+                    onClick={() => setShowMarkModal('declined')}
+                    className="flex items-center gap-2 px-4 py-2.5 border border-danger/40 bg-danger/10 hover:bg-danger/20 text-danger text-sm font-semibold rounded-lg transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                    </svg>
+                    Mark Declined
+                  </button>
+
+                  {/* Resend Quote */}
+                  <button
+                    onClick={() => setShowSendModal(true)}
+                    className="flex items-center gap-2 px-4 py-2.5 border border-white/20 hover:border-orange/40 text-white/60 hover:text-orange text-sm font-medium rounded-lg transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
+                    </svg>
+                    Resend Quote
+                  </button>
+
+                  {/* Edit as New Version */}
+                  <button
+                    onClick={handleClone}
+                    disabled={cloning}
+                    className="flex items-center gap-2 px-4 py-2.5 border border-white/15 text-white/50 hover:text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-40"
+                  >
+                    {cloning ? 'Creating…' : 'Edit as New Version'}
+                  </button>
+
+                  <button
+                    onClick={handleReopenInQW}
+                    className="flex items-center gap-2 px-4 py-2.5 border border-blue/30 bg-blue/10 hover:bg-blue/20 text-blue-light text-sm font-medium rounded-lg transition-colors"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                      <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                    </svg>
+                    Reopen in QuickWrench
+                  </button>
+                </>
               ) : (
                 <>
-                  {/* Edit as New Version */}
+                  {/* Edit as New Version (approved / declined / expired / converted) */}
                   <button
                     onClick={handleClone}
                     disabled={cloning}
@@ -1104,7 +1499,6 @@ function QuoteDetailModal({
                     )}
                   </button>
 
-                  {/* Reopen in QuickWrench */}
                   <button
                     onClick={handleReopenInQW}
                     className="flex items-center gap-2 px-4 py-2.5 border border-blue/30 bg-blue/10 hover:bg-blue/20 text-blue-light text-sm font-medium rounded-lg transition-colors"
@@ -1149,6 +1543,54 @@ function QuoteDetailModal({
         </div>
       )}
 
+      {/* ── Manual mark modal (approve / decline) ── */}
+      {showMarkModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-4">
+          <div className="w-full max-w-sm bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 space-y-4">
+            <p className="text-white font-semibold">
+              Mark as {showMarkModal === 'approved' ? 'Approved' : 'Declined'}?
+            </p>
+            <p className="text-white/50 text-sm">
+              {showMarkModal === 'approved'
+                ? 'Record that the customer verbally approved this quote.'
+                : 'Record that the customer verbally declined this quote.'}
+            </p>
+            {showMarkModal === 'declined' && (
+              <div className="space-y-1">
+                <label className="nwi-label">Reason / note (optional)</label>
+                <textarea
+                  rows={3}
+                  value={markNote}
+                  onChange={e => setMarkNote(e.target.value)}
+                  placeholder="e.g. Customer said too expensive"
+                  className="nwi-input resize-none text-sm w-full"
+                />
+              </div>
+            )}
+            <div className="flex gap-3">
+              <button
+                onClick={() => handleMark(showMarkModal)}
+                disabled={marking}
+                className={`flex-1 px-4 py-2.5 disabled:opacity-50 text-white font-semibold text-sm rounded-lg transition-colors ${
+                  showMarkModal === 'approved'
+                    ? 'bg-emerald-600 hover:bg-emerald-700'
+                    : 'bg-danger hover:bg-danger/80'
+                }`}
+              >
+                {marking ? 'Saving…' : `Yes, Mark ${showMarkModal === 'approved' ? 'Approved' : 'Declined'}`}
+              </button>
+              <button
+                onClick={() => { setShowMarkModal(null); setMarkNote('') }}
+                disabled={marking}
+                className="flex-1 px-4 py-2.5 border border-white/15 text-white/60 hover:text-white text-sm rounded-lg transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ── Vehicle change modal ── */}
       {showVehicleModal && (
         <VehicleChangeModal
@@ -1159,6 +1601,25 @@ function QuoteDetailModal({
             setVehicle({ id: v.id, year: v.year, make: v.make, model: v.model, vin: v.vin })
           }}
           onClose={() => setShowVehicleModal(false)}
+        />
+      )}
+
+      {/* ── Send / Resend Quote modal ── */}
+      {showSendModal && (
+        <SendQuoteModal
+          quote={initialQuote}
+          isResend={isSent}
+          onClose={() => setShowSendModal(false)}
+          onSent={updatedQuote => {
+            setShowSendModal(false)
+            showToast(
+              isSent
+                ? 'Quote resent successfully'
+                : `Quote sent — ${updatedQuote.quote_number}`,
+              'success'
+            )
+            onUpdated(updatedQuote)
+          }}
         />
       )}
 
@@ -1201,7 +1662,6 @@ export default function QuotesTab({ initialQuoteId }: { initialQuoteId?: string 
 
   useEffect(() => { loadQuotes() }, [loadQuotes])
 
-  // Open initial quote if navigated here with ?quote=
   useEffect(() => {
     if (initialQuoteId && quotes.length > 0 && !selected) {
       const match = quotes.find(q => q.id === initialQuoteId)
@@ -1209,8 +1669,6 @@ export default function QuotesTab({ initialQuoteId }: { initialQuoteId?: string 
     }
   }, [initialQuoteId, quotes, selected])
 
-  // When an in-modal save returns an updated quote, swap it into the list and
-  // force the modal to remount so its state re-derives from the fresh quote.
   function handleQuoteUpdated(updatedQuote: Quote) {
     setQuotes(qs => qs.map(q => q.id === updatedQuote.id ? updatedQuote : q))
     setSelected(updatedQuote)
@@ -1222,7 +1680,6 @@ export default function QuotesTab({ initialQuoteId }: { initialQuoteId?: string 
     setSelected(null)
   }
 
-  // Client-side search filtering
   const visible = quotes.filter(q => {
     if (!search.trim()) return true
     const s = search.toLowerCase()

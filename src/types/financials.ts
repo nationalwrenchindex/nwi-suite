@@ -105,6 +105,15 @@ export interface Quote {
   source: string | null
   parent_quote_id: string | null
   converted_invoice_id: string | null
+  // Phase 2 — send workflow + approval tracking
+  public_token: string | null
+  sent_to_phone: string | null
+  sent_to_email: string | null
+  customer_response_note: string | null
+  viewed_at: string | null
+  view_count: number
+  times_sent: number
+  quote_expires_at: string | null
   sent_at: string | null
   approved_at: string | null
   declined_at: string | null
