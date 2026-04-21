@@ -16,6 +16,14 @@ export type InvoiceStatus =
   | 'overdue'
   | 'cancelled'
 
+// Phase 3+ invoice lifecycle (replaces InvoiceStatus for quote-converted invoices)
+export type InvoiceProgressStatus =
+  | 'in_progress'
+  | 'finalized'
+  | 'awaiting_payment'
+  | 'paid'
+  | 'void'
+
 export type PaymentMethod =
   | 'cash'
   | 'card'
@@ -48,6 +56,31 @@ export interface LineItem {
   total: number
 }
 
+// Phase 3: items added during the job (stored as JSONB arrays on the invoice)
+export interface ShopSupplyItem {
+  id: string
+  name: string
+  qty: number
+  unit_cost: number
+  total: number
+}
+
+export interface AdditionalPartItem {
+  id: string
+  description: string
+  qty: number
+  unit_cost: number
+  total: number  // after markup
+}
+
+export interface AdditionalLaborItem {
+  id: string
+  description: string
+  hours: number
+  rate: number
+  subtotal: number
+}
+
 export interface Invoice {
   id: string
   user_id: string
@@ -66,20 +99,48 @@ export interface Invoice {
   status: InvoiceStatus
   payment_method: PaymentMethod | null
   paid_at: string | null
-  source: 'manual' | 'quickwrench' | null
+  source: 'manual' | 'quickwrench' | 'quote' | null
   job_category: string | null
   job_subtype: string | null
   notes: string | null
   terms: string | null
   created_at: string
   updated_at: string
-  // Joined relation
+  // Phase 3 fields
+  invoice_status: InvoiceProgressStatus | null
+  source_quote_id: string | null
+  job_notes: string | null
+  shop_supplies: ShopSupplyItem[]
+  additional_parts: AdditionalPartItem[]
+  additional_labor: AdditionalLaborItem[]
+  started_at: string | null
+  // Joined relations
   customer?: {
     id: string
     first_name: string
     last_name: string
     phone: string | null
     email: string | null
+  } | null
+  vehicle?: {
+    id: string
+    year: number | null
+    make: string
+    model: string
+    vin: string | null
+  } | null
+  source_quote?: {
+    id: string
+    quote_number: string
+    line_items: LineItem[]
+    labor_hours: number | null
+    labor_rate: number | null
+    parts_subtotal: number | null
+    parts_markup_percent: number | null
+    labor_subtotal: number | null
+    tax_percent: number | null
+    tax_amount: number | null
+    grand_total: number | null
   } | null
 }
 

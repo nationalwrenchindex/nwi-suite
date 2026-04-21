@@ -3,11 +3,12 @@ import { createClient } from '@/lib/supabase/server'
 
 const INVOICE_SELECT = `
   *,
-  customer:customers(id, first_name, last_name, phone, email)
+  customer:customers(id, first_name, last_name, phone, email),
+  vehicle:vehicles(id, year, make, model, vin)
 `
 
 // ─── GET /api/invoices ────────────────────────────────────────────────────────
-// Query params: status, source, limit, offset
+// Query params: status, invoice_status, source, limit, offset
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -16,11 +17,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const sp     = request.nextUrl.searchParams
-  const status = sp.get('status')
-  const source = sp.get('source')
-  const limit  = Number(sp.get('limit')  ?? 100)
-  const offset = Number(sp.get('offset') ?? 0)
+  const sp             = request.nextUrl.searchParams
+  const status         = sp.get('status')
+  const invoice_status = sp.get('invoice_status')
+  const source         = sp.get('source')
+  const limit          = Number(sp.get('limit')  ?? 100)
+  const offset         = Number(sp.get('offset') ?? 0)
 
   let query = supabase
     .from('invoices')
@@ -30,8 +32,9 @@ export async function GET(request: NextRequest) {
     .order('created_at',   { ascending: false })
     .range(offset, offset + limit - 1)
 
-  if (status) query = query.eq('status', status)
-  if (source) query = query.eq('source', source)
+  if (status)         query = query.eq('status', status)
+  if (invoice_status) query = query.eq('invoice_status', invoice_status)
+  if (source)         query = query.eq('source', source)
 
   const { data, error } = await query
 
@@ -86,12 +89,13 @@ export async function POST(request: NextRequest) {
       tax_amount:      Number(body.tax_amount      ?? 0),
       discount_amount: Number(body.discount_amount ?? 0),
       total:           Number(body.total),
-      status:          body.status       ?? 'draft',
-      source:          body.source       ?? 'manual',
-      job_category:    body.job_category ?? null,
-      job_subtype:     body.job_subtype  ?? null,
-      notes:           body.notes        ?? null,
-      terms:           body.terms        ?? null,
+      status:           body.status          ?? 'draft',
+      source:           body.source          ?? 'manual',
+      job_category:     body.job_category    ?? null,
+      job_subtype:      body.job_subtype     ?? null,
+      notes:            body.notes           ?? null,
+      terms:            body.terms           ?? null,
+      invoice_status:   body.invoice_status  ?? 'in_progress',
     })
     .select(INVOICE_SELECT)
     .single()

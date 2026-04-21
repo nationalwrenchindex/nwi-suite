@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import type { Invoice, InvoiceStatus, LineItem, PaymentMethod } from '@/types/financials'
+import { useRouter } from 'next/navigation'
+import type { Invoice, InvoiceStatus, InvoiceProgressStatus, LineItem, PaymentMethod } from '@/types/financials'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -23,9 +24,19 @@ function today() {
   return new Date().toISOString().slice(0, 10)
 }
 
-// ─── Status badge ─────────────────────────────────────────────────────────────
+// ─── Status badges ────────────────────────────────────────────────────────────
 
-const STATUS_META: Record<InvoiceStatus, { label: string; cls: string }> = {
+// New invoice_status badge (Phase 3+)
+const PROGRESS_STATUS_META: Record<InvoiceProgressStatus, { label: string; style: React.CSSProperties }> = {
+  in_progress:       { label: 'In Progress',       style: { backgroundColor: '#f59e0b', color: '#fff' } },
+  finalized:         { label: 'Finalized',          style: { backgroundColor: '#2969B0', color: '#fff' } },
+  awaiting_payment:  { label: 'Awaiting Payment',   style: { backgroundColor: '#8b5cf6', color: '#fff' } },
+  paid:              { label: 'Paid',               style: { backgroundColor: '#10b981', color: '#fff' } },
+  void:              { label: 'Void',               style: { backgroundColor: '#6b7280', color: '#fff' } },
+}
+
+// Legacy status badge (manually-created invoices)
+const LEGACY_STATUS_META: Record<InvoiceStatus, { label: string; cls: string }> = {
   draft:     { label: 'Draft',     cls: 'bg-white/10 text-white/50' },
   sent:      { label: 'Sent',      cls: 'bg-blue/20 text-blue' },
   viewed:    { label: 'Viewed',    cls: 'bg-blue/20 text-blue' },
@@ -34,10 +45,29 @@ const STATUS_META: Record<InvoiceStatus, { label: string; cls: string }> = {
   cancelled: { label: 'Cancelled', cls: 'bg-white/5 text-white/30' },
 }
 
-function StatusBadge({ status }: { status: InvoiceStatus }) {
-  const { label, cls } = STATUS_META[status] ?? STATUS_META.draft
+function InvoiceStatusBadge({ invoice }: { invoice: Invoice }) {
+  // Quote-converted invoices use invoice_status; manual invoices use legacy status
+  if (invoice.source_quote_id && invoice.invoice_status) {
+    const meta = PROGRESS_STATUS_META[invoice.invoice_status] ?? PROGRESS_STATUS_META.in_progress
+    return (
+      <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={meta.style}>
+        {meta.label}
+      </span>
+    )
+  }
+  // Fallback: if invoice_status is set (from migration DEFAULT), still show progress badge
+  if (invoice.invoice_status && invoice.invoice_status !== 'in_progress') {
+    const meta = PROGRESS_STATUS_META[invoice.invoice_status] ?? PROGRESS_STATUS_META.in_progress
+    return (
+      <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={meta.style}>
+        {meta.label}
+      </span>
+    )
+  }
+  // Legacy: show old status badge
+  const meta = LEGACY_STATUS_META[invoice.status] ?? LEGACY_STATUS_META.draft
   return (
-    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>{label}</span>
+    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${meta.cls}`}>{meta.label}</span>
   )
 }
 
@@ -45,21 +75,23 @@ function StatusBadge({ status }: { status: InvoiceStatus }) {
 
 const emptyLine = (): LineItem => ({ description: '', quantity: 1, unit_price: 0, total: 0 })
 
-// ─── Status filter tabs ───────────────────────────────────────────────────────
+// ─── Filter options ───────────────────────────────────────────────────────────
 
-const STATUS_FILTERS = [
-  { value: '',          label: 'All' },
-  { value: 'draft',     label: 'Draft' },
-  { value: 'sent',      label: 'Sent' },
-  { value: 'paid',      label: 'Paid' },
-  { value: 'overdue',   label: 'Overdue' },
-  { value: 'cancelled', label: 'Cancelled' },
+// invoice_status filter (Phase 3+ lifecycle)
+const INVOICE_STATUS_FILTERS: { value: InvoiceProgressStatus | ''; label: string }[] = [
+  { value: '',                label: 'All' },
+  { value: 'in_progress',     label: 'In Progress' },
+  { value: 'finalized',       label: 'Finalized' },
+  { value: 'awaiting_payment',label: 'Awaiting Payment' },
+  { value: 'paid',            label: 'Paid' },
+  { value: 'void',            label: 'Void' },
 ]
 
 const SOURCE_FILTERS = [
   { value: '',             label: 'All Sources' },
   { value: 'manual',      label: 'Manual' },
   { value: 'quickwrench', label: 'QuickWrench' },
+  { value: 'quote',       label: 'From Quote' },
 ]
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
@@ -75,11 +107,12 @@ const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function InvoicesTab() {
-  const [invoices,      setInvoices]      = useState<Invoice[]>([])
-  const [loading,       setLoading]       = useState(true)
-  const [statusFilter,  setStatusFilter]  = useState('')
-  const [sourceFilter,  setSourceFilter]  = useState('')
-  const [error,         setError]         = useState<string | null>(null)
+  const router = useRouter()
+  const [invoices,             setInvoices]             = useState<Invoice[]>([])
+  const [loading,              setLoading]              = useState(true)
+  const [invoiceStatusFilter,  setInvoiceStatusFilter]  = useState<InvoiceProgressStatus | ''>('in_progress')
+  const [sourceFilter,         setSourceFilter]         = useState('')
+  const [error,                setError]                = useState<string | null>(null)
   const [showForm,      setShowForm]      = useState(false)
   const [formError,     setFormError]     = useState<string | null>(null)
   const [submitting,    setSubmitting]    = useState(false)
@@ -109,13 +142,13 @@ export default function InvoicesTab() {
   const total    = Math.max(0, subtotal + taxAmt - form.discount_amount)
 
   // ── Fetch invoices ──
-  const fetchInvoices = useCallback(async (status: string, source: string) => {
+  const fetchInvoices = useCallback(async (invoiceStatus: string, source: string) => {
     setLoading(true)
     setError(null)
     try {
       const params = new URLSearchParams()
-      if (status) params.set('status', status)
-      if (source) params.set('source', source)
+      if (invoiceStatus) params.set('invoice_status', invoiceStatus)
+      if (source)        params.set('source', source)
       const url  = params.size > 0 ? `/api/invoices?${params}` : '/api/invoices'
       const res  = await fetch(url)
       const json = await res.json()
@@ -128,7 +161,7 @@ export default function InvoicesTab() {
     }
   }, [])
 
-  useEffect(() => { fetchInvoices(statusFilter, sourceFilter) }, [statusFilter, sourceFilter, fetchInvoices])
+  useEffect(() => { fetchInvoices(invoiceStatusFilter, sourceFilter) }, [invoiceStatusFilter, sourceFilter, fetchInvoices])
 
   // ── Line item helpers ──
   function updateLine(index: number, field: keyof LineItem, value: string | number) {
@@ -235,14 +268,14 @@ export default function InvoicesTab() {
       {/* Filters + New Invoice button */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="space-y-1.5">
-          {/* Status filters */}
+          {/* Invoice status filters (Phase 3 lifecycle) */}
           <div className="flex items-center gap-1 overflow-x-auto">
-            {STATUS_FILTERS.map(f => (
+            {INVOICE_STATUS_FILTERS.map(f => (
               <button
                 key={f.value}
-                onClick={() => setStatusFilter(f.value)}
+                onClick={() => setInvoiceStatusFilter(f.value)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
-                  statusFilter === f.value
+                  invoiceStatusFilter === f.value
                     ? 'bg-orange/15 text-orange'
                     : 'text-white/40 hover:text-white hover:bg-white/5'
                 }`}
@@ -454,7 +487,7 @@ export default function InvoicesTab() {
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
             <polyline points="14 2 14 8 20 8" />
           </svg>
-          <p className="text-white/30 text-sm">No invoices{statusFilter ? ` with status "${statusFilter}"` : ''}.</p>
+          <p className="text-white/30 text-sm">No invoices{invoiceStatusFilter ? ` with status "${invoiceStatusFilter.replace('_', ' ')}"` : ''}.</p>
           <button onClick={() => setShowForm(true)}
             className="mt-3 text-orange text-xs hover:underline">
             Create your first invoice →
@@ -463,7 +496,7 @@ export default function InvoicesTab() {
       ) : (
         <div className="nwi-card p-0 overflow-hidden">
           {/* Table header */}
-          <div className="hidden sm:grid grid-cols-[140px_1fr_120px_90px_100px_44px] gap-4 px-5 py-3 border-b border-dark-border">
+          <div className="hidden sm:grid grid-cols-[140px_1fr_120px_90px_140px_44px] gap-4 px-5 py-3 border-b border-dark-border">
             {['Invoice #', 'Customer', 'Date', 'Total', 'Status', ''].map(h => (
               <span key={h} className="text-white/30 text-xs uppercase tracking-widest">{h}</span>
             ))}
@@ -474,16 +507,25 @@ export default function InvoicesTab() {
               const customerName = inv.customer
                 ? `${inv.customer.first_name} ${inv.customer.last_name}`
                 : '—'
+              const isInProgress = inv.invoice_status === 'in_progress' && inv.source_quote_id
 
               return (
                 <div key={inv.id}
-                  className="grid grid-cols-1 sm:grid-cols-[140px_1fr_120px_90px_100px_44px] gap-2 sm:gap-4 px-5 py-4 hover:bg-white/2 transition-colors items-center">
+                  onClick={isInProgress ? () => router.push(`/financials/invoices/${inv.id}`) : undefined}
+                  className={`grid grid-cols-1 sm:grid-cols-[140px_1fr_120px_90px_140px_44px] gap-2 sm:gap-4 px-5 py-4 hover:bg-white/2 transition-colors items-center ${isInProgress ? 'cursor-pointer' : ''}`}>
                   {/* Invoice # */}
                   <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="font-mono text-xs text-white truncate">{inv.invoice_number}</span>
+                    <span className={`font-mono text-xs truncate ${isInProgress ? 'text-orange' : 'text-white'}`}>
+                      {inv.invoice_number}
+                    </span>
                     {inv.source === 'quickwrench' && (
                       <span className="flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded bg-orange/15 text-orange border border-orange/20 uppercase tracking-wide">
                         QW
+                      </span>
+                    )}
+                    {inv.source === 'quote' && (
+                      <span className="flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded bg-blue/15 text-blue-light border border-blue/20 uppercase tracking-wide">
+                        QT
                       </span>
                     )}
                   </div>
@@ -494,9 +536,9 @@ export default function InvoicesTab() {
                   {/* Total */}
                   <span className="font-condensed font-bold text-white">{fmt(inv.total)}</span>
                   {/* Status */}
-                  <StatusBadge status={inv.status} />
+                  <InvoiceStatusBadge invoice={inv} />
                   {/* Actions */}
-                  <div className="relative">
+                  <div className="relative" onClick={e => e.stopPropagation()}>
                     <button
                       disabled={!!actionLoading}
                       onClick={() => setOpenMenu(openMenu === inv.id ? null : inv.id)}

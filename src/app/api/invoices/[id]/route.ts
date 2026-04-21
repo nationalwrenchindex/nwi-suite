@@ -3,8 +3,38 @@ import { createClient } from '@/lib/supabase/server'
 
 const INVOICE_SELECT = `
   *,
-  customer:customers(id, first_name, last_name, phone, email)
+  customer:customers(id, first_name, last_name, phone, email),
+  vehicle:vehicles(id, year, make, model, vin),
+  source_quote:quotes(id, quote_number, line_items, labor_hours, labor_rate, parts_subtotal, parts_markup_percent, labor_subtotal, tax_percent, tax_amount, grand_total)
 `
+
+// ─── GET /api/invoices/[id] ───────────────────────────────────────────────────
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const { id } = await params
+
+  const { data, error } = await supabase
+    .from('invoices')
+    .select(INVOICE_SELECT)
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .single()
+
+  if (error || !data) {
+    return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
+  }
+
+  return NextResponse.json({ invoice: data })
+}
 
 // ─── PUT /api/invoices/[id] ───────────────────────────────────────────────────
 // Body: { status: 'paid' | 'unpaid' | 'overdue', payment_method?: string }
@@ -51,12 +81,14 @@ export async function PUT(
   const updates: Record<string, unknown> = { status: dbStatus }
 
   if (dbStatus === 'paid') {
-    updates.paid_at = new Date().toISOString()
+    updates.paid_at       = new Date().toISOString()
+    updates.invoice_status = 'paid'
     if (payment_method) updates.payment_method = payment_method
   } else {
     // Revert paid fields when un-marking as paid
     updates.paid_at = null
     if (dbStatus !== 'sent') updates.payment_method = null
+    if (dbStatus === 'cancelled') updates.invoice_status = 'void'
   }
 
   const { data, error } = await supabase
