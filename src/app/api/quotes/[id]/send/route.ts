@@ -150,7 +150,7 @@ export async function POST(
     const smsBody =
       `Hi ${customerName}, your quote from ${bizName} is ready. ` +
       `Total: ${fmtCurrency(quote.grand_total)}. ` +
-      `Review and approve: ${quoteUrl} Reply STOP to opt out.`
+      `Review and approve here: ${quoteUrl}. Reply STOP to opt out.`
     const r = await sendSms(phone, smsBody)
     smsSent  = r.success
     smsError = r.error

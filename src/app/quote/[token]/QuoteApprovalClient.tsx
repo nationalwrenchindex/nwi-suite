@@ -87,7 +87,7 @@ export default function QuoteApprovalClient({
         <div className="text-4xl">✓</div>
         <p className="text-emerald-400 font-bold text-xl">Quote Approved</p>
         <p className="text-white/60 text-sm">
-          {bizName} will contact you to schedule the service. Thank you!
+          Thank you for approving. Your service professional will be in touch directly with any questions or updates.
         </p>
       </div>
     )
@@ -97,7 +97,7 @@ export default function QuoteApprovalClient({
     return (
       <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-center space-y-2">
         <p className="text-white/70 font-semibold">Quote Declined</p>
-        <p className="text-white/40 text-sm">Thanks for letting us know.</p>
+        <p className="text-white/40 text-sm">Thanks for letting us know. {bizName} has been notified.</p>
       </div>
     )
   }
@@ -154,7 +154,7 @@ export default function QuoteApprovalClient({
               <span className="text-white font-semibold">{fmt(grandTotal)}</span>.
             </p>
             <p className="text-white/40 text-xs">
-              {bizName} will contact you to schedule the service.
+              Your service professional will be in touch directly with any questions or updates.
             </p>
             <div className="flex gap-3">
               <button
