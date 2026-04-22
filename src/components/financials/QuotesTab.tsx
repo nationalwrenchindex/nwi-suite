@@ -761,7 +761,7 @@ function QuoteDetailModal({
       const res  = await fetch(`/api/quotes/${initialQuote.id}/respond`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ action, note: markNote || undefined }),
+        body:    JSON.stringify({ action: action === 'approved' ? 'approve' : 'decline', note: markNote || undefined }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Failed to update status')
