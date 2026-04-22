@@ -155,7 +155,7 @@ export async function POST(
     const smsBody =
       `Hi ${customerName}, your invoice from ${bizName} is ready. ` +
       `Total due: ${grandTotal}. ` +
-      `View and pay: ${invoiceUrl}. Reply STOP to opt out.`
+      `View and download here: ${invoiceUrl}. Reply STOP to opt out.`
     const r  = await sendSms(phone, smsBody)
     smsSent  = r.success
     smsError = r.error
@@ -171,9 +171,11 @@ export async function POST(
       `Invoice: ${invoiceNumber}`,
       `Total Due: ${grandTotal}`,
       '',
-      `View your invoice: ${invoiceUrl}`,
+      `View and download your invoice: ${invoiceUrl}`,
       '',
       ...(paymentInstructions ? ['Payment Instructions:', paymentInstructions, ''] : []),
+      `Please contact ${bizName} directly with any questions.`,
+      '',
       `Thanks,`,
       `${techName}`,
       `${bizName}`,

@@ -197,10 +197,10 @@ function SendInvoiceModal({
 
   const smsPreview =
     `Hi ${customerName}, your invoice from ${bizName} is ready. ` +
-    `Total due: ${grandTotal}. View and pay: ${invoiceUrl}. Reply STOP to opt out.`
+    `Total due: ${grandTotal}. View and download here: ${invoiceUrl}. Reply STOP to opt out.`
 
   const emailSubject = `Invoice from ${bizName} — Total Due: ${grandTotal}`
-  const emailBodyPreview = `Hi ${customerName},\n\nYour invoice for service is ready.\n\nTotal Due: ${grandTotal}\n\nView: ${invoiceUrl}\n\n${invoice.payment_instructions ? `Payment Instructions:\n${invoice.payment_instructions}\n\n` : ''}Thanks,\n${techName}\n${bizName}`
+  const emailBodyPreview = `Hi ${customerName},\n\nYour invoice for service is ready.\n\nTotal Due: ${grandTotal}\n\nView and download your invoice: ${invoiceUrl}\n\n${invoice.payment_instructions ? `Payment Instructions:\n${invoice.payment_instructions}\n\n` : ''}Please contact ${bizName} directly with any questions.\n\nThanks,\n${techName}\n${bizName}`
 
   async function handleSend(method: SendTab) {
     setLoading(true)
