@@ -41,13 +41,22 @@ export interface TorqueSpec {
   spec: string
 }
 
+// Demo pricing returned by Claude until PartsTech integration is live.
+export interface TechGuidePart {
+  name:       string
+  qty:        number
+  unit_cost:  number   // supplier cost (demo)
+  unit_price: number   // retail price (demo, ~15-25% above unit_cost)
+}
+
 export interface TechGuide {
   torque:  TorqueSpec[]
   steps:   string[]
   tools:   string[]
   warning: string
   hours:   number
-  parts:   string[]
+  // string[] = legacy format (backward compat); TechGuidePart[] = current format with demo pricing
+  parts:   Array<TechGuidePart | string>
 }
 
 export interface RawPart {

@@ -541,6 +541,8 @@ function QuoteDetailModal({
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [toast,             setToast]             = useState<{ msg: string; type: 'success' | 'error' | 'warn' } | null>(null)
   const [validationErr,     setValidationErr]     = useState<string | null>(null)
+  // Replaces window.confirm for unsaved-changes guard — works on mobile Safari/WebViews.
+  const [pendingDiscard,    setPendingDiscard]    = useState<{ action: () => void; msg: string } | null>(null)
 
   // ── Dirty detection ────────────────────────────────────────────────────────
   function makeHash(
@@ -682,10 +684,7 @@ function QuoteDetailModal({
   }
 
   // ── Cancel ─────────────────────────────────────────────────────────────────
-  function handleCancel() {
-    if (isDirty) {
-      if (!window.confirm('Discard unsaved changes?')) return
-    }
+  function doCancel() {
     setItems(initialItems)
     setLaborHours(initLaborHours)
     setLaborRate(initLaborRate)
@@ -699,6 +698,13 @@ function QuoteDetailModal({
     setEditingId(null)
     setAddingNew(false)
     setValidationErr(null)
+  }
+  function handleCancel() {
+    if (isDirty) {
+      setPendingDiscard({ action: doCancel, msg: 'Discard unsaved changes?' })
+      return
+    }
+    doCancel()
   }
 
   // ── Clone to new version ───────────────────────────────────────────────────
@@ -739,7 +745,11 @@ function QuoteDetailModal({
   // ── Reopen in QuickWrench ──────────────────────────────────────────────────
   function handleReopenInQW() {
     if (isDirty) {
-      if (!window.confirm('You have unsaved changes. Discard and open in QuickWrench?')) return
+      setPendingDiscard({
+        action: () => { window.location.href = `/quickwrench?loadQuoteId=${initialQuote.id}` },
+        msg:    'Discard unsaved changes and open in QuickWrench?',
+      })
+      return
     }
     window.location.href = `/quickwrench?loadQuoteId=${initialQuote.id}`
   }
@@ -768,7 +778,10 @@ function QuoteDetailModal({
 
   // ── Close guard ────────────────────────────────────────────────────────────
   function handleClose() {
-    if (isDirty && !window.confirm('You have unsaved changes. Discard?')) return
+    if (isDirty) {
+      setPendingDiscard({ action: onClose, msg: 'Discard unsaved changes and close?' })
+      return
+    }
     onClose()
   }
 
@@ -1825,6 +1838,30 @@ function QuoteDetailModal({
             onUpdated(updatedQuote)
           }}
         />
+      )}
+
+      {/* ── Discard-changes confirmation (replaces window.confirm for mobile compat) ── */}
+      {pendingDiscard && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-4">
+          <div className="w-full max-w-xs bg-[#1a1a1a] border border-white/10 rounded-2xl shadow-2xl p-6 space-y-4">
+            <p className="text-white font-semibold text-base">Unsaved changes</p>
+            <p className="text-white/50 text-sm">{pendingDiscard.msg}</p>
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => { pendingDiscard.action(); setPendingDiscard(null) }}
+                className="flex-1 py-2.5 rounded-xl bg-danger/20 border border-danger/30 text-danger text-sm font-semibold hover:bg-danger/30 transition-colors"
+              >
+                Discard
+              </button>
+              <button
+                onClick={() => setPendingDiscard(null)}
+                className="flex-1 py-2.5 rounded-xl border border-white/15 text-white/70 text-sm font-semibold hover:bg-white/5 transition-colors"
+              >
+                Keep editing
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Toast ── */}

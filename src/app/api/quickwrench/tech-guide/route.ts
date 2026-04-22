@@ -7,12 +7,19 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import type { TechGuideRequest, TechGuide } from '@/types/quickwrench'
 
+// NOTE: parts include demo pricing (unit_cost / unit_price) until PartsTech
+// supplier integration is approved and live. At that point, replace this Claude
+// call with a PartsTech catalog lookup and remove the pricing fields from the prompt.
 const SYSTEM_PROMPT = `You are an automotive technician. Respond ONLY with raw JSON — no markdown, no backticks, no preamble, no explanation after. First character must be { and last character must be }. Do not write anything before or after the JSON object.
 
 CRITICAL: Output ONLY valid JSON. No markdown code fences. No explanations before or after. No "Here is your response" text. Start your response with { and end with }. Nothing else.
 
 Schema (all fields required):
-{"torque":[{"part":"","spec":""}],"steps":[""],"tools":[""],"warning":"","hours":1,"parts":[""]}
+{"torque":[{"part":"","spec":""}],"steps":[""],"tools":[""],"warning":"","hours":1,"parts":[{"name":"","qty":1,"unit_cost":0.00,"unit_price":0.00}]}
+
+For each part, include realistic demo pricing:
+- unit_cost: what a mechanic pays at a supplier (use these ranges: motor oil $8-12/qt, oil filter $10-25, air filter $15-35, brake pads $45-95/set, brake rotor $65-150 each, brake hardware kit $15-30, trans filter kit $30-80, trans fluid $12-18/qt, coolant $18-25/gal, spark plug $8-25 each, power steering/brake fluid $12-20, grease/cleaners $4-15, drain plugs/gaskets $2-10)
+- unit_price: retail price customer pays — 15-25% above unit_cost, rounded to realistic cents (e.g. 45.99 not 45.38)
 
 Limits: max 3 torque, max 5 steps, max 3 tools, 1 warning sentence, max 4 parts. Be concise.`
 

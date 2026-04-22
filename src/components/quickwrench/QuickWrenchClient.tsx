@@ -6,6 +6,7 @@ import type {
   QWVehicle,
   SelectedJob,
   TechGuide,
+  TechGuidePart,
   PartWithSuppliers,
   Supplier,
   MultiJobEntry,
@@ -134,18 +135,23 @@ function supplierPrices(estimate: number) {
   }
 }
 
-function enrichParts(raw: string[]): PartWithSuppliers[] {
-  return raw.map((name, i) => ({
-    name,
-    part_number_hint: '',
-    qty:              1,
-    price_estimate:   0,
-    id:               `part-${i}-${name.slice(0, 8).replace(/\s/g, '')}`,
-    included:         true,
-    selected_supplier: 'orielly' as Supplier,
-    custom_price:     0,
-    ...supplierPrices(0),
-  }))
+function enrichParts(raw: Array<TechGuidePart | string>): PartWithSuppliers[] {
+  return raw.map((part, i) => {
+    const name = typeof part === 'string' ? part : part.name
+    const qty  = typeof part === 'string' ? 1    : (part.qty       ?? 1)
+    const cost = typeof part === 'string' ? 0    : (part.unit_cost ?? 0)
+    return {
+      name,
+      part_number_hint:  '',
+      qty,
+      price_estimate:    cost,
+      id:                `part-${i}-${name.slice(0, 8).replace(/\s/g, '')}`,
+      included:          true,
+      selected_supplier: 'orielly' as Supplier,
+      custom_price:      cost,
+      ...supplierPrices(cost),
+    }
+  })
 }
 
 function partPrice(p: PartWithSuppliers): number {
