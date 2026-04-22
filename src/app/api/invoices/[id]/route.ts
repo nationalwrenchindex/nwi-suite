@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getCurrentFuelPrice } from '@/lib/fuel-price'
 
 // ─── P&L helpers ─────────────────────────────────────────────────────────────
 
@@ -152,11 +153,12 @@ export async function PUT(
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const { status, payment_method, payment_reference, payment_notes } = body as {
+  const { status, payment_method, payment_reference, payment_notes, miles_driven } = body as {
     status?: string
     payment_method?: string
     payment_reference?: string | null
     payment_notes?: string | null
+    miles_driven?: number | null
   }
 
   if (!status) {
@@ -246,21 +248,78 @@ export async function PUT(
         await supabase.from('expenses').insert(expenseInserts)
       }
 
+      // ── Phase 7: Fuel Cost Calculation ──────────────────────────────────
+      // Runs in the same transaction window as Phase 6.
+      // Requires miles_driven in the request AND average_mpg set on the profile.
+      let fuelCost           = 0
+      let fuelPricePerGallon: number | null = null
+      const milesNum         = miles_driven != null ? Number(miles_driven) : 0
+
+      if (milesNum > 0) {
+        // Warn if distance looks unusually high for a mobile tech job
+        if (milesNum > 500) {
+          console.warn(`[fuel] Invoice ${invNumber}: miles_driven=${milesNum} is unusually high (>500)`)
+        }
+
+        const { data: profileRow } = await supabase
+          .from('profiles')
+          .select('average_mpg, fuel_type')
+          .eq('id', user.id)
+          .single()
+
+        const avgMpg   = profileRow?.average_mpg ? Number(profileRow.average_mpg) : null
+        const fuelType = profileRow?.fuel_type ?? 'gasoline'
+
+        if (avgMpg && avgMpg > 0) {
+          try {
+            fuelPricePerGallon = await getCurrentFuelPrice(fuelType)
+            const gallons      = milesNum / avgMpg
+            fuelCost           = Math.round(gallons * fuelPricePerGallon * 100) / 100
+
+            expenseInserts.push({
+              user_id:           user.id,
+              expense_date:      paidDate,
+              category:          'fuel',
+              description:       `Fuel for ${invNumber} — ${milesNum} mi @ ${avgMpg} MPG`,
+              amount:            fuelCost,
+              linked_invoice_id: id,
+              transaction_type:  'auto_fuel',
+            })
+
+            await supabase.from('expenses').insert(expenseInserts.slice(-1))
+            console.log(`[fuel] Posted $${fuelCost} fuel expense for ${invNumber} (${milesNum} mi / ${avgMpg} MPG @ $${fuelPricePerGallon}/gal)`)
+          } catch (fuelErr) {
+            console.error('[fuel] Fuel expense failed (non-fatal):', fuelErr)
+            fuelCost           = 0
+            fuelPricePerGallon = null
+          }
+        }
+      }
+
+      const invoiceUpdate: Record<string, unknown> = {
+        cogs_total:           bd.cogs_total,
+        labor_income:         bd.labor_income,
+        shop_supplies_total:  bd.shop_supplies_total,
+        parts_gross_profit:   bd.parts_gross_profit,
+        net_profit:           Math.round((bd.net_profit - fuelCost) * 100) / 100,
+        financials_posted:    true,
+        financials_posted_at: new Date().toISOString(),
+      }
+
+      if (milesNum > 0) {
+        invoiceUpdate.miles_driven = milesNum
+        invoiceUpdate.fuel_posted  = fuelCost > 0
+        if (fuelPricePerGallon != null) invoiceUpdate.fuel_price_per_gallon = fuelPricePerGallon
+        if (fuelCost           > 0)     invoiceUpdate.fuel_cost             = fuelCost
+      }
+
       await supabase
         .from('invoices')
-        .update({
-          cogs_total:           bd.cogs_total,
-          labor_income:         bd.labor_income,
-          shop_supplies_total:  bd.shop_supplies_total,
-          parts_gross_profit:   bd.parts_gross_profit,
-          net_profit:           bd.net_profit,
-          financials_posted:    true,
-          financials_posted_at: new Date().toISOString(),
-        })
+        .update(invoiceUpdate)
         .eq('id', id)
         .eq('user_id', user.id)
 
-      // Re-fetch so response reflects posted P&L fields
+      // Re-fetch so response reflects posted P&L + fuel fields
       const { data: refreshed } = await supabase
         .from('invoices')
         .select(INVOICE_SELECT)

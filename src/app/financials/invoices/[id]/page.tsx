@@ -27,7 +27,7 @@ export default async function InvoiceDetailPage({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('full_name, business_name')
+    .select('full_name, business_name, average_mpg, fuel_type')
     .eq('id', user.id)
     .single()
 
@@ -43,8 +43,11 @@ export default async function InvoiceDetailPage({
   if (error || !invoice) notFound()
 
   const inv = invoice as unknown as Invoice
-  const bizName  = (profile as { business_name?: string }).business_name ?? ''
-  const techName = (profile as { full_name?: string }).full_name         ?? bizName
+  const p        = profile as { business_name?: string; full_name?: string; average_mpg?: number | null; fuel_type?: string | null }
+  const bizName  = p.business_name ?? ''
+  const techName = p.full_name     ?? bizName
+  const averageMpg = p.average_mpg ?? null
+  const fuelType   = p.fuel_type   ?? 'gasoline'
 
   // in_progress → editable editor
   if (inv.invoice_status === 'in_progress') {
@@ -64,7 +67,7 @@ export default async function InvoiceDetailPage({
       <div className="min-h-dvh bg-dark flex flex-col">
         <AppNav businessName={bizName} />
         <main className="flex-1 w-full max-w-4xl mx-auto px-4 sm:px-6 py-6">
-          <FinalizedInvoiceClient invoice={inv} bizName={bizName} techName={techName} />
+          <FinalizedInvoiceClient invoice={inv} bizName={bizName} techName={techName} averageMpg={averageMpg} fuelType={fuelType} />
         </main>
       </div>
     )

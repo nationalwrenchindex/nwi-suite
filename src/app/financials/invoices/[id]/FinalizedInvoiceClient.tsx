@@ -107,7 +107,8 @@ function calcJobPnL(invoice: import('@/types/financials').Invoice) {
   const cogsTotal  = round2(totalPartsCost + shopSuppliesTotal)
   const taxAmount  = Number(invoice.tax_amount ?? 0)
   const grandTotal = Number(invoice.total ?? 0)
-  const netProfit  = round2(grandTotal - cogsTotal - taxAmount)
+  const fuelCost   = Number(invoice.fuel_cost ?? 0)
+  const netProfit  = round2(grandTotal - cogsTotal - taxAmount - fuelCost)
   const netMargin  = grandTotal > 0 ? Math.round((netProfit / grandTotal) * 100) : 0
 
   return {
@@ -116,6 +117,7 @@ function calcJobPnL(invoice: import('@/types/financials').Invoice) {
     laborIncome,
     shopSuppliesTotal,
     taxAmount,
+    fuelCost,
     totalPartsCost,
     shopSuppliesCost: shopSuppliesTotal,
     cogsTotal,
@@ -295,18 +297,25 @@ function FinalizeConfirmModal({
 
 function MarkAsPaidModal({
   grandTotal,
+  averageMpg,
+  fuelType,
   onConfirm,
   onCancel,
   loading,
 }: {
   grandTotal: number
-  onConfirm: (method: string, reference: string, notes: string) => void
+  averageMpg: number | null
+  fuelType:   string
+  onConfirm: (method: string, reference: string, notes: string, miles: number | null) => void
   onCancel: () => void
   loading: boolean
 }) {
   const [method,    setMethod]    = useState('cash')
   const [reference, setReference] = useState('')
   const [notes,     setNotes]     = useState('')
+  const [miles,     setMiles]     = useState('')
+
+  const milesNum = miles.trim() !== '' ? Number(miles) : null
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-4">
@@ -358,18 +367,45 @@ function MarkAsPaidModal({
               Notes <span className="normal-case text-white/20">(optional)</span>
             </label>
             <textarea
-              rows={3}
+              rows={2}
               className="nwi-input resize-none text-sm w-full"
               placeholder="Any notes about this payment…"
               value={notes}
               onChange={e => setNotes(e.target.value)}
             />
           </div>
+
+          {/* ── Fuel tracking ── */}
+          <div className="border-t border-white/8 pt-4">
+            <label className="text-white/40 text-xs uppercase tracking-widest block mb-1.5">
+              Miles Driven to This Job <span className="normal-case text-white/20">(optional)</span>
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="0.1"
+              className="nwi-input text-sm w-full"
+              placeholder="e.g. 12"
+              value={miles}
+              onChange={e => setMiles(e.target.value)}
+            />
+            {averageMpg ? (
+              <p className="text-white/30 text-xs mt-1.5">
+                Auto-calculates fuel cost at current {fuelType} prices ({averageMpg} MPG on file)
+              </p>
+            ) : (
+              <p className="text-white/25 text-xs mt-1.5">
+                Tip: Set your vehicle MPG in{' '}
+                <a href="/settings" className="text-orange/60 hover:text-orange underline">Settings</a>
+                {' '}to enable automatic fuel cost tracking.
+              </p>
+            )}
+          </div>
         </div>
 
         <div className="flex gap-3">
           <button
-            onClick={() => onConfirm(method, reference, notes)}
+            onClick={() => onConfirm(method, reference, notes, milesNum)}
             disabled={loading}
             className="flex-1 py-3 bg-success hover:bg-green-600 disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-xl transition-colors"
           >
@@ -617,10 +653,14 @@ export default function FinalizedInvoiceClient({
   invoice: initialInvoice,
   bizName,
   techName,
+  averageMpg = null,
+  fuelType   = 'gasoline',
 }: {
-  invoice: Invoice
-  bizName: string
-  techName: string
+  invoice:     Invoice
+  bizName:     string
+  techName:    string
+  averageMpg?: number | null
+  fuelType?:   string
 }) {
   const router = useRouter()
   const [invoice,           setInvoice]          = useState(initialInvoice)
@@ -741,24 +781,35 @@ export default function FinalizedInvoiceClient({
 
   // ── Mark as Paid ──────────────────────────────────────────────────────────
 
-  async function handleMarkAsPaid(method: string, reference: string, notes: string) {
+  async function handleMarkAsPaid(method: string, reference: string, notes: string, miles: number | null) {
     setMarkingPaid(true)
     try {
+      const body: Record<string, unknown> = {
+        status:            'paid',
+        payment_method:    method,
+        payment_reference: reference || null,
+        payment_notes:     notes     || null,
+      }
+      if (miles != null && miles > 0) body.miles_driven = miles
+
       const res  = await fetch(`/api/invoices/${invoice.id}`, {
         method:  'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          status:            'paid',
-          payment_method:    method,
-          payment_reference: reference || null,
-          payment_notes:     notes     || null,
-        }),
+        body:    JSON.stringify(body),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Failed to mark as paid')
       setInvoice(json.invoice)
       setShowPaidModal(false)
-      showToast('Invoice marked as paid.')
+
+      const fuelCost = Number(json.invoice?.fuel_cost ?? 0)
+      if (miles && miles > 0 && !averageMpg) {
+        showToast('Miles saved. Set MPG in Settings to calculate fuel cost automatically.', 'warning')
+      } else if (fuelCost > 0) {
+        showToast(`Invoice marked as paid. Fuel cost ${fmt(fuelCost)} posted.`)
+      } else {
+        showToast('Invoice marked as paid.')
+      }
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'Failed to mark as paid', 'error')
       setShowPaidModal(false)
@@ -1232,6 +1283,23 @@ export default function FinalizedInvoiceClient({
                 </div>
               )}
 
+              {/* Fuel cost */}
+              {pnl.fuelCost > 0 && (
+                <div className="space-y-1 border-t border-white/8 pt-3">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-white/50">Fuel Cost</span>
+                    <span className="text-danger/80">−{fmt(pnl.fuelCost)}</span>
+                  </div>
+                  {invoice.miles_driven != null && invoice.fuel_price_per_gallon != null && averageMpg && (
+                    <div className="flex justify-between text-xs pl-4">
+                      <span className="text-white/30">
+                        {invoice.miles_driven} mi ÷ {averageMpg} MPG @ ${Number(invoice.fuel_price_per_gallon).toFixed(3)}/gal
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Per-job breakdown (multi-job only) */}
               {Array.isArray(invoice.jobs) && invoice.jobs.length > 1 && (
                 <div className="space-y-2 border-t border-white/8 pt-3">
@@ -1378,6 +1446,8 @@ export default function FinalizedInvoiceClient({
       {showPaidModal && (
         <MarkAsPaidModal
           grandTotal={grandTotal}
+          averageMpg={averageMpg}
+          fuelType={fuelType}
           onConfirm={handleMarkAsPaid}
           onCancel={() => setShowPaidModal(false)}
           loading={markingPaid}

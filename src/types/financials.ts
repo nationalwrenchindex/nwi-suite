@@ -148,6 +148,11 @@ export interface Invoice {
   net_profit: number
   financials_posted: boolean
   financials_posted_at: string | null
+  // Phase 7 fields — fuel/mileage tracking
+  miles_driven: number | null
+  fuel_price_per_gallon: number | null
+  fuel_cost: number
+  fuel_posted: boolean
   // Phase 4 fields
   public_token: string | null
   finalized_at: string | null

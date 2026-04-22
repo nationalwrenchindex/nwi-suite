@@ -162,6 +162,9 @@ export default function ExpensesTab() {
   const cogsTotal     = expenses
     .filter(e => e.transaction_type === 'auto_invoice')
     .reduce((s, e) => s + Number(e.amount), 0)
+  const fuelTotal     = expenses
+    .filter(e => e.transaction_type === 'auto_fuel')
+    .reduce((s, e) => s + Number(e.amount), 0)
 
   return (
     <div className="space-y-4">
@@ -285,6 +288,11 @@ export default function ExpensesTab() {
                 incl. {fmt(cogsTotal)} COGS
               </span>
             )}
+            {fuelTotal > 0 && (
+              <span className="text-white/25 text-xs">
+                {fmt(fuelTotal)} fuel
+              </span>
+            )}
           </div>
           <span className="font-condensed font-bold text-danger">{fmt(filteredTotal)}</span>
         </div>
@@ -320,7 +328,7 @@ export default function ExpensesTab() {
 
           <div className="divide-y divide-dark-border">
             {expenses.map(exp => {
-              const isAuto = exp.transaction_type === 'auto_invoice'
+              const isAuto = exp.transaction_type === 'auto_invoice' || exp.transaction_type === 'auto_fuel'
               return (
                 <div key={exp.id}
                   className={`grid grid-cols-1 sm:grid-cols-[120px_1fr_110px_100px_80px] gap-2 sm:gap-4 px-5 py-4 items-center transition-colors ${isAuto ? 'bg-white/[0.01]' : 'hover:bg-white/2'}`}>

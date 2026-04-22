@@ -120,12 +120,16 @@ export default function SettingsClient({
   techName,
   initialTemplates,
   defaultPaymentInstructions: initialPaymentInstr = '',
+  initialAverageMpg   = null,
+  initialFuelType     = 'gasoline',
 }: {
   slug:                        string | null
   businessName:                string
   techName:                    string
   initialTemplates:            Partial<ShareTemplates>
   defaultPaymentInstructions?: string
+  initialAverageMpg?:          number | null
+  initialFuelType?:            string
 }) {
   const [shareOpen, setShareOpen] = useState(false)
 
@@ -135,6 +139,10 @@ export default function SettingsClient({
 
   const [paymentInstr,        setPaymentInstr]        = useState(initialPaymentInstr)
   const [savingPaymentInstr,  setSavingPaymentInstr]  = useState(false)
+
+  const [mpg,         setMpg]         = useState(initialAverageMpg != null ? String(initialAverageMpg) : '')
+  const [fuelType,    setFuelType]    = useState(initialFuelType)
+  const [savingFuel,  setSavingFuel]  = useState(false)
 
   const [savingSMS,   setSavingSMS]   = useState(false)
   const [savingEmail, setSavingEmail] = useState(false)
@@ -169,6 +177,35 @@ export default function SettingsClient({
       setTimeout(() => setSavedMsg(null), 3000)
     } catch { /* silently fail */ }
     setSavingPaymentInstr(false)
+  }
+
+  async function saveFuelSettings() {
+    setSavingFuel(true)
+    try {
+      const body: Record<string, unknown> = { fuel_type: fuelType }
+      if (mpg.trim() === '') {
+        body.average_mpg = null
+      } else {
+        const n = parseFloat(mpg)
+        if (isNaN(n) || n <= 0) {
+          setSavedMsg('Enter a valid MPG (e.g. 18).')
+          setTimeout(() => setSavedMsg(null), 3000)
+          setSavingFuel(false)
+          return
+        }
+        body.average_mpg = n
+      }
+      const res = await fetch('/api/user/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      if (res.ok) {
+        setSavedMsg('Vehicle & fuel settings saved.')
+        setTimeout(() => setSavedMsg(null), 3000)
+      }
+    } catch { /* silently fail */ }
+    setSavingFuel(false)
   }
 
   return (
@@ -291,6 +328,51 @@ export default function SettingsClient({
             className="px-5 py-2 bg-[#FF6600] hover:bg-[#E55A00] disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-lg transition-colors"
           >
             {savingPaymentInstr ? 'Saving…' : 'Save Default Instructions'}
+          </button>
+        </div>
+      </section>
+
+      {/* ── Vehicle & Fuel Tracking ── */}
+      <section>
+        <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Vehicle &amp; Fuel Tracking</p>
+        <p className="text-white/30 text-xs mb-4">
+          Used to auto-calculate fuel cost per job when you mark invoices as paid. Enter miles driven at payment time.
+        </p>
+        <div className="rounded-xl border border-[#333] bg-[#222] p-5 space-y-4">
+          <div>
+            <label className="nwi-label">Average MPG</label>
+            <input
+              type="number"
+              min="1"
+              max="200"
+              step="0.1"
+              className="nwi-input text-sm w-full"
+              placeholder="e.g. 18"
+              value={mpg}
+              onChange={e => setMpg(e.target.value)}
+            />
+            <p className="text-white/30 text-xs mt-1.5">
+              Your work vehicle&apos;s average fuel economy. Used to calculate per-job fuel costs when you mark invoices as paid.
+            </p>
+          </div>
+          <div>
+            <label className="nwi-label">Fuel Type</label>
+            <select
+              className="nwi-input text-sm w-full"
+              value={fuelType}
+              onChange={e => setFuelType(e.target.value)}
+            >
+              <option value="gasoline">Gasoline</option>
+              <option value="diesel">Diesel</option>
+            </select>
+            <p className="text-white/30 text-xs mt-1.5">Affects which current fuel price is used in the calculation.</p>
+          </div>
+          <button
+            onClick={saveFuelSettings}
+            disabled={savingFuel}
+            className="px-5 py-2 bg-[#FF6600] hover:bg-[#E55A00] disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-lg transition-colors"
+          >
+            {savingFuel ? 'Saving…' : 'Save Vehicle Settings'}
           </button>
         </div>
       </section>

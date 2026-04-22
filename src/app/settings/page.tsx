@@ -12,7 +12,7 @@ export default async function SettingsPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('full_name, business_name, slug, share_sms_template, share_email_subject, share_email_body, default_payment_instructions')
+    .select('full_name, business_name, slug, share_sms_template, share_email_subject, share_email_body, default_payment_instructions, average_mpg, fuel_type')
     .eq('id', user.id)
     .single()
 
@@ -26,6 +26,8 @@ export default async function SettingsPage() {
     share_email_subject?: string
     share_email_body?: string
     default_payment_instructions?: string
+    average_mpg?: number | null
+    fuel_type?: string | null
   }
 
   return (
@@ -47,6 +49,8 @@ export default async function SettingsPage() {
             share_email_body:    p.share_email_body    ?? undefined,
           }}
           defaultPaymentInstructions={p.default_payment_instructions ?? ''}
+          initialAverageMpg={p.average_mpg ?? null}
+          initialFuelType={p.fuel_type ?? 'gasoline'}
         />
       </main>
     </div>
