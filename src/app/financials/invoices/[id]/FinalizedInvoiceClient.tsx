@@ -20,6 +20,49 @@ function round2(n: number) {
   return Math.round(n * 100) / 100
 }
 
+// ─── Per-job P&L calculation (mirrors API calcBreakdown) ─────────────────────
+
+function calcJobPnL(invoice: import('@/types/financials').Invoice) {
+  const sq        = invoice.source_quote
+  const markupPct = Number(sq?.parts_markup_percent ?? 0)
+
+  const quotedPartsCost        = Number(sq?.parts_subtotal ?? 0)
+  const additionalParts        = Array.isArray(invoice.additional_parts) ? invoice.additional_parts : []
+  const additionalPartsCost    = additionalParts.reduce((s, p) => s + p.unit_cost * p.qty, 0)
+  const totalPartsCost         = round2(quotedPartsCost + additionalPartsCost)
+  const quotedPartsRevenue     = round2(quotedPartsCost * (1 + markupPct / 100))
+  const additionalPartsRevenue = additionalParts.reduce((s, p) => s + p.total, 0)
+  const partsRevenue           = round2(quotedPartsRevenue + additionalPartsRevenue)
+  const partsGrossProfit       = round2(partsRevenue - totalPartsCost)
+
+  const additionalLabor     = Array.isArray(invoice.additional_labor) ? invoice.additional_labor : []
+  const quotedLaborSubtotal = Number(sq?.labor_subtotal ?? 0)
+  const laborIncome         = round2(quotedLaborSubtotal + additionalLabor.reduce((s, l) => s + l.subtotal, 0))
+
+  const shopSupplies      = Array.isArray(invoice.shop_supplies) ? invoice.shop_supplies : []
+  const shopSuppliesTotal = round2(shopSupplies.reduce((s, ss) => s + ss.total, 0))
+
+  const cogsTotal  = round2(totalPartsCost + shopSuppliesTotal)
+  const taxAmount  = Number(invoice.tax_amount ?? 0)
+  const grandTotal = Number(invoice.total ?? 0)
+  const netProfit  = round2(grandTotal - cogsTotal - taxAmount)
+  const netMargin  = grandTotal > 0 ? Math.round((netProfit / grandTotal) * 100) : 0
+
+  return {
+    grandTotal,
+    partsRevenue,
+    laborIncome,
+    shopSuppliesTotal,
+    taxAmount,
+    totalPartsCost,
+    shopSuppliesCost: shopSuppliesTotal,
+    cogsTotal,
+    netProfit,
+    netMargin,
+    partsGrossProfit,
+  }
+}
+
 // ─── Payment method constants ──────────────────────────────────────────────────
 
 const PAYMENT_METHODS_FOR_MODAL = [
@@ -771,6 +814,23 @@ export default function FinalizedInvoiceClient({
         </div>
       )}
 
+      {/* Posted to Financials banner */}
+      {isPaid && invoice.financials_posted && (
+        <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-white/10 bg-white/[0.03]">
+          <svg className="w-4 h-4 text-success/60 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2zm0 0V9a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v10m-6 0a2 2 0 0 0 2 2h2a2 2 0 0 0 2-2m0 0V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-2a2 2 0 0 1-2-2z"/>
+          </svg>
+          <div className="flex-1 min-w-0 flex items-center gap-3 flex-wrap">
+            <span className="text-success/70 text-sm font-medium">Posted to Financials</span>
+            {invoice.financials_posted_at && (
+              <span className="text-white/30 text-xs">
+                {fmtDate(invoice.financials_posted_at, { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Source quote banner */}
       {sq && (
         <div className="flex items-center gap-3 px-4 py-3 rounded-xl border border-orange/25 bg-orange/8">
@@ -1005,6 +1065,96 @@ export default function FinalizedInvoiceClient({
           </div>
         </div>
       </div>
+
+      {/* Per-Job P&L — shown only after financials are posted */}
+      {isPaid && invoice.financials_posted && (() => {
+        const pnl = calcJobPnL(invoice)
+        return (
+          <div className="bg-[#1a1f1a] border border-success/20 rounded-2xl overflow-hidden">
+            <div className="px-5 py-3 border-b border-success/15 bg-success/[0.04]">
+              <p className="text-success/70 text-xs font-semibold uppercase tracking-widest">Per-Job P&L</p>
+            </div>
+            <div className="p-5 space-y-3">
+
+              {/* Revenue breakdown */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-baseline text-sm">
+                  <span className="text-white/70 font-medium">Revenue Collected</span>
+                  <span className="text-white font-semibold">{fmt(pnl.grandTotal)}</span>
+                </div>
+                {pnl.partsRevenue > 0 && (
+                  <div className="flex justify-between text-xs pl-4">
+                    <span className="text-white/40">Parts Revenue</span>
+                    <span className="text-white/60">{fmt(pnl.partsRevenue)}</span>
+                  </div>
+                )}
+                {pnl.laborIncome > 0 && (
+                  <div className="flex justify-between text-xs pl-4">
+                    <span className="text-white/40">Labor Income</span>
+                    <span className="text-white/60">{fmt(pnl.laborIncome)}</span>
+                  </div>
+                )}
+                {pnl.shopSuppliesTotal > 0 && (
+                  <div className="flex justify-between text-xs pl-4">
+                    <span className="text-white/40">Shop Supplies Charged</span>
+                    <span className="text-white/60">{fmt(pnl.shopSuppliesTotal)}</span>
+                  </div>
+                )}
+                {pnl.taxAmount > 0 && (
+                  <div className="flex justify-between text-xs pl-4">
+                    <span className="text-white/40">Tax Collected</span>
+                    <span className="text-white/60">{fmt(pnl.taxAmount)}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* COGS */}
+              {pnl.cogsTotal > 0 && (
+                <div className="space-y-1.5 border-t border-white/8 pt-3">
+                  <div className="flex justify-between items-baseline text-sm">
+                    <span className="text-white/70 font-medium">Cost of Goods Sold</span>
+                    <span className="text-danger">−{fmt(pnl.cogsTotal)}</span>
+                  </div>
+                  {pnl.totalPartsCost > 0 && (
+                    <div className="flex justify-between text-xs pl-4">
+                      <span className="text-white/40">Parts Cost</span>
+                      <span className="text-danger/70">−{fmt(pnl.totalPartsCost)}</span>
+                    </div>
+                  )}
+                  {pnl.shopSuppliesCost > 0 && (
+                    <div className="flex justify-between text-xs pl-4">
+                      <span className="text-white/40">Shop Supplies Cost</span>
+                      <span className="text-danger/70">−{fmt(pnl.shopSuppliesCost)}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Tax remitted */}
+              {pnl.taxAmount > 0 && (
+                <div className="flex justify-between text-sm border-t border-white/8 pt-3">
+                  <span className="text-white/50">Tax Remitted</span>
+                  <span className="text-white/40">−{fmt(pnl.taxAmount)}</span>
+                </div>
+              )}
+
+              {/* Net Profit */}
+              <div className="flex justify-between items-baseline border-t border-success/20 pt-3 mt-1">
+                <div>
+                  <span className="font-condensed font-bold text-white text-lg tracking-wide">NET PROFIT</span>
+                  <span className="text-white/30 text-xs ml-2">{pnl.netMargin}% margin</span>
+                </div>
+                <span
+                  className="font-condensed font-bold text-4xl"
+                  style={{ color: pnl.netProfit >= 0 ? '#10b981' : '#ef4444' }}
+                >
+                  {fmt(pnl.netProfit)}
+                </span>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Payment Instructions */}
       <div className="bg-[#222222] border border-white/8 rounded-2xl overflow-hidden">

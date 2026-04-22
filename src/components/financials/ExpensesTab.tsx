@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import type { Expense, ExpenseCategory } from '@/types/financials'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -17,7 +18,8 @@ function today() {
 
 // ─── Category config ──────────────────────────────────────────────────────────
 
-const CATEGORIES: { value: ExpenseCategory; label: string }[] = [
+// All categories (for filter dropdown + display)
+const ALL_CATEGORIES: { value: ExpenseCategory; label: string }[] = [
   { value: 'parts',               label: 'Parts' },
   { value: 'tools',               label: 'Tools' },
   { value: 'fuel',                label: 'Fuel' },
@@ -30,7 +32,15 @@ const CATEGORIES: { value: ExpenseCategory; label: string }[] = [
   { value: 'office_supplies',     label: 'Office Supplies' },
   { value: 'subcontractor',       label: 'Subcontractor' },
   { value: 'other',               label: 'Other' },
+  // Phase 6 — auto-generated COGS (not selectable in manual log form)
+  { value: 'parts_cogs',          label: 'Parts COGS' },
+  { value: 'shop_supplies',       label: 'Shop Supplies' },
 ]
+
+// Only manual categories for the log form
+const MANUAL_CATEGORIES = ALL_CATEGORIES.filter(
+  c => c.value !== 'parts_cogs' && c.value !== 'shop_supplies'
+)
 
 const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
   parts:               'bg-blue/20 text-blue',
@@ -45,11 +55,14 @@ const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
   office_supplies:     'bg-white/10 text-white/50',
   subcontractor:       'bg-red-500/20 text-red-400',
   other:               'bg-white/5 text-white/30',
+  // Phase 6
+  parts_cogs:          'bg-blue/20 text-blue',
+  shop_supplies:       'bg-teal-500/20 text-teal-400',
 }
 
 function CategoryBadge({ category }: { category: ExpenseCategory }) {
   const cls   = CATEGORY_COLORS[category] ?? 'bg-white/5 text-white/30'
-  const label = CATEGORIES.find(c => c.value === category)?.label ?? category
+  const label = ALL_CATEGORIES.find(c => c.value === category)?.label ?? category
   return (
     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>{label}</span>
   )
@@ -58,6 +71,8 @@ function CategoryBadge({ category }: { category: ExpenseCategory }) {
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function ExpensesTab() {
+  const router = useRouter()
+
   const [expenses,   setExpenses]   = useState<Expense[]>([])
   const [loading,    setLoading]    = useState(true)
   const [error,      setError]      = useState<string | null>(null)
@@ -143,8 +158,10 @@ export default function ExpensesTab() {
     }
   }
 
-  // Totals for filtered results
   const filteredTotal = expenses.reduce((s, e) => s + Number(e.amount), 0)
+  const cogsTotal     = expenses
+    .filter(e => e.transaction_type === 'auto_invoice')
+    .reduce((s, e) => s + Number(e.amount), 0)
 
   return (
     <div className="space-y-4">
@@ -155,7 +172,7 @@ export default function ExpensesTab() {
           <select className="nwi-input" value={catFilter}
             onChange={e => setCatFilter(e.target.value)}>
             <option value="">All Categories</option>
-            {CATEGORIES.map(c => (
+            {ALL_CATEGORIES.map(c => (
               <option key={c.value} value={c.value}>{c.label}</option>
             ))}
           </select>
@@ -205,7 +222,7 @@ export default function ExpensesTab() {
                 <label className="nwi-label">Category</label>
                 <select className="nwi-input" value={form.category}
                   onChange={e => setForm(p => ({ ...p, category: e.target.value as ExpenseCategory }))}>
-                  {CATEGORIES.map(c => (
+                  {MANUAL_CATEGORIES.map(c => (
                     <option key={c.value} value={c.value}>{c.label}</option>
                   ))}
                 </select>
@@ -258,10 +275,17 @@ export default function ExpensesTab() {
       {/* Totals banner */}
       {!loading && expenses.length > 0 && (
         <div className="flex items-center justify-between px-5 py-3 bg-dark-card/50 border border-dark-border rounded-xl">
-          <span className="text-white/40 text-sm">
-            {expenses.length} expense{expenses.length !== 1 ? 's' : ''}
-            {(catFilter || fromDate || toDate) ? ' (filtered)' : ''}
-          </span>
+          <div className="flex items-center gap-4">
+            <span className="text-white/40 text-sm">
+              {expenses.length} expense{expenses.length !== 1 ? 's' : ''}
+              {(catFilter || fromDate || toDate) ? ' (filtered)' : ''}
+            </span>
+            {cogsTotal > 0 && (
+              <span className="text-white/25 text-xs">
+                incl. {fmt(cogsTotal)} COGS
+              </span>
+            )}
+          </div>
           <span className="font-condensed font-bold text-danger">{fmt(filteredTotal)}</span>
         </div>
       )}
@@ -288,26 +312,44 @@ export default function ExpensesTab() {
       ) : (
         <div className="nwi-card p-0 overflow-hidden">
           {/* Table header */}
-          <div className="hidden sm:grid grid-cols-[120px_1fr_1fr_110px_100px] gap-4 px-5 py-3 border-b border-dark-border">
-            {['Date', 'Description', 'Vendor', 'Category', 'Amount'].map(h => (
-              <span key={h} className={`text-white/30 text-xs uppercase tracking-widest ${h === 'Amount' ? 'text-right' : ''}`}>{h}</span>
+          <div className="hidden sm:grid grid-cols-[120px_1fr_110px_100px_80px] gap-4 px-5 py-3 border-b border-dark-border">
+            {['Date', 'Description', 'Category', 'Amount', ''].map((h, i) => (
+              <span key={i} className={`text-white/30 text-xs uppercase tracking-widest ${h === 'Amount' ? 'text-right' : ''}`}>{h}</span>
             ))}
           </div>
 
           <div className="divide-y divide-dark-border">
-            {expenses.map(exp => (
-              <div key={exp.id}
-                className="grid grid-cols-1 sm:grid-cols-[120px_1fr_1fr_110px_100px] gap-2 sm:gap-4 px-5 py-4 hover:bg-white/2 transition-colors items-center">
-                <span className="text-white/40 text-xs">{fmtDate(exp.expense_date)}</span>
-                <div className="min-w-0">
-                  <p className="text-white text-sm truncate">{exp.description}</p>
-                  {exp.notes && <p className="text-white/30 text-xs truncate">{exp.notes}</p>}
+            {expenses.map(exp => {
+              const isAuto = exp.transaction_type === 'auto_invoice'
+              return (
+                <div key={exp.id}
+                  className={`grid grid-cols-1 sm:grid-cols-[120px_1fr_110px_100px_80px] gap-2 sm:gap-4 px-5 py-4 items-center transition-colors ${isAuto ? 'bg-white/[0.01]' : 'hover:bg-white/2'}`}>
+                  <span className="text-white/40 text-xs">{fmtDate(exp.expense_date)}</span>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-white text-sm truncate">{exp.description}</p>
+                      {isAuto && (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-white/8 text-white/35 shrink-0">
+                          Auto
+                        </span>
+                      )}
+                    </div>
+                    {exp.notes && <p className="text-white/30 text-xs truncate">{exp.notes}</p>}
+                  </div>
+                  <CategoryBadge category={exp.category} />
+                  <span className="font-condensed font-bold text-danger sm:text-right">{fmt(exp.amount)}</span>
+                  <div className="flex justify-end">
+                    {isAuto && exp.linked_invoice_id ? (
+                      <button
+                        onClick={() => router.push(`/financials/invoices/${exp.linked_invoice_id}`)}
+                        className="text-white/30 hover:text-white/60 text-xs underline underline-offset-2 transition-colors whitespace-nowrap">
+                        Invoice →
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
-                <span className="text-white/50 text-sm truncate">{exp.vendor ?? '—'}</span>
-                <CategoryBadge category={exp.category} />
-                <span className="font-condensed font-bold text-danger sm:text-right">{fmt(exp.amount)}</span>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       )}

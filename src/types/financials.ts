@@ -47,6 +47,9 @@ export type ExpenseCategory =
   | 'office_supplies'
   | 'subcontractor'
   | 'other'
+  // Phase 6: auto-generated COGS categories
+  | 'parts_cogs'
+  | 'shop_supplies'
 
 // ─── Core models ──────────────────────────────────────────────────────────────
 
@@ -118,6 +121,14 @@ export interface Invoice {
   // Phase 5 fields
   payment_reference: string | null
   payment_notes: string | null
+  // Phase 6 fields — per-job P&L (cached on invoice at time of payment)
+  cogs_total: number
+  labor_income: number
+  shop_supplies_total: number
+  parts_gross_profit: number
+  net_profit: number
+  financials_posted: boolean
+  financials_posted_at: string | null
   // Phase 4 fields
   public_token: string | null
   finalized_at: string | null
@@ -222,6 +233,9 @@ export interface Expense {
   vendor: string | null
   job_id: string | null
   notes: string | null
+  // Phase 6 fields
+  linked_invoice_id: string | null
+  transaction_type: 'manual' | 'auto_invoice' | 'auto_fuel' | null
   created_at: string
   updated_at: string
 }
@@ -229,10 +243,15 @@ export interface Expense {
 export interface FinancialsOverview {
   period: string               // YYYY-MM
   revenue_total: number
+  cogs_total: number
+  gross_profit: number
+  gross_margin: number
+  operating_expenses: number
   expense_total: number
   net_profit: number
   profit_margin: number
   avg_job_value: number
+  avg_job_profit: number
   top_service: string | null
   invoice_count: number
   paid_invoice_count: number

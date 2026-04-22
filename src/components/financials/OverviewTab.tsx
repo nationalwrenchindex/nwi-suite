@@ -15,7 +15,7 @@ interface KpiCardProps {
   label: string
   value: string
   sub?: string
-  accent?: 'orange' | 'green' | 'red' | 'blue'
+  accent?: 'orange' | 'green' | 'red' | 'blue' | 'purple'
 }
 
 function KpiCard({ label, value, sub, accent }: KpiCardProps) {
@@ -24,6 +24,7 @@ function KpiCard({ label, value, sub, accent }: KpiCardProps) {
     green:  'text-success',
     red:    'text-danger',
     blue:   'text-blue',
+    purple: 'text-purple-400',
   }[accent ?? 'orange']
 
   return (
@@ -61,9 +62,8 @@ export default function OverviewTab() {
 
   useEffect(() => { fetchOverview(month) }, [month, fetchOverview])
 
-  const netAccent = overview
-    ? overview.net_profit >= 0 ? 'green' : 'red'
-    : 'green'
+  const netAccent   = overview ? (overview.net_profit   >= 0 ? 'green' : 'red') : 'green'
+  const grossAccent = overview ? (overview.gross_profit >= 0 ? 'green' : 'red') : 'green'
 
   return (
     <div className="space-y-6">
@@ -92,40 +92,73 @@ export default function OverviewTab() {
 
       {loading ? (
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => (
+          {Array.from({ length: 9 }).map((_, i) => (
             <div key={i} className="nwi-card animate-pulse h-20 bg-dark-card/50" />
           ))}
         </div>
       ) : overview ? (
         <>
-          {/* KPI grid */}
+          {/* Revenue → COGS → Gross Profit row */}
+          <div>
+            <p className="text-white/30 text-xs font-semibold uppercase tracking-widest mb-3">Revenue & Cost of Goods</p>
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+              <KpiCard
+                label="Revenue"
+                value={fmt(overview.revenue_total)}
+                sub={`${overview.paid_invoice_count} paid invoice${overview.paid_invoice_count !== 1 ? 's' : ''}`}
+                accent="green"
+              />
+              <KpiCard
+                label="COGS"
+                value={fmt(overview.cogs_total)}
+                sub="Parts + shop supplies"
+                accent="red"
+              />
+              <KpiCard
+                label="Gross Profit"
+                value={fmt(overview.gross_profit)}
+                sub={fmtPct(overview.gross_margin) + ' gross margin'}
+                accent={grossAccent}
+              />
+            </div>
+          </div>
+
+          {/* Operating expenses → Net Profit row */}
+          <div>
+            <p className="text-white/30 text-xs font-semibold uppercase tracking-widest mb-3">Net Profit</p>
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+              <KpiCard
+                label="Operating Expenses"
+                value={fmt(overview.operating_expenses)}
+                sub="Tools, fuel, overhead…"
+                accent="red"
+              />
+              <KpiCard
+                label="Net Profit"
+                value={fmt(overview.net_profit)}
+                sub={fmtPct(overview.profit_margin) + ' net margin'}
+                accent={netAccent}
+              />
+              <KpiCard
+                label="Avg Per-Job Profit"
+                value={overview.avg_job_profit > 0 ? fmt(overview.avg_job_profit) : '—'}
+                sub="On posted invoices"
+                accent={overview.avg_job_profit >= 0 ? 'green' : 'red'}
+              />
+            </div>
+          </div>
+
+          {/* Secondary metrics */}
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-            <KpiCard
-              label="Revenue"
-              value={fmt(overview.revenue_total)}
-              sub={`${overview.paid_invoice_count} paid invoice${overview.paid_invoice_count !== 1 ? 's' : ''}`}
-              accent="green"
-            />
-            <KpiCard
-              label="Expenses"
-              value={fmt(overview.expense_total)}
-              accent="red"
-            />
-            <KpiCard
-              label="Net Profit"
-              value={fmt(overview.net_profit)}
-              sub={fmtPct(overview.profit_margin) + ' margin'}
-              accent={netAccent}
-            />
-            <KpiCard
-              label="Profit Margin"
-              value={fmtPct(overview.profit_margin)}
-              accent={netAccent}
-            />
             <KpiCard
               label="Avg Job Value"
               value={fmt(overview.avg_job_value)}
               accent="orange"
+            />
+            <KpiCard
+              label="Gross Margin"
+              value={fmtPct(overview.gross_margin)}
+              accent={grossAccent}
             />
             <KpiCard
               label="Top Service"
