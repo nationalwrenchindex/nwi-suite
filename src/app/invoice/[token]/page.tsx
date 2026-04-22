@@ -16,7 +16,7 @@ const INVOICE_SELECT = `
   sent_to_customer_at, paid_at,
   customer:customers(id, first_name, last_name, phone),
   vehicle:vehicles(id, year, make, model, vin),
-  source_quote:quotes(id, quote_number, parts_subtotal, parts_markup_percent, labor_subtotal, labor_hours, labor_rate),
+  source_quote:quotes!invoices_source_quote_id_fkey(id, quote_number, parts_subtotal, parts_markup_percent, labor_subtotal, labor_hours, labor_rate),
   user_id
 `
 
