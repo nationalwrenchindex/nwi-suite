@@ -11,7 +11,7 @@ const INVOICE_SELECT = `
   *,
   customer:customers(id, first_name, last_name, phone, email),
   vehicle:vehicles(id, year, make, model, vin),
-  source_quote:quotes!invoices_source_quote_id_fkey(id, quote_number, line_items, labor_hours, labor_rate, parts_subtotal, parts_markup_percent, labor_subtotal, tax_percent, tax_amount, grand_total)
+  source_quote:quotes!invoices_source_quote_id_fkey(id, quote_number, line_items, jobs, labor_hours, labor_rate, parts_subtotal, parts_markup_percent, labor_subtotal, tax_percent, tax_amount, grand_total)
 `
 
 export default async function InvoiceDetailPage({

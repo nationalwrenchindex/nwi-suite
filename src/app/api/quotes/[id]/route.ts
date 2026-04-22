@@ -107,6 +107,7 @@ export async function PUT(
     customer_name:        string
     customer_phone:       string
     vehicle_id?:          string | null
+    jobs?:                unknown[]   // Phase 8: multi-job JSONB
   }
 
   try {
@@ -136,6 +137,7 @@ export async function PUT(
       notes:                body.notes ?? null,
       customer_id:          customerId,
       vehicle_id:           body.vehicle_id ?? null,
+      ...(body.jobs !== undefined ? { jobs: body.jobs } : {}),
     })
     .eq('id', id)
     .eq('user_id', user.id)

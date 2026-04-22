@@ -98,6 +98,25 @@ export interface QuickWrenchQuote {
   created_at:    string
 }
 
+// ─── Multi-job structures ──────────────────────────────────────────────────────
+
+export interface MultiJobPart {
+  name:       string
+  qty:        number
+  unit_cost:  number   // what the tech pays the supplier
+  unit_price: number   // what the customer pays (after markup)
+}
+
+export interface MultiJobEntry {
+  id:          string
+  category:    string   // catalog category id (e.g. 'brakes')
+  subtype:     string   // job name (e.g. 'Front Brake Pad Replacement')
+  labor_hours: number
+  labor_rate:  number
+  parts:       MultiJobPart[]
+  notes:       string
+}
+
 // ─── API payloads ─────────────────────────────────────────────────────────────
 
 export interface TechGuideRequest {
@@ -107,10 +126,11 @@ export interface TechGuideRequest {
 
 export interface QuoteSaveRequest {
   vehicle:       QWVehicle
-  job:           SelectedJob
-  parts:         PartWithSuppliers[]
+  job:           SelectedJob           // first job (backwards compat scalar columns)
+  jobs?:         MultiJobEntry[]       // all jobs (multi-job JSONB)
+  parts:         PartWithSuppliers[]   // all included parts flat (backwards compat)
   parts_total:   number
-  labor_hours:   number
+  labor_hours:   number                // total labor hours across all jobs
   labor_rate:    number
   labor_total:   number
   markup_percent: number

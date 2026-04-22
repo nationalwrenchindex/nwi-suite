@@ -8,6 +8,7 @@ import type {
   TechGuide,
   PartWithSuppliers,
   Supplier,
+  MultiJobEntry,
 } from '@/types/quickwrench'
 
 // ─── Job catalog ──────────────────────────────────────────────────────────────
@@ -119,6 +120,10 @@ const JOB_CATEGORIES = [
 const fmt = (n: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
 
+function jobKey(j: SelectedJob): string {
+  return `${j.category}:${j.name}`
+}
+
 function supplierPrices(estimate: number) {
   const seed = estimate
   return {
@@ -192,14 +197,12 @@ function VINScanner({
     let alive = true
 
     async function init() {
-      // ── 1. Check for native BarcodeDetector support ────────────────────
       if (!('BarcodeDetector' in window)) {
         setPhase('error')
         setMsg('unsupported')
         return
       }
 
-      // ── 2. Request rear camera ─────────────────────────────────────────
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: false,
         video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } },
@@ -207,7 +210,6 @@ function VINScanner({
       streamRef.current = stream
       if (!alive) { stream.getTracks().forEach(t => t.stop()); return }
 
-      // ── 3. Start video playback ────────────────────────────────────────
       const video = videoRef.current!
       video.srcObject = stream
       video.setAttribute('playsinline', 'true')
@@ -218,7 +220,6 @@ function VINScanner({
       setPhase('scanning')
       setMsg('Point the camera at the VIN barcode on the door jamb sticker')
 
-      // ── 4. BarcodeDetector scan loop ───────────────────────────────────
       const detector = new (window as any).BarcodeDetector({
         formats: ['code_39', 'code_128'],
       })
@@ -287,7 +288,6 @@ function VINScanner({
       `}</style>
 
       <div className="fixed inset-0 z-50 bg-black overflow-hidden">
-        {/* Live camera feed fills entire background */}
         <video
           ref={videoRef}
           muted
@@ -297,23 +297,17 @@ function VINScanner({
           style={{ objectFit: 'cover', width: '100%', height: '100%' }}
         />
 
-        {/* Semi-transparent dim layer + all UI */}
         <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center gap-6 px-6">
-
-          {/* Guide label */}
           <p className="text-white/50 text-xs uppercase tracking-widest font-medium">
             {phase === 'loading' ? 'Initializing camera…' : 'Align barcode within frame'}
           </p>
 
-          {/* Scan frame — wide & short for barcode orientation */}
           <div className="relative" style={{ width: 300, height: 108 }}>
-            {/* Corner brackets */}
             <span style={{ position:'absolute', top:0,    left:0,  width:24, height:24, borderTop:'3px solid #FF6600',    borderLeft:'3px solid #FF6600'  }} />
             <span style={{ position:'absolute', top:0,    right:0, width:24, height:24, borderTop:'3px solid #FF6600',    borderRight:'3px solid #FF6600' }} />
             <span style={{ position:'absolute', bottom:0, left:0,  width:24, height:24, borderBottom:'3px solid #FF6600', borderLeft:'3px solid #FF6600'  }} />
             <span style={{ position:'absolute', bottom:0, right:0, width:24, height:24, borderBottom:'3px solid #FF6600', borderRight:'3px solid #FF6600' }} />
 
-            {/* Scan line — only visible while actively scanning */}
             {phase === 'scanning' && (
               <div style={{
                 position:   'absolute',
@@ -327,7 +321,6 @@ function VINScanner({
             )}
           </div>
 
-          {/* Status indicator */}
           <div className="flex flex-col items-center gap-3 w-full max-w-xs text-center">
             {phase === 'loading' && (
               <div className="w-6 h-6 border-2 border-orange border-t-transparent rounded-full animate-spin" />
@@ -447,7 +440,6 @@ function VehicleTab({
 
   return (
     <div className="space-y-6">
-      {/* VIN camera scanner overlay — rendered at top level so it covers full screen */}
       {showScanner && (
         <VINScanner
           onScan={handleScanResult}
@@ -455,7 +447,6 @@ function VehicleTab({
         />
       )}
 
-      {/* VIN Entry */}
       {!manual && (
         <div className="nwi-card">
           <p className="text-white/40 text-xs uppercase tracking-widest mb-3">Enter VIN</p>
@@ -468,7 +459,6 @@ function VehicleTab({
               onChange={e => setVin(e.target.value.toUpperCase())}
               onKeyDown={e => e.key === 'Enter' && decodeVin()}
             />
-            {/* Scan VIN button */}
             <button
               onClick={() => { setError(null); setShowScanner(true) }}
               className="flex items-center gap-1.5 px-3 py-2 border border-orange/40 hover:border-orange/70 bg-orange/10 hover:bg-orange/20 text-orange text-sm font-medium rounded-lg transition-colors whitespace-nowrap"
@@ -498,7 +488,6 @@ function VehicleTab({
         </div>
       )}
 
-      {/* Manual entry */}
       {manual && (
         <div className="nwi-card border-orange/20">
           <div className="flex items-center justify-between mb-3">
@@ -535,7 +524,6 @@ function VehicleTab({
         </div>
       )}
 
-      {/* Decoded vehicle display */}
       {vehicle && (
         <div className="nwi-card border-orange/40 bg-orange/5">
           <div className="flex items-start justify-between gap-3">
@@ -559,7 +547,6 @@ function VehicleTab({
         </div>
       )}
 
-      {/* Recent vehicles from Intel Hub */}
       {recentVehicles.length > 0 && (
         <div>
           <p className="text-white/30 text-xs uppercase tracking-widest mb-2">Recent Vehicles from Intel Hub</p>
@@ -586,7 +573,6 @@ function VehicleTab({
         </div>
       )}
 
-      {/* Full-width CTA */}
       {vehicle && (
         <button
           onClick={onNext}
@@ -599,42 +585,51 @@ function VehicleTab({
   )
 }
 
-// ─── Tab 2: Job Type ─────────────────────────────────────────────────────────
+// ─── Tab 2: Job Type (multi-select) ──────────────────────────────────────────
 
 function JobTypeTab({
-  selectedJob,
-  onJobSelect,
+  selectedJobs,
+  onJobToggle,
   onNext,
 }: {
-  selectedJob: SelectedJob | null
-  onJobSelect: (j: SelectedJob) => void
-  onNext:      () => void
+  selectedJobs: SelectedJob[]
+  onJobToggle:  (j: SelectedJob) => void
+  onNext:       () => void
 }) {
   const [activeCat, setActiveCat] = useState<string | null>(
-    selectedJob?.category ?? null,
+    selectedJobs.length > 0 ? selectedJobs[selectedJobs.length - 1].category : null
   )
 
   const cat = JOB_CATEGORIES.find(c => c.id === activeCat) ?? null
+  const totalHours = selectedJobs.reduce((s, j) => s + j.hours, 0)
 
   return (
     <div className="space-y-4">
       {/* Category grid */}
       <div className="grid grid-cols-3 sm:grid-cols-3 lg:grid-cols-9 gap-2">
-        {JOB_CATEGORIES.map(c => (
-          <button
-            key={c.id}
-            onClick={() => setActiveCat(c.id)}
-            className={`
-              flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-colors text-center
-              ${activeCat === c.id
-                ? 'border-orange/60 bg-orange/10 text-orange'
-                : 'border-dark-border bg-dark-card text-white/50 hover:border-white/20 hover:text-white'}
-            `}
-          >
-            <CategoryIcon id={c.id} className="w-5 h-5" />
-            <span className="text-[10px] font-medium leading-tight">{c.label}</span>
-          </button>
-        ))}
+        {JOB_CATEGORIES.map(c => {
+          const hasSel = selectedJobs.some(j => j.category === c.id)
+          return (
+            <button
+              key={c.id}
+              onClick={() => setActiveCat(c.id)}
+              className={`
+                flex flex-col items-center gap-1.5 p-3 rounded-xl border transition-colors text-center relative
+                ${activeCat === c.id
+                  ? 'border-orange/60 bg-orange/10 text-orange'
+                  : hasSel
+                  ? 'border-success/40 bg-success/5 text-success'
+                  : 'border-dark-border bg-dark-card text-white/50 hover:border-white/20 hover:text-white'}
+              `}
+            >
+              <CategoryIcon id={c.id} className="w-5 h-5" />
+              <span className="text-[10px] font-medium leading-tight">{c.label}</span>
+              {hasSel && activeCat !== c.id && (
+                <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-success rounded-full" />
+              )}
+            </button>
+          )
+        })}
       </div>
 
       {/* Job list for selected category */}
@@ -645,14 +640,16 @@ function JobTypeTab({
             <p className="font-condensed font-bold text-white text-base tracking-wide">
               {cat.label.toUpperCase()}
             </p>
+            <span className="text-white/30 text-xs ml-auto">Tap to add / remove</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             {cat.jobs.map(j => {
-              const isSelected = selectedJob?.name === j.name && selectedJob?.category === cat.id
+              const sj: SelectedJob = { category: cat.id, categoryLabel: cat.label, name: j.name, hours: j.hours }
+              const isSelected = selectedJobs.some(s => jobKey(s) === jobKey(sj))
               return (
                 <button
                   key={j.name}
-                  onClick={() => onJobSelect({ category: cat.id, categoryLabel: cat.label, name: j.name, hours: j.hours })}
+                  onClick={() => onJobToggle(sj)}
                   className={`
                     flex items-center justify-between gap-3 px-4 py-3 rounded-lg border text-left transition-colors
                     ${isSelected
@@ -663,9 +660,18 @@ function JobTypeTab({
                   <span className={`text-sm font-medium ${isSelected ? 'text-orange' : 'text-white'}`}>
                     {j.name}
                   </span>
-                  <span className="text-white/30 text-xs whitespace-nowrap flex-shrink-0">
-                    {j.hours}h
-                  </span>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span className="text-white/30 text-xs whitespace-nowrap">{j.hours}h</span>
+                    <span className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors ${
+                      isSelected ? 'bg-orange border-orange' : 'border-white/25 bg-transparent'
+                    }`}>
+                      {isSelected && (
+                        <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      )}
+                    </span>
+                  </div>
                 </button>
               )
             })}
@@ -673,12 +679,32 @@ function JobTypeTab({
         </div>
       )}
 
-      {selectedJob && (
-        <>
-          <div className="flex items-center justify-between px-4 py-3 bg-orange/10 border border-orange/30 rounded-xl">
-            <div>
-              <p className="text-white font-medium text-sm">{selectedJob.name}</p>
-              <p className="text-orange text-xs">{selectedJob.hours}h flat rate</p>
+      {/* Running total + CTA */}
+      {selectedJobs.length > 0 && (
+        <div className="space-y-3">
+          <div className="bg-orange/10 border border-orange/30 rounded-xl px-4 py-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-white font-semibold text-sm">
+                {selectedJobs.length} job{selectedJobs.length !== 1 ? 's' : ''} selected
+              </p>
+              <span className="text-orange text-sm font-medium">{totalHours.toFixed(1)}h labor</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {selectedJobs.map(j => (
+                <span
+                  key={jobKey(j)}
+                  className="flex items-center gap-1 px-2 py-0.5 bg-orange/15 border border-orange/25 rounded-full text-xs text-orange"
+                >
+                  {j.name}
+                  <button
+                    onClick={e => { e.stopPropagation(); onJobToggle(j) }}
+                    className="text-orange/50 hover:text-orange ml-0.5 leading-none text-sm"
+                    aria-label={`Remove ${j.name}`}
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
             </div>
           </div>
           <button
@@ -687,8 +713,68 @@ function JobTypeTab({
           >
             Get Tech Guide + Parts →
           </button>
-        </>
+        </div>
       )}
+    </div>
+  )
+}
+
+// ─── Tech guide content (shared by single and accordion) ─────────────────────
+
+function TechGuideContent({ guide, job }: { guide: TechGuide; job: SelectedJob }) {
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="nwi-card">
+        <p className="text-white/40 text-xs uppercase tracking-widest mb-3">Repair Steps</p>
+        <ol className="space-y-2">
+          {guide.steps.map((step, i) => (
+            <li key={i} className="flex gap-3">
+              <span className="flex-shrink-0 w-5 h-5 rounded-full bg-orange/15 border border-orange/30 flex items-center justify-center text-orange text-[10px] font-bold mt-0.5">
+                {i + 1}
+              </span>
+              <p className="text-white/70 text-sm leading-relaxed">{step.replace(/^\d+\.\s*/, '')}</p>
+            </li>
+          ))}
+        </ol>
+      </div>
+
+      <div className="space-y-4">
+        {guide.torque.length > 0 && (
+          <div className="nwi-card">
+            <p className="text-white/40 text-xs uppercase tracking-widest mb-3">Torque Specs</p>
+            <div className="space-y-2">
+              {guide.torque.map((ts, i) => (
+                <div key={i} className="flex items-start justify-between gap-3 py-1.5 border-b border-dark-border last:border-0">
+                  <p className="text-white text-sm">{ts.part}</p>
+                  <span className="font-condensed font-bold text-orange text-sm whitespace-nowrap flex-shrink-0">
+                    {ts.spec}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {guide.tools.length > 0 && (
+          <div className="nwi-card">
+            <p className="text-white/40 text-xs uppercase tracking-widest mb-3">Special Tools</p>
+            <div className="flex flex-wrap gap-2">
+              {guide.tools.map((t, i) => (
+                <div key={i} className="bg-dark-input border border-dark-border rounded-lg px-3 py-1.5">
+                  <p className="text-white text-xs font-medium">{t}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {guide.warning && (
+          <div className="nwi-card border-danger/20 bg-danger/5">
+            <p className="text-danger/70 text-xs uppercase tracking-widest mb-2">⚠ Warning</p>
+            <p className="text-white/60 text-xs leading-relaxed">• {guide.warning}</p>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -697,27 +783,31 @@ function JobTypeTab({
 
 function TechGuideTab({
   vehicle,
-  job,
-  techGuide,
+  jobs,
+  techGuides,
   loading,
   error,
   onRetry,
   onNext,
 }: {
-  vehicle:   QWVehicle | null
-  job:       SelectedJob | null
-  techGuide: TechGuide | null
-  loading:   boolean
-  error:     string | null
-  onRetry:   () => void
-  onNext:    () => void
+  vehicle:    QWVehicle | null
+  jobs:       SelectedJob[]
+  techGuides: Record<string, TechGuide>
+  loading:    boolean
+  error:      string | null
+  onRetry:    () => void
+  onNext:     () => void
 }) {
+  const [expandedKey, setExpandedKey] = useState<string | null>(
+    jobs.length > 0 ? jobKey(jobs[0]) : null
+  )
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-4">
         <div className="w-12 h-12 border-2 border-orange border-t-transparent rounded-full animate-spin" />
         <p className="text-white/50 text-sm">
-          Getting tech guide for {vehicle?.year} {vehicle?.make} {vehicle?.model}…
+          Loading tech guide{jobs.length > 1 ? 's' : ''} for {vehicle?.year} {vehicle?.make} {vehicle?.model}…
         </p>
       </div>
     )
@@ -737,79 +827,93 @@ function TechGuideTab({
     )
   }
 
-  if (!techGuide) return null
+  const loadedJobs = jobs.filter(j => !!techGuides[jobKey(j)])
+  if (loadedJobs.length === 0) return null
 
+  // Single-job: flat display (same UX as before)
+  if (jobs.length === 1) {
+    const j    = jobs[0]
+    const guide = techGuides[jobKey(j)]
+    if (!guide) return null
+
+    return (
+      <div className="space-y-4">
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <p className="text-white/40 text-xs uppercase tracking-widest mb-0.5">
+              {vehicle?.year} {vehicle?.make} {vehicle?.model} · {vehicle?.engine}
+            </p>
+            <h2 className="font-condensed font-bold text-xl text-white tracking-wide">{j.name}</h2>
+          </div>
+          <span className="bg-white/5 border border-white/10 rounded-full px-3 py-1 text-xs text-white/60">
+            {guide.hours}h flat rate
+          </span>
+        </div>
+
+        <TechGuideContent guide={guide} job={j} />
+
+        <p className="text-white/25 text-[10px] leading-relaxed">
+          AI-generated specifications for reference only. Results may omit vehicle-specific steps or torque values. Always verify against OEM service documentation before beginning work. National Wrench Index&#8482; assumes no liability for inaccuracies.
+        </p>
+
+        <button
+          onClick={onNext}
+          className="w-full py-4 bg-orange hover:bg-orange-hover text-white font-condensed font-bold text-base tracking-wide rounded-xl transition-colors"
+        >
+          View Parts List →
+        </button>
+      </div>
+    )
+  }
+
+  // Multi-job: accordion
   return (
     <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <p className="text-white/40 text-xs uppercase tracking-widest mb-0.5">
-            {vehicle?.year} {vehicle?.make} {vehicle?.model} · {vehicle?.engine}
-          </p>
-          <h2 className="font-condensed font-bold text-xl text-white tracking-wide">{job?.name}</h2>
-        </div>
-        <span className="bg-white/5 border border-white/10 rounded-full px-3 py-1 text-xs text-white/60">
-          {techGuide.hours}h flat rate
-        </span>
+      <div>
+        <p className="text-white/40 text-xs uppercase tracking-widest mb-0.5">
+          {vehicle?.year} {vehicle?.make} {vehicle?.model} · {vehicle?.engine}
+        </p>
+        <h2 className="font-condensed font-bold text-xl text-white tracking-wide">
+          {loadedJobs.length} Tech Guide{loadedJobs.length !== 1 ? 's' : ''}
+        </h2>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Repair Steps */}
-        <div className="nwi-card">
-          <p className="text-white/40 text-xs uppercase tracking-widest mb-3">Repair Steps</p>
-          <ol className="space-y-2">
-            {techGuide.steps.map((step, i) => (
-              <li key={i} className="flex gap-3">
-                <span className="flex-shrink-0 w-5 h-5 rounded-full bg-orange/15 border border-orange/30 flex items-center justify-center text-orange text-[10px] font-bold mt-0.5">
-                  {i + 1}
-                </span>
-                <p className="text-white/70 text-sm leading-relaxed">{step.replace(/^\d+\.\s*/, '')}</p>
-              </li>
-            ))}
-          </ol>
-        </div>
+      <div className="space-y-2">
+        {loadedJobs.map((j, ji) => {
+          const key   = jobKey(j)
+          const guide = techGuides[key]
+          const isExp = expandedKey === key
+          return (
+            <div key={key} className="nwi-card overflow-hidden">
+              <button
+                onClick={() => setExpandedKey(isExp ? null : key)}
+                className="flex items-center justify-between w-full text-left py-0.5"
+              >
+                <div className="flex items-center gap-2.5">
+                  <span className="w-6 h-6 rounded-full bg-orange/15 border border-orange/30 flex items-center justify-center text-orange text-[10px] font-bold flex-shrink-0">
+                    {ji + 1}
+                  </span>
+                  <p className="font-semibold text-white text-sm">{j.name}</p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className="text-white/30 text-xs">{guide.hours}h</span>
+                  <svg
+                    className={`w-4 h-4 text-white/40 transition-transform ${isExp ? 'rotate-180' : ''}`}
+                    fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"
+                  >
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                </div>
+              </button>
 
-        <div className="space-y-4">
-          {/* Torque Specs */}
-          {techGuide.torque.length > 0 && (
-            <div className="nwi-card">
-              <p className="text-white/40 text-xs uppercase tracking-widest mb-3">Torque Specs</p>
-              <div className="space-y-2">
-                {techGuide.torque.map((ts, i) => (
-                  <div key={i} className="flex items-start justify-between gap-3 py-1.5 border-b border-dark-border last:border-0">
-                    <p className="text-white text-sm">{ts.part}</p>
-                    <span className="font-condensed font-bold text-orange text-sm whitespace-nowrap flex-shrink-0">
-                      {ts.spec}
-                    </span>
-                  </div>
-                ))}
-              </div>
+              {isExp && (
+                <div className="mt-4 pt-4 border-t border-dark-border">
+                  <TechGuideContent guide={guide} job={j} />
+                </div>
+              )}
             </div>
-          )}
-
-          {/* Special Tools */}
-          {techGuide.tools.length > 0 && (
-            <div className="nwi-card">
-              <p className="text-white/40 text-xs uppercase tracking-widest mb-3">Special Tools</p>
-              <div className="flex flex-wrap gap-2">
-                {techGuide.tools.map((t, i) => (
-                  <div key={i} className="bg-dark-input border border-dark-border rounded-lg px-3 py-1.5">
-                    <p className="text-white text-xs font-medium">{t}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Warning */}
-          {techGuide.warning && (
-            <div className="nwi-card border-danger/20 bg-danger/5">
-              <p className="text-danger/70 text-xs uppercase tracking-widest mb-2">⚠ Warning</p>
-              <p className="text-white/60 text-xs leading-relaxed">• {techGuide.warning}</p>
-            </div>
-          )}
-        </div>
+          )
+        })}
       </div>
 
       <p className="text-white/25 text-[10px] leading-relaxed">
@@ -836,35 +940,109 @@ const SUPPLIERS: { key: Supplier; label: string; color: string }[] = [
   { key: 'custom',   label: 'Custom',    color: 'text-white/50' },
 ]
 
+function PartCard({
+  p,
+  onChange,
+}: {
+  p:        PartWithSuppliers
+  onChange: (updated: PartWithSuppliers) => void
+}) {
+  function toggle()                       { onChange({ ...p, included: !p.included }) }
+  function setSupplier(s: Supplier)       { onChange({ ...p, selected_supplier: s }) }
+  function setCustomPrice(val: string)    { onChange({ ...p, custom_price: Number(val) || 0 }) }
+  function setQty(val: string)            { onChange({ ...p, qty: Math.max(1, Number(val) || 1) }) }
+
+  return (
+    <div className={`nwi-card transition-opacity ${p.included ? '' : 'opacity-40'}`}>
+      <div className="flex items-start gap-3">
+        <input
+          type="checkbox"
+          checked={p.included}
+          onChange={toggle}
+          className="mt-1 w-4 h-4 accent-orange flex-shrink-0"
+        />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-start justify-between gap-2 flex-wrap">
+            <div>
+              <p className="text-white font-medium text-sm">{p.name}</p>
+              {p.part_number_hint && (
+                <p className="text-white/30 text-xs font-mono">{p.part_number_hint}</p>
+              )}
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <label className="text-white/30 text-xs">Qty</label>
+              <input
+                type="number"
+                min={1}
+                value={p.qty}
+                onChange={e => setQty(e.target.value)}
+                className="nwi-input w-16 text-center text-sm py-1"
+              />
+            </div>
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            {SUPPLIERS.map(s => {
+              const price =
+                s.key === 'autozone'  ? p.price_autozone  :
+                s.key === 'orielly'   ? p.price_orielly   :
+                s.key === 'napa'      ? p.price_napa      :
+                s.key === 'rockauto'  ? p.price_rockauto  :
+                p.custom_price
+              const isSel = p.selected_supplier === s.key
+              return (
+                <button
+                  key={s.key}
+                  onClick={() => setSupplier(s.key)}
+                  className={`
+                    flex flex-col items-center px-3 py-1.5 rounded-lg border text-xs transition-colors
+                    ${isSel ? 'border-orange/60 bg-orange/10' : 'border-dark-border hover:border-white/20'}
+                  `}
+                >
+                  <span className={`font-medium ${isSel ? 'text-orange' : s.color}`}>{s.label}</span>
+                  {s.key === 'custom' ? (
+                    <input
+                      type="number"
+                      min={0}
+                      step={0.01}
+                      value={p.custom_price}
+                      onClick={e => e.stopPropagation()}
+                      onChange={e => { setSupplier('custom'); setCustomPrice(e.target.value) }}
+                      className="w-16 bg-transparent border-0 text-white/60 text-xs text-center p-0 focus:outline-none"
+                    />
+                  ) : (
+                    <span className="text-white/60">{fmt(price)}</span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="mt-2 flex items-center justify-between">
+            <span className="text-white/30 text-xs">{p.qty} × {fmt(partPrice(p))}</span>
+            <span className="font-condensed font-bold text-sm text-white">{fmt(partPrice(p) * p.qty)}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function PartsTab({
-  parts,
+  selectedJobs,
+  partsByJob,
   onPartsChange,
   onNext,
 }: {
-  parts:         PartWithSuppliers[]
-  onPartsChange: (p: PartWithSuppliers[]) => void
+  selectedJobs:  SelectedJob[]
+  partsByJob:    Record<string, PartWithSuppliers[]>
+  onPartsChange: (key: string, p: PartWithSuppliers[]) => void
   onNext:        () => void
 }) {
-  function toggleIncluded(id: string) {
-    onPartsChange(parts.map(p => p.id === id ? { ...p, included: !p.included } : p))
-  }
+  const allParts  = selectedJobs.flatMap(j => partsByJob[jobKey(j)] ?? [])
+  const totalParts = allParts.filter(p => p.included).reduce((s, p) => s + partPrice(p) * p.qty, 0)
 
-  function setSupplier(id: string, supplier: Supplier) {
-    onPartsChange(parts.map(p => p.id === id ? { ...p, selected_supplier: supplier } : p))
-  }
-
-  function setCustomPrice(id: string, val: string) {
-    onPartsChange(parts.map(p => p.id === id ? { ...p, custom_price: Number(val) || 0 } : p))
-  }
-
-  function setQty(id: string, val: string) {
-    onPartsChange(parts.map(p => p.id === id ? { ...p, qty: Math.max(1, Number(val) || 1) } : p))
-  }
-
-  const included  = parts.filter(p => p.included)
-  const partsTotal = included.reduce((s, p) => s + partPrice(p) * p.qty, 0)
-
-  if (parts.length === 0) {
+  if (allParts.length === 0) {
     return (
       <div className="text-center py-16">
         <p className="text-white/30 text-sm">No parts data — go back and load the tech guide first.</p>
@@ -872,110 +1050,94 @@ function PartsTab({
     )
   }
 
+  // Single-job: flat display (same UX as before)
+  if (selectedJobs.length === 1) {
+    const j   = selectedJobs[0]
+    const key = jobKey(j)
+    const parts = partsByJob[key] ?? []
+    const included = parts.filter(p => p.included)
+
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <p className="text-white/40 text-xs uppercase tracking-widest">
+            {parts.length} part{parts.length !== 1 ? 's' : ''} · {included.length} selected
+          </p>
+          <span className="font-condensed font-bold text-lg text-white">
+            Parts Est: <span className="text-orange">{fmt(totalParts)}</span>
+          </span>
+        </div>
+
+        <div className="space-y-3">
+          {parts.map(p => (
+            <PartCard
+              key={p.id}
+              p={p}
+              onChange={updated => onPartsChange(key, parts.map(x => x.id === p.id ? updated : x))}
+            />
+          ))}
+        </div>
+
+        <div className="pt-2 space-y-3">
+          <div className="text-white/40 text-sm text-right">
+            Parts subtotal: <span className="text-white font-medium">{fmt(totalParts)}</span>
+          </div>
+          <button
+            onClick={onNext}
+            className="w-full py-4 bg-orange hover:bg-orange-hover text-white font-condensed font-bold text-base tracking-wide rounded-xl transition-colors"
+          >
+            Build Quote →
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // Multi-job: grouped by job
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <p className="text-white/40 text-xs uppercase tracking-widest">
-          {parts.length} part{parts.length !== 1 ? 's' : ''} · {included.length} selected
-        </p>
+        <p className="text-white/40 text-xs uppercase tracking-widest">Parts by Job</p>
         <span className="font-condensed font-bold text-lg text-white">
-          Parts Est: <span className="text-orange">{fmt(partsTotal)}</span>
+          Total: <span className="text-orange">{fmt(totalParts)}</span>
         </span>
       </div>
 
-      <div className="space-y-3">
-        {parts.map(p => (
-          <div
-            key={p.id}
-            className={`nwi-card transition-opacity ${p.included ? '' : 'opacity-40'}`}
-          >
-            <div className="flex items-start gap-3">
-              <input
-                type="checkbox"
-                checked={p.included}
-                onChange={() => toggleIncluded(p.id)}
-                className="mt-1 w-4 h-4 accent-orange flex-shrink-0"
-              />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-start justify-between gap-2 flex-wrap">
-                  <div>
-                    <p className="text-white font-medium text-sm">{p.name}</p>
-                    {p.part_number_hint && (
-                      <p className="text-white/30 text-xs font-mono">{p.part_number_hint}</p>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <label className="text-white/30 text-xs">Qty</label>
-                    <input
-                      type="number"
-                      min={1}
-                      value={p.qty}
-                      onChange={e => setQty(p.id, e.target.value)}
-                      className="nwi-input w-16 text-center text-sm py-1"
-                    />
-                  </div>
-                </div>
+      {selectedJobs.map((j, ji) => {
+        const key   = jobKey(j)
+        const parts = partsByJob[key] ?? []
+        const jobTotal = parts.filter(p => p.included).reduce((s, p) => s + partPrice(p) * p.qty, 0)
 
-                {/* Supplier pricing */}
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {SUPPLIERS.map(s => {
-                    const price =
-                      s.key === 'autozone'  ? p.price_autozone  :
-                      s.key === 'orielly'   ? p.price_orielly   :
-                      s.key === 'napa'      ? p.price_napa      :
-                      s.key === 'rockauto'  ? p.price_rockauto  :
-                      p.custom_price
-                    const isSelected = p.selected_supplier === s.key
-                    return (
-                      <button
-                        key={s.key}
-                        onClick={() => setSupplier(p.id, s.key)}
-                        className={`
-                          flex flex-col items-center px-3 py-1.5 rounded-lg border text-xs transition-colors
-                          ${isSelected
-                            ? 'border-orange/60 bg-orange/10'
-                            : 'border-dark-border hover:border-white/20'}
-                        `}
-                      >
-                        <span className={`font-medium ${isSelected ? 'text-orange' : s.color}`}>
-                          {s.label}
-                        </span>
-                        {s.key === 'custom' ? (
-                          <input
-                            type="number"
-                            min={0}
-                            step={0.01}
-                            value={p.custom_price}
-                            onClick={e => e.stopPropagation()}
-                            onChange={e => { setSupplier(p.id, 'custom'); setCustomPrice(p.id, e.target.value) }}
-                            className="w-16 bg-transparent border-0 text-white/60 text-xs text-center p-0 focus:outline-none"
-                          />
-                        ) : (
-                          <span className="text-white/60">{fmt(price)}</span>
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
-
-                {/* Line total */}
-                <div className="mt-2 flex items-center justify-between">
-                  <span className="text-white/30 text-xs">
-                    {p.qty} × {fmt(partPrice(p))}
-                  </span>
-                  <span className="font-condensed font-bold text-sm text-white">
-                    {fmt(partPrice(p) * p.qty)}
-                  </span>
-                </div>
-              </div>
+        return (
+          <div key={key} className="space-y-2">
+            <div className="flex items-center gap-2 px-1">
+              <span className="w-5 h-5 rounded-full bg-orange/15 border border-orange/30 flex items-center justify-center text-orange text-[10px] font-bold flex-shrink-0">
+                {ji + 1}
+              </span>
+              <p className="text-white font-semibold text-sm flex-1">{j.name}</p>
+              <span className="text-orange text-xs font-medium">{fmt(jobTotal)}</span>
             </div>
-          </div>
-        ))}
-      </div>
 
-      <div className="pt-2 space-y-3">
+            {parts.length > 0 ? (
+              <div className="space-y-2 pl-7">
+                {parts.map(p => (
+                  <PartCard
+                    key={p.id}
+                    p={p}
+                    onChange={updated => onPartsChange(key, parts.map(x => x.id === p.id ? updated : x))}
+                  />
+                ))}
+              </div>
+            ) : (
+              <p className="text-white/30 text-sm pl-7">No parts for this job.</p>
+            )}
+          </div>
+        )
+      })}
+
+      <div className="pt-2 space-y-3 border-t border-dark-border">
         <div className="text-white/40 text-sm text-right">
-          Parts subtotal: <span className="text-white font-medium">{fmt(partsTotal)}</span>
+          All parts subtotal: <span className="text-white font-medium">{fmt(totalParts)}</span>
         </div>
         <button
           onClick={onNext}
@@ -992,9 +1154,9 @@ function PartsTab({
 
 function QuoteTab({
   vehicle,
-  job,
-  techGuide,
-  parts,
+  selectedJobs,
+  techGuides,
+  partsByJob,
   initialLaborRate   = 125,
   initialMarkupPct   = 20,
   initialTaxPct      = 8.5,
@@ -1002,9 +1164,9 @@ function QuoteTab({
   initialCustomerPhone = '',
 }: {
   vehicle:               QWVehicle | null
-  job:                   SelectedJob | null
-  techGuide:             TechGuide | null
-  parts:                 PartWithSuppliers[]
+  selectedJobs:          SelectedJob[]
+  techGuides:            Record<string, TechGuide>
+  partsByJob:            Record<string, PartWithSuppliers[]>
   initialLaborRate?:     number
   initialMarkupPct?:     number
   initialTaxPct?:        number
@@ -1024,40 +1186,77 @@ function QuoteTab({
   const [smsSent,       setSmsSent]       = useState(false)
   const [error,         setError]         = useState<string | null>(null)
 
-  const includedParts = parts.filter(p => p.included)
-  const laborHours    = techGuide?.hours ?? job?.hours ?? 0
+  // Per-job breakdowns
+  const jobBreakdowns = selectedJobs.map(j => {
+    const key        = jobKey(j)
+    const guide      = techGuides[key]
+    const laborHrs   = guide?.hours ?? j.hours
+    const jParts     = (partsByJob[key] ?? []).filter(p => p.included)
+    const partsBase  = jParts.reduce((s, p) => s + partPrice(p) * p.qty, 0)
+    const partsMarkup = partsBase * markupPct / 100
+    const partsRev   = partsBase + partsMarkup
+    const laborTotal = laborHrs * laborRate
+    const subtotal   = partsRev + laborTotal
+    return { j, key, laborHrs, jParts, partsBase, partsMarkup, partsRev, laborTotal, subtotal }
+  })
 
-  const partsBase   = includedParts.reduce((s, p) => s + partPrice(p) * p.qty, 0)
-  const partsMarkup = partsBase * (markupPct / 100)
-  const partsTotal  = partsBase + partsMarkup
-  const laborTotal  = laborHours * laborRate
-  const preTax      = partsTotal + laborTotal
-  const taxAmount   = preTax * (taxPct / 100)
-  const grandTotal  = preTax + taxAmount
+  const totalPartsRev   = jobBreakdowns.reduce((s, b) => s + b.partsRev,   0)
+  const totalLaborHours = jobBreakdowns.reduce((s, b) => s + b.laborHrs,   0)
+  const totalLaborTotal = jobBreakdowns.reduce((s, b) => s + b.laborTotal, 0)
+  const preTax          = totalPartsRev + totalLaborTotal
+  const taxAmount       = preTax * (taxPct / 100)
+  const grandTotal      = preTax + taxAmount
 
-  // Derive a hash of the quote so we can detect changes after save
-  const quoteHash = `${laborRate}:${markupPct}:${taxPct}:${
-    includedParts.map(p => `${p.id}:${p.qty}:${partPrice(p)}`).join(',')
-  }`
+  const quoteHash = [laborRate, markupPct, taxPct,
+    ...selectedJobs.map(j => {
+      const key = jobKey(j)
+      return (partsByJob[key] ?? []).filter(p => p.included)
+        .map(p => `${p.id}:${p.qty}:${partPrice(p)}`).join(',')
+    })
+  ].join(':')
   const isSaved = !!quoteNumber && savedHash === quoteHash
 
   async function save(sendSms: boolean, saveQuote: boolean) {
-    if (!vehicle || !job) return
+    if (!vehicle || selectedJobs.length === 0) return
     if (sendSms && !customerPhone) { setError('Enter customer phone to send SMS.'); return }
     setError(null)
-
     if (sendSms) { setSendingSms(true) } else { setSaving(true) }
 
     try {
+      const jobsPayload: MultiJobEntry[] = jobBreakdowns.map(b => ({
+        id:          b.key,
+        category:    b.j.category,
+        subtype:     b.j.name,
+        labor_hours: b.laborHrs,
+        labor_rate:  laborRate,
+        parts:       b.jParts.map(p => ({
+          name:       p.name,
+          qty:        p.qty,
+          unit_cost:  Math.round(partPrice(p) * 100) / 100,
+          unit_price: Math.round(partPrice(p) * (1 + markupPct / 100) * 100) / 100,
+        })),
+        notes: '',
+      }))
+
+      const allParts = selectedJobs.flatMap(j => partsByJob[jobKey(j)] ?? [])
+
       const res  = await fetch('/api/quickwrench/quote', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          vehicle, job, parts,
-          parts_total:    Math.round(partsTotal * 100) / 100,
-          labor_hours:    laborHours,
+          vehicle,
+          job: {
+            category:      selectedJobs[0].category,
+            categoryLabel: selectedJobs[0].categoryLabel,
+            name:          selectedJobs[0].name,
+            hours:         jobsPayload[0].labor_hours,
+          },
+          jobs:           jobsPayload,
+          parts:          allParts,
+          parts_total:    Math.round(totalPartsRev * 100) / 100,
+          labor_hours:    totalLaborHours,
           labor_rate:     laborRate,
-          labor_total:    Math.round(laborTotal * 100) / 100,
+          labor_total:    Math.round(totalLaborTotal * 100) / 100,
           markup_percent: markupPct,
           tax_amount:     Math.round(taxAmount * 100) / 100,
           grand_total:    Math.round(grandTotal * 100) / 100,
@@ -1084,16 +1283,27 @@ function QuoteTab({
   }
 
   const vehicleLabel = [vehicle?.year, vehicle?.make, vehicle?.model].filter(Boolean).join(' ')
+  const isMultiJob   = selectedJobs.length > 1
 
   return (
     <div className="space-y-5">
       {/* Vehicle + job summary */}
       <div className="nwi-card border-orange/20 bg-orange/5">
         <div className="flex items-center gap-3 flex-wrap">
-          <div>
+          <div className="flex-1 min-w-0">
             <p className="text-white/40 text-xs uppercase tracking-widest">Quote Summary</p>
             <p className="font-condensed font-bold text-xl text-white tracking-wide">{vehicleLabel}</p>
-            <p className="text-orange text-sm">{job?.name}</p>
+            {isMultiJob ? (
+              <div className="flex flex-wrap gap-1 mt-1">
+                {selectedJobs.map(j => (
+                  <span key={jobKey(j)} className="text-xs text-orange bg-orange/10 border border-orange/20 rounded-full px-2 py-0.5">
+                    {j.name}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="text-orange text-sm">{selectedJobs[0]?.name}</p>
+            )}
           </div>
           {smsSent && (
             <span className="ml-auto bg-blue/15 border border-blue/30 text-blue-light text-xs rounded-full px-3 py-1 font-semibold">
@@ -1146,7 +1356,6 @@ function QuoteTab({
             </div>
           </div>
 
-          {/* Customer info */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
             <div>
               <label className="nwi-label">Customer Name <span className="normal-case text-white/20">(opt)</span></label>
@@ -1163,43 +1372,73 @@ function QuoteTab({
         <div className="nwi-card">
           <p className="text-white/40 text-xs uppercase tracking-widest mb-3">Quote Breakdown</p>
 
-          {/* Parts line items */}
-          {includedParts.length > 0 && (
-            <div className="space-y-1.5 mb-3 pb-3 border-b border-dark-border">
-              {includedParts.map(p => (
-                <div key={p.id} className="flex items-center justify-between gap-2">
-                  <span className="text-white/50 text-xs truncate">{p.qty > 1 ? `${p.qty}× ` : ''}{p.name}</span>
-                  <span className="text-white/60 text-xs whitespace-nowrap">{fmt(partPrice(p) * p.qty)}</span>
+          {isMultiJob ? (
+            /* Multi-job: per-job blocks */
+            <div className="space-y-3 mb-3">
+              {jobBreakdowns.map((b, bi) => (
+                <div key={b.key} className="border border-white/8 rounded-lg overflow-hidden">
+                  <div className="flex items-center justify-between px-3 py-2 bg-white/3">
+                    <p className="text-white font-semibold text-xs">{b.j.name}</p>
+                    <span className="text-orange font-bold text-xs">{fmt(b.subtotal)}</span>
+                  </div>
+                  <div className="px-3 py-2 space-y-1">
+                    {b.jParts.map(p => (
+                      <div key={p.id} className="flex items-center justify-between gap-2">
+                        <span className="text-white/50 text-xs truncate">{p.qty > 1 ? `${p.qty}× ` : ''}{p.name}</span>
+                        <span className="text-white/60 text-xs whitespace-nowrap">{fmt(partPrice(p) * p.qty)}</span>
+                      </div>
+                    ))}
+                    {b.partsMarkup > 0 && (
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-white/25 text-xs">Markup ({markupPct}%)</span>
+                        <span className="text-white/25 text-xs">+{fmt(b.partsMarkup)}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/5">
+                      <span className="text-white/50 text-xs">Labor ({b.laborHrs}h × {fmt(laborRate)}/hr)</span>
+                      <span className="text-white/70 text-xs">{fmt(b.laborTotal)}</span>
+                    </div>
+                  </div>
                 </div>
               ))}
-              <div className="flex items-center justify-between gap-2 pt-1">
-                <span className="text-white/30 text-xs">Markup ({markupPct}%)</span>
-                <span className="text-white/30 text-xs">+{fmt(partsMarkup)}</span>
-              </div>
             </div>
+          ) : (
+            /* Single-job: flat display */
+            <>
+              {jobBreakdowns[0]?.jParts.length > 0 && (
+                <div className="space-y-1.5 mb-3 pb-3 border-b border-dark-border">
+                  {jobBreakdowns[0].jParts.map(p => (
+                    <div key={p.id} className="flex items-center justify-between gap-2">
+                      <span className="text-white/50 text-xs truncate">{p.qty > 1 ? `${p.qty}× ` : ''}{p.name}</span>
+                      <span className="text-white/60 text-xs whitespace-nowrap">{fmt(partPrice(p) * p.qty)}</span>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between gap-2 pt-1">
+                    <span className="text-white/30 text-xs">Markup ({markupPct}%)</span>
+                    <span className="text-white/30 text-xs">+{fmt(jobBreakdowns[0].partsMarkup)}</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-between py-1.5 border-b border-dark-border">
+                <span className="text-white/50 text-sm">
+                  Labor ({jobBreakdowns[0]?.laborHrs ?? 0}h × {fmt(laborRate)}/hr)
+                </span>
+                <span className="text-white text-sm font-medium">{fmt(totalLaborTotal)}</span>
+              </div>
+
+              <div className="flex items-center justify-between py-1.5 border-b border-dark-border">
+                <span className="text-white/50 text-sm">Parts Total</span>
+                <span className="text-white text-sm font-medium">{fmt(totalPartsRev)}</span>
+              </div>
+            </>
           )}
 
-          {/* Labor */}
-          <div className="flex items-center justify-between py-1.5 border-b border-dark-border">
-            <span className="text-white/50 text-sm">
-              Labor ({laborHours}h × {fmt(laborRate)}/hr)
-            </span>
-            <span className="text-white text-sm font-medium">{fmt(laborTotal)}</span>
-          </div>
-
-          {/* Parts total row */}
-          <div className="flex items-center justify-between py-1.5 border-b border-dark-border">
-            <span className="text-white/50 text-sm">Parts Total</span>
-            <span className="text-white text-sm font-medium">{fmt(partsTotal)}</span>
-          </div>
-
-          {/* Tax */}
           <div className="flex items-center justify-between py-1.5 border-b border-dark-border">
             <span className="text-white/30 text-sm">Tax ({taxPct}%)</span>
             <span className="text-white/50 text-sm">{fmt(taxAmount)}</span>
           </div>
 
-          {/* Grand total */}
           <div className="flex items-center justify-between pt-3 mt-1">
             <span className="font-condensed font-bold text-white text-lg tracking-wide">TOTAL</span>
             <span className="font-condensed font-bold text-orange text-3xl">{fmt(grandTotal)}</span>
@@ -1209,7 +1448,6 @@ function QuoteTab({
 
       {error && <div className="alert-error">{error}</div>}
 
-      {/* Success banner — shown after Save as Quote */}
       {isSaved && quoteNumber && (
         <div className="flex items-center gap-3 px-4 py-3 rounded-lg border border-success/30 bg-success/8">
           <svg className="w-4 h-4 text-success flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
@@ -1230,7 +1468,6 @@ function QuoteTab({
         </div>
       )}
 
-      {/* Action buttons */}
       <div className="flex flex-wrap gap-3">
         <button
           onClick={() => save(false, true)}
@@ -1302,33 +1539,49 @@ interface LoadedQuoteDefaults {
 }
 
 export default function QuickWrenchClient({ loadQuoteId }: { loadQuoteId?: string }) {
-  const [activeTab,    setActiveTab]    = useState(0)
-  const [vehicle,      setVehicle]      = useState<QWVehicle | null>(null)
-  const [selectedJob,  setSelectedJob]  = useState<SelectedJob | null>(null)
-  const [techGuide,    setTechGuide]    = useState<TechGuide | null>(null)
-  const [guideLoading, setGuideLoading] = useState(false)
-  const [guideError,   setGuideError]   = useState<string | null>(null)
-  const [parts,        setParts]        = useState<PartWithSuppliers[]>([])
+  const [activeTab,     setActiveTab]     = useState(0)
+  const [vehicle,       setVehicle]       = useState<QWVehicle | null>(null)
+  const [selectedJobs,  setSelectedJobs]  = useState<SelectedJob[]>([])
+  const [techGuides,    setTechGuides]    = useState<Record<string, TechGuide>>({})
+  const [guidesLoading, setGuidesLoading] = useState(false)
+  const [guidesError,   setGuidesError]   = useState<string | null>(null)
+  const [partsByJob,    setPartsByJob]    = useState<Record<string, PartWithSuppliers[]>>({})
   const [quoteDefaults, setQuoteDefaults] = useState<LoadedQuoteDefaults | null>(null)
   const loadedQuoteRef = useRef<string | null>(null)
 
-  const loadTechGuide = useCallback(async (v: QWVehicle, j: SelectedJob) => {
-    setGuideLoading(true)
-    setGuideError(null)
+  const loadAllTechGuides = useCallback(async (v: QWVehicle, jobs: SelectedJob[]) => {
+    setGuidesLoading(true)
+    setGuidesError(null)
     try {
-      const res  = await fetch('/api/quickwrench/tech-guide', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ vehicle: v, job: j }),
+      const results = await Promise.all(
+        jobs.map(async j => {
+          const res  = await fetch('/api/quickwrench/tech-guide', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ vehicle: v, job: j }),
+          })
+          const json = await res.json()
+          if (!res.ok) throw new Error(json.error ?? 'Failed to load tech guide')
+          return { key: jobKey(j), guide: json.guide as TechGuide, parts: enrichParts(json.guide.parts ?? []) }
+        })
+      )
+      setTechGuides(prev => {
+        const next = { ...prev }
+        for (const r of results) next[r.key] = r.guide
+        return next
       })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? 'Failed to load tech guide')
-      setTechGuide(json.guide)
-      setParts(enrichParts(json.guide.parts ?? []))
+      setPartsByJob(prev => {
+        const next = { ...prev }
+        for (const r of results) {
+          // Don't overwrite parts that were manually set (e.g. by handleFindTires)
+          if (!prev[r.key] || prev[r.key].length === 0) next[r.key] = r.parts
+        }
+        return next
+      })
     } catch (e) {
-      setGuideError(e instanceof Error ? e.message : 'Unknown error')
+      setGuidesError(e instanceof Error ? e.message : 'Unknown error')
     } finally {
-      setGuideLoading(false)
+      setGuidesLoading(false)
     }
   }, [])
 
@@ -1354,7 +1607,53 @@ export default function QuickWrenchClient({ loadQuoteId }: { loadQuoteId?: strin
           })
         }
 
-        // Step 2: Job — match category + subtype against the catalog
+        // Multi-job restore from jobs[] JSONB
+        if (Array.isArray(q.jobs) && q.jobs.length > 0) {
+          const restoredJobs: SelectedJob[] = []
+          const restoredParts: Record<string, PartWithSuppliers[]> = {}
+
+          for (const entry of q.jobs as MultiJobEntry[]) {
+            const matchedCat = JOB_CATEGORIES.find(c => c.id === entry.category)
+            const sj: SelectedJob = {
+              category:      entry.category,
+              categoryLabel: matchedCat?.label ?? entry.category,
+              name:          entry.subtype,
+              hours:         entry.labor_hours ?? 1,
+            }
+            restoredJobs.push(sj)
+            const key = jobKey(sj)
+            restoredParts[key] = entry.parts.map((p, idx) => ({
+              id:               `loaded-${key}-${idx}`,
+              name:             p.name,
+              part_number_hint: '',
+              qty:              p.qty,
+              price_estimate:   p.unit_cost,
+              included:         true,
+              selected_supplier: 'custom' as Supplier,
+              custom_price:      p.unit_cost,
+              price_autozone:    p.unit_cost,
+              price_orielly:     p.unit_cost,
+              price_napa:        p.unit_cost,
+              price_rockauto:    p.unit_cost,
+            }))
+          }
+
+          setSelectedJobs(restoredJobs)
+          setPartsByJob(restoredParts)
+          setQuoteDefaults({
+            laborRate:     q.labor_rate          ?? 125,
+            markupPct:     q.parts_markup_percent ?? 20,
+            taxPct:        q.tax_percent          ?? 8.5,
+            customerName:  q.customer ? `${q.customer.first_name} ${q.customer.last_name}`.trim() : '',
+            customerPhone: q.customer?.phone ?? '',
+          })
+          setTechGuides({})
+          setGuidesError(null)
+          setActiveTab(4)
+          return
+        }
+
+        // Legacy single-job restore from line_items
         let matchedJob: SelectedJob | null = null
         if (q.job_category || q.job_subtype) {
           for (const cat of JOB_CATEGORIES) {
@@ -1369,7 +1668,6 @@ export default function QuickWrenchClient({ loadQuoteId }: { loadQuoteId?: strin
               break
             }
           }
-          // Fallback: use whatever job info is available
           if (!matchedJob && q.job_subtype) {
             matchedJob = {
               category:      q.job_category ?? 'diagnostics',
@@ -1379,13 +1677,12 @@ export default function QuickWrenchClient({ loadQuoteId }: { loadQuoteId?: strin
             }
           }
         }
-        if (matchedJob) setSelectedJob(matchedJob)
+        if (matchedJob) setSelectedJobs([matchedJob])
 
-        // Step 4: Parts from line items (exclude labor rows)
         const partItems = (q.line_items ?? []).filter(
           (li: { description: string }) => !/^labor/i.test(li.description ?? '')
         )
-        if (partItems.length > 0) {
+        if (partItems.length > 0 && matchedJob) {
           const markup = (q.parts_markup_percent ?? 0) / 100
           const loadedParts: PartWithSuppliers[] = partItems.map(
             (li: { description: string; quantity: number; unit_price: number }, i: number) => {
@@ -1406,50 +1703,53 @@ export default function QuickWrenchClient({ loadQuoteId }: { loadQuoteId?: strin
               }
             }
           )
-          setParts(loadedParts)
+          setPartsByJob({ [jobKey(matchedJob)]: loadedParts })
         }
 
-        // Step 5: Pricing defaults
         setQuoteDefaults({
-          laborRate:    q.labor_rate    ?? 125,
-          markupPct:    q.parts_markup_percent ?? 20,
-          taxPct:       q.tax_percent   ?? 8.5,
-          customerName: q.customer
-            ? `${q.customer.first_name} ${q.customer.last_name}`.trim()
-            : '',
+          laborRate:     q.labor_rate          ?? 125,
+          markupPct:     q.parts_markup_percent ?? 20,
+          taxPct:        q.tax_percent          ?? 8.5,
+          customerName:  q.customer ? `${q.customer.first_name} ${q.customer.last_name}`.trim() : '',
           customerPhone: q.customer?.phone ?? '',
         })
-
-        // Navigate to Quote tab
-        setTechGuide(null)
-        setGuideError(null)
+        setTechGuides({})
+        setGuidesError(null)
         setActiveTab(4)
       })
       .catch(() => {})
   }, [loadQuoteId])
 
-  // Auto-load tech guide when tab 3 becomes active
+  // Auto-load missing tech guides when tab 2 (Tech Guide) becomes active
   useEffect(() => {
-    if (activeTab === 2 && vehicle && selectedJob && !techGuide && !guideLoading && !guideError) {
-      loadTechGuide(vehicle, selectedJob)
-    }
-  }, [activeTab, vehicle, selectedJob, techGuide, guideLoading, guideError, loadTechGuide])
+    if (activeTab !== 2 || !vehicle || selectedJobs.length === 0 || guidesLoading || guidesError) return
+    const missing = selectedJobs.filter(j => !techGuides[jobKey(j)])
+    if (missing.length === 0) return
+    loadAllTechGuides(vehicle, missing)
+  }, [activeTab, vehicle, selectedJobs, techGuides, guidesLoading, guidesError, loadAllTechGuides])
 
   function handleVehicleSet(v: QWVehicle) {
     setVehicle(v)
-    // Reset downstream state when vehicle changes
-    setSelectedJob(null)
-    setTechGuide(null)
-    setGuideError(null)
-    setParts([])
+    setSelectedJobs([])
+    setTechGuides({})
+    setGuidesError(null)
+    setPartsByJob({})
   }
 
-  function handleJobSelect(j: SelectedJob) {
-    setSelectedJob(j)
-    // Reset guide if job changes
-    setTechGuide(null)
-    setGuideError(null)
-    setParts([])
+  function handleJobToggle(j: SelectedJob) {
+    const key = jobKey(j)
+    const isSelected = selectedJobs.some(s => jobKey(s) === key)
+    if (isSelected) {
+      setSelectedJobs(prev => prev.filter(s => jobKey(s) !== key))
+      setTechGuides(prev => { const n = { ...prev }; delete n[key]; return n })
+      setPartsByJob(prev => { const n = { ...prev }; delete n[key]; return n })
+    } else {
+      setSelectedJobs(prev => [...prev, j])
+    }
+  }
+
+  function handlePartsChange(key: string, updated: PartWithSuppliers[]) {
+    setPartsByJob(prev => ({ ...prev, [key]: updated }))
   }
 
   function handleFindTires(sizes: { front: string | null; rear: string | null }) {
@@ -1459,9 +1759,7 @@ export default function QuickWrenchClient({ loadQuoteId }: { loadQuoteId?: strin
       name:          'Tire Replacement (4 tires)',
       hours:         2.0,
     }
-    setSelectedJob(tireJob)
-    setTechGuide(null)
-    setGuideError(null)
+    const key = jobKey(tireJob)
 
     const items: string[] = []
     const sameTire = !sizes.rear || sizes.front === sizes.rear
@@ -1472,16 +1770,23 @@ export default function QuickWrenchClient({ loadQuoteId }: { loadQuoteId?: strin
       items.push(`Rear Tires — ${sizes.rear}`)
     }
     if (items.length === 0) items.push('Tires (check door jamb sticker for size)')
-    setParts(enrichParts(items))
+
+    setSelectedJobs(prev => prev.some(j => jobKey(j) === key) ? prev : [...prev, tireJob])
+    setPartsByJob(prev => ({ ...prev, [key]: enrichParts(items) }))
+    setGuidesError(null)
     setActiveTab(3)
   }
+
+  const isJobsComplete   = selectedJobs.length > 0
+  const isGuidesComplete = selectedJobs.length > 0 && selectedJobs.every(j => !!techGuides[jobKey(j)])
+  const isPartsComplete  = Object.values(partsByJob).some(p => p.length > 0)
 
   const canGoTo = (tab: number) => {
     if (tab === 0) return true
     if (tab === 1) return !!vehicle
-    if (tab === 2) return !!vehicle && !!selectedJob
-    if (tab === 3) return !!vehicle && !!selectedJob
-    if (tab === 4) return !!vehicle && !!selectedJob
+    if (tab === 2) return !!vehicle && isJobsComplete
+    if (tab === 3) return !!vehicle && isJobsComplete
+    if (tab === 4) return !!vehicle && isJobsComplete
     return false
   }
 
@@ -1497,7 +1802,11 @@ export default function QuickWrenchClient({ loadQuoteId }: { loadQuoteId?: strin
       <div className="flex items-center gap-0">
         {STEP_LABELS.map((label, i) => {
           const isActive   = i === activeTab
-          const isComplete = (i === 0 && !!vehicle) || (i === 1 && !!selectedJob) || (i === 2 && !!techGuide) || (i === 3 && parts.length > 0)
+          const isComplete =
+            (i === 0 && !!vehicle) ||
+            (i === 1 && isJobsComplete) ||
+            (i === 2 && isGuidesComplete) ||
+            (i === 3 && isPartsComplete)
           return (
             <div key={i} className="flex items-center flex-1 last:flex-none">
               <div className="flex flex-col items-center gap-1 flex-shrink-0">
@@ -1523,14 +1832,12 @@ export default function QuickWrenchClient({ loadQuoteId }: { loadQuoteId?: strin
       {/* ── Tab navigation ── */}
       <div className="flex items-center gap-1 overflow-x-auto pb-1">
         {TABS.map((tab, i) => {
-          const isActive    = i === activeTab
-          const isComplete  = (
+          const isActive   = i === activeTab
+          const isComplete =
             (i === 0 && !!vehicle) ||
-            (i === 1 && !!selectedJob) ||
-            (i === 2 && !!techGuide) ||
-            (i === 3 && parts.length > 0) ||
-            false
-          )
+            (i === 1 && isJobsComplete) ||
+            (i === 2 && isGuidesComplete) ||
+            (i === 3 && isPartsComplete)
           const isLocked = !canGoTo(i)
 
           return (
@@ -1566,10 +1873,12 @@ export default function QuickWrenchClient({ loadQuoteId }: { loadQuoteId?: strin
             <span className="text-white/60 text-xs truncate max-w-[120px]">
               {vehicle.year} {vehicle.make} {vehicle.model}
             </span>
-            {selectedJob && (
+            {selectedJobs.length > 0 && (
               <>
                 <span className="text-white/20">·</span>
-                <span className="text-orange text-xs truncate max-w-[100px]">{selectedJob.name}</span>
+                <span className="text-orange text-xs truncate max-w-[100px]">
+                  {selectedJobs.length === 1 ? selectedJobs[0].name : `${selectedJobs.length} Jobs`}
+                </span>
               </>
             )}
           </div>
@@ -1587,35 +1896,36 @@ export default function QuickWrenchClient({ loadQuoteId }: { loadQuoteId?: strin
         )}
         {activeTab === 1 && (
           <JobTypeTab
-            selectedJob={selectedJob}
-            onJobSelect={handleJobSelect}
-            onNext={() => { if (selectedJob) setActiveTab(2) }}
+            selectedJobs={selectedJobs}
+            onJobToggle={handleJobToggle}
+            onNext={() => { if (isJobsComplete) setActiveTab(2) }}
           />
         )}
         {activeTab === 2 && (
           <TechGuideTab
             vehicle={vehicle}
-            job={selectedJob}
-            techGuide={techGuide}
-            loading={guideLoading}
-            error={guideError}
-            onRetry={() => vehicle && selectedJob && loadTechGuide(vehicle, selectedJob)}
+            jobs={selectedJobs}
+            techGuides={techGuides}
+            loading={guidesLoading}
+            error={guidesError}
+            onRetry={() => vehicle && loadAllTechGuides(vehicle, selectedJobs.filter(j => !techGuides[jobKey(j)]))}
             onNext={goNext}
           />
         )}
         {activeTab === 3 && (
           <PartsTab
-            parts={parts}
-            onPartsChange={setParts}
+            selectedJobs={selectedJobs}
+            partsByJob={partsByJob}
+            onPartsChange={handlePartsChange}
             onNext={goNext}
           />
         )}
         {activeTab === 4 && (
           <QuoteTab
             vehicle={vehicle}
-            job={selectedJob}
-            techGuide={techGuide}
-            parts={parts}
+            selectedJobs={selectedJobs}
+            techGuides={techGuides}
+            partsByJob={partsByJob}
             initialLaborRate={quoteDefaults?.laborRate}
             initialMarkupPct={quoteDefaults?.markupPct}
             initialTaxPct={quoteDefaults?.taxPct}

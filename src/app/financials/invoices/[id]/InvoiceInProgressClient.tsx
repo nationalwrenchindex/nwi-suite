@@ -633,8 +633,42 @@ export default function InvoiceInProgressClient({ invoice }: { invoice: Invoice 
         </button>
         {estimateOpen && sq && (
           <div className="p-5 space-y-3">
-            {/* Original line items */}
-            {Array.isArray(sq.line_items) && sq.line_items.length > 0 && (
+            {/* Original line items — grouped by job if multi-job */}
+            {Array.isArray(sq.jobs) && sq.jobs.length > 1 ? (
+              <div className="space-y-3">
+                {sq.jobs.map((j, ji) => {
+                  const jobPartsRev = j.parts.reduce((s, p) => s + p.unit_price * p.qty, 0)
+                  const jobLabor    = j.labor_hours * j.labor_rate
+                  return (
+                    <div key={ji} className="rounded-xl border border-white/8 overflow-hidden">
+                      <div className="flex items-center justify-between px-4 py-2.5 bg-white/[0.02] border-b border-white/8">
+                        <p className="text-white font-semibold text-sm">{j.subtype}</p>
+                        <span className="text-orange font-bold text-sm">
+                          {fmt(jobPartsRev + jobLabor)}
+                        </span>
+                      </div>
+                      {j.parts.length > 0 && (
+                        <table className="w-full text-sm">
+                          <tbody>
+                            {j.parts.map((p, pi) => (
+                              <tr key={pi} className="border-b border-white/5">
+                                <td className="px-4 py-2 text-white/70">{p.name}</td>
+                                <td className="px-4 py-2 text-white/50 text-right">×{p.qty}</td>
+                                <td className="px-4 py-2 text-white font-medium text-right">{fmt(p.unit_price * p.qty)}</td>
+                              </tr>
+                            ))}
+                            <tr>
+                              <td className="px-4 py-2 text-white/50" colSpan={2}>Labor ({j.labor_hours}h)</td>
+                              <td className="px-4 py-2 text-white font-medium text-right">{fmt(jobLabor)}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : Array.isArray(sq.line_items) && sq.line_items.length > 0 && (
               <div className="rounded-xl border border-white/8 overflow-hidden">
                 <table className="w-full text-sm">
                   <thead>

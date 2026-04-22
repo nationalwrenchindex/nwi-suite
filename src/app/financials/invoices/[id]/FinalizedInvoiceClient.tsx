@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import type { Invoice } from '@/types/financials'
+import type { Invoice, MultiJobEntry } from '@/types/financials'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tools.nationalwrenchindex.com'
 
@@ -18,6 +18,68 @@ function fmtDate(s: string | null | undefined, opts?: Intl.DateTimeFormatOptions
 
 function round2(n: number) {
   return Math.round(n * 100) / 100
+}
+
+// ─── Per-job P&L drill-down row ───────────────────────────────────────────────
+
+function JobBreakdownRow({ j, idx }: { j: MultiJobEntry; idx: number }) {
+  const [open, setOpen] = useState(false)
+  const partsRev  = j.parts.reduce((s, p) => s + p.unit_price * p.qty, 0)
+  const partsCost = j.parts.reduce((s, p) => s + p.unit_cost  * p.qty, 0)
+  const laborInc  = j.labor_hours * j.labor_rate
+  const jobProfit = round2(partsRev + laborInc - partsCost)
+  const profitColor = jobProfit >= 0 ? '#10b981' : '#ef4444'
+
+  return (
+    <div className="border border-white/8 rounded-lg overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between px-4 py-2.5 hover:bg-white/3 transition-colors"
+      >
+        <div className="flex items-center gap-2">
+          <span className="w-5 h-5 rounded-full bg-success/15 border border-success/25 flex items-center justify-center text-success text-[9px] font-bold flex-shrink-0">
+            {idx + 1}
+          </span>
+          <span className="text-white font-medium text-sm">{j.subtype}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span style={{ color: profitColor }} className="font-semibold text-sm">{fmt(jobProfit)}</span>
+          <svg
+            className={`w-4 h-4 text-white/30 transition-transform ${open ? 'rotate-180' : ''}`}
+            fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </div>
+      </button>
+      {open && (
+        <div className="px-4 pb-3 space-y-1.5 border-t border-white/5 pt-3">
+          {partsRev > 0 && (
+            <div className="flex justify-between text-xs">
+              <span className="text-white/40">Parts Revenue</span>
+              <span className="text-white/60">{fmt(partsRev)}</span>
+            </div>
+          )}
+          {partsCost > 0 && (
+            <div className="flex justify-between text-xs">
+              <span className="text-white/40">Parts Cost</span>
+              <span className="text-danger/70">−{fmt(partsCost)}</span>
+            </div>
+          )}
+          {laborInc > 0 && (
+            <div className="flex justify-between text-xs">
+              <span className="text-white/40">Labor ({j.labor_hours}h @ {fmt(j.labor_rate)}/hr)</span>
+              <span className="text-white/60">{fmt(laborInc)}</span>
+            </div>
+          )}
+          <div className="flex justify-between text-xs pt-1 border-t border-white/5 font-medium">
+            <span className="text-white/50">Job Profit</span>
+            <span style={{ color: profitColor }}>{fmt(jobProfit)}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 // ─── Per-job P&L calculation (mirrors API calcBreakdown) ─────────────────────
@@ -918,7 +980,39 @@ export default function FinalizedInvoiceClient({
         </button>
         {estimateOpen && sq && (
           <div className="p-5 space-y-3">
-            {Array.isArray(sq.line_items) && sq.line_items.length > 0 && (
+            {Array.isArray(sq.jobs) && sq.jobs.length > 1 ? (
+              <div className="space-y-2">
+                {(sq.jobs as MultiJobEntry[]).map((j, ji) => {
+                  const jobPartsRev = j.parts.reduce((s, p) => s + p.unit_price * p.qty, 0)
+                  const jobLabor    = j.labor_hours * j.labor_rate
+                  return (
+                    <div key={ji} className="rounded-xl border border-white/8 overflow-hidden">
+                      <div className="flex items-center justify-between px-4 py-2.5 bg-white/[0.02] border-b border-white/8">
+                        <p className="text-white font-semibold text-sm">{j.subtype}</p>
+                        <span className="text-orange font-bold text-sm">{fmt(jobPartsRev + jobLabor)}</span>
+                      </div>
+                      {j.parts.length > 0 && (
+                        <table className="w-full text-sm">
+                          <tbody>
+                            {j.parts.map((p, pi) => (
+                              <tr key={pi} className="border-b border-white/5">
+                                <td className="px-4 py-2 text-white/70">{p.name}</td>
+                                <td className="px-4 py-2 text-white/50 text-right">×{p.qty}</td>
+                                <td className="px-4 py-2 text-white font-medium text-right">{fmt(p.unit_price * p.qty)}</td>
+                              </tr>
+                            ))}
+                            <tr>
+                              <td className="px-4 py-2 text-white/50" colSpan={2}>Labor ({j.labor_hours}h)</td>
+                              <td className="px-4 py-2 text-white font-medium text-right">{fmt(jobLabor)}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            ) : Array.isArray(sq.line_items) && sq.line_items.length > 0 && (
               <ReadOnlyTable
                 rows={sq.line_items.map(li => ({
                   label:  li.description,
@@ -1135,6 +1229,16 @@ export default function FinalizedInvoiceClient({
                 <div className="flex justify-between text-sm border-t border-white/8 pt-3">
                   <span className="text-white/50">Tax Remitted</span>
                   <span className="text-white/40">−{fmt(pnl.taxAmount)}</span>
+                </div>
+              )}
+
+              {/* Per-job breakdown (multi-job only) */}
+              {Array.isArray(invoice.jobs) && invoice.jobs.length > 1 && (
+                <div className="space-y-2 border-t border-white/8 pt-3">
+                  <p className="text-white/30 text-[10px] uppercase tracking-widest">By Service</p>
+                  {(invoice.jobs as MultiJobEntry[]).map((j, i) => (
+                    <JobBreakdownRow key={j.id ?? i} j={j} idx={i} />
+                  ))}
                 </div>
               )}
 

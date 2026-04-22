@@ -1,3 +1,22 @@
+// ─── Multi-job (re-exported from quickwrench types for use in financials) ──────
+
+export interface MultiJobPart {
+  name:       string
+  qty:        number
+  unit_cost:  number
+  unit_price: number
+}
+
+export interface MultiJobEntry {
+  id:          string
+  category:    string
+  subtype:     string
+  labor_hours: number
+  labor_rate:  number
+  parts:       MultiJobPart[]
+  notes:       string
+}
+
 // ─── Enums ────────────────────────────────────────────────────────────────────
 
 export type QuoteStatus =
@@ -140,6 +159,8 @@ export interface Invoice {
   sent_to_email: string | null
   times_sent: number
   // Joined relations
+  // Phase 8: multi-job support
+  jobs?: MultiJobEntry[]
   customer?: {
     id: string
     first_name: string
@@ -166,6 +187,7 @@ export interface Invoice {
     tax_percent: number | null
     tax_amount: number | null
     grand_total: number | null
+    jobs?: MultiJobEntry[]
   } | null
 }
 
@@ -206,6 +228,8 @@ export interface Quote {
   converted_at: string | null
   created_at: string
   updated_at: string
+  // Phase 8: multi-job support
+  jobs?: MultiJobEntry[]
   customer?: {
     id: string
     first_name: string

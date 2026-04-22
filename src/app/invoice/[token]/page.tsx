@@ -5,11 +5,12 @@ import { notFound } from 'next/navigation'
 import { createServiceClient } from '@/lib/supabase/service'
 import InvoiceViewClient from './InvoiceViewClient'
 import type { Metadata } from 'next'
+import type { MultiJobEntry } from '@/types/financials'
 
 const INVOICE_SELECT = `
   id, invoice_number, invoice_status, public_token,
   invoice_date, total, subtotal, tax_rate, tax_amount,
-  job_category, job_subtype, job_notes,
+  job_category, job_subtype, job_notes, jobs,
   line_items, shop_supplies, additional_parts, additional_labor,
   payment_instructions, finalized_at,
   customer_view_count, customer_viewed_at, times_sent,
@@ -72,7 +73,11 @@ export default async function PublicInvoicePage(
 
   const isPaid = inv.invoice_status === 'paid'
 
-  // Line items from original quote
+  // Phase 8: multi-job support
+  const jobs: MultiJobEntry[] = Array.isArray(inv.jobs) && inv.jobs.length > 0 ? inv.jobs : []
+  const isMultiJob = jobs.length > 0
+
+  // Line items from original quote (legacy)
   const lineItems: Array<{ description: string; quantity: number; unit_price: number; total: number }> =
     Array.isArray(inv.line_items) ? inv.line_items : []
 
@@ -152,18 +157,63 @@ export default async function PublicInvoicePage(
           </div>
         )}
 
-        {/* Service */}
-        {(inv.job_category || inv.job_subtype) && (
+        {/* Service label */}
+        {isMultiJob ? (
+          <div className="bg-white/5 rounded-xl px-4 py-3 space-y-0.5">
+            <p className="text-white/40 text-xs uppercase tracking-widest">Services Performed ({jobs.length})</p>
+            <ul className="space-y-0.5">
+              {jobs.map((j, i) => (
+                <li key={i} className="text-white font-medium text-sm">{j.subtype}</li>
+              ))}
+            </ul>
+          </div>
+        ) : (inv.job_category || inv.job_subtype) ? (
           <div className="bg-white/5 rounded-xl px-4 py-3 space-y-0.5">
             <p className="text-white/40 text-xs uppercase tracking-widest">Service</p>
             <p className="text-white font-medium">
               {[inv.job_category, inv.job_subtype].filter(Boolean).join(' — ')}
             </p>
           </div>
-        )}
+        ) : null}
 
-        {/* Line items */}
-        {lineItems.length > 0 && (
+        {/* Multi-job grouped breakdown */}
+        {isMultiJob ? (
+          <div className="space-y-4">
+            {jobs.map((j, ji) => {
+              const jobPartsRevenue = j.parts.reduce((s, p) => s + p.unit_price * p.qty, 0)
+              const jobLaborTotal   = j.labor_hours * j.labor_rate
+              const jobSubtotal     = jobPartsRevenue + jobLaborTotal
+              return (
+                <div key={ji} className="bg-white/5 rounded-xl overflow-hidden border border-white/8">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-white/8 bg-white/[0.02]">
+                    <p className="text-white font-semibold text-sm">{j.subtype}</p>
+                    <span className="text-[#FF6600] font-bold text-sm">{fmt(jobSubtotal)}</span>
+                  </div>
+                  {j.parts.length > 0 && (
+                    <table className="w-full text-sm">
+                      <tbody>
+                        {j.parts.map((part, pi) => (
+                          <tr key={pi} className="border-b border-white/5">
+                            <td className="px-4 py-2 text-white/70">{part.name}</td>
+                            <td className="px-4 py-2 text-white/40 text-right">×{part.qty}</td>
+                            <td className="px-4 py-2 text-white/80 text-right font-medium">{fmt(part.unit_price * part.qty)}</td>
+                          </tr>
+                        ))}
+                        <tr>
+                          <td className="px-4 py-2 text-white/50" colSpan={2}>
+                            Labor ({j.labor_hours}h)
+                          </td>
+                          <td className="px-4 py-2 text-white/80 text-right font-medium">{fmt(jobLaborTotal)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        ) : lineItems.length > 0 ? (
+          /* Legacy single-job line items */
           <div className="bg-white/5 rounded-xl overflow-hidden">
             <p className="text-white/40 text-xs uppercase tracking-widest px-4 pt-4 pb-2">Parts &amp; Labor</p>
             <table className="w-full text-sm">
@@ -185,7 +235,7 @@ export default async function PublicInvoicePage(
               </tbody>
             </table>
           </div>
-        )}
+        ) : null}
 
         {/* Additional parts */}
         {additionalParts.length > 0 && (

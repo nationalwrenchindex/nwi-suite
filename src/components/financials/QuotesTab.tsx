@@ -806,7 +806,9 @@ function QuoteDetailModal({
     ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ')
     : '—'
 
-  const jobDesc = [initialQuote.job_category, initialQuote.job_subtype].filter(Boolean).join(' / ') || '—'
+  const jobDesc = Array.isArray(initialQuote.jobs) && initialQuote.jobs.length > 1
+    ? `${initialQuote.jobs.length} Services`
+    : [initialQuote.job_category, initialQuote.job_subtype].filter(Boolean).join(' / ') || '—'
 
   const timeline: { label: string; ts: string | null; detail?: string }[] = [
     { label: 'Created',   ts: initialQuote.created_at },
@@ -984,10 +986,26 @@ function QuoteDetailModal({
             </div>
 
             {/* ── Job ── */}
-            <div className="space-y-1">
-              <p className="text-white/30 text-xs uppercase tracking-widest">Job Description</p>
-              <p className="text-white">{jobDesc}</p>
-            </div>
+            {Array.isArray(initialQuote.jobs) && initialQuote.jobs.length > 1 ? (
+              <div className="space-y-2">
+                <p className="text-white/30 text-xs uppercase tracking-widest">Services ({initialQuote.jobs.length})</p>
+                <div className="space-y-1.5">
+                  {initialQuote.jobs.map((j, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="w-4 h-4 rounded-full bg-orange/15 border border-orange/30 flex items-center justify-center text-orange text-[9px] font-bold flex-shrink-0">
+                        {i + 1}
+                      </span>
+                      <p className="text-white/80 text-sm">{j.subtype}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-1">
+                <p className="text-white/30 text-xs uppercase tracking-widest">Job Description</p>
+                <p className="text-white">{jobDesc}</p>
+              </div>
+            )}
 
             {/* ── Line Items ── */}
             <div className="space-y-3">
@@ -1966,7 +1984,9 @@ export default function QuotesTab({ initialQuoteId }: { initialQuoteId?: string 
                   const vehicleLabel = q.vehicle
                     ? [q.vehicle.year, q.vehicle.make, q.vehicle.model].filter(Boolean).join(' ')
                     : '—'
-                  const jobDesc = [q.job_category, q.job_subtype].filter(Boolean).join(' / ') || '—'
+                  const jobDesc = Array.isArray(q.jobs) && q.jobs.length > 1
+                    ? `${q.jobs.length} Services`
+                    : [q.job_category, q.job_subtype].filter(Boolean).join(' / ') || '—'
 
                   return (
                     <tr
@@ -2005,7 +2025,9 @@ export default function QuotesTab({ initialQuoteId }: { initialQuoteId?: string 
               const vehicleLabel = q.vehicle
                 ? [q.vehicle.year, q.vehicle.make, q.vehicle.model].filter(Boolean).join(' ')
                 : '—'
-              const jobDesc = [q.job_category, q.job_subtype].filter(Boolean).join(' / ') || '—'
+              const jobDesc = Array.isArray(q.jobs) && q.jobs.length > 1
+                ? `${q.jobs.length} Services`
+                : [q.job_category, q.job_subtype].filter(Boolean).join(' / ') || '—'
 
               return (
                 <button

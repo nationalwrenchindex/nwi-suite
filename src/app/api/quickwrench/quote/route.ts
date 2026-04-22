@@ -145,12 +145,14 @@ export async function POST(req: NextRequest) {
   }
 
   const {
-    vehicle, job, parts,
-    parts_total, labor_hours, labor_rate, labor_total,
+    vehicle, job, jobs,
+    parts, parts_total, labor_hours, labor_rate, labor_total,
     markup_percent, tax_amount, grand_total,
     customer_name, customer_phone,
     send_sms, save_quote,
   } = body
+
+  const isMultiJob = Array.isArray(jobs) && jobs.length > 0
 
   // ── Save raw QuickWrench quote log ─────────────────────────────────────────
   const { data: qwQuote, error: qwErr } = await supabase
@@ -195,43 +197,77 @@ export async function POST(req: NextRequest) {
 
     const qtNum = await genQuoteNumber(supabase, user.id)
 
-    const lineItems = [
-      ...parts
-        .filter((p) => p.included)
-        .map((p) => {
+    // ── Build line items and parts subtotal ──────────────────────────────────
+    let lineItems: Array<{ description: string; quantity: number; unit_price: number; total: number }>
+    let partsSubtotal: number
+    let jobCategoryLabel: string
+    let jobSubtype: string
+
+    if (isMultiJob && jobs) {
+      // Multi-job: build line items grouped by job
+      lineItems = []
+      partsSubtotal = 0
+      for (const j of jobs as import('@/types/quickwrench').MultiJobEntry[]) {
+        for (const p of j.parts) {
+          lineItems.push({
+            description: p.name,
+            quantity:    p.qty,
+            unit_price:  Math.round(p.unit_price * 100) / 100,
+            total:       Math.round(p.unit_price * p.qty * 100) / 100,
+          })
+          partsSubtotal += p.unit_cost * p.qty
+        }
+        lineItems.push({
+          description: `Labor — ${j.subtype}`,
+          quantity:    j.labor_hours,
+          unit_price:  j.labor_rate,
+          total:       Math.round(j.labor_hours * j.labor_rate * 100) / 100,
+        })
+      }
+      partsSubtotal = Math.round(partsSubtotal * 100) / 100
+      jobCategoryLabel = job.categoryLabel
+      jobSubtype = jobs.length > 1 ? `${jobs.length} Services` : (jobs as import('@/types/quickwrench').MultiJobEntry[])[0]?.subtype ?? job.name
+    } else {
+      // Single-job legacy path
+      lineItems = [
+        ...parts
+          .filter((p) => p.included)
+          .map((p) => {
+            const supplierPrice =
+              p.selected_supplier === 'autozone' ? p.price_autozone :
+              p.selected_supplier === 'orielly'  ? p.price_orielly  :
+              p.selected_supplier === 'napa'     ? p.price_napa     :
+              p.selected_supplier === 'rockauto' ? p.price_rockauto :
+              p.custom_price
+            const unitPrice = supplierPrice * (1 + markup_percent / 100)
+            return {
+              description: p.name,
+              quantity:    p.qty,
+              unit_price:  Math.round(unitPrice * 100) / 100,
+              total:       Math.round(unitPrice * p.qty * 100) / 100,
+            }
+          }),
+        {
+          description: `Labor — ${job.name}`,
+          quantity:    labor_hours,
+          unit_price:  labor_rate,
+          total:       labor_total,
+        },
+      ]
+      partsSubtotal = parts
+        .filter(p => p.included)
+        .reduce((s, p) => {
           const supplierPrice =
             p.selected_supplier === 'autozone' ? p.price_autozone :
             p.selected_supplier === 'orielly'  ? p.price_orielly  :
             p.selected_supplier === 'napa'     ? p.price_napa     :
             p.selected_supplier === 'rockauto' ? p.price_rockauto :
             p.custom_price
-          const unitPrice = supplierPrice * (1 + markup_percent / 100)
-          return {
-            description: p.name,
-            quantity:    p.qty,
-            unit_price:  Math.round(unitPrice * 100) / 100,
-            total:       Math.round(unitPrice * p.qty * 100) / 100,
-          }
-        }),
-      {
-        description: `Labor — ${job.name}`,
-        quantity:    labor_hours,
-        unit_price:  labor_rate,
-        total:       labor_total,
-      },
-    ]
-
-    const partsSubtotal = parts
-      .filter(p => p.included)
-      .reduce((s, p) => {
-        const supplierPrice =
-          p.selected_supplier === 'autozone' ? p.price_autozone :
-          p.selected_supplier === 'orielly'  ? p.price_orielly  :
-          p.selected_supplier === 'napa'     ? p.price_napa     :
-          p.selected_supplier === 'rockauto' ? p.price_rockauto :
-          p.custom_price
-        return s + supplierPrice * p.qty
-      }, 0)
+          return s + supplierPrice * p.qty
+        }, 0)
+      jobCategoryLabel = job.categoryLabel
+      jobSubtype = job.name
+    }
 
     const vehicleLabel = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ')
     let notes = `Vehicle: ${vehicleLabel}`
@@ -256,8 +292,8 @@ export async function POST(req: NextRequest) {
         status:               quoteStatus,
         customer_id:          customerId,
         vehicle_id:           vehicleId,
-        job_category:         job.categoryLabel,
-        job_subtype:          job.name,
+        job_category:         jobCategoryLabel,
+        job_subtype:          jobSubtype,
         line_items:           lineItems,
         labor_hours,
         labor_rate,
@@ -276,6 +312,8 @@ export async function POST(req: NextRequest) {
         times_sent:           send_sms ? 1 : 0,
         sent_to_phone:        send_sms && customer_phone ? customer_phone.trim() : null,
         quote_expires_at:     expiresAt,
+        // Phase 8: multi-job JSONB
+        jobs:                 isMultiJob ? jobs : [],
       })
       .select('id')
       .single()
@@ -310,11 +348,15 @@ export async function POST(req: NextRequest) {
         ? `${appUrl}/quote/${publicToken}`
         : `${appUrl}/quote`
 
+      const serviceLabel = isMultiJob && jobs && (jobs as import('@/types/quickwrench').MultiJobEntry[]).length > 1
+        ? `${(jobs as import('@/types/quickwrench').MultiJobEntry[]).length} services`
+        : job.name
+
       const message = [
         `Hi ${customer_name || 'there'}, here's your service quote from ${bizName}:`,
         '',
         `Vehicle: ${vehicleLabel}`,
-        `Service: ${job.name}`,
+        `Service: ${serviceLabel}`,
         '',
         `Parts:  ${fmt(parts_total)}`,
         `Labor:  ${fmt(labor_total)} (${labor_hours}h @ ${fmt(labor_rate)}/hr)`,

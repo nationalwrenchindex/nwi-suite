@@ -5,7 +5,7 @@ const INVOICE_SELECT = `
   *,
   customer:customers(id, first_name, last_name, phone, email),
   vehicle:vehicles(id, year, make, model, vin),
-  source_quote:quotes!invoices_source_quote_id_fkey(id, quote_number, line_items, labor_hours, labor_rate, parts_subtotal, parts_markup_percent, labor_subtotal, tax_percent, tax_amount, grand_total)
+  source_quote:quotes!invoices_source_quote_id_fkey(id, quote_number, line_items, jobs, labor_hours, labor_rate, parts_subtotal, parts_markup_percent, labor_subtotal, tax_percent, tax_amount, grand_total)
 `
 
 // ─── POST /api/quotes/[id]/convert ───────────────────────────────────────────
@@ -101,6 +101,8 @@ export async function POST(
     additional_parts: [],
     additional_labor: [],
     started_at:      now,
+    // Phase 8: copy multi-job data from quote
+    jobs:            quote.jobs ?? [],
   }
 
   const { data: newInvoice, error: insertErr } = await supabase
