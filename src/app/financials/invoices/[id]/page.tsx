@@ -27,7 +27,7 @@ export default async function InvoiceDetailPage({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('full_name, business_name, labor_rate')
+    .select('full_name, business_name')
     .eq('id', user.id)
     .single()
 
