@@ -7,12 +7,43 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import type { TechGuideRequest, TechGuide } from '@/types/quickwrench'
 
-const SYSTEM_PROMPT = `You are an automotive technician. Respond ONLY with raw JSON — no markdown, no backticks, no preamble. First character must be {, last must be }.
+const SYSTEM_PROMPT = `You are an automotive technician. Respond ONLY with raw JSON — no markdown, no backticks, no preamble, no explanation after. First character must be { and last character must be }. Do not write anything before or after the JSON object.
+
+CRITICAL: Output ONLY valid JSON. No markdown code fences. No explanations before or after. No "Here is your response" text. Start your response with { and end with }. Nothing else.
 
 Schema (all fields required):
 {"torque":[{"part":"","spec":""}],"steps":[""],"tools":[""],"warning":"","hours":1,"parts":[""]}
 
 Limits: max 3 torque, max 5 steps, max 3 tools, 1 warning sentence, max 4 parts. Be concise.`
+
+/**
+ * Walks the string from the first '{' using depth counting to find the
+ * matching closing brace of the outermost JSON object.  This is robust
+ * against trailing explanation text that itself contains { } characters,
+ * which trips up the naive lastIndexOf('}') approach.
+ */
+function extractOutermostJSON(text: string): string | null {
+  const start = text.indexOf('{')
+  if (start === -1) return null
+
+  let depth = 0
+  let inString = false
+  let escape = false
+
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i]
+    if (escape)              { escape = false; continue }
+    if (ch === '\\' && inString) { escape = true;  continue }
+    if (ch === '"')          { inString = !inString; continue }
+    if (inString)            { continue }
+    if (ch === '{')          { depth++ }
+    else if (ch === '}') {
+      depth--
+      if (depth === 0) return text.slice(start, i + 1)
+    }
+  }
+  return null
+}
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -59,7 +90,7 @@ Provide the complete technical guide for this specific vehicle and job.`
       },
       body: JSON.stringify({
         model:      'claude-sonnet-4-6',
-        max_tokens: 2000,
+        max_tokens: 4000,
         system:     SYSTEM_PROMPT,
         messages:   [{ role: 'user', content: userMessage }],
       }),
@@ -95,32 +126,57 @@ Provide the complete technical guide for this specific vehicle and job.`
     )
   }
 
-  let guide: TechGuide
-  try {
-    console.log('[tech-guide] Raw Claude response:\n', raw)
-
-    let text = raw.trim()
-
-    // Strip all markdown code fences (handles ```json, ```JSON, ``` variants anywhere in the text)
+  function parseRaw(rawText: string): TechGuide {
+    let text = rawText.trim()
+    // Strip markdown code fences wherever they appear
     text = text.replace(/```(?:json|JSON)?\s*/g, '').replace(/```/g, '').trim()
+    // Use depth-counting extraction to find the true outermost JSON object,
+    // immune to trailing explanation text that contains its own { } characters.
+    const extracted = extractOutermostJSON(text)
+    if (!extracted) throw new Error('No JSON object found in response')
+    return JSON.parse(extracted)
+  }
 
-    // Extract the outermost JSON object — handles any remaining preamble/postamble text
-    const firstBrace = text.indexOf('{')
-    const lastBrace  = text.lastIndexOf('}')
-    if (firstBrace !== -1 && lastBrace > firstBrace) {
-      text = text.slice(firstBrace, lastBrace + 1)
+  let guide: TechGuide
+  console.log('[tech-guide] raw length:', raw.length, 'raw preview:', raw.substring(0, 300))
+  try {
+    guide = parseRaw(raw)
+  } catch (firstErr) {
+    console.error('[tech-guide] First parse attempt failed:', firstErr instanceof Error ? firstErr.message : firstErr)
+    console.error('[tech-guide] Full raw response:', raw)
+
+    // Retry once — Claude occasionally produces off outputs
+    console.log('[tech-guide] Retrying Claude API call...')
+    try {
+      const retryRes = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key':         apiKey,
+          'anthropic-version': '2023-06-01',
+          'content-type':      'application/json',
+        },
+        body: JSON.stringify({
+          model:      'claude-sonnet-4-6',
+          max_tokens: 4000,
+          system:     SYSTEM_PROMPT,
+          messages:   [{ role: 'user', content: userMessage }],
+        }),
+      })
+      if (retryRes.ok) {
+        const retryData = await retryRes.json()
+        const retryRaw  = retryData.content?.[0]?.text ?? ''
+        console.log('[tech-guide] Retry raw length:', retryRaw.length, 'preview:', retryRaw.substring(0, 300))
+        guide = parseRaw(retryRaw)
+      } else {
+        throw firstErr
+      }
+    } catch (retryErr) {
+      console.error('[tech-guide] Retry also failed:', retryErr instanceof Error ? retryErr.message : retryErr)
+      return NextResponse.json(
+        { error: `AI response could not be parsed: ${firstErr instanceof Error ? firstErr.message : 'JSON parse error'}` },
+        { status: 502 },
+      )
     }
-
-    console.log('[tech-guide] raw length:', raw.length, 'raw:', raw.substring(0, 500))
-    console.log('[tech-guide] Attempting JSON parse, extracted length:', text.length)
-    guide = JSON.parse(text)
-  } catch (err) {
-    console.error('[tech-guide] JSON parse failed.')
-    console.error('[tech-guide] Parse error:', err instanceof Error ? err.message : err)
-    return NextResponse.json(
-      { error: `AI response could not be parsed: ${err instanceof Error ? err.message : 'JSON parse error'}` },
-      { status: 502 },
-    )
   }
 
   return NextResponse.json({ guide })
