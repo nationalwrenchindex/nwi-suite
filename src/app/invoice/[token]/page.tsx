@@ -261,8 +261,8 @@ export default async function PublicInvoicePage(
           </div>
         </div>
 
-        {/* Payment instructions */}
-        {inv.payment_instructions && (
+        {/* Payment instructions — hidden once paid */}
+        {inv.payment_instructions && !isPaid && (
           <div className="bg-white/5 rounded-xl px-4 py-4 space-y-2">
             <p className="text-white/40 text-xs uppercase tracking-widest">Payment Instructions</p>
             <p className="text-white/80 text-sm whitespace-pre-wrap leading-relaxed">{inv.payment_instructions}</p>

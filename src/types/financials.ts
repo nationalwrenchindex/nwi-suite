@@ -30,6 +30,7 @@ export type PaymentMethod =
   | 'check'
   | 'venmo'
   | 'zelle'
+  | 'cashapp'
   | 'paypal'
   | 'other'
 
@@ -114,6 +115,9 @@ export interface Invoice {
   additional_parts: AdditionalPartItem[]
   additional_labor: AdditionalLaborItem[]
   started_at: string | null
+  // Phase 5 fields
+  payment_reference: string | null
+  payment_notes: string | null
   // Phase 4 fields
   public_token: string | null
   finalized_at: string | null

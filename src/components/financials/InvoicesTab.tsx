@@ -12,6 +12,22 @@ const fmt = (n: number) =>
 const fmtDate = (s: string) =>
   new Date(s + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 
+const fmtPaidDate = (s: string | null | undefined) => {
+  if (!s) return '—'
+  return new Date(s).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+}
+
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  cash:    'Cash',
+  card:    'Card',
+  check:   'Check',
+  venmo:   'Venmo',
+  zelle:   'Zelle',
+  cashapp: 'Cash App',
+  paypal:  'PayPal',
+  other:   'Other',
+}
+
 function genInvoiceNumber() {
   const d = new Date()
   const y = d.getFullYear().toString().slice(2)
@@ -96,13 +112,14 @@ const SOURCE_FILTERS = [
 ]
 
 const PAYMENT_METHODS: { value: PaymentMethod; label: string }[] = [
-  { value: 'cash',   label: 'Cash' },
-  { value: 'card',   label: 'Card' },
-  { value: 'check',  label: 'Check' },
-  { value: 'venmo',  label: 'Venmo' },
-  { value: 'zelle',  label: 'Zelle' },
-  { value: 'paypal', label: 'PayPal' },
-  { value: 'other',  label: 'Other' },
+  { value: 'cash',    label: 'Cash' },
+  { value: 'card',    label: 'Card' },
+  { value: 'check',   label: 'Check' },
+  { value: 'venmo',   label: 'Venmo' },
+  { value: 'zelle',   label: 'Zelle' },
+  { value: 'cashapp', label: 'Cash App' },
+  { value: 'paypal',  label: 'PayPal' },
+  { value: 'other',   label: 'Other' },
 ]
 
 // ─── Main component ───────────────────────────────────────────────────────────
@@ -122,6 +139,29 @@ export default function InvoicesTab() {
   // Action menu state
   const [openMenu, setOpenMenu] = useState<string | null>(null)
   const [payMethodMap, setPayMethodMap] = useState<Record<string, PaymentMethod>>({})
+
+  // Collected this month (separate background fetch, always visible)
+  const [totalCollectedThisMonth, setTotalCollectedThisMonth] = useState<number | null>(null)
+
+  useEffect(() => {
+    const now   = new Date()
+    const year  = now.getFullYear()
+    const month = now.getMonth()
+    fetch('/api/invoices?invoice_status=paid')
+      .then(r => r.json())
+      .then(json => {
+        if (!Array.isArray(json.invoices)) return
+        const sum = (json.invoices as Invoice[])
+          .filter(inv => {
+            if (!inv.paid_at) return false
+            const d = new Date(inv.paid_at)
+            return d.getFullYear() === year && d.getMonth() === month
+          })
+          .reduce((s, inv) => s + inv.total, 0)
+        setTotalCollectedThisMonth(sum)
+      })
+      .catch(() => {})
+  }, [])
 
   // ── New invoice form state ──
   const [form, setForm] = useState(() => ({
@@ -272,19 +312,37 @@ export default function InvoicesTab() {
   return (
     <div className="space-y-4">
 
-      {/* Total Outstanding metric card */}
-      {totalOutstanding > 0 && (
-        <div className="flex items-center gap-4 px-5 py-4 bg-purple-500/10 border border-purple-500/25 rounded-2xl">
-          <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0">
-            <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-            </svg>
-          </div>
-          <div>
-            <p className="text-purple-400/70 text-xs uppercase tracking-widest">Total Outstanding</p>
-            <p className="font-condensed font-bold text-purple-300 text-2xl leading-none">{fmt(totalOutstanding)}</p>
-          </div>
-          <p className="text-purple-400/50 text-xs ml-auto">Awaiting payment</p>
+      {/* Metric cards */}
+      {(totalOutstanding > 0 || (totalCollectedThisMonth != null && totalCollectedThisMonth > 0)) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {totalOutstanding > 0 && (
+            <div className="flex items-center gap-4 px-5 py-4 bg-purple-500/10 border border-purple-500/25 rounded-2xl">
+              <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+              </div>
+              <div>
+                <p className="text-purple-400/70 text-xs uppercase tracking-widest">Total Outstanding</p>
+                <p className="font-condensed font-bold text-purple-300 text-2xl leading-none">{fmt(totalOutstanding)}</p>
+                <p className="text-purple-400/40 text-xs mt-0.5">Awaiting payment</p>
+              </div>
+            </div>
+          )}
+          {totalCollectedThisMonth != null && totalCollectedThisMonth > 0 && (
+            <div className="flex items-center gap-4 px-5 py-4 bg-success/10 border border-success/25 rounded-2xl">
+              <div className="w-10 h-10 rounded-full bg-success/20 flex items-center justify-center flex-shrink-0">
+                <svg className="w-5 h-5 text-success" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+              </div>
+              <div>
+                <p className="text-success/70 text-xs uppercase tracking-widest">Collected This Month</p>
+                <p className="font-condensed font-bold text-success text-2xl leading-none">{fmt(totalCollectedThisMonth)}</p>
+                <p className="text-success/40 text-xs mt-0.5">Paid invoices</p>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -519,8 +577,8 @@ export default function InvoicesTab() {
       ) : (
         <div className="nwi-card p-0 overflow-hidden">
           {/* Table header */}
-          <div className="hidden sm:grid grid-cols-[140px_1fr_120px_90px_140px_44px] gap-4 px-5 py-3 border-b border-dark-border">
-            {['Invoice #', 'Customer', 'Date', 'Total', 'Status', ''].map(h => (
+          <div className="hidden sm:grid grid-cols-[140px_1fr_110px_90px_130px_100px_100px_44px] gap-4 px-5 py-3 border-b border-dark-border">
+            {['Invoice #', 'Customer', 'Date', 'Total', 'Status', 'Payment', 'Paid Date', ''].map(h => (
               <span key={h} className="text-white/30 text-xs uppercase tracking-widest">{h}</span>
             ))}
           </div>
@@ -539,7 +597,7 @@ export default function InvoicesTab() {
               return (
                 <div key={inv.id}
                   onClick={isNavigable ? () => router.push(`/financials/invoices/${inv.id}`) : undefined}
-                  className={`grid grid-cols-1 sm:grid-cols-[140px_1fr_120px_90px_140px_44px] gap-2 sm:gap-4 px-5 py-4 hover:bg-white/2 transition-colors items-center ${isNavigable ? 'cursor-pointer' : ''}`}>
+                  className={`grid grid-cols-1 sm:grid-cols-[140px_1fr_110px_90px_130px_100px_100px_44px] gap-2 sm:gap-4 px-5 py-4 hover:bg-white/2 transition-colors items-center ${isNavigable ? 'cursor-pointer' : ''}`}>
                   {/* Invoice # */}
                   <div className="flex items-center gap-1.5 min-w-0">
                     <span className={`font-mono text-xs truncate ${
@@ -570,6 +628,12 @@ export default function InvoicesTab() {
                   <span className="font-condensed font-bold text-white">{fmt(inv.total)}</span>
                   {/* Status */}
                   <InvoiceStatusBadge invoice={inv} />
+                  {/* Payment method */}
+                  <span className="text-white/40 text-xs">
+                    {inv.payment_method ? (PAYMENT_METHOD_LABELS[inv.payment_method] ?? inv.payment_method) : '—'}
+                  </span>
+                  {/* Paid date */}
+                  <span className="text-white/40 text-xs">{fmtPaidDate(inv.paid_at)}</span>
                   {/* Actions */}
                   <div className="relative" onClick={e => e.stopPropagation()}>
                     <button

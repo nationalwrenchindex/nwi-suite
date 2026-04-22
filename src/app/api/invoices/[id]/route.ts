@@ -97,9 +97,11 @@ export async function PUT(
     return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
   }
 
-  const { status, payment_method } = body as {
+  const { status, payment_method, payment_reference, payment_notes } = body as {
     status?: string
     payment_method?: string
+    payment_reference?: string | null
+    payment_notes?: string | null
   }
 
   if (!status) {
@@ -120,9 +122,11 @@ export async function PUT(
   const updates: Record<string, unknown> = { status: dbStatus }
 
   if (dbStatus === 'paid') {
-    updates.paid_at       = new Date().toISOString()
+    updates.paid_at        = new Date().toISOString()
     updates.invoice_status = 'paid'
-    if (payment_method) updates.payment_method = payment_method
+    if (payment_method)                updates.payment_method    = payment_method
+    if (payment_reference !== undefined) updates.payment_reference = payment_reference ?? null
+    if (payment_notes     !== undefined) updates.payment_notes     = payment_notes     ?? null
   } else {
     // Revert paid fields when un-marking as paid
     updates.paid_at = null

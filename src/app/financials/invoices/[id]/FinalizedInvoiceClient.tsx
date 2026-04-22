@@ -20,6 +20,30 @@ function round2(n: number) {
   return Math.round(n * 100) / 100
 }
 
+// ─── Payment method constants ──────────────────────────────────────────────────
+
+const PAYMENT_METHODS_FOR_MODAL = [
+  { value: 'cash',    label: 'Cash' },
+  { value: 'card',    label: 'Card' },
+  { value: 'check',   label: 'Check' },
+  { value: 'venmo',   label: 'Venmo' },
+  { value: 'zelle',   label: 'Zelle' },
+  { value: 'cashapp', label: 'Cash App' },
+  { value: 'paypal',  label: 'PayPal' },
+  { value: 'other',   label: 'Other' },
+] as const
+
+const PAYMENT_METHOD_LABELS: Record<string, string> = {
+  cash:    'Cash',
+  card:    'Card',
+  check:   'Check',
+  venmo:   'Venmo',
+  zelle:   'Zelle',
+  cashapp: 'Cash App',
+  paypal:  'PayPal',
+  other:   'Other',
+}
+
 // ─── Toast ────────────────────────────────────────────────────────────────────
 
 function Toast({ msg, type }: { msg: string; type: 'success' | 'error' | 'warning' }) {
@@ -148,6 +172,103 @@ function FinalizeConfirmModal({
             className="flex-1 py-3 bg-[#FF6600] hover:bg-orange-600 disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-xl transition-colors"
           >
             {loading ? 'Finalizing…' : 'Yes, Finalize'}
+          </button>
+          <button
+            onClick={onCancel}
+            disabled={loading}
+            className="flex-1 py-3 border border-white/15 text-white/60 hover:text-white rounded-xl transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Mark as Paid Modal ───────────────────────────────────────────────────────
+
+function MarkAsPaidModal({
+  grandTotal,
+  onConfirm,
+  onCancel,
+  loading,
+}: {
+  grandTotal: number
+  onConfirm: (method: string, reference: string, notes: string) => void
+  onCancel: () => void
+  loading: boolean
+}) {
+  const [method,    setMethod]    = useState('cash')
+  const [reference, setReference] = useState('')
+  const [notes,     setNotes]     = useState('')
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      <div className="w-full max-w-sm bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 space-y-5">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-full bg-success/15 flex items-center justify-center flex-shrink-0">
+            <svg className="w-5 h-5 text-success" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+          </div>
+          <div>
+            <h2 className="text-white font-bold text-lg">Mark as Paid</h2>
+            <p className="text-white/60 text-sm mt-1">
+              Total collected:{' '}
+              <span className="text-success font-semibold">{fmt(grandTotal)}</span>
+            </p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <label className="text-white/40 text-xs uppercase tracking-widest block mb-1.5">Payment Method</label>
+            <select
+              value={method}
+              onChange={e => setMethod(e.target.value)}
+              className="nwi-input text-sm w-full"
+            >
+              {PAYMENT_METHODS_FOR_MODAL.map(m => (
+                <option key={m.value} value={m.value}>{m.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="text-white/40 text-xs uppercase tracking-widest block mb-1.5">
+              Reference <span className="normal-case text-white/20">(optional — check #, transaction ID, etc.)</span>
+            </label>
+            <input
+              type="text"
+              className="nwi-input text-sm w-full"
+              placeholder="e.g. Check #1042"
+              value={reference}
+              onChange={e => setReference(e.target.value)}
+            />
+          </div>
+
+          <div>
+            <label className="text-white/40 text-xs uppercase tracking-widest block mb-1.5">
+              Notes <span className="normal-case text-white/20">(optional)</span>
+            </label>
+            <textarea
+              rows={3}
+              className="nwi-input resize-none text-sm w-full"
+              placeholder="Any notes about this payment…"
+              value={notes}
+              onChange={e => setNotes(e.target.value)}
+            />
+          </div>
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            onClick={() => onConfirm(method, reference, notes)}
+            disabled={loading}
+            className="flex-1 py-3 bg-success hover:bg-green-600 disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-xl transition-colors"
+          >
+            {loading ? 'Saving…' : 'Confirm Payment'}
           </button>
           <button
             onClick={onCancel}
@@ -397,14 +518,16 @@ export default function FinalizedInvoiceClient({
   techName: string
 }) {
   const router = useRouter()
-  const [invoice,          setInvoice]          = useState(initialInvoice)
-  const [paymentInstr,     setPaymentInstr]      = useState(initialInvoice.payment_instructions ?? '')
-  const [savingInstr,      setSavingInstr]       = useState(false)
-  const [showFinalizeModal,setShowFinalizeModal] = useState(false)
-  const [finalizing,       setFinalizing]        = useState(false)
-  const [showSendModal,    setShowSendModal]      = useState(false)
-  const [toast,            setToast]             = useState<{ msg: string; type: 'success' | 'error' | 'warning' } | null>(null)
-  const [estimateOpen,     setEstimateOpen]      = useState(false)
+  const [invoice,           setInvoice]          = useState(initialInvoice)
+  const [paymentInstr,      setPaymentInstr]      = useState(initialInvoice.payment_instructions ?? '')
+  const [savingInstr,       setSavingInstr]       = useState(false)
+  const [showFinalizeModal, setShowFinalizeModal] = useState(false)
+  const [finalizing,        setFinalizing]        = useState(false)
+  const [showSendModal,     setShowSendModal]      = useState(false)
+  const [showPaidModal,     setShowPaidModal]      = useState(false)
+  const [markingPaid,       setMarkingPaid]        = useState(false)
+  const [toast,             setToast]             = useState<{ msg: string; type: 'success' | 'error' | 'warning' } | null>(null)
+  const [estimateOpen,      setEstimateOpen]      = useState(false)
 
   const toastRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -425,7 +548,7 @@ export default function FinalizedInvoiceClient({
     : ''
 
   // Totals (read-only, from saved values)
-  const shopSuppliesTotal   = (Array.isArray(invoice.shop_supplies)    ? invoice.shop_supplies    : []).reduce((s: number, i: { total: number }) => s + i.total, 0)
+  const shopSuppliesTotal    = (Array.isArray(invoice.shop_supplies)    ? invoice.shop_supplies    : []).reduce((s: number, i: { total: number }) => s + i.total, 0)
   const additionalPartsTotal = (Array.isArray(invoice.additional_parts) ? invoice.additional_parts : []).reduce((s: number, i: { total: number }) => s + i.total, 0)
   const additionalLaborTotal = (Array.isArray(invoice.additional_labor) ? invoice.additional_labor : []).reduce((s: number, i: { subtotal: number }) => s + i.subtotal, 0)
 
@@ -438,6 +561,11 @@ export default function FinalizedInvoiceClient({
   const vehicleLabel = vehicle
     ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ')
     : '—'
+
+  const isInProgress      = invoice.invoice_status === 'in_progress'
+  const isAwaitingPayment = invoice.invoice_status === 'awaiting_payment'
+  const isPaid            = invoice.invoice_status === 'paid'
+  const isFinalized       = isAwaitingPayment || isPaid
 
   // ── Timeline ──────────────────────────────────────────────────────────────
 
@@ -476,6 +604,14 @@ export default function FinalizedInvoiceClient({
       icon:      '👀',
       highlight: !!invoice.customer_viewed_at,
     },
+    {
+      label:     invoice.payment_method
+        ? `Payment received via ${PAYMENT_METHOD_LABELS[invoice.payment_method] ?? invoice.payment_method}`
+        : 'Payment received',
+      date:      invoice.paid_at ?? null,
+      icon:      '💰',
+      highlight: !!invoice.paid_at,
+    },
   ]
 
   // ── Finalize ──────────────────────────────────────────────────────────────
@@ -495,6 +631,34 @@ export default function FinalizedInvoiceClient({
       setShowFinalizeModal(false)
     } finally {
       setFinalizing(false)
+    }
+  }
+
+  // ── Mark as Paid ──────────────────────────────────────────────────────────
+
+  async function handleMarkAsPaid(method: string, reference: string, notes: string) {
+    setMarkingPaid(true)
+    try {
+      const res  = await fetch(`/api/invoices/${invoice.id}`, {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          status:            'paid',
+          payment_method:    method,
+          payment_reference: reference || null,
+          payment_notes:     notes     || null,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Failed to mark as paid')
+      setInvoice(json.invoice)
+      setShowPaidModal(false)
+      showToast('Invoice marked as paid.')
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Failed to mark as paid', 'error')
+      setShowPaidModal(false)
+    } finally {
+      setMarkingPaid(false)
     }
   }
 
@@ -519,9 +683,6 @@ export default function FinalizedInvoiceClient({
     }
   }, [invoice.id, paymentInstr])
 
-  const isFinalized = invoice.invoice_status === 'awaiting_payment' || invoice.invoice_status === 'paid'
-  const isInProgress = invoice.invoice_status === 'in_progress'
-
   // ─────────────────────────────────────────────────────────────────────────
   // Render
   // ─────────────────────────────────────────────────────────────────────────
@@ -536,7 +697,15 @@ export default function FinalizedInvoiceClient({
             <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">
               {invoice.invoice_number}
             </h1>
-            {isFinalized && (
+            {isPaid && (
+              <span
+                className="px-2.5 py-0.5 rounded-full text-xs font-semibold"
+                style={{ backgroundColor: '#16a34a', color: '#fff' }}
+              >
+                Paid
+              </span>
+            )}
+            {isAwaitingPayment && (
               <span
                 className="px-2.5 py-0.5 rounded-full text-xs font-semibold"
                 style={{ backgroundColor: '#8b5cf6', color: '#fff' }}
@@ -569,6 +738,38 @@ export default function FinalizedInvoiceClient({
           ← Back to Invoices
         </button>
       </div>
+
+      {/* Paid banner */}
+      {isPaid && (
+        <div className="flex items-start gap-3 px-4 py-4 rounded-xl border border-success/25 bg-success/8">
+          <div className="w-8 h-8 rounded-full bg-success/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <svg className="w-4 h-4 text-success" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-success font-semibold text-sm">Payment Received</p>
+            <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1">
+              {invoice.paid_at && (
+                <span className="text-success/70 text-xs">
+                  {fmtDate(invoice.paid_at, { month: 'short', day: 'numeric', year: 'numeric' })}
+                </span>
+              )}
+              {invoice.payment_method && (
+                <span className="text-success/70 text-xs">
+                  via {PAYMENT_METHOD_LABELS[invoice.payment_method] ?? invoice.payment_method}
+                </span>
+              )}
+              {invoice.payment_reference && (
+                <span className="text-success/50 text-xs font-mono">{invoice.payment_reference}</span>
+              )}
+            </div>
+            {invoice.payment_notes && (
+              <p className="text-success/50 text-xs mt-1">{invoice.payment_notes}</p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Source quote banner */}
       {sq && (
@@ -805,27 +1006,35 @@ export default function FinalizedInvoiceClient({
         </div>
       </div>
 
-      {/* Payment Instructions (editable even after finalization) */}
+      {/* Payment Instructions */}
       <div className="bg-[#222222] border border-white/8 rounded-2xl overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3 border-b border-white/8 bg-white/[0.02]">
           <p className="text-white/50 text-xs font-semibold uppercase tracking-widest">Payment Instructions</p>
           <span className="text-white/25 text-xs">Shown to customer</span>
         </div>
         <div className="p-5 space-y-3">
-          <textarea
-            rows={5}
-            className="nwi-input resize-y text-sm w-full"
-            placeholder="Enter payment methods and instructions for your customer. Example: 'Payment accepted via Venmo (@username), Zelle (phone), Cash App ($cashtag), or cash on delivery. Please pay within 7 days of receiving this invoice.'"
-            value={paymentInstr}
-            onChange={e => setPaymentInstr(e.target.value)}
-          />
-          <button
-            onClick={handleSaveInstructions}
-            disabled={savingInstr || paymentInstr === (invoice.payment_instructions ?? '')}
-            className="px-4 py-2 bg-white/10 hover:bg-white/15 disabled:opacity-40 text-white text-sm font-medium rounded-lg transition-colors"
-          >
-            {savingInstr ? 'Saving…' : 'Save Instructions'}
-          </button>
+          {isPaid ? (
+            <p className="text-white/60 text-sm whitespace-pre-wrap leading-relaxed">
+              {invoice.payment_instructions || <span className="text-white/25 italic">No payment instructions provided.</span>}
+            </p>
+          ) : (
+            <>
+              <textarea
+                rows={5}
+                className="nwi-input resize-y text-sm w-full"
+                placeholder="Enter payment methods and instructions for your customer. Example: 'Payment accepted via Venmo (@username), Zelle (phone), Cash App ($cashtag), or cash on delivery. Please pay within 7 days of receiving this invoice.'"
+                value={paymentInstr}
+                onChange={e => setPaymentInstr(e.target.value)}
+              />
+              <button
+                onClick={handleSaveInstructions}
+                disabled={savingInstr || paymentInstr === (invoice.payment_instructions ?? '')}
+                className="px-4 py-2 bg-white/10 hover:bg-white/15 disabled:opacity-40 text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                {savingInstr ? 'Saving…' : 'Save Instructions'}
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -850,16 +1059,45 @@ export default function FinalizedInvoiceClient({
         </div>
       )}
 
-      {isFinalized && (
+      {isAwaitingPayment && (
         <div className="flex items-center gap-3 flex-wrap">
           <button
+            onClick={() => setShowPaidModal(true)}
+            className="flex items-center gap-2 px-6 py-3 bg-success hover:bg-green-600 text-white font-condensed font-bold text-sm tracking-wide rounded-xl transition-colors shadow-md shadow-success/20"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+            Mark as Paid
+          </button>
+          <button
             onClick={() => setShowSendModal(true)}
-            className="flex items-center gap-2 px-6 py-3 bg-[#FF6600] hover:bg-orange-600 text-white font-condensed font-bold text-sm tracking-wide rounded-xl transition-colors shadow-md shadow-orange/20"
+            className="flex items-center gap-2 px-6 py-3 border border-white/20 hover:border-white/35 text-white/70 hover:text-white font-condensed font-bold text-sm tracking-wide rounded-xl transition-colors"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
             </svg>
             {invoice.times_sent > 0 ? 'Resend Invoice' : 'Send Invoice'}
+          </button>
+          <button
+            onClick={() => router.push('/financials?tab=invoices')}
+            className="px-5 py-3 border border-white/15 hover:border-white/30 text-white/50 hover:text-white text-sm font-medium rounded-xl transition-colors"
+          >
+            Back to Invoices
+          </button>
+        </div>
+      )}
+
+      {isPaid && (
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            onClick={() => setShowSendModal(true)}
+            className="flex items-center gap-2 px-6 py-3 border border-white/20 hover:border-white/35 text-white/70 hover:text-white font-condensed font-bold text-sm tracking-wide rounded-xl transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
+            </svg>
+            Resend as Receipt
           </button>
           <button
             onClick={() => router.push('/financials?tab=invoices')}
@@ -880,6 +1118,15 @@ export default function FinalizedInvoiceClient({
           onConfirm={handleFinalize}
           onCancel={() => setShowFinalizeModal(false)}
           loading={finalizing}
+        />
+      )}
+
+      {showPaidModal && (
+        <MarkAsPaidModal
+          grandTotal={grandTotal}
+          onConfirm={handleMarkAsPaid}
+          onCancel={() => setShowPaidModal(false)}
+          loading={markingPaid}
         />
       )}
 
