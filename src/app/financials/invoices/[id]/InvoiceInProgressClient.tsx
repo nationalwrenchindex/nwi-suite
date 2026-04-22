@@ -304,6 +304,60 @@ function ListHeader({ cols }: { cols: string[] }) {
   )
 }
 
+// ─── Finalize Confirm Modal ───────────────────────────────────────────────────
+
+function FinalizeConfirmModal({
+  grandTotal,
+  onConfirm,
+  onCancel,
+  loading,
+}: {
+  grandTotal: number
+  onConfirm: () => void
+  onCancel: () => void
+  loading: boolean
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+      <div className="w-full max-w-sm bg-[#1a1a1a] border border-white/10 rounded-2xl p-6 space-y-5">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-full bg-orange/15 flex items-center justify-center flex-shrink-0">
+            <svg className="w-5 h-5 text-orange" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            </svg>
+          </div>
+          <div>
+            <h2 className="text-white font-bold text-lg">Finalize this invoice?</h2>
+            <p className="text-white/60 text-sm mt-1">
+              Once finalized, the invoice is locked from further edits. The grand total will be{' '}
+              <span className="text-orange font-semibold">
+                {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(grandTotal)}
+              </span>.
+              Only finalize when the job is complete.
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-3">
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            className="flex-1 py-3 bg-[#FF6600] hover:bg-orange-600 disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-xl transition-colors"
+          >
+            {loading ? 'Finalizing…' : 'Yes, Finalize'}
+          </button>
+          <button
+            onClick={onCancel}
+            disabled={loading}
+            className="flex-1 py-3 border border-white/15 text-white/60 hover:text-white rounded-xl transition-colors"
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function InvoiceInProgressClient({ invoice }: { invoice: Invoice }) {
@@ -323,6 +377,8 @@ export default function InvoiceInProgressClient({ invoice }: { invoice: Invoice 
 
   // UI state
   const [saving,          setSaving]          = useState(false)
+  const [finalizing,      setFinalizing]      = useState(false)
+  const [showFinalizeModal, setShowFinalizeModal] = useState(false)
   const [toast,           setToast]           = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
   const [estimateOpen,    setEstimateOpen]    = useState(false)
   const [showDiagPanel,   setShowDiagPanel]   = useState(false)
@@ -400,6 +456,40 @@ export default function InvoiceInProgressClient({ invoice }: { invoice: Invoice 
   const removeLabor = useCallback((id: string) => {
     setAdditionalLabor(p => p.filter(x => x.id !== id))
   }, [])
+
+  // ── Finalize invoice ───────────────────────────────────────────────────────
+
+  async function handleFinalize() {
+    setFinalizing(true)
+    try {
+      // Save current progress first, then finalize
+      await fetch(`/api/invoices/${invoice.id}/progress`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          job_notes:        jobNotes || null,
+          shop_supplies:    shopSupplies,
+          additional_parts: additionalParts,
+          additional_labor: additionalLabor,
+          subtotal:         newSubtotal,
+          tax_amount:       newTaxAmount,
+          total:            grandTotal,
+        }),
+      })
+      const res  = await fetch(`/api/invoices/${invoice.id}/finalize`, { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Finalize failed')
+      showToast('Invoice finalized. Ready to send to customer.')
+      setShowFinalizeModal(false)
+      // Navigate to the same page — server will now render FinalizedInvoiceClient
+      setTimeout(() => router.push(`/financials/invoices/${invoice.id}`), 1200)
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Finalize failed', 'error')
+      setShowFinalizeModal(false)
+    } finally {
+      setFinalizing(false)
+    }
+  }
 
   // ── Save progress ──────────────────────────────────────────────────────────
 
@@ -802,11 +892,11 @@ export default function InvoiceInProgressClient({ invoice }: { invoice: Invoice 
       </div>
 
       {/* ── SECTION I: Action buttons (desktop) ── */}
-      <div className="hidden sm:flex items-center gap-3">
+      <div className="hidden sm:flex items-center gap-3 flex-wrap">
         <button
           onClick={handleSave}
           disabled={saving}
-          className="flex items-center gap-2 px-6 py-3 bg-[#FF6600] hover:bg-orange-600 disabled:opacity-50 text-white font-condensed font-bold text-sm tracking-wide rounded-xl transition-colors shadow-md shadow-orange/20"
+          className="flex items-center gap-2 px-6 py-3 bg-white/10 hover:bg-white/15 disabled:opacity-50 text-white font-condensed font-bold text-sm tracking-wide rounded-xl transition-colors border border-white/15"
         >
           {saving ? (
             <>
@@ -828,6 +918,16 @@ export default function InvoiceInProgressClient({ invoice }: { invoice: Invoice 
           )}
         </button>
         <button
+          onClick={() => setShowFinalizeModal(true)}
+          disabled={saving || finalizing}
+          className="flex items-center gap-2 px-6 py-3 bg-[#FF6600] hover:bg-orange-600 disabled:opacity-50 text-white font-condensed font-bold text-sm tracking-wide rounded-xl transition-colors shadow-md shadow-orange/20"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          Finalize Invoice
+        </button>
+        <button
           onClick={() => router.push('/financials?tab=invoices')}
           className="px-5 py-3 border border-white/15 hover:border-white/30 text-white/50 hover:text-white text-sm font-medium rounded-xl transition-colors"
         >
@@ -835,9 +935,9 @@ export default function InvoiceInProgressClient({ invoice }: { invoice: Invoice 
         </button>
       </div>
 
-      {/* ── Sticky mobile footer (total + save) ── */}
+      {/* ── Sticky mobile footer (total + save + finalize) ── */}
       <div className="fixed bottom-0 inset-x-0 z-30 sm:hidden bg-[#1a1a1a]/95 backdrop-blur-sm border-t border-white/10 px-4 py-3">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-2">
           <div>
             <p className="text-white/30 text-[10px] uppercase tracking-widest">Grand Total</p>
             <p className="font-condensed font-bold text-orange text-2xl leading-none">{fmt(grandTotal)}</p>
@@ -845,9 +945,16 @@ export default function InvoiceInProgressClient({ invoice }: { invoice: Invoice 
           <button
             onClick={handleSave}
             disabled={saving}
-            className="flex-1 max-w-[160px] flex items-center justify-center gap-2 py-3 bg-[#FF6600] hover:bg-orange-600 disabled:opacity-50 text-white font-condensed font-bold text-sm tracking-wide rounded-xl transition-colors"
+            className="flex items-center justify-center gap-1.5 px-4 py-3 bg-white/10 hover:bg-white/15 disabled:opacity-50 text-white font-condensed font-bold text-xs tracking-wide rounded-xl transition-colors border border-white/15"
           >
-            {saving ? 'Saving…' : 'Save Progress'}
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+          <button
+            onClick={() => setShowFinalizeModal(true)}
+            disabled={saving || finalizing}
+            className="flex items-center justify-center gap-1.5 px-4 py-3 bg-[#FF6600] hover:bg-orange-600 disabled:opacity-50 text-white font-condensed font-bold text-xs tracking-wide rounded-xl transition-colors"
+          >
+            Finalize
           </button>
         </div>
       </div>
@@ -869,6 +976,15 @@ export default function InvoiceInProgressClient({ invoice }: { invoice: Invoice 
         <DiagnosticsPanel
           vin={invoice.vehicle?.vin ?? null}
           onClose={() => setShowDiagPanel(false)}
+        />
+      )}
+
+      {showFinalizeModal && (
+        <FinalizeConfirmModal
+          grandTotal={grandTotal}
+          onConfirm={handleFinalize}
+          onCancel={() => setShowFinalizeModal(false)}
+          loading={finalizing}
         />
       )}
 

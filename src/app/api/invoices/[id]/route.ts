@@ -36,6 +36,45 @@ export async function GET(
   return NextResponse.json({ invoice: data })
 }
 
+// ─── PATCH /api/invoices/[id] ────────────────────────────────────────────────
+// Body: { payment_instructions: string }
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { id } = await params
+
+  let body: Record<string, unknown>
+  try { body = await request.json() } catch {
+    return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+  }
+
+  const updates: Record<string, unknown> = {}
+  if ('payment_instructions' in body) updates.payment_instructions = body.payment_instructions ?? null
+
+  if (Object.keys(updates).length === 0) {
+    return NextResponse.json({ error: 'No valid fields to update.' }, { status: 400 })
+  }
+
+  const { data, error } = await supabase
+    .from('invoices')
+    .update(updates)
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .select(INVOICE_SELECT)
+    .single()
+
+  if (error || !data) {
+    return NextResponse.json({ error: error?.message ?? 'Update failed.' }, { status: 500 })
+  }
+
+  return NextResponse.json({ invoice: data })
+}
+
 // ─── PUT /api/invoices/[id] ───────────────────────────────────────────────────
 // Body: { status: 'paid' | 'unpaid' | 'overdue', payment_method?: string }
 export async function PUT(

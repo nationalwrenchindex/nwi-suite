@@ -12,15 +12,25 @@ export default async function SettingsPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('full_name, business_name, slug, share_sms_template, share_email_subject, share_email_body')
+    .select('full_name, business_name, slug, share_sms_template, share_email_subject, share_email_body, default_payment_instructions')
     .eq('id', user.id)
     .single()
 
   if (!profile?.business_name) redirect('/onboarding')
 
+  const p = profile as {
+    full_name?: string
+    business_name?: string
+    slug?: string
+    share_sms_template?: string
+    share_email_subject?: string
+    share_email_body?: string
+    default_payment_instructions?: string
+  }
+
   return (
     <div className="min-h-dvh bg-dark flex flex-col">
-      <AppNav businessName={profile.business_name} />
+      <AppNav businessName={p.business_name ?? ''} />
       <main className="flex-1 max-w-2xl w-full mx-auto px-4 sm:px-6 py-8">
         <div className="mb-8">
           <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Account</p>
@@ -28,14 +38,15 @@ export default async function SettingsPage() {
         </div>
 
         <SettingsClient
-          slug={profile.slug ?? null}
-          businessName={profile.business_name ?? ''}
-          techName={profile.full_name ?? ''}
+          slug={p.slug ?? null}
+          businessName={p.business_name ?? ''}
+          techName={p.full_name ?? ''}
           initialTemplates={{
-            share_sms_template:  profile.share_sms_template  ?? undefined,
-            share_email_subject: profile.share_email_subject ?? undefined,
-            share_email_body:    profile.share_email_body    ?? undefined,
+            share_sms_template:  p.share_sms_template  ?? undefined,
+            share_email_subject: p.share_email_subject ?? undefined,
+            share_email_body:    p.share_email_body    ?? undefined,
           }}
+          defaultPaymentInstructions={p.default_payment_instructions ?? ''}
         />
       </main>
     </div>

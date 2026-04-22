@@ -114,6 +114,16 @@ export interface Invoice {
   additional_parts: AdditionalPartItem[]
   additional_labor: AdditionalLaborItem[]
   started_at: string | null
+  // Phase 4 fields
+  public_token: string | null
+  finalized_at: string | null
+  sent_to_customer_at: string | null
+  customer_viewed_at: string | null
+  customer_view_count: number
+  payment_instructions: string | null
+  sent_to_phone: string | null
+  sent_to_email: string | null
+  times_sent: number
   // Joined relations
   customer?: {
     id: string

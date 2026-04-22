@@ -119,17 +119,22 @@ export default function SettingsClient({
   businessName,
   techName,
   initialTemplates,
+  defaultPaymentInstructions: initialPaymentInstr = '',
 }: {
-  slug:             string | null
-  businessName:     string
-  techName:         string
-  initialTemplates: Partial<ShareTemplates>
+  slug:                        string | null
+  businessName:                string
+  techName:                    string
+  initialTemplates:            Partial<ShareTemplates>
+  defaultPaymentInstructions?: string
 }) {
   const [shareOpen, setShareOpen] = useState(false)
 
   const [smsTpl,    setSmsTpl]    = useState(initialTemplates.share_sms_template  || DEFAULT_SMS)
   const [emailSubj, setEmailSubj] = useState(initialTemplates.share_email_subject || DEFAULT_EMAIL_SUBJECT)
   const [emailBody, setEmailBody] = useState(initialTemplates.share_email_body    || DEFAULT_EMAIL_BODY)
+
+  const [paymentInstr,        setPaymentInstr]        = useState(initialPaymentInstr)
+  const [savingPaymentInstr,  setSavingPaymentInstr]  = useState(false)
 
   const [savingSMS,   setSavingSMS]   = useState(false)
   const [savingEmail, setSavingEmail] = useState(false)
@@ -150,6 +155,20 @@ export default function SettingsClient({
       }
     } catch { /* network error - silently fail */ }
     done()
+  }
+
+  async function savePaymentInstructions() {
+    setSavingPaymentInstr(true)
+    try {
+      await fetch('/api/user/share-templates', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ default_payment_instructions: paymentInstr || null }),
+      })
+      setSavedMsg('Default payment instructions saved.')
+      setTimeout(() => setSavedMsg(null), 3000)
+    } catch { /* silently fail */ }
+    setSavingPaymentInstr(false)
   }
 
   return (
@@ -249,6 +268,30 @@ export default function SettingsClient({
             }}
             saving={savingEmail}
           />
+        </div>
+      </section>
+
+      {/* ── Default Payment Instructions ── */}
+      <section>
+        <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Default Payment Instructions</p>
+        <p className="text-white/30 text-xs mb-4">
+          Pre-filled into each invoice when you finalize it. Edit per-invoice in the invoice view.
+        </p>
+        <div className="rounded-xl border border-[#333] bg-[#222] p-5 space-y-4">
+          <textarea
+            rows={6}
+            className="nwi-input resize-y text-sm w-full"
+            placeholder="Payment accepted via Venmo (@username), Zelle (your-phone), Cash App ($cashtag), or cash. Please pay within 7 days of receiving this invoice."
+            value={paymentInstr}
+            onChange={e => setPaymentInstr(e.target.value)}
+          />
+          <button
+            onClick={savePaymentInstructions}
+            disabled={savingPaymentInstr}
+            className="px-5 py-2 bg-[#FF6600] hover:bg-[#E55A00] disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-lg transition-colors"
+          >
+            {savingPaymentInstr ? 'Saving…' : 'Save Default Instructions'}
+          </button>
         </div>
       </section>
 

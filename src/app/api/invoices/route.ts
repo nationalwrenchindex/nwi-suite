@@ -32,9 +32,16 @@ export async function GET(request: NextRequest) {
     .order('created_at',   { ascending: false })
     .range(offset, offset + limit - 1)
 
-  if (status)         query = query.eq('status', status)
-  if (invoice_status) query = query.eq('invoice_status', invoice_status)
-  if (source)         query = query.eq('source', source)
+  if (status) query = query.eq('status', status)
+  if (invoice_status) {
+    // 'active' is a virtual filter meaning in_progress OR awaiting_payment
+    if (invoice_status === 'active') {
+      query = query.in('invoice_status', ['in_progress', 'awaiting_payment'])
+    } else {
+      query = query.eq('invoice_status', invoice_status)
+    }
+  }
+  if (source) query = query.eq('source', source)
 
   const { data, error } = await query
 

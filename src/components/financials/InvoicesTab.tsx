@@ -78,13 +78,14 @@ const emptyLine = (): LineItem => ({ description: '', quantity: 1, unit_price: 0
 // ─── Filter options ───────────────────────────────────────────────────────────
 
 // invoice_status filter (Phase 3+ lifecycle)
-const INVOICE_STATUS_FILTERS: { value: InvoiceProgressStatus | ''; label: string }[] = [
-  { value: '',                label: 'All' },
-  { value: 'in_progress',     label: 'In Progress' },
-  { value: 'finalized',       label: 'Finalized' },
-  { value: 'awaiting_payment',label: 'Awaiting Payment' },
-  { value: 'paid',            label: 'Paid' },
-  { value: 'void',            label: 'Void' },
+// 'active' is a virtual filter: in_progress + awaiting_payment (handled server-side)
+const INVOICE_STATUS_FILTERS: { value: InvoiceProgressStatus | '' | 'active'; label: string }[] = [
+  { value: 'active',           label: 'All Active' },
+  { value: '',                 label: 'All' },
+  { value: 'in_progress',      label: 'In Progress' },
+  { value: 'awaiting_payment', label: 'Awaiting Payment' },
+  { value: 'paid',             label: 'Paid' },
+  { value: 'void',             label: 'Void' },
 ]
 
 const SOURCE_FILTERS = [
@@ -110,7 +111,7 @@ export default function InvoicesTab() {
   const router = useRouter()
   const [invoices,             setInvoices]             = useState<Invoice[]>([])
   const [loading,              setLoading]              = useState(true)
-  const [invoiceStatusFilter,  setInvoiceStatusFilter]  = useState<InvoiceProgressStatus | ''>('in_progress')
+  const [invoiceStatusFilter,  setInvoiceStatusFilter]  = useState<InvoiceProgressStatus | '' | 'active'>('active')
   const [sourceFilter,         setSourceFilter]         = useState('')
   const [error,                setError]                = useState<string | null>(null)
   const [showForm,      setShowForm]      = useState(false)
@@ -142,7 +143,7 @@ export default function InvoicesTab() {
   const total    = Math.max(0, subtotal + taxAmt - form.discount_amount)
 
   // ── Fetch invoices ──
-  const fetchInvoices = useCallback(async (invoiceStatus: string, source: string) => {
+  const fetchInvoices = useCallback(async (invoiceStatus: string | InvoiceProgressStatus | 'active', source: string) => {
     setLoading(true)
     setError(null)
     try {
@@ -263,8 +264,30 @@ export default function InvoicesTab() {
     }
   }
 
+  // ── Total Outstanding ──
+  const totalOutstanding = invoices
+    .filter(inv => inv.invoice_status === 'awaiting_payment')
+    .reduce((sum, inv) => sum + inv.total, 0)
+
   return (
     <div className="space-y-4">
+
+      {/* Total Outstanding metric card */}
+      {totalOutstanding > 0 && (
+        <div className="flex items-center gap-4 px-5 py-4 bg-purple-500/10 border border-purple-500/25 rounded-2xl">
+          <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center flex-shrink-0">
+            <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+          </div>
+          <div>
+            <p className="text-purple-400/70 text-xs uppercase tracking-widest">Total Outstanding</p>
+            <p className="font-condensed font-bold text-purple-300 text-2xl leading-none">{fmt(totalOutstanding)}</p>
+          </div>
+          <p className="text-purple-400/50 text-xs ml-auto">Awaiting payment</p>
+        </div>
+      )}
+
       {/* Filters + New Invoice button */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="space-y-1.5">
@@ -507,15 +530,25 @@ export default function InvoicesTab() {
               const customerName = inv.customer
                 ? `${inv.customer.first_name} ${inv.customer.last_name}`
                 : '—'
-              const isInProgress = inv.invoice_status === 'in_progress' && inv.source_quote_id
+              const isNavigable = (
+                (inv.invoice_status === 'in_progress' && !!inv.source_quote_id) ||
+                inv.invoice_status === 'awaiting_payment' ||
+                inv.invoice_status === 'paid'
+              )
 
               return (
                 <div key={inv.id}
-                  onClick={isInProgress ? () => router.push(`/financials/invoices/${inv.id}`) : undefined}
-                  className={`grid grid-cols-1 sm:grid-cols-[140px_1fr_120px_90px_140px_44px] gap-2 sm:gap-4 px-5 py-4 hover:bg-white/2 transition-colors items-center ${isInProgress ? 'cursor-pointer' : ''}`}>
+                  onClick={isNavigable ? () => router.push(`/financials/invoices/${inv.id}`) : undefined}
+                  className={`grid grid-cols-1 sm:grid-cols-[140px_1fr_120px_90px_140px_44px] gap-2 sm:gap-4 px-5 py-4 hover:bg-white/2 transition-colors items-center ${isNavigable ? 'cursor-pointer' : ''}`}>
                   {/* Invoice # */}
                   <div className="flex items-center gap-1.5 min-w-0">
-                    <span className={`font-mono text-xs truncate ${isInProgress ? 'text-orange' : 'text-white'}`}>
+                    <span className={`font-mono text-xs truncate ${
+                      inv.invoice_status === 'in_progress' && inv.source_quote_id
+                        ? 'text-orange'
+                        : inv.invoice_status === 'awaiting_payment'
+                        ? 'text-purple-300'
+                        : 'text-white'
+                    }`}>
                       {inv.invoice_number}
                     </span>
                     {inv.source === 'quickwrench' && (
