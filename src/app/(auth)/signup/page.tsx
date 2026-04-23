@@ -269,7 +269,7 @@ export default function SignupPage() {
       {step === 2 && (
         <form onSubmit={handleSignup}>
           <p className="text-white/50 text-xs uppercase tracking-widest mb-4">
-            All plans include a 14-day free trial
+            14-day free trial — no charge until day 15
           </p>
 
           <div className="space-y-3 mb-5">
@@ -310,6 +310,10 @@ export default function SignupPage() {
                       ${dollars}<span className="text-white/40 text-xs font-normal">/mo</span>
                     </span>
                   </div>
+
+                  <p className="text-[11px] text-white/40 mb-2">
+                    14 days free, then ${dollars}/mo
+                  </p>
 
                   <ul className="space-y-0.5 mb-2">
                     {p.features.map((f) => (
@@ -356,7 +360,7 @@ export default function SignupPage() {
           </div>
 
           <p className="text-white/30 text-xs text-center mt-3">
-            No credit card required. Cancel anytime.
+            No charge for 14 days. Cancel anytime.
           </p>
         </form>
       )}
