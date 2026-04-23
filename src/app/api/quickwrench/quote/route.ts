@@ -5,6 +5,7 @@
 
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { hasQuickWrenchAccess } from '@/lib/subscription'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { QuoteSaveRequest } from '@/types/quickwrench'
 
@@ -136,6 +137,9 @@ export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!await hasQuickWrenchAccess(user.id)) {
+    return NextResponse.json({ error: 'QuickWrench requires QuickWrench or Elite plan.' }, { status: 403 })
+  }
 
   let body: QuoteSaveRequest
   try {

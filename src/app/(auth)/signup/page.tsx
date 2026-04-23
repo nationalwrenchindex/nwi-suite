@@ -4,50 +4,10 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { PLANS } from '@/lib/stripe-plans'
+import type { PlanTier } from '@/lib/stripe-plans'
 
 type ProfessionType = 'mobile_mechanic' | 'other'
-type Plan = 'starter' | 'professional' | 'elite'
-
-const PLANS: { id: Plan; name: string; price: string; description: string; features: string[] }[] = [
-  {
-    id: 'starter',
-    name: 'Starter',
-    price: '$29',
-    description: 'Perfect for solo operators just getting started.',
-    features: [
-      'Up to 50 customers',
-      'Job scheduling',
-      'Basic invoicing',
-      'Vehicle history',
-    ],
-  },
-  {
-    id: 'professional',
-    name: 'Professional',
-    price: '$59',
-    description: 'For growing mobile pros who mean business.',
-    features: [
-      'Unlimited customers',
-      'Advanced invoicing',
-      'Expense tracking',
-      'SMS notifications',
-      'Reporting dashboard',
-    ],
-  },
-  {
-    id: 'elite',
-    name: 'Elite',
-    price: '$99',
-    description: 'Full suite for high-volume operations.',
-    features: [
-      'Everything in Professional',
-      'Multi-technician support',
-      'Route optimization',
-      'Priority support',
-      'Custom branding',
-    ],
-  },
-]
 
 const PROFESSIONS: { value: ProfessionType; label: string; emoji: string; sub: string }[] = [
   {
@@ -73,7 +33,7 @@ export default function SignupPage() {
   const [password, setPassword]       = useState('')
   const [confirmPwd, setConfirmPwd]   = useState('')
   const [profession, setProfession]   = useState<ProfessionType>('mobile_mechanic')
-  const [plan, setPlan]               = useState<Plan>('professional')
+  const [plan, setPlan]               = useState<PlanTier>('pro')
   const [loading, setLoading]         = useState(false)
   const [error, setError]             = useState<string | null>(null)
   const [success, setSuccess]         = useState(false)
@@ -100,7 +60,7 @@ export default function SignupPage() {
     setError(null)
 
     const supabase = createClient()
-    const { error } = await supabase.auth.signUp({
+    const { error: signUpError } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -113,20 +73,36 @@ export default function SignupPage() {
       },
     })
 
-    if (error) {
-      setError(error.message)
+    if (signUpError) {
+      setError(signUpError.message)
       setLoading(false)
       return
     }
 
-    // If email confirmation is disabled in Supabase, the user is auto-logged in
+    // If email confirmation is disabled, user is auto-logged in — go straight to Stripe
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
+      // Kick off Stripe Checkout for the selected plan
+      try {
+        const res  = await fetch('/api/stripe/checkout', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ tier: plan, source: 'signup' }),
+        })
+        const json = await res.json()
+        if (json.url) {
+          window.location.href = json.url
+          return
+        }
+        // Stripe not configured (dev) — fall through to onboarding
+      } catch {
+        // Stripe error in dev — continue to onboarding
+      }
       router.push('/onboarding')
       return
     }
 
-    // Email confirmation is enabled — show confirmation message
+    // Email confirmation enabled — show "check your email" message
     setSuccess(true)
     setLoading(false)
   }
@@ -140,7 +116,8 @@ export default function SignupPage() {
         <h1 className="font-condensed font-bold text-3xl text-white mb-3">CHECK YOUR EMAIL</h1>
         <p className="text-white/60 text-sm leading-relaxed mb-6">
           We sent a confirmation link to <span className="text-white font-medium">{email}</span>.
-          Click the link to activate your account and start your onboarding.
+          Click the link to activate your account, then visit{' '}
+          <span className="text-orange">Billing</span> to start your free trial.
         </p>
         <Link href="/login" className="btn-ghost block">
           Back to sign in
@@ -157,7 +134,7 @@ export default function SignupPage() {
           CREATE ACCOUNT
         </h1>
         <p className="text-white/50 text-sm">
-          Join thousands of mobile pros on the{' '}
+          Join mobile pros on the{' '}
           <span style={{ color: '#FF6600' }}>National</span>{' '}
           <span style={{ color: '#2969B0' }}>Wrench Index</span>{' '}
           platform.
@@ -179,11 +156,7 @@ export default function SignupPage() {
             >
               {step > s ? '✓' : s}
             </div>
-            <span
-              className={`text-xs font-medium ${
-                step === s ? 'text-white' : 'text-white/30'
-              }`}
-            >
+            <span className={`text-xs font-medium ${step === s ? 'text-white' : 'text-white/30'}`}>
               {s === 1 ? 'Your Info' : 'Choose Plan'}
             </span>
             {s < 2 && <div className="w-8 h-px bg-dark-border mx-1" />}
@@ -205,7 +178,7 @@ export default function SignupPage() {
               autoComplete="name"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              placeholder="Marcus Rodriguez"
+              placeholder="Your name"
               className="nwi-input"
             />
           </div>
@@ -252,7 +225,6 @@ export default function SignupPage() {
             />
           </div>
 
-          {/* Profession type */}
           <div>
             <label className="nwi-label">I am a</label>
             <div className="grid grid-cols-2 gap-3">
@@ -295,46 +267,82 @@ export default function SignupPage() {
 
       {/* ── Step 2: Plan selection ── */}
       {step === 2 && (
-        <form onSubmit={handleSignup} className="space-y-4">
-          <p className="text-white/50 text-xs uppercase tracking-widest mb-1">All plans include a 14-day free trial</p>
+        <form onSubmit={handleSignup}>
+          <p className="text-white/50 text-xs uppercase tracking-widest mb-4">
+            All plans include a 14-day free trial
+          </p>
 
-          <div className="space-y-3">
-            {PLANS.map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => setPlan(p.id)}
-                className={`w-full rounded-xl border p-4 text-left transition-all relative ${
-                  plan === p.id
-                    ? 'border-orange bg-orange-muted'
-                    : 'border-dark-border bg-dark-card hover:border-white/30'
-                }`}
-              >
-                {p.id === 'professional' && (
-                  <span className="absolute top-3 right-3 bg-orange text-white text-[10px] font-bold px-2 py-0.5 rounded-full tracking-wider">
-                    POPULAR
-                  </span>
-                )}
-                <div className="flex items-baseline gap-2 mb-1">
-                  <span className="font-condensed font-bold text-white text-xl">{p.name}</span>
-                  <span className="text-orange font-bold">{p.price}<span className="text-white/40 text-xs font-normal">/mo</span></span>
-                </div>
-                <p className="text-white/50 text-xs mb-2">{p.description}</p>
-                <ul className="space-y-0.5">
-                  {p.features.map((f) => (
-                    <li key={f} className="flex items-center gap-1.5 text-xs text-white/70">
-                      <svg className="w-3 h-3 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+          <div className="space-y-3 mb-5">
+            {PLANS.map((p) => {
+              const isSelected = plan === p.tier
+              const isElite    = p.tier === 'elite'
+              const dollars    = (p.price / 100).toFixed(0)
+
+              return (
+                <button
+                  key={p.tier}
+                  type="button"
+                  onClick={() => setPlan(p.tier)}
+                  className={`w-full rounded-xl border p-4 text-left transition-all relative ${
+                    isSelected
+                      ? isElite
+                        ? 'border-orange bg-orange/8'
+                        : 'border-orange bg-orange-muted'
+                      : 'border-dark-border bg-dark-card hover:border-white/30'
+                  }`}
+                >
+                  {/* Badge */}
+                  {p.badge && (
+                    <span className={`absolute top-3 right-3 text-[10px] font-bold px-2 py-0.5 rounded-full tracking-wider ${
+                      p.badge === 'Best Value'
+                        ? 'bg-orange text-white'
+                        : p.badge === 'Most Popular'
+                        ? 'bg-orange text-white'
+                        : 'bg-white/10 text-white/60'
+                    }`}>
+                      {p.badge.toUpperCase()}
+                    </span>
+                  )}
+
+                  <div className="flex items-baseline gap-2 mb-1 pr-20">
+                    <span className="font-condensed font-bold text-white text-lg">{p.name}</span>
+                    <span className="text-orange font-bold text-sm">
+                      ${dollars}<span className="text-white/40 text-xs font-normal">/mo</span>
+                    </span>
+                  </div>
+
+                  <ul className="space-y-0.5 mb-2">
+                    {p.features.map((f) => (
+                      <li key={f} className="flex items-center gap-1.5 text-xs text-white/60">
+                        <svg className="w-3 h-3 text-success flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+
+                  {/* Elite promo */}
+                  {p.promo && (
+                    <p className="text-[11px] text-orange/80 leading-snug mt-2 border-t border-orange/20 pt-2">
+                      {p.promo}
+                    </p>
+                  )}
+
+                  {/* Selected indicator */}
+                  {isSelected && (
+                    <div className="absolute top-3 left-3 w-4 h-4 rounded-full bg-orange flex items-center justify-center">
+                      <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                       </svg>
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-              </button>
-            ))}
+                    </div>
+                  )}
+                </button>
+              )
+            })}
           </div>
 
-          <div className="flex gap-3 pt-1">
+          <div className="flex gap-3">
             <button
               type="button"
               onClick={() => { setStep(1); setError(null) }}
@@ -347,7 +355,7 @@ export default function SignupPage() {
             </button>
           </div>
 
-          <p className="text-white/30 text-xs text-center">
+          <p className="text-white/30 text-xs text-center mt-3">
             No credit card required. Cancel anytime.
           </p>
         </form>

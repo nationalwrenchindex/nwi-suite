@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { hasQuickWrenchAccess } from '@/lib/subscription'
 import AppNav from '@/components/layout/AppNav'
 import QuickWrenchClient from '@/components/quickwrench/QuickWrenchClient'
 
@@ -23,6 +24,9 @@ export default async function QuickWrenchPage({
     .single()
 
   if (!profile?.business_name) redirect('/onboarding')
+
+  const hasQW = await hasQuickWrenchAccess(user.id)
+  if (!hasQW) redirect('/dashboard?upsell=1')
 
   return (
     <div className="min-h-dvh bg-dark flex flex-col">

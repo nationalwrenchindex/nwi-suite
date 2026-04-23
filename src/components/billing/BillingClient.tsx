@@ -28,9 +28,11 @@ const STATUS_DISPLAY: Record<string, { label: string; badge: string }> = {
 }
 
 const TIER_DISPLAY: Record<string, string> = {
-  starter:    'Starter',
-  pro:        'Pro',
-  full_suite: 'Full Suite',
+  starter:     'NWI Starter',
+  pro:         'NWI Pro',
+  full_suite:  'NWI Full Suite',
+  quickwrench: 'NWI QuickWrench',
+  elite:       'NWI Elite',
 }
 
 function fmtPeriodEnd(iso: string | null): string {

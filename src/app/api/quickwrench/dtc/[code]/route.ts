@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { hasQuickWrenchAccess } from '@/lib/subscription'
 import { lookupDTC, getCategoryDescription } from '@/data/dtc-codes'
 
 export async function GET(
@@ -9,6 +10,9 @@ export async function GET(
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!await hasQuickWrenchAccess(user.id)) {
+    return NextResponse.json({ error: 'QuickWrench requires QuickWrench or Elite plan.' }, { status: 403 })
+  }
 
   const { code } = await params
   const normalized = code.trim().toUpperCase()

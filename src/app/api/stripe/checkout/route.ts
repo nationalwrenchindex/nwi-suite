@@ -3,17 +3,19 @@ import { createClient } from '@/lib/supabase/server'
 import { stripe, getPriceId, TIER_MODULES, type PlanTier } from '@/lib/stripe'
 import { getSubscription } from '@/lib/subscription'
 
+const VALID_TIERS: PlanTier[] = ['starter', 'pro', 'full_suite', 'quickwrench', 'elite']
+
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  let body: { tier?: string }
+  let body: { tier?: string; source?: string }
   try { body = await request.json() }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
   const tier = body.tier as PlanTier | undefined
-  if (!tier || !['starter', 'pro', 'full_suite'].includes(tier)) {
+  if (!tier || !VALID_TIERS.includes(tier)) {
     return NextResponse.json({ error: 'Invalid tier' }, { status: 400 })
   }
 
@@ -21,7 +23,7 @@ export async function POST(request: NextRequest) {
   try { priceId = getPriceId(tier) }
   catch {
     return NextResponse.json(
-      { error: 'Stripe prices not configured. Run scripts/stripe-setup.mjs first.' },
+      { error: 'Stripe prices not configured. Add STRIPE_PRICE_* env vars.' },
       { status: 503 },
     )
   }
@@ -33,6 +35,9 @@ export async function POST(request: NextRequest) {
     .single()
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
+
+  // Use /onboarding as success destination for new sign-ups, billing for existing users
+  const successPath = body.source === 'signup' ? '/onboarding' : '/billing?success=true'
 
   // Re-use existing Stripe customer if one exists
   const existingSub = await getSubscription(user.id)
@@ -53,10 +58,11 @@ export async function POST(request: NextRequest) {
     payment_method_types: ['card'],
     line_items: [{ price: priceId, quantity: 1 }],
     subscription_data: {
+      trial_period_days: 14,
       metadata: { user_id: user.id, tier },
     },
     metadata: { user_id: user.id, tier },
-    success_url: `${appUrl}/billing?success=true&session_id={CHECKOUT_SESSION_ID}`,
+    success_url: `${appUrl}${successPath}&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url:  `${appUrl}/billing?canceled=true`,
     allow_promotion_codes: true,
   })

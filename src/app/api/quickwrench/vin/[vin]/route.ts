@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { hasQuickWrenchAccess } from '@/lib/subscription'
 import type { QWVehicle } from '@/types/quickwrench'
 
 type RouteContext = { params: Promise<{ vin: string }> }
@@ -16,6 +17,9 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!await hasQuickWrenchAccess(user.id)) {
+    return NextResponse.json({ error: 'QuickWrench requires QuickWrench or Elite plan.' }, { status: 403 })
+  }
 
   const { vin } = await params
   const upperVin = vin.toUpperCase()

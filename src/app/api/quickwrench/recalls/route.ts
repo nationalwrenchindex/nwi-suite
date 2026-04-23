@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { hasQuickWrenchAccess } from '@/lib/subscription'
 
 export interface RecallResult {
   campaignNumber: string
@@ -14,6 +15,9 @@ export async function GET(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!await hasQuickWrenchAccess(user.id)) {
+    return NextResponse.json({ error: 'QuickWrench requires QuickWrench or Elite plan.' }, { status: 403 })
+  }
 
   const { searchParams } = new URL(req.url)
   const make  = searchParams.get('make')?.trim()

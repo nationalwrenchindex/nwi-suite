@@ -44,6 +44,12 @@ export async function getModuleAccess(userId: string): Promise<string[]> {
   return sub.modules ?? []
 }
 
+// Returns true if the user's plan includes QuickWrench (quickwrench or elite tier).
+export async function hasQuickWrenchAccess(userId: string): Promise<boolean> {
+  const modules = await getModuleAccess(userId)
+  return modules.includes('quickwrench')
+}
+
 // Resolves user_id from a Stripe customer ID (used in webhooks)
 export async function getUserIdByStripeCustomer(
   stripeCustomerId: string,

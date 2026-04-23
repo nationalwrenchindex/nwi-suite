@@ -1,11 +1,13 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { hasQuickWrenchAccess } from '@/lib/subscription'
 import AppNav from '@/components/layout/AppNav'
 import { STATUS_CONFIG, formatTime } from '@/lib/scheduler'
 import type { JobStatus } from '@/types/jobs'
 import DashboardShareButton from '@/components/dashboard/DashboardShareButton'
 import BookingPageCard from '@/components/dashboard/BookingPageCard'
+import DashboardQuickWrenchCard from '@/components/dashboard/DashboardQuickWrenchCard'
 
 export const metadata = { title: 'Dashboard — National Wrench Index Suite\u2122' }
 
@@ -276,7 +278,13 @@ function InvoiceRow({ inv, todayStr }: { inv: OutstandingInvoice; todayStr: stri
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ upsell?: string; upgraded?: string }>
+}) {
+  const sp = searchParams ? await searchParams : {}
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
@@ -288,6 +296,8 @@ export default async function DashboardPage() {
     .single()
 
   if (!profile?.business_name) redirect('/onboarding')
+
+  const hasQW = await hasQuickWrenchAccess(user.id)
 
   const today      = new Date()
   const todayStr   = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
@@ -613,18 +623,11 @@ export default async function DashboardPage() {
         <div>
           <p className="text-white/30 text-xs uppercase tracking-widest mb-3">Quick Access</p>
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            <DashboardQuickWrenchCard
+              hasAccess={hasQW}
+              autoOpen={sp?.upsell === '1'}
+            />
             {[
-              {
-                href: '/quickwrench',
-                label: 'QUICKWRENCH',
-                sub: 'Parts · Specs · Quotes',
-                accent: 'orange' as const,
-                icon: (
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-                  </svg>
-                ),
-              },
               {
                 href: '/scheduler',
                 label: 'SCHEDULER',

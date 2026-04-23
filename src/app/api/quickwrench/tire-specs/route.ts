@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { hasQuickWrenchAccess } from '@/lib/subscription'
 
 const SYSTEM_PROMPT = `You are an expert automotive technician with access to OEM specification databases. Respond ONLY with raw JSON — no markdown, no backticks, no preamble. First character must be {, last must be }.
 
@@ -19,6 +20,9 @@ export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!await hasQuickWrenchAccess(user.id)) {
+    return NextResponse.json({ error: 'QuickWrench requires QuickWrench or Elite plan.' }, { status: 403 })
+  }
 
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) return NextResponse.json({ error: 'AI service not configured.' }, { status: 503 })
