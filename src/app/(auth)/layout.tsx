@@ -48,18 +48,18 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             </ul>
           </div>
 
-          {/* Testimonial */}
+          {/* Founder statement */}
           <div className="bg-white/10 rounded-xl p-5 border border-white/10">
             <p className="text-white/90 text-sm italic leading-relaxed mb-3">
-              &ldquo;I went from tracking jobs in a notebook to running a fully professional operation. NWI paid for itself in the first week.&rdquo;
+              &ldquo;Built by a mobile diesel tech with 17 years of experience. The software I wished I&rsquo;d had when I started.&rdquo;
             </p>
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-orange/30 flex items-center justify-center">
-                <span className="text-orange font-bold text-xs">MR</span>
+                <span className="text-orange font-bold text-xs">BF</span>
               </div>
               <div>
-                <p className="text-white text-xs font-semibold">Marcus R.</p>
-                <p className="text-white/50 text-xs">Mobile Mechanic, Houston TX</p>
+                <p className="text-white text-xs font-semibold">Brock Fleeman, Founder</p>
+                <p className="text-white/50 text-xs">Diesel Tech — 17 Years Industry Experience</p>
               </div>
             </div>
           </div>
