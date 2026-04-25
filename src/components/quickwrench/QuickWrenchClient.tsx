@@ -196,9 +196,8 @@ function VINScanner({
   const videoRef  = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const rafRef    = useRef<number>(0)
-  const [phase,       setPhase]       = useState<'loading' | 'scanning' | 'found' | 'error'>('loading')
-  const [msg,         setMsg]         = useState('Starting camera…')
-  const [isLandscape, setIsLandscape] = useState(false)
+  const [phase, setPhase] = useState<'loading' | 'scanning' | 'found' | 'error'>('loading')
+  const [msg,   setMsg]   = useState('Starting camera…')
 
   useEffect(() => {
     let alive = true
@@ -279,26 +278,6 @@ function VINScanner({
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Portrait orientation lock — API where supported, overlay fallback elsewhere
-  useEffect(() => {
-    if (typeof screen.orientation?.lock === 'function') {
-      screen.orientation.lock('portrait').catch(() => {/* not supported in this browser */})
-    }
-
-    function checkOrientation() {
-      setIsLandscape(window.matchMedia('(orientation: landscape)').matches)
-    }
-    checkOrientation()
-    window.addEventListener('orientationchange', checkOrientation)
-    window.addEventListener('resize', checkOrientation)
-
-    return () => {
-      try { screen.orientation?.unlock() } catch { /* ignore */ }
-      window.removeEventListener('orientationchange', checkOrientation)
-      window.removeEventListener('resize', checkOrientation)
-    }
-  }, [])
-
   function dismiss() {
     cancelAnimationFrame(rafRef.current)
     try { streamRef.current?.getTracks().forEach(t => t.stop()) } catch { /* ignore */ }
@@ -315,18 +294,6 @@ function VINScanner({
       `}</style>
 
       <div className="fixed inset-0 z-50 bg-black overflow-hidden">
-        {isLandscape && (
-          <div className="absolute inset-0 z-10 bg-black flex flex-col items-center justify-center gap-4 px-8 text-center">
-            <svg className="w-12 h-12 text-orange/60" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18h3" />
-            </svg>
-            <p className="text-white font-semibold text-base">Rotate to Portrait</p>
-            <p className="text-white/50 text-sm leading-relaxed" style={{ maxWidth: 220 }}>
-              Hold your phone upright to aim the VIN scanner.
-            </p>
-          </div>
-        )}
-
         <video
           ref={videoRef}
           muted
