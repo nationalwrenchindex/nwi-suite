@@ -1,5 +1,5 @@
-// GET  /api/user/profile — returns fuel-tracking profile fields
-// PUT  /api/user/profile — updates average_mpg and/or fuel_type
+// GET  /api/user/profile — returns fuel-tracking and MPI profile fields
+// PUT  /api/user/profile — updates average_mpg, fuel_type, and/or offer_mpi_on_booking
 
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
@@ -11,15 +11,16 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from('profiles')
-    .select('average_mpg, fuel_type')
+    .select('average_mpg, fuel_type, offer_mpi_on_booking')
     .eq('id', user.id)
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   return NextResponse.json({
-    average_mpg: data?.average_mpg ?? null,
-    fuel_type:   data?.fuel_type   ?? 'gasoline',
+    average_mpg:          data?.average_mpg          ?? null,
+    fuel_type:            data?.fuel_type             ?? 'gasoline',
+    offer_mpi_on_booking: data?.offer_mpi_on_booking  ?? false,
   })
 }
 
@@ -53,6 +54,10 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'fuel_type must be gasoline or diesel' }, { status: 400 })
     }
     update.fuel_type = ft
+  }
+
+  if ('offer_mpi_on_booking' in body) {
+    update.offer_mpi_on_booking = !!body.offer_mpi_on_booking
   }
 
   if (Object.keys(update).length === 0) {

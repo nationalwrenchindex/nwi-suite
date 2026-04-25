@@ -122,6 +122,8 @@ export default function SettingsClient({
   defaultPaymentInstructions: initialPaymentInstr = '',
   initialAverageMpg   = null,
   initialFuelType     = 'gasoline',
+  hasQwAccess         = false,
+  initialOfferMpi     = false,
 }: {
   slug:                        string | null
   businessName:                string
@@ -130,6 +132,8 @@ export default function SettingsClient({
   defaultPaymentInstructions?: string
   initialAverageMpg?:          number | null
   initialFuelType?:            string
+  hasQwAccess?:                boolean
+  initialOfferMpi?:            boolean
 }) {
   const [shareOpen, setShareOpen] = useState(false)
 
@@ -143,6 +147,9 @@ export default function SettingsClient({
   const [mpg,         setMpg]         = useState(initialAverageMpg != null ? String(initialAverageMpg) : '')
   const [fuelType,    setFuelType]    = useState(initialFuelType)
   const [savingFuel,  setSavingFuel]  = useState(false)
+
+  const [offerMpi,    setOfferMpi]    = useState(initialOfferMpi)
+  const [savingMpi,   setSavingMpi]   = useState(false)
 
   const [savingSMS,   setSavingSMS]   = useState(false)
   const [savingEmail, setSavingEmail] = useState(false)
@@ -177,6 +184,23 @@ export default function SettingsClient({
       setTimeout(() => setSavedMsg(null), 3000)
     } catch { /* silently fail */ }
     setSavingPaymentInstr(false)
+  }
+
+  async function saveMpiSetting(value: boolean) {
+    setSavingMpi(true)
+    try {
+      const res = await fetch('/api/user/profile', {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ offer_mpi_on_booking: value }),
+      })
+      if (res.ok) {
+        setOfferMpi(value)
+        setSavedMsg(value ? '25-Point Inspection enabled on booking page.' : '25-Point Inspection removed from booking page.')
+        setTimeout(() => setSavedMsg(null), 3000)
+      }
+    } catch { /* silently fail */ }
+    setSavingMpi(false)
   }
 
   async function saveFuelSettings() {
@@ -376,6 +400,60 @@ export default function SettingsClient({
           </button>
         </div>
       </section>
+
+      {/* ── QuickWrench: 25-Point Inspection ── */}
+      {hasQwAccess ? (
+        <section>
+          <p className="text-white/40 text-xs uppercase tracking-widest mb-1">QuickWrench — 25-Point Inspection</p>
+          <p className="text-white/30 text-xs mb-4">
+            When enabled, customers will see a checkbox on your booking page to add the 25-point inspection.
+            This adds 0.5 labor hours to their invoice. You can waive the charge per-job.
+          </p>
+          <div className="rounded-xl border border-[#333] bg-[#222] p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-white text-sm font-medium">Offer 25-Point Inspection on Booking Page</p>
+                <p className="text-white/40 text-xs mt-1">
+                  {offerMpi ? 'Customers will see the inspection add-on checkbox.' : 'Inspection add-on is hidden from your booking page.'}
+                </p>
+              </div>
+              <button
+                disabled={savingMpi}
+                onClick={() => saveMpiSetting(!offerMpi)}
+                aria-pressed={offerMpi}
+                className={`relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 focus:outline-none disabled:opacity-50 ${
+                  offerMpi ? 'border-[#FF6600] bg-[#FF6600]' : 'border-[#444] bg-[#333]'
+                }`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform duration-200 ${
+                    offerMpi ? 'translate-x-5' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
+            </div>
+            <p className={`mt-3 text-xs font-semibold ${offerMpi ? 'text-success' : 'text-white/30'}`}>
+              {offerMpi ? 'YES — Offering on booking page' : 'NO — Not offering'}
+            </p>
+          </div>
+        </section>
+      ) : (
+        <section>
+          <p className="text-white/40 text-xs uppercase tracking-widest mb-1">QuickWrench — 25-Point Inspection</p>
+          <div className="rounded-xl border border-[#333] bg-[#222]/50 p-5 flex items-center gap-4 opacity-60">
+            <div className="flex-1">
+              <p className="text-white/50 text-sm font-medium">Offer 25-Point Inspection on Booking Page</p>
+              <p className="text-white/30 text-xs mt-1">Available on QuickWrench ($69/mo) and Elite ($99/mo) plans.</p>
+            </div>
+            <a
+              href="/billing"
+              className="flex-shrink-0 px-4 py-2 bg-[#FF6600] hover:bg-[#E55A00] text-white font-condensed font-bold text-xs rounded-lg transition-colors"
+            >
+              Upgrade
+            </a>
+          </div>
+        </section>
+      )}
 
       <ShareBookingModal
         slug={slug}

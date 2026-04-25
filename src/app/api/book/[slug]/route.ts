@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
-import { dispatchNotification } from '@/lib/notifications'
+import { dispatchNotification, notifyMechanic } from '@/lib/notifications'
 import { SERVICE_TYPES } from '@/lib/scheduler'
+import { INSPECTION_POINTS, getMappedService } from '@/lib/mpi-catalog'
 
 type RouteContext = { params: Promise<{ slug: string }> }
 
@@ -57,7 +58,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 
   const { data: profile, error } = await supabase
     .from('profiles')
-    .select('id, business_name, full_name, profession_type, service_area_description, working_hours')
+    .select('id, business_name, full_name, profession_type, service_area_description, working_hours, offer_mpi_on_booking')
     .eq('slug', slug)
     .single()
 
@@ -134,7 +135,8 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       service_area_description: profile.service_area_description,
       working_hours:            profile.working_hours,
     },
-    services: [...SERVICE_TYPES],
+    services:         [...SERVICE_TYPES],
+    offerMpi:         !!(profile as Record<string, unknown>).offer_mpi_on_booking,
   })
 }
 
@@ -144,10 +146,10 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
   const { slug } = await params
   const supabase  = createServiceClient()
 
-  // Look up tech
+  // Look up tech (include MPI fields for inspection handling)
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id')
+    .select('id, email, phone, offer_mpi_on_booking')
     .eq('slug', slug)
     .single()
 
@@ -243,6 +245,10 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     vehicleId = newVehicle?.id ?? null
   }
 
+  const wantsInspection =
+    body.inspection_requested === true &&
+    !!(profile as Record<string, unknown>).offer_mpi_on_booking
+
   // ── Create job ──
   const { data: job, error: jobErr } = await supabase
     .from('jobs')
@@ -256,6 +262,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       status:                     'scheduled',
       estimated_duration_minutes: estimated_duration_minutes ? Number(estimated_duration_minutes) : null,
       notes:                      notes ? String(notes) : null,
+      inspection_requested:       wantsInspection,
     })
     .select('id, job_date, job_time, service_type')
     .single()
@@ -265,19 +272,70 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ error: 'Failed to create booking' }, { status: 500 })
   }
 
+  const jobId = job.id as string
+
+  // ── Create inspection record + seed 25 items ──
+  if (wantsInspection) {
+    try {
+      const { data: inspection } = await supabase
+        .from('inspections')
+        .insert({
+          job_id:                jobId,
+          mechanic_id:           techId,
+          customer_id:           customerId,
+          status:                'pending',
+          requested_by_customer: true,
+          labor_charge_applied:  true,
+        })
+        .select('id')
+        .single()
+
+      if (inspection?.id) {
+        const items = INSPECTION_POINTS.map((pt) => {
+          const mapped = getMappedService(pt.point_name)
+          return {
+            inspection_id:       inspection.id as string,
+            point_number:        pt.point_number,
+            point_name:          pt.point_name,
+            category:            pt.category,
+            status:              'not_checked',
+            mapped_service_name: mapped?.name ?? null,
+          }
+        })
+        await supabase.from('inspection_items').insert(items)
+      }
+
+      // Notify mechanic of inspection request
+      const p = profile as Record<string, unknown>
+      const customerObj = customer as Record<string, unknown>
+      const customerName = `${customerObj.first_name} ${customerObj.last_name}`
+      notifyMechanic({
+        supabase,
+        mechanicId: techId,
+        message:    `New booking with 25-Point Inspection requested: ${customerName} — ${service_type} on ${job_date}. Check your scheduler for details.`,
+        subject:    `25-Point Inspection Requested — ${customerName}`,
+      }).catch((e) => console.error('[POST /api/book] mechanic notify error:', e))
+
+      void p // suppress unused warning
+    } catch (e) {
+      console.error('[POST /api/book] inspection creation error:', e)
+    }
+  }
+
   // ── Fire booking confirmation ──
   dispatchNotification({
     trigger:  'booking_confirmation',
-    jobId:    job.id as string,
+    jobId,
     supabase,
   }).catch((err) => console.error('[POST /api/book] notification error:', err))
 
   return NextResponse.json({
     job: {
-      id:           job.id,
-      job_date:     job.job_date,
-      job_time:     job.job_time,
-      service_type: job.service_type,
+      id:                   job.id,
+      job_date:             job.job_date,
+      job_time:             job.job_time,
+      service_type:         job.service_type,
+      inspection_requested: wantsInspection,
     },
     customer: {
       first_name: customer.first_name,

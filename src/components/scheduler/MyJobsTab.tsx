@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import type { Job, JobStatus } from '@/types/jobs'
+import type { Job, JobStatus, Inspection } from '@/types/jobs'
 import { STATUS_CONFIG, STATUS_TRANSITIONS, formatTime, formatDateShort } from '@/lib/scheduler'
+import MultiPointInspection from '@/components/quickwrench/MultiPointInspection'
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -55,10 +56,12 @@ function JobCard({
   job,
   onStatusChange,
   onCancel,
+  onOpenInspection,
 }: {
   job: Job
-  onStatusChange: (id: string, status: JobStatus) => Promise<void>
-  onCancel: (id: string) => Promise<void>
+  onStatusChange:   (id: string, status: JobStatus) => Promise<void>
+  onCancel:         (id: string) => Promise<void>
+  onOpenInspection: (jobId: string, customerName: string) => void
 }) {
   const [expanded,    setExpanded]    = useState(false)
   const [updating,    setUpdating]    = useState(false)
@@ -123,6 +126,11 @@ function JobCard({
               <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${cfg.badge}`}>
                 {cfg.label}
               </span>
+              {job.inspection_requested && (
+                <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold bg-blue/15 text-blue-light border border-blue/30">
+                  MPI Requested
+                </span>
+              )}
               {job.estimated_duration_minutes && (
                 <span className="text-white/30 text-xs">⏱ {job.estimated_duration_minutes} min</span>
               )}
@@ -212,6 +220,26 @@ function JobCard({
             </div>
           )}
 
+          {/* Multi-Point Inspection */}
+          {job.inspection_requested && job.status !== 'cancelled' && (
+            <div className="border-t border-dark-border pt-3">
+              <button
+                onClick={() => {
+                  const name = job.customer
+                    ? `${job.customer.first_name} ${job.customer.last_name}`
+                    : 'Customer'
+                  onOpenInspection(job.id, name)
+                }}
+                className="flex items-center gap-2 text-xs rounded-lg px-3 py-2 font-semibold border border-blue/40 text-blue-light bg-blue/10 hover:bg-blue/20 transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Complete 25-Point Inspection
+              </button>
+            </div>
+          )}
+
           {/* Notification actions — only show if job has a customer */}
           {job.customer && job.status !== 'cancelled' && (
             <div className="border-t border-dark-border pt-3 space-y-2">
@@ -284,6 +312,13 @@ export default function MyJobsTab({ onBookJob }: { onBookJob: () => void }) {
   const [toDate,      setToDate]    = useState('')
   const [activeRange, setActiveRange] = useState<string | null>(null)
 
+  // Multi-Point Inspection modal state
+  const [mpiModal, setMpiModal] = useState<{
+    inspectionId: string
+    customerName: string
+  } | null>(null)
+  const [mpiLoading, setMpiLoading] = useState(false)
+
   const fetchJobs = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -340,6 +375,23 @@ export default function MyJobsTab({ onBookJob }: { onBookJob: () => void }) {
       setJobs((prev) => prev.map((j) =>
         j.id === id ? { ...j, status: 'cancelled' as JobStatus } : j,
       ))
+    }
+  }
+
+  async function handleOpenInspection(jobId: string, customerName: string) {
+    setMpiLoading(true)
+    try {
+      const res = await fetch(`/api/inspections?job_id=${jobId}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Failed to load inspection')
+      const inspection = data.inspection as Inspection | null
+      if (inspection) {
+        setMpiModal({ inspectionId: inspection.id, customerName })
+      }
+    } catch (e) {
+      console.error('[handleOpenInspection]', e)
+    } finally {
+      setMpiLoading(false)
     }
   }
 
@@ -458,9 +510,32 @@ export default function MyJobsTab({ onBookJob }: { onBookJob: () => void }) {
               job={job}
               onStatusChange={handleStatusChange}
               onCancel={handleCancel}
+              onOpenInspection={handleOpenInspection}
             />
           ))}
         </div>
+      )}
+
+      {/* MPI loading indicator */}
+      {mpiLoading && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/50">
+          <div className="bg-dark-card border border-dark-border rounded-2xl px-8 py-6 flex items-center gap-3">
+            <svg className="w-5 h-5 text-orange animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+            </svg>
+            <span className="text-white/70 text-sm">Loading inspection…</span>
+          </div>
+        </div>
+      )}
+
+      {/* Multi-Point Inspection modal */}
+      {mpiModal && (
+        <MultiPointInspection
+          inspectionId={mpiModal.inspectionId}
+          customerName={mpiModal.customerName}
+          onClose={() => setMpiModal(null)}
+        />
       )}
     </div>
   )

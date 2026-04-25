@@ -12,7 +12,7 @@ export default async function BookingPage({ params }: PageProps) {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id, business_name, full_name, profession_type, service_area_description, working_hours')
+    .select('id, business_name, full_name, profession_type, service_area_description, working_hours, offer_mpi_on_booking')
     .eq('slug', techSlug)
     .single()
 
@@ -29,6 +29,7 @@ export default async function BookingPage({ params }: PageProps) {
           service_area_description: (profile.service_area_description as string | null) ?? null,
           working_hours:            (profile.working_hours  as Record<string, { enabled: boolean; open: string; close: string }> | null) ?? null,
         }}
+        offerMpi={!!(profile as Record<string, unknown>).offer_mpi_on_booking}
       />
     </div>
   )

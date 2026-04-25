@@ -58,11 +58,42 @@ export interface Job {
   estimated_duration_minutes: number | null
   notes: string | null
   internal_notes: string | null
+  inspection_requested: boolean | null
   created_at: string
   updated_at: string
   // Joined relations
   customer?: CustomerSummary | null
   vehicle?: VehicleSummary | null
+}
+
+// ─── Multi-Point Inspection ───────────────────────────────────────────────────
+
+export type InspectionStatus     = 'pending' | 'in_progress' | 'completed'
+export type InspectionItemStatus = 'not_checked' | 'pass' | 'fail' | 'needs_attention'
+export type InspectionCategory   = 'fluids_engine' | 'tires_wheels' | 'brakes_underside' | 'lights_safety'
+
+export interface InspectionItem {
+  id:                  string
+  inspection_id:       string
+  point_number:        number
+  point_name:          string
+  category:            InspectionCategory
+  status:              InspectionItemStatus
+  notes:               string | null
+  mapped_service_name: string | null
+}
+
+export interface Inspection {
+  id:                    string
+  job_id:                string
+  mechanic_id:           string
+  customer_id:           string | null
+  status:                InspectionStatus
+  requested_by_customer: boolean
+  labor_charge_applied:  boolean
+  created_at:            string
+  completed_at:          string | null
+  items?:                InspectionItem[]
 }
 
 export interface NotificationTemplate {

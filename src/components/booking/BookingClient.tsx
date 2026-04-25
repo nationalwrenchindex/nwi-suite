@@ -184,9 +184,11 @@ function MiniCalendar({
 export default function BookingClient({
   techSlug,
   profile,
+  offerMpi = false,
 }: {
   techSlug: string
   profile: PublicProfile
+  offerMpi?: boolean
 }) {
   const [step, setStep] = useState(1)
 
@@ -212,11 +214,15 @@ export default function BookingClient({
   const [vMake,     setVMake]     = useState('')
   const [vModel,    setVModel]    = useState('')
 
-  // Step 4
+  // Step 4 — booking submit
   const [submitting, setSubmitting] = useState(false)
   const [submitted,  setSubmitted]  = useState(false)
   const [jobId,      setJobId]      = useState<string | null>(null)
   const [error,      setError]      = useState<string | null>(null)
+
+  // MPI add-on (always off by default — customer must opt in)
+  const [inspectionRequested, setInspectionRequested] = useState(false)
+  const [showMpiModal,        setShowMpiModal]        = useState(false)
 
   // Fetch slots when date or fetchKey changes (fetchKey bumped on stale re-select)
   useEffect(() => {
@@ -264,6 +270,7 @@ export default function BookingClient({
         job_time:                   time,
         notes:                      notes || null,
         estimated_duration_minutes: service ? (SERVICE_DURATIONS[service] ?? 60) : 60,
+        inspection_requested:       inspectionRequested,
         customer: {
           first_name: firstName.trim(),
           last_name:  lastName.trim(),
@@ -336,6 +343,7 @@ export default function BookingClient({
               <Detail label="Time"        value={time  ? formatTime(time) : ''} />
               <Detail label="Est. Duration" value={durationLabel(duration)} />
               <Detail label="Technician"  value={bizName} />
+              {inspectionRequested && <Detail label="Add-On" value="25-Point Multi-Point Inspection" />}
               {jobId && <Detail label="Booking ID" value={jobId.slice(0, 8).toUpperCase()} />}
             </div>
 
@@ -586,9 +594,78 @@ export default function BookingClient({
                 )}
               </div>
 
+              {/* MPI add-on checkbox — only show if mechanic has enabled it */}
+              {offerMpi && (
+                <div className={`rounded-xl border px-4 py-4 mb-4 transition-colors ${
+                  inspectionRequested
+                    ? 'border-orange/40 bg-orange/5'
+                    : 'border-dark-border bg-dark-card'
+                }`}>
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={inspectionRequested}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setShowMpiModal(true)
+                        } else {
+                          setInspectionRequested(false)
+                        }
+                      }}
+                      className="mt-0.5 w-4 h-4 accent-orange flex-shrink-0"
+                    />
+                    <div>
+                      <p className="text-white text-sm font-medium">Add 25-Point Multi-Point Inspection</p>
+                      <p className="text-white/40 text-xs mt-0.5">
+                        A thorough inspection of 25 points — fluids, brakes, tires, lights, and more.
+                        {inspectionRequested && (
+                          <span className="text-orange font-medium"> +0.5 labor hours added.</span>
+                        )}
+                      </p>
+                    </div>
+                  </label>
+                </div>
+              )}
+
               <div className="bg-blue/10 border border-blue/20 rounded-xl px-4 py-3 text-xs text-white/50 mb-6">
                 By booking you agree to be contacted by {bizName} about this appointment.
               </div>
+
+              {/* MPI confirmation modal */}
+              {showMpiModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70">
+                  <div className="bg-dark-card border border-dark-border rounded-2xl p-6 max-w-sm w-full">
+                    <h3 className="font-condensed font-bold text-xl text-white tracking-wide mb-2">
+                      Add 25-Point Inspection?
+                    </h3>
+                    <p className="text-white/60 text-sm leading-relaxed mb-6">
+                      Adding the 25-point inspection will add{' '}
+                      <span className="text-white font-semibold">0.5 labor hours</span> to your invoice.
+                      Continue?
+                    </p>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => {
+                          setInspectionRequested(true)
+                          setShowMpiModal(false)
+                        }}
+                        className="flex-1 py-3 bg-orange hover:bg-orange/90 text-white font-condensed font-bold text-sm rounded-xl transition-colors"
+                      >
+                        Yes, Add It
+                      </button>
+                      <button
+                        onClick={() => {
+                          setInspectionRequested(false)
+                          setShowMpiModal(false)
+                        }}
+                        className="flex-1 py-3 border border-dark-border text-white/60 hover:text-white font-condensed font-bold text-sm rounded-xl transition-colors"
+                      >
+                        No Thanks
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

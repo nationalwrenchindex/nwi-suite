@@ -2,19 +2,23 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import AppNav from '@/components/layout/AppNav'
 import SettingsClient from '@/components/settings/SettingsClient'
+import { hasQuickWrenchAccess } from '@/lib/subscription'
 
-export const metadata = { title: 'Settings — National Wrench Index Suite\u2122' }
+export const metadata = { title: 'Settings — National Wrench Index Suite™' }
 
 export default async function SettingsPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('full_name, business_name, slug, share_sms_template, share_email_subject, share_email_body, default_payment_instructions, average_mpg, fuel_type')
-    .eq('id', user.id)
-    .single()
+  const [{ data: profile }, hasQW] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('full_name, business_name, slug, share_sms_template, share_email_subject, share_email_body, default_payment_instructions, average_mpg, fuel_type, offer_mpi_on_booking')
+      .eq('id', user.id)
+      .single(),
+    hasQuickWrenchAccess(user.id),
+  ])
 
   if (!profile?.business_name) redirect('/onboarding')
 
@@ -28,6 +32,7 @@ export default async function SettingsPage() {
     default_payment_instructions?: string
     average_mpg?: number | null
     fuel_type?: string | null
+    offer_mpi_on_booking?: boolean | null
   }
 
   return (
@@ -51,6 +56,8 @@ export default async function SettingsPage() {
           defaultPaymentInstructions={p.default_payment_instructions ?? ''}
           initialAverageMpg={p.average_mpg ?? null}
           initialFuelType={p.fuel_type ?? 'gasoline'}
+          hasQwAccess={hasQW}
+          initialOfferMpi={p.offer_mpi_on_booking ?? false}
         />
       </main>
     </div>

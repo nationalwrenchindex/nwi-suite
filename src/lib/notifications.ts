@@ -335,3 +335,35 @@ export async function dispatchNotification({
   result.success = !!(result.sms?.success || result.email?.success)
   return result
 }
+
+// ─── Mechanic notification (inspection request, etc.) ─────────────────────────
+// Sends SMS + email directly to the mechanic's registered contacts.
+
+export async function notifyMechanic({
+  supabase,
+  mechanicId,
+  message,
+  subject,
+}: {
+  supabase:   AnyDB
+  mechanicId: string
+  message:    string
+  subject:    string
+}): Promise<void> {
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('phone, email')
+    .eq('id', mechanicId)
+    .single()
+
+  if (profile?.phone) {
+    await sendSms(profile.phone as string, message).catch((e: unknown) =>
+      console.error('[notifyMechanic/sms]', e),
+    )
+  }
+  if (profile?.email) {
+    await sendEmail(profile.email as string, subject, message).catch((e: unknown) =>
+      console.error('[notifyMechanic/email]', e),
+    )
+  }
+}
