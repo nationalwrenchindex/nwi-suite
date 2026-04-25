@@ -281,11 +281,9 @@ function VINScanner({
 
   // Portrait orientation lock — API where supported, overlay fallback elsewhere
   useEffect(() => {
-    const orientation = screen.orientation as ScreenOrientation & {
-      lock?: (o: string) => Promise<void>
-      unlock?: () => void
+    if (typeof screen.orientation?.lock === 'function') {
+      screen.orientation.lock('portrait').catch(() => {/* not supported in this browser */})
     }
-    orientation.lock?.('portrait').catch(() => {/* not supported in this browser */})
 
     function checkOrientation() {
       setIsLandscape(window.matchMedia('(orientation: landscape)').matches)
@@ -295,7 +293,7 @@ function VINScanner({
     window.addEventListener('resize', checkOrientation)
 
     return () => {
-      try { orientation.unlock?.() } catch { /* ignore */ }
+      try { screen.orientation?.unlock() } catch { /* ignore */ }
       window.removeEventListener('orientationchange', checkOrientation)
       window.removeEventListener('resize', checkOrientation)
     }
