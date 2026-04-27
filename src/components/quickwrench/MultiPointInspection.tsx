@@ -97,9 +97,10 @@ export default function MultiPointInspection({
   const [loading,    setLoading]    = useState(true)
   const [saving,     setSaving]     = useState(false)
   const [completing, setCompleting] = useState(false)
-  const [genQuote,   setGenQuote]   = useState(false)
-  const [quoteId,    setQuoteId]    = useState<string | null>(null)
-  const [error,      setError]      = useState<string | null>(null)
+  const [genQuote,      setGenQuote]      = useState(false)
+  const [quoteId,       setQuoteId]       = useState<string | null>(null)
+  const [quoteWarning,  setQuoteWarning]  = useState<string | null>(null)
+  const [error,         setError]         = useState<string | null>(null)
 
   const loadInspection = useCallback(async () => {
     setLoading(true)
@@ -182,13 +183,15 @@ export default function MultiPointInspection({
   async function handleGenerateQuote() {
     setGenQuote(true)
     setError(null)
+    setQuoteWarning(null)
     try {
-      const res = await fetch(`/api/inspections/${inspectionId}/generate-quote`, {
-        method: 'POST',
-      })
+      const res  = await fetch(`/api/inspections/${inspectionId}/generate-quote`, { method: 'POST' })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Quote generation failed')
       setQuoteId(data.quoteId)
+      if (data.usedFallback) {
+        setQuoteWarning('Quote created with placeholder pricing — AI service unavailable. Add parts and pricing manually before sending.')
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Quote generation failed')
     } finally {
@@ -270,18 +273,25 @@ export default function MultiPointInspection({
 
             {/* Quote generated success */}
             {quoteId && (
-              <div className="bg-success/10 border border-success/30 rounded-xl px-4 py-4">
-                <p className="text-success font-semibold text-sm mb-1">Quote created successfully!</p>
-                <p className="text-white/50 text-xs mb-3">
-                  A draft quote has been created with {failedCount} service{failedCount !== 1 ? 's' : ''}.
-                  Open it to set pricing and send it to the customer.
-                </p>
-                <a
-                  href="/financials?tab=quotes"
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-success border border-success/40 rounded-lg px-3 py-2 hover:bg-success/10 transition-colors"
-                >
-                  View Quote in Financials →
-                </a>
+              <div className="space-y-2">
+                <div className="bg-success/10 border border-success/30 rounded-xl px-4 py-4">
+                  <p className="text-success font-semibold text-sm mb-1">Quote created successfully!</p>
+                  <p className="text-white/50 text-xs mb-3">
+                    A draft quote has been created with AI-estimated labor and parts pricing.
+                    Review the numbers and send it to the customer.
+                  </p>
+                  <a
+                    href="/financials?tab=quotes"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-success border border-success/40 rounded-lg px-3 py-2 hover:bg-success/10 transition-colors"
+                  >
+                    View Quote in Financials →
+                  </a>
+                </div>
+                {quoteWarning && (
+                  <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-3 text-amber-400 text-xs">
+                    {quoteWarning}
+                  </div>
+                )}
               </div>
             )}
 
@@ -346,7 +356,17 @@ export default function MultiPointInspection({
                     disabled={genQuote}
                     className="flex-1 sm:flex-none sm:px-6 py-3 bg-orange hover:bg-orange/90 disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-xl transition-colors"
                   >
-                    {genQuote ? 'Generating…' : `Generate Quote (${failedCount} item${failedCount !== 1 ? 's' : ''})`}
+                    {genQuote ? (
+                      <span className="flex items-center justify-center gap-2">
+                        <svg className="w-4 h-4 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                        </svg>
+                        Building quote with AI pricing…
+                      </span>
+                    ) : (
+                      `Generate Quote (${failedCount} item${failedCount !== 1 ? 's' : ''})`
+                    )}
                   </button>
                 )}
                 {failedCount === 0 && !quoteId && (
