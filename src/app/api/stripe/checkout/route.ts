@@ -52,20 +52,27 @@ export async function POST(request: NextRequest) {
     customerId = customer.id
   }
 
-  const session = await stripe.checkout.sessions.create({
-    customer:             customerId,
-    mode:                 'subscription',
-    payment_method_types: ['card'],
-    line_items: [{ price: priceId, quantity: 1 }],
-    subscription_data: {
-      trial_period_days: 14,
+  let session
+  try {
+    session = await stripe.checkout.sessions.create({
+      customer:             customerId,
+      mode:                 'subscription',
+      payment_method_types: ['card'],
+      line_items: [{ price: priceId, quantity: 1 }],
+      subscription_data: {
+        trial_period_days: 14,
+        metadata: { user_id: user.id, tier },
+      },
       metadata: { user_id: user.id, tier },
-    },
-    metadata: { user_id: user.id, tier },
-    success_url: `${appUrl}${successPath}&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url:  `${appUrl}/billing?canceled=true`,
-    allow_promotion_codes: true,
-  })
+      success_url: `${appUrl}${successPath}&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url:  `${appUrl}/billing?canceled=true`,
+      allow_promotion_codes: true,
+    })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Stripe checkout session creation failed'
+    console.error('[POST /api/stripe/checkout] session create error:', err)
+    return NextResponse.json({ error: message }, { status: 502 })
+  }
 
   return NextResponse.json({ url: session.url })
 }

@@ -124,6 +124,9 @@ export default function SettingsClient({
   initialFuelType     = 'gasoline',
   hasQwAccess         = false,
   initialOfferMpi     = false,
+  initialLaborRate    = 125,
+  initialMarkupPct    = 20,
+  initialTaxPct       = 8.5,
 }: {
   slug:                        string | null
   businessName:                string
@@ -134,6 +137,9 @@ export default function SettingsClient({
   initialFuelType?:            string
   hasQwAccess?:                boolean
   initialOfferMpi?:            boolean
+  initialLaborRate?:           number
+  initialMarkupPct?:           number
+  initialTaxPct?:              number
 }) {
   const [shareOpen, setShareOpen] = useState(false)
 
@@ -150,6 +156,11 @@ export default function SettingsClient({
 
   const [offerMpi,    setOfferMpi]    = useState(initialOfferMpi)
   const [savingMpi,   setSavingMpi]   = useState(false)
+
+  const [laborRate,     setLaborRate]     = useState(String(initialLaborRate))
+  const [markupPct,     setMarkupPct]     = useState(String(initialMarkupPct))
+  const [taxPct,        setTaxPct]        = useState(String(initialTaxPct))
+  const [savingRates,   setSavingRates]   = useState(false)
 
   const [savingSMS,   setSavingSMS]   = useState(false)
   const [savingEmail, setSavingEmail] = useState(false)
@@ -201,6 +212,32 @@ export default function SettingsClient({
       }
     } catch { /* silently fail */ }
     setSavingMpi(false)
+  }
+
+  async function savePricingRates() {
+    setSavingRates(true)
+    try {
+      const lr = parseFloat(laborRate)
+      const mp = parseFloat(markupPct)
+      const tp = parseFloat(taxPct)
+      if (isNaN(lr) || lr < 0) { setSavedMsg('Enter a valid labor rate.'); setTimeout(() => setSavedMsg(null), 3000); setSavingRates(false); return }
+      if (isNaN(mp) || mp < 0) { setSavedMsg('Enter a valid markup %.'); setTimeout(() => setSavedMsg(null), 3000); setSavingRates(false); return }
+      if (isNaN(tp) || tp < 0) { setSavedMsg('Enter a valid tax %.'); setTimeout(() => setSavedMsg(null), 3000); setSavingRates(false); return }
+      const res = await fetch('/api/user/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          default_labor_rate:           lr,
+          default_parts_markup_percent: mp,
+          default_tax_percent:          tp,
+        }),
+      })
+      if (res.ok) {
+        setSavedMsg('Pricing defaults saved.')
+        setTimeout(() => setSavedMsg(null), 3000)
+      }
+    } catch { /* silently fail */ }
+    setSavingRates(false)
   }
 
   async function saveFuelSettings() {
@@ -352,6 +389,62 @@ export default function SettingsClient({
             className="px-5 py-2 bg-[#FF6600] hover:bg-[#E55A00] disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-lg transition-colors"
           >
             {savingPaymentInstr ? 'Saving…' : 'Save Default Instructions'}
+          </button>
+        </div>
+      </section>
+
+      {/* ── Pricing & Rates ── */}
+      <section>
+        <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Pricing &amp; Rates</p>
+        <p className="text-white/30 text-xs mb-4">
+          Default values pre-filled in QuickWrench quotes and MPI-generated quotes. Edit per-quote any time.
+        </p>
+        <div className="rounded-xl border border-[#333] bg-[#222] p-5 space-y-4">
+          <div>
+            <label className="nwi-label">Labor Rate ($/hr)</label>
+            <input
+              type="number"
+              min="0"
+              max="9999"
+              step="1"
+              className="nwi-input text-sm w-full"
+              placeholder="125"
+              value={laborRate}
+              onChange={e => setLaborRate(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="nwi-label">Parts Markup (%)</label>
+            <input
+              type="number"
+              min="0"
+              max="999"
+              step="1"
+              className="nwi-input text-sm w-full"
+              placeholder="20"
+              value={markupPct}
+              onChange={e => setMarkupPct(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="nwi-label">Tax Rate (%)</label>
+            <input
+              type="number"
+              min="0"
+              max="99"
+              step="0.1"
+              className="nwi-input text-sm w-full"
+              placeholder="8.5"
+              value={taxPct}
+              onChange={e => setTaxPct(e.target.value)}
+            />
+          </div>
+          <button
+            onClick={savePricingRates}
+            disabled={savingRates}
+            className="px-5 py-2 bg-[#FF6600] hover:bg-[#E55A00] disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-lg transition-colors"
+          >
+            {savingRates ? 'Saving…' : 'Save Pricing Defaults'}
           </button>
         </div>
       </section>

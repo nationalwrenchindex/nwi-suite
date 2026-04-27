@@ -19,11 +19,18 @@ export default async function QuickWrenchPage({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('full_name, business_name')
+    .select('full_name, business_name, default_labor_rate, default_parts_markup_percent, default_tax_percent')
     .eq('id', user.id)
     .single()
 
   if (!profile?.business_name) redirect('/onboarding')
+
+  const p = profile as {
+    business_name?: string
+    default_labor_rate?: number | null
+    default_parts_markup_percent?: number | null
+    default_tax_percent?: number | null
+  }
 
   const hasQW = await hasQuickWrenchAccess(user.id)
   if (!hasQW) redirect('/dashboard?upsell=1')
@@ -47,7 +54,12 @@ export default async function QuickWrenchPage({
             VIN to customer quote in under 2 minutes. Parts · Specs · Quote.
           </p>
         </div>
-        <QuickWrenchClient loadQuoteId={sp.loadQuoteId} />
+        <QuickWrenchClient
+          loadQuoteId={sp.loadQuoteId}
+          defaultLaborRate={p.default_labor_rate ?? 125}
+          defaultMarkupPct={p.default_parts_markup_percent ?? 20}
+          defaultTaxPct={p.default_tax_percent ?? 8.5}
+        />
       </main>
     </div>
   )

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
@@ -113,6 +113,19 @@ export default function OnboardingPage() {
 
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
+
+  // Immediately provision the subscription when arriving from Stripe checkout.
+  // This ensures module access is available before the webhook fires.
+  useEffect(() => {
+    const params    = new URLSearchParams(window.location.search)
+    const sessionId = params.get('session_id')
+    if (!sessionId) return
+    fetch('/api/stripe/provision-session', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ session_id: sessionId }),
+    }).catch(() => {})
+  }, [])
 
   // ── Helpers ──
 

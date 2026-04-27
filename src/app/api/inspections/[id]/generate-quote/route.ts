@@ -79,20 +79,16 @@ export async function POST(_req: Request, { params }: RouteContext) {
     console.warn(`[generate-quote] No vehicle linked to inspection ${id} — AI will use generic context`)
   }
 
-  // Pull mechanic's saved rate settings from their most-recent properly-built quote.
-  // Filter labor_rate > 0 to exclude legacy skeleton quotes that were inserted with $0.
-  const { data: recentQuotes } = await supabase
-    .from('quotes')
-    .select('labor_rate, parts_markup_percent, tax_percent')
-    .eq('user_id', user.id)
-    .gt('labor_rate', 0)
-    .order('created_at', { ascending: false })
-    .limit(1)
+  // Pull mechanic's configured pricing defaults from their profile.
+  const { data: pricingProfile } = await supabase
+    .from('profiles')
+    .select('default_labor_rate, default_parts_markup_percent, default_tax_percent')
+    .eq('id', user.id)
+    .single()
 
-  const recentQ   = recentQuotes?.[0]
-  const laborRate = recentQ?.labor_rate          ? Number(recentQ.labor_rate)          : 125
-  const markupPct = recentQ?.parts_markup_percent ? Number(recentQ.parts_markup_percent) : 20
-  const taxPct    = recentQ?.tax_percent    != null ? Number(recentQ.tax_percent)         : 8.5
+  const laborRate = pricingProfile?.default_labor_rate            != null ? Number(pricingProfile.default_labor_rate)            : 125
+  const markupPct = pricingProfile?.default_parts_markup_percent  != null ? Number(pricingProfile.default_parts_markup_percent)  : 20
+  const taxPct    = pricingProfile?.default_tax_percent           != null ? Number(pricingProfile.default_tax_percent)           : 8.5
 
   // Identify failed/needs_attention items, deduplicate by mapped service name
   const failedItems = ((inspection.items as RawItem[]) ?? []).filter(

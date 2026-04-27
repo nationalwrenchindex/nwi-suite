@@ -14,7 +14,7 @@ export default async function SettingsPage() {
   const [{ data: profile }, hasQW] = await Promise.all([
     supabase
       .from('profiles')
-      .select('full_name, business_name, slug, share_sms_template, share_email_subject, share_email_body, default_payment_instructions, average_mpg, fuel_type, offer_mpi_on_booking')
+      .select('full_name, business_name, slug, share_sms_template, share_email_subject, share_email_body, default_payment_instructions, average_mpg, fuel_type, offer_mpi_on_booking, default_labor_rate, default_parts_markup_percent, default_tax_percent')
       .eq('id', user.id)
       .single(),
     hasQuickWrenchAccess(user.id),
@@ -33,6 +33,9 @@ export default async function SettingsPage() {
     average_mpg?: number | null
     fuel_type?: string | null
     offer_mpi_on_booking?: boolean | null
+    default_labor_rate?: number | null
+    default_parts_markup_percent?: number | null
+    default_tax_percent?: number | null
   }
 
   return (
@@ -58,6 +61,9 @@ export default async function SettingsPage() {
           initialFuelType={p.fuel_type ?? 'gasoline'}
           hasQwAccess={hasQW}
           initialOfferMpi={p.offer_mpi_on_booking ?? false}
+          initialLaborRate={p.default_labor_rate ?? 125}
+          initialMarkupPct={p.default_parts_markup_percent ?? 20}
+          initialTaxPct={p.default_tax_percent ?? 8.5}
         />
       </main>
     </div>

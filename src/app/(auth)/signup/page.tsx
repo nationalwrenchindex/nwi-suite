@@ -94,9 +94,14 @@ export default function SignupPage() {
           window.location.href = json.url
           return
         }
-        // Stripe not configured (dev) — fall through to onboarding
+        // 503 = Stripe not configured (dev environment) — continue to onboarding
+        if (res.status !== 503) {
+          setError(json.error ?? 'Checkout failed. Please try again.')
+          setLoading(false)
+          return
+        }
       } catch {
-        // Stripe error in dev — continue to onboarding
+        // Network error in dev — continue to onboarding
       }
       router.push('/onboarding')
       return

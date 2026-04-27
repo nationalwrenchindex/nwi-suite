@@ -1544,7 +1544,17 @@ interface LoadedQuoteDefaults {
   customerPhone: string
 }
 
-export default function QuickWrenchClient({ loadQuoteId }: { loadQuoteId?: string }) {
+export default function QuickWrenchClient({
+  loadQuoteId,
+  defaultLaborRate = 125,
+  defaultMarkupPct = 20,
+  defaultTaxPct    = 8.5,
+}: {
+  loadQuoteId?:      string
+  defaultLaborRate?: number
+  defaultMarkupPct?: number
+  defaultTaxPct?:    number
+}) {
   const [activeTab,     setActiveTab]     = useState(0)
   const [vehicle,       setVehicle]       = useState<QWVehicle | null>(null)
   const [selectedJobs,  setSelectedJobs]  = useState<SelectedJob[]>([])
@@ -1932,9 +1942,9 @@ export default function QuickWrenchClient({ loadQuoteId }: { loadQuoteId?: strin
             selectedJobs={selectedJobs}
             techGuides={techGuides}
             partsByJob={partsByJob}
-            initialLaborRate={quoteDefaults?.laborRate}
-            initialMarkupPct={quoteDefaults?.markupPct}
-            initialTaxPct={quoteDefaults?.taxPct}
+            initialLaborRate={quoteDefaults?.laborRate ?? defaultLaborRate}
+            initialMarkupPct={quoteDefaults?.markupPct ?? defaultMarkupPct}
+            initialTaxPct={quoteDefaults?.taxPct ?? defaultTaxPct}
             initialCustomerName={quoteDefaults?.customerName}
             initialCustomerPhone={quoteDefaults?.customerPhone}
           />
