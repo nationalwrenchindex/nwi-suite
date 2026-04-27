@@ -79,18 +79,20 @@ export async function POST(_req: Request, { params }: RouteContext) {
     console.warn(`[generate-quote] No vehicle linked to inspection ${id} — AI will use generic context`)
   }
 
-  // Pull mechanic's most-recent rate settings from their quote history
+  // Pull mechanic's saved rate settings from their most-recent properly-built quote.
+  // Filter labor_rate > 0 to exclude legacy skeleton quotes that were inserted with $0.
   const { data: recentQuotes } = await supabase
     .from('quotes')
-    .select('labor_rate, tax_percent')
+    .select('labor_rate, parts_markup_percent, tax_percent')
     .eq('user_id', user.id)
-    .not('labor_rate', 'is', null)
+    .gt('labor_rate', 0)
     .order('created_at', { ascending: false })
     .limit(1)
 
-  const recentQ  = recentQuotes?.[0]
-  const laborRate = Number(recentQ?.labor_rate ?? 125)
-  const taxPct    = Number(recentQ?.tax_percent ?? 8.5)
+  const recentQ   = recentQuotes?.[0]
+  const laborRate = recentQ?.labor_rate          ? Number(recentQ.labor_rate)          : 125
+  const markupPct = recentQ?.parts_markup_percent ? Number(recentQ.parts_markup_percent) : 20
+  const taxPct    = recentQ?.tax_percent    != null ? Number(recentQ.tax_percent)         : 8.5
 
   // Identify failed/needs_attention items, deduplicate by mapped service name
   const failedItems = ((inspection.items as RawItem[]) ?? []).filter(
@@ -193,8 +195,10 @@ export async function POST(_req: Request, { params }: RouteContext) {
     }))
   }
 
-  // Build line items (parts only — QuotesTab renders labor separately via labor_hours + labor_rate)
-  // unit_price = AI retail price; parts_markup_percent = 0 since AI already included markup.
+  // Build line items (parts only — QuotesTab renders labor separately via labor_hours + labor_rate).
+  // unit_price = AI retail price (already includes supplier margin). Storing the mechanic's
+  // markupPct alongside it matches QuickWrench convention: QuotesTab reverse-engineers
+  // cost = retail / (1 + markup) and re-applies markup on display — final prices are identical.
   type LineItem = { description: string; quantity: number; unit_price: number; total: number }
 
   const lineItems: LineItem[] = []
@@ -253,7 +257,7 @@ export async function POST(_req: Request, { params }: RouteContext) {
       labor_hours:          totalHours,
       labor_rate:           laborRate,
       parts_subtotal:       costBasis,
-      parts_markup_percent: 0,
+      parts_markup_percent: markupPct,
       labor_subtotal:       laborSubtotal,
       tax_percent:          taxPct,
       tax_amount:           taxAmount,
