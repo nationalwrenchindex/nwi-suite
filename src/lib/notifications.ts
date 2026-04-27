@@ -127,10 +127,18 @@ async function sendSms(
         body: new URLSearchParams({ From: from, To: e164, Body: body }).toString(),
       },
     )
-    const data = await res.json() as { sid?: string; message?: string }
+    const data = await res.json() as { sid?: string; message?: string; code?: number }
     if (!res.ok) {
-      console.error('[NWI/SMS] Twilio rejected:', data.message)
-      return { success: false, error: data.message }
+      console.error('[NWI/SMS] Twilio rejected (HTTP', res.status, ', code', data.code, '):', data.message)
+      let userError: string
+      if (res.status === 401 || data.code === 20003) {
+        userError = 'SMS service authentication failed — check Twilio credentials.'
+      } else if (data.code === 20008 || data.code === 20009) {
+        userError = 'SMS service unavailable — insufficient account balance.'
+      } else {
+        userError = 'SMS delivery failed. Please try again later.'
+      }
+      return { success: false, error: userError }
     }
     return { success: true, sid: data.sid }
   } catch (err) {

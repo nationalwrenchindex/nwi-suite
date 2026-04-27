@@ -76,10 +76,19 @@ export async function POST(
     month: 'short', day: 'numeric', year: 'numeric',
   })
 
+  // Generate the next sequential quote number for this user
+  const { count: existingCount } = await supabase
+    .from('quotes')
+    .select('*', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+
+  const quoteNumber = `Q-${String((existingCount ?? 0) + 1).padStart(4, '0')}`
+
   const { data: quote, error: quoteErr } = await supabase
     .from('quotes')
     .insert({
       user_id:              user.id,
+      quote_number:         quoteNumber,
       customer_id:          inspection.customer_id ?? null,
       status:               'draft',
       line_items:           lineItems,
