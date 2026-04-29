@@ -175,8 +175,13 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ error: 'job_date is required' }, { status: 400 })
   if (!job_time || typeof job_time !== 'string')
     return NextResponse.json({ error: 'job_time is required' }, { status: 400 })
-  if (!customer?.first_name || !customer?.last_name || !customer?.phone)
-    return NextResponse.json({ error: 'customer first_name, last_name, and phone are required' }, { status: 400 })
+  if (!customer?.first_name || !customer?.last_name)
+    return NextResponse.json({ error: 'customer first_name and last_name are required' }, { status: 400 })
+
+  const smsConsent = body.sms_consent === true
+  // Phone is required only when customer opted into SMS
+  if (smsConsent && !customer?.phone)
+    return NextResponse.json({ error: 'phone is required when SMS consent is given' }, { status: 400 })
 
   // Server-side time validation — reject past slots and same-day slots inside the buffer
   const { dateStr: todayStr, nowMin } = getTechNow(DEFAULT_TIMEZONE)
@@ -197,31 +202,52 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
   const techId = profile.id as string
 
   // ── Find or create customer ──
-  const phone = String(customer.phone).replace(/\D/g, '')
-  const { data: existingCustomers } = await supabase
-    .from('customers')
-    .select('id')
-    .eq('user_id', techId)
-    .ilike('phone', `%${phone.slice(-10)}%`)
-    .limit(1)
-
+  const rawPhone = customer.phone ? String(customer.phone).trim() : ''
+  const digits   = rawPhone.replace(/\D/g, '')
   let customerId: string
 
-  if (existingCustomers && existingCustomers.length > 0) {
-    customerId = existingCustomers[0].id as string
+  if (digits.length >= 10) {
+    // Try to match an existing customer by phone
+    const { data: existingCustomers } = await supabase
+      .from('customers')
+      .select('id')
+      .eq('user_id', techId)
+      .ilike('phone', `%${digits.slice(-10)}%`)
+      .limit(1)
+
+    if (existingCustomers && existingCustomers.length > 0) {
+      customerId = existingCustomers[0].id as string
+    } else {
+      const { data: newCustomer, error: custErr } = await supabase
+        .from('customers')
+        .insert({
+          user_id:    techId,
+          first_name: String(customer.first_name),
+          last_name:  String(customer.last_name),
+          phone:      rawPhone,
+          email:      customer.email ? String(customer.email) : null,
+        })
+        .select('id')
+        .single()
+      if (custErr || !newCustomer) {
+        console.error('[POST /api/book] customer insert error:', custErr)
+        return NextResponse.json({ error: 'Failed to create customer record' }, { status: 500 })
+      }
+      customerId = newCustomer.id as string
+    }
   } else {
+    // No phone provided — create customer without one
     const { data: newCustomer, error: custErr } = await supabase
       .from('customers')
       .insert({
         user_id:    techId,
         first_name: String(customer.first_name),
         last_name:  String(customer.last_name),
-        phone:      String(customer.phone),
+        phone:      null,
         email:      customer.email ? String(customer.email) : null,
       })
       .select('id')
       .single()
-
     if (custErr || !newCustomer) {
       console.error('[POST /api/book] customer insert error:', custErr)
       return NextResponse.json({ error: 'Failed to create customer record' }, { status: 500 })
@@ -263,6 +289,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       estimated_duration_minutes: estimated_duration_minutes ? Number(estimated_duration_minutes) : null,
       notes:                      notes ? String(notes) : null,
       inspection_requested:       wantsInspection,
+      sms_consent:                smsConsent,
     })
     .select('id, job_date, job_time, service_type')
     .single()

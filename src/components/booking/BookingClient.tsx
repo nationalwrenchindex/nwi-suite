@@ -220,6 +220,9 @@ export default function BookingClient({
   const [jobId,      setJobId]      = useState<string | null>(null)
   const [error,      setError]      = useState<string | null>(null)
 
+  // SMS consent (unchecked by default — 10DLC/TCR compliance)
+  const [smsConsent, setSmsConsent] = useState(false)
+
   // MPI add-on (always off by default — customer must opt in)
   const [inspectionRequested, setInspectionRequested] = useState(false)
   const [showMpiModal,        setShowMpiModal]        = useState(false)
@@ -245,7 +248,11 @@ export default function BookingClient({
   function canAdvance() {
     if (step === 1) return !!service
     if (step === 2) return !!date && !!time
-    if (step === 3) return firstName.trim() !== '' && lastName.trim() !== '' && phone.trim() !== ''
+    if (step === 3) return (
+      firstName.trim() !== '' &&
+      lastName.trim()  !== '' &&
+      (!smsConsent || phone.trim() !== '')
+    )
     return true
   }
 
@@ -271,10 +278,11 @@ export default function BookingClient({
         notes:                      notes || null,
         estimated_duration_minutes: service ? (SERVICE_DURATIONS[service] ?? 60) : 60,
         inspection_requested:       inspectionRequested,
+        sms_consent:                smsConsent,
         customer: {
           first_name: firstName.trim(),
           last_name:  lastName.trim(),
-          phone:      phone.trim(),
+          phone:      phone.trim() || null,
           email:      email.trim() || null,
         },
       }
@@ -513,10 +521,42 @@ export default function BookingClient({
                 </div>
 
                 <div>
-                  <label className="nwi-label">Phone number <span className="text-danger">*</span></label>
+                  <label className="nwi-label">
+                    Phone number{smsConsent ? <span className="text-danger"> *</span> : null}
+                  </label>
                   <input className="nwi-input" type="tel" placeholder="(555) 867-5309"
                     value={phone} onChange={e => setPhone(e.target.value)} />
-                  <p className="text-white/25 text-xs mt-1">Used for your appointment confirmation SMS.</p>
+                  <p className="text-white/25 text-xs mt-1">Required if you want SMS notifications. Optional otherwise.</p>
+                </div>
+
+                {/* SMS consent — TCR/A2P 10DLC compliance */}
+                <div className={`rounded-xl border px-4 py-4 transition-colors ${
+                  smsConsent ? 'border-orange/40 bg-orange/5' : 'border-dark-border bg-dark-card'
+                }`}>
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={smsConsent}
+                      onChange={e => setSmsConsent(e.target.checked)}
+                      className="mt-0.5 w-4 h-4 accent-orange flex-shrink-0"
+                    />
+                    <span className="text-white text-sm leading-snug">
+                      I agree to receive SMS notifications about my appointment from <strong>{bizName}</strong>.
+                    </span>
+                  </label>
+                  <p className="text-white/35 text-xs mt-3 pl-7 leading-relaxed">
+                    Message frequency varies based on appointment activity. Message and data rates may apply.
+                    Reply STOP to unsubscribe at any time. Reply HELP for help.{' '}
+                    <a href="/privacy" target="_blank" rel="noopener noreferrer"
+                      className="underline text-white/50 hover:text-white/75 transition-colors">
+                      Privacy Policy
+                    </a>
+                    {' · '}
+                    <a href="/terms" target="_blank" rel="noopener noreferrer"
+                      className="underline text-white/50 hover:text-white/75 transition-colors">
+                      Terms of Service
+                    </a>
+                  </p>
                 </div>
 
                 <div>

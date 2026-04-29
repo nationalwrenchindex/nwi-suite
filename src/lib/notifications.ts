@@ -282,8 +282,9 @@ export async function dispatchNotification({
     return { success: false, channel: 'none', error: 'Job not found' }
   }
 
-  const userId = job.user_id as string
-  const c      = job.customer as { phone?: string; email?: string } | null
+  const userId     = job.user_id as string
+  const c          = job.customer as { phone?: string; email?: string } | null
+  const smsConsent = Boolean((job as Record<string, unknown>).sms_consent)
 
   // Find the user's active template for this trigger
   const templateType = TRIGGER_TEMPLATE_TYPE[trigger]
@@ -306,8 +307,8 @@ export async function dispatchNotification({
 
   const result: DispatchResult = { success: false, channel, message }
 
-  // ── SMS ──
-  if (channel === 'sms' || channel === 'both') {
+  // ── SMS — only if customer opted in at booking time ──
+  if ((channel === 'sms' || channel === 'both') && smsConsent) {
     const phone = c?.phone
     if (phone) {
       const r = await sendSms(phone, message)
