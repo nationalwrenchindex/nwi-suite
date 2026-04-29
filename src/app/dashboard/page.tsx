@@ -291,7 +291,7 @@ export default async function DashboardPage({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('full_name, business_name, profession_type, service_area_description, slug')
+    .select('full_name, business_name, profession_type, service_area_description, slug, business_type')
     .eq('id', user.id)
     .single()
 
@@ -387,7 +387,7 @@ export default async function DashboardPage({
 
   return (
     <div className="min-h-dvh bg-dark flex flex-col">
-      <AppNav businessName={profile.business_name} />
+      <AppNav businessName={profile.business_name} businessType={(profile as Record<string, unknown>).business_type as string | undefined} />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6">
 

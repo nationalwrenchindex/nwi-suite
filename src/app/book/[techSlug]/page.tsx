@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { createServiceClient } from '@/lib/supabase/service'
 import BookingClient from '@/components/booking/BookingClient'
+import { getServicesByBusinessType } from '@/lib/scheduler'
 
 type PageProps = {
   params:       Promise<{ techSlug: string }>
@@ -18,11 +19,14 @@ export default async function BookingPage({ params, searchParams }: PageProps) {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id, business_name, full_name, profession_type, service_area_description, working_hours, offer_mpi_on_booking')
+    .select('id, business_name, full_name, profession_type, service_area_description, working_hours, offer_mpi_on_booking, business_type')
     .eq('slug', techSlug)
     .single()
 
   if (!profile) notFound()
+
+  const p = profile as Record<string, unknown>
+  const services = [...getServicesByBusinessType((p.business_type as string) ?? 'mechanic')]
 
   return (
     <div className="min-h-dvh bg-dark">
@@ -35,6 +39,7 @@ export default async function BookingPage({ params, searchParams }: PageProps) {
           service_area_description: (profile.service_area_description as string | null) ?? null,
           working_hours:            (profile.working_hours  as Record<string, { enabled: boolean; open: string; close: string }> | null) ?? null,
         }}
+        services={services}
         offerMpi={!!(profile as Record<string, unknown>).offer_mpi_on_booking}
         initialStep={initialStep}
       />

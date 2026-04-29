@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { SERVICE_TYPES, buildCalendarGrid, monthLabel, toDateStr, formatTime } from '@/lib/scheduler'
+import { buildCalendarGrid, monthLabel, toDateStr, formatTime } from '@/lib/scheduler'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -184,11 +184,13 @@ function MiniCalendar({
 export default function BookingClient({
   techSlug,
   profile,
+  services,
   offerMpi = false,
   initialStep = 1,
 }: {
   techSlug: string
   profile: PublicProfile
+  services: string[]
   offerMpi?: boolean
   initialStep?: number
 }) {
@@ -406,7 +408,7 @@ export default function BookingClient({
               <p className="text-white/40 text-sm mb-6">Select one to get started.</p>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-5">
-                {SERVICE_TYPES.map(svc => {
+                {services.map(svc => {
                   const dur = SERVICE_DURATIONS[svc] ?? 60
                   const sel = service === svc
                   return (

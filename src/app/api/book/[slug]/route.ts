@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { dispatchNotification, notifyMechanic } from '@/lib/notifications'
-import { SERVICE_TYPES } from '@/lib/scheduler'
+import { getServicesByBusinessType } from '@/lib/scheduler'
 import { INSPECTION_POINTS, getMappedService } from '@/lib/mpi-catalog'
 
 type RouteContext = { params: Promise<{ slug: string }> }
@@ -58,7 +58,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 
   const { data: profile, error } = await supabase
     .from('profiles')
-    .select('id, business_name, full_name, profession_type, service_area_description, working_hours, offer_mpi_on_booking')
+    .select('id, business_name, full_name, profession_type, service_area_description, working_hours, offer_mpi_on_booking, business_type')
     .eq('slug', slug)
     .single()
 
@@ -135,7 +135,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       service_area_description: profile.service_area_description,
       working_hours:            profile.working_hours,
     },
-    services:         [...SERVICE_TYPES],
+    services:         [...getServicesByBusinessType((profile as Record<string, unknown>).business_type as string ?? 'mechanic')],
     offerMpi:         !!(profile as Record<string, unknown>).offer_mpi_on_booking,
   })
 }

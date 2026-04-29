@@ -98,17 +98,21 @@ export default function OnboardingPage() {
 
   const [step, setStep] = useState(1)
 
-  // Step 1 — Business info
+  // Step 1 — Business type
+  const [businessType, setBusinessType] = useState<'mechanic' | 'detailer' | null>(null)
+  const [savingType, setSavingType]     = useState(false)
+
+  // Step 2 — Business info
   const [businessName, setBusinessName] = useState('')
   const [phone, setPhone]               = useState('')
   const [slug, setSlug]                 = useState('')
   const [slugEdited, setSlugEdited]     = useState(false)
 
-  // Step 2 — Service area
+  // Step 3 — Service area
   const [serviceArea, setServiceArea]   = useState('')
   const [radius, setRadius]             = useState('30')
 
-  // Step 3 — Working hours
+  // Step 4 — Working hours
   const [hours, setHours] = useState<WorkingHours>(DEFAULT_HOURS)
 
   const [loading, setLoading] = useState(false)
@@ -145,9 +149,23 @@ export default function OnboardingPage() {
     }))
   }
 
+  async function selectBusinessType(type: 'mechanic' | 'detailer') {
+    setBusinessType(type)
+    setSavingType(true)
+    try {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        await supabase.from('profiles').update({ business_type: type }).eq('id', user.id)
+      }
+    } catch { /* silently ignore — final submit also saves */ }
+    setSavingType(false)
+  }
+
   function validateStep(s: number) {
-    if (s === 1 && !businessName.trim()) return 'Please enter your business name.'
-    if (s === 2 && !serviceArea.trim()) return 'Please describe your service area.'
+    if (s === 1 && !businessType) return 'Please select your business type to continue.'
+    if (s === 2 && !businessName.trim()) return 'Please enter your business name.'
+    if (s === 3 && !serviceArea.trim()) return 'Please describe your service area.'
     return null
   }
 
@@ -176,6 +194,7 @@ export default function OnboardingPage() {
     const { error } = await supabase
       .from('profiles')
       .update({
+        business_type:            businessType ?? 'mechanic',
         business_name:            businessName.trim(),
         phone:                    phone.trim() || null,
         service_area_description: serviceArea.trim(),
@@ -212,12 +231,90 @@ export default function OnboardingPage() {
           </div>
         </div>
 
-        <StepDots current={step} total={3} />
+        <StepDots current={step} total={4} />
 
         {error && <div className="alert-error mb-5">{error}</div>}
 
-        {/* ── Step 1: Business info ── */}
+        {/* ── Step 1: Business type ── */}
         {step === 1 && (
+          <div>
+            <h1 className="font-condensed font-bold text-3xl text-white tracking-wide mb-1">
+              WHAT KIND OF WORK DO YOU DO?
+            </h1>
+            <p className="text-white/50 text-sm mb-7">
+              This determines your tools, services, and workflow.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+              {/* Mobile Mechanic */}
+              <button
+                type="button"
+                disabled={savingType}
+                onClick={() => selectBusinessType('mechanic')}
+                className={`rounded-2xl border p-5 text-left transition-all ${
+                  businessType === 'mechanic'
+                    ? 'border-orange bg-orange/10 ring-1 ring-orange/40'
+                    : 'border-dark-border bg-dark-card hover:border-white/20 hover:bg-dark-input'
+                }`}
+              >
+                <div className={`w-10 h-10 rounded-xl mb-3 flex items-center justify-center ${businessType === 'mechanic' ? 'bg-orange/20' : 'bg-white/5'}`}>
+                  <svg className={`w-5 h-5 ${businessType === 'mechanic' ? 'text-orange' : 'text-white/40'}`} fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                    <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+                  </svg>
+                </div>
+                <p className={`font-condensed font-bold text-lg tracking-wide mb-1 ${businessType === 'mechanic' ? 'text-orange' : 'text-white'}`}>
+                  Mobile Mechanic
+                </p>
+                <p className="text-white/40 text-xs leading-relaxed">
+                  Repairs, diagnostics, oil changes, and mechanical maintenance.
+                </p>
+                {businessType === 'mechanic' && (
+                  <p className="text-orange text-xs font-semibold mt-2">Selected</p>
+                )}
+              </button>
+
+              {/* Mobile Detailer */}
+              <button
+                type="button"
+                disabled={savingType}
+                onClick={() => selectBusinessType('detailer')}
+                className={`rounded-2xl border p-5 text-left transition-all ${
+                  businessType === 'detailer'
+                    ? 'border-orange bg-orange/10 ring-1 ring-orange/40'
+                    : 'border-dark-border bg-dark-card hover:border-white/20 hover:bg-dark-input'
+                }`}
+              >
+                <div className={`w-10 h-10 rounded-xl mb-3 flex items-center justify-center ${businessType === 'detailer' ? 'bg-orange/20' : 'bg-white/5'}`}>
+                  <svg className={`w-5 h-5 ${businessType === 'detailer' ? 'text-orange' : 'text-white/40'}`} fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                    <path d="M3 12a9 9 0 1 0 18 0 9 9 0 0 0-18 0" />
+                    <path d="M12 8v4l3 3" />
+                    <path d="M9.5 14.5a4 4 0 0 0 5 0" />
+                  </svg>
+                </div>
+                <p className={`font-condensed font-bold text-lg tracking-wide mb-1 ${businessType === 'detailer' ? 'text-orange' : 'text-white'}`}>
+                  Mobile Detailer
+                </p>
+                <p className="text-white/40 text-xs leading-relaxed">
+                  Washing, interior and exterior detailing, and paint care.
+                </p>
+                {businessType === 'detailer' && (
+                  <p className="text-orange text-xs font-semibold mt-2">Selected</p>
+                )}
+              </button>
+            </div>
+
+            <button
+              onClick={next}
+              disabled={!businessType || savingType}
+              className="btn-primary disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {savingType ? 'Saving…' : 'NEXT — YOUR BUSINESS'}
+            </button>
+          </div>
+        )}
+
+        {/* ── Step 2: Business info ── */}
+        {step === 2 && (
           <div>
             <h1 className="font-condensed font-bold text-3xl text-white tracking-wide mb-1">
               YOUR BUSINESS
@@ -278,14 +375,23 @@ export default function OnboardingPage() {
               </div>
             </div>
 
-            <button onClick={next} className="btn-primary mt-8">
-              NEXT — SERVICE AREA
-            </button>
+            <div className="flex gap-3 mt-8">
+              <button
+                type="button"
+                onClick={() => { setStep(1); setError(null) }}
+                className="w-1/3 border border-dark-border rounded-lg py-3 text-white/60 hover:text-white text-sm font-medium transition-colors"
+              >
+                ← Back
+              </button>
+              <button onClick={next} className="flex-1 btn-primary">
+                NEXT — SERVICE AREA
+              </button>
+            </div>
           </div>
         )}
 
-        {/* ── Step 2: Service area ── */}
-        {step === 2 && (
+        {/* ── Step 3: Service area ── */}
+        {step === 3 && (
           <div>
             <h1 className="font-condensed font-bold text-3xl text-white tracking-wide mb-1">
               SERVICE AREA
@@ -331,7 +437,7 @@ export default function OnboardingPage() {
 
             <div className="flex gap-3 mt-8">
               <button
-                onClick={() => { setStep(1); setError(null) }}
+                onClick={() => { setStep(2); setError(null) }}
                 className="w-1/3 border border-dark-border rounded-lg py-3 text-white/60 hover:text-white text-sm font-medium transition-colors"
               >
                 ← Back
@@ -343,8 +449,8 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* ── Step 3: Working hours ── */}
-        {step === 3 && (
+        {/* ── Step 4: Working hours ── */}
+        {step === 4 && (
           <form onSubmit={handleSubmit}>
             <h1 className="font-condensed font-bold text-3xl text-white tracking-wide mb-1">
               WORKING HOURS
@@ -404,7 +510,7 @@ export default function OnboardingPage() {
             <div className="flex gap-3 mt-8">
               <button
                 type="button"
-                onClick={() => { setStep(2); setError(null) }}
+                onClick={() => { setStep(3); setError(null) }}
                 className="w-1/3 border border-dark-border rounded-lg py-3 text-white/60 hover:text-white text-sm font-medium transition-colors"
               >
                 ← Back

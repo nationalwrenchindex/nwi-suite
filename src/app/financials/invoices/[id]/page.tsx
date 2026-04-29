@@ -27,7 +27,7 @@ export default async function InvoiceDetailPage({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('full_name, business_name, average_mpg, fuel_type')
+    .select('full_name, business_name, average_mpg, fuel_type, business_type')
     .eq('id', user.id)
     .single()
 
@@ -43,17 +43,18 @@ export default async function InvoiceDetailPage({
   if (error || !invoice) notFound()
 
   const inv = invoice as unknown as Invoice
-  const p        = profile as { business_name?: string; full_name?: string; average_mpg?: number | null; fuel_type?: string | null }
+  const p        = profile as { business_name?: string; full_name?: string; average_mpg?: number | null; fuel_type?: string | null; business_type?: string | null }
   const bizName  = p.business_name ?? ''
   const techName = p.full_name     ?? bizName
   const averageMpg = p.average_mpg ?? null
   const fuelType   = p.fuel_type   ?? 'gasoline'
+  const businessType = p.business_type ?? undefined
 
   // in_progress → editable editor
   if (inv.invoice_status === 'in_progress') {
     return (
       <div className="min-h-dvh bg-dark flex flex-col">
-        <AppNav businessName={bizName} />
+        <AppNav businessName={bizName} businessType={businessType} />
         <main className="flex-1 w-full max-w-4xl mx-auto px-4 sm:px-6 py-6">
           <InvoiceInProgressClient invoice={inv} />
         </main>
@@ -65,7 +66,7 @@ export default async function InvoiceDetailPage({
   if (inv.invoice_status === 'awaiting_payment' || inv.invoice_status === 'paid') {
     return (
       <div className="min-h-dvh bg-dark flex flex-col">
-        <AppNav businessName={bizName} />
+        <AppNav businessName={bizName} businessType={businessType} />
         <main className="flex-1 w-full max-w-4xl mx-auto px-4 sm:px-6 py-6">
           <FinalizedInvoiceClient invoice={inv} bizName={bizName} techName={techName} averageMpg={averageMpg} fuelType={fuelType} />
         </main>

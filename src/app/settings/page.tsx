@@ -14,7 +14,7 @@ export default async function SettingsPage() {
   const [{ data: profile }, hasQW] = await Promise.all([
     supabase
       .from('profiles')
-      .select('full_name, business_name, slug, share_sms_template, share_email_subject, share_email_body, default_payment_instructions, average_mpg, fuel_type, offer_mpi_on_booking, default_labor_rate, default_parts_markup_percent, default_tax_percent')
+      .select('full_name, business_name, slug, share_sms_template, share_email_subject, share_email_body, default_payment_instructions, average_mpg, fuel_type, offer_mpi_on_booking, default_labor_rate, default_parts_markup_percent, default_tax_percent, business_type')
       .eq('id', user.id)
       .single(),
     hasQuickWrenchAccess(user.id),
@@ -36,11 +36,12 @@ export default async function SettingsPage() {
     default_labor_rate?: number | null
     default_parts_markup_percent?: number | null
     default_tax_percent?: number | null
+    business_type?: string | null
   }
 
   return (
     <div className="min-h-dvh bg-dark flex flex-col">
-      <AppNav businessName={p.business_name ?? ''} />
+      <AppNav businessName={p.business_name ?? ''} businessType={p.business_type ?? undefined} />
       <main className="flex-1 max-w-2xl w-full mx-auto px-4 sm:px-6 py-8">
         <div className="mb-8">
           <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Account</p>
@@ -51,6 +52,7 @@ export default async function SettingsPage() {
           slug={p.slug ?? null}
           businessName={p.business_name ?? ''}
           techName={p.full_name ?? ''}
+          businessType={p.business_type ?? 'mechanic'}
           initialTemplates={{
             share_sms_template:  p.share_sms_template  ?? undefined,
             share_email_subject: p.share_email_subject ?? undefined,

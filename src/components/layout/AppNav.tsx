@@ -13,7 +13,7 @@ interface NavItem {
 }
 
 
-export default function AppNav({ businessName }: { businessName?: string }) {
+export default function AppNav({ businessName, businessType }: { businessName?: string; businessType?: string }) {
   const pathname = usePathname()
   const router   = useRouter()
 
@@ -103,6 +103,10 @@ export default function AppNav({ businessName }: { businessName?: string }) {
     },
   ]
 
+  const visibleNavItems = navItems.filter(
+    item => !(item.href === '/quickwrench' && businessType === 'detailer')
+  )
+
   return (
     <header className="border-b border-dark-border bg-dark-card sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center gap-6 h-16 sm:h-14">
@@ -119,7 +123,7 @@ export default function AppNav({ businessName }: { businessName?: string }) {
 
         {/* Nav items */}
         <nav className="flex items-center gap-1 flex-1 overflow-x-auto hide-scrollbar">
-          {navItems.map((item) => {
+          {visibleNavItems.map((item) => {
             const isComingSoon = item.href === '#'
             const base = 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap'
             if (isComingSoon) {

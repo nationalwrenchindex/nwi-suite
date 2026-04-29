@@ -23,7 +23,7 @@ export const STATUS_TRANSITIONS: Partial<Record<JobStatus, JobStatus[]>> = {
 
 // ─── Service type options ──────────────────────────────────────────────────
 
-export const SERVICE_TYPES = [
+export const MECHANIC_SERVICES = [
   'Oil Change',
   'Brake Service',
   'Tire Rotation',
@@ -38,12 +38,20 @@ export const SERVICE_TYPES = [
   'Power Steering Service',
   'Fuel System Service',
   'Pre-Purchase Inspection',
-  'Full Detail',
-  'Interior Detail',
-  'Exterior Detail',
-  'Paint Correction',
   'Other',
 ] as const
+
+// Phase 2 will populate detailer services
+export const DETAILER_SERVICES = [
+  'Other',
+] as const
+
+export function getServicesByBusinessType(type: string): readonly string[] {
+  return type === 'detailer' ? DETAILER_SERVICES : MECHANIC_SERVICES
+}
+
+// Backwards-compatible alias used by BookJobTab, CustomersTab
+export const SERVICE_TYPES = MECHANIC_SERVICES
 
 // ─── Notification template types ───────────────────────────────────────────
 

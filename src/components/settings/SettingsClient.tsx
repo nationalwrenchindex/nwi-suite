@@ -114,10 +114,16 @@ function TemplateEditor({
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
+const BUSINESS_TYPE_LABELS: Record<string, string> = {
+  mechanic: 'Mobile Mechanic',
+  detailer: 'Mobile Detailer',
+}
+
 export default function SettingsClient({
   slug,
   businessName,
   techName,
+  businessType = 'mechanic',
   initialTemplates,
   defaultPaymentInstructions: initialPaymentInstr = '',
   initialAverageMpg   = null,
@@ -131,6 +137,7 @@ export default function SettingsClient({
   slug:                        string | null
   businessName:                string
   techName:                    string
+  businessType?:               string
   initialTemplates:            Partial<ShareTemplates>
   defaultPaymentInstructions?: string
   initialAverageMpg?:          number | null
@@ -287,6 +294,11 @@ export default function SettingsClient({
           <div>
             <p className="nwi-label">Your Name</p>
             <p className="text-white text-sm">{techName || '—'}</p>
+          </div>
+          <div>
+            <p className="nwi-label">Business Type</p>
+            <p className="text-white text-sm">{BUSINESS_TYPE_LABELS[businessType] ?? 'Mobile Mechanic'}</p>
+            <p className="text-white/30 text-xs mt-0.5">Contact support to change your business type.</p>
           </div>
           <div>
             <p className="nwi-label">Booking URL</p>
