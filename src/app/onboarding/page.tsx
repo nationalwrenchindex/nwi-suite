@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import DetailerPricingEditor, { type PricingRow } from '@/components/detailer/DetailerPricingEditor'
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -112,11 +113,21 @@ export default function OnboardingPage() {
   const [serviceArea, setServiceArea]   = useState('')
   const [radius, setRadius]             = useState('30')
 
+  // Step 3 (detailer only) — Pricing setup (handled by DetailerPricingEditor)
+  const [pricingComplete, setPricingComplete] = useState(false)
+
   // Step 4 — Working hours
   const [hours, setHours] = useState<WorkingHours>(DEFAULT_HOURS)
 
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
+
+  // For detailers the onboarding has 5 steps; mechanics have 4
+  const totalSteps = businessType === 'detailer' ? 5 : 4
+
+  // Map logical step number to display step accounting for the inserted pricing step
+  // Detailer: 1=type, 2=bizinfo, 3=pricing, 4=area, 5=hours
+  // Mechanic:  1=type, 2=bizinfo, 3=area, 4=hours
 
   // Immediately provision the subscription when arriving from Stripe checkout.
   // This ensures module access is available before the webhook fires.
@@ -165,7 +176,9 @@ export default function OnboardingPage() {
   function validateStep(s: number) {
     if (s === 1 && !businessType) return 'Please select your business type to continue.'
     if (s === 2 && !businessName.trim()) return 'Please enter your business name.'
-    if (s === 3 && !serviceArea.trim()) return 'Please describe your service area.'
+    // For detailers: step 4 is service area; for mechanics: step 3 is service area
+    const serviceAreaStep = businessType === 'detailer' ? 4 : 3
+    if (s === serviceAreaStep && !serviceArea.trim()) return 'Please describe your service area.'
     return null
   }
 
@@ -174,6 +187,24 @@ export default function OnboardingPage() {
     if (err) { setError(err); return }
     setError(null)
     setStep((s) => s + 1)
+  }
+
+  async function savePricingAndAdvance(rows: PricingRow[]) {
+    const supabase = createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    await fetch('/api/detailer-pricing', {
+      method:  'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ rows }),
+    })
+    setPricingComplete(true)
+    setStep(4)
+  }
+
+  function skipPricing() {
+    setPricingComplete(true)
+    setStep(4)
   }
 
   // ── Submit ──
@@ -231,7 +262,7 @@ export default function OnboardingPage() {
           </div>
         </div>
 
-        <StepDots current={step} total={4} />
+        <StepDots current={step} total={totalSteps} />
 
         {error && <div className="alert-error mb-5">{error}</div>}
 
@@ -384,14 +415,32 @@ export default function OnboardingPage() {
                 ← Back
               </button>
               <button onClick={next} className="flex-1 btn-primary">
-                NEXT — SERVICE AREA
+                {businessType === 'detailer' ? 'NEXT — SET YOUR PRICING' : 'NEXT — SERVICE AREA'}
               </button>
             </div>
           </div>
         )}
 
-        {/* ── Step 3: Service area ── */}
-        {step === 3 && (
+        {/* ── Step 3 (detailer only): Pricing Setup ── */}
+        {step === 3 && businessType === 'detailer' && (
+          <div>
+            <h1 className="font-condensed font-bold text-3xl text-white tracking-wide mb-1">
+              SET YOUR PRICING
+            </h1>
+            <p className="text-white/50 text-sm mb-7">
+              These are starting prices. You can adjust per-job and per-customer later.
+            </p>
+            <DetailerPricingEditor
+              onSave={savePricingAndAdvance}
+              saveLabel="SAVE PRICING — NEXT"
+              showSkip
+              onSkip={skipPricing}
+            />
+          </div>
+        )}
+
+        {/* ── Step 3 (mechanic) / Step 4 (detailer): Service area ── */}
+        {((step === 3 && businessType !== 'detailer') || (step === 4 && businessType === 'detailer')) && (
           <div>
             <h1 className="font-condensed font-bold text-3xl text-white tracking-wide mb-1">
               SERVICE AREA
@@ -437,7 +486,7 @@ export default function OnboardingPage() {
 
             <div className="flex gap-3 mt-8">
               <button
-                onClick={() => { setStep(2); setError(null) }}
+                onClick={() => { setStep(businessType === 'detailer' ? 3 : 2); setError(null) }}
                 className="w-1/3 border border-dark-border rounded-lg py-3 text-white/60 hover:text-white text-sm font-medium transition-colors"
               >
                 ← Back
@@ -449,8 +498,8 @@ export default function OnboardingPage() {
           </div>
         )}
 
-        {/* ── Step 4: Working hours ── */}
-        {step === 4 && (
+        {/* ── Step 4 (mechanic) / Step 5 (detailer): Working hours ── */}
+        {((step === 4 && businessType !== 'detailer') || (step === 5 && businessType === 'detailer')) && (
           <form onSubmit={handleSubmit}>
             <h1 className="font-condensed font-bold text-3xl text-white tracking-wide mb-1">
               WORKING HOURS
@@ -510,7 +559,7 @@ export default function OnboardingPage() {
             <div className="flex gap-3 mt-8">
               <button
                 type="button"
-                onClick={() => { setStep(3); setError(null) }}
+                onClick={() => { setStep(businessType === 'detailer' ? 4 : 3); setError(null) }}
                 className="w-1/3 border border-dark-border rounded-lg py-3 text-white/60 hover:text-white text-sm font-medium transition-colors"
               >
                 ← Back

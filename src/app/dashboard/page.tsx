@@ -377,6 +377,8 @@ export default async function DashboardPage({
   const outstandingTotal = outstandingInvs.reduce((s, inv) => s + Number(inv.total), 0)
   const overdueCount     = outstandingInvs.filter(i => i.status === 'overdue' || (i.due_date && i.due_date < todayStr)).length
 
+  const businessType = (profile as Record<string, unknown>).business_type as string | undefined
+
   const professionLabels: Record<string, string> = {
     mobile_mechanic:  'Mobile Mechanic',
     auto_electrician: 'Auto Electrician',
@@ -385,9 +387,14 @@ export default async function DashboardPage({
     other:            'Auto Technician',
   }
 
+  // Detailers get a clean "Mobile Detailer" label instead of profession_type
+  const roleLabel = businessType === 'detailer'
+    ? 'Mobile Detailer'
+    : (professionLabels[profile.profession_type ?? ''] ?? 'Technician')
+
   return (
     <div className="min-h-dvh bg-dark flex flex-col">
-      <AppNav businessName={profile.business_name} businessType={(profile as Record<string, unknown>).business_type as string | undefined} />
+      <AppNav businessName={profile.business_name} businessType={businessType} />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6">
 
@@ -398,7 +405,7 @@ export default async function DashboardPage({
           <div className="relative z-10 flex items-start justify-between gap-4 flex-wrap">
             <div>
               <p className="text-white/50 text-xs uppercase tracking-widest mb-1">
-                {professionLabels[profile.profession_type ?? ''] ?? 'Technician'} · {dayLabel}
+                {roleLabel} · {dayLabel}
               </p>
               <h1 className="font-condensed font-bold text-3xl sm:text-4xl text-white tracking-wide mb-0.5">
                 {profile.full_name ?? user.email}
@@ -622,11 +629,13 @@ export default async function DashboardPage({
         {/* ── Module navigation ── */}
         <div>
           <p className="text-white/30 text-xs uppercase tracking-widest mb-3">Quick Access</p>
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
-            <DashboardQuickWrenchCard
-              hasAccess={hasQW}
-              autoOpen={sp?.upsell === '1'}
-            />
+          <div className={`grid gap-3 ${businessType === 'detailer' ? 'grid-cols-2 lg:grid-cols-4' : 'grid-cols-2 lg:grid-cols-5'}`}>
+            {businessType !== 'detailer' && (
+              <DashboardQuickWrenchCard
+                hasAccess={hasQW}
+                autoOpen={sp?.upsell === '1'}
+              />
+            )}
             {[
               {
                 href: '/scheduler',

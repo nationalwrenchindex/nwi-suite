@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { buildCalendarGrid, monthLabel, toDateStr, formatTime } from '@/lib/scheduler'
+import { buildCalendarGrid, monthLabel, toDateStr, formatTime, VEHICLE_CATEGORIES, VEHICLE_CATEGORY_LABELS, type VehicleCategory } from '@/lib/scheduler'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -19,25 +19,38 @@ export interface PublicProfile {
 // ─── Service duration estimates (minutes) ─────────────────────────────────────
 
 const SERVICE_DURATIONS: Record<string, number> = {
-  'Oil Change':               45,
-  'Brake Service':           120,
-  'Tire Rotation':            30,
-  'Tire Replacement':         90,
-  'Battery Replacement':      30,
-  'Engine Diagnostic':        60,
-  'A/C Service':              90,
-  'Transmission Service':    120,
-  'Suspension Repair':       180,
-  'Electrical Repair':        90,
-  'Coolant Flush':            60,
-  'Power Steering Service':   60,
-  'Fuel System Service':      60,
-  'Pre-Purchase Inspection':  90,
-  'Full Detail':             240,
-  'Interior Detail':         120,
-  'Exterior Detail':         120,
-  'Paint Correction':        300,
-  'Other':                    60,
+  // Mechanic
+  'Oil Change':                   45,
+  'Brake Service':               120,
+  'Tire Rotation':                30,
+  'Tire Replacement':             90,
+  'Battery Replacement':          30,
+  'Engine Diagnostic':            60,
+  'A/C Service':                  90,
+  'Transmission Service':        120,
+  'Suspension Repair':           180,
+  'Electrical Repair':            90,
+  'Coolant Flush':                60,
+  'Power Steering Service':       60,
+  'Fuel System Service':          60,
+  'Pre-Purchase Inspection':      90,
+  // Detailer
+  'Basic Wash':                   30,
+  'Full Detail':                 240,
+  'Interior Detail':             120,
+  'Exterior Detail':             120,
+  'Paint Correction':            360,
+  'Ceramic Coating (1 Year)':    240,
+  'Ceramic Coating (3 Year)':    360,
+  'Ceramic Coating (5 Year)':    480,
+  'Headlight Restoration':        60,
+  'Engine Bay Cleaning':          75,
+  'Carpet & Upholstery Shampoo': 120,
+  'Leather Treatment':            75,
+  'Pet Hair & Odor Removal':      90,
+  'Boat Detailing':              300,
+  'RV Detailing':                480,
+  'Other':                        60,
 }
 
 const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
@@ -54,9 +67,11 @@ function durationLabel(min: number): string {
 
 // ─── Progress bar ─────────────────────────────────────────────────────────────
 
-const STEP_LABELS = ['Service', 'Date & Time', 'Your Info', 'Confirm']
+const STEP_LABELS_MECHANIC  = ['Service', 'Date & Time', 'Your Info', 'Confirm']
+const STEP_LABELS_DETAILER  = ['Service', 'Vehicle Type', 'Date & Time', 'Your Info', 'Confirm']
 
-function StepBar({ step }: { step: number }) {
+function StepBar({ step, isDetailer }: { step: number; isDetailer?: boolean }) {
+  const STEP_LABELS = isDetailer ? STEP_LABELS_DETAILER : STEP_LABELS_MECHANIC
   return (
     <div className="flex items-center justify-center gap-0 mb-8">
       {STEP_LABELS.map((label, i) => {
@@ -183,17 +198,20 @@ function MiniCalendar({
 
 export default function BookingClient({
   techSlug,
+  businessType = 'mechanic',
   profile,
   services,
   offerMpi = false,
   initialStep = 1,
 }: {
-  techSlug: string
-  profile: PublicProfile
-  services: string[]
-  offerMpi?: boolean
-  initialStep?: number
+  techSlug:      string
+  businessType?: string
+  profile:       PublicProfile
+  services:      string[]
+  offerMpi?:     boolean
+  initialStep?:  number
 }) {
+  const isDetailer = businessType === 'detailer'
   const [step, setStep] = useState(initialStep)
 
   // Keep the URL ?step= in sync with the current step so deep-links stay accurate
@@ -207,6 +225,9 @@ export default function BookingClient({
   // Step 1
   const [service, setService] = useState<string | null>(null)
   const [notes,   setNotes]   = useState('')
+
+  // Step 2 (detailer only) — Vehicle category
+  const [vehicleCategory, setVehicleCategory] = useState<VehicleCategory | null>(null)
 
   // Step 2
   const [date,             setDate]             = useState<string | null>(null)
@@ -257,10 +278,18 @@ export default function BookingClient({
       .finally(() => setSlotsLoading(false))
   }, [date, fetchKey, techSlug])
 
+  // Logical step numbers:
+  // Mechanic:  1=service, 2=datetime, 3=info, 4=confirm
+  // Detailer:  1=service, 2=vehicle cat, 3=datetime, 4=info, 5=confirm
+  const dateTimeStep = isDetailer ? 3 : 2
+  const infoStep     = isDetailer ? 4 : 3
+  const confirmStep  = isDetailer ? 5 : 4
+
   function canAdvance() {
     if (step === 1) return !!service
-    if (step === 2) return !!date && !!time
-    if (step === 3) return (
+    if (isDetailer && step === 2) return !!vehicleCategory
+    if (step === dateTimeStep) return !!date && !!time
+    if (step === infoStep) return (
       firstName.trim() !== '' &&
       lastName.trim()  !== '' &&
       (!smsConsent || phone.trim() !== '')
@@ -271,9 +300,8 @@ export default function BookingClient({
   function goNext() {
     if (!canAdvance()) return
 
-    // Guard: if the user deep-linked to Step 3 without going through earlier steps,
-    // they must complete service + date/time before we allow them to reach Step 4.
-    if (step === 3 && (!service || !date || !time)) {
+    // Guard: deep-link to info step without completing earlier steps
+    if (step === infoStep && (!service || !date || !time)) {
       setError('Please complete service selection and date/time before reviewing your booking.')
       setStep(1)
       return
@@ -300,6 +328,7 @@ export default function BookingClient({
         estimated_duration_minutes: service ? (SERVICE_DURATIONS[service] ?? 60) : 60,
         inspection_requested:       inspectionRequested,
         sms_consent:                smsConsent,
+        vehicle_category:           vehicleCategory || null,
         customer: {
           first_name: firstName.trim(),
           last_name:  lastName.trim(),
@@ -350,7 +379,7 @@ export default function BookingClient({
   if (submitted) {
     return (
       <div className="min-h-dvh bg-dark flex flex-col">
-        <BookingHeader bizName={bizName} profile={profile} />
+        <BookingHeader bizName={bizName} profile={profile} isDetailer={isDetailer} />
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="w-full max-w-md text-center">
             <div className="w-20 h-20 bg-success/20 border border-success/30 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -391,7 +420,7 @@ export default function BookingClient({
 
       <div className="flex-1 flex justify-center p-4 sm:p-8 pb-24">
         <div className="w-full max-w-xl">
-          <StepBar step={step} />
+          <StepBar step={step} isDetailer={isDetailer} />
 
           {error && (
             <div className="bg-danger/10 border border-danger/30 rounded-xl px-4 py-3 text-danger text-sm mb-5">
@@ -443,8 +472,39 @@ export default function BookingClient({
             </div>
           )}
 
-          {/* ── Step 2: Date & Time ── */}
-          {step === 2 && (
+          {/* ── Step 2 (detailer only): Vehicle Category ── */}
+          {isDetailer && step === 2 && (
+            <div>
+              <h2 className="font-condensed font-bold text-2xl text-white tracking-wide mb-1">
+                WHAT TYPE OF VEHICLE?
+              </h2>
+              <p className="text-white/40 text-sm mb-6">Select the vehicle type for this service.</p>
+
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
+                {VEHICLE_CATEGORIES.map(cat => {
+                  const sel = vehicleCategory === cat
+                  return (
+                    <button
+                      key={cat}
+                      onClick={() => setVehicleCategory(cat)}
+                      className={`rounded-xl border px-3 py-4 text-left transition-all ${
+                        sel
+                          ? 'border-orange bg-orange/10 ring-1 ring-orange/40'
+                          : 'border-dark-border bg-dark-card hover:border-white/20 hover:bg-dark-input'
+                      }`}
+                    >
+                      <p className={`text-xs font-semibold leading-tight ${sel ? 'text-orange' : 'text-white'}`}>
+                        {VEHICLE_CATEGORY_LABELS[cat]}
+                      </p>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ── Step 2 (mechanic) / Step 3 (detailer): Date & Time ── */}
+          {step === dateTimeStep && (
             <div>
               <h2 className="font-condensed font-bold text-2xl text-white tracking-wide mb-1">
                 PICK A DATE & TIME
@@ -519,8 +579,8 @@ export default function BookingClient({
             </div>
           )}
 
-          {/* ── Step 3: Contact info ── */}
-          {step === 3 && (
+          {/* ── Step 3 (mechanic) / Step 4 (detailer): Contact info ── */}
+          {step === infoStep && (
             <div>
               <h2 className="font-condensed font-bold text-2xl text-white tracking-wide mb-1">
                 YOUR CONTACT INFO
@@ -612,8 +672,8 @@ export default function BookingClient({
             </div>
           )}
 
-          {/* ── Step 4: Review ── */}
-          {step === 4 && (
+          {/* ── Step 4 (mechanic) / Step 5 (detailer): Review ── */}
+          {step === confirmStep && (
             <div>
               <h2 className="font-condensed font-bold text-2xl text-white tracking-wide mb-1">
                 REVIEW YOUR BOOKING
@@ -626,6 +686,12 @@ export default function BookingClient({
                   <p className="text-white font-semibold">{service}</p>
                   <p className="text-white/40 text-xs mt-0.5">{durationLabel(duration)}</p>
                 </div>
+                {vehicleCategory && (
+                  <div className="pb-3 border-b border-dark-border">
+                    <p className="text-white/30 text-[10px] uppercase tracking-widest mb-1">Vehicle Type</p>
+                    <p className="text-white text-sm">{VEHICLE_CATEGORY_LABELS[vehicleCategory]}</p>
+                  </div>
+                )}
                 <div className="pb-3 border-b border-dark-border grid grid-cols-2 gap-3">
                   <div>
                     <p className="text-white/30 text-[10px] uppercase tracking-widest mb-1">Date</p>
@@ -741,13 +807,13 @@ export default function BookingClient({
               </button>
             )}
 
-            {step < 4 ? (
+            {step < confirmStep ? (
               <button
                 onClick={goNext}
                 disabled={!canAdvance()}
                 className="flex-1 sm:flex-none sm:px-8 py-3 bg-orange hover:bg-orange/90 disabled:opacity-40 disabled:cursor-not-allowed text-white font-condensed font-bold text-sm rounded-xl transition-colors tracking-wide"
               >
-                {step === 3 ? 'REVIEW BOOKING →' : 'CONTINUE →'}
+                {step === infoStep ? 'REVIEW BOOKING →' : 'CONTINUE →'}
               </button>
             ) : (
               <button
@@ -769,7 +835,7 @@ export default function BookingClient({
 
 // ─── Header ───────────────────────────────────────────────────────────────────
 
-function BookingHeader({ bizName, profile }: { bizName: string; profile: PublicProfile }) {
+function BookingHeader({ bizName, profile, isDetailer }: { bizName: string; profile: PublicProfile; isDetailer?: boolean }) {
   const professionLabels: Record<string, string> = {
     mobile_mechanic:  'Mobile Mechanic',
     auto_electrician: 'Auto Electrician',
@@ -777,7 +843,9 @@ function BookingHeader({ bizName, profile }: { bizName: string; profile: PublicP
     tire_technician:  'Tire Technician',
     other:            'Auto Technician',
   }
-  const profLabel = profile.profession_type ? professionLabels[profile.profession_type] ?? 'Auto Technician' : 'Auto Technician'
+  const profLabel = isDetailer
+    ? 'Mobile Detailer'
+    : (profile.profession_type ? professionLabels[profile.profession_type] ?? 'Auto Technician' : 'Auto Technician')
 
   return (
     <header className="border-b border-dark-border bg-dark-card px-4 sm:px-8 py-4">

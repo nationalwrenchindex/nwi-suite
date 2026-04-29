@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import AppNav from '@/components/layout/AppNav'
 import SettingsClient from '@/components/settings/SettingsClient'
 import { hasQuickWrenchAccess } from '@/lib/subscription'
+import type { PricingRow } from '@/components/detailer/DetailerPricingEditor'
 
 export const metadata = { title: 'Settings — National Wrench Index Suite™' }
 
@@ -11,13 +12,17 @@ export default async function SettingsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [{ data: profile }, hasQW] = await Promise.all([
+  const [{ data: profile }, hasQW, { data: pricingRows }] = await Promise.all([
     supabase
       .from('profiles')
       .select('full_name, business_name, slug, share_sms_template, share_email_subject, share_email_body, default_payment_instructions, average_mpg, fuel_type, offer_mpi_on_booking, default_labor_rate, default_parts_markup_percent, default_tax_percent, business_type')
       .eq('id', user.id)
       .single(),
     hasQuickWrenchAccess(user.id),
+    supabase
+      .from('detailer_service_pricing')
+      .select('service_name, vehicle_category, base_price, estimated_hours, is_offered')
+      .eq('profile_id', user.id),
   ])
 
   if (!profile?.business_name) redirect('/onboarding')
@@ -66,6 +71,7 @@ export default async function SettingsPage() {
           initialLaborRate={p.default_labor_rate ?? 125}
           initialMarkupPct={p.default_parts_markup_percent ?? 20}
           initialTaxPct={p.default_tax_percent ?? 8.5}
+          initialPricingRows={(pricingRows ?? []) as PricingRow[]}
         />
       </main>
     </div>

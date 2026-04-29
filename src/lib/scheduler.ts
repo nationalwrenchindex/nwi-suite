@@ -41,10 +41,44 @@ export const MECHANIC_SERVICES = [
   'Other',
 ] as const
 
-// Phase 2 will populate detailer services
 export const DETAILER_SERVICES = [
+  'Basic Wash',
+  'Full Detail',
+  'Interior Detail',
+  'Exterior Detail',
+  'Paint Correction',
+  'Ceramic Coating (1 Year)',
+  'Ceramic Coating (3 Year)',
+  'Ceramic Coating (5 Year)',
+  'Headlight Restoration',
+  'Engine Bay Cleaning',
+  'Carpet & Upholstery Shampoo',
+  'Leather Treatment',
+  'Pet Hair & Odor Removal',
+  'Boat Detailing',
+  'RV Detailing',
   'Other',
 ] as const
+
+export type DetailerService = typeof DETAILER_SERVICES[number]
+
+export const VEHICLE_CATEGORIES = [
+  'sedan', 'suv', 'truck', 'van', 'motorcycle', 'boat', 'rv', 'plane', 'other',
+] as const
+
+export type VehicleCategory = typeof VEHICLE_CATEGORIES[number]
+
+export const VEHICLE_CATEGORY_LABELS: Record<VehicleCategory, string> = {
+  sedan:      'Sedan / Car',
+  suv:        'SUV / Crossover',
+  truck:      'Truck / Pickup',
+  van:        'Van / Minivan',
+  motorcycle: 'Motorcycle',
+  boat:       'Boat',
+  rv:         'RV / Motorhome',
+  plane:      'Aircraft / Plane',
+  other:      'Other',
+}
 
 export function getServicesByBusinessType(type: string): readonly string[] {
   return type === 'detailer' ? DETAILER_SERVICES : MECHANIC_SERVICES

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react'
 import ShareBookingModal from '@/components/ShareBookingModal'
+import DetailerPricingEditor, { type PricingRow } from '@/components/detailer/DetailerPricingEditor'
 
 const BOOKING_BASE = 'https://tools.nationalwrenchindex.com/book'
 
@@ -133,6 +134,7 @@ export default function SettingsClient({
   initialLaborRate    = 125,
   initialMarkupPct    = 20,
   initialTaxPct       = 8.5,
+  initialPricingRows  = [],
 }: {
   slug:                        string | null
   businessName:                string
@@ -147,6 +149,7 @@ export default function SettingsClient({
   initialLaborRate?:           number
   initialMarkupPct?:           number
   initialTaxPct?:              number
+  initialPricingRows?:         PricingRow[]
 }) {
   const [shareOpen, setShareOpen] = useState(false)
 
@@ -405,7 +408,30 @@ export default function SettingsClient({
         </div>
       </section>
 
-      {/* ── Pricing & Rates ── */}
+      {/* ── Detailer: Service Pricing ── */}
+      {businessType === 'detailer' && (
+        <section>
+          <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Detailer Services &amp; Pricing</p>
+          <p className="text-white/30 text-xs mb-4">
+            Toggle services on or off and set your base prices per vehicle type. Customers will only see services you have turned on.
+          </p>
+          <DetailerPricingEditor
+            initialRows={initialPricingRows}
+            onSave={async (rows) => {
+              const res = await fetch('/api/detailer-pricing', {
+                method:  'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({ rows }),
+              })
+              if (!res.ok) throw new Error('Failed to save pricing')
+            }}
+            saveLabel="Save Detailer Pricing"
+          />
+        </section>
+      )}
+
+      {/* ── Pricing & Rates (mechanic only) ── */}
+      {businessType !== 'detailer' && (
       <section>
         <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Pricing &amp; Rates</p>
         <p className="text-white/30 text-xs mb-4">
@@ -460,8 +486,10 @@ export default function SettingsClient({
           </button>
         </div>
       </section>
+      )}
 
-      {/* ── Vehicle & Fuel Tracking ── */}
+      {/* ── Vehicle & Fuel Tracking (mechanic only) ── */}
+      {businessType !== 'detailer' && (
       <section>
         <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Vehicle &amp; Fuel Tracking</p>
         <p className="text-white/30 text-xs mb-4">
@@ -505,59 +533,62 @@ export default function SettingsClient({
           </button>
         </div>
       </section>
+      )}
 
-      {/* ── QuickWrench: 25-Point Inspection ── */}
-      {hasQwAccess ? (
-        <section>
-          <p className="text-white/40 text-xs uppercase tracking-widest mb-1">QuickWrench — 25-Point Inspection</p>
-          <p className="text-white/30 text-xs mb-4">
-            When enabled, customers will see a checkbox on your booking page to add the 25-point inspection.
-            This adds 0.5 labor hours to their invoice. You can waive the charge per-job.
-          </p>
-          <div className="rounded-xl border border-[#333] bg-[#222] p-5">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-white text-sm font-medium">Offer 25-Point Inspection on Booking Page</p>
-                <p className="text-white/40 text-xs mt-1">
-                  {offerMpi ? 'Customers will see the inspection add-on checkbox.' : 'Inspection add-on is hidden from your booking page.'}
-                </p>
-              </div>
-              <button
-                disabled={savingMpi}
-                onClick={() => saveMpiSetting(!offerMpi)}
-                aria-pressed={offerMpi}
-                className={`relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 focus:outline-none disabled:opacity-50 ${
-                  offerMpi ? 'border-[#FF6600] bg-[#FF6600]' : 'border-[#444] bg-[#333]'
-                }`}
-              >
-                <span
-                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform duration-200 ${
-                    offerMpi ? 'translate-x-5' : 'translate-x-0.5'
-                  }`}
-                />
-              </button>
-            </div>
-            <p className={`mt-3 text-xs font-semibold ${offerMpi ? 'text-success' : 'text-white/30'}`}>
-              {offerMpi ? 'YES — Offering on booking page' : 'NO — Not offering'}
+      {/* ── QuickWrench: 25-Point Inspection (mechanic only) ── */}
+      {businessType !== 'detailer' && (
+        hasQwAccess ? (
+          <section>
+            <p className="text-white/40 text-xs uppercase tracking-widest mb-1">QuickWrench — 25-Point Inspection</p>
+            <p className="text-white/30 text-xs mb-4">
+              When enabled, customers will see a checkbox on your booking page to add the 25-point inspection.
+              This adds 0.5 labor hours to their invoice. You can waive the charge per-job.
             </p>
-          </div>
-        </section>
-      ) : (
-        <section>
-          <p className="text-white/40 text-xs uppercase tracking-widest mb-1">QuickWrench — 25-Point Inspection</p>
-          <div className="rounded-xl border border-[#333] bg-[#222]/50 p-5 flex items-center gap-4 opacity-60">
-            <div className="flex-1">
-              <p className="text-white/50 text-sm font-medium">Offer 25-Point Inspection on Booking Page</p>
-              <p className="text-white/30 text-xs mt-1">Available on QuickWrench ($69/mo) and Elite ($99/mo) plans.</p>
+            <div className="rounded-xl border border-[#333] bg-[#222] p-5">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-white text-sm font-medium">Offer 25-Point Inspection on Booking Page</p>
+                  <p className="text-white/40 text-xs mt-1">
+                    {offerMpi ? 'Customers will see the inspection add-on checkbox.' : 'Inspection add-on is hidden from your booking page.'}
+                  </p>
+                </div>
+                <button
+                  disabled={savingMpi}
+                  onClick={() => saveMpiSetting(!offerMpi)}
+                  aria-pressed={offerMpi}
+                  className={`relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 focus:outline-none disabled:opacity-50 ${
+                    offerMpi ? 'border-[#FF6600] bg-[#FF6600]' : 'border-[#444] bg-[#333]'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform duration-200 ${
+                      offerMpi ? 'translate-x-5' : 'translate-x-0.5'
+                    }`}
+                  />
+                </button>
+              </div>
+              <p className={`mt-3 text-xs font-semibold ${offerMpi ? 'text-success' : 'text-white/30'}`}>
+                {offerMpi ? 'YES — Offering on booking page' : 'NO — Not offering'}
+              </p>
             </div>
-            <a
-              href="/billing"
-              className="flex-shrink-0 px-4 py-2 bg-[#FF6600] hover:bg-[#E55A00] text-white font-condensed font-bold text-xs rounded-lg transition-colors"
-            >
-              Upgrade
-            </a>
-          </div>
-        </section>
+          </section>
+        ) : (
+          <section>
+            <p className="text-white/40 text-xs uppercase tracking-widest mb-1">QuickWrench — 25-Point Inspection</p>
+            <div className="rounded-xl border border-[#333] bg-[#222]/50 p-5 flex items-center gap-4 opacity-60">
+              <div className="flex-1">
+                <p className="text-white/50 text-sm font-medium">Offer 25-Point Inspection on Booking Page</p>
+                <p className="text-white/30 text-xs mt-1">Available on QuickWrench ($69/mo) and Elite ($99/mo) plans.</p>
+              </div>
+              <a
+                href="/billing"
+                className="flex-shrink-0 px-4 py-2 bg-[#FF6600] hover:bg-[#E55A00] text-white font-condensed font-bold text-xs rounded-lg transition-colors"
+              >
+                Upgrade
+              </a>
+            </div>
+          </section>
+        )
       )}
 
       <ShareBookingModal

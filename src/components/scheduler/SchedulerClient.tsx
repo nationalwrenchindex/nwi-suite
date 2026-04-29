@@ -56,7 +56,7 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   },
 ]
 
-export default function SchedulerClient() {
+export default function SchedulerClient({ businessType }: { businessType?: string }) {
   const [activeTab, setActiveTab] = useState<Tab>('calendar')
 
   // Allow any tab to navigate to 'book' (e.g. from CalendarTab empty state)
@@ -87,7 +87,7 @@ export default function SchedulerClient() {
       {/* ── Tab content ── */}
       {activeTab === 'calendar'      && <CalendarTab onBookJob={goToBook} />}
       {activeTab === 'jobs'          && <MyJobsTab   onBookJob={goToBook} />}
-      {activeTab === 'book'          && <BookJobTab  onSuccess={() => setActiveTab('jobs')} />}
+      {activeTab === 'book'          && <BookJobTab  onSuccess={() => setActiveTab('jobs')} businessType={businessType} />}
       {activeTab === 'notifications' && <NotificationsTab />}
     </div>
   )

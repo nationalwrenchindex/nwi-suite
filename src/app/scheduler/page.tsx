@@ -35,7 +35,7 @@ export default async function SchedulerPage() {
             Manage your jobs, calendar, and customer notifications.
           </p>
         </div>
-        <SchedulerClient />
+        <SchedulerClient businessType={(profile as Record<string, unknown>).business_type as string | undefined} />
       </main>
     </div>
   )

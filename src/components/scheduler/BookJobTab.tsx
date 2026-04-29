@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import type { CustomerWithVehicles } from '@/types/jobs'
-import { SERVICE_TYPES } from '@/lib/scheduler'
+import { getServicesByBusinessType } from '@/lib/scheduler'
 
 interface FormState {
   job_date: string
@@ -32,7 +32,8 @@ function makeDefaultForm(): FormState {
   }
 }
 
-export default function BookJobTab({ onSuccess }: { onSuccess: () => void }) {
+export default function BookJobTab({ onSuccess, businessType }: { onSuccess: () => void; businessType?: string }) {
+  const serviceTypes = getServicesByBusinessType(businessType ?? 'mechanic')
   const [form,      setForm]      = useState<FormState>(makeDefaultForm)
   const [customers, setCustomers] = useState<CustomerWithVehicles[]>([])
   const [loading,   setLoading]   = useState(false)
@@ -176,7 +177,7 @@ export default function BookJobTab({ onSuccess }: { onSuccess: () => void }) {
               className="nwi-input"
             >
               <option value="">— Select service type —</option>
-              {SERVICE_TYPES.map((s) => (
+              {serviceTypes.map((s) => (
                 <option key={s} value={s}>{s}</option>
               ))}
             </select>
