@@ -185,12 +185,22 @@ export default function BookingClient({
   techSlug,
   profile,
   offerMpi = false,
+  initialStep = 1,
 }: {
   techSlug: string
   profile: PublicProfile
   offerMpi?: boolean
+  initialStep?: number
 }) {
-  const [step, setStep] = useState(1)
+  const [step, setStep] = useState(initialStep)
+
+  // Keep the URL ?step= in sync with the current step so deep-links stay accurate
+  // and back/forward navigation reflects where the user is in the flow.
+  useEffect(() => {
+    const path = window.location.pathname
+    const url  = step === 1 ? path : `${path}?step=${step}`
+    window.history.replaceState(null, '', url)
+  }, [step])
 
   // Step 1
   const [service, setService] = useState<string | null>(null)
@@ -258,6 +268,15 @@ export default function BookingClient({
 
   function goNext() {
     if (!canAdvance()) return
+
+    // Guard: if the user deep-linked to Step 3 without going through earlier steps,
+    // they must complete service + date/time before we allow them to reach Step 4.
+    if (step === 3 && (!service || !date || !time)) {
+      setError('Please complete service selection and date/time before reviewing your booking.')
+      setStep(1)
+      return
+    }
+
     setError(null)
     setStep(s => s + 1)
   }

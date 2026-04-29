@@ -2,12 +2,18 @@ import { notFound } from 'next/navigation'
 import { createServiceClient } from '@/lib/supabase/service'
 import BookingClient from '@/components/booking/BookingClient'
 
-type PageProps = { params: Promise<{ techSlug: string }> }
+type PageProps = {
+  params:       Promise<{ techSlug: string }>
+  searchParams: Promise<{ step?: string }>
+}
 
 export const dynamic = 'force-dynamic'
 
-export default async function BookingPage({ params }: PageProps) {
+export default async function BookingPage({ params, searchParams }: PageProps) {
   const { techSlug } = await params
+  const { step: stepParam } = await searchParams
+  const parsed     = parseInt(stepParam ?? '1')
+  const initialStep = parsed >= 1 && parsed <= 4 ? parsed : 1
   const supabase = createServiceClient()
 
   const { data: profile } = await supabase
@@ -30,6 +36,7 @@ export default async function BookingPage({ params }: PageProps) {
           working_hours:            (profile.working_hours  as Record<string, { enabled: boolean; open: string; close: string }> | null) ?? null,
         }}
         offerMpi={!!(profile as Record<string, unknown>).offer_mpi_on_booking}
+        initialStep={initialStep}
       />
     </div>
   )
