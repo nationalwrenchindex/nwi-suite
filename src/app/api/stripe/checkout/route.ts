@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
         metadata: { user_id: user.id, tier },
       },
       metadata: { user_id: user.id, tier },
-      success_url: `${appUrl}${successPath}&session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${appUrl}${successPath}?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url:  `${appUrl}/billing?canceled=true`,
       allow_promotion_codes: true,
     })
