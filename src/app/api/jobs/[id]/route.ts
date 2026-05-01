@@ -1,6 +1,81 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { dispatchNotification } from '@/lib/notifications'
+
+// ─── Inventory auto-deduct ────────────────────────────────────────────────────
+// Runs fire-and-forget after a job is marked complete.
+// Looks up service_products mappings for the job's services, decrements
+// uses_remaining on each matched inventory product, logs the usage, and
+// creates an expense entry for COGS attribution.
+async function deductInventoryProducts(
+  supabase: SupabaseClient,
+  userId: string,
+  jobId: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  job: Record<string, any>,
+) {
+  const services: string[] = Array.isArray(job.services) && job.services.length > 0
+    ? job.services
+    : (job.service_type ? [job.service_type] : [])
+
+  if (services.length === 0) return
+
+  const { data: mappings } = await supabase
+    .from('service_products')
+    .select('*, product:products_inventory(*)')
+    .eq('user_id', userId)
+    .in('service_name', services)
+
+  if (!mappings || mappings.length === 0) return
+
+  const today = new Date().toISOString().slice(0, 10)
+
+  for (const m of mappings) {
+    const product = m.product as { id: string; cost_cents: number; total_uses: number; uses_remaining: number } | null
+    if (!product) continue
+
+    const qty   = Number(m.quantity_used) || 1
+    const newUses = Math.max(0, product.uses_remaining - qty)
+    const cogsCents = product.total_uses > 0
+      ? Math.round((product.cost_cents / product.total_uses) * qty)
+      : 0
+
+    // Decrement uses_remaining
+    await supabase
+      .from('products_inventory')
+      .update({ uses_remaining: newUses, updated_at: new Date().toISOString() })
+      .eq('id', product.id)
+      .eq('user_id', userId)
+
+    // Log the usage
+    await supabase
+      .from('product_usage_log')
+      .insert({
+        user_id:              userId,
+        product_inventory_id: product.id,
+        job_id:               jobId,
+        service_name:         m.service_name,
+        quantity_used:        qty,
+        cost_cents_attributed: cogsCents,
+      })
+
+    // Add COGS expense entry
+    if (cogsCents > 0) {
+      await supabase
+        .from('expenses')
+        .insert({
+          user_id:          userId,
+          expense_date:     today,
+          category:         'shop_supplies',
+          description:      `${m.product.name} — ${m.service_name} (auto)`,
+          amount:           cogsCents / 100,
+          job_id:           jobId,
+          transaction_type: 'auto_invoice',
+        })
+    }
+  }
+}
 
 const JOB_SELECT = `
   *,
@@ -92,6 +167,13 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
       jobId:    id,
       supabase,
     }).catch((err) => console.error('[PUT /api/jobs/[id]] notification error:', err))
+  }
+
+  // Auto-deduct inventory products on job completion
+  if (updateData.status === 'completed') {
+    deductInventoryProducts(supabase, user.id, id, data).catch(
+      (err) => console.error('[PUT /api/jobs/[id]] inventory deduct error:', err)
+    )
   }
 
   return NextResponse.json({ job: data })

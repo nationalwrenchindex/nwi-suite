@@ -15,7 +15,7 @@ export default async function SettingsPage() {
   const [{ data: profile }, hasQW, { data: pricingRows }] = await Promise.all([
     supabase
       .from('profiles')
-      .select('full_name, business_name, slug, share_sms_template, share_email_subject, share_email_body, default_payment_instructions, average_mpg, fuel_type, offer_mpi_on_booking, default_labor_rate, default_parts_markup_percent, default_tax_percent, business_type')
+      .select('full_name, business_name, slug, share_sms_template, share_email_subject, share_email_body, default_payment_instructions, average_mpg, fuel_type, offer_mpi_on_booking, default_labor_rate, default_parts_markup_percent, default_tax_percent, business_type, bill_consumables_separately')
       .eq('id', user.id)
       .single(),
     hasQuickWrenchAccess(user.id),
@@ -42,6 +42,7 @@ export default async function SettingsPage() {
     default_parts_markup_percent?: number | null
     default_tax_percent?: number | null
     business_type?: string | null
+    bill_consumables_separately?: boolean | null
   }
 
   return (
@@ -72,6 +73,7 @@ export default async function SettingsPage() {
           initialMarkupPct={p.default_parts_markup_percent ?? 20}
           initialTaxPct={p.default_tax_percent ?? 8.5}
           initialPricingRows={(pricingRows ?? []) as PricingRow[]}
+          initialBillConsumables={p.bill_consumables_separately ?? false}
         />
       </main>
     </div>

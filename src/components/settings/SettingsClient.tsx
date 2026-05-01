@@ -135,6 +135,7 @@ export default function SettingsClient({
   initialMarkupPct    = 20,
   initialTaxPct       = 8.5,
   initialPricingRows  = [],
+  initialBillConsumables = false,
 }: {
   slug:                        string | null
   businessName:                string
@@ -150,6 +151,7 @@ export default function SettingsClient({
   initialMarkupPct?:           number
   initialTaxPct?:              number
   initialPricingRows?:         PricingRow[]
+  initialBillConsumables?:     boolean
 }) {
   const [shareOpen, setShareOpen] = useState(false)
 
@@ -166,6 +168,9 @@ export default function SettingsClient({
 
   const [offerMpi,    setOfferMpi]    = useState(initialOfferMpi)
   const [savingMpi,   setSavingMpi]   = useState(false)
+
+  const [billConsumables,      setBillConsumables]      = useState(initialBillConsumables)
+  const [savingBillConsumables, setSavingBillConsumables] = useState(false)
 
   const [laborRate,     setLaborRate]     = useState(String(initialLaborRate))
   const [markupPct,     setMarkupPct]     = useState(String(initialMarkupPct))
@@ -222,6 +227,23 @@ export default function SettingsClient({
       }
     } catch { /* silently fail */ }
     setSavingMpi(false)
+  }
+
+  async function saveBillConsumables(value: boolean) {
+    setSavingBillConsumables(true)
+    try {
+      const res = await fetch('/api/user/profile', {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ bill_consumables_separately: value }),
+      })
+      if (res.ok) {
+        setBillConsumables(value)
+        setSavedMsg(value ? 'Consumables will appear as separate invoice lines.' : 'Consumable costs absorbed into service price.')
+        setTimeout(() => setSavedMsg(null), 3000)
+      }
+    } catch { /* silently fail */ }
+    setSavingBillConsumables(false)
   }
 
   async function savePricingRates() {
@@ -589,6 +611,46 @@ export default function SettingsClient({
             </div>
           </section>
         )
+      )}
+
+      {/* ── Bill Consumables Separately (detailer only) ── */}
+      {businessType === 'detailer' && (
+        <section>
+          <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Inventory &amp; Consumables</p>
+          <p className="text-white/30 text-xs mb-4">
+            When enabled, products used per job appear as separate line items on invoices visible to the customer.
+            When disabled (default), consumable costs are absorbed into your service price — P&amp;L tracking is unaffected.
+          </p>
+          <div className="rounded-xl border border-[#333] bg-[#222] p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-white text-sm font-medium">Bill Consumables Separately</p>
+                <p className="text-white/40 text-xs mt-1">
+                  {billConsumables
+                    ? 'Products like ceramic coating, wax, etc. will show as separate invoice line items.'
+                    : 'Consumable costs are absorbed into your service price (default).'}
+                </p>
+              </div>
+              <button
+                disabled={savingBillConsumables}
+                onClick={() => saveBillConsumables(!billConsumables)}
+                aria-pressed={billConsumables}
+                className={`relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 focus:outline-none disabled:opacity-50 ${
+                  billConsumables ? 'border-[#FF6600] bg-[#FF6600]' : 'border-[#444] bg-[#333]'
+                }`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform duration-200 ${
+                    billConsumables ? 'translate-x-5' : 'translate-x-0.5'
+                  }`}
+                />
+              </button>
+            </div>
+            <p className={`mt-3 text-xs font-semibold ${billConsumables ? 'text-success' : 'text-white/30'}`}>
+              {billConsumables ? 'ON — Consumables billed separately' : 'OFF — Absorbed into service price'}
+            </p>
+          </div>
+        </section>
       )}
 
       <ShareBookingModal

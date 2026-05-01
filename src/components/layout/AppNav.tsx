@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import LowStockBell from './LowStockBell'
 
 interface NavItem {
   href: string
@@ -80,6 +81,18 @@ export default function AppNav({ businessName, businessType }: { businessName?: 
       ),
     },
     {
+      href: '/inventory',
+      label: 'Inventory',
+      active: pathname === '/inventory',
+      icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+          <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+          <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+          <line x1="12" y1="22.08" x2="12" y2="12" />
+        </svg>
+      ),
+    },
+    {
       href: '/billing',
       label: 'Billing',
       active: pathname === '/billing',
@@ -103,9 +116,11 @@ export default function AppNav({ businessName, businessType }: { businessName?: 
     },
   ]
 
-  const visibleNavItems = navItems.filter(
-    item => !(item.href === '/quickwrench' && businessType === 'detailer')
-  )
+  const visibleNavItems = navItems.filter(item => {
+    if (item.href === '/quickwrench' && businessType === 'detailer') return false
+    if (item.href === '/inventory'   && businessType !== 'detailer') return false
+    return true
+  })
 
   return (
     <header className="border-b border-dark-border bg-dark-card sticky top-0 z-40">
@@ -154,6 +169,9 @@ export default function AppNav({ businessName, businessType }: { businessName?: 
             )
           })}
         </nav>
+
+        {/* Low-stock bell (detailers only) */}
+        {businessType === 'detailer' && <LowStockBell />}
 
         {/* Sign out */}
         <button
