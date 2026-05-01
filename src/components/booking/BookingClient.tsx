@@ -265,7 +265,10 @@ function PhotoUploader({
       uploading: true,
       error:     null,
     }))
-    onChange([...photos, ...newEntries])
+
+    // Track the combined array locally so async updates don't use stale closure
+    let localPhotos = [...photos, ...newEntries]
+    onChange(localPhotos)
 
     for (let i = 0; i < toAdd.length; i++) {
       const file  = toAdd[i]
@@ -280,15 +283,17 @@ function PhotoUploader({
         })
         const data = await res.json()
         if (!res.ok) throw new Error(data.error ?? 'Upload failed')
-        onChange(photos.map(p =>
+        localPhotos = localPhotos.map(p =>
           p.id === entry.id ? { ...p, serverUrl: data.url, uploading: false } : p
-        ))
+        )
+        onChange(localPhotos)
       } catch (e) {
-        onChange(photos.map(p =>
+        localPhotos = localPhotos.map(p =>
           p.id === entry.id
             ? { ...p, uploading: false, error: e instanceof Error ? e.message : 'Upload failed' }
             : p
-        ))
+        )
+        onChange(localPhotos)
       }
     }
   }
@@ -591,7 +596,7 @@ export default function BookingClient({
 
   return (
     <div className="min-h-dvh bg-dark flex flex-col">
-      <BookingHeader bizName={bizName} profile={profile} />
+      <BookingHeader bizName={bizName} profile={profile} isDetailer={isDetailer} />
 
       <div className="flex-1 flex justify-center p-4 sm:p-8 pb-24">
         <div className="w-full max-w-xl">

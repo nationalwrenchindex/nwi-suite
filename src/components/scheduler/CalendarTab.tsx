@@ -135,6 +135,17 @@ export default function CalendarTab({ onBookJob }: { onBookJob: () => void }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Re-fetch when the browser tab regains focus — ensures external bookings
+  // (e.g. customer booking page in another tab) show up without a full reload.
+  useEffect(() => {
+    if (!mounted) return
+    function onVisible() {
+      if (!document.hidden) fetchMonth(viewYear, viewMonth)
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [mounted, viewYear, viewMonth, fetchMonth])
+
   function prevMonth() {
     if (viewMonth === 0) { setViewYear(y => y - 1); setViewMonth(11) }
     else setViewMonth(m => m - 1)
