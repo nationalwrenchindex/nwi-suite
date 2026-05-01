@@ -109,7 +109,7 @@ function JobCard({
         msg: ok ? 'Sent!' : (json.error ?? detail ?? 'Failed to send'),
       })
 
-      // Record on_my_way_sent_at so the "On Site" button can appear
+      // Record on_my_way_sent_at for audit/activity timeline
       if (ok && trigger === 'on_my_way') {
         const upd = await fetch(`/api/jobs/${job.id}`, {
           method:  'PUT',
@@ -157,7 +157,7 @@ function JobCard({
   }
 
   const isActive   = job.status !== 'cancelled' && job.status !== 'completed' && job.status !== 'no_show'
-  const showOnSite = job.status === 'in_progress' && !!job.on_my_way_sent_at
+  const showOnSite = job.status === 'in_progress'
   const showQuote  = job.status === 'on_site' && businessType !== 'detailer'
 
   return (
