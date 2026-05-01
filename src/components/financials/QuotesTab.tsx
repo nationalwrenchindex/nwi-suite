@@ -452,14 +452,16 @@ function SendQuoteModal({
 
 function QuoteDetailModal({
   quote:      initialQuote,
+  isDetailer = false,
   onClose,
   onUpdated,
   onDeleted,
 }: {
-  quote:      Quote
-  onClose:    () => void
-  onUpdated:  (q: Quote) => void
-  onDeleted:  (id: string) => void
+  quote:       Quote
+  isDetailer?: boolean
+  onClose:     () => void
+  onUpdated:   (q: Quote) => void
+  onDeleted:   (id: string) => void
 }) {
   const isDraft  = initialQuote.status === 'draft'
   const isSent   = initialQuote.status === 'sent'
@@ -559,9 +561,10 @@ function QuoteDetailModal({
 
   // ── Live calculations ──────────────────────────────────────────────────────
   const partsBase     = items.reduce((s, li) => s + li.quantity * li.unit_price, 0)
-  const markupAmt     = partsBase * (markupPct / 100)
+  const markupAmt     = isDetailer ? 0 : partsBase * (markupPct / 100)
   const partsTotal    = partsBase + markupAmt
-  const laborSubtotal = (laborHours || 0) * (laborRate || 0)
+  // Detailers: service is a flat rate (laborRate), hours are irrelevant
+  const laborSubtotal = isDetailer ? (laborRate || 0) : (laborHours || 0) * (laborRate || 0)
   const subtotal      = partsTotal + laborSubtotal
   const taxAmount     = subtotal * ((taxPct || 0) / 100)
   const grandTotal    = subtotal + taxAmount
@@ -621,10 +624,15 @@ function QuoteDetailModal({
       return 'Grand total cannot be negative.'
     if (items.some(li => li.quantity < 0 || li.unit_price < 0))
       return 'Line items cannot have negative quantity or price.'
-    if (laborHours < 0 || laborRate < 0)
-      return 'Labor hours and rate cannot be negative.'
-    if (items.length === 0 && (laborHours || 0) <= 0)
-      return 'At least one line item or labor time is required.'
+    if (laborRate < 0 || (!isDetailer && laborHours < 0))
+      return 'Rate cannot be negative.'
+    if (isDetailer) {
+      if (items.length === 0 && laborRate <= 0)
+        return 'Add at least one add-on or a service fee.'
+    } else {
+      if (items.length === 0 && (laborHours || 0) <= 0)
+        return 'At least one line item or labor time is required.'
+    }
     return null
   }
 
@@ -635,7 +643,8 @@ function QuoteDetailModal({
     setValidationErr(null)
     setSaving(true)
 
-    const markup = markupPct / 100
+    const markup = isDetailer ? 0 : markupPct / 100
+    const savedLaborHours = isDetailer ? (laborRate > 0 ? 1 : 0) : laborHours
     const savedLineItems = [
       ...items.map(li => ({
         description: li.description,
@@ -643,12 +652,20 @@ function QuoteDetailModal({
         unit_price:  round2(li.unit_price * (1 + markup)),
         total:       round2(li.quantity * li.unit_price * (1 + markup)),
       })),
-      ...(laborHours > 0 ? [{
-        description: 'Labor',
-        quantity:    laborHours,
-        unit_price:  laborRate,
-        total:       round2(laborHours * laborRate),
-      }] : []),
+      ...(isDetailer
+        ? (laborRate > 0 ? [{
+            description: 'Service',
+            quantity:    1,
+            unit_price:  laborRate,
+            total:       laborRate,
+          }] : [])
+        : (laborHours > 0 ? [{
+            description: 'Labor',
+            quantity:    laborHours,
+            unit_price:  laborRate,
+            total:       round2(laborHours * laborRate),
+          }] : [])
+      ),
     ]
 
     try {
@@ -657,10 +674,10 @@ function QuoteDetailModal({
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
           line_items:           savedLineItems,
-          labor_hours:          laborHours,
+          labor_hours:          savedLaborHours,
           labor_rate:           laborRate,
           parts_subtotal:       round2(partsBase),
-          parts_markup_percent: markupPct,
+          parts_markup_percent: isDetailer ? 0 : markupPct,
           labor_subtotal:       round2(laborSubtotal),
           tax_percent:          taxPct,
           tax_amount:           round2(taxAmount),
@@ -1022,13 +1039,17 @@ function QuoteDetailModal({
 
             {/* ── Line Items ── */}
             <div className="space-y-3">
-              <p className="text-white/30 text-xs uppercase tracking-widest">Line Items</p>
+              <p className="text-white/30 text-xs uppercase tracking-widest">
+                {isDetailer ? 'Add-ons / Products' : 'Line Items'}
+              </p>
 
               {isDraft ? (
                 <div className="rounded-xl border border-white/10 overflow-hidden">
                   {/* Header row */}
                   <div className="grid grid-cols-[1fr_56px_80px_80px_52px] gap-1 px-3 py-2 border-b border-white/10 bg-white/5">
-                    <span className="text-white/30 text-[10px] uppercase tracking-wider">Part / Description</span>
+                    <span className="text-white/30 text-[10px] uppercase tracking-wider">
+                      {isDetailer ? 'Add-on / Description' : 'Part / Description'}
+                    </span>
                     <span className="text-white/30 text-[10px] uppercase tracking-wider text-right">Qty</span>
                     <span className="text-white/30 text-[10px] uppercase tracking-wider text-right">Base Price</span>
                     <span className="text-white/30 text-[10px] uppercase tracking-wider text-right">Total</span>
@@ -1037,7 +1058,9 @@ function QuoteDetailModal({
 
                   {items.length === 0 && !addingNew && (
                     <div className="px-4 py-4 text-white/25 text-sm text-center">
-                      No parts — add one below or skip if labor-only.
+                      {isDetailer
+                        ? 'No add-ons — add one below, or leave empty for service-only.'
+                        : 'No parts — add one below or skip if labor-only.'}
                     </div>
                   )}
 
@@ -1048,7 +1071,7 @@ function QuoteDetailModal({
                           <input
                             autoFocus
                             className="nwi-input text-sm w-full"
-                            placeholder="Part name"
+                            placeholder={isDetailer ? 'Add-on name' : 'Part name'}
                             value={editingVals.description}
                             onChange={e => setEditingVals(v => ({ ...v, description: e.target.value }))}
                           />
@@ -1129,7 +1152,7 @@ function QuoteDetailModal({
                       <input
                         autoFocus
                         className="nwi-input text-sm w-full"
-                        placeholder="Part name or description"
+                        placeholder={isDetailer ? 'Add-on name or description' : 'Part name or description'}
                         value={newItemVals.description}
                         onChange={e => setNewItemVals(v => ({ ...v, description: e.target.value }))}
                         onKeyDown={e => { if (e.key === 'Enter') commitNewItem() }}
@@ -1210,46 +1233,74 @@ function QuoteDetailModal({
               )}
             </div>
 
-            {/* ── Labor ── */}
+            {/* ── Labor / Service Fee ── */}
             {isDraft ? (
               <div className="space-y-2">
-                <p className="text-white/30 text-xs uppercase tracking-widest">Labor</p>
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className="nwi-label">Hours</label>
-                    <input
-                      type="number" min={0} step={0.25}
-                      className="nwi-input"
-                      value={laborHours}
-                      onChange={e => setLaborHours(Number(e.target.value) || 0)}
-                    />
+                <p className="text-white/30 text-xs uppercase tracking-widest">
+                  {isDetailer ? 'Service Fee' : 'Labor'}
+                </p>
+                {isDetailer ? (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="nwi-label">Service Fee ($)</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 text-sm">$</span>
+                        <input
+                          type="number" min={0} step={5}
+                          className="nwi-input pl-7"
+                          placeholder="0.00"
+                          value={laborRate}
+                          onChange={e => setLaborRate(Number(e.target.value) || 0)}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="nwi-label">Total</label>
+                      <div className="nwi-input bg-white/5 text-white/60 pointer-events-none">
+                        {fmt(laborSubtotal)}
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <label className="nwi-label">Rate $/hr</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 text-sm">$</span>
+                ) : (
+                  <div className="grid grid-cols-3 gap-3">
+                    <div>
+                      <label className="nwi-label">Hours</label>
                       <input
-                        type="number" min={0} step={5}
-                        className="nwi-input pl-7"
-                        value={laborRate}
-                        onChange={e => setLaborRate(Number(e.target.value) || 0)}
+                        type="number" min={0} step={0.25}
+                        className="nwi-input"
+                        value={laborHours}
+                        onChange={e => setLaborHours(Number(e.target.value) || 0)}
                       />
                     </div>
-                  </div>
-                  <div>
-                    <label className="nwi-label">Subtotal</label>
-                    <div className="nwi-input bg-white/5 text-white/60 pointer-events-none">
-                      {fmt(laborSubtotal)}
+                    <div>
+                      <label className="nwi-label">Rate $/hr</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 text-sm">$</span>
+                        <input
+                          type="number" min={0} step={5}
+                          className="nwi-input pl-7"
+                          value={laborRate}
+                          onChange={e => setLaborRate(Number(e.target.value) || 0)}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="nwi-label">Subtotal</label>
+                      <div className="nwi-input bg-white/5 text-white/60 pointer-events-none">
+                        {fmt(laborSubtotal)}
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
               </div>
             ) : (
               initialQuote.labor_subtotal != null && (
                 <div className="space-y-1">
-                  <p className="text-white/30 text-xs uppercase tracking-widest">Labor</p>
+                  <p className="text-white/30 text-xs uppercase tracking-widest">
+                    {isDetailer ? 'Service Fee' : 'Labor'}
+                  </p>
                   <p className="text-white/70 text-sm">
-                    {initialQuote.labor_hours != null && initialQuote.labor_rate != null
+                    {!isDetailer && initialQuote.labor_hours != null && initialQuote.labor_rate != null
                       ? `${initialQuote.labor_hours}h × ${fmt(initialQuote.labor_rate)}/hr = `
                       : ''}
                     <span className="text-white font-medium">{fmt(initialQuote.labor_subtotal)}</span>
@@ -1262,19 +1313,21 @@ function QuoteDetailModal({
             {isDraft && (
               <div className="space-y-2">
                 <p className="text-white/30 text-xs uppercase tracking-widest">Pricing Settings</p>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="nwi-label">Parts Markup %</label>
-                    <div className="relative">
-                      <input
-                        type="number" min={0} step={1}
-                        className="nwi-input pr-7"
-                        value={markupPct}
-                        onChange={e => setMarkupPct(Number(e.target.value) || 0)}
-                      />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 text-sm">%</span>
+                <div className={`grid gap-3 ${isDetailer ? 'grid-cols-1 max-w-[50%]' : 'grid-cols-2'}`}>
+                  {!isDetailer && (
+                    <div>
+                      <label className="nwi-label">Parts Markup %</label>
+                      <div className="relative">
+                        <input
+                          type="number" min={0} step={1}
+                          className="nwi-input pr-7"
+                          value={markupPct}
+                          onChange={e => setMarkupPct(Number(e.target.value) || 0)}
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 text-sm">%</span>
+                      </div>
                     </div>
-                  </div>
+                  )}
                   <div>
                     <label className="nwi-label">Tax Rate %</label>
                     <div className="relative">
@@ -1320,11 +1373,11 @@ function QuoteDetailModal({
                 <>
                   {partsBase > 0 && (
                     <div className="flex justify-between text-sm">
-                      <span className="text-white/60">Parts Base</span>
+                      <span className="text-white/60">{isDetailer ? 'Add-ons' : 'Parts Base'}</span>
                       <span className="text-white">{fmt(partsBase)}</span>
                     </div>
                   )}
-                  {markupPct > 0 && partsBase > 0 && (
+                  {!isDetailer && markupPct > 0 && partsBase > 0 && (
                     <div className="flex justify-between text-sm">
                       <span className="text-white/40">Parts Markup ({markupPct}%)</span>
                       <span className="text-white/60">+{fmt(markupAmt)}</span>
@@ -1333,7 +1386,7 @@ function QuoteDetailModal({
                   {laborSubtotal > 0 && (
                     <div className="flex justify-between text-sm">
                       <span className="text-white/60">
-                        Labor ({laborHours}h × {fmt(laborRate)}/hr)
+                        {isDetailer ? 'Service Fee' : `Labor (${laborHours}h × ${fmt(laborRate)}/hr)`}
                       </span>
                       <span className="text-white">{fmt(laborSubtotal)}</span>
                     </div>
@@ -1355,11 +1408,11 @@ function QuoteDetailModal({
                 <>
                   {initialQuote.parts_subtotal != null && (
                     <div className="flex justify-between text-sm">
-                      <span className="text-white/60">Parts Subtotal</span>
+                      <span className="text-white/60">{isDetailer ? 'Add-ons Subtotal' : 'Parts Subtotal'}</span>
                       <span className="text-white">{fmt(initialQuote.parts_subtotal)}</span>
                     </div>
                   )}
-                  {initialQuote.parts_markup_percent != null && (
+                  {!isDetailer && initialQuote.parts_markup_percent != null && (
                     <div className="flex justify-between text-sm">
                       <span className="text-white/40">Parts Markup ({initialQuote.parts_markup_percent}%)</span>
                       <span className="text-white/60">
@@ -1372,9 +1425,11 @@ function QuoteDetailModal({
                   {initialQuote.labor_subtotal != null && (
                     <div className="flex justify-between text-sm">
                       <span className="text-white/60">
-                        Labor{initialQuote.labor_hours != null && initialQuote.labor_rate != null
-                          ? ` (${initialQuote.labor_hours}h × ${fmt(initialQuote.labor_rate)}/hr)`
-                          : ''}
+                        {isDetailer
+                          ? 'Service Fee'
+                          : `Labor${initialQuote.labor_hours != null && initialQuote.labor_rate != null
+                              ? ` (${initialQuote.labor_hours}h × ${fmt(initialQuote.labor_rate)}/hr)`
+                              : ''}`}
                       </span>
                       <span className="text-white">{fmt(initialQuote.labor_subtotal)}</span>
                     </div>
@@ -1872,7 +1927,7 @@ function QuoteDetailModal({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function QuotesTab({ initialQuoteId }: { initialQuoteId?: string }) {
+export default function QuotesTab({ initialQuoteId, isDetailer = false }: { initialQuoteId?: string; isDetailer?: boolean }) {
   const [quotes,       setQuotes]       = useState<Quote[]>([])
   const [loading,      setLoading]      = useState(true)
   const [error,        setError]        = useState<string | null>(null)
@@ -2103,6 +2158,7 @@ export default function QuotesTab({ initialQuoteId }: { initialQuoteId?: string 
         <QuoteDetailModal
           key={`${selected.id}-${modalKey}`}
           quote={selected}
+          isDetailer={isDetailer}
           onClose={() => setSelected(null)}
           onUpdated={handleQuoteUpdated}
           onDeleted={handleQuoteDeleted}

@@ -53,7 +53,7 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   },
 ]
 
-export default function FinancialsClient() {
+export default function FinancialsClient({ businessType }: { businessType?: string }) {
   const searchParams = useSearchParams()
   const tabParam     = searchParams.get('tab') as Tab | null
   const quoteParam   = searchParams.get('quote') ?? undefined
@@ -92,7 +92,7 @@ export default function FinancialsClient() {
         ))}
       </div>
 
-      {activeTab === 'quotes'   && <QuotesTab initialQuoteId={quoteParam} />}
+      {activeTab === 'quotes'   && <QuotesTab initialQuoteId={quoteParam} isDetailer={businessType === 'detailer'} />}
       {activeTab === 'overview' && <OverviewTab />}
       {activeTab === 'invoices' && <InvoicesTab />}
       {activeTab === 'expenses' && <ExpensesTab />}

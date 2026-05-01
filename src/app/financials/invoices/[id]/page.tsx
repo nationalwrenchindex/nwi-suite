@@ -56,7 +56,7 @@ export default async function InvoiceDetailPage({
       <div className="min-h-dvh bg-dark flex flex-col">
         <AppNav businessName={bizName} businessType={businessType} />
         <main className="flex-1 w-full max-w-4xl mx-auto px-4 sm:px-6 py-6">
-          <InvoiceInProgressClient invoice={inv} />
+          <InvoiceInProgressClient invoice={inv} isDetailer={businessType === 'detailer'} />
         </main>
       </div>
     )
@@ -68,7 +68,7 @@ export default async function InvoiceDetailPage({
       <div className="min-h-dvh bg-dark flex flex-col">
         <AppNav businessName={bizName} businessType={businessType} />
         <main className="flex-1 w-full max-w-4xl mx-auto px-4 sm:px-6 py-6">
-          <FinalizedInvoiceClient invoice={inv} bizName={bizName} techName={techName} averageMpg={averageMpg} fuelType={fuelType} />
+          <FinalizedInvoiceClient invoice={inv} bizName={bizName} techName={techName} averageMpg={averageMpg} fuelType={fuelType} isDetailer={businessType === 'detailer'} />
         </main>
       </div>
     )

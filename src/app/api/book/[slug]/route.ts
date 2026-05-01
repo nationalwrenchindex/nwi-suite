@@ -275,6 +275,9 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     body.inspection_requested === true &&
     !!(profile as Record<string, unknown>).offer_mpi_on_booking
 
+  const vehicleCategory = typeof body.vehicle_category === 'string' ? body.vehicle_category : null
+  const photos          = Array.isArray(body.photos) ? (body.photos as string[]).filter(u => typeof u === 'string') : []
+
   // ── Create job ──
   const { data: job, error: jobErr } = await supabase
     .from('jobs')
@@ -290,6 +293,8 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       notes:                      notes ? String(notes) : null,
       inspection_requested:       wantsInspection,
       sms_consent:                smsConsent,
+      vehicle_category:           vehicleCategory,
+      photos:                     photos,
     })
     .select('id, job_date, job_time, service_type')
     .single()

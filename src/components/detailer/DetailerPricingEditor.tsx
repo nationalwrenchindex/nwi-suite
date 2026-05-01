@@ -60,15 +60,12 @@ export default function DetailerPricingEditor({
   const [saved,  setSaved]    = useState(false)
   const [error,  setError]    = useState<string | null>(null)
 
-  // Which services are toggled open (expanded)
+  // Collapse all by default; expand only the three most common services on load
+  const DEFAULT_EXPANDED = new Set(['Basic Wash', 'Full Detail', 'Interior Detail'])
   const [expanded, setExpanded] = useState<Set<string>>(() => {
     const s = new Set<string>()
-    // Only expand offered services by default, max 3
-    let count = 0
     for (const svc of DETAILER_SERVICES) {
-      if (count >= 3) break
-      const offered = rows.some(r => r.service_name === svc && r.is_offered)
-      if (offered) { s.add(svc); count++ }
+      if (DEFAULT_EXPANDED.has(svc)) s.add(svc)
     }
     return s
   })
@@ -114,6 +111,19 @@ export default function DetailerPricingEditor({
     <div className="space-y-3">
       {error && <div className="alert-error">{error}</div>}
       {saved && <div className="alert-success">Pricing saved.</div>}
+
+      {showSkip && onSkip && (
+        <div className="flex items-center justify-between px-4 py-3 rounded-xl border border-dark-border bg-dark-card/60">
+          <p className="text-white/50 text-sm">Not sure about pricing yet?</p>
+          <button
+            type="button"
+            onClick={onSkip}
+            className="text-sm font-medium text-orange hover:text-orange/80 transition-colors whitespace-nowrap"
+          >
+            Skip all &amp; use defaults →
+          </button>
+        </div>
+      )}
 
       {DETAILER_SERVICES.map(svc => {
         const svcRows = rows.filter(r => r.service_name === svc)

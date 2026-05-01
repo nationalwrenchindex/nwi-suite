@@ -35,7 +35,7 @@ export default async function FinancialsPage() {
             Invoices, expenses &amp; monthly profit overview.
           </p>
         </div>
-        <FinancialsClient />
+        <FinancialsClient businessType={(profile as Record<string, unknown>).business_type as string | undefined} />
       </main>
     </div>
   )

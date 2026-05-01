@@ -243,15 +243,52 @@ function LaborRow({
   item,
   onChange,
   onRemove,
+  isDetailer = false,
 }: {
   item: AdditionalLaborItem
   onChange: (updated: AdditionalLaborItem) => void
   onRemove: () => void
+  isDetailer?: boolean
 }) {
   function update(field: keyof AdditionalLaborItem, val: string | number) {
     const updated = { ...item, [field]: val }
-    updated.subtotal = round2(Number(updated.hours) * Number(updated.rate))
+    if (isDetailer) {
+      updated.hours    = 1
+      updated.subtotal = round2(Number(updated.rate))
+    } else {
+      updated.subtotal = round2(Number(updated.hours) * Number(updated.rate))
+    }
     onChange(updated)
+  }
+
+  if (isDetailer) {
+    return (
+      <div className="grid grid-cols-[1fr_88px_84px_32px] gap-2 items-center">
+        <input
+          className="nwi-input py-2 text-sm"
+          placeholder="Service description"
+          value={item.description}
+          onChange={e => update('description', e.target.value)}
+        />
+        <input
+          type="number" min="0" step="5"
+          className="nwi-input py-2 text-sm text-right"
+          placeholder="Price"
+          value={item.rate}
+          onChange={e => update('rate', Number(e.target.value))}
+        />
+        <div className="nwi-input py-2 text-sm text-right bg-white/5 text-white/60 cursor-default">
+          {fmt(item.subtotal)}
+        </div>
+        <button
+          type="button"
+          onClick={onRemove}
+          className="text-white/25 hover:text-danger transition-colors text-xl leading-none flex items-center justify-center"
+        >
+          ×
+        </button>
+      </div>
+    )
   }
 
   return (
@@ -360,7 +397,7 @@ function FinalizeConfirmModal({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function InvoiceInProgressClient({ invoice }: { invoice: Invoice }) {
+export default function InvoiceInProgressClient({ invoice, isDetailer = false }: { invoice: Invoice; isDetailer?: boolean }) {
   const router = useRouter()
 
   // Editable state
@@ -697,7 +734,9 @@ export default function InvoiceInProgressClient({ invoice }: { invoice: Invoice 
               {quotedPartsSubtotal > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-white/50">
-                    Parts{markupPct > 0 ? ` (incl. ${markupPct}% markup)` : ''}
+                    {isDetailer
+                      ? 'Add-ons'
+                      : `Parts${markupPct > 0 ? ` (incl. ${markupPct}% markup)` : ''}`}
                   </span>
                   <span className="text-white">{fmt(quotedPartsSubtotal)}</span>
                 </div>
@@ -705,9 +744,11 @@ export default function InvoiceInProgressClient({ invoice }: { invoice: Invoice 
               {quotedLaborSubtotal > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-white/50">
-                    Labor{sq?.labor_hours && sq?.labor_rate
-                      ? ` (${sq.labor_hours}h × ${fmt(sq.labor_rate)}/hr)`
-                      : ''}
+                    {isDetailer
+                      ? 'Service Fee'
+                      : `Labor${sq?.labor_hours && sq?.labor_rate
+                          ? ` (${sq.labor_hours}h × ${fmt(sq.labor_rate)}/hr)`
+                          : ''}`}
                   </span>
                   <span className="text-white">{fmt(quotedLaborSubtotal)}</span>
                 </div>
@@ -783,9 +824,9 @@ export default function InvoiceInProgressClient({ invoice }: { invoice: Invoice 
         )}
       </Section>
 
-      {/* ── SECTION F: Additional parts ── */}
+      {/* ── SECTION F: Additional parts / add-ons ── */}
       <Section
-        label={`Additional Parts${markupPct > 0 ? ` (${markupPct}% markup applied)` : ''}`}
+        label={isDetailer ? 'Add-ons / Products' : `Additional Parts${markupPct > 0 ? ` (${markupPct}% markup applied)` : ''}`}
         action={
           <button
             onClick={addPart}
@@ -794,7 +835,7 @@ export default function InvoiceInProgressClient({ invoice }: { invoice: Invoice 
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
               <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
             </svg>
-            Add Part
+            {isDetailer ? 'Add Add-on' : 'Add Part'}
           </button>
         }
       >
@@ -803,7 +844,9 @@ export default function InvoiceInProgressClient({ invoice }: { invoice: Invoice 
             onClick={addPart}
             className="w-full py-6 text-white/25 hover:text-white/50 text-sm text-center border border-dashed border-white/10 hover:border-white/20 rounded-xl transition-colors"
           >
-            + Add parts not in the original quote…
+            {isDetailer
+              ? '+ Add products, conditioners, coatings not in the original quote…'
+              : '+ Add parts not in the original quote…'}
           </button>
         ) : (
           <div className="space-y-2">
@@ -820,7 +863,7 @@ export default function InvoiceInProgressClient({ invoice }: { invoice: Invoice 
             {additionalParts.length > 0 && (
               <div className="flex justify-end pt-2 border-t border-white/8">
                 <div className="flex gap-6 text-sm">
-                  <span className="text-white/40">Additional Parts Subtotal</span>
+                  <span className="text-white/40">{isDetailer ? 'Add-ons Subtotal' : 'Additional Parts Subtotal'}</span>
                   <span className="text-white font-medium w-20 text-right">{fmt(additionalPartsTotal)}</span>
                 </div>
               </div>
@@ -829,9 +872,9 @@ export default function InvoiceInProgressClient({ invoice }: { invoice: Invoice 
         )}
       </Section>
 
-      {/* ── SECTION G: Additional labor ── */}
+      {/* ── SECTION G: Additional labor / services ── */}
       <Section
-        label="Additional Labor"
+        label={isDetailer ? 'Additional Services' : 'Additional Labor'}
         action={
           <button
             onClick={addLabor}
@@ -840,7 +883,7 @@ export default function InvoiceInProgressClient({ invoice }: { invoice: Invoice 
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
               <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
             </svg>
-            Add Labor
+            {isDetailer ? 'Add Service' : 'Add Labor'}
           </button>
         }
       >
@@ -849,15 +892,18 @@ export default function InvoiceInProgressClient({ invoice }: { invoice: Invoice 
             onClick={addLabor}
             className="w-full py-6 text-white/25 hover:text-white/50 text-sm text-center border border-dashed border-white/10 hover:border-white/20 rounded-xl transition-colors"
           >
-            + Add extra diagnostic time, wire brushing, additional repairs…
+            {isDetailer
+              ? '+ Add extra services, treatments, corrections…'
+              : '+ Add extra diagnostic time, wire brushing, additional repairs…'}
           </button>
         ) : (
           <div className="space-y-2">
-            <ListHeader cols={['Description', 'Hrs', 'Rate', 'Subtotal', '']} />
+            <ListHeader cols={isDetailer ? ['Description', 'Price', 'Total', ''] : ['Description', 'Hrs', 'Rate', 'Subtotal', '']} />
             {additionalLabor.map(item => (
               <LaborRow
                 key={item.id}
                 item={item}
+                isDetailer={isDetailer}
                 onChange={updated => updateLabor(item.id, updated)}
                 onRemove={() => removeLabor(item.id)}
               />
@@ -865,7 +911,7 @@ export default function InvoiceInProgressClient({ invoice }: { invoice: Invoice 
             {additionalLabor.length > 0 && (
               <div className="flex justify-end pt-2 border-t border-white/8">
                 <div className="flex gap-6 text-sm">
-                  <span className="text-white/40">Additional Labor Subtotal</span>
+                  <span className="text-white/40">{isDetailer ? 'Additional Services Subtotal' : 'Additional Labor Subtotal'}</span>
                   <span className="text-white font-medium w-20 text-right">{fmt(additionalLaborTotal)}</span>
                 </div>
               </div>
@@ -880,13 +926,13 @@ export default function InvoiceInProgressClient({ invoice }: { invoice: Invoice 
         <div className="space-y-2">
           {quotedPartsSubtotal > 0 && (
             <div className="flex justify-between text-sm">
-              <span className="text-white/50">Quoted Parts</span>
+              <span className="text-white/50">{isDetailer ? 'Quoted Add-ons' : 'Quoted Parts'}</span>
               <span className="text-white">{fmt(quotedPartsSubtotal)}</span>
             </div>
           )}
           {additionalPartsTotal > 0 && (
             <div className="flex justify-between text-sm">
-              <span className="text-white/50">Additional Parts</span>
+              <span className="text-white/50">{isDetailer ? 'Additional Add-ons' : 'Additional Parts'}</span>
               <span className="text-white">{fmt(additionalPartsTotal)}</span>
             </div>
           )}
@@ -898,13 +944,13 @@ export default function InvoiceInProgressClient({ invoice }: { invoice: Invoice 
           )}
           {quotedLaborSubtotal > 0 && (
             <div className="flex justify-between text-sm">
-              <span className="text-white/50">Quoted Labor</span>
+              <span className="text-white/50">{isDetailer ? 'Quoted Service' : 'Quoted Labor'}</span>
               <span className="text-white">{fmt(quotedLaborSubtotal)}</span>
             </div>
           )}
           {additionalLaborTotal > 0 && (
             <div className="flex justify-between text-sm">
-              <span className="text-white/50">Additional Labor</span>
+              <span className="text-white/50">{isDetailer ? 'Additional Services' : 'Additional Labor'}</span>
               <span className="text-white">{fmt(additionalLaborTotal)}</span>
             </div>
           )}
@@ -993,20 +1039,22 @@ export default function InvoiceInProgressClient({ invoice }: { invoice: Invoice 
         </div>
       </div>
 
-      {/* ── Floating diagnostics button ── */}
-      <button
-        onClick={() => setShowDiagPanel(true)}
-        className="fixed bottom-20 sm:bottom-6 right-4 sm:right-6 z-20 flex items-center gap-2 px-4 py-3 bg-[#2969B0] hover:bg-blue-700 text-white font-semibold text-sm rounded-xl shadow-xl shadow-blue-900/30 transition-colors"
-        title="Diagnostic Tools"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-        </svg>
-        <span className="hidden sm:inline">Diagnostics</span>
-      </button>
+      {/* ── Floating diagnostics button (mechanic only) ── */}
+      {!isDetailer && (
+        <button
+          onClick={() => setShowDiagPanel(true)}
+          className="fixed bottom-20 sm:bottom-6 right-4 sm:right-6 z-20 flex items-center gap-2 px-4 py-3 bg-[#2969B0] hover:bg-blue-700 text-white font-semibold text-sm rounded-xl shadow-xl shadow-blue-900/30 transition-colors"
+          title="Diagnostic Tools"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+          </svg>
+          <span className="hidden sm:inline">Diagnostics</span>
+        </button>
+      )}
 
       {/* ── Modals ── */}
-      {showDiagPanel && (
+      {!isDetailer && showDiagPanel && (
         <DiagnosticsPanel
           vin={invoice.vehicle?.vin ?? null}
           onClose={() => setShowDiagPanel(false)}

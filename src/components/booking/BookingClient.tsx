@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { buildCalendarGrid, monthLabel, toDateStr, formatTime, VEHICLE_CATEGORIES, VEHICLE_CATEGORY_LABELS, type VehicleCategory } from '@/lib/scheduler'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -194,6 +194,176 @@ function MiniCalendar({
   )
 }
 
+// ─── Photo upload helpers ─────────────────────────────────────────────────────
+
+interface PhotoEntry {
+  id:        string
+  localUrl:  string
+  serverUrl: string | null
+  uploading: boolean
+  error:     string | null
+}
+
+async function compressImage(file: File): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => {
+      const MAX = 1600
+      let { width, height } = img
+      if (width > MAX || height > MAX) {
+        const ratio = Math.min(MAX / width, MAX / height)
+        width  = Math.round(width  * ratio)
+        height = Math.round(height * ratio)
+      }
+      const canvas = document.createElement('canvas')
+      canvas.width  = width
+      canvas.height = height
+      const ctx = canvas.getContext('2d')!
+      ctx.drawImage(img, 0, 0, width, height)
+      canvas.toBlob(
+        blob => blob ? resolve(blob) : reject(new Error('Compression failed')),
+        'image/jpeg',
+        0.75,
+      )
+    }
+    img.onerror = reject
+    img.src = URL.createObjectURL(file)
+  })
+}
+
+async function blobToBase64(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload  = () => resolve((reader.result as string).split(',')[1])
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
+}
+
+function PhotoUploader({
+  techSlug,
+  photos,
+  onChange,
+  maxPhotos = 5,
+}: {
+  techSlug:  string
+  photos:    PhotoEntry[]
+  onChange:  (photos: PhotoEntry[]) => void
+  maxPhotos?: number
+}) {
+  const inputRef  = useRef<HTMLInputElement>(null)
+  const remaining = maxPhotos - photos.length
+
+  async function handleFiles(files: FileList) {
+    const toAdd = Array.from(files).slice(0, remaining)
+    if (toAdd.length === 0) return
+
+    const newEntries: PhotoEntry[] = toAdd.map(f => ({
+      id:        Math.random().toString(36).slice(2),
+      localUrl:  URL.createObjectURL(f),
+      serverUrl: null,
+      uploading: true,
+      error:     null,
+    }))
+    onChange([...photos, ...newEntries])
+
+    for (let i = 0; i < toAdd.length; i++) {
+      const file  = toAdd[i]
+      const entry = newEntries[i]
+      try {
+        const compressed = await compressImage(file)
+        const base64     = await blobToBase64(compressed)
+        const res        = await fetch(`/api/book/${techSlug}/photos`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ image: base64 }),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error ?? 'Upload failed')
+        onChange(photos.map(p =>
+          p.id === entry.id ? { ...p, serverUrl: data.url, uploading: false } : p
+        ))
+      } catch (e) {
+        onChange(photos.map(p =>
+          p.id === entry.id
+            ? { ...p, uploading: false, error: e instanceof Error ? e.message : 'Upload failed' }
+            : p
+        ))
+      }
+    }
+  }
+
+  function remove(id: string) {
+    onChange(photos.filter(p => p.id !== id))
+  }
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-2">
+        {photos.map(p => (
+          <div key={p.id} className="relative w-20 h-20 rounded-xl overflow-hidden border border-dark-border flex-shrink-0">
+            <img
+              src={p.serverUrl ?? p.localUrl}
+              alt=""
+              className="w-full h-full object-cover"
+            />
+            {p.uploading && (
+              <div className="absolute inset-0 bg-dark/70 flex items-center justify-center">
+                <svg className="animate-spin w-5 h-5 text-white" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+                </svg>
+              </div>
+            )}
+            {p.error && (
+              <div className="absolute inset-0 bg-danger/80 flex items-center justify-center">
+                <span className="text-white text-[9px] text-center px-1 leading-tight">{p.error}</span>
+              </div>
+            )}
+            {!p.uploading && (
+              <button
+                type="button"
+                onClick={() => remove(p.id)}
+                className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 flex items-center justify-center text-white hover:bg-danger/80 transition-colors"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </button>
+            )}
+          </div>
+        ))}
+
+        {remaining > 0 && (
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            className="w-20 h-20 rounded-xl border border-dashed border-dark-border flex flex-col items-center justify-center gap-1 text-white/30 hover:text-white/60 hover:border-white/30 transition-colors flex-shrink-0"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+            </svg>
+            <span className="text-[10px]">Add photo</span>
+          </button>
+        )}
+      </div>
+
+      <p className="text-white/25 text-xs">
+        {photos.length}/{maxPhotos} photos · JPEG, PNG, or WebP · compressed automatically
+      </p>
+
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/jpg,image/png,image/webp"
+        multiple
+        className="hidden"
+        onChange={e => { if (e.target.files?.length) { handleFiles(e.target.files); e.target.value = '' } }}
+      />
+    </div>
+  )
+}
+
 // ─── Main booking wizard ──────────────────────────────────────────────────────
 
 export default function BookingClient({
@@ -252,6 +422,9 @@ export default function BookingClient({
   const [submitted,  setSubmitted]  = useState(false)
   const [jobId,      setJobId]      = useState<string | null>(null)
   const [error,      setError]      = useState<string | null>(null)
+
+  // Photo uploads (detailer only)
+  const [bookingPhotos, setBookingPhotos] = useState<PhotoEntry[]>([])
 
   // SMS consent (unchecked by default — 10DLC/TCR compliance)
   const [smsConsent, setSmsConsent] = useState(false)
@@ -320,6 +493,7 @@ export default function BookingClient({
     setSubmitting(true)
     setError(null)
     try {
+      const uploadedPhotoUrls = bookingPhotos.filter(p => p.serverUrl).map(p => p.serverUrl!)
       const payload: Record<string, unknown> = {
         service_type:               service,
         job_date:                   date,
@@ -329,6 +503,7 @@ export default function BookingClient({
         inspection_requested:       inspectionRequested,
         sms_consent:                smsConsent,
         vehicle_category:           vehicleCategory || null,
+        photos:                     uploadedPhotoUrls,
         customer: {
           first_name: firstName.trim(),
           last_name:  lastName.trim(),
@@ -668,6 +843,24 @@ export default function BookingClient({
                     </div>
                   </div>
                 </div>
+
+                {/* Photo upload — detailer bookings only */}
+                {isDetailer && (
+                  <div className="border-t border-dark-border pt-4">
+                    <p className="font-condensed font-bold text-white/60 text-sm tracking-wide mb-1">
+                      VEHICLE PHOTOS <span className="font-normal normal-case text-white/30 text-xs ml-1">optional</span>
+                    </p>
+                    <p className="text-white/35 text-xs mb-3 leading-relaxed">
+                      Photos help your detailer give an accurate quote (e.g. show condition, problem areas, vehicle size).
+                    </p>
+                    <PhotoUploader
+                      techSlug={techSlug}
+                      photos={bookingPhotos}
+                      onChange={setBookingPhotos}
+                      maxPhotos={5}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           )}

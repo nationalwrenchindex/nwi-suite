@@ -653,14 +653,16 @@ export default function FinalizedInvoiceClient({
   invoice: initialInvoice,
   bizName,
   techName,
-  averageMpg = null,
-  fuelType   = 'gasoline',
+  averageMpg  = null,
+  fuelType    = 'gasoline',
+  isDetailer  = false,
 }: {
   invoice:     Invoice
   bizName:     string
   techName:    string
   averageMpg?: number | null
   fuelType?:   string
+  isDetailer?: boolean
 }) {
   const router = useRouter()
   const [invoice,           setInvoice]          = useState(initialInvoice)
@@ -724,10 +726,10 @@ export default function FinalizedInvoiceClient({
       ? [{ label: 'Shop supplies added', date: invoice.started_at ?? invoice.invoice_date, icon: '🔧' }]
       : []),
     ...(Array.isArray(invoice.additional_parts) && invoice.additional_parts.length > 0
-      ? [{ label: 'Additional parts added', date: invoice.started_at ?? invoice.invoice_date, icon: '⚙️' }]
+      ? [{ label: isDetailer ? 'Add-ons added' : 'Additional parts added', date: invoice.started_at ?? invoice.invoice_date, icon: '⚙️' }]
       : []),
     ...(Array.isArray(invoice.additional_labor) && invoice.additional_labor.length > 0
-      ? [{ label: 'Additional labor added', date: invoice.started_at ?? invoice.invoice_date, icon: '⏱️' }]
+      ? [{ label: isDetailer ? 'Additional services added' : 'Additional labor added', date: invoice.started_at ?? invoice.invoice_date, icon: '⏱️' }]
       : []),
     ...(invoice.job_notes
       ? [{ label: 'Job notes recorded', date: invoice.started_at ?? invoice.invoice_date, icon: '📝' }]
@@ -1075,13 +1077,15 @@ export default function FinalizedInvoiceClient({
             <div className="space-y-1.5 border-t border-white/8 pt-3">
               {quotedPartsSubtotal > 0 && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-white/50">Parts{markupPct > 0 ? ` (incl. ${markupPct}% markup)` : ''}</span>
+                  <span className="text-white/50">
+                    {isDetailer ? 'Add-ons' : `Parts${markupPct > 0 ? ` (incl. ${markupPct}% markup)` : ''}`}
+                  </span>
                   <span className="text-white">{fmt(quotedPartsSubtotal)}</span>
                 </div>
               )}
               {quotedLaborSubtotal > 0 && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-white/50">Labor</span>
+                  <span className="text-white/50">{isDetailer ? 'Service Fee' : 'Labor'}</span>
                   <span className="text-white">{fmt(quotedLaborSubtotal)}</span>
                 </div>
               )}
@@ -1122,9 +1126,9 @@ export default function FinalizedInvoiceClient({
         </Section>
       )}
 
-      {/* Additional parts (read-only) */}
+      {/* Additional parts / add-ons (read-only) */}
       {Array.isArray(invoice.additional_parts) && invoice.additional_parts.length > 0 && (
-        <Section label={`Additional Parts${markupPct > 0 ? ` (${markupPct}% markup applied)` : ''}`}>
+        <Section label={isDetailer ? 'Add-ons / Products' : `Additional Parts${markupPct > 0 ? ` (${markupPct}% markup applied)` : ''}`}>
           <ReadOnlyTable
             rows={(invoice.additional_parts as Array<{ id: string; description: string; qty: number; unit_cost: number; total: number }>).map(p => ({
               label:  p.description,
@@ -1141,13 +1145,13 @@ export default function FinalizedInvoiceClient({
         </Section>
       )}
 
-      {/* Additional labor (read-only) */}
+      {/* Additional labor / services (read-only) */}
       {Array.isArray(invoice.additional_labor) && invoice.additional_labor.length > 0 && (
-        <Section label="Additional Labor">
+        <Section label={isDetailer ? 'Additional Services' : 'Additional Labor'}>
           <ReadOnlyTable
             rows={(invoice.additional_labor as Array<{ id: string; description: string; hours: number; rate: number; subtotal: number }>).map(l => ({
               label:  l.description,
-              qty:    `${l.hours}h`,
+              qty:    isDetailer ? undefined : `${l.hours}h`,
               amount: l.subtotal,
             }))}
           />
@@ -1166,13 +1170,13 @@ export default function FinalizedInvoiceClient({
         <div className="space-y-2">
           {quotedPartsSubtotal > 0 && (
             <div className="flex justify-between text-sm">
-              <span className="text-white/50">Quoted Parts</span>
+              <span className="text-white/50">{isDetailer ? 'Quoted Add-ons' : 'Quoted Parts'}</span>
               <span className="text-white">{fmt(quotedPartsSubtotal)}</span>
             </div>
           )}
           {additionalPartsTotal > 0 && (
             <div className="flex justify-between text-sm">
-              <span className="text-white/50">Additional Parts</span>
+              <span className="text-white/50">{isDetailer ? 'Additional Add-ons' : 'Additional Parts'}</span>
               <span className="text-white">{fmt(additionalPartsTotal)}</span>
             </div>
           )}
@@ -1184,13 +1188,13 @@ export default function FinalizedInvoiceClient({
           )}
           {quotedLaborSubtotal > 0 && (
             <div className="flex justify-between text-sm">
-              <span className="text-white/50">Quoted Labor</span>
+              <span className="text-white/50">{isDetailer ? 'Quoted Service' : 'Quoted Labor'}</span>
               <span className="text-white">{fmt(quotedLaborSubtotal)}</span>
             </div>
           )}
           {additionalLaborTotal > 0 && (
             <div className="flex justify-between text-sm">
-              <span className="text-white/50">Additional Labor</span>
+              <span className="text-white/50">{isDetailer ? 'Additional Services' : 'Additional Labor'}</span>
               <span className="text-white">{fmt(additionalLaborTotal)}</span>
             </div>
           )}
@@ -1235,7 +1239,7 @@ export default function FinalizedInvoiceClient({
                 )}
                 {pnl.laborIncome > 0 && (
                   <div className="flex justify-between text-xs pl-4">
-                    <span className="text-white/40">Labor Income</span>
+                    <span className="text-white/40">{isDetailer ? 'Service Income' : 'Labor Income'}</span>
                     <span className="text-white/60">{fmt(pnl.laborIncome)}</span>
                   </div>
                 )}
