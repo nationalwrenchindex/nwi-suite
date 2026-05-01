@@ -89,8 +89,8 @@ export async function POST(
   const now   = new Date().toISOString()
   const patch: Record<string, unknown> =
     body.action === 'approve'
-      ? { status: 'approved', approved_at: now }
-      : { status: 'declined', declined_at: now, customer_response_note: body.note || null }
+      ? { status: 'approved', approved_at: now, approval_method: 'customer_link' }
+      : { status: 'declined', declined_at: now, customer_response_note: body.note || null, approval_method: 'customer_link' }
 
   const { error: updateErr } = await serviceClient
     .from('quotes')
@@ -135,6 +135,22 @@ export async function POST(
 
       if (p?.phone)  await sendSms(p.phone, smsMsg)
       if (p?.email)  await sendEmail(p.email, emailSubject, emailBody)
+
+      // Insert in-app inbox notification for the mechanic
+      const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tools.nationalwrenchindex.com'
+      const notifTitle = body.action === 'approve'
+        ? `Quote ${quote.quote_number} approved`
+        : `Quote ${quote.quote_number} declined`
+      const notifBody = body.action === 'approve'
+        ? `${customerName} approved your quote for ${fmtCurrency(quote.grand_total)}.`
+        : `${customerName} declined your quote.${body.note ? ` Reason: ${body.note}` : ''}`
+      await serviceClient.from('notifications').insert({
+        user_id:    quote.user_id,
+        type:       body.action === 'approve' ? 'quote_approved' : 'quote_declined',
+        title:      notifTitle,
+        body:       notifBody,
+        link:       `${APP_URL}/financials?tab=quotes&quote=${quote.id}`,
+      })
     } catch (notifErr) {
       console.error('[public/respond] tech notification error:', notifErr)
     }

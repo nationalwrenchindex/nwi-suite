@@ -43,8 +43,8 @@ export async function POST(
   const now = new Date().toISOString()
   const patch: Record<string, unknown> =
     body.action === 'approve'
-      ? { status: 'approved', approved_at: now }
-      : { status: 'declined', declined_at: now, customer_response_note: body.note ?? null }
+      ? { status: 'approved', approved_at: now, approval_method: 'verbal' }
+      : { status: 'declined', declined_at: now, customer_response_note: body.note ?? null, approval_method: 'verbal' }
 
   const { data: updated, error: updateErr } = await supabase
     .from('quotes')

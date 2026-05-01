@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import LowStockBell from './LowStockBell'
+import InboxBell from './InboxBell'
 
 interface NavItem {
   href: string
@@ -169,6 +170,9 @@ export default function AppNav({ businessName, businessType }: { businessName?: 
             )
           })}
         </nav>
+
+        {/* In-app notification inbox (all users) */}
+        <InboxBell />
 
         {/* Low-stock bell (detailers only) */}
         {businessType === 'detailer' && <LowStockBell />}
