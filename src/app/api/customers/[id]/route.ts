@@ -7,7 +7,8 @@ const CUSTOMER_FULL_SELECT = `
   *,
   vehicles(
     *,
-    service_history(*)
+    service_history(*),
+    jobs(id, job_date, service_type, services, status, estimated_duration_minutes)
   )
 `
 
@@ -32,13 +33,17 @@ export async function GET(_req: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ error: 'Customer not found' }, { status: 404 })
   }
 
-  // Sort service history newest-first per vehicle
+  // Sort service history and jobs newest-first per vehicle
   if (data.vehicles) {
-    data.vehicles = data.vehicles.map((v: { service_history?: { service_date: string }[] }) => ({
+    data.vehicles = data.vehicles.map((v: { service_history?: { service_date: string }[]; jobs?: { job_date: string }[] }) => ({
       ...v,
       service_history: (v.service_history ?? []).sort(
         (a: { service_date: string }, b: { service_date: string }) =>
           new Date(b.service_date).getTime() - new Date(a.service_date).getTime(),
+      ),
+      jobs: (v.jobs ?? []).sort(
+        (a: { job_date: string }, b: { job_date: string }) =>
+          new Date(b.job_date).getTime() - new Date(a.job_date).getTime(),
       ),
     }))
   }

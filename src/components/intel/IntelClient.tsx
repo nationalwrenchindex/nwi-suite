@@ -44,7 +44,7 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   },
 ]
 
-export default function IntelClient() {
+export default function IntelClient({ slug }: { slug?: string }) {
   const [activeTab, setActiveTab] = useState<Tab>('customers')
 
   return (
@@ -69,7 +69,7 @@ export default function IntelClient() {
         ))}
       </div>
 
-      {activeTab === 'customers' && <CustomersTab />}
+      {activeTab === 'customers' && <CustomersTab slug={slug} />}
       {activeTab === 'vin'       && <VinLookupTab />}
       {activeTab === 'alerts'    && <AlertsTab />}
     </div>

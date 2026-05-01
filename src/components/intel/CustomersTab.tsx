@@ -207,15 +207,26 @@ function LogServiceForm({ vehicleId, onLogged }: { vehicleId: string; onLogged: 
   )
 }
 
+const JOB_STATUS_COLORS: Record<string, string> = {
+  scheduled:   'text-blue-300',
+  en_route:    'text-yellow-400',
+  in_progress: 'text-orange',
+  completed:   'text-success',
+  cancelled:   'text-white/30',
+  no_show:     'text-danger',
+}
+
 // ─── Vehicle Card ─────────────────────────────────────────────────────────────
 
-function VehicleCard({ vehicle, onServiceLogged }: {
+function VehicleCard({ vehicle, onServiceLogged, slug }: {
   vehicle: Vehicle
   onServiceLogged: (vehicleId: string, record: ServiceRecord) => void
+  slug?: string
 }) {
   const [expanded, setExpanded] = useState(false)
   const [showLog, setShowLog]   = useState(false)
-  const history = vehicle.service_history ?? []
+  const history  = vehicle.service_history ?? []
+  const jobsList = (vehicle.jobs ?? []).filter(j => j.status !== 'cancelled')
 
   return (
     <div className="rounded-xl border border-dark-border bg-dark overflow-hidden">
@@ -287,6 +298,39 @@ function VehicleCard({ vehicle, onServiceLogged }: {
             <p className="text-white/25 text-xs">No service records yet.</p>
           )}
 
+          {/* Booked job history */}
+          {jobsList.length > 0 && (
+            <div className="space-y-1.5 border-t border-dark-border pt-3">
+              <div className="flex items-center justify-between">
+                <p className="text-white/30 text-xs uppercase tracking-widest">Job History</p>
+                {slug && (
+                  <a
+                    href={`/book/${slug}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] bg-orange hover:bg-orange-hover text-white font-condensed font-semibold rounded px-2.5 py-1 transition-colors whitespace-nowrap"
+                  >
+                    + Rebook
+                  </a>
+                )}
+              </div>
+              {jobsList.map(j => {
+                const label = j.services && j.services.length > 1
+                  ? j.services.join(', ')
+                  : j.service_type
+                return (
+                  <div key={j.id} className="flex items-center gap-2 text-xs">
+                    <span className="text-white/40 whitespace-nowrap">{fmtDate(j.job_date)}</span>
+                    <span className="text-white/70 min-w-0 truncate">{label}</span>
+                    <span className={`ml-auto whitespace-nowrap font-medium capitalize ${JOB_STATUS_COLORS[j.status] ?? 'text-white/30'}`}>
+                      {j.status.replace('_', ' ')}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
           {/* Log service toggle */}
           <button
             onClick={() => setShowLog(s => !s)}
@@ -316,10 +360,12 @@ function CustomerProfile({
   customerId,
   onClose,
   onUpdated,
+  slug,
 }: {
   customerId: string
   onClose: () => void
   onUpdated: (c: CustomerListItem) => void
+  slug?: string
 }) {
   const [customer, setCustomer] = useState<Customer | null>(null)
   const [loading, setLoading]   = useState(true)
@@ -483,7 +529,7 @@ function CustomerProfile({
                   <p className="text-white/25 text-xs text-center py-4">No vehicles on file. Add one above.</p>
                 )}
                 {(customer.vehicles ?? []).map(v => (
-                  <VehicleCard key={v.id} vehicle={v} onServiceLogged={handleServiceLogged} />
+                  <VehicleCard key={v.id} vehicle={v} onServiceLogged={handleServiceLogged} slug={slug} />
                 ))}
               </div>
             </div>
@@ -496,7 +542,7 @@ function CustomerProfile({
 
 // ─── Main Component ───────────────────────────────────────────────────────────
 
-export default function CustomersTab() {
+export default function CustomersTab({ slug }: { slug?: string }) {
   const [customers,    setCustomers]  = useState<CustomerListItem[]>([])
   const [loading,      setLoading]    = useState(true)
   const [error,        setError]      = useState<string | null>(null)
@@ -606,6 +652,7 @@ export default function CustomersTab() {
             customerId={selectedId}
             onClose={() => setSelectedId(null)}
             onUpdated={handleCustomerUpdated}
+            slug={slug}
           />
         </div>
       ) : (

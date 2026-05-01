@@ -31,6 +31,15 @@ export interface CustomerListItem {
 
 export type Transmission = 'automatic' | 'manual' | 'cvt' | 'other'
 
+export interface VehicleJobSummary {
+  id: string
+  job_date: string
+  service_type: string
+  services: string[]
+  status: string
+  estimated_duration_minutes: number | null
+}
+
 export interface Vehicle {
   id: string
   customer_id: string
@@ -48,6 +57,7 @@ export interface Vehicle {
   created_at: string
   updated_at: string
   service_history?: ServiceRecord[]
+  jobs?: VehicleJobSummary[]
 }
 
 // ─── Service History ──────────────────────────────────────────────────────────

@@ -165,15 +165,16 @@ export default function CalendarTab({ onBookJob }: { onBookJob: () => void }) {
   }
 
   async function handleStatusChange(jobId: string, newStatus: Job['status']) {
+    const now  = new Date().toISOString()
+    const body: Record<string, unknown> = { status: newStatus }
+    if (newStatus === 'in_progress') body.actual_start_at = now
+    if (newStatus === 'completed')   { body.actual_end_at = now; body.completed_at = now }
     const res = await fetch(`/api/jobs/${jobId}`, {
-      method: 'PUT',
+      method:  'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: newStatus }),
+      body:    JSON.stringify(body),
     })
-    if (res.ok) {
-      // Refresh the current month
-      await fetchMonth(viewYear, viewMonth)
-    }
+    if (res.ok) await fetchMonth(viewYear, viewMonth)
   }
 
   // Render a neutral skeleton during SSR — avoids comparing date-dependent

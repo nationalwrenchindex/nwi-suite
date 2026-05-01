@@ -19,6 +19,7 @@ function today() {
 // ─── Category config ──────────────────────────────────────────────────────────
 
 // All categories (for filter dropdown + display)
+// Detailer variants for parts_cogs and shop_supplies are applied at render time.
 const ALL_CATEGORIES: { value: ExpenseCategory; label: string }[] = [
   { value: 'parts',               label: 'Parts' },
   { value: 'tools',               label: 'Tools' },
@@ -36,6 +37,14 @@ const ALL_CATEGORIES: { value: ExpenseCategory; label: string }[] = [
   { value: 'parts_cogs',          label: 'Parts COGS' },
   { value: 'shop_supplies',       label: 'Shop Supplies' },
 ]
+
+function categoryLabel(cat: ExpenseCategory, isDetailer: boolean): string {
+  if (isDetailer) {
+    if (cat === 'parts_cogs')    return 'Products & Supplies COGS'
+    if (cat === 'shop_supplies') return 'Detailing Supplies'
+  }
+  return ALL_CATEGORIES.find(c => c.value === cat)?.label ?? cat
+}
 
 // Only manual categories for the log form
 const MANUAL_CATEGORIES = ALL_CATEGORIES.filter(
@@ -60,9 +69,9 @@ const CATEGORY_COLORS: Record<ExpenseCategory, string> = {
   shop_supplies:       'bg-teal-500/20 text-teal-400',
 }
 
-function CategoryBadge({ category }: { category: ExpenseCategory }) {
+function CategoryBadge({ category, isDetailer }: { category: ExpenseCategory; isDetailer: boolean }) {
   const cls   = CATEGORY_COLORS[category] ?? 'bg-white/5 text-white/30'
-  const label = ALL_CATEGORIES.find(c => c.value === category)?.label ?? category
+  const label = categoryLabel(category, isDetailer)
   return (
     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${cls}`}>{label}</span>
   )
@@ -70,7 +79,8 @@ function CategoryBadge({ category }: { category: ExpenseCategory }) {
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function ExpensesTab() {
+export default function ExpensesTab({ businessType }: { businessType?: string }) {
+  const isDetailer = businessType === 'detailer'
   const router = useRouter()
 
   const [expenses,   setExpenses]   = useState<Expense[]>([])
@@ -176,7 +186,7 @@ export default function ExpensesTab() {
             onChange={e => setCatFilter(e.target.value)}>
             <option value="">All Categories</option>
             {ALL_CATEGORIES.map(c => (
-              <option key={c.value} value={c.value}>{c.label}</option>
+              <option key={c.value} value={c.value}>{categoryLabel(c.value, isDetailer)}</option>
             ))}
           </select>
         </div>
@@ -344,7 +354,7 @@ export default function ExpensesTab() {
                     </div>
                     {exp.notes && <p className="text-white/30 text-xs truncate">{exp.notes}</p>}
                   </div>
-                  <CategoryBadge category={exp.category} />
+                  <CategoryBadge category={exp.category} isDetailer={isDetailer} />
                   <span className="font-condensed font-bold text-danger sm:text-right">{fmt(exp.amount)}</span>
                   <div className="flex justify-end">
                     {isAuto && exp.linked_invoice_id ? (

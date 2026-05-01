@@ -93,9 +93,9 @@ export default function FinancialsClient({ businessType }: { businessType?: stri
       </div>
 
       {activeTab === 'quotes'   && <QuotesTab initialQuoteId={quoteParam} isDetailer={businessType === 'detailer'} />}
-      {activeTab === 'overview' && <OverviewTab />}
+      {activeTab === 'overview' && <OverviewTab businessType={businessType} />}
       {activeTab === 'invoices' && <InvoicesTab />}
-      {activeTab === 'expenses' && <ExpensesTab />}
+      {activeTab === 'expenses' && <ExpensesTab businessType={businessType} />}
     </div>
   )
 }

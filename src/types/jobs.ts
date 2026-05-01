@@ -60,6 +60,9 @@ export interface Job {
   notes: string | null
   internal_notes: string | null
   inspection_requested: boolean | null
+  actual_start_at: string | null
+  actual_end_at: string | null
+  completed_at: string | null
   created_at: string
   updated_at: string
   // Joined relations

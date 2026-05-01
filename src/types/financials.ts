@@ -269,8 +269,30 @@ export interface Expense {
   updated_at: string
 }
 
+export interface DayBreakdown {
+  date: string
+  revenue: number
+  cogs: number
+  gross_profit: number
+  expenses: number
+  net_profit: number
+  job_count: number
+}
+
+export interface WeekBreakdown {
+  week_start: string   // Monday YYYY-MM-DD
+  revenue: number
+  cogs: number
+  gross_profit: number
+  expenses: number
+  net_profit: number
+  job_count: number
+}
+
 export interface FinancialsOverview {
-  period: string               // YYYY-MM
+  period: string               // YYYY-MM (backward compat)
+  from_date: string
+  to_date: string
   revenue_total: number
   cogs_total: number
   gross_profit: number
@@ -281,10 +303,13 @@ export interface FinancialsOverview {
   profit_margin: number
   avg_job_value: number
   avg_job_profit: number
+  avg_time_variance: number | null   // minutes; positive = over estimate
   top_service: string | null
   invoice_count: number
   paid_invoice_count: number
   overdue_invoice_count: number
+  daily_breakdown: DayBreakdown[]
+  weekly_breakdown: WeekBreakdown[]
 }
 
 // ─── Payloads ─────────────────────────────────────────────────────────────────

@@ -14,7 +14,7 @@ export default async function IntelPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('full_name, business_name, business_type')
+    .select('full_name, business_name, business_type, slug')
     .eq('id', user.id)
     .single()
 
@@ -35,7 +35,7 @@ export default async function IntelPage() {
             Customer profiles, vehicle history, VIN decoder &amp; service alerts.
           </p>
         </div>
-        <IntelClient />
+        <IntelClient slug={(profile as Record<string, unknown>).slug as string | undefined} />
       </main>
     </div>
   )
