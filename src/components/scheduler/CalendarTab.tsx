@@ -46,8 +46,16 @@ function JobCard({
   return (
     <div className="rounded-xl border border-dark-border bg-dark p-3 space-y-2">
       <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-white font-semibold text-sm leading-tight">{job.service_type}</p>
+        <div className="min-w-0">
+          {job.services && job.services.length > 1 ? (
+            <div className="space-y-0.5">
+              {job.services.map((svc, i) => (
+                <p key={i} className="text-white font-semibold text-sm leading-tight">{svc}</p>
+              ))}
+            </div>
+          ) : (
+            <p className="text-white font-semibold text-sm leading-tight">{job.service_type}</p>
+          )}
           {job.job_time && (
             <p className="text-orange text-xs font-medium mt-0.5">{formatTime(job.job_time)}</p>
           )}

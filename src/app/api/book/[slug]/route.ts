@@ -169,7 +169,16 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
   const customer = body.customer as Record<string, unknown> | undefined
   const vehicle  = body.vehicle  as Record<string, unknown> | undefined
 
-  if (!service_type || typeof service_type !== 'string')
+  // services[] is sent by detailer multi-select; service_type is the mechanic single-select.
+  // Normalize both to a services array and a primary service_type string.
+  const servicesRaw = Array.isArray(body.services)
+    ? (body.services as unknown[]).filter((s): s is string => typeof s === 'string')
+    : []
+  const primaryService = servicesRaw.length > 0
+    ? servicesRaw[0]
+    : (typeof service_type === 'string' ? service_type : null)
+
+  if (!primaryService)
     return NextResponse.json({ error: 'service_type is required' }, { status: 400 })
   if (!job_date || typeof job_date !== 'string')
     return NextResponse.json({ error: 'job_date is required' }, { status: 400 })
@@ -287,7 +296,8 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       vehicle_id:                 vehicleId,
       job_date:                   job_date,
       job_time:                   job_time,
-      service_type:               service_type,
+      service_type:               primaryService,
+      services:                   servicesRaw,
       status:                     'scheduled',
       estimated_duration_minutes: estimated_duration_minutes ? Number(estimated_duration_minutes) : null,
       notes:                      notes ? String(notes) : null,

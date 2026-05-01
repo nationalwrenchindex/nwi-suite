@@ -51,6 +51,7 @@ export interface Job {
   job_date: string               // YYYY-MM-DD
   job_time: string | null        // HH:MM:SS from Postgres
   service_type: string
+  services: string[]             // multi-service array; empty [] on mechanic records
   status: JobStatus
   location_address: string | null
   location_lat: number | null
