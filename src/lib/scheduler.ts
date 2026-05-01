@@ -62,6 +62,50 @@ export const DETAILER_SERVICES = [
 
 export type DetailerService = typeof DETAILER_SERVICES[number]
 
+export type DetailerServiceSlug =
+  | 'basic_wash' | 'full_detail' | 'interior_detail' | 'exterior_detail'
+  | 'paint_correction' | 'ceramic_coating_1yr' | 'ceramic_coating_3yr' | 'ceramic_coating_5yr'
+  | 'headlight_restoration' | 'engine_bay' | 'carpet_upholstery' | 'leather_treatment'
+  | 'pet_hair_odor' | 'boat_detailing' | 'rv_detailing' | 'other'
+
+export const DETAILER_SERVICE_SLUGS: Record<DetailerService, DetailerServiceSlug> = {
+  'Basic Wash':                   'basic_wash',
+  'Full Detail':                  'full_detail',
+  'Interior Detail':              'interior_detail',
+  'Exterior Detail':              'exterior_detail',
+  'Paint Correction':             'paint_correction',
+  'Ceramic Coating (1 Year)':     'ceramic_coating_1yr',
+  'Ceramic Coating (3 Year)':     'ceramic_coating_3yr',
+  'Ceramic Coating (5 Year)':     'ceramic_coating_5yr',
+  'Headlight Restoration':        'headlight_restoration',
+  'Engine Bay Cleaning':          'engine_bay',
+  'Carpet & Upholstery Shampoo':  'carpet_upholstery',
+  'Leather Treatment':            'leather_treatment',
+  'Pet Hair & Odor Removal':      'pet_hair_odor',
+  'Boat Detailing':               'boat_detailing',
+  'RV Detailing':                 'rv_detailing',
+  'Other':                        'other',
+}
+
+export const DETAILER_SERVICE_SLUG_LABELS: Record<DetailerServiceSlug, string> = {
+  basic_wash:            'Basic Wash',
+  full_detail:           'Full Detail',
+  interior_detail:       'Interior Detail',
+  exterior_detail:       'Exterior Detail',
+  paint_correction:      'Paint Correction',
+  ceramic_coating_1yr:   'Ceramic Coating (1 Year)',
+  ceramic_coating_3yr:   'Ceramic Coating (3 Year)',
+  ceramic_coating_5yr:   'Ceramic Coating (5 Year)',
+  headlight_restoration: 'Headlight Restoration',
+  engine_bay:            'Engine Bay Cleaning',
+  carpet_upholstery:     'Carpet & Upholstery Shampoo',
+  leather_treatment:     'Leather Treatment',
+  pet_hair_odor:         'Pet Hair & Odor Removal',
+  boat_detailing:        'Boat Detailing',
+  rv_detailing:          'RV Detailing',
+  other:                 'Other',
+}
+
 export const VEHICLE_CATEGORIES = [
   'sedan', 'suv', 'truck', 'van', 'motorcycle', 'boat', 'rv', 'plane', 'other',
 ] as const

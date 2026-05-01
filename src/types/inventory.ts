@@ -57,7 +57,7 @@ export interface InventoryProduct {
 export interface ServiceProduct {
   id: string
   user_id: string
-  service_name: string
+  service_slug: string
   product_inventory_id: string
   quantity_used: number
   product?: InventoryProduct

@@ -12,7 +12,7 @@ export async function GET(_req: NextRequest) {
     .from('service_products')
     .select('*, product:products_inventory(*)')
     .eq('user_id', user.id)
-    .order('service_name')
+    .order('service_slug')
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ mappings: data ?? [] })
@@ -29,16 +29,16 @@ export async function POST(req: NextRequest) {
   try { body = await req.json() }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
-  const { service_name, product_inventory_id, quantity_used } = body
+  const { service_slug, product_inventory_id, quantity_used } = body
 
-  if (!service_name || !product_inventory_id)
-    return NextResponse.json({ error: 'service_name and product_inventory_id required' }, { status: 400 })
+  if (!service_slug || !product_inventory_id)
+    return NextResponse.json({ error: 'service_slug and product_inventory_id required' }, { status: 400 })
 
   const { data, error } = await supabase
     .from('service_products')
     .insert({
       user_id:              user.id,
-      service_name:         String(service_name),
+      service_slug:         String(service_slug),
       product_inventory_id: String(product_inventory_id),
       quantity_used:        quantity_used ? Number(quantity_used) : 1.0,
     })

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { InventoryProduct, ServiceProduct, UsageLogEntry, GlobalProduct } from '@/types/inventory'
 import { PRODUCT_CATEGORIES, PRODUCT_CATEGORY_LABELS } from '@/types/inventory'
-import { DETAILER_SERVICES } from '@/lib/scheduler'
+import { DETAILER_SERVICES, DETAILER_SERVICE_SLUGS, type DetailerService } from '@/lib/scheduler'
 import BarcodeScanner, { isBarcodeDetectorSupported } from './BarcodeScanner'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -516,14 +516,14 @@ function ServiceMappingTab({ products }: { products: InventoryProduct[] }) {
 
   useEffect(() => { fetchMappings() }, [fetchMappings])
 
-  async function addMapping(serviceName: string) {
+  async function addMapping(svcDisplayName: string) {
     if (!addForm.product_inventory_id) { setError('Select a product.'); return }
     setAdding(true); setError(null)
     const res = await fetch('/api/inventory/service-products', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({
-        service_name:         serviceName,
+        service_slug:         DETAILER_SERVICE_SLUGS[svcDisplayName as DetailerService],
         product_inventory_id: addForm.product_inventory_id,
         quantity_used:        parseFloat(addForm.quantity_used) || 1,
       }),
@@ -542,7 +542,8 @@ function ServiceMappingTab({ products }: { products: InventoryProduct[] }) {
   }
 
   const byService = DETAILER_SERVICES.reduce<Record<string, ServiceProduct[]>>((acc, svc) => {
-    acc[svc] = mappings.filter(m => m.service_name === svc)
+    const slug = DETAILER_SERVICE_SLUGS[svc]
+    acc[svc] = mappings.filter(m => m.service_slug === slug)
     return acc
   }, {})
 

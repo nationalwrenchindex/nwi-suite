@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
 import { dispatchNotification } from '@/lib/notifications'
+import { DETAILER_SERVICE_SLUGS, DETAILER_SERVICE_SLUG_LABELS, type DetailerService, type DetailerServiceSlug } from '@/lib/scheduler'
 
 // ─── Inventory auto-deduct ────────────────────────────────────────────────────
 // Runs fire-and-forget after a job is marked complete.
@@ -21,11 +22,18 @@ async function deductInventoryProducts(
 
   if (services.length === 0) return
 
+  // Convert display names → slugs; skip any that don't map (mechanic services, etc.)
+  const slugs = services
+    .map(s => DETAILER_SERVICE_SLUGS[s as DetailerService])
+    .filter((s): s is DetailerServiceSlug => Boolean(s))
+
+  if (slugs.length === 0) return
+
   const { data: mappings } = await supabase
     .from('service_products')
     .select('*, product:products_inventory(*)')
     .eq('user_id', userId)
-    .in('service_name', services)
+    .in('service_slug', slugs)
 
   if (!mappings || mappings.length === 0) return
 
@@ -48,6 +56,8 @@ async function deductInventoryProducts(
       .eq('id', product.id)
       .eq('user_id', userId)
 
+    const serviceLabel = DETAILER_SERVICE_SLUG_LABELS[m.service_slug as DetailerServiceSlug] ?? m.service_slug
+
     // Log the usage
     await supabase
       .from('product_usage_log')
@@ -55,7 +65,7 @@ async function deductInventoryProducts(
         user_id:              userId,
         product_inventory_id: product.id,
         job_id:               jobId,
-        service_name:         m.service_name,
+        service_name:         serviceLabel,
         quantity_used:        qty,
         cost_cents_attributed: cogsCents,
       })
@@ -68,7 +78,7 @@ async function deductInventoryProducts(
           user_id:          userId,
           expense_date:     today,
           category:         'shop_supplies',
-          description:      `${m.product.name} — ${m.service_name} (auto)`,
+          description:      `${m.product.name} — ${serviceLabel} (auto)`,
           amount:           cogsCents / 100,
           job_id:           jobId,
           transaction_type: 'auto_invoice',
