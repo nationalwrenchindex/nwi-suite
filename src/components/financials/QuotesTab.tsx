@@ -637,9 +637,9 @@ function QuoteDetailModal({
   }
 
   // ── Save ───────────────────────────────────────────────────────────────────
-  async function handleSave() {
+  async function handleSave(): Promise<boolean> {
     const err = validate()
-    if (err) { setValidationErr(err); return }
+    if (err) { setValidationErr(err); return false }
     setValidationErr(null)
     setSaving(true)
 
@@ -693,8 +693,10 @@ function QuoteDetailModal({
       setSavedHash(currentHash)
       showToast(`Quote updated — ${json.quote.quote_number}`)
       onUpdated(json.quote)
+      return true
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'Failed to save', 'error')
+      return false
     } finally {
       setSaving(false)
     }
@@ -1505,8 +1507,15 @@ function QuoteDetailModal({
                 <>
                   {/* Send Quote (primary for draft) */}
                   <button
-                    onClick={() => setShowSendModal(true)}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-[#FF6600] hover:bg-orange-600 text-white font-condensed font-bold text-sm tracking-wide rounded-lg transition-colors shadow-md shadow-orange/20"
+                    onClick={() => {
+                      if (isDirty) {
+                        setValidationErr('Save your changes before sending.')
+                        return
+                      }
+                      setShowSendModal(true)
+                    }}
+                    disabled={saving}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-[#FF6600] hover:bg-orange-600 disabled:opacity-50 text-white font-condensed font-bold text-sm tracking-wide rounded-lg transition-colors shadow-md shadow-orange/20"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                       <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
