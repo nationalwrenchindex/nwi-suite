@@ -147,7 +147,7 @@ function JobCard({
       const json = await res.json()
       if (!res.ok) { setQuoteError(json.error ?? 'Failed to create quote'); return }
       if (json.quote?.id) {
-        window.location.href = `/quickwrench?loadQuoteId=${json.quote.id}`
+        window.location.href = `/financials?tab=quotes&quote=${json.quote.id}`
       }
     } catch {
       setQuoteError('Network error')
