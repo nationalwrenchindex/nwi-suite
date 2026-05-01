@@ -27,6 +27,16 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ error: 'Image exceeds 5 MB limit' }, { status: 413 })
   }
 
+  // Ensure bucket exists (idempotent — ignore "already exists" errors)
+  const { error: bucketErr } = await supabase.storage.createBucket('booking-photos', {
+    public: true,
+    fileSizeLimit: MAX_BYTES,
+    allowedMimeTypes: ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'],
+  })
+  if (bucketErr && !/already exist|duplicate/i.test(bucketErr.message)) {
+    console.error('[POST /api/book/photos] bucket create error:', bucketErr.message)
+  }
+
   const uid      = Math.random().toString(36).slice(2)
   const filename = `${slug}/${Date.now()}-${uid}.jpg`
 
@@ -35,7 +45,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     .upload(filename, buffer, { contentType: 'image/jpeg', upsert: false })
 
   if (uploadErr) {
-    console.error('[POST /api/book/photos] storage upload error:', uploadErr)
+    console.error('[POST /api/book/photos] upload error:', JSON.stringify(uploadErr))
     return NextResponse.json({ error: 'Photo upload failed' }, { status: 500 })
   }
 

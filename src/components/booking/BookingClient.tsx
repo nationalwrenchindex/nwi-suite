@@ -360,7 +360,8 @@ function PhotoUploader({
       <input
         ref={inputRef}
         type="file"
-        accept="image/jpeg,image/jpg,image/png,image/webp"
+        accept="image/*"
+        capture="environment"
         multiple
         className="hidden"
         onChange={e => { if (e.target.files?.length) { handleFiles(e.target.files); e.target.value = '' } }}
