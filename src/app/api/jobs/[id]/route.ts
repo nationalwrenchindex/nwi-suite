@@ -153,6 +153,11 @@ export async function PUT(request: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ error: 'No updatable fields provided' }, { status: 400 })
   }
 
+  // Auto-inject on_site_at when transitioning to on_site
+  if (updateData.status === 'on_site' && !updateData.on_site_at) {
+    updateData.on_site_at = new Date().toISOString()
+  }
+
   const { data, error } = await supabase
     .from('jobs')
     .update(updateData)

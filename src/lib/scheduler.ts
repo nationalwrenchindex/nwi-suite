@@ -9,6 +9,7 @@ export const STATUS_CONFIG: Record<
   scheduled:   { label: 'Scheduled',   badge: 'bg-blue/20 text-blue-light border border-blue/40',          dot: 'bg-blue',      ring: 'ring-blue/30'    },
   en_route:    { label: 'En Route',    badge: 'bg-amber-500/20 text-amber-400 border border-amber-500/40', dot: 'bg-amber-400', ring: 'ring-amber-500/30' },
   in_progress: { label: 'In Progress', badge: 'bg-orange/20 text-orange-light border border-orange/40',    dot: 'bg-orange',    ring: 'ring-orange/30'  },
+  on_site:     { label: 'On Site',     badge: 'bg-amber-500/20 text-amber-400 border border-amber-500/40', dot: 'bg-amber-400', ring: 'ring-amber-500/30' },
   completed:   { label: 'Completed',   badge: 'bg-success/20 text-success border border-success/40',       dot: 'bg-success',   ring: 'ring-success/30' },
   cancelled:   { label: 'Cancelled',   badge: 'bg-white/10 text-white/40 border border-white/10',          dot: 'bg-white/30',  ring: 'ring-white/10'   },
   no_show:     { label: 'No Show',     badge: 'bg-danger/20 text-danger border border-danger/40',          dot: 'bg-danger',    ring: 'ring-danger/30'  },
@@ -19,6 +20,7 @@ export const STATUS_TRANSITIONS: Partial<Record<JobStatus, JobStatus[]>> = {
   scheduled:   ['en_route', 'cancelled'],
   en_route:    ['in_progress', 'cancelled'],
   in_progress: ['completed', 'no_show'],
+  on_site:     ['completed', 'no_show'],
 }
 
 // ─── Service type options ──────────────────────────────────────────────────

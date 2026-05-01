@@ -86,7 +86,7 @@ export default function SchedulerClient({ businessType }: { businessType?: strin
 
       {/* ── Tab content ── */}
       {activeTab === 'calendar'      && <CalendarTab onBookJob={goToBook} />}
-      {activeTab === 'jobs'          && <MyJobsTab   onBookJob={goToBook} />}
+      {activeTab === 'jobs'          && <MyJobsTab   onBookJob={goToBook} businessType={businessType} />}
       {activeTab === 'book'          && <BookJobTab  onSuccess={() => setActiveTab('jobs')} businessType={businessType} />}
       {activeTab === 'notifications' && <NotificationsTab />}
     </div>

@@ -4,6 +4,7 @@ export type JobStatus =
   | 'scheduled'
   | 'en_route'
   | 'in_progress'
+  | 'on_site'
   | 'completed'
   | 'cancelled'
   | 'no_show'
@@ -60,9 +61,11 @@ export interface Job {
   notes: string | null
   internal_notes: string | null
   inspection_requested: boolean | null
-  actual_start_at: string | null
-  actual_end_at: string | null
-  completed_at: string | null
+  actual_start_at:   string | null
+  actual_end_at:     string | null
+  completed_at:      string | null
+  on_my_way_sent_at: string | null
+  on_site_at:        string | null
   created_at: string
   updated_at: string
   // Joined relations

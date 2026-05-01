@@ -536,7 +536,15 @@ export default function BookingClient({
         body:    JSON.stringify(payload),
       })
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Booking failed')
+      if (!res.ok) {
+        const msg = data.error ?? 'Booking failed'
+        if (res.status === 409) {
+          // Slot was taken — send customer back to the date/time picker
+          setTime(null)
+          setStep(dateTimeStep)
+        }
+        throw new Error(msg)
+      }
       setJobId(data.job?.id ?? null)
       setSubmitted(true)
     } catch (e) {

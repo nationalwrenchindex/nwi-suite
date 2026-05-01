@@ -210,6 +210,31 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
 
   const techId = profile.id as string
 
+  // ── Conflict check: reject if proposed window overlaps an existing job ────────
+  const newDuration = estimated_duration_minutes ? Number(estimated_duration_minutes) : 60
+  const newEnd = jobSlotMin + newDuration
+
+  const { data: existingJobs } = await supabase
+    .from('jobs')
+    .select('job_time, estimated_duration_minutes')
+    .eq('user_id', techId)
+    .eq('job_date', job_date)
+    .in('status', ['scheduled', 'en_route', 'in_progress', 'on_site'])
+
+  for (const existing of existingJobs ?? []) {
+    if (!existing.job_time) continue
+    const [eh, em] = (existing.job_time as string).slice(0, 5).split(':').map(Number)
+    const existStart = eh * 60 + em
+    const existEnd   = existStart + ((existing.estimated_duration_minutes as number | null) ?? 60)
+    // Overlap = NOT (existEnd <= newStart OR existStart >= newEnd)
+    if (!(existEnd <= jobSlotMin || existStart >= newEnd)) {
+      return NextResponse.json(
+        { error: 'This time is no longer available. Please pick another slot.' },
+        { status: 409 },
+      )
+    }
+  }
+
   // ── Find or create customer ──
   const rawPhone = customer.phone ? String(customer.phone).trim() : ''
   const digits   = rawPhone.replace(/\D/g, '')

@@ -8,13 +8,14 @@ import MultiPointInspection from '@/components/quickwrench/MultiPointInspection'
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const ALL_STATUSES: { value: '' | JobStatus; label: string }[] = [
-  { value: '',            label: 'All Statuses' },
-  { value: 'scheduled',  label: 'Scheduled'    },
-  { value: 'en_route',   label: 'En Route'     },
-  { value: 'in_progress',label: 'In Progress'  },
-  { value: 'completed',  label: 'Completed'    },
-  { value: 'no_show',    label: 'No Show'      },
-  { value: 'cancelled',  label: 'Cancelled'    },
+  { value: '',             label: 'All Statuses' },
+  { value: 'scheduled',   label: 'Scheduled'    },
+  { value: 'en_route',    label: 'En Route'     },
+  { value: 'in_progress', label: 'In Progress'  },
+  { value: 'on_site',     label: 'On Site'      },
+  { value: 'completed',   label: 'Completed'    },
+  { value: 'no_show',     label: 'No Show'      },
+  { value: 'cancelled',   label: 'Cancelled'    },
 ]
 
 const QUICK_RANGES: { label: string; from: () => string; to: () => string }[] = [
@@ -54,19 +55,25 @@ const QUICK_RANGES: { label: string; from: () => string; to: () => string }[] = 
 
 function JobCard({
   job,
+  businessType,
   onStatusChange,
   onCancel,
   onOpenInspection,
+  onJobUpdated,
 }: {
   job: Job
+  businessType?: string
   onStatusChange:   (id: string, status: JobStatus) => Promise<void>
   onCancel:         (id: string) => Promise<void>
   onOpenInspection: (jobId: string, customerName: string) => void
+  onJobUpdated?:    (job: Job) => void
 }) {
-  const [expanded,    setExpanded]    = useState(false)
-  const [updating,    setUpdating]    = useState(false)
-  const [notifying,   setNotifying]   = useState<string | null>(null)
-  const [notifResult, setNotifResult] = useState<{ ok: boolean; msg: string } | null>(null)
+  const [expanded,        setExpanded]        = useState(false)
+  const [updating,        setUpdating]        = useState(false)
+  const [generatingQuote, setGeneratingQuote] = useState(false)
+  const [notifying,       setNotifying]       = useState<string | null>(null)
+  const [notifResult,     setNotifResult]     = useState<{ ok: boolean; msg: string } | null>(null)
+  const [quoteError,      setQuoteError]      = useState<string | null>(null)
   const cfg         = STATUS_CONFIG[job.status]
   const transitions = STATUS_TRANSITIONS[job.status] ?? []
 
@@ -101,6 +108,19 @@ function JobCard({
         ok,
         msg: ok ? 'Sent!' : (json.error ?? detail ?? 'Failed to send'),
       })
+
+      // Record on_my_way_sent_at so the "On Site" button can appear
+      if (ok && trigger === 'on_my_way') {
+        const upd = await fetch(`/api/jobs/${job.id}`, {
+          method:  'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ on_my_way_sent_at: new Date().toISOString() }),
+        })
+        if (upd.ok) {
+          const { job: updated } = await upd.json()
+          if (updated) onJobUpdated?.(updated)
+        }
+      }
     } catch {
       setNotifResult({ ok: false, msg: 'Network error' })
     } finally {
@@ -108,6 +128,37 @@ function JobCard({
       setTimeout(() => setNotifResult(null), 4000)
     }
   }
+
+  async function handleGenerateQuote() {
+    setGeneratingQuote(true)
+    setQuoteError(null)
+    try {
+      const servicesList = (job.services?.length ?? 0) > 0 ? job.services : [job.service_type]
+      const res = await fetch('/api/quotes', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          job_id:      job.id,
+          customer_id: job.customer_id,
+          vehicle_id:  job.vehicle_id,
+          notes:       `Services requested: ${servicesList.join(', ')}`,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) { setQuoteError(json.error ?? 'Failed to create quote'); return }
+      if (json.quote?.id) {
+        window.location.href = `/quickwrench?loadQuoteId=${json.quote.id}`
+      }
+    } catch {
+      setQuoteError('Network error')
+    } finally {
+      setGeneratingQuote(false)
+    }
+  }
+
+  const isActive   = job.status !== 'cancelled' && job.status !== 'completed' && job.status !== 'no_show'
+  const showOnSite = job.status === 'in_progress' && !!job.on_my_way_sent_at
+  const showQuote  = job.status === 'on_site' && businessType !== 'detailer'
 
   return (
     <div
@@ -197,8 +248,20 @@ function JobCard({
           )}
 
           {/* Action bar */}
-          {job.status !== 'cancelled' && job.status !== 'completed' && job.status !== 'no_show' && (
+          {isActive && (
             <div className="flex flex-wrap gap-2 pt-1">
+              {/* On Site — only when in_progress AND on_my_way was sent */}
+              {showOnSite && (
+                <button
+                  disabled={updating}
+                  onClick={() => doStatusChange('on_site')}
+                  className="text-xs rounded-lg px-3 py-1.5 font-medium transition-colors border bg-amber-500/20 text-amber-400 border-amber-500/40 hover:bg-amber-500/30 disabled:opacity-50"
+                >
+                  📍 On Site
+                </button>
+              )}
+
+              {/* Generic transitions (Completed, No Show, En Route, etc.) */}
               {transitions.filter(t => t !== 'cancelled').map((next) => (
                 <button
                   key={next}
@@ -210,6 +273,17 @@ function JobCard({
                 </button>
               ))}
 
+              {/* Generate Quote — only when on_site and mechanic */}
+              {showQuote && (
+                <button
+                  disabled={generatingQuote}
+                  onClick={handleGenerateQuote}
+                  className="text-xs rounded-lg px-3 py-1.5 font-medium transition-colors border border-orange/40 text-orange bg-orange/10 hover:bg-orange/20 disabled:opacity-50"
+                >
+                  {generatingQuote ? 'Creating…' : '📋 Generate Quote'}
+                </button>
+              )}
+
               <button
                 disabled={updating}
                 onClick={doCancel}
@@ -217,6 +291,12 @@ function JobCard({
               >
                 Cancel Job
               </button>
+            </div>
+          )}
+
+          {quoteError && (
+            <div className="text-xs px-3 py-2 rounded-lg border bg-danger/10 border-danger/30 text-danger">
+              {quoteError}
             </div>
           )}
 
@@ -300,7 +380,13 @@ function JobCard({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function MyJobsTab({ onBookJob }: { onBookJob: () => void }) {
+export default function MyJobsTab({
+  onBookJob,
+  businessType,
+}: {
+  onBookJob: () => void
+  businessType?: string
+}) {
   const [jobs,     setJobs]     = useState<Job[]>([])
   const [loading,  setLoading]  = useState(true)
   const [error,    setError]    = useState<string | null>(null)
@@ -376,6 +462,10 @@ export default function MyJobsTab({ onBookJob }: { onBookJob: () => void }) {
         j.id === id ? { ...j, status: 'cancelled' as JobStatus } : j,
       ))
     }
+  }
+
+  function handleJobUpdated(updated: Job) {
+    setJobs((prev) => prev.map((j) => (j.id === updated.id ? updated : j)))
   }
 
   async function handleOpenInspection(jobId: string, customerName: string) {
@@ -508,9 +598,11 @@ export default function MyJobsTab({ onBookJob }: { onBookJob: () => void }) {
             <JobCard
               key={job.id}
               job={job}
+              businessType={businessType}
               onStatusChange={handleStatusChange}
               onCancel={handleCancel}
               onOpenInspection={handleOpenInspection}
+              onJobUpdated={handleJobUpdated}
             />
           ))}
         </div>
