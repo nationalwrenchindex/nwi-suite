@@ -481,7 +481,7 @@ export default function BookingClient({
     if (!canAdvance()) return
 
     // Guard: deep-link to info step without completing earlier steps
-    if (step === infoStep && (!service || !date || !time)) {
+    if (step === infoStep && (!(isDetailer ? selectedServices.length > 0 : service) || !date || !time)) {
       setError('Please complete service selection and date/time before reviewing your booking.')
       setStep(1)
       return
