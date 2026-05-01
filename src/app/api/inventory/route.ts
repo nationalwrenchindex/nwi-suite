@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   try { body = await req.json() }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
-  const { name, brand, container_size, cost_cents, total_uses, category, global_product_id } = body
+  const { name, cost_cents, total_uses, global_product_id } = body
 
   if (!name || typeof name !== 'string')
     return NextResponse.json({ error: 'name is required' }, { status: 400 })
@@ -46,12 +46,9 @@ export async function POST(req: NextRequest) {
       user_id:           user.id,
       global_product_id: global_product_id ?? null,
       name:              String(name),
-      brand:             brand    ? String(brand)          : null,
-      container_size:    container_size ? String(container_size) : null,
       cost_cents:        cost,
       total_uses:        uses,
       uses_remaining:    uses,
-      category:          category ? String(category) : null,
     })
     .select('*')
     .single()

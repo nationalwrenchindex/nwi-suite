@@ -2,26 +2,42 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { createClient } from '@/lib/supabase/server'
 
-// ─── GET /api/inventory/global?barcode=xxx ────────────────────────────────────
-// Looks up a product in the crowdsourced global DB by barcode
+// ─── GET /api/inventory/global ────────────────────────────────────────────────
+// ?barcode=xxx  — barcode lookup (exact)
+// ?name=xxx&brand=yyy  — name+brand lookup (case-insensitive, for manual entry)
 export async function GET(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const barcode = req.nextUrl.searchParams.get('barcode')
-  if (!barcode) return NextResponse.json({ error: 'barcode param required' }, { status: 400 })
+  const name    = req.nextUrl.searchParams.get('name')
 
-  const { data, error } = await supabase
-    .from('products_global')
-    .select('*')
-    .eq('barcode', barcode)
-    .single()
+  if (barcode) {
+    const { data, error } = await supabase
+      .from('products_global')
+      .select('*')
+      .eq('barcode', barcode)
+      .single()
 
-  if (error && error.code !== 'PGRST116') // PGRST116 = not found
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error && error.code !== 'PGRST116')
+      return NextResponse.json({ error: error.message }, { status: 500 })
 
-  return NextResponse.json({ hit: !!data, product: data ?? null })
+    return NextResponse.json({ hit: !!data, product: data ?? null })
+  }
+
+  if (name) {
+    const brand = req.nextUrl.searchParams.get('brand')
+    let q = supabase.from('products_global').select('*').ilike('name', name)
+    if (brand) q = q.ilike('brand', brand)
+
+    const { data, error } = await q.limit(1).maybeSingle()
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ hit: !!data, product: data ?? null })
+  }
+
+  return NextResponse.json({ error: 'barcode or name param required' }, { status: 400 })
 }
 
 // ─── POST /api/inventory/global ───────────────────────────────────────────────

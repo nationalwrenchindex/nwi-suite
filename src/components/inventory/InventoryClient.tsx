@@ -273,39 +273,73 @@ function AddProductModal({
     if (!form.name.trim()) { setError('Product name is required.'); return }
     setSubmitting(true); setError(null)
 
-    // Seed global DB if this was a barcode scan with a miss or a new entry
-    let globalId: string | null = globalProduct?.id ?? null
-    if (scannedBarcode && !globalProduct) {
+    const costCents = form.cost_dollars ? Math.round(parseFloat(form.cost_dollars) * 100) : 0
+    const totalUses = form.total_uses ? (parseInt(form.total_uses) || 1) : 1
+    const name      = form.name.trim()
+
+    // ── Step 1: resolve or create the global product record ───────────────────
+    let globalId: string | null = null
+
+    if (globalProduct) {
+      // Barcode hit — already have the global record
+      globalId = globalProduct.id
+    } else if (scannedBarcode) {
+      // Barcode miss — seed global DB with the barcode
       try {
         const gRes  = await fetch('/api/inventory/global', {
           method:  'POST',
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify({
             barcode:                    scannedBarcode,
-            name:                       form.name.trim(),
+            name,
             brand:                      form.brand || null,
             container_size:             form.container_size || null,
-            default_cost_cents:         form.cost_dollars ? Math.round(parseFloat(form.cost_dollars) * 100) : null,
-            default_uses_per_container: form.total_uses ? parseInt(form.total_uses) : null,
+            default_cost_cents:         costCents || null,
+            default_uses_per_container: totalUses,
             category:                   form.category || null,
           }),
         })
         const gJson = await gRes.json()
         globalId = gJson.product?.id ?? null
-      } catch { /* non-fatal — skip seeding */ }
+      } catch { /* non-fatal */ }
+    } else {
+      // Manual entry — look up by name+brand (case-insensitive), create if absent
+      try {
+        const params = new URLSearchParams({ name })
+        if (form.brand) params.set('brand', form.brand)
+        const lookupRes  = await fetch(`/api/inventory/global?${params}`)
+        const lookupJson = await lookupRes.json()
+
+        if (lookupJson.hit && lookupJson.product) {
+          globalId = lookupJson.product.id
+        } else {
+          const gRes  = await fetch('/api/inventory/global', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({
+              name,
+              brand:                      form.brand || null,
+              container_size:             form.container_size || null,
+              default_cost_cents:         costCents || null,
+              default_uses_per_container: totalUses,
+              category:                   form.category || null,
+            }),
+          })
+          const gJson = await gRes.json()
+          globalId = gJson.product?.id ?? null
+        }
+      } catch { /* non-fatal */ }
     }
 
+    // ── Step 2: insert into per-user inventory (only columns that exist) ──────
     const res = await fetch('/api/inventory', {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({
         global_product_id: globalId,
-        name:           form.name.trim(),
-        brand:          form.brand   || null,
-        container_size: form.container_size || null,
-        cost_cents:     form.cost_dollars ? Math.round(parseFloat(form.cost_dollars) * 100) : 0,
-        total_uses:     form.total_uses ? parseInt(form.total_uses) : 1,
-        category:       form.category || null,
+        name,
+        cost_cents: costCents,
+        total_uses: totalUses,
       }),
     })
     const json = await res.json()
