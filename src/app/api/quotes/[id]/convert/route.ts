@@ -81,6 +81,7 @@ export async function POST(
     invoice_date:    today,
     customer_id:     quote.customer_id ?? null,
     vehicle_id:      quote.vehicle_id  ?? null,
+    job_id:          quote.job_id      ?? null,
     job_category:    quote.job_category ?? null,
     job_subtype:     quote.job_subtype  ?? null,
     // Copy the original line items and pricing from the quote

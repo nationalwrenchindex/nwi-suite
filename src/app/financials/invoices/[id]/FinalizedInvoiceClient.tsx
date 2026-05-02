@@ -1109,7 +1109,7 @@ export default function FinalizedInvoiceClient({
 
       {/* Shop supplies (read-only) */}
       {Array.isArray(invoice.shop_supplies) && invoice.shop_supplies.length > 0 && (
-        <Section label="Shop Supplies">
+        <Section label={isDetailer ? 'Detailing Supplies' : 'Shop Supplies'}>
           <ReadOnlyTable
             rows={(invoice.shop_supplies as Array<{ id: string; name: string; qty: number; unit_cost: number; total: number }>).map(s => ({
               label:  s.name,
@@ -1182,7 +1182,7 @@ export default function FinalizedInvoiceClient({
           )}
           {shopSuppliesTotal > 0 && (
             <div className="flex justify-between text-sm">
-              <span className="text-white/50">Shop Supplies</span>
+              <span className="text-white/50">{isDetailer ? 'Detailing Supplies' : 'Shop Supplies'}</span>
               <span className="text-white">{fmt(shopSuppliesTotal)}</span>
             </div>
           )}
@@ -1245,7 +1245,7 @@ export default function FinalizedInvoiceClient({
                 )}
                 {pnl.shopSuppliesTotal > 0 && (
                   <div className="flex justify-between text-xs pl-4">
-                    <span className="text-white/40">Shop Supplies Charged</span>
+                    <span className="text-white/40">{isDetailer ? 'Detailing Supplies Charged' : 'Shop Supplies Charged'}</span>
                     <span className="text-white/60">{fmt(pnl.shopSuppliesTotal)}</span>
                   </div>
                 )}
@@ -1272,7 +1272,7 @@ export default function FinalizedInvoiceClient({
                   )}
                   {pnl.shopSuppliesCost > 0 && (
                     <div className="flex justify-between text-xs pl-4">
-                      <span className="text-white/40">Shop Supplies Cost</span>
+                      <span className="text-white/40">{isDetailer ? 'Detailing Supplies Cost' : 'Shop Supplies Cost'}</span>
                       <span className="text-danger/70">−{fmt(pnl.shopSuppliesCost)}</span>
                     </div>
                   )}

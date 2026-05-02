@@ -71,6 +71,7 @@ export async function GET(req: NextRequest) {
 
 // ─── POST /api/quotes ─────────────────────────────────────────────────────────
 // Creates a new draft quote, optionally linked to a job.
+// For detailers with a job_id, pre-populates labor_rate from saved service catalog pricing.
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -82,21 +83,75 @@ export async function POST(req: NextRequest) {
 
   const { job_id, customer_id, vehicle_id, notes } = body
 
+  // Check business type; detailers get service catalog pre-population
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('business_type')
+    .eq('id', user.id)
+    .single()
+  const isDetailer = profile?.business_type === 'detailer'
+
+  let prePopLaborRate: number | null = null
+  let prePopLaborHours: number | null = null
+  let prePopMarkupPct: number | null = null
+
+  if (isDetailer) {
+    prePopLaborRate  = 0
+    prePopLaborHours = 1
+    prePopMarkupPct  = 0
+
+    if (job_id) {
+      const { data: jobRow } = await supabase
+        .from('jobs')
+        .select('services, service_type, vehicle_category')
+        .eq('id', String(job_id))
+        .eq('user_id', user.id)
+        .single()
+
+      if (jobRow) {
+        const services: string[] = Array.isArray(jobRow.services) && jobRow.services.length > 0
+          ? jobRow.services
+          : (jobRow.service_type ? [jobRow.service_type] : [])
+        const vehicleCategory = jobRow.vehicle_category
+
+        if (services.length > 0 && vehicleCategory) {
+          const { data: pricingRows } = await supabase
+            .from('detailer_service_pricing')
+            .select('service_name, base_price')
+            .eq('profile_id', user.id)
+            .in('service_name', services)
+            .eq('vehicle_category', vehicleCategory)
+            .eq('is_offered', true)
+
+          if (pricingRows && pricingRows.length > 0) {
+            prePopLaborRate = pricingRows.reduce((sum, p) => sum + (Number(p.base_price) || 0), 0)
+          }
+        }
+      }
+    }
+  }
+
   const quoteNumber = await genQuoteNumber(supabase, user.id)
+
+  const insertData: Record<string, unknown> = {
+    user_id:      user.id,
+    quote_number: quoteNumber,
+    status:       'draft',
+    source:       'job',
+    job_id:       job_id      ? String(job_id)      : null,
+    customer_id:  customer_id ? String(customer_id) : null,
+    vehicle_id:   vehicle_id  ? String(vehicle_id)  : null,
+    notes:        notes       ? String(notes)        : null,
+    line_items:   [],
+  }
+
+  if (prePopLaborRate  !== null) insertData.labor_rate           = prePopLaborRate
+  if (prePopLaborHours !== null) insertData.labor_hours          = prePopLaborHours
+  if (prePopMarkupPct  !== null) insertData.parts_markup_percent = prePopMarkupPct
 
   const { data: quote, error } = await supabase
     .from('quotes')
-    .insert({
-      user_id:      user.id,
-      quote_number: quoteNumber,
-      status:       'draft',
-      source:       'job',
-      job_id:       job_id      ? String(job_id)      : null,
-      customer_id:  customer_id ? String(customer_id) : null,
-      vehicle_id:   vehicle_id  ? String(vehicle_id)  : null,
-      notes:        notes       ? String(notes)        : null,
-      line_items:   [],
-    })
+    .insert(insertData)
     .select('*')
     .single()
 

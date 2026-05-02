@@ -575,7 +575,7 @@ export default function InvoicesTab() {
           </button>
         </div>
       ) : (
-        <div className="nwi-card p-0 overflow-hidden">
+        <div className="nwi-card p-0">
           {/* Table header */}
           <div className="hidden sm:grid grid-cols-[140px_1fr_110px_90px_130px_100px_100px_44px] gap-4 px-5 py-3 border-b border-dark-border">
             {['Invoice #', 'Customer', 'Date', 'Total', 'Status', 'Payment', 'Paid Date', ''].map(h => (
@@ -654,7 +654,7 @@ export default function InvoicesTab() {
                     </button>
 
                     {openMenu === inv.id && (
-                      <div className="absolute right-0 top-9 z-20 w-48 bg-dark-card border border-dark-border rounded-xl shadow-xl overflow-hidden">
+                      <div className="absolute right-0 top-9 z-[100] w-48 bg-dark-card border border-dark-border rounded-xl shadow-xl overflow-hidden">
                         {inv.status !== 'paid' && (
                           <div className="border-b border-dark-border">
                             <p className="px-3 pt-2 pb-1 text-white/30 text-xs uppercase tracking-widest">Mark as Paid</p>
@@ -691,7 +691,7 @@ export default function InvoicesTab() {
 
       {/* Close menu on outside click */}
       {openMenu && (
-        <div className="fixed inset-0 z-10" onClick={() => setOpenMenu(null)} />
+        <div className="fixed inset-0 z-[99]" onClick={() => setOpenMenu(null)} />
       )}
     </div>
   )

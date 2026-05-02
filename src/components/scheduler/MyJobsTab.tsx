@@ -158,7 +158,7 @@ function JobCard({
 
   const isActive   = job.status !== 'cancelled' && job.status !== 'completed' && job.status !== 'no_show'
   const showOnSite = job.status === 'in_progress'
-  const showQuote  = job.status === 'on_site' && businessType !== 'detailer'
+  const showQuote  = job.status === 'on_site'
 
   return (
     <div

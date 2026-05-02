@@ -781,7 +781,7 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
 
       {/* ── SECTION E: Shop supplies ── */}
       <Section
-        label="Shop Supplies"
+        label={isDetailer ? 'Detailing Supplies' : 'Shop Supplies'}
         action={
           <button
             onClick={addSupply}
@@ -938,7 +938,7 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
           )}
           {shopSuppliesTotal > 0 && (
             <div className="flex justify-between text-sm">
-              <span className="text-white/50">Shop Supplies</span>
+              <span className="text-white/50">{isDetailer ? 'Detailing Supplies' : 'Shop Supplies'}</span>
               <span className="text-white">{fmt(shopSuppliesTotal)}</span>
             </div>
           )}

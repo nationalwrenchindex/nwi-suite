@@ -27,7 +27,7 @@ export async function POST(
 
   const { data: invoice, error: fetchErr } = await supabase
     .from('invoices')
-    .select('id, invoice_status, public_token, payment_instructions')
+    .select('id, invoice_status, public_token, payment_instructions, job_id')
     .eq('id', id)
     .eq('user_id', user.id)
     .single()
@@ -75,6 +75,18 @@ export async function POST(
   if (updateErr || !updated) {
     console.error('[finalize]', updateErr)
     return NextResponse.json({ error: 'Failed to finalize invoice.' }, { status: 500 })
+  }
+
+  // Link any auto-generated COGS expenses from job completion to this invoice
+  const jobId = (invoice as Record<string, unknown>).job_id as string | null
+  if (jobId) {
+    await supabase
+      .from('expenses')
+      .update({ linked_invoice_id: id })
+      .eq('job_id', jobId)
+      .eq('user_id', user.id)
+      .is('linked_invoice_id', null)
+      .eq('transaction_type', 'auto_invoice')
   }
 
   return NextResponse.json({ invoice: updated })
