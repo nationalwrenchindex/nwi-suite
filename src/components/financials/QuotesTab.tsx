@@ -659,7 +659,7 @@ function QuoteDetailModal({
         unit_price:  laborRate,
         total:       round2(laborHours * laborRate),
       }] : []),
-    ]
+    ].filter(li => !(isDetailer && li.description?.trim() === 'Service'))
 
     try {
       const res  = await fetch(`/api/quotes/${initialQuote.id}`, {

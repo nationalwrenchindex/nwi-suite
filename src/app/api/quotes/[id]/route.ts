@@ -120,12 +120,24 @@ export async function PUT(
     return NextResponse.json({ error: 'Grand total cannot be negative.' }, { status: 422 })
   }
 
+  // For detailers the service fee lives in labor_rate — strip any synthetic 'Service' line item
+  // so it can never be double-counted regardless of what the client sends.
+  const { data: profileRow } = await supabase
+    .from('profiles')
+    .select('business_type')
+    .eq('id', user.id)
+    .single()
+  const isDetailer = profileRow?.business_type === 'detailer'
+  const safeLineItems = isDetailer
+    ? body.line_items.filter((li) => li.description?.trim() !== 'Service')
+    : body.line_items
+
   const customerId = await resolveCustomer(supabase, user.id, body.customer_name ?? '', body.customer_phone ?? '')
 
   const { data: updated, error: updateErr } = await supabase
     .from('quotes')
     .update({
-      line_items:           body.line_items,
+      line_items:           safeLineItems,
       labor_hours:          body.labor_hours,
       labor_rate:           body.labor_rate,
       parts_subtotal:       body.parts_subtotal,
