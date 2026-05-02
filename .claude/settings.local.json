@@ -6,7 +6,19 @@
       "Bash(git add *)",
       "Bash(git commit *)",
       "Bash(npx tsc *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(npx next *)",
+      "Bash(git diff *)",
+      "Bash(grep -E \"\\\\.\\(ts|tsx\\)$\")",
+      "Bash(grep -E \"\\\\.sql$\")",
+      "Bash(grep -E \"\\\\.\\(json|md|txt\\)$\")",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\natio\\\\national_wrench_index\" -Recurse -Directory)",
+      "Bash(Select-Object -First 20)",
+      "Bash(Format-List FullName)",
+      "Bash(powershell *)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\natio\\\\national_wrench_index\" -Directory)",
+      "Bash(Select-Object Name)",
+      "Bash(dir \"C:\\\\Users\\\\natio\\\\national_wrench_index\" /b)"
     ]
   }
 }

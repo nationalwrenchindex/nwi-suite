@@ -79,6 +79,27 @@ export interface LineItem {
   total: number
 }
 
+// Detailer quote model (replaces line_items + labor_rate for detailers)
+export interface ServiceLine {
+  service_name: string
+  vehicle_category: string | null
+  price_cents: number
+}
+
+export interface Adjustment {
+  name: string
+  price_cents: number
+}
+
+export interface AdjustmentPreset {
+  id: string
+  user_id: string
+  name: string
+  price_cents: number
+  sort_order: number
+  created_at: string
+}
+
 // Phase 3: items added during the job (stored as JSONB arrays on the invoice)
 export interface ShopSupplyItem {
   id: string
@@ -166,6 +187,10 @@ export interface Invoice {
   // Joined relations
   // Phase 8: multi-job support
   jobs?: MultiJobEntry[]
+  // Detailer quote model
+  service_lines?: ServiceLine[]
+  adjustments?: Adjustment[]
+  tip_amount_cents?: number
   customer?: {
     id: string
     first_name: string
@@ -235,6 +260,10 @@ export interface Quote {
   updated_at: string
   // Phase 8: multi-job support
   jobs?: MultiJobEntry[]
+  // Detailer invoice model
+  service_lines?: ServiceLine[]
+  adjustments?: Adjustment[]
+  tip_amount_cents?: number
   customer?: {
     id: string
     first_name: string

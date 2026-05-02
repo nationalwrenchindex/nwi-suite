@@ -3,6 +3,7 @@
 import { useState, useRef, useCallback } from 'react'
 import ShareBookingModal from '@/components/ShareBookingModal'
 import DetailerPricingEditor, { type PricingRow } from '@/components/detailer/DetailerPricingEditor'
+import type { AdjustmentPreset } from '@/types/financials'
 
 const BOOKING_BASE = 'https://tools.nationalwrenchindex.com/book'
 
@@ -136,6 +137,7 @@ export default function SettingsClient({
   initialTaxPct       = 8.5,
   initialPricingRows  = [],
   initialBillConsumables = false,
+  initialAdjustmentPresets = [] as AdjustmentPreset[],
 }: {
   slug:                        string | null
   businessName:                string
@@ -152,6 +154,7 @@ export default function SettingsClient({
   initialTaxPct?:              number
   initialPricingRows?:         PricingRow[]
   initialBillConsumables?:     boolean
+  initialAdjustmentPresets?:   AdjustmentPreset[]
 }) {
   const [shareOpen, setShareOpen] = useState(false)
 
@@ -176,6 +179,14 @@ export default function SettingsClient({
   const [markupPct,     setMarkupPct]     = useState(String(initialMarkupPct))
   const [taxPct,        setTaxPct]        = useState(String(initialTaxPct))
   const [savingRates,   setSavingRates]   = useState(false)
+
+  const [adjPresets,     setAdjPresets]     = useState<AdjustmentPreset[]>(initialAdjustmentPresets)
+  const [adjEdits,       setAdjEdits]       = useState<{ id: string; name: string; price_cents: number }[]>(
+    initialAdjustmentPresets.map(p => ({ id: p.id, name: p.name, price_cents: p.price_cents }))
+  )
+  const [addingPreset,   setAddingPreset]   = useState(false)
+  const [newPresetVals,  setNewPresetVals]  = useState({ name: '', price_cents: 0 })
+  const [savingPresets,  setSavingPresets]  = useState(false)
 
   const [savingSMS,   setSavingSMS]   = useState(false)
   const [savingEmail, setSavingEmail] = useState(false)
@@ -270,6 +281,28 @@ export default function SettingsClient({
       }
     } catch { /* silently fail */ }
     setSavingRates(false)
+  }
+
+  async function saveAdjPresets() {
+    setSavingPresets(true)
+    try {
+      const rows = adjEdits
+        .filter(e => e.name.trim().length > 0)
+        .map((e, i) => ({ name: e.name.trim(), price_cents: e.price_cents, sort_order: i }))
+      const res  = await fetch('/api/detailer-adjustments', {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ presets: rows }),
+      })
+      const json = res.ok ? await res.json() : null
+      if (res.ok && json?.presets) {
+        setAdjPresets(json.presets)
+        setAdjEdits(json.presets.map((p: AdjustmentPreset) => ({ id: p.id, name: p.name, price_cents: p.price_cents })))
+        setSavedMsg('Adjustment presets saved.')
+        setTimeout(() => setSavedMsg(null), 3000)
+      }
+    } catch { /* silently fail */ }
+    setSavingPresets(false)
   }
 
   async function saveFuelSettings() {
@@ -449,6 +482,108 @@ export default function SettingsClient({
             }}
             saveLabel="Save Detailer Pricing"
           />
+        </section>
+      )}
+
+      {/* ── Detailer: Adjustment Presets ── */}
+      {businessType === 'detailer' && (
+        <section>
+          <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Adjustment Presets</p>
+          <p className="text-white/30 text-xs mb-4">
+            Quick-add chips shown when building a quote. Negative amounts are discounts.
+          </p>
+          <div className="rounded-xl border border-[#333] bg-[#222] p-5 space-y-3">
+            {adjEdits.map((p, i) => (
+              <div key={p.id || i} className="flex items-center gap-2">
+                <input
+                  className="nwi-input text-sm flex-1"
+                  placeholder="Name"
+                  value={p.name}
+                  onChange={e => setAdjEdits(prev => prev.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
+                />
+                <div className="relative w-32">
+                  <input
+                    type="number" step={1}
+                    className="nwi-input text-sm w-full pl-6"
+                    placeholder="0.00"
+                    value={(p.price_cents / 100).toFixed(2)}
+                    onChange={e => setAdjEdits(prev => prev.map((x, j) => j === i ? { ...x, price_cents: Math.round((Number(e.target.value) || 0) * 100) } : x))}
+                  />
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 text-sm">$</span>
+                </div>
+                <button
+                  onClick={() => setAdjEdits(prev => prev.filter((_, j) => j !== i))}
+                  className="p-2 text-white/25 hover:text-danger transition-colors rounded flex-shrink-0"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+            ))}
+
+            {addingPreset ? (
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  autoFocus
+                  className="nwi-input text-sm flex-1"
+                  placeholder="Preset name"
+                  value={newPresetVals.name}
+                  onChange={e => setNewPresetVals(v => ({ ...v, name: e.target.value }))}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && newPresetVals.name.trim()) {
+                      setAdjEdits(prev => [...prev, { id: `new-${Date.now()}`, name: newPresetVals.name.trim(), price_cents: newPresetVals.price_cents }])
+                      setNewPresetVals({ name: '', price_cents: 0 })
+                      setAddingPreset(false)
+                    }
+                  }}
+                />
+                <div className="relative w-32">
+                  <input
+                    type="number" step={1}
+                    className="nwi-input text-sm w-full pl-6"
+                    placeholder="0.00"
+                    value={(newPresetVals.price_cents / 100).toFixed(2)}
+                    onChange={e => setNewPresetVals(v => ({ ...v, price_cents: Math.round((Number(e.target.value) || 0) * 100) }))}
+                  />
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 text-sm">$</span>
+                </div>
+                <div className="flex gap-1.5 flex-shrink-0">
+                  <button
+                    onClick={() => {
+                      if (!newPresetVals.name.trim()) return
+                      setAdjEdits(prev => [...prev, { id: `new-${Date.now()}`, name: newPresetVals.name.trim(), price_cents: newPresetVals.price_cents }])
+                      setNewPresetVals({ name: '', price_cents: 0 })
+                      setAddingPreset(false)
+                    }}
+                    className="px-3 py-1.5 bg-orange hover:bg-orange-hover text-white text-xs font-semibold rounded-lg transition-colors"
+                  >Add</button>
+                  <button
+                    onClick={() => { setAddingPreset(false); setNewPresetVals({ name: '', price_cents: 0 }) }}
+                    className="px-3 py-1.5 border border-white/15 text-white/50 hover:text-white text-xs rounded-lg transition-colors"
+                  >Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setAddingPreset(true)}
+                className="flex items-center gap-2 text-white/40 hover:text-orange text-xs transition-colors pt-1"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
+                Add Preset
+              </button>
+            )}
+
+            <button
+              onClick={saveAdjPresets}
+              disabled={savingPresets}
+              className="mt-2 px-5 py-2 bg-[#FF6600] hover:bg-[#E55A00] disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-lg transition-colors"
+            >
+              {savingPresets ? 'Saving…' : 'Save Adjustment Presets'}
+            </button>
+          </div>
         </section>
       )}
 

@@ -12,7 +12,7 @@ export default async function SettingsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
 
-  const [{ data: profile }, hasQW, { data: pricingRows }] = await Promise.all([
+  const [{ data: profile }, hasQW, { data: pricingRows }, { data: adjPresets }] = await Promise.all([
     supabase
       .from('profiles')
       .select('full_name, business_name, slug, share_sms_template, share_email_subject, share_email_body, default_payment_instructions, average_mpg, fuel_type, offer_mpi_on_booking, default_labor_rate, default_parts_markup_percent, default_tax_percent, business_type, bill_consumables_separately')
@@ -23,6 +23,11 @@ export default async function SettingsPage() {
       .from('detailer_service_pricing')
       .select('service_name, vehicle_category, base_price, estimated_hours, is_offered')
       .eq('profile_id', user.id),
+    supabase
+      .from('detailer_adjustment_presets')
+      .select('id, user_id, name, price_cents, sort_order, created_at')
+      .eq('user_id', user.id)
+      .order('sort_order', { ascending: true }),
   ])
 
   if (!profile?.business_name) redirect('/onboarding')
@@ -74,6 +79,8 @@ export default async function SettingsPage() {
           initialTaxPct={p.default_tax_percent ?? 8.5}
           initialPricingRows={(pricingRows ?? []) as PricingRow[]}
           initialBillConsumables={p.bill_consumables_separately ?? false}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          initialAdjustmentPresets={(adjPresets ?? []) as any[]}
         />
       </main>
     </div>

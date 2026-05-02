@@ -94,10 +94,11 @@ export async function POST(req: NextRequest) {
   let prePopLaborRate: number | null = null
   let prePopLaborHours: number | null = null
   let prePopMarkupPct: number | null = null
+  let prePopServiceLines: Array<{ service_name: string; vehicle_category: string | null; price_cents: number }> = []
 
   if (isDetailer) {
     prePopLaborRate  = 0
-    prePopLaborHours = 1
+    prePopLaborHours = 0
     prePopMarkupPct  = 0
 
     if (job_id) {
@@ -112,7 +113,7 @@ export async function POST(req: NextRequest) {
         const services: string[] = Array.isArray(jobRow.services) && jobRow.services.length > 0
           ? jobRow.services
           : (jobRow.service_type ? [jobRow.service_type] : [])
-        const vehicleCategory = jobRow.vehicle_category
+        const vehicleCategory: string | null = jobRow.vehicle_category ?? null
 
         if (services.length > 0 && vehicleCategory) {
           const { data: pricingRows } = await supabase
@@ -124,7 +125,11 @@ export async function POST(req: NextRequest) {
             .eq('is_offered', true)
 
           if (pricingRows && pricingRows.length > 0) {
-            prePopLaborRate = pricingRows.reduce((sum, p) => sum + (Number(p.base_price) || 0), 0)
+            prePopServiceLines = pricingRows.map(p => ({
+              service_name:     p.service_name as string,
+              vehicle_category: vehicleCategory,
+              price_cents:      Math.round((Number(p.base_price) || 0) * 100),
+            }))
           }
         }
       }
@@ -148,6 +153,10 @@ export async function POST(req: NextRequest) {
   if (prePopLaborRate  !== null) insertData.labor_rate           = prePopLaborRate
   if (prePopLaborHours !== null) insertData.labor_hours          = prePopLaborHours
   if (prePopMarkupPct  !== null) insertData.parts_markup_percent = prePopMarkupPct
+  if (isDetailer) {
+    insertData.service_lines = prePopServiceLines
+    insertData.adjustments   = []
+  }
 
   const { data: quote, error } = await supabase
     .from('quotes')

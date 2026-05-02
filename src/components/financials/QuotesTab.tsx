@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import type { Quote, QuoteStatus, LineItem } from '@/types/financials'
+import type { Quote, QuoteStatus, LineItem, ServiceLine, Adjustment, AdjustmentPreset } from '@/types/financials'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -40,6 +40,14 @@ interface EditItem {
   description: string
   quantity:    number
   unit_price:  number   // BASE price (pre-markup), what the tech paid/sourced
+}
+
+interface EditServiceLine extends ServiceLine {
+  _id: string
+}
+
+interface EditAdjustment extends Adjustment {
+  _id: string
 }
 
 // ─── Status badge ─────────────────────────────────────────────────────────────
@@ -494,6 +502,16 @@ function QuoteDetailModal({
   )
   const [initCustPhone]  = useState(initialQuote.customer?.phone ?? '')
 
+  const dq = initialQuote as Quote & { service_lines?: ServiceLine[]; adjustments?: Adjustment[] }
+  const [initServiceLines] = useState<EditServiceLine[]>(() =>
+    (Array.isArray(dq.service_lines) ? dq.service_lines : [])
+      .map((sl, i) => ({ ...sl, _id: `sl-${i}` }))
+  )
+  const [initAdjustments] = useState<EditAdjustment[]>(() =>
+    (Array.isArray(dq.adjustments) ? dq.adjustments : [])
+      .map((a, i) => ({ ...a, _id: `adj-${i}` }))
+  )
+
   // ── Edit state ─────────────────────────────────────────────────────────────
   const [items,       setItems]       = useState<EditItem[]>(initialItems)
   const [laborHours,  setLaborHours]  = useState(initLaborHours)
@@ -505,6 +523,17 @@ function QuoteDetailModal({
   const [custPhone,   setCustPhone]   = useState(initCustPhone)
   const [vehicleId,   setVehicleId]   = useState<string | null>(initialQuote.vehicle_id)
   const [vehicle,     setVehicle]     = useState(initialQuote.vehicle)
+
+  // ── Detailer edit state ────────────────────────────────────────────────────
+  const [serviceLines,   setServiceLines]   = useState<EditServiceLine[]>(initServiceLines)
+  const [adjustments,    setAdjustments]    = useState<EditAdjustment[]>(initAdjustments)
+  const [presets,        setPresets]        = useState<AdjustmentPreset[]>([])
+  const [editingSlId,    setEditingSlId]    = useState<string | null>(null)
+  const [editingSlVals,  setEditingSlVals]  = useState({ service_name: '', price_cents: 0 })
+  const [addingAdj,      setAddingAdj]      = useState(false)
+  const [newAdjVals,     setNewAdjVals]     = useState({ name: '', price_cents: 0 })
+  const [editingAdjId,   setEditingAdjId]   = useState<string | null>(null)
+  const [editingAdjVals, setEditingAdjVals] = useState({ name: '', price_cents: 0 })
 
   // ── Inline line-item editing ───────────────────────────────────────────────
   const [editingId,     setEditingId]     = useState<string | null>(null)
@@ -537,6 +566,16 @@ function QuoteDetailModal({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialQuote.status, initialQuote.converted_invoice_id])
 
+  // Load adjustment presets for detailers
+  useEffect(() => {
+    if (!isDetailer) return
+    fetch('/api/detailer-adjustments')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.presets) setPresets(d.presets) })
+      .catch(() => {})
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDetailer])
+
   // ── UI state ───────────────────────────────────────────────────────────────
   const [saving,            setSaving]            = useState(false)
   const [cloning,           setCloning]           = useState(false)
@@ -554,21 +593,36 @@ function QuoteDetailModal({
   ) {
     return JSON.stringify({ its: its.map(x => ({ d: x.description, q: x.quantity, p: x.unit_price })), lh, lr, mp, tp, n, cn, cp, vid })
   }
+  function makeDetHash(
+    sls: EditServiceLine[], adjs: EditAdjustment[], tp: number,
+    n: string, cn: string, cp: string, vid: string | null,
+  ) {
+    return JSON.stringify({
+      sls:  sls.map(s  => ({ nm: s.service_name, vc: s.vehicle_category, pc: s.price_cents })),
+      adjs: adjs.map(a => ({ nm: a.name, pc: a.price_cents })),
+      tp, n, cn, cp, vid,
+    })
+  }
   const [savedHash, setSavedHash] = useState(() =>
-    makeHash(initialItems, initLaborHours, initLaborRate, initMarkup, initTaxPct, initNotes, initCustName, initCustPhone, initialQuote.vehicle_id)
+    isDetailer
+      ? makeDetHash(initServiceLines, initAdjustments, initTaxPct, initNotes, initCustName, initCustPhone, initialQuote.vehicle_id)
+      : makeHash(initialItems, initLaborHours, initLaborRate, initMarkup, initTaxPct, initNotes, initCustName, initCustPhone, initialQuote.vehicle_id)
   )
-  const currentHash = makeHash(items, laborHours, laborRate, markupPct, taxPct, notes, custName, custPhone, vehicleId)
+  const currentHash = isDetailer
+    ? makeDetHash(serviceLines, adjustments, taxPct, notes, custName, custPhone, vehicleId)
+    : makeHash(items, laborHours, laborRate, markupPct, taxPct, notes, custName, custPhone, vehicleId)
   const isDirty = isDraft && currentHash !== savedHash
 
   // ── Live calculations ──────────────────────────────────────────────────────
-  const partsBase     = items.reduce((s, li) => s + li.quantity * li.unit_price, 0)
-  const markupAmt     = isDetailer ? 0 : partsBase * (markupPct / 100)
-  const partsTotal    = partsBase + markupAmt
-  // Detailers: service is a flat rate (laborRate), hours are irrelevant
-  const laborSubtotal = isDetailer ? (laborRate || 0) : (laborHours || 0) * (laborRate || 0)
-  const subtotal      = partsTotal + laborSubtotal
-  const taxAmount     = subtotal * ((taxPct || 0) / 100)
-  const grandTotal    = subtotal + taxAmount
+  const partsBase           = isDetailer ? 0 : items.reduce((s, li) => s + li.quantity * li.unit_price, 0)
+  const markupAmt           = isDetailer ? 0 : partsBase * (markupPct / 100)
+  const partsTotal          = partsBase + markupAmt
+  const laborSubtotal       = isDetailer ? 0 : (laborHours || 0) * (laborRate || 0)
+  const servicesSubtotal    = isDetailer ? serviceLines.reduce((s, sl) => s + sl.price_cents / 100, 0) : 0
+  const adjustmentsSubtotal = isDetailer ? adjustments.reduce((s, a) => s + a.price_cents / 100, 0) : 0
+  const subtotal            = isDetailer ? servicesSubtotal + adjustmentsSubtotal : partsTotal + laborSubtotal
+  const taxAmount           = subtotal * ((taxPct || 0) / 100)
+  const grandTotal          = subtotal + taxAmount
 
   // ── Prevent accidental navigation when dirty ───────────────────────────────
   useEffect(() => {
@@ -623,14 +677,14 @@ function QuoteDetailModal({
   function validate(): string | null {
     if (grandTotal < 0)
       return 'Grand total cannot be negative.'
-    if (items.some(li => li.quantity < 0 || li.unit_price < 0))
-      return 'Line items cannot have negative quantity or price.'
-    if (laborRate < 0 || (!isDetailer && laborHours < 0))
-      return 'Rate cannot be negative.'
     if (isDetailer) {
-      if (items.length === 0 && laborRate <= 0)
-        return 'Add at least one add-on or a service fee.'
+      if (serviceLines.length === 0 && adjustments.length === 0)
+        return 'Add at least one service or adjustment.'
     } else {
+      if (items.some(li => li.quantity < 0 || li.unit_price < 0))
+        return 'Line items cannot have negative quantity or price.'
+      if (laborRate < 0 || laborHours < 0)
+        return 'Rate cannot be negative.'
       if (items.length === 0 && (laborHours || 0) <= 0)
         return 'At least one line item or labor time is required.'
     }
@@ -644,33 +698,51 @@ function QuoteDetailModal({
     setValidationErr(null)
     setSaving(true)
 
-    const markup = isDetailer ? 0 : markupPct / 100
-    const savedLaborHours = isDetailer ? (laborRate > 0 ? 1 : 0) : laborHours
-    const savedLineItems = [
-      ...items.map(li => ({
-        description: li.description,
-        quantity:    li.quantity,
-        unit_price:  round2(li.unit_price * (1 + markup)),
-        total:       round2(li.quantity * li.unit_price * (1 + markup)),
-      })),
-      ...(!isDetailer && laborHours > 0 ? [{
-        description: 'Labor',
-        quantity:    laborHours,
-        unit_price:  laborRate,
-        total:       round2(laborHours * laborRate),
-      }] : []),
-    ].filter(li => !(isDetailer && li.description?.trim() === 'Service'))
-
     try {
-      const res  = await fetch(`/api/quotes/${initialQuote.id}`, {
-        method:  'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
+      let body: Record<string, unknown>
+
+      if (isDetailer) {
+        body = {
+          line_items:           [],
+          labor_hours:          0,
+          labor_rate:           0,
+          parts_subtotal:       0,
+          parts_markup_percent: 0,
+          labor_subtotal:       0,
+          tax_percent:          taxPct,
+          tax_amount:           round2(taxAmount),
+          grand_total:          round2(grandTotal),
+          notes,
+          customer_name:        custName,
+          customer_phone:       custPhone,
+          vehicle_id:           vehicleId,
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          service_lines:        serviceLines.map(({ _id, ...sl }) => sl),
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          adjustments:          adjustments.map(({ _id, ...a }) => a),
+        }
+      } else {
+        const markup = markupPct / 100
+        const savedLineItems = [
+          ...items.map(li => ({
+            description: li.description,
+            quantity:    li.quantity,
+            unit_price:  round2(li.unit_price * (1 + markup)),
+            total:       round2(li.quantity * li.unit_price * (1 + markup)),
+          })),
+          ...(laborHours > 0 ? [{
+            description: 'Labor',
+            quantity:    laborHours,
+            unit_price:  laborRate,
+            total:       round2(laborHours * laborRate),
+          }] : []),
+        ]
+        body = {
           line_items:           savedLineItems,
-          labor_hours:          savedLaborHours,
+          labor_hours:          laborHours,
           labor_rate:           laborRate,
           parts_subtotal:       round2(partsBase),
-          parts_markup_percent: isDetailer ? 0 : markupPct,
+          parts_markup_percent: markupPct,
           labor_subtotal:       round2(laborSubtotal),
           tax_percent:          taxPct,
           tax_amount:           round2(taxAmount),
@@ -679,7 +751,13 @@ function QuoteDetailModal({
           customer_name:        custName,
           customer_phone:       custPhone,
           vehicle_id:           vehicleId,
-        }),
+        }
+      }
+
+      const res  = await fetch(`/api/quotes/${initialQuote.id}`, {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(body),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Save failed')
@@ -707,8 +785,12 @@ function QuoteDetailModal({
     setCustPhone(initCustPhone)
     setVehicleId(initialQuote.vehicle_id)
     setVehicle(initialQuote.vehicle)
+    setServiceLines(initServiceLines)
+    setAdjustments(initAdjustments)
     setEditingId(null)
     setAddingNew(false)
+    setEditingSlId(null)
+    setAddingAdj(false)
     setValidationErr(null)
   }
   function handleCancel() {
@@ -1032,276 +1114,449 @@ function QuoteDetailModal({
               </div>
             )}
 
-            {/* ── Line Items ── */}
-            <div className="space-y-3">
-              <p className="text-white/30 text-xs uppercase tracking-widest">
-                {isDetailer ? 'Add-ons / Products' : 'Line Items'}
-              </p>
+            {/* ── Line Items (mechanic only) ── */}
+            {!isDetailer && (
+              <div className="space-y-3">
+                <p className="text-white/30 text-xs uppercase tracking-widest">Line Items</p>
 
-              {isDraft ? (
-                <div className="rounded-xl border border-white/10 overflow-hidden">
-                  {/* Header row */}
-                  <div className="grid grid-cols-[1fr_56px_80px_80px_52px] gap-1 px-3 py-2 border-b border-white/10 bg-white/5">
-                    <span className="text-white/30 text-[10px] uppercase tracking-wider">
-                      {isDetailer ? 'Add-on / Description' : 'Part / Description'}
-                    </span>
-                    <span className="text-white/30 text-[10px] uppercase tracking-wider text-right">Qty</span>
-                    <span className="text-white/30 text-[10px] uppercase tracking-wider text-right">Base Price</span>
-                    <span className="text-white/30 text-[10px] uppercase tracking-wider text-right">Total</span>
-                    <span />
-                  </div>
-
-                  {items.length === 0 && !addingNew && (
-                    <div className="px-4 py-4 text-white/25 text-sm text-center">
-                      {isDetailer
-                        ? 'No add-ons — add one below, or leave empty for service-only.'
-                        : 'No parts — add one below or skip if labor-only.'}
+                {isDraft ? (
+                  <div className="rounded-xl border border-white/10 overflow-hidden">
+                    <div className="grid grid-cols-[1fr_56px_80px_80px_52px] gap-1 px-3 py-2 border-b border-white/10 bg-white/5">
+                      <span className="text-white/30 text-[10px] uppercase tracking-wider">Part / Description</span>
+                      <span className="text-white/30 text-[10px] uppercase tracking-wider text-right">Qty</span>
+                      <span className="text-white/30 text-[10px] uppercase tracking-wider text-right">Base Price</span>
+                      <span className="text-white/30 text-[10px] uppercase tracking-wider text-right">Total</span>
+                      <span />
                     </div>
-                  )}
 
-                  {items.map(li => (
-                    <div key={li._id} className="border-b border-white/5 last:border-0">
-                      {editingId === li._id ? (
-                        <div className="p-3 space-y-2 bg-orange/5">
-                          <input
-                            autoFocus
-                            className="nwi-input text-sm w-full"
-                            placeholder={isDetailer ? 'Add-on name' : 'Part name'}
-                            value={editingVals.description}
-                            onChange={e => setEditingVals(v => ({ ...v, description: e.target.value }))}
-                          />
-                          <div className="grid grid-cols-2 gap-2">
-                            <div>
-                              <label className="nwi-label text-[10px]">Qty</label>
-                              <input
-                                type="number" min={0} step={1}
-                                className="nwi-input text-sm"
-                                value={editingVals.quantity}
-                                onChange={e => setEditingVals(v => ({ ...v, quantity: Number(e.target.value) || 0 }))}
-                              />
-                            </div>
-                            <div>
-                              <label className="nwi-label text-[10px]">Base Price ($)</label>
-                              <input
-                                type="number" min={0} step={0.01}
-                                className="nwi-input text-sm"
-                                value={editingVals.unit_price}
-                                onChange={e => setEditingVals(v => ({ ...v, unit_price: Number(e.target.value) || 0 }))}
-                              />
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <button
-                              onClick={commitEditItem}
-                              className="px-3 py-1.5 bg-orange hover:bg-orange-hover text-white text-xs font-semibold rounded-lg transition-colors"
-                            >
-                              Apply
-                            </button>
-                            <button
-                              onClick={() => setEditingId(null)}
-                              className="px-3 py-1.5 border border-white/15 text-white/50 hover:text-white text-xs rounded-lg transition-colors"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-[1fr_56px_80px_80px_52px] gap-1 items-center px-3 py-2.5 hover:bg-white/[0.03]">
-                          <span className="text-white/80 text-sm truncate">{li.description}</span>
-                          <span className="text-white/50 text-sm text-right">{li.quantity}</span>
-                          <span className="text-white/50 text-sm text-right">{fmt(li.unit_price)}</span>
-                          <span className="text-white text-sm font-medium text-right">
-                            {fmt(li.quantity * li.unit_price)}
-                          </span>
-                          <div className="flex items-center justify-end gap-0.5">
-                            <button
-                              onClick={() => startEditItem(li)}
-                              className="p-1.5 text-white/25 hover:text-orange transition-colors rounded"
-                              title="Edit item"
-                            >
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
-                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
-                              </svg>
-                            </button>
-                            <button
-                              onClick={() => removeItem(li._id)}
-                              className="p-1.5 text-white/25 hover:text-danger transition-colors rounded"
-                              title="Remove item"
-                            >
-                              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                                <polyline points="3 6 5 6 21 6"/>
-                                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                                <path d="M10 11v6M14 11v6"/>
-                                <path d="M9 6V4h6v2"/>
-                              </svg>
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-
-                  {addingNew ? (
-                    <div className="p-3 space-y-2 bg-white/5 border-t border-white/10">
-                      <input
-                        autoFocus
-                        className="nwi-input text-sm w-full"
-                        placeholder={isDetailer ? 'Add-on name or description' : 'Part name or description'}
-                        value={newItemVals.description}
-                        onChange={e => setNewItemVals(v => ({ ...v, description: e.target.value }))}
-                        onKeyDown={e => { if (e.key === 'Enter') commitNewItem() }}
-                      />
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="nwi-label text-[10px]">Qty</label>
-                          <input
-                            type="number" min={0} step={1}
-                            className="nwi-input text-sm"
-                            value={newItemVals.quantity}
-                            onChange={e => setNewItemVals(v => ({ ...v, quantity: Number(e.target.value) || 0 }))}
-                          />
-                        </div>
-                        <div>
-                          <label className="nwi-label text-[10px]">Base Price ($)</label>
-                          <input
-                            type="number" min={0} step={0.01}
-                            className="nwi-input text-sm"
-                            value={newItemVals.unit_price}
-                            onChange={e => setNewItemVals(v => ({ ...v, unit_price: Number(e.target.value) || 0 }))}
-                          />
-                        </div>
+                    {items.length === 0 && !addingNew && (
+                      <div className="px-4 py-4 text-white/25 text-sm text-center">
+                        No parts — add one below or skip if labor-only.
                       </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={commitNewItem}
-                          className="px-3 py-1.5 bg-orange hover:bg-orange-hover text-white text-xs font-semibold rounded-lg transition-colors"
-                        >
-                          Add Item
-                        </button>
-                        <button
-                          onClick={() => { setAddingNew(false); setNewItemVals({ description: '', quantity: 1, unit_price: 0 }) }}
-                          className="px-3 py-1.5 border border-white/15 text-white/50 hover:text-white text-xs rounded-lg transition-colors"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => { setAddingNew(true); setEditingId(null) }}
-                      className="w-full flex items-center gap-2 px-4 py-3 text-white/40 hover:text-orange hover:bg-white/5 text-xs transition-colors border-t border-white/5"
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                        <line x1="12" y1="5" x2="12" y2="19" />
-                        <line x1="5" y1="12" x2="19" y2="12" />
-                      </svg>
-                      Add Line Item
-                    </button>
-                  )}
-                </div>
-              ) : (
-                Array.isArray(initialQuote.line_items) && initialQuote.line_items.length > 0 && (
-                  <div className="bg-white/5 rounded-xl overflow-hidden">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-white/10">
-                          <th className="text-left px-4 py-2.5 text-white/40 font-medium">Description</th>
-                          <th className="text-right px-4 py-2.5 text-white/40 font-medium">Qty</th>
-                          <th className="text-right px-4 py-2.5 text-white/40 font-medium">Unit</th>
-                          <th className="text-right px-4 py-2.5 text-white/40 font-medium">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {initialQuote.line_items.map((li, i) => (
-                          <tr key={i} className="border-b border-white/5 last:border-0">
-                            <td className="px-4 py-2.5 text-white/80">{li.description}</td>
-                            <td className="px-4 py-2.5 text-white/60 text-right">{li.quantity}</td>
-                            <td className="px-4 py-2.5 text-white/60 text-right">{fmt(li.unit_price)}</td>
-                            <td className="px-4 py-2.5 text-white font-medium text-right">{fmt(li.total)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )
-              )}
-            </div>
+                    )}
 
-            {/* ── Labor / Service Fee ── */}
-            {isDraft ? (
-              <div className="space-y-2">
-                <p className="text-white/30 text-xs uppercase tracking-widest">
-                  {isDetailer ? 'Service Fee' : 'Labor'}
-                </p>
-                {isDetailer ? (
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="nwi-label">Service Fee ($)</label>
-                      <div className="relative">
-                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 text-sm">$</span>
+                    {items.map(li => (
+                      <div key={li._id} className="border-b border-white/5 last:border-0">
+                        {editingId === li._id ? (
+                          <div className="p-3 space-y-2 bg-orange/5">
+                            <input
+                              autoFocus
+                              className="nwi-input text-sm w-full"
+                              placeholder="Part name"
+                              value={editingVals.description}
+                              onChange={e => setEditingVals(v => ({ ...v, description: e.target.value }))}
+                            />
+                            <div className="grid grid-cols-2 gap-2">
+                              <div>
+                                <label className="nwi-label text-[10px]">Qty</label>
+                                <input
+                                  type="number" min={0} step={1}
+                                  className="nwi-input text-sm"
+                                  value={editingVals.quantity}
+                                  onChange={e => setEditingVals(v => ({ ...v, quantity: Number(e.target.value) || 0 }))}
+                                />
+                              </div>
+                              <div>
+                                <label className="nwi-label text-[10px]">Base Price ($)</label>
+                                <input
+                                  type="number" min={0} step={0.01}
+                                  className="nwi-input text-sm"
+                                  value={editingVals.unit_price}
+                                  onChange={e => setEditingVals(v => ({ ...v, unit_price: Number(e.target.value) || 0 }))}
+                                />
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <button onClick={commitEditItem} className="px-3 py-1.5 bg-orange hover:bg-orange-hover text-white text-xs font-semibold rounded-lg transition-colors">Apply</button>
+                              <button onClick={() => setEditingId(null)} className="px-3 py-1.5 border border-white/15 text-white/50 hover:text-white text-xs rounded-lg transition-colors">Cancel</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="grid grid-cols-[1fr_56px_80px_80px_52px] gap-1 items-center px-3 py-2.5 hover:bg-white/[0.03]">
+                            <span className="text-white/80 text-sm truncate">{li.description}</span>
+                            <span className="text-white/50 text-sm text-right">{li.quantity}</span>
+                            <span className="text-white/50 text-sm text-right">{fmt(li.unit_price)}</span>
+                            <span className="text-white text-sm font-medium text-right">{fmt(li.quantity * li.unit_price)}</span>
+                            <div className="flex items-center justify-end gap-0.5">
+                              <button onClick={() => startEditItem(li)} className="p-1.5 text-white/25 hover:text-orange transition-colors rounded" title="Edit item">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                              </button>
+                              <button onClick={() => removeItem(li._id)} className="p-1.5 text-white/25 hover:text-danger transition-colors rounded" title="Remove item">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+
+                    {addingNew ? (
+                      <div className="p-3 space-y-2 bg-white/5 border-t border-white/10">
                         <input
-                          type="number" min={0} step={5}
-                          className="nwi-input pl-7"
-                          placeholder="0.00"
-                          value={laborRate}
-                          onChange={e => setLaborRate(Number(e.target.value) || 0)}
+                          autoFocus
+                          className="nwi-input text-sm w-full"
+                          placeholder="Part name or description"
+                          value={newItemVals.description}
+                          onChange={e => setNewItemVals(v => ({ ...v, description: e.target.value }))}
+                          onKeyDown={e => { if (e.key === 'Enter') commitNewItem() }}
                         />
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="nwi-label text-[10px]">Qty</label>
+                            <input type="number" min={0} step={1} className="nwi-input text-sm" value={newItemVals.quantity} onChange={e => setNewItemVals(v => ({ ...v, quantity: Number(e.target.value) || 0 }))} />
+                          </div>
+                          <div>
+                            <label className="nwi-label text-[10px]">Base Price ($)</label>
+                            <input type="number" min={0} step={0.01} className="nwi-input text-sm" value={newItemVals.unit_price} onChange={e => setNewItemVals(v => ({ ...v, unit_price: Number(e.target.value) || 0 }))} />
+                          </div>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={commitNewItem} className="px-3 py-1.5 bg-orange hover:bg-orange-hover text-white text-xs font-semibold rounded-lg transition-colors">Add Item</button>
+                          <button onClick={() => { setAddingNew(false); setNewItemVals({ description: '', quantity: 1, unit_price: 0 }) }} className="px-3 py-1.5 border border-white/15 text-white/50 hover:text-white text-xs rounded-lg transition-colors">Cancel</button>
+                        </div>
                       </div>
-                    </div>
-                    <div>
-                      <label className="nwi-label">Total</label>
-                      <div className="nwi-input bg-white/5 text-white/60 pointer-events-none">
-                        {fmt(laborSubtotal)}
-                      </div>
-                    </div>
+                    ) : (
+                      <button onClick={() => { setAddingNew(true); setEditingId(null) }} className="w-full flex items-center gap-2 px-4 py-3 text-white/40 hover:text-orange hover:bg-white/5 text-xs transition-colors border-t border-white/5">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                        Add Line Item
+                      </button>
+                    )}
                   </div>
                 ) : (
+                  Array.isArray(initialQuote.line_items) && initialQuote.line_items.length > 0 && (
+                    <div className="bg-white/5 rounded-xl overflow-hidden">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b border-white/10">
+                            <th className="text-left px-4 py-2.5 text-white/40 font-medium">Description</th>
+                            <th className="text-right px-4 py-2.5 text-white/40 font-medium">Qty</th>
+                            <th className="text-right px-4 py-2.5 text-white/40 font-medium">Unit</th>
+                            <th className="text-right px-4 py-2.5 text-white/40 font-medium">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {initialQuote.line_items.map((li, i) => (
+                            <tr key={i} className="border-b border-white/5 last:border-0">
+                              <td className="px-4 py-2.5 text-white/80">{li.description}</td>
+                              <td className="px-4 py-2.5 text-white/60 text-right">{li.quantity}</td>
+                              <td className="px-4 py-2.5 text-white/60 text-right">{fmt(li.unit_price)}</td>
+                              <td className="px-4 py-2.5 text-white font-medium text-right">{fmt(li.total)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )
+                )}
+              </div>
+            )}
+
+            {/* ── Services (detailer only) ── */}
+            {isDetailer && (
+              <div className="space-y-3">
+                <p className="text-white/30 text-xs uppercase tracking-widest">Services</p>
+
+                {isDraft ? (
+                  <div className="rounded-xl border border-white/10 overflow-hidden">
+                    {serviceLines.length === 0 && (
+                      <div className="px-4 py-4 text-white/25 text-sm text-center">
+                        No services — add one below.
+                      </div>
+                    )}
+
+                    {serviceLines.map(sl => (
+                      <div key={sl._id} className="border-b border-white/5 last:border-0">
+                        {editingSlId === sl._id ? (
+                          <div className="p-3 space-y-2 bg-orange/5">
+                            <input
+                              autoFocus
+                              className="nwi-input text-sm w-full"
+                              placeholder="Service name"
+                              value={editingSlVals.service_name}
+                              onChange={e => setEditingSlVals(v => ({ ...v, service_name: e.target.value }))}
+                            />
+                            <div>
+                              <label className="nwi-label text-[10px]">Price ($)</label>
+                              <div className="relative">
+                                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 text-sm">$</span>
+                                <input
+                                  type="number" min={0} step={1}
+                                  className="nwi-input pl-7 text-sm"
+                                  value={(editingSlVals.price_cents / 100).toFixed(2)}
+                                  onChange={e => setEditingSlVals(v => ({ ...v, price_cents: Math.round((Number(e.target.value) || 0) * 100) }))}
+                                />
+                              </div>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => {
+                                  if (!editingSlVals.service_name.trim()) return
+                                  setServiceLines(prev => prev.map(s =>
+                                    s._id === editingSlId ? { ...s, service_name: editingSlVals.service_name.trim(), price_cents: editingSlVals.price_cents } : s
+                                  ))
+                                  setEditingSlId(null)
+                                }}
+                                className="px-3 py-1.5 bg-orange hover:bg-orange-hover text-white text-xs font-semibold rounded-lg transition-colors"
+                              >Apply</button>
+                              <button onClick={() => setEditingSlId(null)} className="px-3 py-1.5 border border-white/15 text-white/50 hover:text-white text-xs rounded-lg transition-colors">Cancel</button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 px-3 py-2.5 hover:bg-white/[0.03]">
+                            <span className="flex-1 text-white/80 text-sm truncate">{sl.service_name}</span>
+                            {sl.vehicle_category && (
+                              <span className="text-white/30 text-xs">{sl.vehicle_category}</span>
+                            )}
+                            <span className="text-white text-sm font-medium w-20 text-right">{fmt(sl.price_cents / 100)}</span>
+                            <div className="flex items-center gap-0.5">
+                              <button
+                                onClick={() => { setEditingSlId(sl._id); setEditingSlVals({ service_name: sl.service_name, price_cents: sl.price_cents }) }}
+                                className="p-1.5 text-white/25 hover:text-orange transition-colors rounded"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                              </button>
+                              <button
+                                onClick={() => setServiceLines(prev => prev.filter(s => s._id !== sl._id))}
+                                className="p-1.5 text-white/25 hover:text-danger transition-colors rounded"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+
+                    <button
+                      onClick={() => {
+                        const newSl: EditServiceLine = { _id: `sl-${Date.now()}`, service_name: 'New Service', vehicle_category: null, price_cents: 0 }
+                        setServiceLines(prev => [...prev, newSl])
+                        setEditingSlId(newSl._id)
+                        setEditingSlVals({ service_name: '', price_cents: 0 })
+                      }}
+                      className="w-full flex items-center gap-2 px-4 py-3 text-white/40 hover:text-orange hover:bg-white/5 text-xs transition-colors border-t border-white/5"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                      Add Service
+                    </button>
+                  </div>
+                ) : (
+                  dq.service_lines && dq.service_lines.length > 0 && (
+                    <div className="bg-white/5 rounded-xl overflow-hidden">
+                      {dq.service_lines.map((sl, i) => (
+                        <div key={i} className="flex items-center justify-between px-4 py-2.5 border-b border-white/5 last:border-0">
+                          <span className="text-white/80 text-sm">{sl.service_name}</span>
+                          <span className="text-white text-sm font-medium">{fmt(sl.price_cents / 100)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                )}
+              </div>
+            )}
+
+            {/* ── Labor (mechanic only) ── */}
+            {!isDetailer && (
+              isDraft ? (
+                <div className="space-y-2">
+                  <p className="text-white/30 text-xs uppercase tracking-widest">Labor</p>
                   <div className="grid grid-cols-3 gap-3">
                     <div>
                       <label className="nwi-label">Hours</label>
-                      <input
-                        type="number" min={0} step={0.25}
-                        className="nwi-input"
-                        value={laborHours}
-                        onChange={e => setLaborHours(Number(e.target.value) || 0)}
-                      />
+                      <input type="number" min={0} step={0.25} className="nwi-input" value={laborHours} onChange={e => setLaborHours(Number(e.target.value) || 0)} />
                     </div>
                     <div>
                       <label className="nwi-label">Rate $/hr</label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 text-sm">$</span>
-                        <input
-                          type="number" min={0} step={5}
-                          className="nwi-input pl-7"
-                          value={laborRate}
-                          onChange={e => setLaborRate(Number(e.target.value) || 0)}
-                        />
+                        <input type="number" min={0} step={5} className="nwi-input pl-7" value={laborRate} onChange={e => setLaborRate(Number(e.target.value) || 0)} />
                       </div>
                     </div>
                     <div>
                       <label className="nwi-label">Subtotal</label>
-                      <div className="nwi-input bg-white/5 text-white/60 pointer-events-none">
-                        {fmt(laborSubtotal)}
-                      </div>
+                      <div className="nwi-input bg-white/5 text-white/60 pointer-events-none">{fmt(laborSubtotal)}</div>
                     </div>
                   </div>
+                </div>
+              ) : (
+                initialQuote.labor_subtotal != null && (
+                  <div className="space-y-1">
+                    <p className="text-white/30 text-xs uppercase tracking-widest">Labor</p>
+                    <p className="text-white/70 text-sm">
+                      {initialQuote.labor_hours != null && initialQuote.labor_rate != null
+                        ? `${initialQuote.labor_hours}h × ${fmt(initialQuote.labor_rate)}/hr = `
+                        : ''}
+                      <span className="text-white font-medium">{fmt(initialQuote.labor_subtotal)}</span>
+                    </p>
+                  </div>
+                )
+              )
+            )}
+
+            {/* ── Adjustments (detailer only) ── */}
+            {isDetailer && (
+              <div className="space-y-3">
+                <p className="text-white/30 text-xs uppercase tracking-widest">Adjustments</p>
+
+                {isDraft ? (
+                  <div className="space-y-3">
+                    {/* Preset chips */}
+                    {presets.length > 0 && (
+                      <div className="flex flex-wrap gap-2">
+                        {presets.map(p => {
+                          const alreadyAdded = adjustments.some(a => a.name === p.name && a.price_cents === p.price_cents)
+                          return (
+                            <button
+                              key={p.id}
+                              disabled={alreadyAdded}
+                              onClick={() => {
+                                if (alreadyAdded) return
+                                setAdjustments(prev => [...prev, { _id: `adj-${Date.now()}`, name: p.name, price_cents: p.price_cents }])
+                              }}
+                              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                                alreadyAdded
+                                  ? 'border-orange/30 bg-orange/10 text-orange/50 cursor-default'
+                                  : 'border-white/15 bg-white/5 text-white/60 hover:border-orange/40 hover:text-white hover:bg-orange/10'
+                              }`}
+                            >
+                              {p.name} {p.price_cents >= 0 ? '+' : ''}{fmt(p.price_cents / 100)}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    {/* Adjustments list */}
+                    {adjustments.length > 0 && (
+                      <div className="rounded-xl border border-white/10 overflow-hidden">
+                        {adjustments.map(a => (
+                          <div key={a._id} className="border-b border-white/5 last:border-0">
+                            {editingAdjId === a._id ? (
+                              <div className="p-3 space-y-2 bg-orange/5">
+                                <input
+                                  autoFocus
+                                  className="nwi-input text-sm w-full"
+                                  placeholder="Adjustment name"
+                                  value={editingAdjVals.name}
+                                  onChange={e => setEditingAdjVals(v => ({ ...v, name: e.target.value }))}
+                                />
+                                <div>
+                                  <label className="nwi-label text-[10px]">Amount ($, negative to discount)</label>
+                                  <input
+                                    type="number" step={1}
+                                    className="nwi-input text-sm"
+                                    value={(editingAdjVals.price_cents / 100).toFixed(2)}
+                                    onChange={e => setEditingAdjVals(v => ({ ...v, price_cents: Math.round((Number(e.target.value) || 0) * 100) }))}
+                                  />
+                                </div>
+                                <div className="flex gap-2">
+                                  <button
+                                    onClick={() => {
+                                      if (!editingAdjVals.name.trim()) return
+                                      setAdjustments(prev => prev.map(adj =>
+                                        adj._id === editingAdjId ? { ...adj, name: editingAdjVals.name.trim(), price_cents: editingAdjVals.price_cents } : adj
+                                      ))
+                                      setEditingAdjId(null)
+                                    }}
+                                    className="px-3 py-1.5 bg-orange hover:bg-orange-hover text-white text-xs font-semibold rounded-lg transition-colors"
+                                  >Apply</button>
+                                  <button onClick={() => setEditingAdjId(null)} className="px-3 py-1.5 border border-white/15 text-white/50 hover:text-white text-xs rounded-lg transition-colors">Cancel</button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-2 px-3 py-2.5 hover:bg-white/[0.03]">
+                                <span className="flex-1 text-white/80 text-sm truncate">{a.name}</span>
+                                <span className={`text-sm font-medium w-20 text-right ${a.price_cents < 0 ? 'text-emerald-400' : 'text-white'}`}>
+                                  {a.price_cents < 0 ? '-' : '+'}{fmt(Math.abs(a.price_cents) / 100)}
+                                </span>
+                                <div className="flex items-center gap-0.5">
+                                  <button
+                                    onClick={() => { setEditingAdjId(a._id); setEditingAdjVals({ name: a.name, price_cents: a.price_cents }) }}
+                                    className="p-1.5 text-white/25 hover:text-orange transition-colors rounded"
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                  </button>
+                                  <button
+                                    onClick={() => setAdjustments(prev => prev.filter(adj => adj._id !== a._id))}
+                                    className="p-1.5 text-white/25 hover:text-danger transition-colors rounded"
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Add custom adjustment */}
+                    {addingAdj ? (
+                      <div className="p-3 space-y-2 bg-white/5 border border-white/10 rounded-xl">
+                        <input
+                          autoFocus
+                          className="nwi-input text-sm w-full"
+                          placeholder="Adjustment name"
+                          value={newAdjVals.name}
+                          onChange={e => setNewAdjVals(v => ({ ...v, name: e.target.value }))}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' && newAdjVals.name.trim()) {
+                              setAdjustments(prev => [...prev, { _id: `adj-${Date.now()}`, name: newAdjVals.name.trim(), price_cents: newAdjVals.price_cents }])
+                              setNewAdjVals({ name: '', price_cents: 0 })
+                              setAddingAdj(false)
+                            }
+                          }}
+                        />
+                        <div>
+                          <label className="nwi-label text-[10px]">Amount ($, negative to discount)</label>
+                          <input
+                            type="number" step={1}
+                            className="nwi-input text-sm"
+                            value={(newAdjVals.price_cents / 100).toFixed(2)}
+                            onChange={e => setNewAdjVals(v => ({ ...v, price_cents: Math.round((Number(e.target.value) || 0) * 100) }))}
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => {
+                              if (!newAdjVals.name.trim()) return
+                              setAdjustments(prev => [...prev, { _id: `adj-${Date.now()}`, name: newAdjVals.name.trim(), price_cents: newAdjVals.price_cents }])
+                              setNewAdjVals({ name: '', price_cents: 0 })
+                              setAddingAdj(false)
+                            }}
+                            className="px-3 py-1.5 bg-orange hover:bg-orange-hover text-white text-xs font-semibold rounded-lg transition-colors"
+                          >Add</button>
+                          <button
+                            onClick={() => { setAddingAdj(false); setNewAdjVals({ name: '', price_cents: 0 }) }}
+                            className="px-3 py-1.5 border border-white/15 text-white/50 hover:text-white text-xs rounded-lg transition-colors"
+                          >Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setAddingAdj(true)}
+                        className="flex items-center gap-2 text-white/40 hover:text-orange text-xs transition-colors"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                        Add Custom Adjustment
+                      </button>
+                    )}
+                  </div>
+                ) : (
+                  dq.adjustments && dq.adjustments.length > 0 && (
+                    <div className="bg-white/5 rounded-xl overflow-hidden">
+                      {dq.adjustments.map((a, i) => (
+                        <div key={i} className="flex items-center justify-between px-4 py-2.5 border-b border-white/5 last:border-0">
+                          <span className="text-white/80 text-sm">{a.name}</span>
+                          <span className={`text-sm font-medium ${a.price_cents < 0 ? 'text-emerald-400' : 'text-white'}`}>
+                            {a.price_cents < 0 ? '-' : '+'}{fmt(Math.abs(a.price_cents) / 100)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )
                 )}
               </div>
-            ) : (
-              initialQuote.labor_subtotal != null && (
-                <div className="space-y-1">
-                  <p className="text-white/30 text-xs uppercase tracking-widest">
-                    {isDetailer ? 'Service Fee' : 'Labor'}
-                  </p>
-                  <p className="text-white/70 text-sm">
-                    {!isDetailer && initialQuote.labor_hours != null && initialQuote.labor_rate != null
-                      ? `${initialQuote.labor_hours}h × ${fmt(initialQuote.labor_rate)}/hr = `
-                      : ''}
-                    <span className="text-white font-medium">{fmt(initialQuote.labor_subtotal)}</span>
-                  </p>
-                </div>
-              )
             )}
 
             {/* ── Pricing settings (draft only) ── */}
@@ -1366,25 +1621,48 @@ function QuoteDetailModal({
 
               {isDraft ? (
                 <>
-                  {partsBase > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-white/60">{isDetailer ? 'Add-ons' : 'Parts Base'}</span>
-                      <span className="text-white">{fmt(partsBase)}</span>
-                    </div>
-                  )}
-                  {!isDetailer && markupPct > 0 && partsBase > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-white/40">Parts Markup ({markupPct}%)</span>
-                      <span className="text-white/60">+{fmt(markupAmt)}</span>
-                    </div>
-                  )}
-                  {laborSubtotal > 0 && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-white/60">
-                        {isDetailer ? 'Service Fee' : `Labor (${laborHours}h × ${fmt(laborRate)}/hr)`}
-                      </span>
-                      <span className="text-white">{fmt(laborSubtotal)}</span>
-                    </div>
+                  {isDetailer ? (
+                    <>
+                      {servicesSubtotal > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-white/60">Services</span>
+                          <span className="text-white">{fmt(servicesSubtotal)}</span>
+                        </div>
+                      )}
+                      {adjustmentsSubtotal !== 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-white/60">Adjustments</span>
+                          <span className={adjustmentsSubtotal < 0 ? 'text-emerald-400' : 'text-white'}>{fmt(adjustmentsSubtotal)}</span>
+                        </div>
+                      )}
+                      {(servicesSubtotal !== 0 || adjustmentsSubtotal !== 0) && (
+                        <div className="flex justify-between text-sm border-t border-white/10 pt-2">
+                          <span className="text-white/40">Subtotal</span>
+                          <span className="text-white/60">{fmt(subtotal)}</span>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {partsBase > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-white/60">Parts Base</span>
+                          <span className="text-white">{fmt(partsBase)}</span>
+                        </div>
+                      )}
+                      {markupPct > 0 && partsBase > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-white/40">Parts Markup ({markupPct}%)</span>
+                          <span className="text-white/60">+{fmt(markupAmt)}</span>
+                        </div>
+                      )}
+                      {laborSubtotal > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-white/60">Labor ({laborHours}h × {fmt(laborRate)}/hr)</span>
+                          <span className="text-white">{fmt(laborSubtotal)}</span>
+                        </div>
+                      )}
+                    </>
                   )}
                   {taxPct > 0 && (
                     <div className="flex justify-between text-sm border-t border-white/10 pt-2.5">
@@ -1401,33 +1679,50 @@ function QuoteDetailModal({
                 </>
               ) : (
                 <>
-                  {initialQuote.parts_subtotal != null && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-white/60">{isDetailer ? 'Add-ons Subtotal' : 'Parts Subtotal'}</span>
-                      <span className="text-white">{fmt(initialQuote.parts_subtotal)}</span>
-                    </div>
-                  )}
-                  {!isDetailer && initialQuote.parts_markup_percent != null && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-white/40">Parts Markup ({initialQuote.parts_markup_percent}%)</span>
-                      <span className="text-white/60">
-                        {initialQuote.parts_subtotal != null
-                          ? fmt(initialQuote.parts_subtotal * (initialQuote.parts_markup_percent / 100))
-                          : '—'}
-                      </span>
-                    </div>
-                  )}
-                  {initialQuote.labor_subtotal != null && (
-                    <div className="flex justify-between text-sm">
-                      <span className="text-white/60">
-                        {isDetailer
-                          ? 'Service Fee'
-                          : `Labor${initialQuote.labor_hours != null && initialQuote.labor_rate != null
+                  {isDetailer ? (
+                    <>
+                      {dq.service_lines && dq.service_lines.length > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-white/60">Services</span>
+                          <span className="text-white">{fmt(dq.service_lines.reduce((s, sl) => s + sl.price_cents / 100, 0))}</span>
+                        </div>
+                      )}
+                      {dq.adjustments && dq.adjustments.length > 0 && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-white/60">Adjustments</span>
+                          <span className="text-white">{fmt(dq.adjustments.reduce((s, a) => s + a.price_cents / 100, 0))}</span>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      {initialQuote.parts_subtotal != null && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-white/60">Parts Subtotal</span>
+                          <span className="text-white">{fmt(initialQuote.parts_subtotal)}</span>
+                        </div>
+                      )}
+                      {initialQuote.parts_markup_percent != null && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-white/40">Parts Markup ({initialQuote.parts_markup_percent}%)</span>
+                          <span className="text-white/60">
+                            {initialQuote.parts_subtotal != null
+                              ? fmt(initialQuote.parts_subtotal * (initialQuote.parts_markup_percent / 100))
+                              : '—'}
+                          </span>
+                        </div>
+                      )}
+                      {initialQuote.labor_subtotal != null && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-white/60">
+                            Labor{initialQuote.labor_hours != null && initialQuote.labor_rate != null
                               ? ` (${initialQuote.labor_hours}h × ${fmt(initialQuote.labor_rate)}/hr)`
-                              : ''}`}
-                      </span>
-                      <span className="text-white">{fmt(initialQuote.labor_subtotal)}</span>
-                    </div>
+                              : ''}
+                          </span>
+                          <span className="text-white">{fmt(initialQuote.labor_subtotal)}</span>
+                        </div>
+                      )}
+                    </>
                   )}
                   {initialQuote.tax_amount != null && (
                     <div className="flex justify-between text-sm border-t border-white/10 pt-2.5">

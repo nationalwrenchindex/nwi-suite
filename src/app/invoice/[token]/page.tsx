@@ -4,6 +4,7 @@
 import { notFound } from 'next/navigation'
 import { createServiceClient } from '@/lib/supabase/service'
 import InvoiceViewClient from './InvoiceViewClient'
+import InvoiceApprovalClient from './InvoiceApprovalClient'
 import type { Metadata } from 'next'
 import type { MultiJobEntry } from '@/types/financials'
 
@@ -15,6 +16,7 @@ const INVOICE_SELECT = `
   payment_instructions, finalized_at,
   customer_view_count, customer_viewed_at, times_sent,
   sent_to_customer_at, paid_at,
+  service_lines, adjustments, tip_amount_cents,
   customer:customers(id, first_name, last_name, phone),
   vehicle:vehicles(id, year, make, model, vin),
   source_quote:quotes!invoices_source_quote_id_fkey(id, quote_number, parts_subtotal, parts_markup_percent, labor_subtotal, labor_hours, labor_rate),
@@ -53,13 +55,14 @@ export default async function PublicInvoicePage(
 
   const { data: profile } = await sc
     .from('profiles')
-    .select('full_name, business_name, phone, email')
+    .select('full_name, business_name, phone, email, business_type')
     .eq('id', invoice.user_id)
     .single()
 
-  const p = profile as { full_name?: string; business_name?: string; phone?: string } | null
-  const bizName   = p?.business_name ?? 'Your Technician'
-  const techPhone = p?.phone         ?? null
+  const p = profile as { full_name?: string; business_name?: string; phone?: string; business_type?: string } | null
+  const bizName    = p?.business_name ?? 'Your Technician'
+  const techPhone  = p?.phone         ?? null
+  const isDetailer = p?.business_type === 'detailer'
 
   const inv = invoice as AnyInvoice
 
@@ -77,11 +80,18 @@ export default async function PublicInvoicePage(
   const jobs: MultiJobEntry[] = Array.isArray(inv.jobs) && inv.jobs.length > 0 ? inv.jobs : []
   const isMultiJob = jobs.length > 0
 
-  // Line items from original quote (legacy)
+  // Detailer model
+  const serviceLines: Array<{ service_name: string; vehicle_category: string | null; price_cents: number }> =
+    Array.isArray(inv.service_lines) ? inv.service_lines : []
+  const adjustments: Array<{ name: string; price_cents: number }> =
+    Array.isArray(inv.adjustments) ? inv.adjustments : []
+  const isDetailerModel = isDetailer && (serviceLines.length > 0 || adjustments.length > 0)
+
+  // Legacy line items
   const lineItems: Array<{ description: string; quantity: number; unit_price: number; total: number }> =
     Array.isArray(inv.line_items) ? inv.line_items : []
 
-  // Additional items
+  // Additional items (mechanic/in-progress only)
   const shopSupplies:    Array<{ id: string; name: string; qty: number; unit_cost: number; total: number }> =
     Array.isArray(inv.shop_supplies)    ? inv.shop_supplies    : []
   const additionalParts: Array<{ id: string; description: string; qty: number; unit_cost: number; total: number }> =
@@ -176,8 +186,40 @@ export default async function PublicInvoicePage(
           </div>
         ) : null}
 
-        {/* Multi-job grouped breakdown */}
-        {isMultiJob ? (
+        {/* Detailer: services + adjustments */}
+        {isDetailerModel ? (
+          <>
+            {serviceLines.length > 0 && (
+              <div className="bg-white/5 rounded-xl overflow-hidden">
+                <p className="text-white/40 text-xs uppercase tracking-widest px-4 pt-4 pb-2">Services</p>
+                <div>
+                  {serviceLines.map((sl, i) => (
+                    <div key={i} className="flex items-center justify-between px-4 py-2.5 border-b border-white/5 last:border-0">
+                      <span className="text-white/80 text-sm">{sl.service_name}</span>
+                      <span className="text-white text-sm font-medium">{fmt(sl.price_cents / 100)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {adjustments.length > 0 && (
+              <div className="bg-white/5 rounded-xl overflow-hidden">
+                <p className="text-white/40 text-xs uppercase tracking-widest px-4 pt-4 pb-2">Adjustments</p>
+                <div>
+                  {adjustments.map((a, i) => (
+                    <div key={i} className="flex items-center justify-between px-4 py-2.5 border-b border-white/5 last:border-0">
+                      <span className="text-white/80 text-sm">{a.name}</span>
+                      <span className={`text-sm font-medium ${a.price_cents < 0 ? 'text-emerald-400' : 'text-white'}`}>
+                        {a.price_cents < 0 ? '-' : '+'}{fmt(Math.abs(a.price_cents) / 100)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        ) : isMultiJob ? (
+          /* Multi-job grouped breakdown */
           <div className="space-y-4">
             {jobs.map((j, ji) => {
               const jobPartsRevenue = j.parts.reduce((s, p) => s + p.unit_price * p.qty, 0)
@@ -310,6 +352,11 @@ export default async function PublicInvoicePage(
             <span className="text-[#FF6600] font-bold text-3xl">{fmt(inv.total)}</span>
           </div>
         </div>
+
+        {/* Detailer: tip + approve (unpaid only) */}
+        {isDetailer && !isPaid && (
+          <InvoiceApprovalClient token={token} invoiceTotal={Number(inv.total) || 0} />
+        )}
 
         {/* Payment instructions — hidden once paid */}
         {inv.payment_instructions && !isPaid && (

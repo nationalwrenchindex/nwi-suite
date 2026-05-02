@@ -13,6 +13,7 @@ const QUOTE_SELECT = `
   line_items, labor_hours, labor_rate,
   parts_subtotal, parts_markup_percent, labor_subtotal,
   tax_percent, tax_amount, grand_total,
+  service_lines, adjustments,
   view_count, viewed_at, times_sent,
   sent_at, approved_at, declined_at, quote_expires_at,
   customer_response_note,
@@ -79,6 +80,12 @@ export default async function PublicQuotePage(
 
   const lineItems: Array<{ description: string; quantity: number; unit_price: number; total: number }> =
     Array.isArray(q.line_items) ? q.line_items : []
+
+  const serviceLines: Array<{ service_name: string; vehicle_category: string | null; price_cents: number }> =
+    Array.isArray(q.service_lines) ? q.service_lines : []
+  const adjustments: Array<{ name: string; price_cents: number }> =
+    Array.isArray(q.adjustments) ? q.adjustments : []
+  const isDetailerModel = isDetailer && (serviceLines.length > 0 || adjustments.length > 0)
 
   const partsItems  = lineItems.filter(li =>
     !/^labor/i.test(li.description?.trim() ?? '') &&
@@ -148,8 +155,36 @@ export default async function PublicQuotePage(
           </div>
         ) : null}
 
-        {/* Multi-job grouped breakdown */}
-        {isMultiJob ? (
+        {/* Detailer: services + adjustments */}
+        {isDetailerModel ? (
+          <>
+            {serviceLines.length > 0 && (
+              <div className="bg-white/5 rounded-xl overflow-hidden">
+                <p className="text-white/40 text-xs uppercase tracking-widest px-4 pt-4 pb-2">Services</p>
+                {serviceLines.map((sl, i) => (
+                  <div key={i} className="flex items-center justify-between px-4 py-2.5 border-b border-white/5 last:border-0">
+                    <span className="text-white/80 text-sm">{sl.service_name}</span>
+                    <span className="text-white text-sm font-medium">{fmt(sl.price_cents / 100)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {adjustments.length > 0 && (
+              <div className="bg-white/5 rounded-xl overflow-hidden">
+                <p className="text-white/40 text-xs uppercase tracking-widest px-4 pt-4 pb-2">Adjustments</p>
+                {adjustments.map((a, i) => (
+                  <div key={i} className="flex items-center justify-between px-4 py-2.5 border-b border-white/5 last:border-0">
+                    <span className="text-white/80 text-sm">{a.name}</span>
+                    <span className={`text-sm font-medium ${a.price_cents < 0 ? 'text-emerald-400' : 'text-white'}`}>
+                      {a.price_cents < 0 ? '-' : '+'}{fmt(Math.abs(a.price_cents) / 100)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        ) : isMultiJob ? (
+          /* Multi-job grouped breakdown */
           <div className="space-y-4">
             {jobs.map((j, ji) => {
               const jobPartsRevenue = j.parts.reduce((s, p) => s + p.unit_price * p.qty, 0)
@@ -172,9 +207,7 @@ export default async function PublicQuotePage(
                           </tr>
                         ))}
                         <tr className="border-b border-white/5">
-                          <td className="px-4 py-2 text-white/50" colSpan={2}>
-                            Labor ({j.labor_hours}h)
-                          </td>
+                          <td className="px-4 py-2 text-white/50" colSpan={2}>Labor ({j.labor_hours}h)</td>
                           <td className="px-4 py-2 text-white/80 text-right font-medium">{fmt(jobLaborTotal)}</td>
                         </tr>
                       </tbody>
@@ -185,11 +218,8 @@ export default async function PublicQuotePage(
             })}
           </div>
         ) : lineItems.length > 0 ? (
-          /* Legacy single-job line items */
           <div className="bg-white/5 rounded-xl overflow-hidden">
-            <p className="text-white/40 text-xs uppercase tracking-widest px-4 pt-4 pb-2">
-              What&apos;s Included
-            </p>
+            <p className="text-white/40 text-xs uppercase tracking-widest px-4 pt-4 pb-2">What&apos;s Included</p>
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-white/10">
@@ -220,7 +250,22 @@ export default async function PublicQuotePage(
 
         {/* Pricing summary */}
         <div className="bg-white/5 rounded-xl p-4 space-y-2">
-          {isMultiJob ? (
+          {isDetailerModel ? (
+            <>
+              {serviceLines.length > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/60">Services</span>
+                  <span className="text-white">{fmt(serviceLines.reduce((s, sl) => s + sl.price_cents / 100, 0))}</span>
+                </div>
+              )}
+              {adjustments.length > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/60">Adjustments</span>
+                  <span className="text-white">{fmt(adjustments.reduce((s, a) => s + a.price_cents / 100, 0))}</span>
+                </div>
+              )}
+            </>
+          ) : isMultiJob ? (
             <>
               {(() => {
                 const totalPartsRevenue = jobs.reduce((s, j) => s + j.parts.reduce((ps, p) => ps + p.unit_price * p.qty, 0), 0)
@@ -248,18 +293,13 @@ export default async function PublicQuotePage(
               {q.parts_subtotal != null && q.parts_subtotal > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-white/60">Parts</span>
-                  <span className="text-white">
-                    {fmt(q.parts_subtotal * (1 + (q.parts_markup_percent ?? 0) / 100))}
-                  </span>
+                  <span className="text-white">{fmt(q.parts_subtotal * (1 + (q.parts_markup_percent ?? 0) / 100))}</span>
                 </div>
               )}
               {q.labor_subtotal != null && q.labor_subtotal > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-white/60">
-                    {isDetailer
-                      ? 'Service Fee'
-                      : `Labor${q.labor_hours && q.labor_rate ? ` (${q.labor_hours}h)` : ''}`
-                    }
+                    Labor{q.labor_hours && q.labor_rate ? ` (${q.labor_hours}h)` : ''}
                   </span>
                   <span className="text-white">{fmt(q.labor_subtotal)}</span>
                 </div>
@@ -268,9 +308,7 @@ export default async function PublicQuotePage(
           )}
           {q.tax_amount != null && q.tax_amount > 0 && (
             <div className="flex justify-between text-sm border-t border-white/10 pt-2">
-              <span className="text-white/50">
-                Tax{q.tax_percent ? ` (${q.tax_percent}%)` : ''}
-              </span>
+              <span className="text-white/50">Tax{q.tax_percent ? ` (${q.tax_percent}%)` : ''}</span>
               <span className="text-white/70">{fmt(q.tax_amount)}</span>
             </div>
           )}

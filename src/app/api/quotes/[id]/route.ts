@@ -107,7 +107,10 @@ export async function PUT(
     customer_name:        string
     customer_phone:       string
     vehicle_id?:          string | null
-    jobs?:                unknown[]   // Phase 8: multi-job JSONB
+    jobs?:                unknown[]
+    // Detailer model
+    service_lines?: Array<{ service_name: string; vehicle_category: string | null; price_cents: number }>
+    adjustments?:   Array<{ name: string; price_cents: number }>
   }
 
   try {
@@ -134,23 +137,33 @@ export async function PUT(
 
   const customerId = await resolveCustomer(supabase, user.id, body.customer_name ?? '', body.customer_phone ?? '')
 
+  const updatePayload: Record<string, unknown> = {
+    line_items:           safeLineItems,
+    labor_hours:          isDetailer ? 0 : body.labor_hours,
+    labor_rate:           isDetailer ? 0 : body.labor_rate,
+    parts_subtotal:       isDetailer ? 0 : body.parts_subtotal,
+    parts_markup_percent: isDetailer ? 0 : body.parts_markup_percent,
+    labor_subtotal:       isDetailer ? 0 : body.labor_subtotal,
+    tax_percent:          body.tax_percent,
+    tax_amount:           body.tax_amount,
+    grand_total:          body.grand_total,
+    notes:                body.notes ?? null,
+    customer_id:          customerId,
+    vehicle_id:           body.vehicle_id ?? null,
+  }
+  if (body.jobs !== undefined) updatePayload.jobs = body.jobs
+  if (isDetailer) {
+    updatePayload.service_lines = (body.service_lines ?? []).filter(
+      (sl) => typeof sl.service_name === 'string' && sl.service_name.trim().length > 0
+    )
+    updatePayload.adjustments = (body.adjustments ?? []).filter(
+      (a) => typeof a.name === 'string' && a.name.trim().length > 0
+    )
+  }
+
   const { data: updated, error: updateErr } = await supabase
     .from('quotes')
-    .update({
-      line_items:           safeLineItems,
-      labor_hours:          body.labor_hours,
-      labor_rate:           body.labor_rate,
-      parts_subtotal:       body.parts_subtotal,
-      parts_markup_percent: body.parts_markup_percent,
-      labor_subtotal:       body.labor_subtotal,
-      tax_percent:          body.tax_percent,
-      tax_amount:           body.tax_amount,
-      grand_total:          body.grand_total,
-      notes:                body.notes ?? null,
-      customer_id:          customerId,
-      vehicle_id:           body.vehicle_id ?? null,
-      ...(body.jobs !== undefined ? { jobs: body.jobs } : {}),
-    })
+    .update(updatePayload)
     .eq('id', id)
     .eq('user_id', user.id)
     .select(QUOTE_SELECT)

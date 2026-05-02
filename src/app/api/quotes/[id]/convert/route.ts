@@ -75,6 +75,7 @@ export async function POST(
   const now   = new Date().toISOString()
 
   // Build invoice row from quote data
+  const q = quote as Record<string, unknown>
   const invoiceInsert = {
     user_id:         user.id,
     invoice_number,
@@ -84,14 +85,13 @@ export async function POST(
     job_id:          quote.job_id      ?? null,
     job_category:    quote.job_category ?? null,
     job_subtype:     quote.job_subtype  ?? null,
-    // Copy the original line items and pricing from the quote
     line_items:      quote.line_items   ?? [],
     subtotal:        Number(quote.parts_subtotal ?? 0) * (1 + Number(quote.parts_markup_percent ?? 0) / 100) + Number(quote.labor_subtotal ?? 0),
     tax_rate:        Number(quote.tax_percent ?? 0) / 100,
     tax_amount:      Number(quote.tax_amount   ?? 0),
     discount_amount: 0,
     total:           Number(quote.grand_total  ?? 0),
-    status:          'draft',          // legacy status field — not used for workflow
+    status:          'draft',
     source:          'quote',
     notes:           quote.notes       ?? null,
     // Phase 3 fields
@@ -104,6 +104,9 @@ export async function POST(
     started_at:      now,
     // Phase 8: copy multi-job data from quote
     jobs:            quote.jobs ?? [],
+    // Detailer model: carry service_lines and adjustments forward
+    service_lines:   Array.isArray(q.service_lines) ? q.service_lines : [],
+    adjustments:     Array.isArray(q.adjustments)   ? q.adjustments   : [],
   }
 
   const { data: newInvoice, error: insertErr } = await supabase
