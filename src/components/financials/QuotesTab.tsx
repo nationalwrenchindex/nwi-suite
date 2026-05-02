@@ -472,6 +472,7 @@ function QuoteDetailModal({
   const [initialItems] = useState<EditItem[]>(() =>
     (initialQuote.line_items ?? [])
       .filter(li => !isLaborItem(li))
+      .filter(li => !(isDetailer && li.description?.trim() === 'Service'))
       .map((li, i) => ({
         _id:         `li-${i}`,
         description: li.description,
@@ -652,20 +653,12 @@ function QuoteDetailModal({
         unit_price:  round2(li.unit_price * (1 + markup)),
         total:       round2(li.quantity * li.unit_price * (1 + markup)),
       })),
-      ...(isDetailer
-        ? (laborRate > 0 ? [{
-            description: 'Service',
-            quantity:    1,
-            unit_price:  laborRate,
-            total:       laborRate,
-          }] : [])
-        : (laborHours > 0 ? [{
-            description: 'Labor',
-            quantity:    laborHours,
-            unit_price:  laborRate,
-            total:       round2(laborHours * laborRate),
-          }] : [])
-      ),
+      ...(!isDetailer && laborHours > 0 ? [{
+        description: 'Labor',
+        quantity:    laborHours,
+        unit_price:  laborRate,
+        total:       round2(laborHours * laborRate),
+      }] : []),
     ]
 
     try {

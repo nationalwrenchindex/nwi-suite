@@ -50,14 +50,15 @@ export default async function PublicQuotePage(
 
   const { data: profile } = await sc
     .from('profiles')
-    .select('full_name, business_name, phone, email')
+    .select('full_name, business_name, phone, email, business_type')
     .eq('id', quote.user_id)
     .single()
 
-  const p = profile as { full_name?: string; business_name?: string; phone?: string; email?: string } | null
-  const bizName  = p?.business_name ?? 'Your Technician'
-  const techName = p?.full_name     ?? 'Your Technician'
-  const techPhone = p?.phone        ?? null
+  const p = profile as { full_name?: string; business_name?: string; phone?: string; email?: string; business_type?: string } | null
+  const bizName    = p?.business_name   ?? 'Your Technician'
+  const techName   = p?.full_name       ?? 'Your Technician'
+  const techPhone  = p?.phone           ?? null
+  const isDetailer = p?.business_type   === 'detailer'
 
   const q = quote as AnyQuote
 
@@ -79,7 +80,10 @@ export default async function PublicQuotePage(
   const lineItems: Array<{ description: string; quantity: number; unit_price: number; total: number }> =
     Array.isArray(q.line_items) ? q.line_items : []
 
-  const partsItems  = lineItems.filter(li => !/^labor/i.test(li.description?.trim() ?? ''))
+  const partsItems  = lineItems.filter(li =>
+    !/^labor/i.test(li.description?.trim() ?? '') &&
+    !(isDetailer && li.description?.trim() === 'Service')
+  )
   const laborItems  = lineItems.filter(li => /^labor/i.test(li.description?.trim() ?? ''))
 
   const isExpired   = q.status === 'expired' || (
@@ -252,9 +256,10 @@ export default async function PublicQuotePage(
               {q.labor_subtotal != null && q.labor_subtotal > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-white/60">
-                    Labor{q.labor_hours && q.labor_rate
-                      ? ` (${q.labor_hours}h)`
-                      : ''}
+                    {isDetailer
+                      ? 'Service Fee'
+                      : `Labor${q.labor_hours && q.labor_rate ? ` (${q.labor_hours}h)` : ''}`
+                    }
                   </span>
                   <span className="text-white">{fmt(q.labor_subtotal)}</span>
                 </div>
