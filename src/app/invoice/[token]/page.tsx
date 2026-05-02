@@ -90,8 +90,6 @@ export default async function PublicInvoicePage(
     Array.isArray(inv.service_lines) ? inv.service_lines : []
   const adjustments: Array<{ name: string; price_cents: number }> =
     Array.isArray(inv.adjustments) ? inv.adjustments : []
-  const isDetailerModel = isDetailer && (serviceLines.length > 0 || adjustments.length > 0)
-
   // Legacy line items
   const lineItems: Array<{ description: string; quantity: number; unit_price: number; total: number }> =
     Array.isArray(inv.line_items) ? inv.line_items : []
@@ -105,8 +103,8 @@ export default async function PublicInvoicePage(
     Array.isArray(inv.additional_labor) ? inv.additional_labor : []
 
   // Detailer: compute subtotal/tax/total from JSON rather than relying on stored total (may be 0 for older rows)
-  const showDetailerSupplies = isDetailerModel && billConsumables && shopSupplies.length > 0
-  const detailerSubtotal = isDetailerModel
+  const showDetailerSupplies = isDetailer && billConsumables && shopSupplies.length > 0
+  const detailerSubtotal = isDetailer
     ? round2(
         serviceLines.reduce((s, sl) => s + sl.price_cents, 0) / 100 +
         adjustments.reduce((s, a) => s + a.price_cents, 0) / 100 +
@@ -212,7 +210,7 @@ export default async function PublicInvoicePage(
         ) : null}
 
         {/* Detailer: services + adjustments */}
-        {isDetailerModel ? (
+        {isDetailer ? (
           <>
             {serviceLines.length > 0 && (
               <div className="bg-white/5 rounded-xl overflow-hidden">
@@ -323,9 +321,11 @@ export default async function PublicInvoicePage(
         )}
 
         {/* Shop supplies — detailers only show if bill_consumables_separately is on */}
-        {shopSupplies.length > 0 && (!isDetailerModel || showDetailerSupplies) && (
+        {shopSupplies.length > 0 && (!isDetailer || showDetailerSupplies) && (
           <div className="bg-white/5 rounded-xl overflow-hidden">
-            <p className="text-white/40 text-xs uppercase tracking-widest px-4 pt-4 pb-2">Shop Supplies</p>
+            <p className="text-white/40 text-xs uppercase tracking-widest px-4 pt-4 pb-2">
+              {isDetailer ? 'Detailing Supplies' : 'Shop Supplies'}
+            </p>
             <table className="w-full text-sm">
               <tbody>
                 {shopSupplies.map((sup) => (
@@ -340,8 +340,8 @@ export default async function PublicInvoicePage(
           </div>
         )}
 
-        {/* Additional labor */}
-        {additionalLabor.length > 0 && (
+        {/* Additional labor — hidden for detailers (they use service_lines instead) */}
+        {!isDetailer && additionalLabor.length > 0 && (
           <div className="bg-white/5 rounded-xl overflow-hidden">
             <p className="text-white/40 text-xs uppercase tracking-widest px-4 pt-4 pb-2">Additional Labor</p>
             <table className="w-full text-sm">

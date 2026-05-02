@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import type { Invoice, MultiJobEntry } from '@/types/financials'
+import type { Invoice, MultiJobEntry, ServiceLine, Adjustment, ShopSupplyItem, AdditionalPartItem, AdditionalLaborItem } from '@/types/financials'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tools.nationalwrenchindex.com'
 
@@ -705,6 +705,25 @@ export default function FinalizedInvoiceClient({
   const quotedLaborSubtotal = Number(sq?.labor_subtotal ?? 0)
   const grandTotal          = invoice.total
 
+  // Detailer: service_lines + adjustments, with computed totals (stored total may be 0 on older rows)
+  const serviceLines: ServiceLine[] = Array.isArray(invoice.service_lines) ? invoice.service_lines : []
+  const adjLines:     Adjustment[]  = Array.isArray(invoice.adjustments)   ? invoice.adjustments   : []
+
+  const detailerServicesTotal = isDetailer ? round2(serviceLines.reduce((s, sl) => s + sl.price_cents, 0) / 100) : 0
+  const detailerAdjTotal      = isDetailer ? round2(adjLines.reduce((s, a) => s + a.price_cents, 0) / 100) : 0
+  const detailerSubtotal = isDetailer
+    ? round2(detailerServicesTotal + detailerAdjTotal + shopSuppliesTotal + additionalPartsTotal + additionalLaborTotal)
+    : null
+  const detailerTaxRate = isDetailer ? Number(invoice.tax_rate ?? 0) : 0
+  const detailerTax     = detailerSubtotal != null ? round2(detailerSubtotal * detailerTaxRate) : null
+  const detailerTotal   = detailerSubtotal != null && detailerTax != null
+    ? round2(detailerSubtotal + detailerTax)
+    : null
+
+  const displaySubtotal = detailerSubtotal ?? invoice.subtotal
+  const displayTaxAmt   = detailerTax      ?? invoice.tax_amount
+  const displayTotal    = detailerTotal    ?? grandTotal
+
   const vehicleLabel = vehicle
     ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ')
     : '—'
@@ -722,13 +741,13 @@ export default function FinalizedInvoiceClient({
       date:  invoice.started_at ?? invoice.invoice_date,
       icon:  sq ? '📄' : '🧾',
     },
-    ...(Array.isArray(invoice.shop_supplies) && invoice.shop_supplies.length > 0
-      ? [{ label: 'Shop supplies added', date: invoice.started_at ?? invoice.invoice_date, icon: '🔧' }]
+    ...(invoice.shop_supplies.filter((s: ShopSupplyItem) => s.name?.trim() && s.total > 0).length > 0
+      ? [{ label: isDetailer ? 'Detailing supplies added' : 'Shop supplies added', date: invoice.started_at ?? invoice.invoice_date, icon: '🔧' }]
       : []),
-    ...(Array.isArray(invoice.additional_parts) && invoice.additional_parts.length > 0
+    ...(invoice.additional_parts.filter((p: AdditionalPartItem) => p.description?.trim() && p.total > 0).length > 0
       ? [{ label: isDetailer ? 'Add-ons added' : 'Additional parts added', date: invoice.started_at ?? invoice.invoice_date, icon: '⚙️' }]
       : []),
-    ...(Array.isArray(invoice.additional_labor) && invoice.additional_labor.length > 0
+    ...(invoice.additional_labor.filter((l: AdditionalLaborItem) => l.description?.trim() && l.subtotal > 0).length > 0
       ? [{ label: isDetailer ? 'Additional services added' : 'Additional labor added', date: invoice.started_at ?? invoice.invoice_date, icon: '⏱️' }]
       : []),
     ...(invoice.job_notes
@@ -1107,6 +1126,48 @@ export default function FinalizedInvoiceClient({
         </Section>
       )}
 
+      {/* Services (detailer only, read-only) */}
+      {isDetailer && serviceLines.length > 0 && (
+        <Section label="Services">
+          <ReadOnlyTable
+            rows={serviceLines.map(sl => ({
+              label:  sl.service_name + (sl.vehicle_category ? ` — ${sl.vehicle_category}` : ''),
+              amount: sl.price_cents / 100,
+            }))}
+          />
+          <div className="flex justify-end pt-3 border-t border-white/8 mt-3">
+            <div className="flex gap-6 text-sm">
+              <span className="text-white/40">Subtotal</span>
+              <span className="text-white w-20 text-right">{fmt(detailerServicesTotal)}</span>
+            </div>
+          </div>
+        </Section>
+      )}
+
+      {/* Adjustments (detailer only, read-only) */}
+      {isDetailer && adjLines.length > 0 && (
+        <Section label="Adjustments">
+          <div className="rounded-xl border border-white/8 overflow-hidden">
+            {adjLines.map((a, i) => (
+              <div key={i} className="flex items-center justify-between px-4 py-2.5 border-b border-white/5 last:border-0">
+                <span className="text-white/70 text-sm">{a.name}</span>
+                <span className={`text-sm font-medium ${a.price_cents < 0 ? 'text-emerald-400' : 'text-white'}`}>
+                  {a.price_cents < 0 ? '−' : '+'}{fmt(Math.abs(a.price_cents) / 100)}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="flex justify-end pt-3 border-t border-white/8 mt-3">
+            <div className="flex gap-6 text-sm">
+              <span className="text-white/40">Total Adjustments</span>
+              <span className={`w-24 text-right font-medium ${detailerAdjTotal < 0 ? 'text-emerald-400' : 'text-white'}`}>
+                {detailerAdjTotal < 0 ? '−' : '+'}{fmt(Math.abs(detailerAdjTotal))}
+              </span>
+            </div>
+          </div>
+        </Section>
+      )}
+
       {/* Shop supplies (read-only) */}
       {Array.isArray(invoice.shop_supplies) && invoice.shop_supplies.length > 0 && (
         <Section label={isDetailer ? 'Detailing Supplies' : 'Shop Supplies'}>
@@ -1168,49 +1229,86 @@ export default function FinalizedInvoiceClient({
       <div className="bg-[#222222] border border-white/8 rounded-2xl p-5">
         <p className="text-white/50 text-xs font-semibold uppercase tracking-widest mb-4">Invoice Total</p>
         <div className="space-y-2">
-          {quotedPartsSubtotal > 0 && (
-            <div className="flex justify-between text-sm">
-              <span className="text-white/50">{isDetailer ? 'Quoted Add-ons' : 'Quoted Parts'}</span>
-              <span className="text-white">{fmt(quotedPartsSubtotal)}</span>
-            </div>
-          )}
-          {additionalPartsTotal > 0 && (
-            <div className="flex justify-between text-sm">
-              <span className="text-white/50">{isDetailer ? 'Additional Add-ons' : 'Additional Parts'}</span>
-              <span className="text-white">{fmt(additionalPartsTotal)}</span>
-            </div>
-          )}
-          {shopSuppliesTotal > 0 && (
-            <div className="flex justify-between text-sm">
-              <span className="text-white/50">{isDetailer ? 'Detailing Supplies' : 'Shop Supplies'}</span>
-              <span className="text-white">{fmt(shopSuppliesTotal)}</span>
-            </div>
-          )}
-          {quotedLaborSubtotal > 0 && (
-            <div className="flex justify-between text-sm">
-              <span className="text-white/50">{isDetailer ? 'Quoted Service' : 'Quoted Labor'}</span>
-              <span className="text-white">{fmt(quotedLaborSubtotal)}</span>
-            </div>
-          )}
-          {additionalLaborTotal > 0 && (
-            <div className="flex justify-between text-sm">
-              <span className="text-white/50">{isDetailer ? 'Additional Services' : 'Additional Labor'}</span>
-              <span className="text-white">{fmt(additionalLaborTotal)}</span>
-            </div>
+          {isDetailer ? (
+            <>
+              {detailerServicesTotal > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/50">Services</span>
+                  <span className="text-white">{fmt(detailerServicesTotal)}</span>
+                </div>
+              )}
+              {detailerAdjTotal !== 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/50">Adjustments</span>
+                  <span className={detailerAdjTotal < 0 ? 'text-emerald-400' : 'text-white'}>{fmt(detailerAdjTotal)}</span>
+                </div>
+              )}
+              {shopSuppliesTotal > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/50">Detailing Supplies</span>
+                  <span className="text-white">{fmt(shopSuppliesTotal)}</span>
+                </div>
+              )}
+              {additionalPartsTotal > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/50">Add-ons / Products</span>
+                  <span className="text-white">{fmt(additionalPartsTotal)}</span>
+                </div>
+              )}
+              {additionalLaborTotal > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/50">Additional Services</span>
+                  <span className="text-white">{fmt(additionalLaborTotal)}</span>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              {quotedPartsSubtotal > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/50">Quoted Parts</span>
+                  <span className="text-white">{fmt(quotedPartsSubtotal)}</span>
+                </div>
+              )}
+              {additionalPartsTotal > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/50">Additional Parts</span>
+                  <span className="text-white">{fmt(additionalPartsTotal)}</span>
+                </div>
+              )}
+              {shopSuppliesTotal > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/50">Shop Supplies</span>
+                  <span className="text-white">{fmt(shopSuppliesTotal)}</span>
+                </div>
+              )}
+              {quotedLaborSubtotal > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/50">Quoted Labor</span>
+                  <span className="text-white">{fmt(quotedLaborSubtotal)}</span>
+                </div>
+              )}
+              {additionalLaborTotal > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/50">Additional Labor</span>
+                  <span className="text-white">{fmt(additionalLaborTotal)}</span>
+                </div>
+              )}
+            </>
           )}
           <div className="flex justify-between text-sm border-t border-white/8 pt-2">
             <span className="text-white/50">Subtotal</span>
-            <span className="text-white">{fmt(invoice.subtotal)}</span>
+            <span className="text-white">{fmt(displaySubtotal)}</span>
           </div>
-          {invoice.tax_amount > 0 && (
+          {displayTaxAmt > 0 && (
             <div className="flex justify-between text-sm">
-              <span className="text-white/40">Tax ({Math.round(taxRate * 10000) / 100}%)</span>
-              <span className="text-white/60">{fmt(invoice.tax_amount)}</span>
+              <span className="text-white/40">Tax ({Math.round((isDetailer ? detailerTaxRate : taxRate) * 10000) / 100}%)</span>
+              <span className="text-white/60">{fmt(displayTaxAmt)}</span>
             </div>
           )}
           <div className="flex justify-between items-baseline border-t border-white/8 pt-3 mt-1">
             <span className="font-condensed font-bold text-white text-lg tracking-wide">GRAND TOTAL</span>
-            <span className="font-condensed font-bold text-orange text-4xl">{fmt(grandTotal)}</span>
+            <span className="font-condensed font-bold text-orange text-4xl">{fmt(displayTotal)}</span>
           </div>
         </div>
       </div>
