@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import type { Invoice, ShopSupplyItem, AdditionalPartItem, AdditionalLaborItem } from '@/types/financials'
+import type { Invoice, ShopSupplyItem, AdditionalPartItem, AdditionalLaborItem, ServiceLine, Adjustment, AdjustmentPreset } from '@/types/financials'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -326,6 +326,86 @@ function LaborRow({
   )
 }
 
+// ─── Service Line row (detailer) ──────────────────────────────────────────────
+
+function ServiceLineRow({
+  item,
+  onChange,
+  onRemove,
+}: {
+  item: ServiceLine
+  onChange: (updated: ServiceLine) => void
+  onRemove: () => void
+}) {
+  return (
+    <div className="grid grid-cols-[1fr_120px_32px] gap-2 items-center">
+      <input
+        className="nwi-input py-2 text-sm"
+        placeholder="Service name"
+        value={item.service_name}
+        onChange={e => onChange({ ...item, service_name: e.target.value })}
+      />
+      <div className="relative">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 text-sm">$</span>
+        <input
+          type="number" min="0" step="5"
+          className="nwi-input py-2 text-sm text-right pl-6"
+          placeholder="0"
+          value={item.price_cents / 100}
+          onChange={e => onChange({ ...item, price_cents: Math.round((Number(e.target.value) || 0) * 100) })}
+        />
+      </div>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="text-white/25 hover:text-danger transition-colors text-xl leading-none flex items-center justify-center"
+      >
+        ×
+      </button>
+    </div>
+  )
+}
+
+// ─── Adjustment row (detailer) ────────────────────────────────────────────────
+
+function AdjustmentRow({
+  item,
+  onChange,
+  onRemove,
+}: {
+  item: Adjustment
+  onChange: (updated: Adjustment) => void
+  onRemove: () => void
+}) {
+  return (
+    <div className="grid grid-cols-[1fr_120px_32px] gap-2 items-center">
+      <input
+        className="nwi-input py-2 text-sm"
+        placeholder="Adjustment name"
+        value={item.name}
+        onChange={e => onChange({ ...item, name: e.target.value })}
+      />
+      <div className="relative">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 text-sm">$</span>
+        <input
+          type="number" step="0.01"
+          className="nwi-input py-2 text-sm text-right pl-6"
+          placeholder="0.00"
+          value={item.price_cents / 100}
+          onChange={e => onChange({ ...item, price_cents: Math.round((Number(e.target.value) || 0) * 100) })}
+        />
+      </div>
+      <button
+        type="button"
+        onClick={onRemove}
+        className="text-white/25 hover:text-danger transition-colors text-xl leading-none flex items-center justify-center"
+      >
+        ×
+      </button>
+    </div>
+  )
+}
+
 // ─── Column headers for editable lists ────────────────────────────────────────
 
 function ListHeader({ cols }: { cols: string[] }) {
@@ -411,6 +491,14 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
   const [additionalLabor, setAdditionalLabor] = useState<AdditionalLaborItem[]>(
     Array.isArray(invoice.additional_labor) ? invoice.additional_labor : []
   )
+  // Detailer-only editable state
+  const [serviceLines,    setServiceLines]    = useState<ServiceLine[]>(
+    Array.isArray(invoice.service_lines) ? invoice.service_lines : []
+  )
+  const [adjLines,        setAdjLines]        = useState<Adjustment[]>(
+    Array.isArray(invoice.adjustments) ? invoice.adjustments : []
+  )
+  const [adjPresets,      setAdjPresets]      = useState<AdjustmentPreset[]>([])
 
   // UI state
   const [saving,          setSaving]          = useState(false)
@@ -428,26 +516,41 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
     toastRef.current = setTimeout(() => setToast(null), 3500)
   }
 
+  useEffect(() => {
+    if (!isDetailer) return
+    fetch('/api/detailer-adjustments')
+      .then(r => r.json())
+      .then(json => { if (Array.isArray(json.presets)) setAdjPresets(json.presets) })
+      .catch(() => {})
+  }, [isDetailer])
+
   // ── Derived values ─────────────────────────────────────────────────────────
 
   const sq          = invoice.source_quote
   const markupPct   = sq?.parts_markup_percent ?? 0
   const taxRate     = invoice.tax_rate          // decimal, e.g. 0.0875
 
-  // Original quote totals (what was estimated)
+  // Original quote totals (what was estimated) — mechanic model only
   const quotedPartsSubtotal  = sq
     ? round2(Number(sq.parts_subtotal ?? 0) * (1 + markupPct / 100))
     : 0
   const quotedLaborSubtotal  = Number(sq?.labor_subtotal ?? 0)
-  const originalSubtotal     = invoice.subtotal  // baseline from quote conversion
+  const originalSubtotal     = invoice.subtotal  // mechanic baseline (parts + labor from quote)
 
-  // Additional items totals
-  const shopSuppliesTotal   = round2(shopSupplies.reduce((s, i) => s + i.total, 0))
+  // Additional items totals (shared between mechanic and detailer)
+  const shopSuppliesTotal    = round2(shopSupplies.reduce((s, i) => s + i.total, 0))
   const additionalPartsTotal = round2(additionalParts.reduce((s, i) => s + i.total, 0))
   const additionalLaborTotal = round2(additionalLabor.reduce((s, i) => s + i.subtotal, 0))
 
+  // Detailer: service lines and adjustments drive the base subtotal (not originalSubtotal)
+  // Sum cents first to avoid floating-point accumulation, then divide once
+  const serviceLinesTotal = isDetailer ? serviceLines.reduce((s, sl) => s + sl.price_cents, 0) / 100 : 0
+  const adjLinesTotal     = isDetailer ? adjLines.reduce((s, a) => s + a.price_cents, 0) / 100 : 0
+
   // Running total
-  const newSubtotal  = round2(originalSubtotal + shopSuppliesTotal + additionalPartsTotal + additionalLaborTotal)
+  const newSubtotal  = isDetailer
+    ? round2(serviceLinesTotal + adjLinesTotal + shopSuppliesTotal + additionalPartsTotal + additionalLaborTotal)
+    : round2(originalSubtotal + shopSuppliesTotal + additionalPartsTotal + additionalLaborTotal)
   const newTaxAmount = round2(newSubtotal * taxRate)
   const grandTotal   = round2(newSubtotal + newTaxAmount)
 
@@ -494,6 +597,34 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
     setAdditionalLabor(p => p.filter(x => x.id !== id))
   }, [])
 
+  // ── Detailer: service line helpers ────────────────────────────────────────
+
+  function addServiceLine() {
+    setServiceLines(p => [...p, { service_name: '', vehicle_category: null, price_cents: 0 }])
+  }
+
+  const updateServiceLine = useCallback((idx: number, updated: ServiceLine) => {
+    setServiceLines(p => p.map((s, i) => i === idx ? updated : s))
+  }, [])
+
+  const removeServiceLine = useCallback((idx: number) => {
+    setServiceLines(p => p.filter((_, i) => i !== idx))
+  }, [])
+
+  // ── Detailer: adjustment helpers ──────────────────────────────────────────
+
+  function addAdjLine(preset?: { name: string; price_cents: number }) {
+    setAdjLines(p => [...p, { name: preset?.name ?? '', price_cents: preset?.price_cents ?? 0 }])
+  }
+
+  const updateAdjLine = useCallback((idx: number, updated: Adjustment) => {
+    setAdjLines(p => p.map((a, i) => i === idx ? updated : a))
+  }, [])
+
+  const removeAdjLine = useCallback((idx: number) => {
+    setAdjLines(p => p.filter((_, i) => i !== idx))
+  }, [])
+
   // ── Finalize invoice ───────────────────────────────────────────────────────
 
   async function handleFinalize() {
@@ -508,6 +639,7 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
           shop_supplies:    shopSupplies,
           additional_parts: additionalParts,
           additional_labor: additionalLabor,
+          ...(isDetailer ? { service_lines: serviceLines, adjustments: adjLines } : {}),
           subtotal:         newSubtotal,
           tax_amount:       newTaxAmount,
           total:            grandTotal,
@@ -541,6 +673,7 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
           shop_supplies:    shopSupplies,
           additional_parts: additionalParts,
           additional_labor: additionalLabor,
+          ...(isDetailer ? { service_lines: serviceLines, adjustments: adjLines } : {}),
           subtotal:         newSubtotal,
           tax_amount:       newTaxAmount,
           total:            grandTotal,
@@ -768,6 +901,126 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
         )}
       </div>
 
+      {/* ── SECTION C2: Detailer — Services ── */}
+      {isDetailer && (
+        <Section
+          label="Services"
+          action={
+            <button
+              onClick={addServiceLine}
+              className="flex items-center gap-1.5 text-xs text-orange hover:text-orange/80 font-semibold transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              Add Service
+            </button>
+          }
+        >
+          {serviceLines.length === 0 ? (
+            <button
+              onClick={addServiceLine}
+              className="w-full py-6 text-white/25 hover:text-white/50 text-sm text-center border border-dashed border-white/10 hover:border-white/20 rounded-xl transition-colors"
+            >
+              + Add a service line…
+            </button>
+          ) : (
+            <div className="space-y-2">
+              <div className="hidden sm:grid grid-cols-[1fr_120px_32px] gap-2 px-1 mb-1">
+                <span className="text-white/25 text-[10px] uppercase tracking-widest">Service</span>
+                <span className="text-white/25 text-[10px] uppercase tracking-widest text-right">Price</span>
+                <span />
+              </div>
+              {serviceLines.map((sl, i) => (
+                <ServiceLineRow
+                  key={i}
+                  item={sl}
+                  onChange={updated => updateServiceLine(i, updated)}
+                  onRemove={() => removeServiceLine(i)}
+                />
+              ))}
+              <div className="flex justify-end pt-2 border-t border-white/8">
+                <div className="flex gap-6 text-sm">
+                  <span className="text-white/40">Services Subtotal</span>
+                  <span className="text-white font-medium w-20 text-right">{fmt(serviceLinesTotal)}</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </Section>
+      )}
+
+      {/* ── SECTION C3: Detailer — Adjustments ── */}
+      {isDetailer && (
+        <Section
+          label="Adjustments"
+          action={
+            <button
+              onClick={() => addAdjLine()}
+              className="flex items-center gap-1.5 text-xs text-orange hover:text-orange/80 font-semibold transition-colors"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+              </svg>
+              Add Adjustment
+            </button>
+          }
+        >
+          <div className="space-y-3">
+            {/* Preset chips */}
+            {adjPresets.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {adjPresets.map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => addAdjLine({ name: p.name, price_cents: p.price_cents })}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-white/15 hover:border-orange/40 bg-white/5 hover:bg-orange/10 text-white/60 hover:text-orange text-xs font-medium transition-colors"
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                      <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                    </svg>
+                    {p.name} {fmt(p.price_cents / 100)}
+                  </button>
+                ))}
+              </div>
+            )}
+            {adjLines.length > 0 && (
+              <div className="space-y-2">
+                <div className="hidden sm:grid grid-cols-[1fr_120px_32px] gap-2 px-1 mb-1">
+                  <span className="text-white/25 text-[10px] uppercase tracking-widest">Adjustment</span>
+                  <span className="text-white/25 text-[10px] uppercase tracking-widest text-right">Amount</span>
+                  <span />
+                </div>
+                {adjLines.map((a, i) => (
+                  <AdjustmentRow
+                    key={i}
+                    item={a}
+                    onChange={updated => updateAdjLine(i, updated)}
+                    onRemove={() => removeAdjLine(i)}
+                  />
+                ))}
+                <div className="flex justify-end pt-2 border-t border-white/8">
+                  <div className="flex gap-6 text-sm">
+                    <span className="text-white/40">Adjustments Subtotal</span>
+                    <span className={`font-medium w-20 text-right ${adjLinesTotal < 0 ? 'text-emerald-400' : 'text-white'}`}>
+                      {adjLinesTotal < 0 ? '-' : ''}{fmt(Math.abs(adjLinesTotal))}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+            {adjLines.length === 0 && adjPresets.length === 0 && (
+              <button
+                onClick={() => addAdjLine()}
+                className="w-full py-6 text-white/25 hover:text-white/50 text-sm text-center border border-dashed border-white/10 hover:border-white/20 rounded-xl transition-colors"
+              >
+                + Add adjustment or discount…
+              </button>
+            )}
+          </div>
+        </Section>
+      )}
+
       {/* ── SECTION D: Job notes ── */}
       <Section label="Job Notes">
         <textarea
@@ -924,35 +1177,74 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
       <div className="hidden sm:block bg-[#222222] border border-white/8 rounded-2xl p-5">
         <p className="text-white/50 text-xs font-semibold uppercase tracking-widest mb-4">Running Total</p>
         <div className="space-y-2">
-          {quotedPartsSubtotal > 0 && (
-            <div className="flex justify-between text-sm">
-              <span className="text-white/50">{isDetailer ? 'Quoted Add-ons' : 'Quoted Parts'}</span>
-              <span className="text-white">{fmt(quotedPartsSubtotal)}</span>
-            </div>
-          )}
-          {additionalPartsTotal > 0 && (
-            <div className="flex justify-between text-sm">
-              <span className="text-white/50">{isDetailer ? 'Additional Add-ons' : 'Additional Parts'}</span>
-              <span className="text-white">{fmt(additionalPartsTotal)}</span>
-            </div>
-          )}
-          {shopSuppliesTotal > 0 && (
-            <div className="flex justify-between text-sm">
-              <span className="text-white/50">{isDetailer ? 'Detailing Supplies' : 'Shop Supplies'}</span>
-              <span className="text-white">{fmt(shopSuppliesTotal)}</span>
-            </div>
-          )}
-          {quotedLaborSubtotal > 0 && (
-            <div className="flex justify-between text-sm">
-              <span className="text-white/50">{isDetailer ? 'Quoted Service' : 'Quoted Labor'}</span>
-              <span className="text-white">{fmt(quotedLaborSubtotal)}</span>
-            </div>
-          )}
-          {additionalLaborTotal > 0 && (
-            <div className="flex justify-between text-sm">
-              <span className="text-white/50">{isDetailer ? 'Additional Services' : 'Additional Labor'}</span>
-              <span className="text-white">{fmt(additionalLaborTotal)}</span>
-            </div>
+          {isDetailer ? (
+            <>
+              {serviceLinesTotal > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/50">Services</span>
+                  <span className="text-white">{fmt(serviceLinesTotal)}</span>
+                </div>
+              )}
+              {adjLinesTotal !== 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/50">Adjustments</span>
+                  <span className={adjLinesTotal < 0 ? 'text-emerald-400' : 'text-white'}>
+                    {adjLinesTotal < 0 ? '-' : ''}{fmt(Math.abs(adjLinesTotal))}
+                  </span>
+                </div>
+              )}
+              {shopSuppliesTotal > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/50">Detailing Supplies</span>
+                  <span className="text-white">{fmt(shopSuppliesTotal)}</span>
+                </div>
+              )}
+              {additionalPartsTotal > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/50">Add-ons / Products</span>
+                  <span className="text-white">{fmt(additionalPartsTotal)}</span>
+                </div>
+              )}
+              {additionalLaborTotal > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/50">Additional Services</span>
+                  <span className="text-white">{fmt(additionalLaborTotal)}</span>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              {quotedPartsSubtotal > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/50">Quoted Parts</span>
+                  <span className="text-white">{fmt(quotedPartsSubtotal)}</span>
+                </div>
+              )}
+              {additionalPartsTotal > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/50">Additional Parts</span>
+                  <span className="text-white">{fmt(additionalPartsTotal)}</span>
+                </div>
+              )}
+              {shopSuppliesTotal > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/50">Shop Supplies</span>
+                  <span className="text-white">{fmt(shopSuppliesTotal)}</span>
+                </div>
+              )}
+              {quotedLaborSubtotal > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/50">Quoted Labor</span>
+                  <span className="text-white">{fmt(quotedLaborSubtotal)}</span>
+                </div>
+              )}
+              {additionalLaborTotal > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/50">Additional Labor</span>
+                  <span className="text-white">{fmt(additionalLaborTotal)}</span>
+                </div>
+              )}
+            </>
           )}
           <div className="flex justify-between text-sm border-t border-white/8 pt-2">
             <span className="text-white/50">Subtotal</span>

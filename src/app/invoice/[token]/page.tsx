@@ -39,6 +39,10 @@ export async function generateMetadata(
 const fmt = (n: number | null | undefined) =>
   n == null ? '$0.00' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
 
+function round2(n: number) {
+  return Math.round(n * 100) / 100
+}
+
 export default async function PublicInvoicePage(
   { params }: { params: Promise<{ token: string }> },
 ) {
@@ -55,14 +59,15 @@ export default async function PublicInvoicePage(
 
   const { data: profile } = await sc
     .from('profiles')
-    .select('full_name, business_name, phone, email, business_type')
+    .select('full_name, business_name, phone, email, business_type, bill_consumables_separately')
     .eq('id', invoice.user_id)
     .single()
 
-  const p = profile as { full_name?: string; business_name?: string; phone?: string; business_type?: string } | null
-  const bizName    = p?.business_name ?? 'Your Technician'
-  const techPhone  = p?.phone         ?? null
-  const isDetailer = p?.business_type === 'detailer'
+  const p = profile as { full_name?: string; business_name?: string; phone?: string; business_type?: string; bill_consumables_separately?: boolean } | null
+  const bizName             = p?.business_name             ?? 'Your Technician'
+  const techPhone           = p?.phone                     ?? null
+  const isDetailer          = p?.business_type             === 'detailer'
+  const billConsumables     = p?.bill_consumables_separately ?? false
 
   const inv = invoice as AnyInvoice
 
@@ -98,6 +103,26 @@ export default async function PublicInvoicePage(
     Array.isArray(inv.additional_parts) ? inv.additional_parts : []
   const additionalLabor: Array<{ id: string; description: string; hours: number; rate: number; subtotal: number }> =
     Array.isArray(inv.additional_labor) ? inv.additional_labor : []
+
+  // Detailer: compute subtotal/tax/total from JSON rather than relying on stored total (may be 0 for older rows)
+  const showDetailerSupplies = isDetailerModel && billConsumables && shopSupplies.length > 0
+  const detailerSubtotal = isDetailerModel
+    ? round2(
+        serviceLines.reduce((s, sl) => s + sl.price_cents, 0) / 100 +
+        adjustments.reduce((s, a) => s + a.price_cents, 0) / 100 +
+        (showDetailerSupplies ? shopSupplies.reduce((s, ss) => s + ss.total, 0) : 0)
+      )
+    : null
+  const detailerTaxRate = Number(inv.tax_rate ?? 0)
+  const detailerTax     = detailerSubtotal != null ? round2(detailerSubtotal * detailerTaxRate) : null
+  const detailerTotal   = detailerSubtotal != null && detailerTax != null
+    ? round2(detailerSubtotal + detailerTax)
+    : null
+
+  // Use computed values for display (fall back to stored values for non-detailer)
+  const displaySubtotal = detailerSubtotal ?? inv.subtotal
+  const displayTaxAmt   = detailerTax      ?? inv.tax_amount
+  const displayTotal    = detailerTotal    ?? inv.total
 
   return (
     <div className="min-h-screen bg-[#0f0f0f] text-white">
@@ -297,8 +322,8 @@ export default async function PublicInvoicePage(
           </div>
         )}
 
-        {/* Shop supplies */}
-        {shopSupplies.length > 0 && (
+        {/* Shop supplies — detailers only show if bill_consumables_separately is on */}
+        {shopSupplies.length > 0 && (!isDetailerModel || showDetailerSupplies) && (
           <div className="bg-white/5 rounded-xl overflow-hidden">
             <p className="text-white/40 text-xs uppercase tracking-widest px-4 pt-4 pb-2">Shop Supplies</p>
             <table className="w-full text-sm">
@@ -337,33 +362,35 @@ export default async function PublicInvoicePage(
         <div className="bg-white/5 rounded-xl p-4 space-y-2">
           <div className="flex justify-between text-sm">
             <span className="text-white/60">Subtotal</span>
-            <span className="text-white">{fmt(inv.subtotal)}</span>
+            <span className="text-white">{fmt(displaySubtotal)}</span>
           </div>
-          {inv.tax_amount > 0 && (
+          {displayTaxAmt > 0 && (
             <div className="flex justify-between text-sm border-t border-white/10 pt-2">
               <span className="text-white/50">
-                Tax{inv.tax_rate ? ` (${Math.round(inv.tax_rate * 10000) / 100}%)` : ''}
+                Tax{detailerTaxRate > 0
+                  ? ` (${Math.round(detailerTaxRate * 10000) / 100}%)`
+                  : inv.tax_rate ? ` (${Math.round(inv.tax_rate * 10000) / 100}%)` : ''}
               </span>
-              <span className="text-white/70">{fmt(inv.tax_amount)}</span>
+              <span className="text-white/70">{fmt(displayTaxAmt)}</span>
             </div>
           )}
           <div className="flex justify-between items-baseline border-t border-white/15 pt-3 mt-1">
             <span className="text-white font-bold text-base uppercase tracking-wide">Total Due</span>
-            <span className="text-[#FF6600] font-bold text-3xl">{fmt(inv.total)}</span>
+            <span className="text-[#FF6600] font-bold text-3xl">{fmt(displayTotal)}</span>
           </div>
         </div>
 
-        {/* Detailer: tip + approve (unpaid only) */}
-        {isDetailer && !isPaid && (
-          <InvoiceApprovalClient token={token} invoiceTotal={Number(inv.total) || 0} />
-        )}
-
-        {/* Payment instructions — hidden once paid */}
+        {/* Payment instructions — shown before approval section so customer knows where to pay */}
         {inv.payment_instructions && !isPaid && (
           <div className="bg-white/5 rounded-xl px-4 py-4 space-y-2">
             <p className="text-white/40 text-xs uppercase tracking-widest">Payment Instructions</p>
             <p className="text-white/80 text-sm whitespace-pre-wrap leading-relaxed">{inv.payment_instructions}</p>
           </div>
+        )}
+
+        {/* Detailer: tip + approve (unpaid only) */}
+        {isDetailer && !isPaid && (
+          <InvoiceApprovalClient token={token} invoiceTotal={detailerTotal ?? Number(inv.total) ?? 0} />
         )}
 
         {/* Job notes (work performed) */}

@@ -56,6 +56,8 @@ export async function PATCH(
   if (body.shop_supplies    !== undefined) updates.shop_supplies    = body.shop_supplies    ?? []
   if (body.additional_parts !== undefined) updates.additional_parts = body.additional_parts ?? []
   if (body.additional_labor !== undefined) updates.additional_labor = body.additional_labor ?? []
+  if (body.service_lines    !== undefined) updates.service_lines    = Array.isArray(body.service_lines) ? body.service_lines : []
+  if (body.adjustments      !== undefined) updates.adjustments      = Array.isArray(body.adjustments)   ? body.adjustments   : []
   if (body.subtotal         !== undefined) updates.subtotal         = Number(body.subtotal)
   if (body.tax_amount       !== undefined) updates.tax_amount       = Number(body.tax_amount)
   if (body.total            !== undefined) updates.total            = Number(body.total)
