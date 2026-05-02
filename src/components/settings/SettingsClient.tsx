@@ -286,9 +286,15 @@ export default function SettingsClient({
   async function saveAdjPresets() {
     setSavingPresets(true)
     try {
-      const rows = adjEdits
-        .filter(e => e.name.trim().length > 0)
-        .map((e, i) => ({ name: e.name.trim(), price_cents: e.price_cents, sort_order: i }))
+      const committed = adjEdits.filter(e => e.name.trim().length > 0)
+      // Flush any preset still in the "Add" form that wasn't confirmed with the Add button
+      const flushed = (addingPreset && newPresetVals.name.trim())
+        ? [{ name: newPresetVals.name.trim(), price_cents: newPresetVals.price_cents }]
+        : []
+      const rows = [
+        ...committed.map((e, i) => ({ name: e.name.trim(), price_cents: e.price_cents, sort_order: i })),
+        ...flushed.map((p, j) => ({ name: p.name, price_cents: p.price_cents, sort_order: committed.length + j })),
+      ]
       const res  = await fetch('/api/detailer-adjustments', {
         method:  'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -298,6 +304,8 @@ export default function SettingsClient({
       if (res.ok && json?.presets) {
         setAdjPresets(json.presets)
         setAdjEdits(json.presets.map((p: AdjustmentPreset) => ({ id: p.id, name: p.name, price_cents: p.price_cents })))
+        setAddingPreset(false)
+        setNewPresetVals({ name: '', price_cents: 0 })
         setSavedMsg('Adjustment presets saved.')
         setTimeout(() => setSavedMsg(null), 3000)
       }
