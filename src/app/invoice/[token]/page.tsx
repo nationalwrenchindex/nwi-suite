@@ -59,15 +59,33 @@ export default async function PublicInvoicePage(
 
   const { data: profile } = await sc
     .from('profiles')
-    .select('full_name, business_name, phone, email, business_type, bill_consumables_separately')
+    .select('full_name, business_name, phone, email, business_type, bill_consumables_separately, default_payment_instructions')
     .eq('id', invoice.user_id)
     .single()
 
-  const p = profile as { full_name?: string; business_name?: string; phone?: string; business_type?: string; bill_consumables_separately?: boolean } | null
+  const p = profile as { full_name?: string; business_name?: string; phone?: string; business_type?: string; bill_consumables_separately?: boolean; default_payment_instructions?: string | null } | null
   const bizName             = p?.business_name             ?? 'Your Technician'
   const techPhone           = p?.phone                     ?? null
-  const isDetailer          = p?.business_type             === 'detailer'
   const billConsumables     = p?.bill_consumables_separately ?? false
+
+  // Detect detailer: primary signal is profile.business_type; fallback is invoice having
+  // service_lines or adjustments data (mechanics never get those columns populated).
+  const isDetailerByProfile = p?.business_type === 'detailer'
+  const hasDetailerData     = (Array.isArray(invoice.service_lines) && (invoice.service_lines as unknown[]).length > 0)
+                           || (Array.isArray(invoice.adjustments)   && (invoice.adjustments   as unknown[]).length > 0)
+  const isDetailer          = isDetailerByProfile || hasDetailerData
+
+  console.log('[PublicInvoicePage]', {
+    invoiceNumber: invoice.invoice_number,
+    userId:            invoice.user_id,
+    bizName,
+    profileBizType:    p?.business_type,
+    isDetailerByProfile,
+    hasDetailerData,
+    isDetailer,
+    serviceLineCount:  Array.isArray(invoice.service_lines) ? (invoice.service_lines as unknown[]).length : 'not-array',
+    adjustmentCount:   Array.isArray(invoice.adjustments)   ? (invoice.adjustments   as unknown[]).length : 'not-array',
+  })
 
   const inv = invoice as AnyInvoice
 
@@ -116,6 +134,9 @@ export default async function PublicInvoicePage(
   const detailerTotal   = detailerSubtotal != null && detailerTax != null
     ? round2(detailerSubtotal + detailerTax)
     : null
+
+  // Payment instructions: invoice-level setting takes priority, fall back to profile default
+  const paymentInstructions = inv.payment_instructions || p?.default_payment_instructions || null
 
   // Use computed values for display (fall back to stored values for non-detailer)
   const displaySubtotal = detailerSubtotal ?? inv.subtotal
@@ -380,11 +401,11 @@ export default async function PublicInvoicePage(
           </div>
         </div>
 
-        {/* Payment instructions — shown before approval section so customer knows where to pay */}
-        {inv.payment_instructions && !isPaid && (
+        {/* Payment instructions — invoice-level setting or fallback to profile default */}
+        {paymentInstructions && !isPaid && (
           <div className="bg-white/5 rounded-xl px-4 py-4 space-y-2">
             <p className="text-white/40 text-xs uppercase tracking-widest">Payment Instructions</p>
-            <p className="text-white/80 text-sm whitespace-pre-wrap leading-relaxed">{inv.payment_instructions}</p>
+            <p className="text-white/80 text-sm whitespace-pre-wrap leading-relaxed">{paymentInstructions}</p>
           </div>
         )}
 
