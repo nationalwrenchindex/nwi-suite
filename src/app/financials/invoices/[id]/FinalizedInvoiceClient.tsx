@@ -180,7 +180,7 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 // ─── ReadOnlyTable ────────────────────────────────────────────────────────────
 
 function ReadOnlyTable({ rows }: {
-  rows: Array<{ label: string; qty?: string; amount: number }>
+  rows: Array<{ label: string; qty?: string; amount: number; isComp?: boolean }>
 }) {
   if (rows.length === 0) return null
   return (
@@ -198,7 +198,12 @@ function ReadOnlyTable({ rows }: {
             <tr key={i} className="border-b border-white/5 last:border-0">
               <td className="px-4 py-2.5 text-white/70">{r.label}</td>
               {rows.some(x => x.qty) && <td className="px-4 py-2.5 text-white/50 text-right">{r.qty ?? ''}</td>}
-              <td className="px-4 py-2.5 text-white font-medium text-right">{fmt(r.amount)}</td>
+              <td className="px-4 py-2.5 text-right">
+                {r.isComp
+                  ? <span className="text-emerald-400/70 font-medium">Complimentary</span>
+                  : <span className="text-white font-medium">{fmt(r.amount)}</span>
+                }
+              </td>
             </tr>
           ))}
         </tbody>
@@ -724,6 +729,10 @@ export default function FinalizedInvoiceClient({
   const displayTaxAmt   = detailerTax      ?? invoice.tax_amount
   const displayTotal    = detailerTotal    ?? grandTotal
 
+  const tipAmountCents  = invoice.tip_amount_cents ?? 0
+  const tipDollars      = tipAmountCents / 100
+  const totalReceived   = tipAmountCents > 0 ? round2(displayTotal + tipDollars) : displayTotal
+
   const vehicleLabel = vehicle
     ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ')
     : '—'
@@ -1133,6 +1142,7 @@ export default function FinalizedInvoiceClient({
             rows={serviceLines.map(sl => ({
               label:  sl.service_name + (sl.vehicle_category ? ` — ${sl.vehicle_category}` : ''),
               amount: sl.price_cents / 100,
+              isComp: sl.price_cents === 0,
             }))}
           />
           <div className="flex justify-end pt-3 border-t border-white/8 mt-3">
@@ -1307,9 +1317,23 @@ export default function FinalizedInvoiceClient({
             </div>
           )}
           <div className="flex justify-between items-baseline border-t border-white/8 pt-3 mt-1">
-            <span className="font-condensed font-bold text-white text-lg tracking-wide">GRAND TOTAL</span>
+            <span className="font-condensed font-bold text-white text-lg tracking-wide">
+              {tipAmountCents > 0 ? 'CUSTOMER TOTAL' : 'GRAND TOTAL'}
+            </span>
             <span className="font-condensed font-bold text-orange text-4xl">{fmt(displayTotal)}</span>
           </div>
+          {tipAmountCents > 0 && (
+            <>
+              <div className="flex justify-between text-sm border-t border-white/8 pt-3">
+                <span className="text-white/50">Tip received</span>
+                <span className="text-emerald-400 font-medium">+{fmt(tipDollars)}</span>
+              </div>
+              <div className="flex justify-between items-baseline border-t border-white/8 pt-3">
+                <span className="font-condensed font-bold text-white text-lg tracking-wide">TOTAL RECEIVED</span>
+                <span className="font-condensed font-bold text-emerald-400 text-4xl">{fmt(totalReceived)}</span>
+              </div>
+            </>
+          )}
         </div>
       </div>
 

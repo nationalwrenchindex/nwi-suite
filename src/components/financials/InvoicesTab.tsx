@@ -28,6 +28,8 @@ const PAYMENT_METHOD_LABELS: Record<string, string> = {
   other:   'Other',
 }
 
+function round2(n: number) { return Math.round(n * 100) / 100 }
+
 function genInvoiceNumber() {
   const d = new Date()
   const y = d.getFullYear().toString().slice(2)
@@ -179,8 +181,8 @@ export default function InvoicesTab() {
 
   // ── Computed totals ──
   const subtotal = form.line_items.reduce((s, l) => s + l.total, 0)
-  const taxAmt   = subtotal * (form.tax_rate / 100)
-  const total    = Math.max(0, subtotal + taxAmt - form.discount_amount)
+  const taxAmt   = round2(subtotal * (form.tax_rate / 100))
+  const total    = round2(Math.max(0, subtotal + taxAmt - form.discount_amount))
 
   // ── Fetch invoices ──
   const fetchInvoices = useCallback(async (invoiceStatus: string | InvoiceProgressStatus | 'active', source: string) => {
