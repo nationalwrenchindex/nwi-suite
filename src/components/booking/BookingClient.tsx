@@ -628,7 +628,7 @@ export default function BookingClient({
     <div className="min-h-dvh bg-dark flex flex-col">
       <BookingHeader bizName={bizName} profile={profile} isDetailer={isDetailer} />
 
-      <div className="flex-1 flex justify-center p-4 sm:p-8 pb-24">
+      <div className="flex-1 flex justify-center px-4 pt-4 pb-24 sm:px-8 sm:pt-8">
         <div className="w-full max-w-xl">
           <StepBar step={step} isDetailer={isDetailer} />
 
