@@ -84,6 +84,11 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     const durationParam = request.nextUrl.searchParams.get('duration')
     const requestedDuration = Math.max(60, durationParam ? parseInt(durationParam, 10) : 60)
 
+    // Business hours close in minutes — used to reject slots whose service end
+    // would run past close time (generateSlots only enforces a 60-min baseline)
+    const [closeH, closeM] = daySchedule.close.split(':').map(Number)
+    const businessCloseMin = closeH * 60 + closeM
+
     // Fetch already-booked jobs for this date
     const { data: bookedJobs } = await supabase
       .from('jobs')
@@ -120,7 +125,10 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
         ({ start, end }) => !(slotEnd <= start || slotMin >= end),
       )
 
-      if (hasConflict) {
+      if (slotEnd > businessCloseMin) {
+        // Service would run past business hours — hide this slot
+        continue
+      } else if (hasConflict) {
         // Overlaps an existing booking — hide entirely (privacy)
         continue
       } else if (date === todayStr && slotMin < cutoffMin) {
