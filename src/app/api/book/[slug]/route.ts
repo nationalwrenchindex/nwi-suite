@@ -80,6 +80,10 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 
     const allSlots = generateSlots(daySchedule.open, daySchedule.close)
 
+    // Duration of the booking the customer intends to make (passed by client)
+    const durationParam = request.nextUrl.searchParams.get('duration')
+    const requestedDuration = Math.max(60, durationParam ? parseInt(durationParam, 10) : 60)
+
     // Fetch already-booked jobs for this date
     const { data: bookedJobs } = await supabase
       .from('jobs')
@@ -89,17 +93,14 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       .neq('status', 'cancelled')
       .neq('status', 'no_show')
 
-    // Build set of minute-marks blocked by existing bookings
-    const blocked = new Set<number>()
-    for (const job of bookedJobs ?? []) {
-      if (!job.job_time) continue
+    // Pre-compute existing job intervals [start, end) in minutes-since-midnight
+    const existingIntervals = (bookedJobs ?? []).flatMap(job => {
+      if (!job.job_time) return []
       const [h, m] = (job.job_time as string).slice(0, 5).split(':').map(Number)
       const startMin = h * 60 + m
-      const duration = (job.estimated_duration_minutes as number | null) ?? 60
-      for (let offset = 0; offset < duration; offset += 60) {
-        blocked.add(startMin + offset)
-      }
-    }
+      const dur      = (job.estimated_duration_minutes as number | null) ?? 60
+      return [{ start: startMin, end: startMin + dur }]
+    })
 
     // Cutoff = now + buffer (only applies when date === today in tech's timezone)
     const { dateStr: todayStr, nowMin } = getTechNow(DEFAULT_TIMEZONE)
@@ -111,9 +112,16 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     for (const slot of allSlots) {
       const [h, m] = slot.split(':').map(Number)
       const slotMin = h * 60 + m
+      const slotEnd = slotMin + requestedDuration
 
-      if (blocked.has(slotMin)) {
-        // Booked by an existing customer — hide entirely (privacy)
+      // A slot conflicts when [slotMin, slotEnd) overlaps any existing job — same
+      // logic as the POST conflict check so both endpoints agree on what's bookable.
+      const hasConflict = existingIntervals.some(
+        ({ start, end }) => !(slotEnd <= start || slotMin >= end),
+      )
+
+      if (hasConflict) {
+        // Overlaps an existing booking — hide entirely (privacy)
         continue
       } else if (date === todayStr && slotMin < cutoffMin) {
         // Past or within the same-day lead-time buffer — show greyed

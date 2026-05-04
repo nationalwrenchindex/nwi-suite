@@ -649,7 +649,7 @@ function QuoteDetailModal({
         setLiveQuote(json.quote as Quote)
         if ((json.quote as Quote).status !== liveStatus) onUpdated(json.quote as Quote)
       } catch { /* aborted or network error */ }
-    }, 10_000)
+    }, 5_000)
     return () => { clearInterval(id); ctrl.abort() }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveStatus, initialQuote.id])

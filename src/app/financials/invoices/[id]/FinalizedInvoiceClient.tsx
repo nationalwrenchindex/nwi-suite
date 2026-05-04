@@ -1337,6 +1337,18 @@ export default function FinalizedInvoiceClient({
         </div>
       </div>
 
+      {/* Tip pending indicator — visible while awaiting payment, hidden once paid */}
+      {isAwaitingPayment && tipAmountCents > 0 && (
+        <div className="flex items-start gap-3 bg-yellow-500/8 border border-yellow-500/25 rounded-xl px-4 py-3">
+          <svg className="w-4 h-4 text-yellow-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+          <p className="text-yellow-400/90 text-sm leading-snug">
+            Customer added a <span className="font-semibold">{fmt(tipDollars)}</span> tip when confirming payment. Will appear in Total Received once you mark this invoice paid.
+          </p>
+        </div>
+      )}
+
       {/* Per-Job P&L — shown only after financials are posted */}
       {isPaid && invoice.financials_posted && (() => {
         const pnl = calcJobPnL(invoice)

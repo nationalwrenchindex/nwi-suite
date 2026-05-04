@@ -440,14 +440,20 @@ export default function BookingClient({
   const [inspectionRequested, setInspectionRequested] = useState(false)
   const [showMpiModal,        setShowMpiModal]        = useState(false)
 
-  // Fetch slots when date or fetchKey changes (fetchKey bumped on stale re-select)
+  // Duration of the intended booking — used by the server to run the same overlap
+  // check as the POST endpoint, so every displayed slot is guaranteed bookable.
+  const bookingDuration = isDetailer
+    ? Math.max(60, selectedServices.reduce((sum, s) => sum + (SERVICE_DURATIONS[s] ?? 60), 0))
+    : (service ? (SERVICE_DURATIONS[service] ?? 60) : 60)
+
+  // Fetch slots when date, fetchKey, or booking duration changes
   useEffect(() => {
     if (!date) return
     setTime(null)
     setSlots([])
     setUnavailableSlots([])
     setSlotsLoading(true)
-    fetch(`/api/book/${techSlug}?date=${date}`)
+    fetch(`/api/book/${techSlug}?date=${date}&duration=${bookingDuration}`)
       .then(r => r.json())
       .then(d => {
         setSlots(d.slots ?? [])
@@ -456,7 +462,8 @@ export default function BookingClient({
       })
       .catch(() => { setSlots([]); setUnavailableSlots([]) })
       .finally(() => setSlotsLoading(false))
-  }, [date, fetchKey, techSlug])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date, fetchKey, techSlug, bookingDuration])
 
   // Logical step numbers:
   // Mechanic:  1=service, 2=datetime, 3=info, 4=confirm
