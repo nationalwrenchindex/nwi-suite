@@ -3,7 +3,7 @@ import { unstable_cache } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import AppNav from '@/components/layout/AppNav'
-import { PLANS } from '@/lib/stripe-plans'
+import { PLANS, TIER_MODULES } from '@/lib/stripe-plans'
 import type { PlanTier } from '@/lib/stripe-plans'
 
 const FOUNDER_ID = '4a8c046f-7db3-42bb-8422-fd47efb7678c'
@@ -23,6 +23,7 @@ type Profile = {
   id: string
   full_name: string | null
   email: string | null
+  business_type: string | null
   created_at: string
 }
 
@@ -40,7 +41,7 @@ const getAdminData = unstable_cache(
     const [{ data: profiles }, { data: subscriptions }] = await Promise.all([
       svc
         .from('profiles')
-        .select('id, full_name, email, created_at')
+        .select('id, full_name, email, business_type, created_at')
         .order('created_at', { ascending: false }),
       svc
         .from('subscriptions')
@@ -81,6 +82,32 @@ function StatCard({
       <p className="text-white/40 text-xs uppercase tracking-widest mb-1">{label}</p>
       <p className={`text-2xl font-bold tabular-nums ${color}`}>{value}</p>
     </div>
+  )
+}
+
+type AccountType = 'Detailer' | 'Detailer + QW' | 'Mechanic' | 'Mechanic + QW' | 'QuickWrench' | null
+
+function getAccountType(businessType: string | null, tier: PlanTier | null): AccountType {
+  const hasQW = tier ? (TIER_MODULES[tier]?.includes('quickwrench') ?? false) : false
+  if (businessType === 'detailer') return hasQW ? 'Detailer + QW' : 'Detailer'
+  if (businessType === 'mechanic') return hasQW ? 'Mechanic + QW' : 'Mechanic'
+  if (tier === 'quickwrench')      return 'QuickWrench'
+  return null
+}
+
+function TypeBadge({ accountType }: { accountType: AccountType }) {
+  if (!accountType) return <span className="text-white/25">—</span>
+  const styles: Record<string, string> = {
+    'Detailer':      'bg-blue-500/15 text-blue-400',
+    'Detailer + QW': 'bg-purple-500/15 text-purple-400',
+    'Mechanic':      'bg-orange/20 text-orange-light',
+    'Mechanic + QW': 'bg-purple-500/15 text-purple-400',
+    'QuickWrench':   'bg-green-500/15 text-green-400',
+  }
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${styles[accountType]}`}>
+      {accountType}
+    </span>
   )
 }
 
@@ -184,6 +211,7 @@ export default async function AdminPage() {
                   <th className={th}>Name</th>
                   <th className={th}>Email</th>
                   <th className={th}>Plan</th>
+                  <th className={th}>Type</th>
                   <th className={th}>Status</th>
                   <th className={th}>Trial End</th>
                   <th className={th}>MRR</th>
@@ -203,6 +231,9 @@ export default async function AdminPage() {
                       <td className={td}>{p.full_name ?? '—'}</td>
                       <td className={`${td} text-white/60`}>{p.email ?? '—'}</td>
                       <td className={td}>{tierLabel}</td>
+                      <td className={td}>
+                        <TypeBadge accountType={getAccountType(p.business_type, sub?.tier ?? null)} />
+                      </td>
                       <td className={td}>
                         <StatusBadge status={sub?.status ?? null} />
                       </td>
@@ -224,7 +255,7 @@ export default async function AdminPage() {
                 })}
                 {nonFounderProfiles.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-white/30 text-sm">
+                    <td colSpan={8} className="px-4 py-8 text-center text-white/30 text-sm">
                       No signups yet
                     </td>
                   </tr>
@@ -246,6 +277,7 @@ export default async function AdminPage() {
                   <th className={th}>Name</th>
                   <th className={th}>Email</th>
                   <th className={th}>Plan Attempted</th>
+                  <th className={th}>Type</th>
                   <th className={th}>Signed Up</th>
                   <th className={th}>Days Since</th>
                 </tr>
@@ -260,6 +292,9 @@ export default async function AdminPage() {
                       <td className={td}>
                         {sub?.tier ? (TIER_LABEL[sub.tier] ?? sub.tier) : '—'}
                       </td>
+                      <td className={td}>
+                        <TypeBadge accountType={getAccountType(p.business_type, sub?.tier ?? null)} />
+                      </td>
                       <td className={`${td} text-white/60`}>{fmtDate(p.created_at)}</td>
                       <td className={`${td} text-yellow-400/80`}>{daysSince(p.created_at)}d</td>
                     </tr>
@@ -267,7 +302,7 @@ export default async function AdminPage() {
                 })}
                 {abandonedCarts.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-8 text-center text-white/30 text-sm">
+                    <td colSpan={6} className="px-4 py-8 text-center text-white/30 text-sm">
                       No abandoned carts
                     </td>
                   </tr>
