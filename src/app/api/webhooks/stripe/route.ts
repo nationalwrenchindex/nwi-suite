@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server'
 import type Stripe from 'stripe'
 import { stripe, TIER_MODULES, getTierFromPriceId, type PlanTier } from '@/lib/stripe'
 import { upsertSubscription, getUserIdByStripeSubscription } from '@/lib/subscription'
+import { sendFounderAlert } from '@/lib/email-alerts'
+import { createServiceClient } from '@/lib/supabase/service'
 
 // Raw body required for Stripe signature verification — do NOT parse JSON
 export async function POST(request: NextRequest) {
@@ -57,6 +59,29 @@ export async function POST(request: NextRequest) {
           current_period_end:     null,
           cancel_at_period_end:   false,
         })
+
+        // Fire-and-forget — alert failure must not fail the webhook
+        void (async () => {
+          try {
+            const svc = createServiceClient()
+            const { data: profile } = await svc
+              .from('profiles')
+              .select('full_name, email')
+              .eq('id', userId)
+              .single()
+            const name  = profile?.full_name ?? userId
+            const email = profile?.email ?? '—'
+            await sendFounderAlert({
+              subject: `New paying customer: ${name} (${tier})`,
+              html: `
+                <p><strong>${name}</strong> just completed checkout for <strong>${tier}</strong>.</p>
+                <p>Email: ${email}</p>
+                <p>User ID: ${userId}</p>
+              `,
+            })
+          } catch { /* non-critical */ }
+        })()
+
         break
       }
 

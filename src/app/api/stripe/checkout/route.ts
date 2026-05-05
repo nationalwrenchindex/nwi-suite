@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { stripe, getPriceId, TIER_MODULES, type PlanTier } from '@/lib/stripe'
 import { getSubscription } from '@/lib/subscription'
+import { sendFounderAlert } from '@/lib/email-alerts'
 
 const VALID_TIERS: PlanTier[] = ['starter', 'pro', 'full_suite', 'quickwrench', 'elite']
 
@@ -72,6 +73,19 @@ export async function POST(request: NextRequest) {
     const message = err instanceof Error ? err.message : 'Stripe checkout session creation failed'
     console.error('[POST /api/stripe/checkout] session create error:', err)
     return NextResponse.json({ error: message }, { status: 502 })
+  }
+
+  if (body.source === 'signup') {
+    const name  = profile?.full_name ?? user.email ?? user.id
+    const email = profile?.email ?? user.email ?? '—'
+    void sendFounderAlert({
+      subject: `New signup: ${name} (${tier})`,
+      html: `
+        <p><strong>${name}</strong> just signed up for <strong>${tier}</strong>.</p>
+        <p>Email: ${email}</p>
+        <p>User ID: ${user.id}</p>
+      `,
+    })
   }
 
   return NextResponse.json({ url: session.url })
