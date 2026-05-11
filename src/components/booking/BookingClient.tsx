@@ -399,8 +399,7 @@ export default function BookingClient({
   }, [step])
 
   // Step 1
-  const [service,          setService]          = useState<string | null>(null)
-  const [selectedServices, setSelectedServices] = useState<string[]>([])   // detailer multi-select
+  const [selectedServices, setSelectedServices] = useState<string[]>([])
   const [notes,            setNotes]            = useState('')
 
   // Step 2 (detailer only) — Vehicle category
@@ -442,9 +441,7 @@ export default function BookingClient({
 
   // Duration of the intended booking — used by the server to run the same overlap
   // check as the POST endpoint, so every displayed slot is guaranteed bookable.
-  const bookingDuration = isDetailer
-    ? Math.max(60, selectedServices.reduce((sum, s) => sum + (SERVICE_DURATIONS[s] ?? 60), 0))
-    : (service ? (SERVICE_DURATIONS[service] ?? 60) : 60)
+  const bookingDuration = Math.max(60, selectedServices.reduce((sum, s) => sum + (SERVICE_DURATIONS[s] ?? 60), 0))
 
   // Fetch slots when date, fetchKey, or booking duration changes
   useEffect(() => {
@@ -473,7 +470,7 @@ export default function BookingClient({
   const confirmStep  = isDetailer ? 5 : 4
 
   function canAdvance() {
-    if (step === 1) return isDetailer ? selectedServices.length > 0 : !!service
+    if (step === 1) return selectedServices.length > 0
     if (isDetailer && step === 2) return !!vehicleCategory
     if (step === dateTimeStep) return !!date && !!time
     if (step === infoStep) return (
@@ -488,7 +485,7 @@ export default function BookingClient({
     if (!canAdvance()) return
 
     // Guard: deep-link to info step without completing earlier steps
-    if (step === infoStep && (!(isDetailer ? selectedServices.length > 0 : service) || !date || !time)) {
+    if (step === infoStep && (!(selectedServices.length > 0) || !date || !time)) {
       setError('Please complete service selection and date/time before reviewing your booking.')
       setStep(1)
       return
@@ -508,12 +505,10 @@ export default function BookingClient({
     setError(null)
     try {
       const uploadedPhotoUrls = bookingPhotos.filter(p => p.serverUrl).map(p => p.serverUrl!)
-      const totalDuration = isDetailer
-        ? selectedServices.reduce((sum, s) => sum + (SERVICE_DURATIONS[s] ?? 60), 0)
-        : (service ? (SERVICE_DURATIONS[service] ?? 60) : 60)
+      const totalDuration = selectedServices.reduce((sum, s) => sum + (SERVICE_DURATIONS[s] ?? 60), 0)
       const payload: Record<string, unknown> = {
-        service_type:               isDetailer ? (selectedServices[0] ?? null) : service,
-        services:                   isDetailer ? selectedServices : [],
+        service_type:               selectedServices[0] ?? null,
+        services:                   selectedServices,
         job_date:                   date,
         job_time:                   time,
         notes:                      notes || null,
@@ -574,9 +569,7 @@ export default function BookingClient({
   }
 
   const bizName = profile.business_name ?? profile.full_name ?? 'Your Technician'
-  const totalDuration = isDetailer
-    ? selectedServices.reduce((sum, s) => sum + (SERVICE_DURATIONS[s] ?? 60), 0)
-    : (service ? SERVICE_DURATIONS[service] ?? 60 : 60)
+  const totalDuration = selectedServices.reduce((sum, s) => sum + (SERVICE_DURATIONS[s] ?? 60), 0)
 
   // ── Success screen ──
   if (submitted) {
@@ -594,7 +587,7 @@ export default function BookingClient({
             <p className="text-white/60 text-sm mb-6 leading-relaxed">
               Your{' '}
               <strong className="text-white">
-                {isDetailer ? selectedServices.join(' + ') : service}
+                {selectedServices.join(' + ')}
               </strong>{' '}
               appointment is scheduled for{' '}
               <strong className="text-white">{date && formatDateFull(date)}</strong> at{' '}
@@ -604,8 +597,8 @@ export default function BookingClient({
 
             <div className="nwi-card text-left space-y-3 mb-8">
               <Detail
-                label={isDetailer && selectedServices.length > 1 ? 'Services' : 'Service'}
-                value={isDetailer ? selectedServices.join(', ') : (service ?? '')}
+                label={selectedServices.length > 1 ? 'Services' : 'Service'}
+                value={selectedServices.join(', ')}
               />
               <Detail label="Date"        value={date  ? formatDateFull(date) : ''} />
               <Detail label="Time"        value={time  ? formatTime(time) : ''} />
@@ -644,25 +637,19 @@ export default function BookingClient({
               <h2 className="font-condensed font-bold text-2xl text-white tracking-wide mb-1">
                 WHAT SERVICE DO YOU NEED?
               </h2>
-              <p className="text-white/40 text-sm mb-6">
-                {isDetailer ? 'Select all services for this visit.' : 'Select one to get started.'}
-              </p>
+              <p className="text-white/40 text-sm mb-6">Select all services for this visit.</p>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-3">
                 {services.map(svc => {
                   const dur = SERVICE_DURATIONS[svc] ?? 60
-                  const sel = isDetailer ? selectedServices.includes(svc) : service === svc
+                  const sel = selectedServices.includes(svc)
                   return (
                     <button
                       key={svc}
                       onClick={() => {
-                        if (isDetailer) {
-                          setSelectedServices(prev =>
-                            prev.includes(svc) ? prev.filter(s => s !== svc) : [...prev, svc]
-                          )
-                        } else {
-                          setService(svc)
-                        }
+                        setSelectedServices(prev =>
+                          prev.includes(svc) ? prev.filter(s => s !== svc) : [...prev, svc]
+                        )
                       }}
                       className={`rounded-xl border px-3 py-3 text-left transition-all ${
                         sel
@@ -679,27 +666,25 @@ export default function BookingClient({
                 })}
               </div>
 
-              {/* Running tally — detailer only */}
-              {isDetailer && (
-                <div className={`rounded-xl border px-4 py-3 mb-5 transition-colors ${
-                  selectedServices.length > 0
-                    ? 'border-orange/30 bg-orange/5'
-                    : 'border-dark-border bg-dark-card/50'
-                }`}>
-                  {selectedServices.length === 0 ? (
-                    <p className="text-white/30 text-sm">No services selected yet.</p>
-                  ) : (
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-orange text-sm font-semibold">
-                        {selectedServices.length} service{selectedServices.length > 1 ? 's' : ''} selected
-                      </p>
-                      <p className="text-white/50 text-xs">
-                        {durationLabel(selectedServices.reduce((s, svc) => s + (SERVICE_DURATIONS[svc] ?? 60), 0))} total
-                      </p>
-                    </div>
-                  )}
-                </div>
-              )}
+              {/* Running tally */}
+              <div className={`rounded-xl border px-4 py-3 mb-5 transition-colors ${
+                selectedServices.length > 0
+                  ? 'border-orange/30 bg-orange/5'
+                  : 'border-dark-border bg-dark-card/50'
+              }`}>
+                {selectedServices.length === 0 ? (
+                  <p className="text-white/30 text-sm">No services selected yet.</p>
+                ) : (
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-orange text-sm font-semibold">
+                      {selectedServices.length} service{selectedServices.length > 1 ? 's' : ''} selected
+                    </p>
+                    <p className="text-white/50 text-xs">
+                      {durationLabel(selectedServices.reduce((s, svc) => s + (SERVICE_DURATIONS[svc] ?? 60), 0))} total
+                    </p>
+                  </div>
+                )}
+              </div>
 
               <div className="mb-6">
                 <label className="nwi-label">Additional notes <span className="text-white/30">(optional)</span></label>
@@ -943,9 +928,9 @@ export default function BookingClient({
               <div className="nwi-card space-y-3 mb-6">
                 <div className="pb-3 border-b border-dark-border">
                   <p className="text-white/30 text-[10px] uppercase tracking-widest mb-1">
-                    {isDetailer && selectedServices.length > 1 ? 'Services' : 'Service'}
+                    {selectedServices.length > 1 ? 'Services' : 'Service'}
                   </p>
-                  {isDetailer && selectedServices.length > 1 ? (
+                  {selectedServices.length > 1 ? (
                     <div className="space-y-1.5 mt-1">
                       {selectedServices.map((svc, i) => (
                         <div key={i} className="flex items-center justify-between gap-2">
@@ -960,7 +945,7 @@ export default function BookingClient({
                     </div>
                   ) : (
                     <>
-                      <p className="text-white font-semibold">{isDetailer ? selectedServices[0] : service}</p>
+                      <p className="text-white font-semibold">{selectedServices[0]}</p>
                       <p className="text-white/40 text-xs mt-0.5">{durationLabel(totalDuration)}</p>
                     </>
                   )}
