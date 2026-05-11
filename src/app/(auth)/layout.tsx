@@ -15,41 +15,56 @@ const FEATURES = [
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-dvh flex">
+    <div className="min-h-dvh flex flex-col lg:flex-row">
       {/* ── Left brand panel ── */}
-      <div className="hidden lg:flex lg:w-[420px] xl:w-[480px] flex-col bg-blue-gradient relative overflow-hidden flex-shrink-0">
-        {/* Decorative circles */}
-        <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full bg-white/5" />
-        <div className="absolute -bottom-32 -right-16 w-80 h-80 rounded-full bg-white/5" />
-        <div className="absolute top-1/3 -right-12 w-48 h-48 rounded-full bg-orange/20" />
+      {/* Mobile: full-width top section. Desktop lg+: fixed-width sidebar */}
+      <div className="lg:w-[420px] xl:w-[480px] lg:flex-shrink-0 bg-blue-gradient relative overflow-hidden flex flex-col">
+        {/* Decorative circles — desktop only (too large for mobile) */}
+        <div className="hidden lg:block absolute -top-24 -left-24 w-96 h-96 rounded-full bg-white/5" />
+        <div className="hidden lg:block absolute -bottom-32 -right-16 w-80 h-80 rounded-full bg-white/5" />
+        <div className="hidden lg:block absolute top-1/3 -right-12 w-48 h-48 rounded-full bg-orange/20" />
 
-        <div className="relative z-10 flex flex-col justify-between h-full p-10">
+        <div className="relative z-10 flex flex-col lg:justify-between lg:h-full p-6 sm:p-8 lg:p-10">
           {/* Logo */}
           <div>
-            <div className="mb-12">
+            <div className="mb-5 lg:mb-12">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/nwi-logo.png" alt="National Wrench Index Suite™" className="h-14 w-auto" />
+              <img src="/nwi-logo.png" alt="National Wrench Index Suite™" className="h-10 lg:h-14 w-auto" />
             </div>
 
-            <h2 className="font-condensed font-bold text-white text-4xl xl:text-5xl leading-tight mb-4">
+            <h2 className="font-condensed font-bold text-white text-3xl sm:text-4xl xl:text-5xl leading-tight mb-3 lg:mb-4">
               Run your mobile shop <span className="text-orange">smarter.</span>
             </h2>
-            <p className="text-white/70 text-base leading-relaxed mb-10">
+            <p className="text-white/70 text-sm lg:text-base leading-relaxed mb-5 lg:mb-10">
               Everything a mobile automotive professional needs — from first call to paid invoice.
             </p>
 
-            <ul className="space-y-4">
+            <ul className="space-y-3 lg:space-y-4">
               {FEATURES.map((f) => (
                 <li key={f.text} className="flex items-center gap-3">
-                  <span className="text-xl leading-none">{f.icon}</span>
+                  <span className="text-lg lg:text-xl leading-none">{f.icon}</span>
                   <span className="text-white/80 text-sm">{f.text}</span>
                 </li>
               ))}
             </ul>
+
+            {/* Mobile CTA — primary signup button, hidden on desktop (form panel handles CTAs) */}
+            <div className="lg:hidden mt-6 pb-2 space-y-3">
+              <Link
+                href="/signup"
+                className="block text-center py-3.5 bg-orange hover:bg-orange/90 text-white font-condensed font-bold text-sm rounded-xl tracking-wide transition-colors"
+              >
+                GET STARTED FREE →
+              </Link>
+              <p className="text-white/60 text-xs text-center">
+                Already have an account?{' '}
+                <Link href="/login" className="text-white underline">Sign in</Link>
+              </p>
+            </div>
           </div>
 
-          {/* Founder statement */}
-          <div className="bg-white/10 rounded-xl p-5 border border-white/10">
+          {/* Founder statement — desktop only */}
+          <div className="hidden lg:block bg-white/10 rounded-xl p-5 border border-white/10">
             <p className="text-white/90 text-sm italic leading-relaxed mb-3">
               &ldquo;Built by a mobile diesel tech with 17 years of experience. The software I wished I&rsquo;d had when I started.&rdquo;
             </p>
@@ -68,12 +83,6 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
       {/* ── Right form panel ── */}
       <div className="flex-1 flex flex-col overflow-y-auto">
-        {/* Mobile logo strip */}
-        <div className="lg:hidden flex items-center gap-3 p-4 border-b border-dark-border bg-white">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/nwi-logo.png" alt="National Wrench Index Suite™" className="h-14 w-auto" />
-        </div>
-
         <div className="flex-1 flex items-start justify-center p-6 sm:p-10">
           <div className="w-full max-w-md">{children}</div>
         </div>
