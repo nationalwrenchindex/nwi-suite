@@ -30,7 +30,35 @@ function userMessage(code: string, vehicleDesc: string): string {
 Be specific to the vehicle year/make/model when possible. Order causes most to least likely. Keep tone field-mechanic friendly, not textbook. Return ONLY valid JSON with no markdown fences or surrounding text.`
 }
 
-async function callClaude(apiKey: string, code: string, vehicleDesc: string): Promise<string> {
+const DTC_TOOL = {
+  name: 'return_dtc_analysis',
+  description: 'Return the structured DTC analysis for the given code and vehicle.',
+  input_schema: {
+    type: 'object' as const,
+    properties: {
+      code:             { type: 'string' },
+      name:             { type: 'string' },
+      category:         { type: 'string' },
+      symptoms:         { type: 'array', items: { type: 'string' } },
+      severity: {
+        type: 'object',
+        properties: {
+          level:    { type: 'string', enum: ['Low', 'Moderate', 'High', 'Critical'] },
+          drivable: { type: 'boolean' },
+          notes:    { type: 'string' },
+        },
+        required: ['level', 'drivable', 'notes'],
+      },
+      common_causes:    { type: 'array', items: { type: 'string' } },
+      related_codes:    { type: 'array', items: { type: 'string' } },
+      diagnostic_order: { type: 'array', items: { type: 'string' } },
+      suggested_repair: { type: 'string' },
+    },
+    required: ['code', 'name', 'category', 'symptoms', 'severity', 'common_causes', 'related_codes', 'diagnostic_order', 'suggested_repair'],
+  },
+}
+
+async function callClaude(apiKey: string, code: string, vehicleDesc: string): Promise<unknown> {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -39,26 +67,20 @@ async function callClaude(apiKey: string, code: string, vehicleDesc: string): Pr
       'content-type':      'application/json',
     },
     body: JSON.stringify({
-      model:      'claude-sonnet-4-6',
-      max_tokens: 800,
-      system:     SYSTEM_PROMPT,
-      messages:   [{ role: 'user', content: userMessage(code, vehicleDesc) }],
+      model:       'claude-sonnet-4-6',
+      max_tokens:  800,
+      system:      SYSTEM_PROMPT,
+      tools:       [DTC_TOOL],
+      tool_choice: { type: 'tool', name: 'return_dtc_analysis' },
+      messages:    [{ role: 'user', content: userMessage(code, vehicleDesc) }],
     }),
   })
 
   if (!res.ok) throw new Error(`AI service error: ${await res.text()}`)
-  const data = await res.json()
-  const raw  = data.content?.[0]?.text ?? ''
-  if (!raw) throw new Error('Empty AI response')
-  return raw
-}
-
-function parseJSON(raw: string): unknown {
-  let text = raw.trim().replace(/```(?:json|JSON)?\s*/g, '').replace(/```/g, '').trim()
-  const first = text.indexOf('{')
-  const last  = text.lastIndexOf('}')
-  if (first !== -1 && last > first) text = text.slice(first, last + 1)
-  return JSON.parse(text)
+  const data  = await res.json()
+  const block = data.content?.find((b: { type: string }) => b.type === 'tool_use')
+  if (!block) throw new Error('No tool_use block in AI response')
+  return block.input
 }
 
 export async function GET(req: NextRequest, { params }: RouteContext) {
@@ -83,27 +105,18 @@ export async function GET(req: NextRequest, { params }: RouteContext) {
   const model = req.nextUrl.searchParams.get('model') ?? ''
   const vehicleDesc = [year, make, model].filter(Boolean).join(' ') || 'an unspecified vehicle'
 
-  // Attempt Claude call — retry once on JSON parse failure (observed in production May 11)
-  let raw: string
+  // tool_use guarantees structured output — retry once on any failure
   try {
-    raw = await callClaude(apiKey, normalized, vehicleDesc)
-  } catch (err) {
-    console.error('[dtc] Claude API error:', err)
-    return NextResponse.json({ error: 'AI service unavailable. Please try again.' }, { status: 502 })
-  }
-
-  try {
-    const result = parseJSON(raw)
+    const result = await callClaude(apiKey, normalized, vehicleDesc)
     return NextResponse.json({ result, source: 'ai' })
-  } catch {
-    console.error('[dtc] parse failed on first attempt, raw:', raw)
+  } catch (err) {
+    console.error('[dtc] Claude call failed on first attempt:', err)
     // Single retry
     try {
-      raw = await callClaude(apiKey, normalized, vehicleDesc)
-      const result = parseJSON(raw)
+      const result = await callClaude(apiKey, normalized, vehicleDesc)
       return NextResponse.json({ result, source: 'ai' })
     } catch (retryErr) {
-      console.error('[dtc] parse failed after retry:', retryErr)
+      console.error('[dtc] Claude call failed after retry:', retryErr)
       return NextResponse.json(
         { error: 'AI response could not be parsed — please try again' },
         { status: 502 },
