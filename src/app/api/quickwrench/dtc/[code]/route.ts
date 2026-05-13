@@ -80,7 +80,14 @@ async function callClaude(apiKey: string, code: string, vehicleDesc: string): Pr
   const data  = await res.json()
   const block = data.content?.find((b: { type: string }) => b.type === 'tool_use')
   if (!block) throw new Error('No tool_use block in AI response')
-  return block.input
+  const input = block.input as Record<string, unknown>
+  return {
+    ...input,
+    symptoms:         Array.isArray(input.symptoms)         ? input.symptoms         : [],
+    common_causes:    Array.isArray(input.common_causes)    ? input.common_causes    : [],
+    related_codes:    Array.isArray(input.related_codes)    ? input.related_codes    : [],
+    diagnostic_order: Array.isArray(input.diagnostic_order) ? input.diagnostic_order : [],
+  }
 }
 
 export async function GET(req: NextRequest, { params }: RouteContext) {

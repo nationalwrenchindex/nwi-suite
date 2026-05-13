@@ -12,15 +12,15 @@ interface DTCSeverity {
 }
 
 interface DTCResult {
-  code:             string
-  name:             string
-  category:         string
-  symptoms:         string[]
-  severity:         DTCSeverity
-  common_causes:    string[]
-  related_codes:    string[]
-  diagnostic_order: string[]
-  suggested_repair: string
+  code?:             string
+  name?:             string
+  category?:         string
+  symptoms?:         string[]
+  severity?:         Partial<DTCSeverity>
+  common_causes?:    string[]
+  related_codes?:    string[]
+  diagnostic_order?: string[]
+  suggested_repair?: string
 }
 
 interface RecallResult {
@@ -191,17 +191,17 @@ function DTCPanel({ vehicle }: { vehicle: QWVehicle | null }) {
           {/* Top card — preserved */}
           <div className="nwi-card border-orange/30 bg-orange/5">
             <div className="flex items-start justify-between gap-3 mb-2">
-              <span className="font-condensed font-bold text-orange text-xl tracking-wide">{result.code}</span>
+              <span className="font-condensed font-bold text-orange text-xl tracking-wide">{result.code || '—'}</span>
               <span className="bg-blue/15 border border-blue/30 text-blue-light text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide whitespace-nowrap">
-                {result.category}
+                {result.category || '—'}
               </span>
             </div>
-            <p className="text-white font-medium text-sm leading-relaxed">{result.name}</p>
+            <p className="text-white font-medium text-sm leading-relaxed">{result.name || '—'}</p>
           </div>
 
           <SectionCard title="Symptoms" defaultOpen={true}>
             <ul className="space-y-1.5">
-              {result.symptoms.map((s, i) => (
+              {(result.symptoms || []).map((s, i) => (
                 <li key={i} className="flex gap-2 text-white/70 text-sm">
                   <span className="text-orange flex-shrink-0 mt-0.5">•</span>
                   {s}
@@ -213,10 +213,10 @@ function DTCPanel({ vehicle }: { vehicle: QWVehicle | null }) {
           <SectionCard title="Severity" defaultOpen={true}>
             <div className="space-y-2">
               <div className="flex items-center gap-3">
-                <span className={`font-condensed font-bold text-lg ${severityBadgeCls(result.severity.level)}`}>
-                  {result.severity.level}
+                <span className={`font-condensed font-bold text-lg ${severityBadgeCls(result.severity?.level ?? '')}`}>
+                  {result.severity?.level || '—'}
                 </span>
-                {result.severity.drivable ? (
+                {result.severity?.drivable ? (
                   <span className="flex items-center gap-1 text-success text-xs font-medium">
                     <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                       <polyline points="20 6 9 17 4 12" />
@@ -232,13 +232,13 @@ function DTCPanel({ vehicle }: { vehicle: QWVehicle | null }) {
                   </span>
                 )}
               </div>
-              <p className="text-white/60 text-xs italic leading-relaxed">{result.severity.notes}</p>
+              <p className="text-white/60 text-xs italic leading-relaxed">{result.severity?.notes || '—'}</p>
             </div>
           </SectionCard>
 
           <SectionCard title="Common Causes" defaultOpen={true}>
             <ul className="space-y-1.5">
-              {result.common_causes.map((c, i) => (
+              {(result.common_causes || []).map((c, i) => (
                 <li key={i} className="flex gap-2 text-white/70 text-sm">
                   <span className="text-orange flex-shrink-0 mt-0.5">•</span>
                   {c}
@@ -249,7 +249,7 @@ function DTCPanel({ vehicle }: { vehicle: QWVehicle | null }) {
 
           <SectionCard title="Related Codes" defaultOpen={false}>
             <div className="flex flex-wrap gap-2">
-              {result.related_codes.map(rc => (
+              {(result.related_codes || []).map(rc => (
                 <button
                   key={rc}
                   onClick={() => lookup(rc)}
@@ -263,7 +263,7 @@ function DTCPanel({ vehicle }: { vehicle: QWVehicle | null }) {
 
           <SectionCard title="Diagnostic Order" defaultOpen={false}>
             <ol className="space-y-2.5">
-              {result.diagnostic_order.map((step, i) => (
+              {(result.diagnostic_order || []).map((step, i) => (
                 <li key={i} className="flex gap-3 text-white/70 text-sm">
                   <span className="flex-shrink-0 w-6 h-6 rounded-full bg-orange/15 border border-orange/30 flex items-center justify-center font-condensed font-bold text-orange text-xs">
                     {i + 1}
@@ -275,7 +275,7 @@ function DTCPanel({ vehicle }: { vehicle: QWVehicle | null }) {
           </SectionCard>
 
           <SectionCard title="Suggested Repair" defaultOpen={true}>
-            <p className="text-white/80 text-sm leading-relaxed">{result.suggested_repair}</p>
+            <p className="text-white/80 text-sm leading-relaxed">{result.suggested_repair || '—'}</p>
           </SectionCard>
 
           <p className="text-white/20 text-[10px] leading-relaxed">
