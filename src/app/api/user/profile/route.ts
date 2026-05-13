@@ -87,6 +87,19 @@ export async function PUT(request: NextRequest) {
     update.default_tax_percent = Math.round(n * 100) / 100
   }
 
+  if ('phone' in body) {
+    const raw = body.phone
+    update.phone = (typeof raw === 'string' && raw.trim()) ? raw.trim() : null
+  }
+
+  if ('sms_booking_notifications_enabled' in body) {
+    update.sms_booking_notifications_enabled = !!body.sms_booking_notifications_enabled
+  }
+
+  if ('bill_consumables_separately' in body) {
+    update.bill_consumables_separately = !!body.bill_consumables_separately
+  }
+
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: 'No valid fields to update' }, { status: 400 })
   }

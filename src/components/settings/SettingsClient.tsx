@@ -135,9 +135,11 @@ export default function SettingsClient({
   initialLaborRate    = 125,
   initialMarkupPct    = 20,
   initialTaxPct       = 8.5,
-  initialPricingRows  = [],
-  initialBillConsumables = false,
+  initialPricingRows       = [],
+  initialBillConsumables   = false,
   initialAdjustmentPresets = [] as AdjustmentPreset[],
+  initialPhone             = null,
+  initialSmsBookingNotif   = true,
 }: {
   slug:                        string | null
   businessName:                string
@@ -155,6 +157,8 @@ export default function SettingsClient({
   initialPricingRows?:         PricingRow[]
   initialBillConsumables?:     boolean
   initialAdjustmentPresets?:   AdjustmentPreset[]
+  initialPhone?:               string | null
+  initialSmsBookingNotif?:     boolean
 }) {
   const [shareOpen, setShareOpen] = useState(false)
 
@@ -174,6 +178,11 @@ export default function SettingsClient({
 
   const [billConsumables,      setBillConsumables]      = useState(initialBillConsumables)
   const [savingBillConsumables, setSavingBillConsumables] = useState(false)
+
+  const [smsNotifEnabled,   setSmsNotifEnabled]   = useState(initialSmsBookingNotif)
+  const [savingSmsNotif,    setSavingSmsNotif]    = useState(false)
+  const [notifPhone,        setNotifPhone]        = useState(initialPhone ?? '')
+  const [savingNotifPhone,  setSavingNotifPhone]  = useState(false)
 
   const [laborRate,     setLaborRate]     = useState(String(initialLaborRate))
   const [markupPct,     setMarkupPct]     = useState(String(initialMarkupPct))
@@ -255,6 +264,39 @@ export default function SettingsClient({
       }
     } catch { /* silently fail */ }
     setSavingBillConsumables(false)
+  }
+
+  async function saveSmsNotifSetting(value: boolean) {
+    setSavingSmsNotif(true)
+    try {
+      const res = await fetch('/api/user/profile', {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ sms_booking_notifications_enabled: value }),
+      })
+      if (res.ok) {
+        setSmsNotifEnabled(value)
+        setSavedMsg(value ? 'Booking SMS notifications enabled.' : 'Booking SMS notifications disabled.')
+        setTimeout(() => setSavedMsg(null), 3000)
+      }
+    } catch { /* silently fail */ }
+    setSavingSmsNotif(false)
+  }
+
+  async function saveNotifPhone() {
+    setSavingNotifPhone(true)
+    try {
+      const res = await fetch('/api/user/profile', {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ phone: notifPhone.trim() || null }),
+      })
+      if (res.ok) {
+        setSavedMsg('Phone number saved.')
+        setTimeout(() => setSavedMsg(null), 3000)
+      }
+    } catch { /* silently fail */ }
+    setSavingNotifPhone(false)
   }
 
   async function savePricingRates() {
@@ -795,6 +837,72 @@ export default function SettingsClient({
           </div>
         </section>
       )}
+
+      {/* ── Notifications ── */}
+      <section>
+        <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Notifications</p>
+        <p className="text-white/30 text-xs mb-4">
+          Get notified on your phone when a customer books through your public booking link.
+        </p>
+        <div className="rounded-xl border border-[#333] bg-[#222] p-5 space-y-5">
+
+          {/* Toggle */}
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-white text-sm font-medium">Text me when a customer books</p>
+              <p className="text-white/40 text-xs mt-1">
+                Get an SMS to your phone every time someone books through your public booking link.
+              </p>
+            </div>
+            <button
+              disabled={savingSmsNotif}
+              onClick={() => saveSmsNotifSetting(!smsNotifEnabled)}
+              aria-pressed={smsNotifEnabled}
+              className={`relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 focus:outline-none disabled:opacity-50 ${
+                smsNotifEnabled ? 'border-[#FF6600] bg-[#FF6600]' : 'border-[#444] bg-[#333]'
+              }`}
+            >
+              <span
+                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform duration-200 ${
+                  smsNotifEnabled ? 'translate-x-5' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
+          </div>
+          <p className={`text-xs font-semibold -mt-3 ${smsNotifEnabled ? 'text-success' : 'text-white/30'}`}>
+            {smsNotifEnabled ? 'ON — You\'ll receive an SMS on new bookings' : 'OFF — No SMS on new bookings'}
+          </p>
+
+          {/* Phone number */}
+          <div className="border-t border-[#333] pt-4 space-y-3">
+            <div>
+              <label className="nwi-label">Your Phone Number</label>
+              <input
+                type="tel"
+                className="nwi-input text-sm w-full"
+                placeholder="e.g. 336-555-0144"
+                value={notifPhone}
+                onChange={e => setNotifPhone(e.target.value)}
+              />
+              {smsNotifEnabled && !notifPhone.trim() && (
+                <p className="mt-2 text-yellow-400/80 text-xs flex items-center gap-1.5">
+                  <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                  </svg>
+                  Add a phone number to receive booking notifications.
+                </p>
+              )}
+            </div>
+            <button
+              onClick={saveNotifPhone}
+              disabled={savingNotifPhone}
+              className="px-5 py-2 bg-[#FF6600] hover:bg-[#E55A00] disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-lg transition-colors"
+            >
+              {savingNotifPhone ? 'Saving…' : 'Save Phone Number'}
+            </button>
+          </div>
+        </div>
+      </section>
 
       <ShareBookingModal
         slug={slug}

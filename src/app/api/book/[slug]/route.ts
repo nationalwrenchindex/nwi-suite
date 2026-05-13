@@ -3,10 +3,54 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { dispatchNotification, notifyMechanic } from '@/lib/notifications'
 import { getServicesByBusinessType } from '@/lib/scheduler'
 import { INSPECTION_POINTS, getMappedService } from '@/lib/mpi-catalog'
+import { sendSubscriberSms } from '@/lib/twilio'
 
 type RouteContext = { params: Promise<{ slug: string }> }
 
 const DAY_NAMES = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday']
+
+// ─── Subscriber booking SMS helpers ──────────────────────────────────────────
+
+function fmtNotifDate(dateStr: string): string {
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', {
+    weekday: 'short', month: 'short', day: 'numeric',
+  })
+}
+
+function fmtNotifTime(timeStr: string): string {
+  const [h, m] = timeStr.slice(0, 5).split(':').map(Number)
+  const period = h >= 12 ? 'PM' : 'AM'
+  const hour12 = h % 12 || 12
+  return `${hour12}:${String(m).padStart(2, '0')} ${period}`
+}
+
+function buildBookingSmsBody({
+  customerFirstName,
+  services,
+  primaryService,
+  jobDate,
+  jobTime,
+  customerPhone,
+}: {
+  customerFirstName: string
+  services:          string[]
+  primaryService:    string
+  jobDate:           string
+  jobTime:           string
+  customerPhone?:    string
+}): string {
+  const list   = services.length > 0 ? services : [primaryService]
+  const svcStr = list.length <= 3
+    ? list.join(', ')
+    : list.slice(0, 3).join(', ') + ` +${list.length - 3} more`
+  const parts  = [
+    `New booking: ${customerFirstName}`,
+    svcStr,
+    `${fmtNotifDate(jobDate)} at ${fmtNotifTime(jobTime)}`,
+  ]
+  if (customerPhone) parts.push(customerPhone)
+  return parts.join(' · ') + ' — NWI Suite'
+}
 
 // Configurable defaults — can be moved to a per-tech profile field later
 const DEFAULT_TIMEZONE       = 'America/New_York'
@@ -165,7 +209,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
   // Look up tech (include MPI fields for inspection handling)
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id, email, phone, offer_mpi_on_booking')
+    .select('id, email, phone, offer_mpi_on_booking, sms_booking_notifications_enabled')
     .eq('slug', slug)
     .single()
 
@@ -405,12 +449,34 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     }
   }
 
-  // ── Fire booking confirmation ──
+  // ── Fire booking confirmation (to customer) ──
   dispatchNotification({
     trigger:  'booking_confirmation',
     jobId,
     supabase,
   }).catch((err) => console.error('[POST /api/book] notification error:', err))
+
+  // ── Subscriber booking SMS (to the tech) — fire-and-forget ──
+  void (async () => {
+    try {
+      const subPhone   = profile.phone as string | null
+      const subEnabled = (profile as Record<string, unknown>).sms_booking_notifications_enabled as boolean ?? true
+      if (!subEnabled || !subPhone) return
+      if (subPhone.replace(/\D/g, '').length < 10) return
+
+      const smsBody = buildBookingSmsBody({
+        customerFirstName: String(customer.first_name),
+        services:          servicesRaw,
+        primaryService,
+        jobDate:           String(job_date),
+        jobTime:           String(job_time),
+        customerPhone:     rawPhone || undefined,
+      })
+      await sendSubscriberSms({ to: subPhone, body: smsBody })
+    } catch (err) {
+      console.error('[POST /api/book] subscriber SMS error:', err)
+    }
+  })()
 
   return NextResponse.json({
     job: {

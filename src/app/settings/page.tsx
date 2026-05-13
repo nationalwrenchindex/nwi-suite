@@ -15,7 +15,7 @@ export default async function SettingsPage() {
   const [{ data: profile }, hasQW, { data: pricingRows }, { data: adjPresets }] = await Promise.all([
     supabase
       .from('profiles')
-      .select('full_name, business_name, slug, share_sms_template, share_email_subject, share_email_body, default_payment_instructions, average_mpg, fuel_type, offer_mpi_on_booking, default_labor_rate, default_parts_markup_percent, default_tax_percent, business_type, bill_consumables_separately')
+      .select('full_name, business_name, slug, share_sms_template, share_email_subject, share_email_body, default_payment_instructions, average_mpg, fuel_type, offer_mpi_on_booking, default_labor_rate, default_parts_markup_percent, default_tax_percent, business_type, bill_consumables_separately, phone, sms_booking_notifications_enabled')
       .eq('id', user.id)
       .single(),
     hasQuickWrenchAccess(user.id),
@@ -47,7 +47,9 @@ export default async function SettingsPage() {
     default_parts_markup_percent?: number | null
     default_tax_percent?: number | null
     business_type?: string | null
-    bill_consumables_separately?: boolean | null
+    bill_consumables_separately?:        boolean | null
+    phone?:                              string | null
+    sms_booking_notifications_enabled?:  boolean | null
   }
 
   return (
@@ -79,6 +81,8 @@ export default async function SettingsPage() {
           initialTaxPct={p.default_tax_percent ?? 8.5}
           initialPricingRows={(pricingRows ?? []) as PricingRow[]}
           initialBillConsumables={p.bill_consumables_separately ?? false}
+          initialPhone={p.phone ?? null}
+          initialSmsBookingNotif={p.sms_booking_notifications_enabled ?? true}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           initialAdjustmentPresets={(adjPresets ?? []) as any[]}
         />
