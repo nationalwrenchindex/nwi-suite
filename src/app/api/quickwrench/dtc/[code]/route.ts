@@ -2,6 +2,9 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { hasQuickWrenchAccess } from '@/lib/subscription'
 
+// Claude can take >10s on long DTC responses; 60s prevents Vercel's default timeout kill
+export const maxDuration = 60
+
 type RouteContext = { params: Promise<{ code: string }> }
 
 const SYSTEM_PROMPT =
