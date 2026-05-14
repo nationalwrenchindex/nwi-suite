@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 
 interface ForemanSettings {
   is_enabled?:          boolean
@@ -30,6 +31,7 @@ export default function ForemanSettingsClient({
   initialSettings,
   canceledFlow,
 }: Props) {
+  const router = useRouter()
 
   // ── Upgrade flow state ────────────────────────────────────────────────────
   const [checkoutLoading, setCheckoutLoading] = useState(false)
@@ -92,6 +94,7 @@ export default function ForemanSettingsClient({
       if (!res.ok) throw new Error(json.error ?? 'Save failed')
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 3000)
+      router.refresh()
     } catch (e) {
       setSaveError(e instanceof Error ? e.message : 'Failed to save. Please try again.')
     } finally {

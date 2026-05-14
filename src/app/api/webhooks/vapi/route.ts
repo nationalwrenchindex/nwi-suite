@@ -6,7 +6,6 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { sendSubscriberSms } from '@/lib/twilio'
 import { buildSystemPrompt, SERVICE_DURATIONS } from '@/lib/foreman/system-prompt'
 
-const VAPI_ASSISTANT_ID = process.env.VAPI_ASSISTANT_ID ?? ''
 const SERVER_URL = 'https://tools.nationalwrenchindex.com/api/webhooks/vapi'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -47,27 +46,45 @@ export async function POST(request: NextRequest) {
   const message = (body.message ?? body) as VapiMessage
   const type    = message.type as string | undefined
 
-  console.log('[vapi] event:', type, 'callId:', message.call?.id)
+  console.log('[vapi] ── INCOMING ──────────────────────────────────')
+  console.log('[vapi] body:', JSON.stringify(body))
+  console.log('[vapi] event type:', type, '| callId:', message.call?.id)
+  console.log('[vapi] toolCallList:', JSON.stringify(message.toolCallList ?? null))
 
   try {
     switch (type) {
       case 'assistant-request':
+      case 'server-request': {
+        console.log('[vapi] action: handleAssistantRequest')
         return await handleAssistantRequest(message)
+      }
 
-      case 'function-call':
+      case 'tool-calls':
+      case 'function-call': {
+        console.log('[vapi] action: handleFunctionCall | toolCallList length:', message.toolCallList?.length ?? 0)
         return await handleFunctionCall(message)
+      }
 
-      case 'end-of-call-report':
+      case 'end-of-call-report': {
+        console.log('[vapi] action: handleEndOfCall')
         await handleEndOfCall(message)
-        return NextResponse.json({ ok: true })
+        const eocRes = { ok: true }
+        console.log('[vapi] RESPONSE for end-of-call-report:', JSON.stringify(eocRes))
+        return NextResponse.json(eocRes)
+      }
 
-      default:
+      default: {
         // status-update, transcript, hang, speech-update — no action needed
-        return NextResponse.json({ ok: true })
+        const defaultRes = { ok: true }
+        console.log('[vapi] RESPONSE for unhandled event type', type, ':', JSON.stringify(defaultRes))
+        return NextResponse.json(defaultRes)
+      }
     }
   } catch (err) {
     console.error('[vapi] unhandled error for event', type, ':', err instanceof Error ? err.message : String(err))
-    return NextResponse.json({ ok: true }) // always 200 to Vapi
+    const errRes = { ok: true }
+    console.log('[vapi] RESPONSE (error fallback):', JSON.stringify(errRes))
+    return NextResponse.json(errRes) // always 200 to Vapi
   }
 }
 
@@ -82,7 +99,7 @@ async function handleAssistantRequest(message: VapiMessage): Promise<NextRespons
   const calledNumber      = call.phoneNumber?.number
   const callerNumber      = call.customer?.number
 
-  console.log('[vapi assistant-request] vapiCallId:', vapiCallId, 'vapiPhoneNumberId:', vapiPhoneNumberId, 'calledNumber:', calledNumber)
+  console.log('[vapi assistant-request] vapiCallId:', vapiCallId, '| vapiPhoneNumberId:', vapiPhoneNumberId, '| calledNumber:', calledNumber, '| callerNumber:', callerNumber)
 
   // Look up subscriber — try vapi_phone_number_id first, then raw phone number
   let userId: string | null = null
@@ -107,18 +124,23 @@ async function handleAssistantRequest(message: VapiMessage): Promise<NextRespons
 
   if (!userId) {
     console.error('[vapi assistant-request] could not identify subscriber — vapiPhoneNumberId:', vapiPhoneNumberId, 'calledNumber:', calledNumber)
-    return NextResponse.json({
+    const fallback = {
       assistant: {
         firstMessage: "Thanks for calling. I'm a virtual assistant. How can I help you today?",
+        serverUrl: SERVER_URL,
         model: {
           provider: 'anthropic',
           model:    'claude-haiku-4-5-20251001',
-          messages: [{ role: 'system', content: 'You are a polite receptionist. Collect the caller\'s name, phone number, and what they need, then let them know someone will call back.' }],
+          messages: [{ role: 'system', content: "You are a polite receptionist. Collect the caller's name, phone number, and what they need, then let them know someone will call back." }],
         },
         voice: { provider: '11labs', voiceId: 'burt' },
       },
-    })
+    }
+    console.log('[vapi assistant-request] RESPONSE (no subscriber fallback):', JSON.stringify(fallback))
+    return NextResponse.json(fallback)
   }
+
+  console.log('[vapi assistant-request] subscriber identified — userId:', userId)
 
   // Fetch settings + profile in parallel
   const [{ data: settings }, { data: profile }] = await Promise.all([
@@ -135,8 +157,10 @@ async function handleAssistantRequest(message: VapiMessage): Promise<NextRespons
   const hoursEnd      = String(settings?.working_hours_end   ?? '18:00').slice(0, 5)
   const workingDays   = (settings?.working_days ?? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']).join(', ')
 
+  console.log('[vapi assistant-request] businessName:', businessName, '| mechanicName:', mechanicName, '| hours:', hoursStart, '-', hoursEnd, '| days:', workingDays)
+
   const servicesListWithDurations = Object.entries(SERVICE_DURATIONS)
-    .map(([svc, mins]) => `${svc} (~${mins} min)`)
+    .map(([svcName, mins]) => `${svcName} (~${mins} min)`)
     .join(', ')
 
   // Log the call — upsert in case of assistant-request retry
@@ -225,75 +249,126 @@ async function handleAssistantRequest(message: VapiMessage): Promise<NextRespons
     },
   ]
 
-  return NextResponse.json({
-    assistantId:       VAPI_ASSISTANT_ID,
-    assistantOverrides: {
+  const assistantResponse = {
+    assistant: {
       firstMessage,
       serverUrl: SERVER_URL,
       model: {
+        provider: 'anthropic',
+        model:    'claude-haiku-4-5-20251001',
         messages: [{ role: 'system', content: systemPrompt }],
         tools:    vapiTools,
       },
+      voice: { provider: '11labs', voiceId: 'burt' },
+      variableValues: {
+        business_name:       businessName,
+        mechanic_first_name: mechanicName,
+        mechanic_phone:      settings?.mechanic_phone ?? '',
+        labor_rate:          String(laborRate),
+        working_hours_start: hoursStart,
+        working_hours_end:   hoursEnd,
+        working_days:        workingDays,
+      },
     },
-  })
+  }
+
+  console.log('[vapi assistant-request] RESPONSE for userId:', userId, '| businessName:', businessName, '| firstMessage:', firstMessage)
+  return NextResponse.json(assistantResponse)
 }
 
-// ── function-call: route to check_availability or book_appointment ─────────────
+// ── tool-calls / function-call: route to check_availability or book_appointment ─
 
 async function handleFunctionCall(message: VapiMessage): Promise<NextResponse> {
   const call       = message.call ?? {}
   const vapiCallId = call.id
 
-  // Parse function call — handle both Vapi formats
-  let fnName: string | undefined
-  let fnParams: Record<string, unknown> = {}
+  // New Vapi format (tool-calls event, or function-call with toolCallList):
+  // toolCallList has IDs — respond with { results: [{ toolCallId, result }] }
+  if (message.toolCallList && message.toolCallList.length > 0) {
+    const results: Array<{ toolCallId: string; result: string }> = []
 
+    for (const tc of message.toolCallList) {
+      const toolCallId = tc.id ?? ''
+      const fnName     = tc.function?.name
+      let fnParams: Record<string, unknown> = {}
+      try {
+        fnParams = tc.function?.arguments ? JSON.parse(tc.function.arguments) as Record<string, unknown> : {}
+      } catch {
+        fnParams = {}
+      }
+
+      console.log('[vapi tool-call] fn:', fnName, '| toolCallId:', toolCallId, '| callId:', vapiCallId, '| params:', JSON.stringify(fnParams))
+
+      let result: string
+      try {
+        result = await dispatchToolCall(vapiCallId, fnName, fnParams)
+      } catch (err) {
+        console.error('[vapi tool-call] error in', fnName, ':', err instanceof Error ? err.message : String(err))
+        result = "I'm sorry, I ran into a technical issue. Let me take your information and have someone follow up."
+      }
+
+      console.log('[vapi tool-call] fn:', fnName, '| result:', result)
+      results.push({ toolCallId, result })
+    }
+
+    const response = { results }
+    console.log('[vapi tool-calls] RESPONSE to Vapi:', JSON.stringify(response))
+    return NextResponse.json(response)
+  }
+
+  // Legacy format: message.functionCall (older Vapi versions without toolCallList)
   if (message.functionCall) {
-    fnName   = message.functionCall.name
-    fnParams = message.functionCall.parameters ?? {}
-  } else if (message.toolCallList?.[0]?.function) {
-    const tc = message.toolCallList[0].function
-    fnName   = tc.name
+    const fnName   = message.functionCall.name
+    const fnParams = message.functionCall.parameters ?? {}
+
+    console.log('[vapi function-call] fn:', fnName, '| callId:', vapiCallId, '| params:', JSON.stringify(fnParams))
+
+    let result: string
     try {
-      fnParams = tc.arguments ? JSON.parse(tc.arguments) as Record<string, unknown> : {}
-    } catch {
-      fnParams = {}
+      result = await dispatchToolCall(vapiCallId, fnName, fnParams)
+    } catch (err) {
+      console.error('[vapi function-call] error in', fnName, ':', err instanceof Error ? err.message : String(err))
+      result = "I'm sorry, I ran into a technical issue. Let me take your information and have someone follow up."
     }
+
+    const response = { result }
+    console.log('[vapi function-call] RESPONSE to Vapi:', JSON.stringify(response))
+    return NextResponse.json(response)
   }
 
-  console.log('[vapi function-call] fn:', fnName, 'callId:', vapiCallId)
+  console.warn('[vapi function-call] no functionCall or toolCallList in message')
+  const noDataResponse = { result: 'No tool call data found in request.' }
+  console.log('[vapi function-call] RESPONSE (no tool data):', JSON.stringify(noDataResponse))
+  return NextResponse.json(noDataResponse)
+}
 
-  let result: string
+// ── dispatchToolCall: routes function name to its handler ─────────────────────
 
-  try {
-    switch (fnName) {
-      case 'check_availability':
-        result = await handleCheckAvailability(vapiCallId, {
-          service_type:   String(fnParams.service_type ?? ''),
-          preferred_date: fnParams.preferred_date ? String(fnParams.preferred_date) : undefined,
-        })
-        break
+async function dispatchToolCall(
+  vapiCallId: string | undefined,
+  fnName: string | undefined,
+  fnParams: Record<string, unknown>,
+): Promise<string> {
+  switch (fnName) {
+    case 'check_availability':
+      return await handleCheckAvailability(vapiCallId, {
+        service_type:   String(fnParams.service_type ?? ''),
+        preferred_date: fnParams.preferred_date ? String(fnParams.preferred_date) : undefined,
+      })
 
-      case 'book_appointment':
-        result = await handleBookAppointment(vapiCallId, {
-          customer_name:        String(fnParams.customer_name ?? ''),
-          customer_phone:       fnParams.customer_phone ? String(fnParams.customer_phone) : undefined,
-          vehicle_info:         fnParams.vehicle_info  ? String(fnParams.vehicle_info)  : undefined,
-          service_type:         String(fnParams.service_type ?? ''),
-          appointment_datetime: String(fnParams.appointment_datetime ?? ''),
-        })
-        break
+    case 'book_appointment':
+      return await handleBookAppointment(vapiCallId, {
+        customer_name:        String(fnParams.customer_name ?? ''),
+        customer_phone:       fnParams.customer_phone ? String(fnParams.customer_phone) : undefined,
+        vehicle_info:         fnParams.vehicle_info  ? String(fnParams.vehicle_info)  : undefined,
+        service_type:         String(fnParams.service_type ?? ''),
+        appointment_datetime: String(fnParams.appointment_datetime ?? ''),
+      })
 
-      default:
-        console.warn('[vapi function-call] unknown function:', fnName)
-        result = 'Function not recognized.'
-    }
-  } catch (err) {
-    console.error('[vapi function-call] error in', fnName, ':', err instanceof Error ? err.message : String(err))
-    result = "I'm sorry, I ran into a technical issue. Let me take your information and have someone follow up."
+    default:
+      console.warn('[vapi dispatchToolCall] unknown function:', fnName)
+      return 'Function not recognized. Ask the caller to repeat their request.'
   }
-
-  return NextResponse.json({ result })
 }
 
 // ── check_availability ─────────────────────────────────────────────────────────
@@ -306,7 +381,7 @@ async function handleCheckAvailability(
 
   const userId = await getUserIdFromCallId(svc, vapiCallId)
   if (!userId) {
-    return JSON.stringify({ error: 'Could not identify account. Please try again.' })
+    return 'Unable to look up the appointment schedule right now. Offer to take a message and have someone call the customer back.'
   }
 
   const { data: settings } = await svc
@@ -383,18 +458,11 @@ async function handleCheckAvailability(
   }
 
   if (slots.length === 0) {
-    return JSON.stringify({
-      available: false,
-      message: `No openings in the next two weeks for ${serviceName}. I can take a message and have ${mechanicName} reach out to find a time.`,
-    })
+    return `No available slots in the next two weeks for ${serviceName}. Offer to take a message or check a different week. ${mechanicName} will follow up.`
   }
 
-  return JSON.stringify({
-    available:    true,
-    service:      serviceName,
-    duration_min: duration,
-    slots,
-  })
+  const slotLabels = slots.map(s => s.label).join(', ')
+  return `Available slots for ${serviceName}: ${slotLabels}. Ask which time works best for the caller.`
 }
 
 // ── book_appointment ───────────────────────────────────────────────────────────
@@ -413,7 +481,7 @@ async function handleBookAppointment(
 
   const userId = await getUserIdFromCallId(svc, vapiCallId)
   if (!userId) {
-    return JSON.stringify({ success: false, error: "Could not identify account. I'll have someone follow up." })
+    return "Unable to identify the account. Tell the caller you'll have someone follow up to confirm their booking."
   }
 
   // Parse ISO datetime
@@ -427,7 +495,7 @@ async function handleBookAppointment(
   } else {
     const parsed = new Date(params.appointment_datetime)
     if (isNaN(parsed.getTime())) {
-      return JSON.stringify({ success: false, error: "I couldn't read that date and time. Could you confirm it again?" })
+      return "Booking failed: couldn't read that date and time. Ask the caller to confirm the date and time again, then call book_appointment once more."
     }
     jobDate = toDateStr(parsed)
     jobTime = `${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')}`
@@ -454,7 +522,7 @@ async function handleBookAppointment(
     const existStart = eh * 60 + em
     const existEnd   = existStart + ((job.estimated_duration_minutes as number | null) ?? 60)
     if (!(slotEnd <= existStart || slotMin >= existEnd)) {
-      return JSON.stringify({ success: false, error: "That slot was just taken. Let me check for the next available time — please call check_availability again." })
+      return "Booking failed: that slot was just taken by another booking. Call check_availability again to find the next open time and offer it to the caller."
     }
   }
 
@@ -503,7 +571,7 @@ async function handleBookAppointment(
         .single()
       if (custErr || !newCust) {
         console.error('[book_appointment] customer insert error:', custErr)
-        return JSON.stringify({ success: false, error: "Trouble saving customer info. I'll have someone follow up." })
+        return "Booking failed: trouble saving customer information. Tell the caller you'll have someone follow up to confirm."
       }
       customerId = newCust.id as string
     }
@@ -515,7 +583,7 @@ async function handleBookAppointment(
       .single()
     if (custErr || !newCust) {
       console.error('[book_appointment] customer insert error:', custErr)
-      return JSON.stringify({ success: false, error: "Trouble saving customer info. I'll have someone follow up." })
+      return "Booking failed: trouble saving customer information. Tell the caller you'll have someone follow up to confirm."
     }
     customerId = newCust.id as string
   }
@@ -551,7 +619,7 @@ async function handleBookAppointment(
 
   if (jobErr || !job) {
     console.error('[book_appointment] job insert error:', jobErr)
-    return JSON.stringify({ success: false, error: "Trouble saving the appointment. I'll have someone follow up to confirm." })
+    return "Booking failed: trouble saving the appointment. Tell the caller you'll have someone follow up to confirm."
   }
 
   // Update foreman_calls row
@@ -591,11 +659,8 @@ async function handleBookAppointment(
   }
 
   const longDateLabel = dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
-  return JSON.stringify({
-    success:     true,
-    job_id:      job.id,
-    confirmation: `Booked: ${serviceName} on ${longDateLabel} at ${timeLabel}.${rawPhone.length >= 10 ? ' Customer SMS confirmation sent.' : ''}`,
-  })
+  const smsNote = rawPhone.length >= 10 ? ' Customer will receive SMS confirmation shortly.' : ''
+  return `Appointment booked. Job ID: ${job.id}. ${serviceName} confirmed for ${longDateLabel} at ${timeLabel}.${smsNote}`
 }
 
 // ── end-of-call-report: log call, notify mechanic ─────────────────────────────
@@ -628,7 +693,6 @@ async function handleEndOfCall(message: VapiMessage): Promise<void> {
 
   if (!existingCall) {
     console.warn('[vapi end-of-call] no foreman_calls row for callId:', vapiCallId)
-    // Create a minimal record so we don't lose data
     console.warn('[vapi end-of-call] cannot determine user_id — skipping record creation')
     return
   }
