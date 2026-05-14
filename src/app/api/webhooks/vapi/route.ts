@@ -10,6 +10,8 @@ const SERVER_URL = 'https://tools.nationalwrenchindex.com/api/webhooks/vapi'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+type Svc = ReturnType<typeof createServiceClient>
+
 interface VapiCall {
   id?:            string
   phoneNumberId?: string
@@ -25,10 +27,16 @@ interface VapiCall {
 interface VapiMessage {
   type:           string
   call?:          VapiCall
+  phoneNumber?:   { number?: string }  // top-level fallback in some Vapi events
   functionCall?:  { name: string; parameters?: Record<string, unknown> }
   toolCallList?:  { id?: string; type?: string; function?: { name: string; arguments?: string } }[]
   summary?:       string
   transcript?:    string
+}
+
+interface ResolvedSubscriber {
+  userId: string
+  source: 'foreman_calls' | 'phone_number'
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -43,38 +51,45 @@ export async function POST(request: NextRequest) {
   }
 
   // Vapi wraps events in a `message` field; some older versions send the event directly
-  const message = (body.message ?? body) as VapiMessage
-  const type    = message.type as string | undefined
+  const message    = (body.message ?? body) as VapiMessage
+  const type       = message.type as string | undefined
+  const vapiCallId = message.call?.id
 
   console.log('[vapi] ── INCOMING ──────────────────────────────────')
   console.log('[vapi] body:', JSON.stringify(body))
-  console.log('[vapi] event type:', type, '| callId:', message.call?.id)
+  console.log('[vapi] event type:', type, '| callId:', vapiCallId)
   console.log('[vapi] toolCallList:', JSON.stringify(message.toolCallList ?? null))
+
+  // Resolve subscriber once up front — used by all event handlers
+  const svc        = createServiceClient()
+  const subscriber = await resolveSubscriberId(svc, vapiCallId, message)
+  console.log('[vapi] subscriber lookup result:', subscriber
+    ? `userId=${subscriber.userId} (source=${subscriber.source})`
+    : 'NOT FOUND — phone number could not be matched to any foreman_settings row')
 
   try {
     switch (type) {
       case 'assistant-request':
       case 'server-request': {
         console.log('[vapi] action: handleAssistantRequest')
-        return await handleAssistantRequest(message)
+        return await handleAssistantRequest(svc, message, subscriber?.userId ?? null)
       }
 
       case 'tool-calls':
       case 'function-call': {
         console.log('[vapi] action: handleFunctionCall | toolCallList length:', message.toolCallList?.length ?? 0)
-        return await handleFunctionCall(message)
+        return await handleFunctionCall(svc, message, subscriber)
       }
 
       case 'end-of-call-report': {
         console.log('[vapi] action: handleEndOfCall')
-        await handleEndOfCall(message)
+        await handleEndOfCall(svc, message, subscriber?.userId ?? null)
         const eocRes = { ok: true }
         console.log('[vapi] RESPONSE for end-of-call-report:', JSON.stringify(eocRes))
         return NextResponse.json(eocRes)
       }
 
       default: {
-        // status-update, transcript, hang, speech-update — no action needed
         const defaultRes = { ok: true }
         console.log('[vapi] RESPONSE for unhandled event type', type, ':', JSON.stringify(defaultRes))
         return NextResponse.json(defaultRes)
@@ -88,10 +103,131 @@ export async function POST(request: NextRequest) {
   }
 }
 
+// ── Subscriber resolution — the critical lookup ────────────────────────────────
+
+async function resolveSubscriberId(
+  svc: Svc,
+  vapiCallId: string | undefined,
+  message: VapiMessage,
+): Promise<ResolvedSubscriber | null> {
+
+  // ── Step 1: foreman_calls row (created during assistant-request) ──────────
+  if (vapiCallId) {
+    console.log('[vapi] subscriber lookup: trying foreman_calls for callId=', vapiCallId)
+    const { data } = await svc
+      .from('foreman_calls')
+      .select('user_id')
+      .eq('vapi_call_id', vapiCallId)
+      .single()
+    if (data?.user_id) {
+      console.log('[vapi] subscriber lookup: foreman_calls → userId=', data.user_id)
+      return { userId: data.user_id as string, source: 'foreman_calls' }
+    }
+    console.log('[vapi] subscriber lookup: foreman_calls → no row found for callId=', vapiCallId)
+  } else {
+    console.log('[vapi] subscriber lookup: no callId in message, skipping foreman_calls lookup')
+  }
+
+  // ── Step 2: match called phone number against foreman_settings.phone_number ─
+  const calledRaw = extractCalledNumber(message)
+  console.log('[vapi] subscriber lookup: extracted called number from message =', calledRaw)
+
+  if (!calledRaw) {
+    console.log('[vapi] subscriber lookup: no called phone number found in any known path')
+    return null
+  }
+
+  const normalized = normalizeE164(calledRaw)
+  console.log('[vapi] subscriber lookup: normalized called number =', normalized)
+
+  if (!normalized) {
+    console.log('[vapi] subscriber lookup: could not normalize', calledRaw, 'to E.164 — giving up')
+    return null
+  }
+
+  const userId = await findUserIdByPhoneNumber(svc, normalized)
+  if (userId) {
+    console.log('[vapi] subscriber lookup: phone_number', normalized, '→ userId=', userId)
+    return { userId, source: 'phone_number' }
+  }
+
+  console.log('[vapi] subscriber lookup: phone_number', normalized, '→ NOT FOUND in foreman_settings')
+  return null
+}
+
+// Extract the CALLED number (Foreman's number, not the caller's number)
+// from multiple possible paths in the Vapi event body.
+function extractCalledNumber(message: VapiMessage): string | null {
+  const candidates: (string | null | undefined)[] = [
+    message.call?.phoneNumber?.number,   // most common: message.call.phoneNumber.number
+    message.phoneNumber?.number,          // top-level fallback seen in some Vapi events
+    // NOTE: message.call?.customer?.number is the CALLER — do NOT use for subscriber lookup
+  ]
+
+  for (const [i, candidate] of candidates.entries()) {
+    console.log('[vapi] subscriber lookup: path[' + i + '] =', candidate ?? '(empty)')
+    if (candidate) return candidate
+  }
+
+  return null
+}
+
+// Normalize any US phone number string to E.164 (+1XXXXXXXXXX)
+function normalizeE164(num: string): string | null {
+  const digits = num.replace(/\D/g, '')
+  if (digits.length === 10)                      return `+1${digits}`
+  if (digits.length === 11 && digits[0] === '1') return `+${digits}`
+  if (num.startsWith('+') && digits.length >= 10) return `+${digits.slice(-10 - (digits.length === 11 ? 1 : 0))}`
+  return null
+}
+
+// Query foreman_settings by phone_number — try E.164 then variations
+async function findUserIdByPhoneNumber(svc: Svc, normalized: string): Promise<string | null> {
+  // Exact match (most likely stored format)
+  const { data: exact } = await svc
+    .from('foreman_settings')
+    .select('user_id')
+    .eq('phone_number', normalized)
+    .maybeSingle()
+  if (exact?.user_id) {
+    console.log('[vapi] subscriber lookup: exact phone_number match found')
+    return exact.user_id as string
+  }
+
+  // Without leading '+' (in case stored without it)
+  const withoutPlus = normalized.replace(/^\+/, '')
+  const { data: noPlusData } = await svc
+    .from('foreman_settings')
+    .select('user_id')
+    .eq('phone_number', withoutPlus)
+    .maybeSingle()
+  if (noPlusData?.user_id) {
+    console.log('[vapi] subscriber lookup: no-plus phone_number match found')
+    return noPlusData.user_id as string
+  }
+
+  // Last-resort: last 10 digits wildcard
+  const last10 = normalized.replace(/\D/g, '').slice(-10)
+  const { data: last10Data } = await svc
+    .from('foreman_settings')
+    .select('user_id')
+    .ilike('phone_number', `%${last10}`)
+    .maybeSingle()
+  if (last10Data?.user_id) {
+    console.log('[vapi] subscriber lookup: last-10-digits match found')
+    return last10Data.user_id as string
+  }
+
+  return null
+}
+
 // ── assistant-request: identify subscriber, return personalized config ─────────
 
-async function handleAssistantRequest(message: VapiMessage): Promise<NextResponse> {
-  const svc  = createServiceClient()
+async function handleAssistantRequest(
+  svc: Svc,
+  message: VapiMessage,
+  preResolvedUserId: string | null,
+): Promise<NextResponse> {
   const call = message.call ?? {}
 
   const vapiCallId        = call.id
@@ -101,25 +237,18 @@ async function handleAssistantRequest(message: VapiMessage): Promise<NextRespons
 
   console.log('[vapi assistant-request] vapiCallId:', vapiCallId, '| vapiPhoneNumberId:', vapiPhoneNumberId, '| calledNumber:', calledNumber, '| callerNumber:', callerNumber)
 
-  // Look up subscriber — try vapi_phone_number_id first, then raw phone number
-  let userId: string | null = null
+  // Use pre-resolved userId if available; otherwise do assistant-request-specific lookup
+  // (which also tries vapi_phone_number_id — a column tool-calls events don't always carry)
+  let userId: string | null = preResolvedUserId
 
-  if (vapiPhoneNumberId) {
+  if (!userId && vapiPhoneNumberId) {
     const { data } = await svc
       .from('foreman_settings')
       .select('user_id')
       .eq('vapi_phone_number_id', vapiPhoneNumberId)
       .single()
     userId = data?.user_id ?? null
-  }
-
-  if (!userId && calledNumber) {
-    const { data } = await svc
-      .from('foreman_settings')
-      .select('user_id')
-      .eq('phone_number', calledNumber)
-      .single()
-    userId = data?.user_id ?? null
+    if (userId) console.log('[vapi assistant-request] found via vapi_phone_number_id')
   }
 
   if (!userId) {
@@ -136,7 +265,7 @@ async function handleAssistantRequest(message: VapiMessage): Promise<NextRespons
         voice: { provider: '11labs', voiceId: 'burt' },
       },
     }
-    console.log('[vapi assistant-request] RESPONSE (no subscriber fallback):', JSON.stringify(fallback))
+    console.log('[vapi assistant-request] RESPONSE (no subscriber fallback)')
     return NextResponse.json(fallback)
   }
 
@@ -175,6 +304,8 @@ async function handleAssistantRequest(message: VapiMessage): Promise<NextRespons
 
     if (callErr) {
       console.error('[vapi assistant-request] foreman_calls upsert error:', callErr.message)
+    } else {
+      console.log('[vapi assistant-request] foreman_calls row upserted for callId:', vapiCallId)
     }
   }
 
@@ -278,12 +409,35 @@ async function handleAssistantRequest(message: VapiMessage): Promise<NextRespons
 
 // ── tool-calls / function-call: route to check_availability or book_appointment ─
 
-async function handleFunctionCall(message: VapiMessage): Promise<NextResponse> {
-  const call       = message.call ?? {}
-  const vapiCallId = call.id
+async function handleFunctionCall(
+  svc: Svc,
+  message: VapiMessage,
+  subscriber: ResolvedSubscriber | null,
+): Promise<NextResponse> {
+  const vapiCallId = message.call?.id
 
-  // New Vapi format (tool-calls event, or function-call with toolCallList):
-  // toolCallList has IDs — respond with { results: [{ toolCallId, result }] }
+  // If we resolved the subscriber by phone number (no foreman_calls row yet),
+  // create that row now so end-of-call-report can find it.
+  if (subscriber?.source === 'phone_number' && vapiCallId) {
+    const callerPhone = message.call?.customer?.number ?? null
+    const { error: upsertErr } = await svc.from('foreman_calls').upsert({
+      user_id:      subscriber.userId,
+      vapi_call_id: vapiCallId,
+      caller_phone: callerPhone,
+      status:       'in_progress',
+      created_at:   new Date().toISOString(),
+    }, { onConflict: 'vapi_call_id' })
+    if (upsertErr) {
+      console.error('[vapi handleFunctionCall] foreman_calls upsert error:', upsertErr.message)
+    } else {
+      console.log('[vapi handleFunctionCall] created foreman_calls row for callId:', vapiCallId, 'userId:', subscriber.userId)
+    }
+  }
+
+  const errorResult = 'Unable to identify the business account — please confirm you called the right number.'
+
+  // New Vapi format (tool-calls event or function-call with toolCallList):
+  // toolCallList carries IDs → respond with { results: [{ toolCallId, result }] }
   if (message.toolCallList && message.toolCallList.length > 0) {
     const results: Array<{ toolCallId: string; result: string }> = []
 
@@ -297,14 +451,18 @@ async function handleFunctionCall(message: VapiMessage): Promise<NextResponse> {
         fnParams = {}
       }
 
-      console.log('[vapi tool-call] fn:', fnName, '| toolCallId:', toolCallId, '| callId:', vapiCallId, '| params:', JSON.stringify(fnParams))
+      console.log('[vapi tool-call] fn:', fnName, '| toolCallId:', toolCallId, '| callId:', vapiCallId, '| userId:', subscriber?.userId ?? 'UNKNOWN', '| params:', JSON.stringify(fnParams))
 
       let result: string
-      try {
-        result = await dispatchToolCall(vapiCallId, fnName, fnParams)
-      } catch (err) {
-        console.error('[vapi tool-call] error in', fnName, ':', err instanceof Error ? err.message : String(err))
-        result = "I'm sorry, I ran into a technical issue. Let me take your information and have someone follow up."
+      if (!subscriber) {
+        result = errorResult
+      } else {
+        try {
+          result = await dispatchToolCall(svc, vapiCallId, subscriber.userId, fnName, fnParams)
+        } catch (err) {
+          console.error('[vapi tool-call] error in', fnName, ':', err instanceof Error ? err.message : String(err))
+          result = "I ran into a technical issue. Let me take your information and have someone follow up."
+        }
       }
 
       console.log('[vapi tool-call] fn:', fnName, '| result:', result)
@@ -321,14 +479,18 @@ async function handleFunctionCall(message: VapiMessage): Promise<NextResponse> {
     const fnName   = message.functionCall.name
     const fnParams = message.functionCall.parameters ?? {}
 
-    console.log('[vapi function-call] fn:', fnName, '| callId:', vapiCallId, '| params:', JSON.stringify(fnParams))
+    console.log('[vapi function-call] fn:', fnName, '| callId:', vapiCallId, '| userId:', subscriber?.userId ?? 'UNKNOWN', '| params:', JSON.stringify(fnParams))
 
     let result: string
-    try {
-      result = await dispatchToolCall(vapiCallId, fnName, fnParams)
-    } catch (err) {
-      console.error('[vapi function-call] error in', fnName, ':', err instanceof Error ? err.message : String(err))
-      result = "I'm sorry, I ran into a technical issue. Let me take your information and have someone follow up."
+    if (!subscriber) {
+      result = errorResult
+    } else {
+      try {
+        result = await dispatchToolCall(svc, vapiCallId, subscriber.userId, fnName, fnParams)
+      } catch (err) {
+        console.error('[vapi function-call] error in', fnName, ':', err instanceof Error ? err.message : String(err))
+        result = "I ran into a technical issue. Let me take your information and have someone follow up."
+      }
     }
 
     const response = { result }
@@ -345,19 +507,21 @@ async function handleFunctionCall(message: VapiMessage): Promise<NextResponse> {
 // ── dispatchToolCall: routes function name to its handler ─────────────────────
 
 async function dispatchToolCall(
+  svc: Svc,
   vapiCallId: string | undefined,
+  userId: string,
   fnName: string | undefined,
   fnParams: Record<string, unknown>,
 ): Promise<string> {
   switch (fnName) {
     case 'check_availability':
-      return await handleCheckAvailability(vapiCallId, {
+      return await handleCheckAvailability(svc, userId, vapiCallId, {
         service_type:   String(fnParams.service_type ?? ''),
         preferred_date: fnParams.preferred_date ? String(fnParams.preferred_date) : undefined,
       })
 
     case 'book_appointment':
-      return await handleBookAppointment(vapiCallId, {
+      return await handleBookAppointment(svc, userId, vapiCallId, {
         customer_name:        String(fnParams.customer_name ?? ''),
         customer_phone:       fnParams.customer_phone ? String(fnParams.customer_phone) : undefined,
         vehicle_info:         fnParams.vehicle_info  ? String(fnParams.vehicle_info)  : undefined,
@@ -374,26 +538,29 @@ async function dispatchToolCall(
 // ── check_availability ─────────────────────────────────────────────────────────
 
 async function handleCheckAvailability(
+  svc: Svc,
+  userId: string,
   vapiCallId: string | undefined,
   params: { service_type: string; preferred_date?: string },
 ): Promise<string> {
-  const svc = createServiceClient()
+  console.log('[check_availability] userId:', userId, '| callId:', vapiCallId, '| params:', JSON.stringify(params))
 
-  const userId = await getUserIdFromCallId(svc, vapiCallId)
-  if (!userId) {
-    return 'Unable to look up the appointment schedule right now. Offer to take a message and have someone call the customer back.'
-  }
-
-  const { data: settings } = await svc
+  const { data: settings, error: settingsErr } = await svc
     .from('foreman_settings')
     .select('working_hours_start, working_hours_end, working_days, mechanic_first_name')
     .eq('user_id', userId)
     .single()
 
-  const workingDays   = settings?.working_days ?? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
-  const hoursStart    = String(settings?.working_hours_start ?? '08:00').slice(0, 5)
-  const hoursEnd      = String(settings?.working_hours_end   ?? '18:00').slice(0, 5)
-  const mechanicName  = settings?.mechanic_first_name ?? 'the mechanic'
+  if (settingsErr) {
+    console.error('[check_availability] settings fetch error:', settingsErr.message)
+  }
+
+  const workingDays  = settings?.working_days ?? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri']
+  const hoursStart   = String(settings?.working_hours_start ?? '08:00').slice(0, 5)
+  const hoursEnd     = String(settings?.working_hours_end   ?? '18:00').slice(0, 5)
+  const mechanicName = settings?.mechanic_first_name ?? 'the mechanic'
+
+  console.log('[check_availability] workingDays:', workingDays, '| hours:', hoursStart, '-', hoursEnd)
 
   const serviceName = params.service_type || 'Oil Change'
   const duration    = SERVICE_DURATIONS[serviceName] ?? 60
@@ -403,14 +570,15 @@ async function handleCheckAvailability(
   const openMin  = oh * 60 + om
   const closeMin = ch * 60 + cm
 
+  console.log('[check_availability] service:', serviceName, '| duration:', duration, 'min | openMin:', openMin, '| closeMin:', closeMin)
+
   const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
   const slots: { label: string; datetime: string }[] = []
-
   const now = new Date()
 
   // Search up to 14 days out to find 3 slots
   for (let offset = 1; offset <= 14 && slots.length < 3; offset++) {
-    const date    = new Date(now)
+    const date = new Date(now)
     date.setDate(date.getDate() + offset)
     date.setHours(0, 0, 0, 0)
 
@@ -418,17 +586,19 @@ async function handleCheckAvailability(
     if (!workingDays.includes(dayAbbr)) continue
 
     const dateStr = toDateStr(date)
-
-    // If caller specified a preferred date, only check that date
     if (params.preferred_date && dateStr !== params.preferred_date) continue
 
-    const { data: bookedJobs } = await svc
+    const { data: bookedJobs, error: jobsErr } = await svc
       .from('jobs')
       .select('job_time, estimated_duration_minutes')
       .eq('user_id', userId)
       .eq('job_date', dateStr)
       .neq('status', 'cancelled')
       .neq('status', 'no_show')
+
+    if (jobsErr) {
+      console.error('[check_availability] jobs fetch error for', dateStr, ':', jobsErr.message)
+    }
 
     const existingIntervals = (bookedJobs ?? []).flatMap(job => {
       if (!job.job_time) return []
@@ -438,17 +608,17 @@ async function handleCheckAvailability(
       return [{ start, end }]
     })
 
+    console.log('[check_availability] date:', dateStr, '| existing intervals:', JSON.stringify(existingIntervals))
+
     for (let m = openMin; m + duration <= closeMin && slots.length < 3; m += 60) {
       const slotEnd     = m + duration
-      const hasConflict = existingIntervals.some(
-        ({ start, end }) => !(slotEnd <= start || m >= end),
-      )
+      const hasConflict = existingIntervals.some(({ start, end }) => !(slotEnd <= start || m >= end))
       if (hasConflict) continue
 
-      const h      = Math.floor(m / 60)
-      const min    = m % 60
-      const period = h >= 12 ? 'PM' : 'AM'
-      const h12    = h % 12 || 12
+      const h          = Math.floor(m / 60)
+      const min        = m % 60
+      const period     = h >= 12 ? 'PM' : 'AM'
+      const h12        = h % 12 || 12
       const timeLabel  = `${h12}:${String(min).padStart(2, '0')} ${period}`
       const dateLabel  = date.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
       const isoTime    = `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}:00`
@@ -457,17 +627,25 @@ async function handleCheckAvailability(
     }
   }
 
+  console.log('[check_availability] found', slots.length, 'slots:', JSON.stringify(slots))
+
   if (slots.length === 0) {
-    return `No available slots in the next two weeks for ${serviceName}. Offer to take a message or check a different week. ${mechanicName} will follow up.`
+    const result = `No available slots in the next two weeks for ${serviceName}. Offer to take a message or check a different week. ${mechanicName} will follow up.`
+    console.log('[check_availability] result:', result)
+    return result
   }
 
   const slotLabels = slots.map(s => s.label).join(', ')
-  return `Available slots for ${serviceName}: ${slotLabels}. Ask which time works best for the caller.`
+  const result = `Available slots for ${serviceName}: ${slotLabels}. Ask which time works best for the caller.`
+  console.log('[check_availability] result:', result)
+  return result
 }
 
 // ── book_appointment ───────────────────────────────────────────────────────────
 
 async function handleBookAppointment(
+  svc: Svc,
+  userId: string,
   vapiCallId: string | undefined,
   params: {
     customer_name:        string
@@ -477,12 +655,7 @@ async function handleBookAppointment(
     appointment_datetime: string
   },
 ): Promise<string> {
-  const svc = createServiceClient()
-
-  const userId = await getUserIdFromCallId(svc, vapiCallId)
-  if (!userId) {
-    return "Unable to identify the account. Tell the caller you'll have someone follow up to confirm their booking."
-  }
+  console.log('[book_appointment] userId:', userId, '| callId:', vapiCallId, '| params:', JSON.stringify(params))
 
   // Parse ISO datetime
   const isoMatch = params.appointment_datetime.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/)
@@ -501,6 +674,8 @@ async function handleBookAppointment(
     jobTime = `${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')}`
   }
 
+  console.log('[book_appointment] parsed → jobDate:', jobDate, '| jobTime:', jobTime)
+
   const serviceName = params.service_type || 'Service'
   const duration    = SERVICE_DURATIONS[serviceName] ?? 60
 
@@ -518,7 +693,7 @@ async function handleBookAppointment(
 
   for (const job of existingJobs ?? []) {
     if (!job.job_time) continue
-    const [eh, em]  = String(job.job_time).slice(0, 5).split(':').map(Number)
+    const [eh, em]   = String(job.job_time).slice(0, 5).split(':').map(Number)
     const existStart = eh * 60 + em
     const existEnd   = existStart + ((job.estimated_duration_minutes as number | null) ?? 60)
     if (!(slotEnd <= existStart || slotMin >= existEnd)) {
@@ -537,8 +712,8 @@ async function handleBookAppointment(
   let vehicleModel: string | null = null
 
   if (params.vehicle_info) {
-    const parts  = params.vehicle_info.trim().split(/\s+/)
-    const yearN  = parseInt(parts[0], 10)
+    const parts = params.vehicle_info.trim().split(/\s+/)
+    const yearN = parseInt(parts[0], 10)
     if (!isNaN(yearN) && yearN > 1900 && yearN < 2100) {
       vehicleYear  = yearN
       vehicleMake  = parts[1] ?? null
@@ -622,6 +797,8 @@ async function handleBookAppointment(
     return "Booking failed: trouble saving the appointment. Tell the caller you'll have someone follow up to confirm."
   }
 
+  console.log('[book_appointment] job created:', job.id)
+
   // Update foreman_calls row
   if (vapiCallId) {
     await svc
@@ -660,13 +837,18 @@ async function handleBookAppointment(
 
   const longDateLabel = dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
   const smsNote = rawPhone.length >= 10 ? ' Customer will receive SMS confirmation shortly.' : ''
-  return `Appointment booked. Job ID: ${job.id}. ${serviceName} confirmed for ${longDateLabel} at ${timeLabel}.${smsNote}`
+  const result = `Appointment booked. Job ID: ${job.id}. ${serviceName} confirmed for ${longDateLabel} at ${timeLabel}.${smsNote}`
+  console.log('[book_appointment] result:', result)
+  return result
 }
 
 // ── end-of-call-report: log call, notify mechanic ─────────────────────────────
 
-async function handleEndOfCall(message: VapiMessage): Promise<void> {
-  const svc  = createServiceClient()
+async function handleEndOfCall(
+  svc: Svc,
+  message: VapiMessage,
+  preResolvedUserId: string | null,
+): Promise<void> {
   const call = message.call ?? {}
 
   const vapiCallId = call.id
@@ -681,49 +863,63 @@ async function handleEndOfCall(message: VapiMessage): Promise<void> {
     ? Math.max(0, Math.round((endedAt.getTime() - startedAt.getTime()) / 1000))
     : null
 
-  const summary      = message.summary      ?? null
-  const recordingUrl = call.recordingUrl    ?? null
+  const summary      = message.summary   ?? null
+  const recordingUrl = call.recordingUrl ?? null
+  const callerPhone  = call.customer?.number ?? null
 
-  // Look up the in-progress row
+  // Look up or bootstrap the foreman_calls row
   const { data: existingCall } = await svc
     .from('foreman_calls')
     .select('user_id, appointment_booked, caller_phone')
     .eq('vapi_call_id', vapiCallId)
     .single()
 
-  if (!existingCall) {
-    console.warn('[vapi end-of-call] no foreman_calls row for callId:', vapiCallId)
-    console.warn('[vapi end-of-call] cannot determine user_id — skipping record creation')
+  const userId = existingCall?.user_id ?? preResolvedUserId
+
+  if (!userId) {
+    console.warn('[vapi end-of-call] no user_id found for callId:', vapiCallId, '| called phone not matched — skipping record')
     return
   }
 
-  const outcome      = existingCall.appointment_booked ? 'booked' : 'no_booking'
-  const callerName   = extractCallerName(summary)
-  const callerPhone  = call.customer?.number ?? existingCall.caller_phone ?? null
+  if (!existingCall) {
+    console.log('[vapi end-of-call] no foreman_calls row found — creating one via upsert for callId:', vapiCallId, 'userId:', userId)
+  }
 
-  await svc
+  const outcome    = existingCall?.appointment_booked ? 'booked' : 'no_booking'
+  const callerName = extractCallerName(summary)
+
+  // Upsert handles both "row exists" (update) and "row missing" (create) cases
+  const { error: upsertErr } = await svc
     .from('foreman_calls')
-    .update({
+    .upsert({
+      user_id:               userId,
+      vapi_call_id:          vapiCallId,
+      caller_phone:          callerPhone ?? existingCall?.caller_phone ?? null,
       call_duration_seconds: durationSeconds,
       call_summary:          summary,
       recording_url:         recordingUrl,
       status:                'completed',
       outcome,
       caller_name:           callerName,
-      caller_phone:          callerPhone,
-    })
-    .eq('vapi_call_id', vapiCallId)
+      appointment_booked:    existingCall?.appointment_booked ?? false,
+    }, { onConflict: 'vapi_call_id' })
+
+  if (upsertErr) {
+    console.error('[vapi end-of-call] foreman_calls upsert error:', upsertErr.message)
+  } else {
+    console.log('[vapi end-of-call] foreman_calls row upserted — callId:', vapiCallId, 'outcome:', outcome, 'duration:', durationSeconds)
+  }
 
   // Notify mechanic
   const { data: settings } = await svc
     .from('foreman_settings')
     .select('mechanic_phone, mechanic_first_name')
-    .eq('user_id', existingCall.user_id)
+    .eq('user_id', userId)
     .single()
 
   if (settings?.mechanic_phone) {
     const dur        = durationSeconds != null ? `${Math.round(durationSeconds / 60)}m` : '—'
-    const outcomeStr = existingCall.appointment_booked ? 'booked a job' : 'did not book'
+    const outcomeStr = existingCall?.appointment_booked ? 'booked a job' : 'did not book'
     const snippet    = summary ? ` "${summary.slice(0, 80).trim()}${summary.length > 80 ? '…' : ''}"` : ''
     const smsBody    = `Foreman call: ${outcomeStr} (${dur}).${snippet} — View at nationalwrenchindex.com`
     sendSubscriberSms({ to: settings.mechanic_phone, body: smsBody }).catch(e =>
@@ -733,19 +929,6 @@ async function handleEndOfCall(message: VapiMessage): Promise<void> {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-
-async function getUserIdFromCallId(
-  svc: ReturnType<typeof createServiceClient>,
-  vapiCallId: string | undefined,
-): Promise<string | null> {
-  if (!vapiCallId) return null
-  const { data } = await svc
-    .from('foreman_calls')
-    .select('user_id')
-    .eq('vapi_call_id', vapiCallId)
-    .single()
-  return data?.user_id ?? null
-}
 
 function toDateStr(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
