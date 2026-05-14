@@ -2,6 +2,7 @@
 // MUST return 200 to Vapi on all paths to prevent retry storms.
 
 import { NextResponse, type NextRequest } from 'next/server'
+import * as chrono from 'chrono-node'
 import { createServiceClient } from '@/lib/supabase/service'
 import { sendSubscriberSms } from '@/lib/twilio'
 import { buildSystemPrompt, SERVICE_DURATIONS } from '@/lib/foreman/system-prompt'
@@ -657,24 +658,20 @@ async function handleBookAppointment(
 ): Promise<string> {
   console.log('[book_appointment] userId:', userId, '| callId:', vapiCallId, '| params:', JSON.stringify(params))
 
-  // Parse ISO datetime
-  const isoMatch = params.appointment_datetime.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/)
-  let jobDate: string
-  let jobTime: string
+  // Parse datetime — accepts ISO strings AND natural language from Vapi
+  const rawSlot = params.appointment_datetime
+  console.log('[vapi] book_appointment input slot:', rawSlot)
 
-  if (isoMatch) {
-    jobDate = isoMatch[1]
-    jobTime = isoMatch[2]
-  } else {
-    const parsed = new Date(params.appointment_datetime)
-    if (isNaN(parsed.getTime())) {
-      return "Booking failed: couldn't read that date and time. Ask the caller to confirm the date and time again, then call book_appointment once more."
-    }
-    jobDate = toDateStr(parsed)
-    jobTime = `${String(parsed.getHours()).padStart(2, '0')}:${String(parsed.getMinutes()).padStart(2, '0')}`
+  const parsedDate = parseSlotDatetime(rawSlot)
+  if (!parsedDate) {
+    console.error('[vapi] book_appointment failed to parse slot:', rawSlot)
+    return "Booking failed: couldn't read that date and time. Ask the caller to confirm the date and time again, then call book_appointment once more."
   }
 
-  console.log('[book_appointment] parsed → jobDate:', jobDate, '| jobTime:', jobTime)
+  const jobDate = toDateStr(parsedDate)
+  const jobTime = `${String(parsedDate.getHours()).padStart(2, '0')}:${String(parsedDate.getMinutes()).padStart(2, '0')}`
+
+  console.log('[vapi] book_appointment parsed slot:', parsedDate.toISOString(), '→ jobDate:', jobDate, '| jobTime:', jobTime)
 
   const serviceName = params.service_type || 'Service'
   const duration    = SERVICE_DURATIONS[serviceName] ?? 60
@@ -857,6 +854,8 @@ async function handleEndOfCall(
     return
   }
 
+  console.log('[vapi end-of-call] callId:', vapiCallId, '| preResolvedUserId:', preResolvedUserId ?? 'null')
+
   const startedAt = call.startedAt ? new Date(call.startedAt) : null
   const endedAt   = call.endedAt   ? new Date(call.endedAt)   : null
   const durationSeconds = startedAt && endedAt
@@ -874,7 +873,11 @@ async function handleEndOfCall(
     .eq('vapi_call_id', vapiCallId)
     .single()
 
+  console.log('[vapi end-of-call] existingCall user_id:', existingCall?.user_id ?? 'none')
+
   const userId = existingCall?.user_id ?? preResolvedUserId
+
+  console.log('[vapi end-of-call] subscriber lookup result:', userId ?? 'null')
 
   if (!userId) {
     console.warn('[vapi end-of-call] no user_id found for callId:', vapiCallId, '| called phone not matched — skipping record')
@@ -888,21 +891,24 @@ async function handleEndOfCall(
   const outcome    = existingCall?.appointment_booked ? 'booked' : 'no_booking'
   const callerName = extractCallerName(summary)
 
+  const eocRow = {
+    user_id:               userId,
+    vapi_call_id:          vapiCallId,
+    caller_phone:          callerPhone ?? existingCall?.caller_phone ?? null,
+    call_duration_seconds: durationSeconds,
+    call_summary:          summary,
+    recording_url:         recordingUrl,
+    status:                'completed',
+    outcome,
+    caller_name:           callerName,
+    appointment_booked:    existingCall?.appointment_booked ?? false,
+  }
+  console.log('[vapi end-of-call] inserting foreman_calls row:', JSON.stringify(eocRow))
+
   // Upsert handles both "row exists" (update) and "row missing" (create) cases
   const { error: upsertErr } = await svc
     .from('foreman_calls')
-    .upsert({
-      user_id:               userId,
-      vapi_call_id:          vapiCallId,
-      caller_phone:          callerPhone ?? existingCall?.caller_phone ?? null,
-      call_duration_seconds: durationSeconds,
-      call_summary:          summary,
-      recording_url:         recordingUrl,
-      status:                'completed',
-      outcome,
-      caller_name:           callerName,
-      appointment_booked:    existingCall?.appointment_booked ?? false,
-    }, { onConflict: 'vapi_call_id' })
+    .upsert(eocRow, { onConflict: 'vapi_call_id' })
 
   if (upsertErr) {
     console.error('[vapi end-of-call] foreman_calls upsert error:', upsertErr.message)
@@ -929,6 +935,50 @@ async function handleEndOfCall(
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+// Parse natural-language or ISO slot strings into a Date.
+// Examples handled: "Friday May 15 at 1:00 PM", "one o'clock on Friday May fifteenth",
+// "tomorrow at 2 PM", "next Tuesday at 9 AM", "2026-05-15T13:00:00"
+function parseSlotDatetime(input: string, referenceDate: Date = new Date()): Date | null {
+  if (!input?.trim()) return null
+
+  console.log('[parseSlotDatetime] input:', input)
+
+  // Fast path: already ISO format
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(input.trim())) {
+    const d = new Date(input.trim())
+    if (!isNaN(d.getTime())) {
+      console.log('[parseSlotDatetime] ISO fast-path →', d.toISOString())
+      return d
+    }
+  }
+
+  // Primary: chrono-node natural language parser
+  try {
+    const parsed = chrono.parseDate(input, referenceDate, { forwardDate: true })
+    if (parsed && !isNaN(parsed.getTime())) {
+      console.log('[parseSlotDatetime] chrono parsed →', parsed.toISOString())
+      return parsed
+    }
+    console.log('[parseSlotDatetime] chrono returned null for:', input)
+  } catch (err) {
+    console.error('[parseSlotDatetime] chrono threw:', err instanceof Error ? err.message : String(err))
+  }
+
+  // Last resort: native Date constructor (handles many unambiguous strings)
+  try {
+    const d = new Date(input)
+    if (!isNaN(d.getTime())) {
+      console.log('[parseSlotDatetime] native Date fallback →', d.toISOString())
+      return d
+    }
+  } catch {
+    // ignore
+  }
+
+  console.error('[parseSlotDatetime] all parsers failed for:', input)
+  return null
+}
 
 function toDateStr(date: Date): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
