@@ -371,7 +371,7 @@ async function handleAssistantRequest(
             },
             appointment_datetime: {
               type:        'string',
-              description: 'Confirmed date and time in ISO 8601 format, e.g. 2026-05-20T10:00:00',
+              description: 'The confirmed appointment date and time. Pass exactly what the caller said, e.g. "Friday May 15 at 1 PM", "this Friday at 2 PM", or ISO format "2026-05-20T13:00:00". Always include both a date and a time.',
             },
           },
           required: ['customer_name', 'service_type', 'appointment_datetime'],
@@ -521,14 +521,29 @@ async function dispatchToolCall(
         preferred_date: fnParams.preferred_date ? String(fnParams.preferred_date) : undefined,
       })
 
-    case 'book_appointment':
+    case 'book_appointment': {
+      // Try every key the AI might use for the datetime field
+      const rawDatetime = String(
+        fnParams.appointment_datetime   ??
+        fnParams.appointment_time       ??
+        fnParams.confirmed_slot_datetime ??
+        fnParams.confirmedSlotDatetime  ??
+        fnParams.slot_datetime          ??
+        fnParams.slot                   ??
+        fnParams.datetime               ??
+        fnParams.time                   ??
+        '',
+      )
+      console.log('[dispatchToolCall] book_appointment full fnParams:', JSON.stringify(fnParams))
+      console.log('[dispatchToolCall] book_appointment resolved datetime key:', rawDatetime || '(empty)')
       return await handleBookAppointment(svc, userId, vapiCallId, {
         customer_name:        String(fnParams.customer_name ?? ''),
         customer_phone:       fnParams.customer_phone ? String(fnParams.customer_phone) : undefined,
         vehicle_info:         fnParams.vehicle_info  ? String(fnParams.vehicle_info)  : undefined,
         service_type:         String(fnParams.service_type ?? ''),
-        appointment_datetime: String(fnParams.appointment_datetime ?? ''),
+        appointment_datetime: rawDatetime,
       })
+    }
 
     default:
       console.warn('[vapi dispatchToolCall] unknown function:', fnName)
@@ -815,21 +830,27 @@ async function handleBookAppointment(
   const dateObj   = new Date(jobDate + 'T00:00:00')
   const dateLabel = dateObj.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
 
-  // SMS to mechanic (fire-and-forget)
+  // SMS to mechanic (awaited so Vercel doesn't kill in-flight fetch)
   if (settings?.mechanic_phone) {
     const body = `Foreman booked: ${firstName} ${lastName} · ${serviceName} · ${dateLabel} at ${timeLabel}${rawPhone.length >= 10 ? ' · ' + params.customer_phone : ''} — NWI Suite`
-    sendSubscriberSms({ to: settings.mechanic_phone, body }).catch(e =>
-      console.error('[book_appointment] mechanic SMS error:', e),
-    )
+    try {
+      await sendSubscriberSms({ to: settings.mechanic_phone, body })
+      console.log('[booking-sms] mechanic SMS sent to', settings.mechanic_phone)
+    } catch (e) {
+      console.error('[booking-sms] mechanic SMS failed:', e instanceof Error ? e.message : String(e))
+    }
   }
 
-  // SMS confirmation to customer (fire-and-forget)
+  // SMS confirmation to customer (awaited)
   if (params.customer_phone && rawPhone.length >= 10) {
     const biz  = settings?.business_name ?? 'your mechanic'
     const body = `Appointment confirmed with ${biz}: ${serviceName} on ${dateLabel} at ${timeLabel}. See you then! — National Wrench Index`
-    sendSubscriberSms({ to: params.customer_phone, body }).catch(e =>
-      console.error('[book_appointment] customer SMS error:', e),
-    )
+    try {
+      await sendSubscriberSms({ to: params.customer_phone, body })
+      console.log('[booking-sms] customer SMS sent to', params.customer_phone)
+    } catch (e) {
+      console.error('[booking-sms] customer SMS failed:', e instanceof Error ? e.message : String(e))
+    }
   }
 
   const longDateLabel = dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
@@ -928,9 +949,12 @@ async function handleEndOfCall(
     const outcomeStr = existingCall?.appointment_booked ? 'booked a job' : 'did not book'
     const snippet    = summary ? ` "${summary.slice(0, 80).trim()}${summary.length > 80 ? '…' : ''}"` : ''
     const smsBody    = `Foreman call: ${outcomeStr} (${dur}).${snippet} — View at nationalwrenchindex.com`
-    sendSubscriberSms({ to: settings.mechanic_phone, body: smsBody }).catch(e =>
-      console.error('[end-of-call] mechanic SMS error:', e),
-    )
+    try {
+      await sendSubscriberSms({ to: settings.mechanic_phone, body: smsBody })
+      console.log('[end-of-call] mechanic SMS sent to', settings.mechanic_phone)
+    } catch (e) {
+      console.error('[end-of-call] mechanic SMS failed:', e instanceof Error ? e.message : String(e))
+    }
   }
 }
 
