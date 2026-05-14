@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import type Stripe from 'stripe'
 import { stripe, TIER_MODULES, getTierFromPriceId, type PlanTier } from '@/lib/stripe'
-import { upsertSubscription, getUserIdByStripeSubscription } from '@/lib/subscription'
+import { upsertSubscription, getUserIdByStripeSubscription, getUserIdByForemanSubscription } from '@/lib/subscription'
 import { sendFounderAlert } from '@/lib/email-alerts'
 import { createServiceClient } from '@/lib/supabase/service'
 
@@ -38,16 +38,44 @@ export async function POST(request: NextRequest) {
         const session = event.data.object as Stripe.Checkout.Session
         if (session.mode !== 'subscription') break
 
-        const userId = session.metadata?.user_id
-        const tier   = session.metadata?.tier as PlanTier | undefined
-        if (!userId || !tier) {
-          console.error('[webhook] checkout.session.completed: missing metadata', session.metadata)
+        const userId  = session.metadata?.user_id
+        const product = session.metadata?.product
+        const tier    = session.metadata?.tier as PlanTier | undefined
+
+        if (!userId) {
+          console.error('[webhook] checkout.session.completed: missing user_id', session.metadata)
           break
         }
 
         const subId = typeof session.subscription === 'string'
           ? session.subscription
           : session.subscription?.id
+
+        // ── Foreman add-on checkout ──
+        if (product === 'foreman_addon') {
+          const svc = createServiceClient()
+          await svc.from('profiles').update({
+            foreman_addon_active:           true,
+            foreman_stripe_subscription_id: subId ?? null,
+          }).eq('id', userId)
+
+          void (async () => {
+            try {
+              const { data: profile } = await svc.from('profiles').select('full_name, email').eq('id', userId).single()
+              await sendFounderAlert({
+                subject: `Foreman add-on activated: ${profile?.full_name ?? userId}`,
+                html: `<p><strong>${profile?.full_name ?? userId}</strong> just subscribed to Foreman ($59/mo).</p><p>Email: ${profile?.email ?? '—'}</p><p>User ID: ${userId}</p>`,
+              })
+            } catch { /* non-critical */ }
+          })()
+          break
+        }
+
+        // ── Base tier checkout ──
+        if (!tier) {
+          console.error('[webhook] checkout.session.completed: missing tier', session.metadata)
+          break
+        }
 
         await upsertSubscription({
           user_id:                userId,
@@ -116,6 +144,18 @@ export async function POST(request: NextRequest) {
       // ── Subscription deleted (cancelled at end of period) ──────────────────
       case 'customer.subscription.deleted': {
         const sub = event.data.object as Stripe.Subscription
+
+        // Check if this is a Foreman add-on subscription first
+        const foremanUserId = await getUserIdByForemanSubscription(sub.id)
+        if (foremanUserId) {
+          const svc = createServiceClient()
+          await svc.from('profiles').update({
+            foreman_addon_active:           false,
+            foreman_stripe_subscription_id: null,
+          }).eq('id', foremanUserId)
+          console.log('[webhook] Foreman add-on cancelled for', foremanUserId)
+          break
+        }
 
         const userId = sub.metadata?.user_id
           ?? await getUserIdByStripeSubscription(sub.id)

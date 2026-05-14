@@ -75,3 +75,27 @@ export async function getUserIdByStripeSubscription(
     .single()
   return data?.user_id ?? null
 }
+
+// Returns true if the user has an active Foreman add-on subscription.
+export async function hasForemanAccess(userId: string): Promise<boolean> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('profiles')
+    .select('foreman_addon_active')
+    .eq('id', userId)
+    .single()
+  return data?.foreman_addon_active ?? false
+}
+
+// Resolves user_id from a Foreman-specific Stripe subscription ID (used in webhooks).
+export async function getUserIdByForemanSubscription(
+  stripeSubscriptionId: string,
+): Promise<string | null> {
+  const supabase = createServiceClient()
+  const { data } = await supabase
+    .from('profiles')
+    .select('id')
+    .eq('foreman_stripe_subscription_id', stripeSubscriptionId)
+    .single()
+  return data?.id ?? null
+}
