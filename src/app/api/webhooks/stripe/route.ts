@@ -4,6 +4,7 @@ import { stripe, TIER_MODULES, getTierFromPriceId, type PlanTier } from '@/lib/s
 import { upsertSubscription, getUserIdByStripeSubscription, getUserIdByForemanSubscription } from '@/lib/subscription'
 import { sendFounderAlert } from '@/lib/email-alerts'
 import { createServiceClient } from '@/lib/supabase/service'
+import { provisionForemanNumber } from '@/lib/foreman/provision'
 
 // Raw body required for Stripe signature verification — do NOT parse JSON
 export async function POST(request: NextRequest) {
@@ -58,6 +59,17 @@ export async function POST(request: NextRequest) {
             foreman_addon_active:           true,
             foreman_stripe_subscription_id: subId ?? null,
           }).eq('id', userId)
+
+          // Auto-provision a Twilio/Vapi phone number
+          void provisionForemanNumber(userId).then(result => {
+            if (!result.ok) {
+              console.error('[webhook] Foreman auto-provision failed:', result.error)
+            } else if (result.already_provisioned) {
+              console.log('[webhook] Foreman number already provisioned for', userId)
+            } else {
+              console.log('[webhook] Foreman number provisioned:', result.phone_number)
+            }
+          }).catch(e => console.error('[webhook] Foreman provision error:', e))
 
           void (async () => {
             try {

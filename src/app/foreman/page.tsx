@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { hasForemanAccess } from '@/lib/subscription'
 import AppNav from '@/components/layout/AppNav'
+import ForemanProvisionButton from '@/components/foreman/ForemanProvisionButton'
 
 export const metadata = { title: 'Foreman — National Wrench Index Suite™' }
 
@@ -65,6 +66,14 @@ export default async function ForemanPage() {
   const avgSeconds = totalCallsThisMonth
     ? Math.round(totalSeconds / totalCallsThisMonth)
     : null
+
+  // Most common booked service from recent calls
+  const serviceCounts = (recentCalls ?? []).reduce<Record<string, number>>((acc, c) => {
+    const s = (c as Record<string, unknown>).service_type as string | null
+    if (s) acc[s] = (acc[s] ?? 0) + 1
+    return acc
+  }, {})
+  const mostCommonService = Object.entries(serviceCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
 
   return (
     <div className="min-h-dvh bg-dark flex flex-col">
@@ -145,7 +154,7 @@ export default async function ForemanPage() {
             },
             {
               label: 'Most common service',
-              value: '—',
+              value: mostCommonService ?? '—',
               accent: 'muted',
               icon: (
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
@@ -184,19 +193,7 @@ export default async function ForemanPage() {
               </p>
             </>
           ) : (
-            <div className="flex items-start gap-3 py-2">
-              <div className="w-8 h-8 rounded-lg bg-white/5 border border-dark-border flex items-center justify-center flex-shrink-0 mt-0.5">
-                <svg className="w-4 h-4 text-white/30" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-                </svg>
-              </div>
-              <div>
-                <p className="text-white/70 text-sm font-medium">Phone number will be provisioned shortly</p>
-                <p className="text-white/30 text-xs mt-0.5">
-                  Finish setup in Settings, then your dedicated Foreman number appears here.
-                </p>
-              </div>
-            </div>
+            <ForemanProvisionButton />
           )}
         </div>
 
@@ -236,16 +233,45 @@ export default async function ForemanPage() {
                       <p className="text-white/50 text-xs mt-0.5 line-clamp-2">{call.call_summary}</p>
                     )}
                   </div>
-                  {call.appointment_booked && (
-                    <span className="text-[10px] font-semibold text-success border border-success/30 bg-success/10 px-2 py-0.5 rounded-full whitespace-nowrap flex-shrink-0">
-                      Booked
-                    </span>
-                  )}
+                  <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                    {call.appointment_booked ? (
+                      <span className="text-[10px] font-semibold text-success border border-success/30 bg-success/10 px-2 py-0.5 rounded-full whitespace-nowrap">
+                        Booked
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-semibold text-white/30 border border-white/10 bg-white/5 px-2 py-0.5 rounded-full whitespace-nowrap">
+                        No booking
+                      </span>
+                    )}
+                    {typeof (call as Record<string, unknown>).service_type === 'string' && (
+                      <span className="text-[10px] text-white/25 whitespace-nowrap">
+                        {String((call as Record<string, unknown>).service_type)}
+                      </span>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </div>
+
+        {/* ── Enable Foreman CTA (shown only when off) ── */}
+        {!isOn && (
+          <div className="nwi-card border-orange/20 bg-orange/5 mb-6">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-white/80 text-sm font-medium">Foreman is currently OFF</p>
+                <p className="text-white/40 text-xs mt-0.5">Enable it in Settings to start answering calls.</p>
+              </div>
+              <Link
+                href="/settings/foreman"
+                className="px-5 py-2.5 bg-orange hover:bg-orange-hover text-white font-condensed font-bold text-sm rounded-xl transition-colors active:scale-95 min-h-[44px] flex items-center whitespace-nowrap"
+              >
+                Enable Now
+              </Link>
+            </div>
+          </div>
+        )}
 
         {/* ── Configure link ── */}
         <div className="flex justify-start">

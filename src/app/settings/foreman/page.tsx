@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import AppNav from '@/components/layout/AppNav'
 import ForemanSettingsClient from '@/components/foreman/ForemanSettingsClient'
 
+export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Foreman Settings — National Wrench Index Suite™' }
 
 export default async function ForemanSettingsPage({
@@ -32,7 +33,14 @@ export default async function ForemanSettingsPage({
       .select('*')
       .eq('user_id', user.id)
       .single()
-    initialSettings = data ?? null
+    if (data) {
+      // Supabase returns TIME columns as "HH:MM:SS" — normalize to "HH:MM" for <input type="time">
+      initialSettings = {
+        ...data,
+        working_hours_start: data.working_hours_start ? String(data.working_hours_start).slice(0, 5) : '08:00',
+        working_hours_end:   data.working_hours_end   ? String(data.working_hours_end).slice(0, 5)   : '18:00',
+      }
+    }
   }
 
   return (
