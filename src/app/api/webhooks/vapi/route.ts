@@ -521,6 +521,8 @@ async function dispatchToolCall(
   fnName: string | undefined,
   fnParams: Record<string, unknown>,
 ): Promise<string> {
+  console.log('[DIAG] dispatchToolCall called — fnName:', fnName, '| fnParams:', JSON.stringify(fnParams, null, 2))
+
   switch (fnName) {
     case 'check_availability':
       return await handleCheckAvailability(svc, userId, vapiCallId, {
@@ -529,23 +531,35 @@ async function dispatchToolCall(
       })
 
     case 'book_appointment': {
-      // Try every key the AI might use for the datetime field
-      const rawDatetime = String(
-        fnParams.appointment_datetime   ??
-        fnParams.appointment_time       ??
-        fnParams.confirmed_slot_datetime ??
-        fnParams.confirmedSlotDatetime  ??
-        fnParams.slot_datetime          ??
-        fnParams.slot                   ??
-        fnParams.datetime               ??
-        fnParams.time                   ??
-        '',
-      )
-      console.log('[dispatchToolCall] book_appointment full fnParams:', JSON.stringify(fnParams))
-      console.log('[dispatchToolCall] book_appointment resolved datetime key:', rawDatetime || '(empty)')
+      // Log every possible key path so we can see exactly where the slot is hiding
+      const possibleSlotKeys = [
+        'appointment_datetime', 'appointment_time', 'confirmed_slot_datetime',
+        'confirmedSlotDatetime', 'slot_datetime', 'slot', 'datetime', 'time', 'when',
+      ]
+      for (const key of possibleSlotKeys) {
+        console.log(`[DIAG] args.${key} =`, JSON.stringify(fnParams[key]))
+      }
+
+      // Pick the first non-empty string value
+      let rawDatetime = ''
+      for (const key of possibleSlotKeys) {
+        const val = fnParams[key]
+        if (val !== undefined && val !== null && String(val).trim() !== '') {
+          rawDatetime = String(val).trim()
+          console.log('[DIAG] book_appointment datetime found under key:', key, '=', rawDatetime)
+          break
+        }
+      }
+
       console.log('[SLOT INPUT TYPE]', typeof rawDatetime)
       console.log('[SLOT INPUT VALUE]', JSON.stringify(rawDatetime))
-      console.log('[SLOT INPUT LENGTH]', rawDatetime?.length)
+      console.log('[SLOT INPUT LENGTH]', rawDatetime.length)
+
+      if (!rawDatetime) {
+        console.error('[DIAG] book_appointment: ALL slot keys empty. Full fnParams:', JSON.stringify(fnParams, null, 2))
+        return "I'm missing the appointment time. Please ask the caller to state the exact date and time again — like 'Monday May eighteenth at 9 AM' — then call book_appointment with that datetime in the appointment_datetime field."
+      }
+
       return await handleBookAppointment(svc, userId, vapiCallId, {
         customer_name:        String(fnParams.customer_name ?? ''),
         customer_phone:       fnParams.customer_phone ? String(fnParams.customer_phone) : undefined,
@@ -593,10 +607,17 @@ async function handleCheckAvailability(
 
   const [oh, om] = hoursStart.split(':').map(Number)
   const [ch, cm] = hoursEnd.split(':').map(Number)
-  const openMin  = oh * 60 + om
-  const closeMin = ch * 60 + cm
+  const rawOpenMin  = oh * 60 + om
+  const rawCloseMin = ch * 60 + cm
 
-  console.log('[check_availability] service:', serviceName, '| duration:', duration, 'min | openMin:', openMin, '| closeMin:', closeMin)
+  // Clamp to sane business hours (8 AM – 6 PM) so test configs like
+  // "00:00–23:59" don't produce 1 AM slots for callers
+  const SANE_START = 8 * 60   // 480 = 8:00 AM
+  const SANE_END   = 18 * 60  // 1080 = 6:00 PM
+  const openMin  = Math.max(rawOpenMin,  SANE_START)
+  const closeMin = Math.min(rawCloseMin, SANE_END)
+
+  console.log('[check_availability] service:', serviceName, '| duration:', duration, 'min | rawOpen:', rawOpenMin, '| rawClose:', rawCloseMin, '| effectiveOpen:', openMin, '| effectiveClose:', closeMin)
 
   const DAY_ABBR = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
   const slots: { label: string; datetime: string }[] = []
