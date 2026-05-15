@@ -366,6 +366,10 @@ async function handleAssistantRequest(
               type:        'string',
               description: "Vehicle description, e.g. '2018 Honda Civic'",
             },
+            engine_size: {
+              type:        'string',
+              description: "Engine size or displacement as the caller stated it (e.g. '5.3 liter', 'V8', '2.4', '3.0 turbo'). Optional — if caller doesn't know, pass 'unknown' and continue booking.",
+            },
             service_type: {
               type:        'string',
               description: 'Service to be performed',
@@ -572,6 +576,7 @@ async function dispatchToolCall(
         customer_name:        String(fnParams.customer_name ?? ''),
         customer_phone:       fnParams.customer_phone ? String(fnParams.customer_phone) : undefined,
         vehicle_info:         fnParams.vehicle_info  ? String(fnParams.vehicle_info)  : undefined,
+        engine_size:          fnParams.engine_size   ? String(fnParams.engine_size)   : undefined,
         service_type:         String(fnParams.service_type ?? ''),
         appointment_datetime: rawDatetime,
       })
@@ -706,6 +711,7 @@ async function handleBookAppointment(
     customer_name:        string
     customer_phone?:      string
     vehicle_info?:        string
+    engine_size?:         string
     service_type:         string
     appointment_datetime: string
   },
@@ -757,23 +763,10 @@ async function handleBookAppointment(
   const firstName = nameParts[0] || 'Customer'
   const lastName  = nameParts.slice(1).join(' ') || 'Unknown'
 
-  // Parse vehicle info: "2018 Honda Civic" → year, make, model
-  let vehicleYear: number | null  = null
-  let vehicleMake: string | null  = null
-  let vehicleModel: string | null = null
-
-  if (params.vehicle_info) {
-    const parts = params.vehicle_info.trim().split(/\s+/)
-    const yearN = parseInt(parts[0], 10)
-    if (!isNaN(yearN) && yearN > 1900 && yearN < 2100) {
-      vehicleYear  = yearN
-      vehicleMake  = parts[1] ?? null
-      vehicleModel = parts.slice(2).join(' ') || null
-    } else {
-      vehicleMake  = parts[0] ?? null
-      vehicleModel = parts.slice(1).join(' ') || null
-    }
-  }
+  // Build vehicle + engine text for job notes (no separate vehicle row for inbound calls)
+  const vehicleText = params.vehicle_info?.trim() || null
+  const engineRaw   = params.engine_size?.trim() || null
+  const engineText  = engineRaw && engineRaw.toLowerCase() !== 'unknown' ? engineRaw : null
 
   // Find or create customer
   const rawPhone = (params.customer_phone ?? '').replace(/\D/g, '')
@@ -814,30 +807,23 @@ async function handleBookAppointment(
     customerId = newCust.id as string
   }
 
-  // Create vehicle
-  let vehicleId: string | null = null
-  if (vehicleMake) {
-    const { data: vehicle } = await svc
-      .from('vehicles')
-      .insert({ customer_id: customerId, year: vehicleYear, make: vehicleMake, model: vehicleModel ?? '' })
-      .select('id')
-      .single()
-    vehicleId = vehicle?.id ?? null
-  }
-
   // Create job
   const { data: job, error: jobErr } = await svc
     .from('jobs')
     .insert({
       user_id:                    userId,
       customer_id:                customerId,
-      vehicle_id:                 vehicleId,
+      vehicle_id:                 null,
       job_date:                   jobDate,
       job_time:                   jobTime,
       service_type:               serviceName,
       status:                     'scheduled',
       estimated_duration_minutes: duration,
-      notes:                      'Booked by Foreman AI receptionist.',
+      notes:                      [
+                                    vehicleText ? `Vehicle: ${vehicleText}.` : null,
+                                    `Engine: ${engineText ?? 'not captured'}.`,
+                                    'Booked via Foreman call.',
+                                  ].filter(Boolean).join(' '),
       sms_consent:                rawPhone.length >= 10,
     })
     .select('id')
@@ -871,7 +857,10 @@ async function handleBookAppointment(
 
   // SMS to mechanic (awaited so Vercel doesn't kill in-flight fetch)
   if (settings?.mechanic_phone) {
-    const body = `Foreman booked: ${firstName} ${lastName} · ${serviceName} · ${dateLabel} at ${timeLabel}${rawPhone.length >= 10 ? ' · ' + params.customer_phone : ''} — NWI Suite`
+    const vehicleDesc = vehicleText
+      ? (engineText ? `${vehicleText} (${engineText})` : vehicleText)
+      : null
+    const body = `Foreman booked: ${firstName} ${lastName}${vehicleDesc ? ` · ${vehicleDesc}` : ''} · ${serviceName} · ${dateLabel} at ${timeLabel}${rawPhone.length >= 10 ? ' · ' + params.customer_phone : ''} — NWI Suite`
     try {
       await sendSubscriberSms({ to: settings.mechanic_phone, body })
       console.log('[booking-sms] mechanic SMS sent to', settings.mechanic_phone)
