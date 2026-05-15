@@ -56,6 +56,7 @@ export async function POST(request: NextRequest) {
   const type       = message.type as string | undefined
   const vapiCallId = message.call?.id
 
+  console.log('[FULL VAPI PAYLOAD]', JSON.stringify(body, null, 2))
   console.log('[vapi] ── INCOMING ──────────────────────────────────')
   console.log('[vapi] body:', JSON.stringify(body))
   console.log('[vapi] event type:', type, '| callId:', vapiCallId)
@@ -452,6 +453,12 @@ async function handleFunctionCall(
         fnParams = {}
       }
 
+      if (fnName === 'book_appointment') {
+        console.log('[BOOK APPOINTMENT RAW TOOL CALL]', JSON.stringify(tc, null, 2))
+        console.log('[BOOK APPOINTMENT ARGS KEYS]', Object.keys(fnParams))
+        console.log('[BOOK APPOINTMENT ARGS VALUES]', JSON.stringify(fnParams, null, 2))
+      }
+
       console.log('[vapi tool-call] fn:', fnName, '| toolCallId:', toolCallId, '| callId:', vapiCallId, '| userId:', subscriber?.userId ?? 'UNKNOWN', '| params:', JSON.stringify(fnParams))
 
       let result: string
@@ -536,6 +543,9 @@ async function dispatchToolCall(
       )
       console.log('[dispatchToolCall] book_appointment full fnParams:', JSON.stringify(fnParams))
       console.log('[dispatchToolCall] book_appointment resolved datetime key:', rawDatetime || '(empty)')
+      console.log('[SLOT INPUT TYPE]', typeof rawDatetime)
+      console.log('[SLOT INPUT VALUE]', JSON.stringify(rawDatetime))
+      console.log('[SLOT INPUT LENGTH]', rawDatetime?.length)
       return await handleBookAppointment(svc, userId, vapiCallId, {
         customer_name:        String(fnParams.customer_name ?? ''),
         customer_phone:       fnParams.customer_phone ? String(fnParams.customer_phone) : undefined,
