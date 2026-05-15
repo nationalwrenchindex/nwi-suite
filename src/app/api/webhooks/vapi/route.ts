@@ -30,7 +30,7 @@ interface VapiMessage {
   call?:          VapiCall
   phoneNumber?:   { number?: string }  // top-level fallback in some Vapi events
   functionCall?:  { name: string; parameters?: Record<string, unknown> }
-  toolCallList?:  { id?: string; type?: string; function?: { name: string; arguments?: string } }[]
+  toolCallList?:  { id?: string; type?: string; function?: { name: string; arguments?: string | Record<string, unknown> } }[]
   summary?:       string
   transcript?:    string
 }
@@ -448,10 +448,18 @@ async function handleFunctionCall(
       const fnName     = tc.function?.name
       let fnParams: Record<string, unknown> = {}
       try {
-        fnParams = tc.function?.arguments ? JSON.parse(tc.function.arguments) as Record<string, unknown> : {}
+        const rawArgs = tc.function?.arguments as unknown
+        if (!rawArgs) {
+          fnParams = {}
+        } else if (typeof rawArgs === 'string') {
+          fnParams = JSON.parse(rawArgs) as Record<string, unknown>
+        } else if (typeof rawArgs === 'object') {
+          fnParams = rawArgs as Record<string, unknown>
+        }
       } catch {
         fnParams = {}
       }
+      console.log('[DIAG-3.1] fn:', fnName, '| arguments type:', typeof tc.function?.arguments, '| fnParams keys:', Object.keys(fnParams))
 
       if (fnName === 'book_appointment') {
         console.log('[BOOK APPOINTMENT RAW TOOL CALL]', JSON.stringify(tc, null, 2))
@@ -979,7 +987,8 @@ async function handleEndOfCall(
     const dur        = durationSeconds != null ? `${Math.round(durationSeconds / 60)}m` : '—'
     const outcomeStr = existingCall?.appointment_booked ? 'booked a job' : 'did not book'
     const snippet    = summary ? ` "${summary.slice(0, 80).trim()}${summary.length > 80 ? '…' : ''}"` : ''
-    const smsBody    = `Foreman call: ${outcomeStr} (${dur}).${snippet} — View at nationalwrenchindex.com`
+    const appUrl     = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tools.nationalwrenchindex.com'
+    const smsBody    = `Foreman call: ${outcomeStr} (${dur}).${snippet} — View at ${appUrl}`
     try {
       await sendSubscriberSms({ to: settings.mechanic_phone, body: smsBody })
       console.log('[end-of-call] mechanic SMS sent to', settings.mechanic_phone)
