@@ -49,6 +49,18 @@ const templates: Record<string, TemplateFn> = {
   mobile_service: ({ customer_first_name, review_link }) =>
     `Hey ${customer_first_name}! Really appreciate you letting us come out to you. If everything's running right, a quick Google review helps us a ton: ${review_link}`,
 
+  ac_service: ({ customer_first_name, review_link }) =>
+    `Hey ${customer_first_name}! Hope you're staying cool now. If we got your A/C blowing cold, a quick Google review would really help us out: ${review_link}`,
+
+  coolant_flush: ({ customer_first_name, review_link }) =>
+    `Hey ${customer_first_name} — fresh coolant in and running cool? If we took care of you, a Google review would mean a lot: ${review_link}`,
+
+  power_steering: ({ customer_first_name, review_link }) =>
+    `Hey ${customer_first_name}! Steering feeling smooth again? If we got you handling right, mind dropping a quick review? ${review_link}`,
+
+  fuel_system: ({ customer_first_name, review_link }) =>
+    `Hey ${customer_first_name} — running cleaner now? If the fuel system service did the trick, a Google review would really help: ${review_link}`,
+
   default: ({ customer_first_name, review_link }) =>
     `Hey ${customer_first_name} — hope everything's running right after today. A quick Google review would really help: ${review_link}`,
 }
@@ -88,6 +100,45 @@ const SERVICE_TYPE_MAP: Record<string, string> = {
   towing:          'towing',
   mobile_service:  'mobile_service',
   'mobile service': 'mobile_service',
+
+  // A/C Service
+  'a/c':                    'ac_service',
+  'ac':                     'ac_service',
+  'a/c service':            'ac_service',
+  'ac service':             'ac_service',
+  'air conditioning':       'ac_service',
+  'ac repair':              'ac_service',
+  'a/c repair':             'ac_service',
+
+  // Tire Replacement
+  'tire replacement':       'tire_service',
+  'tire_replacement':       'tire_service',
+
+  // Engine Diagnostic
+  'engine diagnostic':      'diagnostic',
+  'engine_diagnostic':      'diagnostic',
+
+  // Coolant Flush
+  'coolant flush':          'coolant_flush',
+  'coolant_flush':          'coolant_flush',
+
+  // Power Steering
+  'power steering':         'power_steering',
+  'power steering service': 'power_steering',
+  'power_steering_service': 'power_steering',
+
+  // Fuel System
+  'fuel system':            'fuel_system',
+  'fuel system service':    'fuel_system',
+  'fuel_system_service':    'fuel_system',
+
+  // Pre-Purchase Inspection
+  'pre-purchase inspection': 'inspection',
+  'pre purchase inspection': 'inspection',
+  'prepurchase inspection':  'inspection',
+
+  // Other — explicit fallthrough to default
+  'other':                  'default',
 }
 
 export function getSmsBody(
