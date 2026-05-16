@@ -15,7 +15,7 @@ interface NavItem {
 }
 
 
-export default function AppNav({ businessName, businessType, foremanActive }: { businessName?: string; businessType?: string; foremanActive?: boolean }) {
+export default function AppNav({ businessName, businessType, foremanActive, torquewrenchActive }: { businessName?: string; businessType?: string; foremanActive?: boolean; torquewrenchActive?: boolean }) {
   const pathname = usePathname()
   const router   = useRouter()
 
@@ -92,6 +92,16 @@ export default function AppNav({ businessName, businessType, foremanActive }: { 
       ),
     },
     {
+      href: '/torquewrench',
+      label: 'TorqueWrench',
+      active: pathname.startsWith('/torquewrench'),
+      icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
+        </svg>
+      ),
+    },
+    {
       href: '/inventory',
       label: 'Inventory',
       active: pathname === '/inventory',
@@ -128,9 +138,10 @@ export default function AppNav({ businessName, businessType, foremanActive }: { 
   ]
 
   const visibleNavItems = navItems.filter(item => {
-    if (item.href === '/quickwrench' && businessType === 'detailer') return false
-    if (item.href === '/inventory'   && businessType !== 'detailer') return false
-    if (item.href === '/foreman'     && !foremanActive)              return false
+    if (item.href === '/quickwrench'   && businessType === 'detailer') return false
+    if (item.href === '/inventory'     && businessType !== 'detailer') return false
+    if (item.href === '/foreman'       && !foremanActive)              return false
+    if (item.href === '/torquewrench'  && !torquewrenchActive)         return false
     return true
   })
 

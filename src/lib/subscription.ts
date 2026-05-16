@@ -76,6 +76,17 @@ export async function getUserIdByStripeSubscription(
   return data?.user_id ?? null
 }
 
+// Returns true if the user's tier includes TorqueWrench (bundled with Full Suite, QuickWrench, Elite).
+export async function hasTorqueWrenchAccess(userId: string): Promise<boolean> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('profiles')
+    .select('torquewrench_addon_active')
+    .eq('id', userId)
+    .single()
+  return data?.torquewrench_addon_active ?? false
+}
+
 // Returns true if the user has an active Foreman add-on subscription.
 export async function hasForemanAccess(userId: string): Promise<boolean> {
   const supabase = await createClient()

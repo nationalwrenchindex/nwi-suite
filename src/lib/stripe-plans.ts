@@ -94,14 +94,15 @@ export const PLANS: {
 export const TIER_MODULES: Record<PlanTier, string[]> = {
   starter:     ['scheduler'],
   pro:         ['scheduler', 'intel'],
-  full_suite:  ['scheduler', 'intel', 'financials'],
-  quickwrench: ['quickwrench'],
-  elite:       ['scheduler', 'intel', 'financials', 'quickwrench'],
+  full_suite:  ['scheduler', 'intel', 'financials', 'torquewrench'],
+  quickwrench: ['quickwrench', 'torquewrench'],
+  elite:       ['scheduler', 'intel', 'financials', 'quickwrench', 'torquewrench'],
 }
 
 export const MODULE_LABELS: Record<string, string> = {
-  scheduler:   'Scheduler',
-  intel:       'Intel Hub',
-  financials:  'Financials',
-  quickwrench: 'QuickWrench',
+  scheduler:    'Scheduler',
+  intel:        'Intel Hub',
+  financials:   'Financials',
+  quickwrench:  'QuickWrench',
+  torquewrench: 'TorqueWrench',
 }
