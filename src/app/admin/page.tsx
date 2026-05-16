@@ -3,8 +3,10 @@ import { unstable_cache } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import AppNav from '@/components/layout/AppNav'
+import Link from 'next/link'
 import { PLANS, TIER_MODULES } from '@/lib/stripe-plans'
 import type { PlanTier } from '@/lib/stripe-plans'
+import { FOREMAN_SUBSCRIBER_CAP } from '@/lib/foreman/config'
 
 const FOUNDER_ID = '4a8c046f-7db3-42bb-8422-fd47efb7678c'
 
@@ -36,9 +38,19 @@ type Subscription = {
 }
 
 const getAdminData = unstable_cache(
-  async (): Promise<{ profiles: Profile[]; subscriptions: Subscription[] }> => {
+  async (): Promise<{
+    profiles:          Profile[]
+    subscriptions:     Subscription[]
+    foremanCount:      number
+    waitlistCount:     number
+  }> => {
     const svc = createServiceClient()
-    const [{ data: profiles }, { data: subscriptions }] = await Promise.all([
+    const [
+      { data: profiles },
+      { data: subscriptions },
+      { count: foremanCount },
+      { count: waitlistCount },
+    ] = await Promise.all([
       svc
         .from('profiles')
         .select('id, full_name, email, business_type, created_at')
@@ -46,10 +58,19 @@ const getAdminData = unstable_cache(
       svc
         .from('subscriptions')
         .select('user_id, tier, status, stripe_subscription_id, current_period_end'),
+      svc
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .eq('foreman_addon_active', true),
+      svc
+        .from('foreman_waitlist')
+        .select('*', { count: 'exact', head: true }),
     ])
     return {
       profiles:      (profiles ?? []) as Profile[],
       subscriptions: (subscriptions ?? []) as Subscription[],
+      foremanCount:  foremanCount ?? 0,
+      waitlistCount: waitlistCount ?? 0,
     }
   },
   ['admin-dashboard'],
@@ -134,7 +155,7 @@ export default async function AdminPage() {
 
   if (!user || user.id !== FOUNDER_ID) return notFound()
 
-  const { profiles, subscriptions } = await getAdminData()
+  const { profiles, subscriptions, foremanCount, waitlistCount } = await getAdminData()
 
   const subMap = new Map(subscriptions.map(s => [s.user_id, s]))
 
@@ -175,7 +196,7 @@ export default async function AdminPage() {
         </div>
 
         {/* ── Stats ─────────────────────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-10">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-6">
           <StatCard label="Total Signups" value={nonFounderProfiles.length} />
           <StatCard
             label="Active Paying"
@@ -197,6 +218,39 @@ export default async function AdminPage() {
             value={abandonedCarts.length}
             color={abandonedCarts.length > 0 ? 'text-yellow-400' : 'text-white'}
           />
+        </div>
+
+        {/* ── Foreman add-on stats ────────────────────────────────────────── */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-10">
+          <div className="bg-dark-card border border-orange/20 rounded-xl px-4 py-5">
+            <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Foreman Slots</p>
+            <p className="text-2xl font-bold tabular-nums text-orange">
+              {foremanCount} <span className="text-white/30 text-base font-normal">/ {FOREMAN_SUBSCRIBER_CAP}</span>
+            </p>
+            <div className="mt-2 h-1.5 bg-dark-border rounded-full overflow-hidden">
+              <div
+                className="h-full bg-orange rounded-full transition-all"
+                style={{ width: `${Math.min((foremanCount / FOREMAN_SUBSCRIBER_CAP) * 100, 100)}%` }}
+              />
+            </div>
+            <p className="text-white/25 text-xs mt-1">{FOREMAN_SUBSCRIBER_CAP - foremanCount} slots remaining</p>
+          </div>
+          <div className="bg-dark-card border border-dark-border rounded-xl px-4 py-5">
+            <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Foreman Waitlist</p>
+            <p className={`text-2xl font-bold tabular-nums ${waitlistCount > 0 ? 'text-yellow-400' : 'text-white'}`}>
+              {waitlistCount}
+            </p>
+            <p className="text-white/25 text-xs mt-1">Waiting for a slot</p>
+          </div>
+          <div className="bg-dark-card border border-dark-border rounded-xl px-4 py-5">
+            <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Foreman MRR</p>
+            <p className={`text-2xl font-bold tabular-nums ${foremanCount > 0 ? 'text-green-400' : 'text-white'}`}>
+              ${((foremanCount * 5900) / 100).toFixed(0)}
+            </p>
+            <Link href="/admin/foreman" className="text-orange text-xs hover:underline mt-1 block">
+              View details →
+            </Link>
+          </div>
         </div>
 
         {/* ── Signups table ─────────────────────────────────────────────────── */}

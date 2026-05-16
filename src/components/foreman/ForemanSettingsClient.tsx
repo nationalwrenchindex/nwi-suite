@@ -21,6 +21,8 @@ interface Props {
   businessType?:   string
   initialSettings: ForemanSettings | null
   canceledFlow?:   boolean
+  capAvailable:    boolean
+  userEmail?:      string
 }
 
 const ALL_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -30,10 +32,12 @@ export default function ForemanSettingsClient({
   businessName,
   initialSettings,
   canceledFlow,
+  capAvailable,
+  userEmail = '',
 }: Props) {
   const router = useRouter()
 
-  // ── Upgrade flow state ────────────────────────────────────────────────────
+  // ── Checkout flow ─────────────────────────────────────────────────────────
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const [checkoutError,   setCheckoutError]   = useState<string | null>(null)
 
@@ -48,6 +52,43 @@ export default function ForemanSettingsClient({
     } catch (e) {
       setCheckoutError(e instanceof Error ? e.message : 'Checkout failed. Please try again.')
       setCheckoutLoading(false)
+    }
+  }
+
+  // ── Waitlist flow ─────────────────────────────────────────────────────────
+  const [showWaitlist,      setShowWaitlist]      = useState(false)
+  const [waitlistEmail,     setWaitlistEmail]     = useState(userEmail)
+  const [waitlistName,      setWaitlistName]      = useState('')
+  const [waitlistBusiness,  setWaitlistBusiness]  = useState(businessName ?? '')
+  const [waitlistNotes,     setWaitlistNotes]     = useState('')
+  const [waitlistSubmitting, setWaitlistSubmitting] = useState(false)
+  const [waitlistSuccess,   setWaitlistSuccess]   = useState(false)
+  const [waitlistPosition,  setWaitlistPosition]  = useState<number | null>(null)
+  const [waitlistError,     setWaitlistError]     = useState<string | null>(null)
+
+  async function joinWaitlist() {
+    if (!waitlistEmail) { setWaitlistError('Email is required.'); return }
+    setWaitlistSubmitting(true)
+    setWaitlistError(null)
+    try {
+      const res = await fetch('/api/foreman/waitlist', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email:         waitlistEmail,
+          mechanic_name: waitlistName || undefined,
+          business_name: waitlistBusiness || undefined,
+          notes:         waitlistNotes || undefined,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Failed to join waitlist.')
+      setWaitlistSuccess(true)
+      setWaitlistPosition(json.position ?? null)
+    } catch (e) {
+      setWaitlistError(e instanceof Error ? e.message : 'Failed to join waitlist.')
+    } finally {
+      setWaitlistSubmitting(false)
     }
   }
 
@@ -102,6 +143,122 @@ export default function ForemanSettingsClient({
     }
   }
 
+  const PhoneIcon = () => (
+    <svg className="w-6 h-6 text-orange" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.44 2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6 6l.92-.92a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
+    </svg>
+  )
+
+  const CheckIcon = () => (
+    <svg className="w-4 h-4 text-orange flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  )
+
+  const features = [
+    'Answers calls instantly — even when you\'re elbows-deep in an engine',
+    'Books jobs directly into your NWI Scheduler — no manual entry',
+    'Texts customers confirmation and on-my-way alerts automatically',
+  ]
+
+  // ── Waitlist modal ────────────────────────────────────────────────────────
+  if (showWaitlist && !foremanActive) {
+    return (
+      <div className="space-y-6">
+        <div className="nwi-card border-orange/20">
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-10 h-10 rounded-xl bg-orange/15 border border-orange/30 flex items-center justify-center flex-shrink-0">
+              <PhoneIcon />
+            </div>
+            <div>
+              <h2 className="font-condensed font-bold text-2xl text-white tracking-wide">Join the Foreman Waitlist</h2>
+              <p className="text-white/40 text-xs mt-0.5">We&apos;ll email you the moment a spot opens up</p>
+            </div>
+          </div>
+
+          {waitlistSuccess ? (
+            <div className="text-center py-6 space-y-3">
+              <div className="w-14 h-14 rounded-full bg-green-500/10 border border-green-500/30 flex items-center justify-center mx-auto">
+                <svg className="w-7 h-7 text-green-400" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </div>
+              <p className="text-white font-medium">You&apos;re on the list!</p>
+              <p className="text-white/50 text-sm">
+                {waitlistPosition ? `You're #${waitlistPosition} in line. ` : ''}We&apos;ll email you when a Foreman slot opens up.
+              </p>
+              <button
+                onClick={() => setShowWaitlist(false)}
+                className="text-white/30 hover:text-white text-sm transition-colors"
+              >
+                ← Back
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <label className="nwi-label">Email Address *</label>
+                <input
+                  className="nwi-input"
+                  type="email"
+                  value={waitlistEmail}
+                  onChange={e => setWaitlistEmail(e.target.value)}
+                  placeholder="you@example.com"
+                />
+              </div>
+              <div>
+                <label className="nwi-label">Your First Name</label>
+                <input
+                  className="nwi-input"
+                  type="text"
+                  value={waitlistName}
+                  onChange={e => setWaitlistName(e.target.value)}
+                  placeholder="e.g. Charlotte"
+                />
+              </div>
+              <div>
+                <label className="nwi-label">Business Name</label>
+                <input
+                  className="nwi-input"
+                  type="text"
+                  value={waitlistBusiness}
+                  onChange={e => setWaitlistBusiness(e.target.value)}
+                  placeholder="Your shop name"
+                />
+              </div>
+              <div>
+                <label className="nwi-label">Anything else? (optional)</label>
+                <textarea
+                  className="nwi-input resize-none"
+                  rows={2}
+                  value={waitlistNotes}
+                  onChange={e => setWaitlistNotes(e.target.value)}
+                  placeholder="How many calls do you miss per week?"
+                />
+              </div>
+              {waitlistError && <p className="text-danger text-xs">{waitlistError}</p>}
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={joinWaitlist}
+                  disabled={waitlistSubmitting}
+                  className="flex-1 px-6 py-3 bg-orange hover:bg-orange-hover disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-xl transition-colors active:scale-95 min-h-[48px]"
+                >
+                  {waitlistSubmitting ? 'Joining…' : 'Join Waitlist'}
+                </button>
+                <button
+                  onClick={() => setShowWaitlist(false)}
+                  className="px-4 py-3 border border-dark-border hover:border-white/20 text-white/40 hover:text-white text-sm rounded-xl transition-colors min-h-[48px]"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    )
+  }
+
   // ── Upgrade card ──────────────────────────────────────────────────────────
   if (!foremanActive) {
     return (
@@ -112,12 +269,17 @@ export default function ForemanSettingsClient({
           </div>
         )}
 
+        {!capAvailable && (
+          <div className="nwi-card border-yellow-500/30 bg-yellow-500/5">
+            <p className="text-yellow-400 text-sm font-medium">Foreman is at capacity for this launch period.</p>
+            <p className="text-white/40 text-xs mt-1">Join the waitlist below and we&apos;ll notify you the moment a spot opens up.</p>
+          </div>
+        )}
+
         <div className="nwi-card border-orange/30 bg-orange/5">
           <div className="flex items-start gap-4 mb-6">
             <div className="w-12 h-12 rounded-xl bg-orange/15 border border-orange/30 flex items-center justify-center flex-shrink-0">
-              <svg className="w-6 h-6 text-orange" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.44 2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6 6l.92-.92a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
-              </svg>
+              <PhoneIcon />
             </div>
             <div>
               <h2 className="font-condensed font-bold text-2xl text-white tracking-wide leading-tight">
@@ -130,35 +292,10 @@ export default function ForemanSettingsClient({
           </div>
 
           <div className="space-y-3 mb-6">
-            {[
-              {
-                icon: (
-                  <svg className="w-4 h-4 text-orange flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                ),
-                text: 'Answers calls instantly — even when you\'re elbows-deep in an engine',
-              },
-              {
-                icon: (
-                  <svg className="w-4 h-4 text-orange flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                ),
-                text: 'Books jobs directly into your NWI Scheduler — no manual entry',
-              },
-              {
-                icon: (
-                  <svg className="w-4 h-4 text-orange flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                ),
-                text: 'Texts customers confirmation and on-my-way alerts automatically',
-              },
-            ].map((item, i) => (
+            {features.map((text, i) => (
               <div key={i} className="flex items-start gap-3">
-                {item.icon}
-                <p className="text-white/70 text-sm leading-relaxed">{item.text}</p>
+                <CheckIcon />
+                <p className="text-white/70 text-sm leading-relaxed">{text}</p>
               </div>
             ))}
           </div>
@@ -168,13 +305,22 @@ export default function ForemanSettingsClient({
               <p className="font-condensed font-bold text-3xl text-orange">$59<span className="text-white/40 text-base font-normal">/month</span></p>
               <p className="text-white/30 text-xs mt-0.5">Add to any existing NWI plan</p>
             </div>
-            <button
-              onClick={startCheckout}
-              disabled={checkoutLoading}
-              className="px-6 py-3 bg-orange hover:bg-orange-hover disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-xl transition-colors active:scale-95 min-h-[48px] whitespace-nowrap"
-            >
-              {checkoutLoading ? 'Opening checkout…' : 'Add Foreman to My Plan'}
-            </button>
+            {capAvailable ? (
+              <button
+                onClick={startCheckout}
+                disabled={checkoutLoading}
+                className="px-6 py-3 bg-orange hover:bg-orange-hover disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-xl transition-colors active:scale-95 min-h-[48px] whitespace-nowrap"
+              >
+                {checkoutLoading ? 'Opening checkout…' : 'Add Foreman to My Plan'}
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowWaitlist(true)}
+                className="px-6 py-3 border border-orange/50 hover:border-orange text-orange font-condensed font-bold text-sm rounded-xl transition-colors active:scale-95 min-h-[48px] whitespace-nowrap"
+              >
+                Join Foreman Waitlist
+              </button>
+            )}
           </div>
 
           {checkoutError && (
@@ -186,7 +332,7 @@ export default function ForemanSettingsClient({
           {[
             { label: 'Calls answered', value: '24/7', sub: 'Even at 2am' },
             { label: 'Time saved/week', value: '~3 hrs', sub: 'No more tag' },
-            { label: 'Setup time', value: '5 min', sub: 'We handle the rest' },
+            { label: 'Setup time', value: '30 sec', sub: 'We handle the rest' },
           ].map(card => (
             <div key={card.label} className="nwi-card border-white/10 text-center py-5">
               <p className="font-condensed font-bold text-2xl text-orange">{card.value}</p>

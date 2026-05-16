@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import AppNav from '@/components/layout/AppNav'
 import ForemanSettingsClient from '@/components/foreman/ForemanSettingsClient'
+import { isForemanAvailable } from '@/lib/foreman/cap'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Foreman Settings — National Wrench Index Suite™' }
@@ -18,7 +19,7 @@ export default async function ForemanSettingsPage({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('business_name, business_type, foreman_addon_active')
+    .select('email, business_name, business_type, foreman_addon_active, torquewrench_addon_active')
     .eq('id', user.id)
     .single()
 
@@ -26,22 +27,24 @@ export default async function ForemanSettingsPage({
 
   const foremanActive = profile?.foreman_addon_active ?? false
 
-  let initialSettings = null
-  if (foremanActive) {
-    const { data } = await supabase
-      .from('foreman_settings')
-      .select('*')
-      .eq('user_id', user.id)
-      .single()
-    if (data) {
-      // Supabase returns TIME columns as "HH:MM:SS" — normalize to "HH:MM" for <input type="time">
-      initialSettings = {
-        ...data,
-        working_hours_start: data.working_hours_start ? String(data.working_hours_start).slice(0, 5) : '08:00',
-        working_hours_end:   data.working_hours_end   ? String(data.working_hours_end).slice(0, 5)   : '18:00',
-      }
-    }
-  }
+  const [initialSettings, capAvailable] = await Promise.all([
+    foremanActive
+      ? supabase
+          .from('foreman_settings')
+          .select('*')
+          .eq('user_id', user.id)
+          .single()
+          .then(({ data }) => data
+            ? {
+                ...data,
+                working_hours_start: data.working_hours_start ? String(data.working_hours_start).slice(0, 5) : '08:00',
+                working_hours_end:   data.working_hours_end   ? String(data.working_hours_end).slice(0, 5)   : '18:00',
+              }
+            : null,
+          )
+      : Promise.resolve(null),
+    !foremanActive ? isForemanAvailable() : Promise.resolve(true),
+  ])
 
   return (
     <div className="min-h-dvh bg-dark flex flex-col">
@@ -49,6 +52,7 @@ export default async function ForemanSettingsPage({
         businessName={profile.business_name}
         businessType={profile.business_type ?? undefined}
         foremanActive={foremanActive}
+        torquewrenchActive={profile.torquewrench_addon_active ?? false}
       />
       <main className="flex-1 max-w-2xl w-full mx-auto px-4 sm:px-6 py-8">
         <div className="mb-8">
@@ -65,7 +69,7 @@ export default async function ForemanSettingsPage({
             </div>
             <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">FOREMAN</h1>
           </div>
-          <p className="text-white/40 text-sm mt-1">AI virtual receptionist add-on</p>
+          <p className="text-white/40 text-sm mt-1">AI virtual receptionist add-on · $59/mo</p>
         </div>
 
         <ForemanSettingsClient
@@ -74,6 +78,8 @@ export default async function ForemanSettingsPage({
           businessType={profile.business_type ?? undefined}
           initialSettings={initialSettings}
           canceledFlow={sp.canceled === 'true'}
+          capAvailable={capAvailable}
+          userEmail={profile.email ?? ''}
         />
       </main>
     </div>

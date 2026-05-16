@@ -5,6 +5,8 @@ import { upsertSubscription, getUserIdByStripeSubscription, getUserIdByForemanSu
 import { sendFounderAlert } from '@/lib/email-alerts'
 import { createServiceClient } from '@/lib/supabase/service'
 import { provisionForemanNumber } from '@/lib/foreman/provision'
+import { isForemanAvailable } from '@/lib/foreman/cap'
+import { FOREMAN_GRACE_PERIOD_DAYS, FOREMAN_WORKING_HOURS_DEFAULT } from '@/lib/foreman/config'
 
 // Raw body required for Stripe signature verification — do NOT parse JSON
 export async function POST(request: NextRequest) {
@@ -55,25 +57,74 @@ export async function POST(request: NextRequest) {
         // ── Foreman add-on checkout ──
         if (product === 'foreman_addon') {
           const svc = createServiceClient()
+
+          // Soft-launch cap check — cancel + alert if exceeded
+          const capAvailable = await isForemanAvailable()
+          if (!capAvailable) {
+            console.warn('[foreman-automation] cap exceeded — cancelling subscription', subId)
+            if (subId) {
+              try { await stripe.subscriptions.cancel(subId) } catch (e) {
+                console.error('[foreman-automation] failed to cancel over-cap sub:', e)
+              }
+            }
+            await sendFounderAlert({
+              subject: 'Foreman cap exceeded — manual refund needed',
+              html: `<p>User <strong>${userId}</strong> subscribed to Foreman but the 50-slot cap is full.</p><p>Subscription <strong>${subId}</strong> has been cancelled. Please issue a manual refund in Stripe.</p>`,
+            })
+            break
+          }
+
+          // Activate
           await svc.from('profiles').update({
             foreman_addon_active:           true,
             foreman_stripe_subscription_id: subId ?? null,
           }).eq('id', userId)
 
-          // Auto-provision a Twilio/Vapi phone number
+          // Fetch profile for defaults
+          const { data: profile } = await svc
+            .from('profiles')
+            .select('full_name, email, business_name, phone')
+            .eq('id', userId)
+            .single()
+
+          const firstName = profile?.full_name
+            ? profile.full_name.trim().split(/\s+/)[0]
+            : null
+
+          // Seed foreman_settings with sensible defaults so the user lands
+          // on a partially-configured Foreman (phone is added by provision)
+          await svc.from('foreman_settings').upsert({
+            user_id:              userId,
+            is_enabled:           true,
+            business_name:        profile?.business_name ?? null,
+            mechanic_first_name:  firstName,
+            mechanic_phone:       profile?.phone ?? null,
+            working_hours_start:  FOREMAN_WORKING_HOURS_DEFAULT.start,
+            working_hours_end:    FOREMAN_WORKING_HOURS_DEFAULT.end,
+            working_days:         [...FOREMAN_WORKING_HOURS_DEFAULT.days],
+            after_hours_message:  'Sorry we missed you — please call back during business hours.',
+            updated_at:           new Date().toISOString(),
+          }, { onConflict: 'user_id' })
+
+          console.log('[foreman-automation] defaults set for', userId)
+
+          // Auto-provision Twilio + Vapi number (fire-and-forget)
           void provisionForemanNumber(userId).then(result => {
             if (!result.ok) {
-              console.error('[webhook] Foreman auto-provision failed:', result.error)
+              console.error('[foreman-automation] provision failed:', result.error)
+              void sendFounderAlert({
+                subject: `Foreman provisioning failed — ${profile?.full_name ?? userId}`,
+                html: `<p>Foreman was activated for <strong>${profile?.full_name ?? userId}</strong> (${profile?.email ?? '—'}) but phone provisioning failed.</p><p>Error: ${result.error}</p><p>User ID: ${userId}</p><p>Manual intervention needed.</p>`,
+              })
             } else if (result.already_provisioned) {
-              console.log('[webhook] Foreman number already provisioned for', userId)
+              console.log('[foreman-automation] number already provisioned for', userId)
             } else {
-              console.log('[webhook] Foreman number provisioned:', result.phone_number)
+              console.log('[foreman-automation] number provisioned:', result.phone_number)
             }
-          }).catch(e => console.error('[webhook] Foreman provision error:', e))
+          }).catch(e => console.error('[foreman-automation] provision error:', e))
 
           void (async () => {
             try {
-              const { data: profile } = await svc.from('profiles').select('full_name, email').eq('id', userId).single()
               await sendFounderAlert({
                 subject: `Foreman add-on activated: ${profile?.full_name ?? userId}`,
                 html: `<p><strong>${profile?.full_name ?? userId}</strong> just subscribed to Foreman ($59/mo).</p><p>Email: ${profile?.email ?? '—'}</p><p>User ID: ${userId}</p>`,
@@ -162,11 +213,34 @@ export async function POST(request: NextRequest) {
         const foremanUserId = await getUserIdByForemanSubscription(sub.id)
         if (foremanUserId) {
           const svc = createServiceClient()
+
+          // Fetch phone details for grace period before deactivating
+          const { data: fSettings } = await svc
+            .from('foreman_settings')
+            .select('phone_number, vapi_phone_number_id')
+            .eq('user_id', foremanUserId)
+            .single()
+
+          // Deactivate access immediately
           await svc.from('profiles').update({
             foreman_addon_active:           false,
             foreman_stripe_subscription_id: null,
           }).eq('id', foremanUserId)
-          console.log('[webhook] Foreman add-on cancelled for', foremanUserId)
+
+          // Schedule number release after grace period (do NOT release now)
+          if (fSettings?.phone_number) {
+            const releaseAt = new Date()
+            releaseAt.setDate(releaseAt.getDate() + FOREMAN_GRACE_PERIOD_DAYS)
+            await svc.from('foreman_grace_period').insert({
+              user_id:              foremanUserId,
+              phone_number:         fSettings.phone_number,
+              vapi_phone_number_id: fSettings.vapi_phone_number_id ?? null,
+              release_scheduled_for: releaseAt.toISOString(),
+            })
+            console.log('[foreman-automation] grace period scheduled for', foremanUserId, 'until', releaseAt.toISOString())
+          }
+
+          console.log('[foreman-automation] Foreman add-on cancelled for', foremanUserId)
           break
         }
 
