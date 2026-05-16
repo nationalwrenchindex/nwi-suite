@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import AppNav from '@/components/layout/AppNav'
 import { FOREMAN_SUBSCRIBER_CAP } from '@/lib/foreman/config'
+import { getCurrentForemanSubscriberCount } from '@/lib/foreman/cap'
 
 const FOUNDER_ID = '4a8c046f-7db3-42bb-8422-fd47efb7678c'
 
@@ -54,13 +55,22 @@ export default async function AdminForemanPage() {
 
   const svc = createServiceClient()
 
+  // Idempotent backfill: founders activated before the automation flow never
+  // got a foreman_settings row created for them. Without this, a LEFT JOIN
+  // would show them correctly but they'd have no settings row to configure.
+  await svc
+    .from('foreman_settings')
+    .upsert({ user_id: FOUNDER_ID }, { onConflict: 'user_id', ignoreDuplicates: true })
+
   const [
+    foremanCount,
     { data: subscribers },
     { data: waitlist },
   ] = await Promise.all([
+    getCurrentForemanSubscriberCount(),
     svc
       .from('profiles')
-      .select('id, full_name, email, created_at, foreman_settings(phone_number, is_enabled, business_name, updated_at)')
+      .select('id, full_name, email, created_at, foreman_settings!left(phone_number, is_enabled, business_name, updated_at)')
       .eq('foreman_addon_active', true)
       .order('created_at', { ascending: false }),
     svc
@@ -92,7 +102,7 @@ export default async function AdminForemanPage() {
           </div>
           <div className="bg-dark-card border border-orange/20 rounded-xl px-5 py-3 text-center">
             <p className="font-condensed font-bold text-2xl text-orange">
-              {subs.length} <span className="text-white/30 text-base font-normal">/ {FOREMAN_SUBSCRIBER_CAP}</span>
+              {foremanCount} <span className="text-white/30 text-base font-normal">/ {FOREMAN_SUBSCRIBER_CAP}</span>
             </p>
             <p className="text-white/40 text-xs">slots filled</p>
           </div>
@@ -100,7 +110,7 @@ export default async function AdminForemanPage() {
 
         {/* ── Subscribers table ──────────────────────────────────────────────── */}
         <section className="mb-10">
-          <h2 className="text-white font-semibold text-lg mb-3">Active Subscribers ({subs.length})</h2>
+          <h2 className="text-white font-semibold text-lg mb-3">Active Subscribers ({foremanCount})</h2>
           <div className="overflow-x-auto rounded-xl border border-dark-border">
             <table className="w-full">
               <thead className="bg-dark-lighter">
@@ -121,11 +131,15 @@ export default async function AdminForemanPage() {
                     <tr key={s.id} className="hover:bg-dark-lighter/40 transition-colors">
                       <td className={td}>{s.full_name ?? '—'}</td>
                       <td className={`${td} text-white/60`}>{s.email ?? '—'}</td>
-                      <td className={td}>{fs?.business_name ?? '—'}</td>
                       <td className={td}>
-                        <span className="font-mono text-orange text-xs">
-                          {fmtPhone(fs?.phone_number ?? null)}
-                        </span>
+                        {fs?.business_name
+                          ? fs.business_name
+                          : <span className="text-white/25 italic">Not yet configured</span>}
+                      </td>
+                      <td className={td}>
+                        {fs?.phone_number
+                          ? <span className="font-mono text-orange text-xs">{fmtPhone(fs.phone_number)}</span>
+                          : <span className="text-white/25 italic">Not yet configured</span>}
                       </td>
                       <td className={td}>
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
@@ -140,7 +154,7 @@ export default async function AdminForemanPage() {
                     </tr>
                   )
                 })}
-                {subs.length === 0 && (
+                {subs.length === 0 && foremanCount === 0 && (
                   <tr>
                     <td colSpan={6} className="px-4 py-8 text-center text-white/30 text-sm">
                       No Foreman subscribers yet
