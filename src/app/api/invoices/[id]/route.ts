@@ -1,6 +1,79 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentFuelPrice } from '@/lib/fuel-price'
+import type { SupabaseClient } from '@supabase/supabase-js'
+
+// ─── TorqueWrench: queue review request when invoice is marked paid ───────────
+
+async function enqueueTorqueWrenchReview(
+  supabase: SupabaseClient,
+  userId: string,
+  invoice: Record<string, unknown>,
+): Promise<void> {
+  try {
+    const jobId    = invoice.job_id as string | null
+    const customer = invoice.customer as {
+      first_name: string | null
+      last_name:  string | null
+      phone:      string | null
+    } | null
+
+    const rawPhone = customer?.phone
+    if (!rawPhone || !jobId) return
+
+    // Normalize phone to E.164 for consistent storage and matching
+    const digits      = rawPhone.replace(/\D/g, '')
+    const customerPhone = digits.startsWith('1') ? `+${digits}` : `+1${digits}`
+
+    // Check TorqueWrench addon active on profile
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('torquewrench_addon_active')
+      .eq('id', userId)
+      .single()
+    if (!profile?.torquewrench_addon_active) return
+
+    // Check settings is_enabled
+    const { data: settings } = await supabase
+      .from('torquewrench_settings')
+      .select('is_enabled')
+      .eq('user_id', userId)
+      .single()
+    if (!settings?.is_enabled) return
+
+    // Dedupe: skip if a review row already exists for this job
+    const { data: existing } = await supabase
+      .from('torquewrench_reviews')
+      .select('id')
+      .eq('job_id', jobId)
+      .maybeSingle()
+    if (existing) return
+
+    // Pull service_type from the linked job
+    const { data: job } = await supabase
+      .from('jobs')
+      .select('service_type')
+      .eq('id', jobId)
+      .single()
+
+    const firstName     = (customer.first_name ?? '').trim()
+    const lastName      = (customer.last_name  ?? '').trim()
+    const customerName  = [firstName, lastName].filter(Boolean).join(' ') || null
+
+    await supabase.from('torquewrench_reviews').insert({
+      user_id:        userId,
+      job_id:         jobId,
+      customer_name:  customerName,
+      customer_phone: customerPhone,
+      service_type:   job?.service_type ?? null,
+      status:         'pending',
+    })
+
+    console.log(`[torquewrench] Queued review request for job ${jobId}`)
+  } catch (err) {
+    console.error('[torquewrench] enqueue error:', err instanceof Error ? err.message : String(err))
+  }
+}
 
 // ─── P&L helpers ─────────────────────────────────────────────────────────────
 
@@ -208,10 +281,15 @@ export async function PUT(
     return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
   }
 
+  // ── TorqueWrench: queue review request on first paid transition ───────────
+  const inv = data as Record<string, unknown>
+  if (dbStatus === 'paid') {
+    await enqueueTorqueWrenchReview(supabase, user.id, inv)
+  }
+
   // ── Phase 6: Auto-Financial Breakdown ─────────────────────────────────────
   // Runs exactly once per invoice when it is first marked paid.
   // financials_posted acts as an idempotency guard.
-  const inv = data as Record<string, unknown>
   if (dbStatus === 'paid' && !inv.financials_posted) {
     try {
       const bd         = calcBreakdown(inv as unknown as InvoiceForBreakdown)
