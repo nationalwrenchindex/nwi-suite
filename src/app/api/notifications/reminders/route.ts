@@ -2,14 +2,16 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { dispatchNotification } from '@/lib/notifications'
 
-// ─── POST /api/notifications/reminders ───────────────────────────────────────
+export const dynamic = 'force-dynamic'
+
+// ─── GET /api/notifications/reminders ────────────────────────────────────────
 // Called daily by Vercel Cron at 8:00 AM UTC (see vercel.json).
 // Sends day-before SMS/email to every customer with a job scheduled tomorrow.
 //
 // Protected by CRON_SECRET env var.
 // curl -X POST https://your-domain.com/api/notifications/reminders \
 //      -H "x-cron-secret: $CRON_SECRET"
-export async function POST(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const incomingSecret =
     request.headers.get('x-cron-secret') ??
     request.headers.get('authorization')?.replace('Bearer ', '')

@@ -3,11 +3,13 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { sendSmsResult } from '@/lib/twilio'
 import { getSmsBody } from '@/lib/torquewrench/sms-templates'
 
-// ─── POST /api/cron/torquewrench-send ────────────────────────────────────────
+export const dynamic = 'force-dynamic'
+
+// ─── GET /api/cron/torquewrench-send ─────────────────────────────────────────
 // Runs every 5 minutes (see vercel.json).
 // Sends pending review-request SMS once the mechanic's send delay has elapsed.
 // Protected by x-cron-secret header (same CRON_SECRET used by /api/notifications/reminders).
-export async function POST(request: NextRequest) {
+export async function GET(request: NextRequest) {
   const incomingSecret =
     request.headers.get('x-cron-secret') ??
     request.headers.get('authorization')?.replace('Bearer ', '')
