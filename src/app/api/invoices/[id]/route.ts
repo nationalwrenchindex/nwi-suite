@@ -11,18 +11,24 @@ async function enqueueTorqueWrenchReview(
   invoice: Record<string, unknown>,
 ): Promise<void> {
   try {
-    const jobId    = invoice.job_id as string | null
-    const customer = invoice.customer as {
-      first_name: string | null
-      last_name:  string | null
-      phone:      string | null
-    } | null
+    const jobId      = invoice.job_id      as string | null
+    const customerId = invoice.customer_id as string | null
+
+    if (!customerId || !jobId) return
+
+    // Load customer separately — invoices store customer_id FK, not a nested object
+    const { data: customer } = await supabase
+      .from('customers')
+      .select('first_name, last_name, phone')
+      .eq('id', customerId)
+      .eq('user_id', userId)
+      .single()
 
     const rawPhone = customer?.phone
-    if (!rawPhone || !jobId) return
+    if (!rawPhone) return
 
     // Normalize phone to E.164 for consistent storage and matching
-    const digits      = rawPhone.replace(/\D/g, '')
+    const digits        = rawPhone.replace(/\D/g, '')
     const customerPhone = digits.startsWith('1') ? `+${digits}` : `+1${digits}`
 
     // Check TorqueWrench addon active on profile
