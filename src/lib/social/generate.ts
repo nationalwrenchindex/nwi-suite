@@ -85,38 +85,74 @@ const DALL_E_SIZES: Record<SocialPlatform, DallESize> = {
   twitter:   '1792x1024',
 }
 
-export async function generatePostImage(
-  imagePrompt: string,
-  platform:    SocialPlatform,
-  openAiKey:   string,
+// Simplified per-platform fallback prompts — short, generic, safe for content filters
+const FALLBACK_PROMPTS: Record<SocialPlatform, string> = {
+  tiktok:    'Mobile auto mechanic opening the hood of a Ford F-150 pickup truck parked on a residential street. Toolbox on the ground, morning light. Dark moody background, orange light accents. Cinematic, photorealistic. 9:16 vertical format. No text.',
+  instagram: 'Close-up of a mechanic\'s hands using a diagnostic scanner on a modern SUV engine bay. Professional tools, clean composition. Dark charcoal tones, warm orange highlights. Photorealistic. 1:1 square format. No text.',
+  facebook:  'Mobile mechanic van parked next to a Chevrolet Silverado on a suburban driveway. Mechanic working under the hood. Professional, clean. Dark background, orange accent lighting. 16:9 horizontal format. No text.',
+  linkedin:  'Professional mobile mechanic in uniform standing beside a Toyota Camry, holding a tablet showing a digital inspection report. Confident, clean, modern. Dark background with blue and orange accents. 16:9 horizontal format. No text.',
+  twitter:   'Mechanic\'s hands on a laptop keyboard inside a service van, phone showing an invoice app, Honda Civic visible through the window. Dark moody tones, orange glow. 16:9 horizontal format. No text.',
+}
+
+async function callDallE(
+  prompt:   string,
+  platform: SocialPlatform,
+  apiKey:   string,
+  attempt:  number,
 ): Promise<string | null> {
   try {
     const res = await fetch('https://api.openai.com/v1/images/generations', {
       method:  'POST',
       headers: {
-        'Authorization': `Bearer ${openAiKey}`,
+        'Authorization': `Bearer ${apiKey}`,
         'Content-Type':  'application/json',
       },
       body: JSON.stringify({
         model:           'dall-e-3',
-        prompt:          imagePrompt,
+        prompt,
         n:               1,
         size:            DALL_E_SIZES[platform],
         quality:         'standard',
         response_format: 'url',
       }),
     })
+
     if (!res.ok) {
       const errText = await res.text()
-      console.error('[generatePostImage] DALL-E error:', res.status, errText.slice(0, 300))
+      console.error(`[generatePostImage] attempt ${attempt} — DALL-E HTTP error for ${platform}: status=${res.status} body=${errText.slice(0, 500)}`)
       return null
     }
-    const data = await res.json()
-    return (data.data?.[0]?.url as string) ?? null
+
+    const data: unknown = await res.json()
+    const url = (data as { data?: { url?: string }[] })?.data?.[0]?.url
+
+    if (!url) {
+      console.error(
+        `[generatePostImage] attempt ${attempt} — DALL-E returned no URL for ${platform}.`,
+        'Full response:', JSON.stringify(data),
+      )
+      return null
+    }
+
+    return url
   } catch (err) {
-    console.error('[generatePostImage] fetch error:', err)
+    console.error(`[generatePostImage] attempt ${attempt} — fetch error for ${platform}:`, err)
     return null
   }
+}
+
+export async function generatePostImage(
+  imagePrompt: string,
+  platform:    SocialPlatform,
+  openAiKey:   string,
+): Promise<string | null> {
+  // Attempt 1: use the AI-generated image prompt
+  const url = await callDallE(imagePrompt, platform, openAiKey, 1)
+  if (url) return url
+
+  // Attempt 2: retry with a short, safe fallback prompt that avoids content filter triggers
+  console.warn(`[generatePostImage] retrying ${platform} with simplified fallback prompt`)
+  return callDallE(FALLBACK_PROMPTS[platform], platform, openAiKey, 2)
 }
 
 function extractOutermostArray(text: string): string | null {
