@@ -117,24 +117,76 @@ async function callDallE(
       }),
     })
 
+    // Read raw text first so we can log it regardless of parse outcome
+    const rawText = await res.text()
+
     if (!res.ok) {
-      const errText = await res.text()
-      console.error(`[generatePostImage] attempt ${attempt} — DALL-E HTTP error for ${platform}: status=${res.status} body=${errText.slice(0, 500)}`)
-      return null
-    }
-
-    const data: unknown = await res.json()
-    const url = (data as { data?: { url?: string }[] })?.data?.[0]?.url
-
-    if (!url) {
       console.error(
-        `[generatePostImage] attempt ${attempt} — DALL-E returned no URL for ${platform}.`,
-        'Full response:', JSON.stringify(data),
+        `[generatePostImage] attempt ${attempt} — DALL-E HTTP ${res.status} for ${platform}.\n` +
+        `RAW RESPONSE BODY: ${rawText}`,
       )
       return null
     }
 
-    return url
+    let data: unknown
+    try {
+      data = JSON.parse(rawText)
+    } catch (parseErr) {
+      console.error(
+        `[generatePostImage] attempt ${attempt} — failed to parse DALL-E response for ${platform}.\n` +
+        `PARSE ERROR: ${parseErr}\n` +
+        `RAW TEXT: ${rawText}`,
+      )
+      return null
+    }
+
+    // Log the complete response every time so we can see exactly what DALL-E returned
+    console.log(
+      `[generatePostImage] attempt ${attempt} — DALL-E raw response for ${platform}:\n` +
+      JSON.stringify(data, null, 2),
+    )
+
+    type DallEResponse = {
+      created?:  number
+      data?:     { url?: string; b64_json?: string; revised_prompt?: string }[]
+      error?:    { message?: string; type?: string; code?: string }
+    }
+    const parsed = data as DallEResponse
+
+    // Surface any error object DALL-E embeds in a 200 body
+    if (parsed.error) {
+      console.error(
+        `[generatePostImage] attempt ${attempt} — DALL-E error object in 200 body for ${platform}:`,
+        JSON.stringify(parsed.error),
+      )
+      return null
+    }
+
+    const item = parsed.data?.[0]
+    if (!item) {
+      console.error(`[generatePostImage] attempt ${attempt} — DALL-E data array empty or missing for ${platform}`)
+      return null
+    }
+
+    // Check for revised_prompt — indicates content policy rewrote the prompt
+    if (item.revised_prompt) {
+      console.warn(
+        `[generatePostImage] attempt ${attempt} — DALL-E revised the prompt for ${platform}.\n` +
+        `ORIGINAL: ${prompt.slice(0, 200)}\n` +
+        `REVISED:  ${item.revised_prompt.slice(0, 200)}`,
+      )
+    }
+
+    if (!item.url) {
+      console.error(
+        `[generatePostImage] attempt ${attempt} — DALL-E item has no url for ${platform}.\n` +
+        `item keys present: ${Object.keys(item).join(', ')}\n` +
+        `b64_json present: ${!!item.b64_json}`,
+      )
+      return null
+    }
+
+    return item.url
   } catch (err) {
     console.error(`[generatePostImage] attempt ${attempt} — fetch error for ${platform}:`, err)
     return null
