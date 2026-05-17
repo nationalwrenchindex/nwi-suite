@@ -15,7 +15,7 @@ export default async function BillingPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('full_name, business_name, business_type')
+    .select('full_name, business_name, business_type, foreman_addon_active')
     .eq('id', user.id)
     .single()
 
@@ -27,7 +27,11 @@ export default async function BillingPage() {
     <div className="min-h-dvh bg-dark flex flex-col">
       <AppNav businessName={profile.business_name} businessType={(profile as Record<string, unknown>).business_type as string | undefined} />
       <Suspense fallback={null}>
-        <BillingClient subscription={subscription} plans={PLANS} />
+        <BillingClient
+          subscription={subscription}
+          plans={PLANS}
+          foremanAddonActive={(profile as Record<string, unknown>).foreman_addon_active as boolean ?? false}
+        />
       </Suspense>
     </div>
   )

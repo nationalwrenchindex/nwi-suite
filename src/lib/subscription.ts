@@ -36,12 +36,27 @@ export async function upsertSubscription(
 }
 
 // Returns the list of module slugs this user can access.
-// 'active' and 'trialing' → full access; 'past_due' → grace-period access
+// 'active' and 'trialing' → full access; 'past_due' → grace-period access.
+// Standalone Foreman subscribers (no base tier) always receive 'scheduler'.
 export async function getModuleAccess(userId: string): Promise<string[]> {
-  const sub = await getSubscription(userId)
-  if (!sub) return []
-  if (!['active', 'trialing', 'past_due'].includes(sub.status)) return []
-  return sub.modules ?? []
+  const supabase = await createClient()
+  const [{ data: subData }, { data: profileData }] = await Promise.all([
+    supabase.from('subscriptions').select('*').eq('user_id', userId).single(),
+    supabase.from('profiles').select('foreman_addon_active').eq('id', userId).single(),
+  ])
+
+  const sub = subData as Subscription | null
+  const modules: string[] = []
+
+  if (sub && ['active', 'trialing', 'past_due'].includes(sub.status)) {
+    modules.push(...(sub.modules ?? []))
+  }
+
+  if (profileData?.foreman_addon_active && !modules.includes('scheduler')) {
+    modules.push('scheduler')
+  }
+
+  return modules
 }
 
 // Returns true if the user's plan includes QuickWrench (quickwrench or elite tier).
