@@ -18,6 +18,9 @@ export default async function SocialPage() {
 
   if (!profile?.business_name) redirect('/onboarding')
 
+  const FOUNDER_ID = '4a8c046f-7db3-42bb-8422-fd47efb7678c'
+  if (user.id !== FOUNDER_ID) redirect('/dashboard')
+
   const today    = new Date()
   const todayStr = today.toISOString().slice(0, 10)
 
