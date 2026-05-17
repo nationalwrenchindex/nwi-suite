@@ -30,13 +30,12 @@ export async function provisionForemanNumber(userId: string): Promise<ProvisionR
   const twilioSid   = process.env.TWILIO_ACCOUNT_SID
   const twilioToken = process.env.TWILIO_AUTH_TOKEN
   const vapiKey     = process.env.VAPI_API_KEY
-  const vapiAsstId  = process.env.VAPI_ASSISTANT_ID
 
   if (!twilioSid || !twilioToken) {
     console.error('[provision] Twilio credentials missing')
     return { ok: false, error: 'Phone provisioning unavailable — Twilio not configured.' }
   }
-  if (!vapiKey || !vapiAsstId) {
+  if (!vapiKey) {
     console.error('[provision] Vapi credentials missing')
     return { ok: false, error: 'Phone provisioning unavailable — Vapi not configured.' }
   }
@@ -106,6 +105,9 @@ export async function provisionForemanNumber(userId: string): Promise<ProvisionR
   console.log('[provision] registering with Vapi')
   let vapiPhoneNumberId: string | null = null
 
+  // No assistantId — phone numbers use server URL only so Vapi sends
+  // assistant-request to our webhook on every inbound call, enabling
+  // per-subscriber dynamic assistant config (multi-tenancy).
   const vapiRes = await fetch('https://api.vapi.ai/phone-number', {
     method: 'POST',
     headers: { Authorization: `Bearer ${vapiKey}`, 'Content-Type': 'application/json' },
@@ -114,7 +116,6 @@ export async function provisionForemanNumber(userId: string): Promise<ProvisionR
       number:           purchasedNumber,
       twilioAccountSid: twilioSid,
       twilioAuthToken:  twilioToken,
-      assistantId:      vapiAsstId,
       serverUrl:        VAPI_SERVER_URL,
     }),
   })
@@ -132,7 +133,6 @@ export async function provisionForemanNumber(userId: string): Promise<ProvisionR
   await svc.from('foreman_settings').upsert({
     user_id:              userId,
     phone_number:         purchasedNumber,
-    vapi_assistant_id:    vapiAsstId,
     vapi_phone_number_id: vapiPhoneNumberId,
     updated_at:           new Date().toISOString(),
   }, { onConflict: 'user_id' })
