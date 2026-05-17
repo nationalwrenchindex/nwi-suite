@@ -355,7 +355,7 @@ export default function BillingClient({
   const [toast,         setToast]         = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
 
   const isActive     = subscription && ['active', 'trialing', 'past_due'].includes(subscription.status)
-  const isForemanOnly = foremanAddonActive && !isActive
+  const isForemanOnly = foremanAddonActive && !subscription?.tier
 
   // Handle redirect-back from Stripe
   useEffect(() => {
