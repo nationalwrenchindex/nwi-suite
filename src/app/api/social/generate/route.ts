@@ -1,11 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { generateSocialPosts, generatePostImage } from '@/lib/social/generate'
-import type { SocialPlatform } from '@/lib/social/generate'
+import { generateSocialPosts } from '@/lib/social/generate'
+
+export const maxDuration = 60
 
 // POST /api/social/generate
-// Generates today's social posts for the authenticated user.
-// Returns cached posts if already generated today.
+// Phase 1: generates text content + image_prompts via Claude only.
+// Phase 2 (images) is handled by /api/social/generate-images called separately by the client.
 // Body: { force?: boolean } — force=true skips cache and regenerates.
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
@@ -35,13 +36,16 @@ export async function POST(request: NextRequest) {
 
   const apiKey = process.env.ANTHROPIC_API_KEY
   if (!apiKey) {
+    console.error('[social/generate] ANTHROPIC_API_KEY not configured')
     return NextResponse.json({ error: 'ANTHROPIC_API_KEY not configured' }, { status: 500 })
   }
 
+  console.log('[social/generate] calling Claude for content...')
   const generated = await generateSocialPosts(apiKey)
   if (!generated) {
     return NextResponse.json({ error: 'AI generation failed' }, { status: 502 })
   }
+  console.log(`[social/generate] Claude returned ${generated.length} posts`)
 
   // Delete today's existing posts before inserting fresh ones (handles force-regen)
   if (force) {
@@ -73,32 +77,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: insertErr.message }, { status: 500 })
   }
 
-  // Generate DALL-E 3 images in parallel; failures are non-fatal
-  const openAiKey = process.env.OPENAI_API_KEY
-  if (openAiKey && stored && stored.length > 0) {
-    await Promise.all(
-      stored.map(async (post) => {
-        const draft = generated.find((d) => d.platform === post.platform)
-        if (!draft?.image_prompt) return
-        const imageUrl = await generatePostImage(draft.image_prompt, post.platform as SocialPlatform, openAiKey)
-        if (!imageUrl) return
-        await supabase
-          .from('social_posts')
-          .update({ image_url: imageUrl })
-          .eq('id', post.id)
-          .eq('user_id', user.id)
-      })
-    )
-  }
-
-  // Re-fetch to return rows with image_url populated
-  const { data: final } = await supabase
-    .from('social_posts')
-    .select('id, platform, content, visual_suggestion, image_prompt, image_url, theme, status, created_at, posted_at')
-    .eq('user_id', user.id)
-    .gte('created_at', `${todayStr}T00:00:00Z`)
-    .lt('created_at', `${todayStr}T23:59:59Z`)
-    .order('created_at', { ascending: true })
-
-  return NextResponse.json({ posts: final ?? stored, cached: false })
+  console.log(`[social/generate] inserted ${stored?.length ?? 0} posts — image generation deferred to /api/social/generate-images`)
+  return NextResponse.json({ posts: stored, cached: false })
 }

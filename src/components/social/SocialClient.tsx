@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 
 type Platform = 'tiktok' | 'instagram' | 'facebook' | 'linkedin' | 'twitter'
 type PostStatus = 'pending' | 'posted' | 'skipped'
@@ -93,12 +93,22 @@ const PLATFORM_META: Record<Platform, {
 
 const PLATFORM_ORDER: Platform[] = ['tiktok', 'instagram', 'facebook', 'linkedin', 'twitter']
 
+const ASPECT_CLASS: Record<Platform, string> = {
+  tiktok:    'aspect-[9/16] max-h-64',
+  instagram: 'aspect-square',
+  facebook:  'aspect-video',
+  linkedin:  'aspect-video',
+  twitter:   'aspect-video',
+}
+
 function PostCard({
   post,
+  imageLoading,
   onUpdate,
 }: {
-  post:     SocialPost
-  onUpdate: (id: string, updates: Partial<SocialPost>) => void
+  post:         SocialPost
+  imageLoading: boolean
+  onUpdate:     (id: string, updates: Partial<SocialPost>) => void
 }) {
   const [editing,      setEditing]      = useState(false)
   const [editContent,  setEditContent]  = useState(post.content)
@@ -259,7 +269,18 @@ function PostCard({
         <p className="text-white/50 text-xs leading-relaxed">{post.visual_suggestion}</p>
       </div>
 
-      {/* Generated image */}
+      {/* Generated image — loading skeleton */}
+      {imageLoading && !post.image_url && (
+        <div className={`mb-3 rounded-xl border border-orange/20 bg-dark-lighter flex flex-col items-center justify-center gap-2 py-8 ${ASPECT_CLASS[post.platform]}`}>
+          <svg className="w-5 h-5 text-orange/60 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+          </svg>
+          <p className="text-orange/50 text-[10px] font-condensed tracking-wider uppercase">Generating image…</p>
+        </div>
+      )}
+
+      {/* Generated image — loaded */}
       {post.image_url && (
         <div className="relative mb-3 rounded-xl overflow-hidden border border-dark-border bg-dark-lighter">
           <img
@@ -379,9 +400,10 @@ function PostCard({
 }
 
 export default function SocialClient({ initialPosts, todayTheme, dayName }: Props) {
-  const [posts,       setPosts]       = useState<SocialPost[]>(initialPosts)
-  const [generating,  setGenerating]  = useState(false)
-  const [error,       setError]       = useState<string | null>(null)
+  const [posts,            setPosts]            = useState<SocialPost[]>(initialPosts)
+  const [generating,       setGenerating]       = useState(false)
+  const [generatingImages, setGeneratingImages] = useState(false)
+  const [error,            setError]            = useState<string | null>(null)
 
   const hasAny  = posts.length > 0
   const pending = posts.filter((p) => p.status === 'pending').length
@@ -391,10 +413,45 @@ export default function SocialClient({ initialPosts, todayTheme, dayName }: Prop
     setPosts((prev) => prev.map((p) => p.id === id ? { ...p, ...updates } : p))
   }, [])
 
+  // Phase 2: call DALL-E image generation for a set of post IDs
+  const fetchImages = useCallback(async (postIds: string[]) => {
+    if (postIds.length === 0) return
+    setGeneratingImages(true)
+    try {
+      const res = await fetch('/api/social/generate-images', {
+        method:  'POST',
+        headers: { 'content-type': 'application/json' },
+        body:    JSON.stringify({ postIds }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        console.error('[SocialClient] generate-images failed:', data.error)
+        return
+      }
+      const { results } = await res.json()
+      for (const r of (results ?? [])) {
+        if (r.image_url) handleUpdate(r.id, { image_url: r.image_url })
+      }
+    } catch (err) {
+      console.error('[SocialClient] generate-images error:', err)
+    } finally {
+      setGeneratingImages(false)
+    }
+  }, [handleUpdate])
+
+  // On mount: auto-generate images for any posts that have image_prompt but no image_url
+  // (handles page refresh after a prior image generation failure)
+  useEffect(() => {
+    const needImages = initialPosts.filter((p) => p.image_prompt && !p.image_url).map((p) => p.id)
+    if (needImages.length > 0) fetchImages(needImages)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   async function generate(force = false) {
     setGenerating(true)
     setError(null)
     try {
+      // Phase 1: generate text content via Claude
       const res = await fetch('/api/social/generate', {
         method:  'POST',
         headers: { 'content-type': 'application/json' },
@@ -402,7 +459,14 @@ export default function SocialClient({ initialPosts, todayTheme, dayName }: Prop
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Generation failed')
-      setPosts(data.posts ?? [])
+      const newPosts: SocialPost[] = data.posts ?? []
+      setPosts(newPosts)
+
+      // Phase 2: generate images for newly created posts (non-blocking)
+      const needImages = newPosts.filter((p) => p.image_prompt && !p.image_url).map((p) => p.id)
+      if (!data.cached && needImages.length > 0) {
+        fetchImages(needImages)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to generate content')
     } finally {
@@ -482,6 +546,7 @@ export default function SocialClient({ initialPosts, todayTheme, dayName }: Prop
               <PostCard
                 key={post.id}
                 post={post}
+                imageLoading={generatingImages && !!post.image_prompt && !post.image_url}
                 onUpdate={handleUpdate}
               />
             ))}
