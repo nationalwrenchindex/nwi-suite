@@ -5,7 +5,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import * as chrono from 'chrono-node'
 import { createServiceClient } from '@/lib/supabase/service'
 import { sendSubscriberSms } from '@/lib/twilio'
-import { buildSystemPrompt, SERVICE_DURATIONS } from '@/lib/foreman/system-prompt'
+import { SERVICE_DURATIONS } from '@/lib/foreman/system-prompt'
 
 const SERVER_URL = 'https://tools.nationalwrenchindex.com/api/webhooks/vapi'
 
@@ -314,106 +314,43 @@ async function handleAssistantRequest(
 
   // after_hours_message is subscriber-configurable; fall back to a sensible default
   const afterHoursMsg = (settings?.after_hours_message as string | null | undefined)
-    ?? `Thanks for calling. ${mechanicName} is off the clock right now, but I can schedule you for the next available time. Want to do that, or would you prefer ${mechanicName} call you back?`
+    ?? 'Thanks for calling. We are currently closed. Please call back during business hours.'
 
   const firstMessage = `Thanks for calling ${businessName}. This is Foreman, your virtual assistant. How can I help you today?`
 
-  const systemPrompt = buildSystemPrompt({
-    businessName,
-    mechanicName,
-    laborRate,
-    servicesListWithDurations,
-    workingHoursStart: hoursStart,
-    workingHoursEnd:   hoursEnd,
-    workingDays,
-  })
-
-  console.log('[vapi assistant-request] system prompt length:', systemPrompt.length)
-
-  // Tool definitions — mirrored here so Vapi gets them on every call regardless
-  // of what is configured on the dashboard assistant.
-  const vapiTools = [
-    {
-      type: 'function',
-      function: {
-        name:        'check_availability',
-        description: 'Check available appointment time slots for a service. Always call this before offering any times to the caller.',
-        parameters: {
-          type: 'object',
-          properties: {
-            service_type: {
-              type:        'string',
-              description: `The service the customer needs. Valid values: ${Object.keys(SERVICE_DURATIONS).join(', ')}`,
-            },
-            preferred_date: {
-              type:        'string',
-              description: 'Optional preferred date as YYYY-MM-DD. Omit to check the next available dates.',
-            },
-          },
-          required: ['service_type'],
-        },
+  const masterAssistantId = process.env.VAPI_ASSISTANT_ID
+  if (!masterAssistantId) {
+    console.error('[vapi assistant-request] VAPI_ASSISTANT_ID env var not set — cannot return assistantId')
+    return NextResponse.json({
+      assistant: {
+        name:         'Foreman Config Error',
+        firstMessage: 'Thanks for calling. Our system is updating — please call back in a moment.',
       },
-      server: { url: SERVER_URL, timeoutSeconds: 20 },
-    },
-    {
-      type: 'function',
-      function: {
-        name:        'book_appointment',
-        description: 'Book an appointment after the caller has confirmed a specific date and time. Only call this after the caller has verbally agreed to a slot.',
-        parameters: {
-          type: 'object',
-          properties: {
-            customer_name: {
-              type:        'string',
-              description: "Caller's full name",
-            },
-            customer_phone: {
-              type:        'string',
-              description: "Caller's callback phone number",
-            },
-            vehicle_info: {
-              type:        'string',
-              description: "Vehicle description, e.g. '2018 Honda Civic'",
-            },
-            engine_size: {
-              type:        'string',
-              description: "Engine size or displacement as the caller stated it (e.g. '5.3 liter', 'V8', '2.4', '3.0 turbo'). Optional — if caller doesn't know, pass 'unknown' and continue booking.",
-            },
-            service_type: {
-              type:        'string',
-              description: 'Service to be performed',
-            },
-            appointment_datetime: {
-              type:        'string',
-              description: 'The confirmed appointment date and time. Pass exactly what the caller said, e.g. "Friday May 15 at 1 PM", "this Friday at 2 PM", or ISO format "2026-05-20T13:00:00". Always include both a date and a time.',
-            },
-          },
-          required: ['customer_name', 'service_type', 'appointment_datetime'],
-        },
-      },
-      server: { url: SERVER_URL, timeoutSeconds: 30 },
-    },
-  ]
+    })
+  }
 
-  // Return a transient full assistant config. The phone number has NO assistantId
-  // so Vapi sends assistant-request and uses whatever we return here for this call.
-  // This is the canonical Vapi multi-tenancy pattern.
+  // Return assistantId + assistantOverrides — the canonical Vapi multi-tenancy pattern.
+  // Vapi uses the master Foreman assistant (voice, transcriber, tools, {{variable}} prompt)
+  // and applies per-subscriber overrides for this call only.
   const assistantResponse = {
-    assistant: {
-      name:         `Foreman - ${businessName}`,
+    assistantId: masterAssistantId,
+    assistantOverrides: {
       firstMessage,
-      serverUrl:    SERVER_URL,
-      model: {
-        provider: 'anthropic',
-        model:    'claude-sonnet-4-5',
-        messages: [{ role: 'system', content: systemPrompt }],
-        tools:    vapiTools,
+      variableValues: {
+        business_name:       businessName,
+        mechanic_first_name: mechanicName,
+        working_hours_start: hoursStart,
+        working_hours_end:   hoursEnd,
+        working_days:        workingDays,
+        after_hours_message: afterHoursMsg,
+        labor_rate:          String(laborRate),
+        services_list:       servicesListWithDurations,
       },
-      voice: { provider: '11labs', voiceId: 'burt' },
     },
   }
 
-  console.log('[vapi assistant-request] RESPONSE for userId:', userId, '| businessName:', businessName, '| firstMessage:', firstMessage)
+  console.log('[vapi assistant-request] RESPONSE for userId:', userId, '| businessName:', businessName, '| assistantId:', masterAssistantId)
+  console.log('[vapi assistant-request] variableValues:', JSON.stringify(assistantResponse.assistantOverrides.variableValues))
   return NextResponse.json(assistantResponse)
 }
 
