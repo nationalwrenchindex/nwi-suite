@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
   if (!force) {
     const { data: existing } = await supabase
       .from('social_posts')
-      .select('id, platform, content, visual_suggestion, theme, status, created_at, posted_at')
+      .select('id, platform, content, visual_suggestion, image_prompt, theme, status, created_at, posted_at')
       .eq('user_id', user.id)
       .gte('created_at', `${todayStr}T00:00:00Z`)
       .lt('created_at', `${todayStr}T23:59:59Z`)
@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
     platform:          p.platform,
     content:           p.content,
     visual_suggestion: p.visual_suggestion,
+    image_prompt:      p.image_prompt,
     theme:             p.theme,
     status:            'pending',
   }))
@@ -64,7 +65,7 @@ export async function POST(request: NextRequest) {
   const { data: stored, error: insertErr } = await supabase
     .from('social_posts')
     .insert(inserts)
-    .select('id, platform, content, visual_suggestion, theme, status, created_at, posted_at')
+    .select('id, platform, content, visual_suggestion, image_prompt, theme, status, created_at, posted_at')
 
   if (insertErr) {
     console.error('[social/generate] insert error:', insertErr)

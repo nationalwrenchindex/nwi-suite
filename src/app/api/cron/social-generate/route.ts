@@ -69,6 +69,7 @@ export async function GET(request: NextRequest) {
         platform:          p.platform,
         content:           p.content,
         visual_suggestion: p.visual_suggestion,
+        image_prompt:      p.image_prompt,
         theme:             p.theme,
         status:            'pending',
       }))

@@ -4,6 +4,7 @@ export interface SocialPostDraft {
   platform:          SocialPlatform
   content:           string
   visual_suggestion: string
+  image_prompt:      string
   theme:             string
 }
 
@@ -48,13 +49,31 @@ const SYSTEM_PROMPT = `You are a social media content creator writing on behalf 
 - Torque Wrench: sends automatic Google review requests after every job
 - Pricing starts at $19/month
 
+━━━ IMAGE PROMPT GENERATION ━━━
+For each post generate an image_prompt — a detailed prompt the user can paste into Midjourney, DALL-E, or Canva AI to create a matching image.
+
+Image style rules for ALL posts:
+- Deep charcoal/dark background (#1a1a1a)
+- Primary accent: bold orange (#FF6600) — glow, gradients, highlights
+- Secondary accent: deep blue (#2969B0) — UI screens, data displays
+- Subject matter: mobile mechanic world — diesel trucks, tool bags, diagnostic tablets, grease-stained hands on keyboards, shop invoices on phone screens, open hoods at dawn
+- Photorealistic or cinematic quality, professional and clean
+- No text overlaid in the image
+
+Platform-specific aspect ratio to include in each image_prompt:
+- tiktok: 9:16 vertical format
+- instagram: 1:1 square format
+- facebook: 16:9 horizontal format
+- linkedin: 16:9 horizontal format
+- twitter: 16:9 horizontal format
+
 ━━━ RESPONSE FORMAT ━━━
 Respond ONLY with raw JSON — no markdown, no backticks, no preamble. First character must be [ and last must be ].
 
 Return a JSON array with exactly 5 objects, one per platform, in this order: tiktok, instagram, facebook, linkedin, twitter.
 
 Each object must match this schema exactly:
-{"platform":"tiktok","content":"...","visual_suggestion":"..."}`
+{"platform":"tiktok","content":"...","visual_suggestion":"...","image_prompt":"..."}`
 
 function extractOutermostArray(text: string): string | null {
   const start = text.indexOf('[')
@@ -104,7 +123,7 @@ For each platform, also provide a visual_suggestion (1-2 sentences describing wh
       },
       body: JSON.stringify({
         model:      'claude-sonnet-4-6',
-        max_tokens: 3000,
+        max_tokens: 4500,
         system:     SYSTEM_PROMPT,
         messages:   [{ role: 'user', content: userMessage }],
       }),
@@ -129,7 +148,7 @@ For each platform, also provide a visual_suggestion (1-2 sentences describing wh
     raw = raw.replace(/```(?:json|JSON)?\s*/g, '').replace(/```/g, '').trim()
     const extracted = extractOutermostArray(raw)
     if (!extracted) throw new Error('No JSON array in response')
-    const parsed: { platform: string; content: string; visual_suggestion: string }[] = JSON.parse(extracted)
+    const parsed: { platform: string; content: string; visual_suggestion: string; image_prompt: string }[] = JSON.parse(extracted)
     return parsed.map((p) => ({ ...p, platform: p.platform as SocialPlatform, theme }))
   } catch (err) {
     console.error('[generateSocialPosts] parse error:', err, 'raw:', raw?.slice(0, 200))
