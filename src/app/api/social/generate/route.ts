@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { generateSocialPosts } from '@/lib/social/generate'
+import { generateSocialPosts, generatePostImage } from '@/lib/social/generate'
+import type { SocialPlatform } from '@/lib/social/generate'
 
 // POST /api/social/generate
 // Generates today's social posts for the authenticated user.
@@ -21,7 +22,7 @@ export async function POST(request: NextRequest) {
   if (!force) {
     const { data: existing } = await supabase
       .from('social_posts')
-      .select('id, platform, content, visual_suggestion, image_prompt, theme, status, created_at, posted_at')
+      .select('id, platform, content, visual_suggestion, image_prompt, image_url, theme, status, created_at, posted_at')
       .eq('user_id', user.id)
       .gte('created_at', `${todayStr}T00:00:00Z`)
       .lt('created_at', `${todayStr}T23:59:59Z`)
@@ -65,12 +66,39 @@ export async function POST(request: NextRequest) {
   const { data: stored, error: insertErr } = await supabase
     .from('social_posts')
     .insert(inserts)
-    .select('id, platform, content, visual_suggestion, image_prompt, theme, status, created_at, posted_at')
+    .select('id, platform, content, visual_suggestion, image_prompt, image_url, theme, status, created_at, posted_at')
 
   if (insertErr) {
     console.error('[social/generate] insert error:', insertErr)
     return NextResponse.json({ error: insertErr.message }, { status: 500 })
   }
 
-  return NextResponse.json({ posts: stored, cached: false })
+  // Generate DALL-E 3 images in parallel; failures are non-fatal
+  const openAiKey = process.env.OPENAI_API_KEY
+  if (openAiKey && stored && stored.length > 0) {
+    await Promise.all(
+      stored.map(async (post) => {
+        const draft = generated.find((d) => d.platform === post.platform)
+        if (!draft?.image_prompt) return
+        const imageUrl = await generatePostImage(draft.image_prompt, post.platform as SocialPlatform, openAiKey)
+        if (!imageUrl) return
+        await supabase
+          .from('social_posts')
+          .update({ image_url: imageUrl })
+          .eq('id', post.id)
+          .eq('user_id', user.id)
+      })
+    )
+  }
+
+  // Re-fetch to return rows with image_url populated
+  const { data: final } = await supabase
+    .from('social_posts')
+    .select('id, platform, content, visual_suggestion, image_prompt, image_url, theme, status, created_at, posted_at')
+    .eq('user_id', user.id)
+    .gte('created_at', `${todayStr}T00:00:00Z`)
+    .lt('created_at', `${todayStr}T23:59:59Z`)
+    .order('created_at', { ascending: true })
+
+  return NextResponse.json({ posts: final ?? stored, cached: false })
 }

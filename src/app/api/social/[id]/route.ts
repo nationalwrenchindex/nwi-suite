@@ -46,7 +46,7 @@ export async function PATCH(
     .update(updates)
     .eq('id', id)
     .eq('user_id', user.id)
-    .select('id, platform, content, visual_suggestion, image_prompt, theme, status, created_at, posted_at')
+    .select('id, platform, content, visual_suggestion, image_prompt, image_url, theme, status, created_at, posted_at')
     .single()
 
   if (error) {

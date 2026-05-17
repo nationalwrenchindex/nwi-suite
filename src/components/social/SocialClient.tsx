@@ -6,15 +6,16 @@ type Platform = 'tiktok' | 'instagram' | 'facebook' | 'linkedin' | 'twitter'
 type PostStatus = 'pending' | 'posted' | 'skipped'
 
 interface SocialPost {
-  id:               string
-  platform:         Platform
-  content:          string
+  id:                string
+  platform:          Platform
+  content:           string
   visual_suggestion: string
-  image_prompt:     string | null
-  theme:            string
-  status:           PostStatus
-  created_at:       string
-  posted_at:        string | null
+  image_prompt:      string | null
+  image_url:         string | null
+  theme:             string
+  status:            PostStatus
+  created_at:        string
+  posted_at:         string | null
 }
 
 interface Props {
@@ -104,6 +105,7 @@ function PostCard({
   const [saving,       setSaving]       = useState(false)
   const [copied,       setCopied]       = useState(false)
   const [copiedPrompt, setCopiedPrompt] = useState(false)
+  const [downloading,  setDownloading]  = useState(false)
 
   const meta = PLATFORM_META[post.platform]
 
@@ -136,6 +138,27 @@ function PostCard({
     if (res.ok) {
       const { post: updated } = await res.json()
       onUpdate(post.id, updated)
+    }
+  }
+
+  async function handleDownload() {
+    if (!post.image_url) return
+    setDownloading(true)
+    try {
+      const res  = await fetch(post.image_url)
+      const blob = await res.blob()
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      a.download = `nwi-${post.platform}-${post.id.slice(0, 8)}.png`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch {
+      window.open(post.image_url, '_blank', 'noopener,noreferrer')
+    } finally {
+      setDownloading(false)
     }
   }
 
@@ -235,6 +258,34 @@ function PostCard({
         <p className="text-white/30 text-[10px] uppercase tracking-widest mb-1">Visual Suggestion</p>
         <p className="text-white/50 text-xs leading-relaxed">{post.visual_suggestion}</p>
       </div>
+
+      {/* Generated image */}
+      {post.image_url && (
+        <div className="relative mb-3 rounded-xl overflow-hidden border border-dark-border bg-dark-lighter">
+          <img
+            src={post.image_url}
+            alt={`AI generated image for ${meta.label}`}
+            className="w-full object-cover"
+          />
+          <button
+            onClick={handleDownload}
+            disabled={downloading}
+            className="absolute bottom-2.5 right-2.5 flex items-center gap-1.5 bg-dark/80 hover:bg-dark border border-white/10 hover:border-orange/40 text-white/60 hover:text-orange font-condensed font-bold text-[10px] tracking-wider rounded-lg px-2.5 py-1.5 backdrop-blur-sm transition-all disabled:opacity-50"
+          >
+            {downloading ? (
+              <svg className="w-3 h-3 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+              </svg>
+            ) : (
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+            )}
+            {downloading ? 'SAVING…' : 'DOWNLOAD'}
+          </button>
+        </div>
+      )}
 
       {/* Image prompt */}
       {post.image_prompt && (

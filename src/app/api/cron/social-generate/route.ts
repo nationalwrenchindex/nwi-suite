@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
-import { generateSocialPosts } from '@/lib/social/generate'
+import { generateSocialPosts, generatePostImage } from '@/lib/social/generate'
+import type { SocialPlatform } from '@/lib/social/generate'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,7 +19,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
+  const apiKey    = process.env.ANTHROPIC_API_KEY
+  const openAiKey = process.env.OPENAI_API_KEY
+
   if (!apiKey) {
     return NextResponse.json({ error: 'ANTHROPIC_API_KEY not configured' }, { status: 500 })
   }
@@ -74,15 +77,33 @@ export async function GET(request: NextRequest) {
         status:            'pending',
       }))
 
-      const { error: insertErr } = await supabase
+      const { data: inserted, error: insertErr } = await supabase
         .from('social_posts')
         .insert(inserts)
+        .select('id, platform')
 
       if (insertErr) {
         console.error(`[social-cron] insert error for ${sub.user_id}:`, insertErr.message)
         failed++
-      } else {
-        generated++
+        continue
+      }
+
+      generated++
+
+      // Generate DALL-E 3 images in parallel; failures are non-fatal
+      if (openAiKey && inserted && inserted.length > 0) {
+        await Promise.all(
+          inserted.map(async (row) => {
+            const draft = posts.find((d) => d.platform === row.platform)
+            if (!draft?.image_prompt) return
+            const imageUrl = await generatePostImage(draft.image_prompt, row.platform as SocialPlatform, openAiKey)
+            if (!imageUrl) return
+            await supabase
+              .from('social_posts')
+              .update({ image_url: imageUrl })
+              .eq('id', row.id)
+          })
+        )
       }
     } catch (err) {
       console.error(`[social-cron] error for ${sub.user_id}:`, err)

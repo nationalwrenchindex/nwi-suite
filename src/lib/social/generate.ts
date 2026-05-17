@@ -75,6 +75,50 @@ Return a JSON array with exactly 5 objects, one per platform, in this order: tik
 Each object must match this schema exactly:
 {"platform":"tiktok","content":"...","visual_suggestion":"...","image_prompt":"..."}`
 
+type DallESize = '1024x1024' | '1024x1792' | '1792x1024'
+
+const DALL_E_SIZES: Record<SocialPlatform, DallESize> = {
+  tiktok:    '1024x1792',
+  instagram: '1024x1024',
+  facebook:  '1024x1024',
+  linkedin:  '1792x1024',
+  twitter:   '1792x1024',
+}
+
+export async function generatePostImage(
+  imagePrompt: string,
+  platform:    SocialPlatform,
+  openAiKey:   string,
+): Promise<string | null> {
+  try {
+    const res = await fetch('https://api.openai.com/v1/images/generations', {
+      method:  'POST',
+      headers: {
+        'Authorization': `Bearer ${openAiKey}`,
+        'Content-Type':  'application/json',
+      },
+      body: JSON.stringify({
+        model:           'dall-e-3',
+        prompt:          imagePrompt,
+        n:               1,
+        size:            DALL_E_SIZES[platform],
+        quality:         'standard',
+        response_format: 'url',
+      }),
+    })
+    if (!res.ok) {
+      const errText = await res.text()
+      console.error('[generatePostImage] DALL-E error:', res.status, errText.slice(0, 300))
+      return null
+    }
+    const data = await res.json()
+    return (data.data?.[0]?.url as string) ?? null
+  } catch (err) {
+    console.error('[generatePostImage] fetch error:', err)
+    return null
+  }
+}
+
 function extractOutermostArray(text: string): string | null {
   const start = text.indexOf('[')
   if (start === -1) return null
