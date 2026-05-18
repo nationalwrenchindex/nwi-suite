@@ -365,8 +365,8 @@ export default function SignupClient({ foremanAvailable }: Props) {
               {plan === 'foreman' && <SelectedDot />}
             </button>
 
-            {/* ── Base tier cards (exclude foreman_standalone — handled by the card above) ── */}
-            {PLANS.filter(p => p.tier !== 'foreman_standalone').map((p) => {
+            {/* ── Base tier cards (exclude foreman_standalone — handled by card above) ── */}
+            {PLANS.filter(p => p.tier !== 'foreman_standalone' && p.tier !== 'quickwrench').map((p) => {
               const isSelected = plan === p.tier
               const isElite    = p.tier === 'elite'
               const dollars    = (p.price / 100).toFixed(0)

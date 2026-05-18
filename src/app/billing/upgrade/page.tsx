@@ -10,7 +10,7 @@ export const metadata = { title: 'Upgrade — National Wrench Index Suite™' }
 const FEATURE_TO_TIER: Record<string, string> = {
   intel:        'pro',
   financials:   'full_suite',
-  quickwrench:  'full_suite_plus',
+  quickwrench:  'quickwrench',
   torquewrench: 'full_suite_plus',
   foreman:      '',
 }

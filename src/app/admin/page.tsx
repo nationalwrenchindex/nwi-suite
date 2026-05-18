@@ -20,6 +20,7 @@ const TIER_LABEL: Record<string, string> = {
   full_suite_plus:    'Full Suite Plus ($99)',
   elite:              'Elite ($159)',
   foreman_standalone: 'Foreman Standalone ($59)',
+  quickwrench:        'QuickWrench ($69)',
 }
 
 type Profile = {

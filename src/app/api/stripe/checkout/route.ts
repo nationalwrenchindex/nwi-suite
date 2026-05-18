@@ -4,7 +4,7 @@ import { stripe, getPriceId, TIER_MODULES, type PlanTier } from '@/lib/stripe'
 import { getSubscription } from '@/lib/subscription'
 import { sendFounderAlert } from '@/lib/email-alerts'
 
-const VALID_TIERS: PlanTier[] = ['starter', 'pro', 'full_suite', 'full_suite_plus', 'elite', 'foreman_standalone']
+const VALID_TIERS: PlanTier[] = ['starter', 'pro', 'full_suite', 'full_suite_plus', 'elite', 'foreman_standalone', 'quickwrench']
 const NO_TRIAL_TIERS: PlanTier[] = ['elite', 'foreman_standalone']
 
 export async function POST(request: NextRequest) {

@@ -8,6 +8,7 @@ export type PlanTier =
   | 'full_suite_plus'
   | 'elite'
   | 'foreman_standalone'
+  | 'quickwrench'
 
 export const PLANS: {
   tier:      PlanTier
@@ -108,6 +109,26 @@ export const PLANS: {
       'Billed immediately · No free trial',
     ],
   },
+  {
+    tier:      'quickwrench',
+    name:      'NWI QuickWrench',
+    price:     6900,
+    priceKey:  'QUICKWRENCH',
+    modules:   ['quickwrench'],
+    trialDays: 14,
+    badge:     'STANDALONE',
+    features: [
+      'VIN camera scanner — point and shoot',
+      'AI torque specs and repair sequence',
+      'DTC fault code lookup and diagnosis',
+      'Open recall check via NHTSA database',
+      'Fluid specifications by vehicle',
+      'Live parts pricing from multiple suppliers',
+      'Quote builder — text to customer instantly',
+      'VIN to quote in under 2 minutes',
+      'No full Suite required',
+    ],
+  },
 ]
 
 export const TIER_MODULES: Record<PlanTier, string[]> = {
@@ -117,6 +138,7 @@ export const TIER_MODULES: Record<PlanTier, string[]> = {
   full_suite_plus:    ['scheduler', 'intel', 'financials', 'quickwrench', 'torquewrench'],
   elite:              ['scheduler', 'intel', 'financials', 'quickwrench', 'torquewrench', 'foreman'],
   foreman_standalone: ['scheduler', 'foreman'],
+  quickwrench:        ['quickwrench'],
 }
 
 export const MODULE_LABELS: Record<string, string> = {

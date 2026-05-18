@@ -40,6 +40,7 @@ const TIER_DISPLAY: Record<string, string> = {
   full_suite_plus:    'NWI Full Suite Plus',
   elite:              'NWI Elite',
   foreman_standalone: 'NWI Foreman Standalone',
+  quickwrench:        'NWI QuickWrench',
 }
 
 // NWI tiers in price order (excludes foreman_standalone — different product track)
@@ -86,6 +87,8 @@ function PlanCard({
     ? 'border-orange/30 bg-orange/5'
     : plan.badge === 'All-In-One'
     ? 'border-purple-500/40 bg-purple-500/5'
+    : plan.badge === 'STANDALONE'
+    ? 'border-white/15 bg-dark-card hover:border-white/25'
     : 'border-dark-border bg-dark-card hover:border-white/20'
 
   return (
@@ -93,11 +96,12 @@ function PlanCard({
 
       {plan.badge && (
         <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-          <span className={`text-white text-[10px] font-bold px-3 py-1 rounded-full tracking-wide uppercase
-            ${plan.badge === 'Most Popular' ? 'bg-blue' :
-              plan.badge === 'Best Value'   ? 'bg-orange' :
-              plan.badge === 'All-In-One'   ? 'bg-purple-600' :
-              'bg-dark-lighter border border-dark-border'}`}>
+          <span className={`text-[10px] font-bold px-3 py-1 rounded-full tracking-wide uppercase
+            ${plan.badge === 'Most Popular' ? 'bg-blue text-white' :
+              plan.badge === 'Best Value'   ? 'bg-orange text-white' :
+              plan.badge === 'All-In-One'   ? 'bg-purple-600 text-white' :
+              plan.badge === 'STANDALONE'   ? 'bg-dark-lighter border border-white/20 text-white/60' :
+              'bg-dark-lighter border border-dark-border text-white'}`}>
             {plan.badge}
           </span>
         </div>
@@ -183,7 +187,8 @@ function PlanCard({
               ? 'bg-orange hover:bg-orange-hover text-white'
               : plan.badge === 'All-In-One'
               ? 'bg-purple-600 hover:bg-purple-700 text-white'
-              : 'bg-dark-border hover:bg-white/10 text-white border border-dark-border hover:border-white/20'}`}
+              : 'bg-dark-border hover:bg-white/10 text-white border border-dark-border hover:border-white/20'
+            }`}
         >
           {isLoading
             ? <span className="flex items-center justify-center gap-2"><Spinner />Starting…</span>
@@ -332,11 +337,12 @@ function ActiveSubscriptionView({
   const statusCfg = STATUS_DISPLAY[subscription.status] ?? STATUS_DISPLAY.inactive
   const currentPlan = plans.find(p => p.tier === subscription.tier)
 
-  const isForemanStandalone = subscription.tier === 'foreman_standalone'
-  const currentNwiIndex     = NWI_TIER_ORDER.indexOf(subscription.tier as PlanTier)
+  const isForemanStandalone     = subscription.tier === 'foreman_standalone'
+  const isQuickWrenchStandalone = subscription.tier === 'quickwrench'
+  const currentNwiIndex         = NWI_TIER_ORDER.indexOf(subscription.tier as PlanTier)
 
   // Plans to offer as upgrades / additions
-  const upgradePlans = isForemanStandalone
+  const upgradePlans = (isForemanStandalone || isQuickWrenchStandalone)
     ? plans.filter(p => NWI_TIER_ORDER.includes(p.tier))
     : currentNwiIndex >= 0
     ? plans.filter(p => NWI_TIER_ORDER.indexOf(p.tier) > currentNwiIndex)
@@ -389,7 +395,7 @@ function ActiveSubscriptionView({
       {upgradePlans.length > 0 && (
         <div>
           <p className="text-white/30 text-xs uppercase tracking-widest mb-3">
-            {isForemanStandalone ? 'Add an NWI Tier' : 'Available Upgrades'}
+            {(isForemanStandalone || isQuickWrenchStandalone) ? 'Add an NWI Tier' : 'Available Upgrades'}
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {upgradePlans.map(plan => (
@@ -402,9 +408,9 @@ function ActiveSubscriptionView({
               />
             ))}
           </div>
-          {isForemanStandalone && (
+          {(isForemanStandalone || isQuickWrenchStandalone) && (
             <p className="text-white/25 text-xs mt-3">
-              NWI tiers are billed separately alongside your Foreman subscription.
+              NWI tiers are billed separately alongside your standalone subscription.
             </p>
           )}
         </div>
@@ -551,7 +557,10 @@ export default function BillingClient({
         />
       ) : (
         <div>
-          {/* NWI Tiers — row 1 */}
+          {/* NWI Suite Plans */}
+          <p className="text-white/30 text-[11px] uppercase tracking-widest mb-3">NWI Suite Plans</p>
+
+          {/* Row 1: Starter, Pro, Full Suite */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-5">
             {plans.filter(p => ['starter', 'pro', 'full_suite'].includes(p.tier)).map(plan => (
               <PlanCard
@@ -564,8 +573,8 @@ export default function BillingClient({
             ))}
           </div>
 
-          {/* NWI Tiers — row 2 */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-8">
+          {/* Row 2: Full Suite Plus, Elite, Foreman Standalone */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-10">
             {plans.filter(p => ['full_suite_plus', 'elite', 'foreman_standalone'].includes(p.tier)).map(plan => (
               <PlanCard
                 key={plan.tier}
@@ -575,6 +584,25 @@ export default function BillingClient({
                 loading={loadingPlan}
               />
             ))}
+          </div>
+
+          {/* Standalone Tools */}
+          <div className="border-t border-dark-border pt-8 mb-8">
+            <p className="text-white/30 text-[11px] uppercase tracking-widest mb-1">Standalone Tools</p>
+            <p className="text-white/25 text-xs mb-4">
+              Already have a shop management system? Add just the tool you need.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+              {plans.filter(p => p.tier === 'quickwrench').map(plan => (
+                <PlanCard
+                  key={plan.tier}
+                  plan={plan}
+                  isCurrent={false}
+                  onSelect={handleSelectPlan}
+                  loading={loadingPlan}
+                />
+              ))}
+            </div>
           </div>
 
           <div className="nwi-card text-center py-5">
