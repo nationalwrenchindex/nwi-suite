@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { generatePostImage } from '@/lib/social/generate'
 import type { SocialPlatform } from '@/lib/social/generate'
 
-export const maxDuration = 60
+export const maxDuration = 300
 
 // POST /api/social/generate-images
 // Phase 2 of social post generation — generates DALL-E 3 images for a batch of posts.
