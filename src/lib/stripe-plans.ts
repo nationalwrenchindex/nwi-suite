@@ -1,102 +1,122 @@
 // ─── Client-safe plan definitions ────────────────────────────────────────────
 // NO Stripe SDK import here — safe to import from client components.
 
-export type PlanTier = 'starter' | 'pro' | 'full_suite' | 'quickwrench' | 'elite'
+export type PlanTier =
+  | 'starter'
+  | 'pro'
+  | 'full_suite'
+  | 'full_suite_plus'
+  | 'elite'
+  | 'foreman_standalone'
 
 export const PLANS: {
-  tier:     PlanTier
-  name:     string
-  price:    number           // USD cents
-  priceKey: string           // STRIPE_PRICE_<priceKey> env var suffix
-  modules:  string[]
-  features: string[]
-  badge?:   string
-  promo?:   string
+  tier:      PlanTier
+  name:      string
+  price:     number           // USD cents
+  priceKey:  string           // STRIPE_PRICE_<priceKey> env var suffix
+  modules:   string[]
+  features:  string[]
+  badge?:    string
+  trialDays: number
 }[] = [
   {
-    tier:     'starter',
-    name:     'NWI Starter',
-    price:    1900,
-    priceKey: 'STARTER',
-    modules:  ['scheduler'],
+    tier:      'starter',
+    name:      'NWI Starter',
+    price:     1900,
+    priceKey:  'STARTER',
+    modules:   [],
+    trialDays: 14,
     features: [
-      'Job scheduling & calendar',
-      'Customer booking page',
-      'SMS & email notifications',
-      'Day-before reminders',
-      'On-my-way alerts',
+      'Choose 1 module: Scheduler, Intel Hub, or Financials',
+      'Public booking page',
+      '14-day free trial',
+      'Cancel anytime',
     ],
   },
   {
-    tier:     'pro',
-    name:     'NWI Pro',
-    price:    3400,
-    priceKey: 'PRO',
-    badge:    'Most Popular',
-    modules:  ['scheduler', 'intel'],
+    tier:      'pro',
+    name:      'NWI Pro',
+    price:     3400,
+    priceKey:  'PRO',
+    modules:   [],
+    trialDays: 14,
+    badge:     'Most Popular',
     features: [
-      'Everything in Starter',
-      'Customer & vehicle management',
-      'VIN decoder',
-      'NHTSA recall lookup',
-      'Service due alerts',
+      'Choose any 2: Scheduler, Intel Hub, or Financials',
+      'Public booking page',
+      '14-day free trial',
+      'Cancel anytime',
     ],
   },
   {
-    tier:     'full_suite',
-    name:     'NWI Full Suite',
-    price:    4900,
-    priceKey: 'FULL_SUITE',
-    modules:  ['scheduler', 'intel', 'financials'],
+    tier:      'full_suite',
+    name:      'NWI Full Suite',
+    price:     4900,
+    priceKey:  'FULL_SUITE',
+    modules:   ['scheduler', 'intel', 'financials'],
+    trialDays: 14,
     features: [
-      'Everything in Pro',
-      'Invoicing & line items',
-      'Expense tracking',
-      'Monthly P&L overview',
-      'Revenue & profit metrics',
+      'Scheduler — booking, calendar, SMS reminders',
+      'Intel Hub — customer profiles, VIN decoder, service alerts',
+      'Financials — invoicing, expenses, P&L reports',
+      '14-day free trial',
+      'Cancel anytime',
     ],
   },
   {
-    tier:     'quickwrench',
-    name:     'NWI QuickWrench',
-    price:    6900,
-    priceKey: 'QUICKWRENCH',
-    badge:    'Standalone',
-    modules:  ['quickwrench'],
-    features: [
-      'VIN scan in 2 seconds',
-      'AI-powered tech guide',
-      'Torque specs & procedures',
-      'Multi-supplier parts pricing',
-      'Customer-facing quotes',
-      'Multi-job support',
-      'Per-job profit tracking',
-    ],
-  },
-  {
-    tier:     'elite',
-    name:     'NWI Elite',
-    price:    9900,
-    priceKey: 'ELITE',
-    badge:    'Best Value',
-    modules:  ['scheduler', 'intel', 'financials', 'quickwrench'],
+    tier:      'full_suite_plus',
+    name:      'NWI Full Suite Plus',
+    price:     9900,
+    priceKey:  'FULL_SUITE_PLUS',
+    modules:   ['scheduler', 'intel', 'financials', 'quickwrench', 'torquewrench'],
+    trialDays: 14,
+    badge:     'Best Value',
     features: [
       'Everything in Full Suite',
-      'Everything in QuickWrench',
-      'Per-job P&L with fuel tracking',
-      'Auto-financial breakdown',
-      'Priority support',
+      'QuickWrench — VIN scan, AI tech guide, parts pricing',
+      'TorqueWrench — automated review requests & follow-up',
+      '14-day free trial',
+      'Cancel anytime',
     ],
-    promo: '🔥 LAUNCH PRICING: First 100 subscribers lock in $99/mo for life. After subscriber #100, Elite increases to $129/mo.',
+  },
+  {
+    tier:      'elite',
+    name:      'NWI Elite',
+    price:     15900,
+    priceKey:  'ELITE',
+    modules:   ['scheduler', 'intel', 'financials', 'quickwrench', 'torquewrench', 'foreman'],
+    trialDays: 0,
+    badge:     'All-In-One',
+    features: [
+      'Everything in Full Suite Plus',
+      'Foreman AI receptionist',
+      'Up to 150 free minutes / month',
+      'Billed immediately · No free trial',
+    ],
+  },
+  {
+    tier:      'foreman_standalone',
+    name:      'NWI Foreman Standalone',
+    price:     5900,
+    priceKey:  'FOREMAN',
+    modules:   ['scheduler', 'foreman'],
+    trialDays: 0,
+    features: [
+      'AI call answering & smart receptionist',
+      'Free Scheduler module included',
+      'Up to 150 free minutes / month',
+      'Billed immediately · No free trial',
+    ],
   },
 ]
 
 export const TIER_MODULES: Record<PlanTier, string[]> = {
-  starter:     ['scheduler'],
-  pro:         ['scheduler', 'intel'],
-  full_suite:  ['scheduler', 'intel', 'financials', 'torquewrench'],
-  quickwrench: ['quickwrench', 'torquewrench'],
-  elite:       ['scheduler', 'intel', 'financials', 'quickwrench', 'torquewrench'],
+  starter:            [],
+  pro:                [],
+  full_suite:         ['scheduler', 'intel', 'financials'],
+  full_suite_plus:    ['scheduler', 'intel', 'financials', 'quickwrench', 'torquewrench'],
+  elite:              ['scheduler', 'intel', 'financials', 'quickwrench', 'torquewrench', 'foreman'],
+  foreman_standalone: ['scheduler', 'foreman'],
 }
 
 export const MODULE_LABELS: Record<string, string> = {
@@ -105,6 +125,7 @@ export const MODULE_LABELS: Record<string, string> = {
   financials:   'Financials',
   quickwrench:  'QuickWrench',
   torquewrench: 'TorqueWrench',
+  foreman:      'Foreman',
 }
 
 // The 3 modules a Starter or Pro subscriber chooses from

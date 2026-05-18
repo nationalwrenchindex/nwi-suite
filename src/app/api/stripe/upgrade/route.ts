@@ -8,7 +8,7 @@ import { createClient } from '@/lib/supabase/server'
 import { stripe, getPriceId, TIER_MODULES, type PlanTier } from '@/lib/stripe'
 import { getSubscription, upsertSubscription } from '@/lib/subscription'
 
-const VALID_TIERS: PlanTier[] = ['starter', 'pro', 'full_suite', 'quickwrench', 'elite']
+const VALID_TIERS: PlanTier[] = ['starter', 'pro', 'full_suite', 'full_suite_plus', 'elite', 'foreman_standalone']
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient()

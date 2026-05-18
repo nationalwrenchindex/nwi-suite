@@ -4,7 +4,8 @@ import { stripe, getPriceId, TIER_MODULES, type PlanTier } from '@/lib/stripe'
 import { getSubscription } from '@/lib/subscription'
 import { sendFounderAlert } from '@/lib/email-alerts'
 
-const VALID_TIERS: PlanTier[] = ['starter', 'pro', 'full_suite', 'quickwrench', 'elite']
+const VALID_TIERS: PlanTier[] = ['starter', 'pro', 'full_suite', 'full_suite_plus', 'elite', 'foreman_standalone']
+const NO_TRIAL_TIERS: PlanTier[] = ['elite', 'foreman_standalone']
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
@@ -81,7 +82,7 @@ export async function POST(request: NextRequest) {
       payment_method_types: ['card'],
       line_items: [{ price: priceId, quantity: 1 }],
       subscription_data: {
-        trial_period_days: 14,
+        ...(NO_TRIAL_TIERS.includes(tier) ? {} : { trial_period_days: 14 }),
         metadata: {
           user_id: user.id,
           tier,

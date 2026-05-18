@@ -14,11 +14,12 @@ export const metadata = { title: 'Admin — NWI Suite' }
 
 const TIER_PRICE = Object.fromEntries(PLANS.map(p => [p.tier, p.price]))
 const TIER_LABEL: Record<string, string> = {
-  starter:     'Starter ($19)',
-  pro:         'Pro ($34)',
-  full_suite:  'Full Suite ($49)',
-  quickwrench: 'QuickWrench ($69)',
-  elite:       'Elite ($99)',
+  starter:            'Starter ($19)',
+  pro:                'Pro ($34)',
+  full_suite:         'Full Suite ($49)',
+  full_suite_plus:    'Full Suite Plus ($99)',
+  elite:              'Elite ($159)',
+  foreman_standalone: 'Foreman Standalone ($59)',
 }
 
 type Profile = {
@@ -112,7 +113,6 @@ function getAccountType(businessType: string | null, tier: PlanTier | null): Acc
   const hasQW = tier ? (TIER_MODULES[tier]?.includes('quickwrench') ?? false) : false
   if (businessType === 'detailer') return hasQW ? 'Detailer + QW' : 'Detailer'
   if (businessType === 'mechanic') return hasQW ? 'Mechanic + QW' : 'Mechanic'
-  if (tier === 'quickwrench')      return 'QuickWrench'
   return null
 }
 

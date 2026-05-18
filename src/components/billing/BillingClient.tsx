@@ -3,41 +3,62 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import type { Subscription } from '@/lib/subscription'
-import { MODULE_LABELS, MODULE_DESCRIPTIONS, MODULE_PICK_COUNT, type PlanTier } from '@/lib/stripe-plans'
+import {
+  MODULE_LABELS,
+  MODULE_DESCRIPTIONS,
+  MODULE_PICK_COUNT,
+  type PlanTier,
+} from '@/lib/stripe-plans'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Plan {
-  tier:     PlanTier
-  name:     string
-  price:    number
-  priceKey: string
-  modules:  string[]
-  badge?:   string
-  features: string[]
+  tier:      PlanTier
+  name:      string
+  price:     number
+  priceKey:  string
+  modules:   string[]
+  badge?:    string
+  features:  string[]
+  trialDays: number
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const STATUS_DISPLAY: Record<string, { label: string; badge: string }> = {
-  active:     { label: 'Active',     badge: 'bg-success/15 text-success border-success/30'          },
-  trialing:   { label: 'Trialing',   badge: 'bg-blue/15 text-blue-light border-blue/30'             },
-  past_due:   { label: 'Past Due',   badge: 'bg-amber-500/15 text-amber-400 border-amber-500/30'    },
-  canceled:   { label: 'Cancelled',  badge: 'bg-white/5 text-white/30 border-white/10'              },
-  inactive:   { label: 'Inactive',   badge: 'bg-white/5 text-white/30 border-white/10'              },
+  active:   { label: 'Active',   badge: 'bg-success/15 text-success border-success/30'       },
+  trialing: { label: 'Trialing', badge: 'bg-blue/15 text-blue-light border-blue/30'          },
+  past_due: { label: 'Past Due', badge: 'bg-amber-500/15 text-amber-400 border-amber-500/30' },
+  canceled: { label: 'Cancelled', badge: 'bg-white/5 text-white/30 border-white/10'          },
+  inactive: { label: 'Inactive', badge: 'bg-white/5 text-white/30 border-white/10'           },
 }
 
 const TIER_DISPLAY: Record<string, string> = {
-  starter:     'NWI Starter',
-  pro:         'NWI Pro',
-  full_suite:  'NWI Full Suite',
-  quickwrench: 'NWI QuickWrench',
-  elite:       'NWI Elite',
+  starter:            'NWI Starter',
+  pro:                'NWI Pro',
+  full_suite:         'NWI Full Suite',
+  full_suite_plus:    'NWI Full Suite Plus',
+  elite:              'NWI Elite',
+  foreman_standalone: 'NWI Foreman Standalone',
 }
+
+// NWI tiers in price order (excludes foreman_standalone — different product track)
+const NWI_TIER_ORDER: PlanTier[] = ['starter', 'pro', 'full_suite', 'full_suite_plus', 'elite']
 
 function fmtPeriodEnd(iso: string | null): string {
   if (!iso) return '—'
   return new Date(iso).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+}
+
+// ─── Spinner ──────────────────────────────────────────────────────────────────
+
+function Spinner() {
+  return (
+    <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+    </svg>
+  )
 }
 
 // ─── Plan card ────────────────────────────────────────────────────────────────
@@ -45,29 +66,38 @@ function fmtPeriodEnd(iso: string | null): string {
 function PlanCard({
   plan,
   isCurrent,
-  isDowngrade,
   onSelect,
   loading,
 }: {
-  plan:       Plan
-  isCurrent:  boolean
-  isDowngrade: boolean
-  onSelect:   (tier: PlanTier) => void
-  loading:    PlanTier | null
+  plan:      Plan
+  isCurrent: boolean
+  onSelect:  (tier: PlanTier) => void
+  loading:   PlanTier | null
 }) {
-  const isLoading = loading === plan.tier
+  const isLoading  = loading === plan.tier
+  const pickCount  = MODULE_PICK_COUNT[plan.tier]
+  const noTrial    = plan.trialDays === 0
+
+  const borderClass = isCurrent
+    ? 'border-orange bg-orange/5 ring-1 ring-orange/20'
+    : plan.badge === 'Most Popular'
+    ? 'border-blue/40 bg-blue/5'
+    : plan.badge === 'Best Value'
+    ? 'border-orange/30 bg-orange/5'
+    : plan.badge === 'All-In-One'
+    ? 'border-purple-500/40 bg-purple-500/5'
+    : 'border-dark-border bg-dark-card hover:border-white/20'
 
   return (
-    <div className={`relative rounded-2xl border p-6 flex flex-col transition-all
-      ${isCurrent
-        ? 'border-orange bg-orange/5 ring-1 ring-orange/20'
-        : plan.badge
-        ? 'border-blue/40 bg-blue/5'
-        : 'border-dark-border bg-dark-card hover:border-white/20'}`}>
+    <div className={`relative rounded-2xl border p-6 flex flex-col transition-all ${borderClass}`}>
 
       {plan.badge && (
         <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-          <span className="bg-blue text-white text-[10px] font-bold px-3 py-1 rounded-full tracking-wide uppercase">
+          <span className={`text-white text-[10px] font-bold px-3 py-1 rounded-full tracking-wide uppercase
+            ${plan.badge === 'Most Popular' ? 'bg-blue' :
+              plan.badge === 'Best Value'   ? 'bg-orange' :
+              plan.badge === 'All-In-One'   ? 'bg-purple-600' :
+              'bg-dark-lighter border border-dark-border'}`}>
             {plan.badge}
           </span>
         </div>
@@ -88,13 +118,16 @@ function PlanCard({
           <span className="font-condensed font-bold text-4xl text-white">${plan.price / 100}</span>
           <span className="text-white/40 text-sm">/month</span>
         </div>
+        <p className="text-white/30 text-[11px] mt-1">
+          {noTrial ? 'Billed immediately · No free trial' : '14-day free trial included'}
+        </p>
       </div>
 
-      {/* Modules */}
-      {MODULE_PICK_COUNT[plan.tier] ? (
+      {/* Module selection preview (Starter / Pro only) */}
+      {pickCount ? (
         <div className="mb-4">
           <p className="text-orange text-[11px] font-condensed font-bold tracking-wide uppercase mb-2.5">
-            {plan.tier === 'starter' ? 'Choose 1 of these 3 modules:' : 'Choose any 2 of these 3 modules:'}
+            {pickCount === 1 ? 'Choose 1 of these 3 modules:' : 'Choose any 2 of these 3 modules:'}
           </p>
           <ul className="space-y-2">
             {(Object.keys(MODULE_DESCRIPTIONS) as (keyof typeof MODULE_DESCRIPTIONS)[]).map(slug => (
@@ -108,7 +141,8 @@ function PlanCard({
             ))}
           </ul>
         </div>
-      ) : (
+      ) : plan.modules.length > 0 ? (
+        /* Module chips for fixed-module plans */
         <div className="mb-4">
           <p className="text-white/30 text-[10px] uppercase tracking-widest mb-2">Modules Included</p>
           <div className="flex flex-wrap gap-1.5">
@@ -119,7 +153,7 @@ function PlanCard({
             ))}
           </div>
         </div>
-      )}
+      ) : null}
 
       {/* Features */}
       <ul className="space-y-2 mb-6 flex-1">
@@ -143,22 +177,83 @@ function PlanCard({
           onClick={() => onSelect(plan.tier)}
           disabled={!!loading}
           className={`w-full py-2.5 rounded-xl text-sm font-condensed font-bold transition-colors disabled:opacity-50
-            ${plan.badge
+            ${plan.badge === 'Most Popular'
               ? 'bg-blue hover:bg-blue/90 text-white'
+              : plan.badge === 'Best Value'
+              ? 'bg-orange hover:bg-orange-hover text-white'
+              : plan.badge === 'All-In-One'
+              ? 'bg-purple-600 hover:bg-purple-700 text-white'
               : 'bg-dark-border hover:bg-white/10 text-white border border-dark-border hover:border-white/20'}`}
         >
           {isLoading
-            ? <span className="flex items-center justify-center gap-2"><Spinner />{isDowngrade ? 'Switching…' : 'Starting…'}</span>
-            : MODULE_PICK_COUNT[plan.tier]
-              ? `Choose ${MODULE_PICK_COUNT[plan.tier] === 1 ? '1 Module' : '2 Modules'} →`
-              : isDowngrade ? 'Switch to This Plan' : `Get ${plan.name}`}
+            ? <span className="flex items-center justify-center gap-2"><Spinner />Starting…</span>
+            : pickCount === 1
+            ? 'Choose 1 Module →'
+            : pickCount === 2
+            ? 'Choose 2 Modules →'
+            : `Get ${plan.name}`}
         </button>
       )}
     </div>
   )
 }
 
-// ─── Foreman-only view ────────────────────────────────────────────────────────
+// ─── Module access chips (used in subscription views) ─────────────────────────
+
+function ModuleChips({
+  ownedModules,
+  foremanActive,
+}: {
+  ownedModules:  string[]
+  foremanActive: boolean
+}) {
+  const allModules = ['scheduler', 'intel', 'financials', 'quickwrench', 'torquewrench', 'foreman']
+  // Only show modules relevant to what the user might have (avoid showing empty locked chips)
+  const maxModule = allModules.filter(m =>
+    m === 'foreman'
+      ? foremanActive || ownedModules.includes('foreman')
+      : ownedModules.includes(m) || ['scheduler','intel','financials'].includes(m)
+  )
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {maxModule.map(mod => {
+        const has = ownedModules.includes(mod) || (mod === 'foreman' && foremanActive)
+        return (
+          <div key={mod} className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm
+            ${has ? 'border-success/30 bg-success/10 text-success' : 'border-dark-border text-white/20'}`}>
+            {has
+              ? <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
+              : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m0 0v2m0-2h2m-2 0H10"/><path strokeLinecap="round" strokeLinejoin="round" d="M5 3a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2H5z"/></svg>}
+            {MODULE_LABELS[mod] ?? mod}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── Manage billing button ────────────────────────────────────────────────────
+
+function ManageBillingButton({ onClick, loading }: { onClick: () => void; loading: boolean }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={loading}
+      className="flex items-center gap-2 border border-dark-border hover:border-white/20 text-white/60 hover:text-white rounded-xl px-4 py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
+    >
+      {loading ? <Spinner /> : (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+          <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+          <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+      )}
+      Manage Billing
+    </button>
+  )
+}
+
+// ─── Foreman-only view (add-on without base tier) ─────────────────────────────
 
 function ForemanOnlyView({
   plans,
@@ -173,6 +268,7 @@ function ForemanOnlyView({
   loadingPortal: boolean
   loadingPlan:   PlanTier | null
 }) {
+  const nwiPlans = plans.filter(p => NWI_TIER_ORDER.includes(p.tier))
   return (
     <div className="space-y-6">
       <div className="nwi-card">
@@ -185,41 +281,16 @@ function ForemanOnlyView({
                 Active
               </span>
             </div>
-            <p className="text-white/40 text-sm mt-1">$59/month · AI Receptionist Standalone</p>
+            <p className="text-white/40 text-sm mt-1">$59/month · AI Receptionist Add-On</p>
           </div>
-          <button
-            onClick={onOpenPortal}
-            disabled={loadingPortal}
-            className="flex items-center gap-2 border border-dark-border hover:border-white/20 text-white/60 hover:text-white rounded-xl px-4 py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
-          >
-            {loadingPortal ? <Spinner /> : (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-                <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-              </svg>
-            )}
-            Manage Billing
-          </button>
+          <ManageBillingButton onClick={onOpenPortal} loading={loadingPortal} />
         </div>
 
         <div className="mt-5 pt-5 border-t border-dark-border">
           <p className="text-white/30 text-xs uppercase tracking-widest mb-3">Module Access</p>
-          <div className="flex flex-wrap gap-2">
-            {['scheduler', 'intel', 'financials'].map(mod => {
-              const has = mod === 'scheduler'
-              return (
-                <div key={mod} className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm
-                  ${has ? 'border-success/30 bg-success/10 text-success' : 'border-dark-border text-white/20'}`}>
-                  {has
-                    ? <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
-                    : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m0 0v2m0-2h2m-2 0H10"/><path strokeLinecap="round" strokeLinejoin="round" d="M5 3a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2H5z"/></svg>}
-                  {MODULE_LABELS[mod] ?? mod}
-                </div>
-              )
-            })}
-          </div>
+          <ModuleChips ownedModules={['scheduler']} foremanActive={true} />
           <p className="text-white/25 text-xs mt-3">
-            Foreman includes free Scheduler access. Add an NWI tier to unlock Intel, Financials, and more.
+            Foreman includes free Scheduler access. Add an NWI tier to unlock Intel Hub, Financials, and more.
           </p>
         </div>
       </div>
@@ -227,15 +298,8 @@ function ForemanOnlyView({
       <div>
         <p className="text-white/30 text-xs uppercase tracking-widest mb-3">Add an NWI Tier</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {plans.map(plan => (
-            <PlanCard
-              key={plan.tier}
-              plan={plan}
-              isCurrent={false}
-              isDowngrade={false}
-              onSelect={onChangePlan}
-              loading={loadingPlan}
-            />
+          {nwiPlans.map(plan => (
+            <PlanCard key={plan.tier} plan={plan} isCurrent={false} onSelect={onChangePlan} loading={loadingPlan} />
           ))}
         </div>
         <p className="text-white/25 text-xs mt-3">
@@ -251,20 +315,32 @@ function ForemanOnlyView({
 function ActiveSubscriptionView({
   subscription,
   plans,
+  foremanAddonActive,
   onOpenPortal,
   onChangePlan,
   loadingPortal,
   loadingPlan,
 }: {
-  subscription:  Subscription
-  plans:         Plan[]
-  onOpenPortal:  () => void
-  onChangePlan:  (tier: PlanTier) => void
-  loadingPortal: boolean
-  loadingPlan:   PlanTier | null
+  subscription:       Subscription
+  plans:              Plan[]
+  foremanAddonActive: boolean
+  onOpenPortal:       () => void
+  onChangePlan:       (tier: PlanTier) => void
+  loadingPortal:      boolean
+  loadingPlan:        PlanTier | null
 }) {
   const statusCfg = STATUS_DISPLAY[subscription.status] ?? STATUS_DISPLAY.inactive
   const currentPlan = plans.find(p => p.tier === subscription.tier)
+
+  const isForemanStandalone = subscription.tier === 'foreman_standalone'
+  const currentNwiIndex     = NWI_TIER_ORDER.indexOf(subscription.tier as PlanTier)
+
+  // Plans to offer as upgrades / additions
+  const upgradePlans = isForemanStandalone
+    ? plans.filter(p => NWI_TIER_ORDER.includes(p.tier))
+    : currentNwiIndex >= 0
+    ? plans.filter(p => NWI_TIER_ORDER.indexOf(p.tier) > currentNwiIndex)
+    : []
 
   return (
     <div className="space-y-6">
@@ -284,41 +360,20 @@ function ActiveSubscriptionView({
             {currentPlan && (
               <p className="text-white/40 text-sm mt-1">
                 ${currentPlan.price / 100}/month
+                {currentPlan.trialDays > 0 && ' · 14-day free trial'}
               </p>
             )}
           </div>
-          <button
-            onClick={onOpenPortal}
-            disabled={loadingPortal}
-            className="flex items-center gap-2 border border-dark-border hover:border-white/20 text-white/60 hover:text-white rounded-xl px-4 py-2.5 text-sm font-medium transition-colors disabled:opacity-50"
-          >
-            {loadingPortal ? <Spinner /> : (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
-                <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
-                <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-              </svg>
-            )}
-            Manage Billing
-          </button>
+          <ManageBillingButton onClick={onOpenPortal} loading={loadingPortal} />
         </div>
 
         {/* Module access chips */}
         <div className="mt-5 pt-5 border-t border-dark-border">
           <p className="text-white/30 text-xs uppercase tracking-widest mb-3">Module Access</p>
-          <div className="flex flex-wrap gap-2">
-            {['scheduler', 'intel', 'financials'].map(mod => {
-              const has = subscription.modules.includes(mod)
-              return (
-                <div key={mod} className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-sm
-                  ${has ? 'border-success/30 bg-success/10 text-success' : 'border-dark-border text-white/20'}`}>
-                  {has
-                    ? <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" /></svg>
-                    : <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m0 0v2m0-2h2m-2 0H10"/><path strokeLinecap="round" strokeLinejoin="round" d="M5 3a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2H5z"/></svg>}
-                  {MODULE_LABELS[mod] ?? mod}
-                </div>
-              )
-            })}
-          </div>
+          <ModuleChips
+            ownedModules={subscription.modules}
+            foremanActive={foremanAddonActive || subscription.tier === 'elite' || subscription.tier === 'foreman_standalone'}
+          />
         </div>
 
         {subscription.current_period_end && (
@@ -330,29 +385,28 @@ function ActiveSubscriptionView({
         )}
       </div>
 
-      {/* Upgrade options (show plans above current) */}
-      {subscription.tier !== 'full_suite' && (
+      {/* Upgrades / add-ons */}
+      {upgradePlans.length > 0 && (
         <div>
-          <p className="text-white/30 text-xs uppercase tracking-widest mb-3">Available Upgrades</p>
+          <p className="text-white/30 text-xs uppercase tracking-widest mb-3">
+            {isForemanStandalone ? 'Add an NWI Tier' : 'Available Upgrades'}
+          </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {plans.map(plan => (
+            {upgradePlans.map(plan => (
               <PlanCard
                 key={plan.tier}
                 plan={plan}
-                isCurrent={plan.tier === subscription.tier}
-                isDowngrade={
-                  plans.findIndex(p => p.tier === plan.tier) <
-                  plans.findIndex(p => p.tier === subscription.tier)
-                }
+                isCurrent={false}
                 onSelect={onChangePlan}
                 loading={loadingPlan}
               />
             ))}
           </div>
-          <p className="text-white/25 text-xs mt-3">
-            Plan changes take effect immediately. You&apos;ll be charged the prorated difference.
-            Upgrades and downgrades are handled via the Manage Billing portal.
-          </p>
+          {isForemanStandalone && (
+            <p className="text-white/25 text-xs mt-3">
+              NWI tiers are billed separately alongside your Foreman subscription.
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -381,11 +435,10 @@ export default function BillingClient({
   // Handle redirect-back from Stripe
   useEffect(() => {
     if (searchParams.get('success') === 'true') {
-      setToast({ type: 'success', msg: 'Subscription activated! Welcome to National Wrench Index Suite\u2122.' })
+      setToast({ type: 'success', msg: 'Subscription activated! Welcome to National Wrench Index Suite™.' })
     } else if (searchParams.get('canceled') === 'true') {
       setToast({ type: 'error', msg: 'Checkout was cancelled. No charge was made.' })
     }
-    // clear query params from URL without re-render
     window.history.replaceState({}, '', '/billing')
   }, [searchParams])
 
@@ -490,6 +543,7 @@ export default function BillingClient({
         <ActiveSubscriptionView
           subscription={subscription}
           plans={plans}
+          foremanAddonActive={foremanAddonActive}
           onOpenPortal={handleOpenPortal}
           onChangePlan={handleSelectPlan}
           loadingPortal={loadingPortal}
@@ -497,36 +551,40 @@ export default function BillingClient({
         />
       ) : (
         <div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-            {plans.map(plan => (
+          {/* NWI Tiers — row 1 */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-5">
+            {plans.filter(p => ['starter', 'pro', 'full_suite'].includes(p.tier)).map(plan => (
               <PlanCard
                 key={plan.tier}
                 plan={plan}
                 isCurrent={false}
-                isDowngrade={false}
                 onSelect={handleSelectPlan}
                 loading={loadingPlan}
               />
             ))}
           </div>
 
-          <div className="mt-8 nwi-card text-center py-6">
+          {/* NWI Tiers — row 2 */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-8">
+            {plans.filter(p => ['full_suite_plus', 'elite', 'foreman_standalone'].includes(p.tier)).map(plan => (
+              <PlanCard
+                key={plan.tier}
+                plan={plan}
+                isCurrent={false}
+                onSelect={handleSelectPlan}
+                loading={loadingPlan}
+              />
+            ))}
+          </div>
+
+          <div className="nwi-card text-center py-5">
             <p className="text-white/30 text-xs mb-1">All plans include</p>
             <p className="text-white/60 text-sm">
-              Public booking page · Secure Stripe billing · Cancel anytime · No contracts
+              Secure Stripe billing · Cancel anytime · No contracts
             </p>
           </div>
         </div>
       )}
     </main>
-  )
-}
-
-function Spinner() {
-  return (
-    <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-    </svg>
   )
 }

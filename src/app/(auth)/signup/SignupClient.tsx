@@ -307,11 +307,18 @@ export default function SignupClient({ foremanAvailable }: Props) {
       {/* ── Step 2: Plan selection ── */}
       {step === 2 && (
         <form onSubmit={handleSignup}>
-          {plan !== 'foreman' && (
-            <p className="text-white/50 text-xs uppercase tracking-widest mb-4">
-              14-day free trial — no charge until day 15
-            </p>
-          )}
+          {plan !== 'foreman' && (() => {
+            const planData = PLANS.find(p => p.tier === plan)
+            return planData && planData.trialDays > 0 ? (
+              <p className="text-white/50 text-xs uppercase tracking-widest mb-4">
+                14-day free trial — no charge until day 15
+              </p>
+            ) : planData && planData.trialDays === 0 ? (
+              <p className="text-white/50 text-xs uppercase tracking-widest mb-4">
+                Billed immediately — no free trial
+              </p>
+            ) : null
+          })()}
 
           <div className="space-y-3 mb-5">
 
@@ -358,8 +365,8 @@ export default function SignupClient({ foremanAvailable }: Props) {
               {plan === 'foreman' && <SelectedDot />}
             </button>
 
-            {/* ── Base tier cards ── */}
-            {PLANS.map((p) => {
+            {/* ── Base tier cards (exclude foreman_standalone — handled by the card above) ── */}
+            {PLANS.filter(p => p.tier !== 'foreman_standalone').map((p) => {
               const isSelected = plan === p.tier
               const isElite    = p.tier === 'elite'
               const dollars    = (p.price / 100).toFixed(0)
@@ -397,7 +404,7 @@ export default function SignupClient({ foremanAvailable }: Props) {
                   </div>
 
                   <p className="text-[11px] text-white/40 mb-2">
-                    14 days free, then ${dollars}/mo
+                    {p.trialDays > 0 ? `14 days free, then $${dollars}/mo` : `Billed immediately · No free trial`}
                   </p>
 
                   <ul className="space-y-0.5 mb-2">
@@ -408,12 +415,6 @@ export default function SignupClient({ foremanAvailable }: Props) {
                       </li>
                     ))}
                   </ul>
-
-                  {p.promo && (
-                    <p className="text-[11px] text-orange/80 leading-snug mt-2 border-t border-orange/20 pt-2">
-                      {p.promo}
-                    </p>
-                  )}
 
                   {isSelected && <SelectedDot />}
                 </button>

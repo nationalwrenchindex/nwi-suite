@@ -157,6 +157,60 @@ export async function POST(request: NextRequest) {
           cancel_at_period_end:   false,
         })
 
+        // ── Activate Foreman for Elite and Foreman Standalone ──
+        if (tier === 'elite' || tier === 'foreman_standalone') {
+          const svc = createServiceClient()
+          const capAvailable = await isForemanAvailable()
+
+          if (!capAvailable) {
+            await sendFounderAlert({
+              subject: `Foreman cap exceeded — ${tier} subscriber (${userId})`,
+              html: `<p>User <strong>${userId}</strong> subscribed to <strong>${tier}</strong> but Foreman cap is full. Manual action needed.</p>`,
+            })
+          } else {
+            const { data: fProfile } = await svc
+              .from('profiles')
+              .select('full_name, email, business_name, phone')
+              .eq('id', userId)
+              .single()
+
+            const firstName = fProfile?.full_name
+              ? fProfile.full_name.trim().split(/\s+/)[0]
+              : null
+
+            // Activate Foreman — do NOT set foreman_stripe_subscription_id so
+            // getUserIdByForemanSubscription won't intercept this tier's cancellation
+            await svc.from('profiles').update({
+              foreman_addon_active: true,
+            }).eq('id', userId)
+
+            await svc.from('foreman_settings').upsert({
+              user_id:             userId,
+              is_enabled:          true,
+              business_name:       fProfile?.business_name ?? null,
+              mechanic_first_name: firstName,
+              mechanic_phone:      fProfile?.phone ?? null,
+              working_hours_start: FOREMAN_WORKING_HOURS_DEFAULT.start,
+              working_hours_end:   FOREMAN_WORKING_HOURS_DEFAULT.end,
+              working_days:        [...FOREMAN_WORKING_HOURS_DEFAULT.days],
+              after_hours_message: 'Sorry we missed you — please call back during business hours.',
+              updated_at:          new Date().toISOString(),
+            }, { onConflict: 'user_id' })
+
+            void provisionForemanNumber(userId).then(result => {
+              if (!result.ok) {
+                console.error('[foreman-automation] provision failed:', result.error)
+                void sendFounderAlert({
+                  subject: `Foreman provisioning failed — ${tier} — ${fProfile?.full_name ?? userId}`,
+                  html: `<p>Foreman was activated for <strong>${fProfile?.full_name ?? userId}</strong> (${fProfile?.email ?? '—'}) via ${tier} but phone provisioning failed.</p><p>Error: ${result.error}</p>`,
+                })
+              } else {
+                console.log('[foreman-automation] number provisioned for', tier, ':', result.phone_number)
+              }
+            }).catch(e => console.error('[foreman-automation] provision error:', e))
+          }
+        }
+
         // Fire-and-forget — alert failure must not fail the webhook
         void (async () => {
           try {
@@ -220,9 +274,12 @@ export async function POST(request: NextRequest) {
       // ── Subscription deleted (cancelled at end of period) ──────────────────
       case 'customer.subscription.deleted': {
         const sub = event.data.object as Stripe.Subscription
+        const tierMeta = sub.metadata?.tier as PlanTier | undefined
 
-        // Check if this is a Foreman add-on subscription first
-        const foremanUserId = await getUserIdByForemanSubscription(sub.id)
+        // Check if this is a Foreman add-on subscription first.
+        // Elite and Foreman Standalone tiers have tier metadata, so skip the
+        // foreman-only lookup for them — they go through the base tier path below.
+        const foremanUserId = tierMeta ? null : await getUserIdByForemanSubscription(sub.id)
         if (foremanUserId) {
           const svc = createServiceClient()
 
@@ -271,6 +328,33 @@ export async function POST(request: NextRequest) {
             ? new Date(sub.current_period_end * 1000).toISOString() : null,
           cancel_at_period_end:   false,
         })
+
+        // Deactivate Foreman for tiers that bundle it
+        if (tierMeta === 'elite' || tierMeta === 'foreman_standalone') {
+          const svc = createServiceClient()
+          const { data: fSettings } = await svc
+            .from('foreman_settings')
+            .select('phone_number, vapi_phone_number_id')
+            .eq('user_id', userId)
+            .single()
+
+          await svc.from('profiles').update({
+            foreman_addon_active: false,
+          }).eq('id', userId)
+
+          if (fSettings?.phone_number) {
+            const releaseAt = new Date()
+            releaseAt.setDate(releaseAt.getDate() + FOREMAN_GRACE_PERIOD_DAYS)
+            await svc.from('foreman_grace_period').insert({
+              user_id:               userId,
+              phone_number:          fSettings.phone_number,
+              vapi_phone_number_id:  fSettings.vapi_phone_number_id ?? null,
+              release_scheduled_for: releaseAt.toISOString(),
+            })
+            console.log('[foreman-automation] grace period scheduled for', userId, 'tier', tierMeta)
+          }
+        }
+
         break
       }
 

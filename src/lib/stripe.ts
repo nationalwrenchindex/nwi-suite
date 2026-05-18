@@ -17,7 +17,9 @@ export const stripe =
 if (process.env.NODE_ENV !== 'production') globalForStripe.stripe = stripe
 
 export function getPriceId(tier: PlanTier): string {
-  const key = `STRIPE_PRICE_${tier.toUpperCase()}`
+  const plan = PLANS.find(p => p.tier === tier)
+  if (!plan) throw new Error(`Unknown tier: ${tier}`)
+  const key = `STRIPE_PRICE_${plan.priceKey}`
   const id  = process.env[key]
   if (!id) throw new Error(`Missing env var: ${key}`)
   return id

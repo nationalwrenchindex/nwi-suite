@@ -10,8 +10,8 @@ export const metadata = { title: 'Upgrade — National Wrench Index Suite™' }
 const FEATURE_TO_TIER: Record<string, string> = {
   intel:        'pro',
   financials:   'full_suite',
-  quickwrench:  'quickwrench',
-  torquewrench: 'full_suite',
+  quickwrench:  'full_suite_plus',
+  torquewrench: 'full_suite_plus',
   foreman:      '',
 }
 
@@ -41,11 +41,7 @@ export default async function UpgradePage({
   // If they clicked the Foreman lock, send them directly to Foreman settings
   if (from === 'foreman') redirect('/settings/foreman')
 
-  const displayPlans = PLANS.filter(p =>
-    profile.business_type === 'detailer'
-      ? p.tier !== 'quickwrench'
-      : true,
-  )
+  const displayPlans = PLANS
 
   return (
     <div className="min-h-dvh bg-dark flex flex-col">
