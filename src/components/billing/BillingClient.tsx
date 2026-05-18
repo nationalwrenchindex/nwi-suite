@@ -573,9 +573,9 @@ export default function BillingClient({
             ))}
           </div>
 
-          {/* Row 2: Full Suite Plus, Elite, Foreman Standalone */}
+          {/* Row 2: Full Suite Plus, Elite */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-10">
-            {plans.filter(p => ['full_suite_plus', 'elite', 'foreman_standalone'].includes(p.tier)).map(plan => (
+            {plans.filter(p => ['full_suite_plus', 'elite'].includes(p.tier)).map(plan => (
               <PlanCard
                 key={plan.tier}
                 plan={plan}
@@ -588,12 +588,12 @@ export default function BillingClient({
 
           {/* Standalone Tools */}
           <div className="border-t border-dark-border pt-8 mb-8">
-            <p className="text-white/30 text-[11px] uppercase tracking-widest mb-1">Standalone Tools</p>
-            <p className="text-white/25 text-xs mb-4">
-              Already have a shop management system? Add just the tool you need.
+            <p className="font-condensed font-bold text-white/60 text-base tracking-wide mb-1">
+              Already have a shop management system?
             </p>
+            <p className="text-white/30 text-sm mb-5">Add just the tool you need.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {plans.filter(p => p.tier === 'quickwrench').map(plan => (
+              {plans.filter(p => ['foreman_standalone', 'quickwrench'].includes(p.tier)).map(plan => (
                 <PlanCard
                   key={plan.tier}
                   plan={plan}
