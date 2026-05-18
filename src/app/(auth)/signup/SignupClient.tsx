@@ -61,7 +61,7 @@ export default function SignupClient({ foremanAvailable }: Props) {
   const [password, setPassword]       = useState('')
   const [confirmPwd, setConfirmPwd]   = useState('')
   const [profession, setProfession]   = useState<ProfessionType>('mobile_mechanic')
-  const [plan, setPlan]               = useState<SignupPlan>('foreman')
+  const [plan, setPlan]               = useState<SignupPlan>('starter')
   const [loading, setLoading]         = useState(false)
   const [error, setError]             = useState<string | null>(null)
   const [success, setSuccess]         = useState(false)
@@ -322,50 +322,7 @@ export default function SignupClient({ foremanAvailable }: Props) {
 
           <div className="space-y-3 mb-5">
 
-            {/* ── Foreman standalone card ── */}
-            <button
-              type="button"
-              onClick={() => setPlan('foreman')}
-              className={`w-full rounded-xl border p-4 text-left transition-all relative ${
-                plan === 'foreman'
-                  ? 'border-orange bg-orange/8'
-                  : 'border-orange/30 bg-dark-card hover:border-orange/60'
-              }`}
-            >
-              <span className="absolute top-3 right-3 text-[10px] font-bold px-2 py-0.5 rounded-full tracking-wider bg-orange/20 text-orange border border-orange/30">
-                STANDALONE
-              </span>
-
-              <div className="flex items-baseline gap-2 mb-0.5 pr-24">
-                <span className="font-condensed font-bold text-white text-lg">Foreman</span>
-                <span className="text-orange font-bold text-sm">
-                  $59<span className="text-white/40 text-xs font-normal">/mo</span>
-                </span>
-              </div>
-
-              <p className="text-[11px] text-white/40 mb-2">
-                AI Receptionist · No NWI tier required
-              </p>
-
-              <ul className="space-y-0.5 mb-2">
-                {FOREMAN_FEATURES.map((f) => (
-                  <li key={f} className="flex items-center gap-1.5 text-xs text-white/60">
-                    <CheckMark />
-                    {f}
-                  </li>
-                ))}
-              </ul>
-
-              {!foremanAvailable && (
-                <p className="text-[11px] text-yellow-400/80 mt-2 border-t border-yellow-500/20 pt-2">
-                  At capacity — selecting this will join the waitlist.
-                </p>
-              )}
-
-              {plan === 'foreman' && <SelectedDot />}
-            </button>
-
-            {/* ── Base tier cards (exclude foreman_standalone — handled by card above) ── */}
+            {/* ── Main tier cards: Starter, Pro, Full Suite, Full Suite Plus, Elite ── */}
             {PLANS.filter(p => p.tier !== 'foreman_standalone' && p.tier !== 'quickwrench').map((p) => {
               const isSelected = plan === p.tier
               const isElite    = p.tier === 'elite'
@@ -420,6 +377,89 @@ export default function SignupClient({ foremanAvailable }: Props) {
                 </button>
               )
             })}
+
+            {/* ── Standalone section divider ── */}
+            <div className="flex items-center gap-3 pt-1">
+              <div className="flex-1 border-t border-dark-border" />
+              <p className="text-[10px] text-white/40 text-center leading-snug shrink-0 max-w-[210px]">
+                Already have a shop management system?<br />Add just the tool you need.
+              </p>
+              <div className="flex-1 border-t border-dark-border" />
+            </div>
+
+            {/* ── Standalone cards: Foreman + QuickWrench side by side ── */}
+            <div className="grid grid-cols-2 gap-2">
+
+              {/* Foreman standalone */}
+              <button
+                type="button"
+                onClick={() => setPlan('foreman')}
+                className={`rounded-xl border p-3 text-left transition-all relative ${
+                  plan === 'foreman'
+                    ? 'border-orange bg-orange/8'
+                    : 'border-orange/30 bg-dark-card hover:border-orange/60'
+                }`}
+              >
+                <span className="block text-[9px] font-bold px-1.5 py-0.5 rounded-full tracking-wider bg-orange/20 text-orange border border-orange/30 w-fit mb-2">
+                  STANDALONE
+                </span>
+                <div className="font-condensed font-bold text-white text-sm leading-tight mb-0.5">Foreman</div>
+                <div className="text-orange font-bold text-xs mb-1.5">
+                  $59<span className="text-white/40 text-[10px] font-normal">/mo</span>
+                </div>
+                <p className="text-[10px] text-white/40 mb-2 leading-tight">AI Receptionist · No NWI tier required</p>
+                <ul className="space-y-0.5">
+                  {FOREMAN_FEATURES.slice(0, 4).map((f) => (
+                    <li key={f} className="flex items-start gap-1 text-[10px] text-white/60">
+                      <CheckMark />
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                </ul>
+                {!foremanAvailable && (
+                  <p className="text-[10px] text-yellow-400/80 mt-2 border-t border-yellow-500/20 pt-2 leading-tight">
+                    At capacity — joins waitlist.
+                  </p>
+                )}
+                {plan === 'foreman' && <SelectedDot />}
+              </button>
+
+              {/* QuickWrench standalone */}
+              {(() => {
+                const qw = PLANS.find(p => p.tier === 'quickwrench')!
+                const isSelected = plan === 'quickwrench'
+                return (
+                  <button
+                    type="button"
+                    onClick={() => setPlan('quickwrench')}
+                    className={`rounded-xl border p-3 text-left transition-all relative ${
+                      isSelected
+                        ? 'border-orange bg-orange/8'
+                        : 'border-orange/30 bg-dark-card hover:border-orange/60'
+                    }`}
+                  >
+                    <span className="block text-[9px] font-bold px-1.5 py-0.5 rounded-full tracking-wider bg-orange/20 text-orange border border-orange/30 w-fit mb-2">
+                      STANDALONE
+                    </span>
+                    <div className="font-condensed font-bold text-white text-sm leading-tight mb-0.5">QuickWrench</div>
+                    <div className="text-orange font-bold text-xs mb-1.5">
+                      $69<span className="text-white/40 text-[10px] font-normal">/mo</span>
+                    </div>
+                    <p className="text-[10px] text-white/40 mb-2 leading-tight">VIN Scanner · No NWI tier required</p>
+                    <ul className="space-y-0.5">
+                      {qw.features.slice(0, 4).map((f) => (
+                        <li key={f} className="flex items-start gap-1 text-[10px] text-white/60">
+                          <CheckMark />
+                          <span>{f}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    {isSelected && <SelectedDot />}
+                  </button>
+                )
+              })()}
+
+            </div>
           </div>
 
           <div className="flex gap-3">
@@ -435,6 +475,8 @@ export default function SignupClient({ foremanAvailable }: Props) {
                 ? 'Creating account…'
                 : plan === 'foreman'
                 ? 'START WITH FOREMAN →'
+                : plan === 'quickwrench'
+                ? 'START WITH QUICKWRENCH →'
                 : 'START FREE TRIAL'}
             </button>
           </div>
@@ -442,6 +484,8 @@ export default function SignupClient({ foremanAvailable }: Props) {
           <p className="text-white/30 text-xs text-center mt-3">
             {plan === 'foreman'
               ? '$59/mo · No NWI tier required · Cancel anytime.'
+              : plan === 'quickwrench'
+              ? '$69/mo · No NWI tier required · 14-day free trial.'
               : 'No charge for 14 days. Cancel anytime.'}
           </p>
         </form>
