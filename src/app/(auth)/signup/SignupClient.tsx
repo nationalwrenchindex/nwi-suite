@@ -108,6 +108,8 @@ export default function SignupClient({ foremanAvailable }: Props) {
     setLoading(true)
     setError(null)
 
+    console.log('[handleSignup] plan:', plan, '| selectedModules:', selectedModules)
+
     if (plan === 'starter' && selectedModules.length === 0) {
       setModuleWarningShown(true)
       setLoading(false)
@@ -157,7 +159,7 @@ export default function SignupClient({ foremanAvailable }: Props) {
           const res  = await fetch('/api/stripe/checkout', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ tier: plan, modules: selectedModules, source: 'signup' }),
+            body:    JSON.stringify({ tier: plan, selectedModules, source: 'signup' }),
           })
           const json = await res.json()
           if (json.url) { window.location.href = json.url; return }
