@@ -108,12 +108,13 @@ Each object must match this schema exactly:
 
 type DallESize = '1024x1024' | '1024x1792' | '1792x1024'
 
+// dall-e-3 supported sizes
 const DALL_E_SIZES: Record<SocialPlatform, DallESize> = {
-  tiktok:    '1024x1792',
-  instagram: '1024x1024',
-  facebook:  '1024x1024',
-  linkedin:  '1792x1024',
-  twitter:   '1792x1024',
+  tiktok:    '1024x1792', // 9:16 vertical
+  instagram: '1024x1024', // 1:1 square
+  facebook:  '1024x1024', // 1:1 (16:9 not supported by dall-e-3)
+  linkedin:  '1792x1024', // 16:9 horizontal
+  twitter:   '1792x1024', // 16:9 horizontal
 }
 
 // Simplified per-platform fallback prompts — short, generic, safe for content filters
@@ -131,6 +132,20 @@ async function callDallE(
   apiKey:   string,
   attempt:  number,
 ): Promise<string | null> {
+  const requestBody = {
+    model:           'dall-e-3',
+    prompt,
+    n:               1,
+    size:            DALL_E_SIZES[platform],
+    quality:         'standard',
+    response_format: 'url',
+  }
+
+  console.log(
+    `[generatePostImage] attempt ${attempt} — DALL-E 3 REQUEST for ${platform}:\n` +
+    JSON.stringify({ ...requestBody, prompt: prompt.slice(0, 200) + (prompt.length > 200 ? '…' : '') }, null, 2),
+  )
+
   try {
     const res = await fetch('https://api.openai.com/v1/images/generations', {
       method:  'POST',
@@ -138,13 +153,7 @@ async function callDallE(
         'Authorization': `Bearer ${apiKey}`,
         'Content-Type':  'application/json',
       },
-      body: JSON.stringify({
-        model:   'gpt-image-1',
-        prompt,
-        n:       1,
-        size:    DALL_E_SIZES[platform],
-        quality: 'standard',
-      }),
+      body: JSON.stringify(requestBody),
     })
 
     // Read raw text first so we can log it regardless of parse outcome
@@ -152,7 +161,7 @@ async function callDallE(
 
     if (!res.ok) {
       console.error(
-        `[generatePostImage] attempt ${attempt} — DALL-E HTTP ${res.status} for ${platform}.\n` +
+        `[generatePostImage] attempt ${attempt} — DALL-E 3 HTTP ${res.status} for ${platform}.\n` +
         `RAW RESPONSE BODY: ${rawText}`,
       )
       return null
@@ -163,16 +172,16 @@ async function callDallE(
       data = JSON.parse(rawText)
     } catch (parseErr) {
       console.error(
-        `[generatePostImage] attempt ${attempt} — failed to parse DALL-E response for ${platform}.\n` +
+        `[generatePostImage] attempt ${attempt} — failed to parse DALL-E 3 response for ${platform}.\n` +
         `PARSE ERROR: ${parseErr}\n` +
         `RAW TEXT: ${rawText}`,
       )
       return null
     }
 
-    // Log the complete response every time so we can see exactly what DALL-E returned
+    // Log the complete response every time
     console.log(
-      `[generatePostImage] attempt ${attempt} — DALL-E raw response for ${platform}:\n` +
+      `[generatePostImage] attempt ${attempt} — DALL-E 3 RESPONSE for ${platform}:\n` +
       JSON.stringify(data, null, 2),
     )
 
@@ -183,10 +192,9 @@ async function callDallE(
     }
     const parsed = data as DallEResponse
 
-    // Surface any error object DALL-E embeds in a 200 body
     if (parsed.error) {
       console.error(
-        `[generatePostImage] attempt ${attempt} — DALL-E error object in 200 body for ${platform}:`,
+        `[generatePostImage] attempt ${attempt} — DALL-E 3 error object in 200 body for ${platform}:`,
         JSON.stringify(parsed.error),
       )
       return null
@@ -194,14 +202,13 @@ async function callDallE(
 
     const item = parsed.data?.[0]
     if (!item) {
-      console.error(`[generatePostImage] attempt ${attempt} — DALL-E data array empty or missing for ${platform}`)
+      console.error(`[generatePostImage] attempt ${attempt} — DALL-E 3 data array empty or missing for ${platform}`)
       return null
     }
 
-    // Check for revised_prompt — indicates content policy rewrote the prompt
     if (item.revised_prompt) {
       console.warn(
-        `[generatePostImage] attempt ${attempt} — DALL-E revised the prompt for ${platform}.\n` +
+        `[generatePostImage] attempt ${attempt} — DALL-E 3 revised the prompt for ${platform}.\n` +
         `ORIGINAL: ${prompt.slice(0, 200)}\n` +
         `REVISED:  ${item.revised_prompt.slice(0, 200)}`,
       )
@@ -209,13 +216,14 @@ async function callDallE(
 
     if (!item.url) {
       console.error(
-        `[generatePostImage] attempt ${attempt} — DALL-E item has no url for ${platform}.\n` +
+        `[generatePostImage] attempt ${attempt} — DALL-E 3 item has no url for ${platform}.\n` +
         `item keys present: ${Object.keys(item).join(', ')}\n` +
         `b64_json present: ${!!item.b64_json}`,
       )
       return null
     }
 
+    console.log(`[generatePostImage] attempt ${attempt} — DALL-E 3 SUCCESS for ${platform}: ${item.url.slice(0, 80)}…`)
     return item.url
   } catch (err) {
     console.error(`[generatePostImage] attempt ${attempt} — fetch error for ${platform}:`, err)
