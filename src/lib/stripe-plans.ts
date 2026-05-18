@@ -106,3 +106,19 @@ export const MODULE_LABELS: Record<string, string> = {
   quickwrench:  'QuickWrench',
   torquewrench: 'TorqueWrench',
 }
+
+// The 3 modules a Starter or Pro subscriber chooses from
+export const SELECTABLE_MODULES = ['scheduler', 'intel', 'financials'] as const
+export type SelectableModule = typeof SELECTABLE_MODULES[number]
+
+export const MODULE_DESCRIPTIONS: Record<SelectableModule, string> = {
+  scheduler:  'Booking page, calendar, job management, automatic SMS reminders',
+  intel:      'Customer profiles, vehicle history, VIN decoder, service alerts',
+  financials: 'Professional invoicing, expense tracking, revenue and profit reports',
+}
+
+// How many modules each choosable tier lets the user pick
+export const MODULE_PICK_COUNT: Partial<Record<PlanTier, number>> = {
+  starter: 1,
+  pro:     2,
+}

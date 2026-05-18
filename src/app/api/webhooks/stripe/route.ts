@@ -140,13 +140,19 @@ export async function POST(request: NextRequest) {
           break
         }
 
+        // Use user-selected modules if present, otherwise fall back to tier defaults
+        const selectedModulesStr = session.metadata?.selected_modules
+        const modules = selectedModulesStr
+          ? selectedModulesStr.split(',').filter(Boolean)
+          : (TIER_MODULES[tier] ?? [])
+
         await upsertSubscription({
           user_id:                userId,
           stripe_customer_id:     typeof session.customer === 'string' ? session.customer : session.customer?.id ?? null,
           stripe_subscription_id: subId ?? null,
           status:                 'active',
           tier,
-          modules:                TIER_MODULES[tier] ?? [],
+          modules,
           current_period_end:     null,
           cancel_at_period_end:   false,
         })
@@ -189,6 +195,12 @@ export async function POST(request: NextRequest) {
         const tier    = (sub.metadata?.tier as PlanTier | undefined)
           ?? (priceId ? getTierFromPriceId(priceId) : null)
 
+        // Preserve user-selected modules stored in subscription metadata
+        const updatedModulesStr = sub.metadata?.selected_modules
+        const updatedModules = updatedModulesStr
+          ? updatedModulesStr.split(',').filter(Boolean)
+          : (tier ? (TIER_MODULES[tier] ?? []) : [])
+
         await upsertSubscription({
           user_id:                userId,
           stripe_customer_id:     typeof sub.customer === 'string' ? sub.customer : sub.customer.id,
@@ -197,7 +209,7 @@ export async function POST(request: NextRequest) {
                                   : sub.status === 'past_due' ? 'past_due'
                                   : sub.status as string,
           tier:                   tier ?? null,
-          modules:                tier ? (TIER_MODULES[tier] ?? []) : [],
+          modules:                updatedModules,
           current_period_end:     sub.current_period_end
             ? new Date(sub.current_period_end * 1000).toISOString() : null,
           cancel_at_period_end:   sub.cancel_at_period_end,

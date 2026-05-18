@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import type { Subscription } from '@/lib/subscription'
-import { MODULE_LABELS, type PlanTier } from '@/lib/stripe-plans'
+import { MODULE_LABELS, MODULE_DESCRIPTIONS, MODULE_PICK_COUNT, type PlanTier } from '@/lib/stripe-plans'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -91,16 +91,35 @@ function PlanCard({
       </div>
 
       {/* Modules */}
-      <div className="mb-4">
-        <p className="text-white/30 text-[10px] uppercase tracking-widest mb-2">Modules Included</p>
-        <div className="flex flex-wrap gap-1.5">
-          {plan.modules.map(m => (
-            <span key={m} className="rounded-lg border border-orange/30 bg-orange/10 text-orange text-xs px-2.5 py-1 font-medium">
-              {MODULE_LABELS[m] ?? m}
-            </span>
-          ))}
+      {MODULE_PICK_COUNT[plan.tier] ? (
+        <div className="mb-4">
+          <p className="text-orange text-[11px] font-condensed font-bold tracking-wide uppercase mb-2.5">
+            {plan.tier === 'starter' ? 'Choose 1 of these 3 modules:' : 'Choose any 2 of these 3 modules:'}
+          </p>
+          <ul className="space-y-2">
+            {(Object.keys(MODULE_DESCRIPTIONS) as (keyof typeof MODULE_DESCRIPTIONS)[]).map(slug => (
+              <li key={slug} className="flex items-start gap-2">
+                <span className="w-1.5 h-1.5 rounded-full bg-orange/50 flex-shrink-0 mt-1.5" />
+                <p className="text-white/55 text-xs leading-snug">
+                  <span className="text-white/80 font-medium">{MODULE_LABELS[slug]}</span>
+                  {' — '}{MODULE_DESCRIPTIONS[slug]}
+                </p>
+              </li>
+            ))}
+          </ul>
         </div>
-      </div>
+      ) : (
+        <div className="mb-4">
+          <p className="text-white/30 text-[10px] uppercase tracking-widest mb-2">Modules Included</p>
+          <div className="flex flex-wrap gap-1.5">
+            {plan.modules.map(m => (
+              <span key={m} className="rounded-lg border border-orange/30 bg-orange/10 text-orange text-xs px-2.5 py-1 font-medium">
+                {MODULE_LABELS[m] ?? m}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Features */}
       <ul className="space-y-2 mb-6 flex-1">
@@ -130,7 +149,9 @@ function PlanCard({
         >
           {isLoading
             ? <span className="flex items-center justify-center gap-2"><Spinner />{isDowngrade ? 'Switching…' : 'Starting…'}</span>
-            : isDowngrade ? 'Switch to This Plan' : `Get ${plan.name}`}
+            : MODULE_PICK_COUNT[plan.tier]
+              ? `Choose ${MODULE_PICK_COUNT[plan.tier] === 1 ? '1 Module' : '2 Modules'} →`
+              : isDowngrade ? 'Switch to This Plan' : `Get ${plan.name}`}
         </button>
       )}
     </div>
@@ -375,6 +396,11 @@ export default function BillingClient({
   }, [toast])
 
   async function handleSelectPlan(tier: PlanTier) {
+    // Starter and Pro require module selection before checkout
+    if (MODULE_PICK_COUNT[tier]) {
+      window.location.href = `/billing/select?plan=${tier}`
+      return
+    }
     setLoadingPlan(tier)
     try {
       const res  = await fetch('/api/stripe/checkout', {

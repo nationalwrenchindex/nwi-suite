@@ -11,13 +11,33 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  let body: { tier?: string; source?: string }
+  let body: { tier?: string; source?: string; selectedModules?: string[] }
   try { body = await request.json() }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
   const tier = body.tier as PlanTier | undefined
   if (!tier || !VALID_TIERS.includes(tier)) {
     return NextResponse.json({ error: 'Invalid tier' }, { status: 400 })
+  }
+
+  // Validate selectedModules for Starter/Pro
+  const ALLOWED_SELECTABLE = ['scheduler', 'intel', 'financials']
+  const PICK_COUNT: Partial<Record<PlanTier, number>> = { starter: 1, pro: 2 }
+  const required = PICK_COUNT[tier]
+  let resolvedModules: string[] | undefined
+
+  if (required !== undefined) {
+    const sel = body.selectedModules ?? []
+    if (
+      sel.length !== required ||
+      sel.some((m: string) => !ALLOWED_SELECTABLE.includes(m))
+    ) {
+      return NextResponse.json(
+        { error: `${tier} requires exactly ${required} module(s) from: ${ALLOWED_SELECTABLE.join(', ')}` },
+        { status: 400 },
+      )
+    }
+    resolvedModules = sel
   }
 
   let priceId: string
@@ -62,9 +82,17 @@ export async function POST(request: NextRequest) {
       line_items: [{ price: priceId, quantity: 1 }],
       subscription_data: {
         trial_period_days: 14,
-        metadata: { user_id: user.id, tier },
+        metadata: {
+          user_id: user.id,
+          tier,
+          ...(resolvedModules ? { selected_modules: resolvedModules.join(',') } : {}),
+        },
       },
-      metadata: { user_id: user.id, tier },
+      metadata: {
+        user_id: user.id,
+        tier,
+        ...(resolvedModules ? { selected_modules: resolvedModules.join(',') } : {}),
+      },
       success_url: `${appUrl}${successPath}?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url:  `${appUrl}/billing?canceled=true`,
       allow_promotion_codes: true,

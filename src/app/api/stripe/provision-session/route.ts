@@ -42,13 +42,19 @@ export async function POST(request: NextRequest) {
       ? session.subscription as { id: string; status: string; current_period_end: number; cancel_at_period_end: boolean }
       : null
 
+    // Use user-selected modules if present in metadata, otherwise fall back to tier defaults
+    const selectedModulesStr = session.metadata?.selected_modules
+    const modules = selectedModulesStr
+      ? selectedModulesStr.split(',').filter(Boolean)
+      : TIER_MODULES[tier]
+
     await upsertSubscription({
       user_id:                user.id,
       stripe_customer_id:     customerId,
       stripe_subscription_id: sub?.id ?? null,
       status:                 sub?.status ?? 'trialing',
       tier,
-      modules:                TIER_MODULES[tier],
+      modules,
       current_period_end:     sub ? new Date(sub.current_period_end * 1000).toISOString() : null,
       cancel_at_period_end:   sub?.cancel_at_period_end ?? false,
     })
