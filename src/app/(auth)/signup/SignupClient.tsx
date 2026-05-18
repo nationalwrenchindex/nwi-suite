@@ -4,8 +4,8 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
-import { PLANS } from '@/lib/stripe-plans'
-import type { PlanTier } from '@/lib/stripe-plans'
+import { PLANS, SELECTABLE_MODULES, MODULE_LABELS, MODULE_DESCRIPTIONS } from '@/lib/stripe-plans'
+import type { PlanTier, SelectableModule } from '@/lib/stripe-plans'
 
 type SignupPlan = PlanTier | 'foreman'
 type ProfessionType = 'mobile_mechanic' | 'other'
@@ -62,9 +62,30 @@ export default function SignupClient({ foremanAvailable }: Props) {
   const [confirmPwd, setConfirmPwd]   = useState('')
   const [profession, setProfession]   = useState<ProfessionType>('mobile_mechanic')
   const [plan, setPlan]               = useState<SignupPlan>('starter')
+  const [selectedModules, setSelectedModules]   = useState<SelectableModule[]>([])
+  const [moduleWarningShown, setModuleWarningShown] = useState(false)
   const [loading, setLoading]         = useState(false)
   const [error, setError]             = useState<string | null>(null)
   const [success, setSuccess]         = useState(false)
+
+  function handlePlanSelect(tier: SignupPlan) {
+    setPlan(tier)
+    setSelectedModules([])
+    setModuleWarningShown(false)
+  }
+
+  function handleModuleToggle(mod: SelectableModule) {
+    setModuleWarningShown(false)
+    if (plan === 'starter') {
+      setSelectedModules([mod])
+    } else {
+      setSelectedModules(prev =>
+        prev.includes(mod)
+          ? prev.filter(m => m !== mod)
+          : prev.length < 2 ? [...prev, mod] : prev
+      )
+    }
+  }
 
   function validateStep1() {
     if (!fullName.trim()) return 'Please enter your full name.'
@@ -86,6 +107,17 @@ export default function SignupClient({ foremanAvailable }: Props) {
     e.preventDefault()
     setLoading(true)
     setError(null)
+
+    if (plan === 'starter' && selectedModules.length === 0) {
+      setModuleWarningShown(true)
+      setLoading(false)
+      return
+    }
+    if (plan === 'pro' && selectedModules.length < 2) {
+      setModuleWarningShown(true)
+      setLoading(false)
+      return
+    }
 
     const supabase = createClient()
     const { error: signUpError } = await supabase.auth.signUp({
@@ -125,7 +157,7 @@ export default function SignupClient({ foremanAvailable }: Props) {
           const res  = await fetch('/api/stripe/checkout', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ tier: plan, source: 'signup' }),
+            body:    JSON.stringify({ tier: plan, modules: selectedModules, source: 'signup' }),
           })
           const json = await res.json()
           if (json.url) { window.location.href = json.url; return }
@@ -329,7 +361,7 @@ export default function SignupClient({ foremanAvailable }: Props) {
                 <button
                   key={p.tier}
                   type="button"
-                  onClick={() => setPlan(p.tier)}
+                  onClick={() => handlePlanSelect(p.tier)}
                   className={`w-full rounded-xl border p-4 text-left transition-all relative ${
                     isSelected
                       ? isElite
@@ -375,6 +407,62 @@ export default function SignupClient({ foremanAvailable }: Props) {
               )
             })}
 
+            {/* ── Module picker for Starter / Pro ── */}
+            {(plan === 'starter' || plan === 'pro') && (
+              <div className="rounded-xl border border-orange/30 bg-dark-card p-4">
+                <p className="text-xs font-semibold text-white/70 uppercase tracking-widest mb-1">
+                  {plan === 'starter' ? 'Choose your 1 module' : 'Choose your 2 modules'}
+                </p>
+                <p className="text-[11px] text-white/40 mb-3">
+                  {plan === 'starter'
+                    ? 'Pick the tool that fits your workflow.'
+                    : 'Pick any two — you can always upgrade later.'}
+                </p>
+                <div className="space-y-2">
+                  {SELECTABLE_MODULES.map((mod) => {
+                    const isSelected = selectedModules.includes(mod)
+                    const isDisabled = !isSelected && plan === 'pro' && selectedModules.length >= 2
+                    return (
+                      <button
+                        key={mod}
+                        type="button"
+                        disabled={isDisabled}
+                        onClick={() => handleModuleToggle(mod)}
+                        className={`w-full rounded-lg border p-3 text-left transition-all relative ${
+                          isSelected
+                            ? 'border-orange bg-orange/8'
+                            : isDisabled
+                            ? 'border-dark-border bg-dark-card opacity-40 cursor-not-allowed'
+                            : 'border-dark-border bg-dark-card hover:border-white/30'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between pr-2">
+                          <span className="font-semibold text-sm text-white">{MODULE_LABELS[mod]}</span>
+                          {isSelected && (
+                            <div className="w-4 h-4 rounded-full bg-orange flex items-center justify-center flex-shrink-0">
+                              <svg className="w-2.5 h-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                              </svg>
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-white/40 mt-0.5 leading-snug">
+                          {MODULE_DESCRIPTIONS[mod]}
+                        </p>
+                      </button>
+                    )
+                  })}
+                </div>
+                {moduleWarningShown && (
+                  <p className="text-red-400 text-xs mt-3">
+                    {plan === 'starter'
+                      ? 'Please select a module to continue.'
+                      : 'Please select 2 modules to continue.'}
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* ── Standalone section divider ── */}
             <div className="flex items-center gap-3 pt-1">
               <div className="flex-1 border-t border-dark-border" />
@@ -390,7 +478,7 @@ export default function SignupClient({ foremanAvailable }: Props) {
               {/* Foreman standalone */}
               <button
                 type="button"
-                onClick={() => setPlan('foreman')}
+                onClick={() => handlePlanSelect('foreman')}
                 className={`rounded-xl border p-3 text-left transition-all relative ${
                   plan === 'foreman'
                     ? 'border-orange bg-orange/8'
@@ -428,7 +516,7 @@ export default function SignupClient({ foremanAvailable }: Props) {
                 return (
                   <button
                     type="button"
-                    onClick={() => setPlan('quickwrench')}
+                    onClick={() => handlePlanSelect('quickwrench')}
                     className={`rounded-xl border p-3 text-left transition-all relative ${
                       isSelected
                         ? 'border-orange bg-orange/8'
