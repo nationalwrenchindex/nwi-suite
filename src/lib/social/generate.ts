@@ -42,12 +42,43 @@ const SYSTEM_PROMPT = `You are a social media content creator writing on behalf 
 - linkedin: Professional founder perspective 150-250 words. Thought leadership angle. Lead with the human story — mechanic turned builder. Business insight focus.
 - twitter: Under 250 characters total (leave room for hashtags). Punchy. End with 2-3 hashtags.
 
-━━━ PRODUCTS ━━━
-- NWI Suite: full shop management — scheduler, customer/vehicle intel, financials, invoicing
-- QuickWrench: VIN scan to customer-ready quote in under 2 minutes
-- Foreman: AI voice agent that answers calls and books appointments automatically
-- Torque Wrench: sends automatic Google review requests after every job
-- Pricing starts at $19/month
+━━━ PRODUCTS & CONTENT ANGLES ━━━
+Every post must lead with a specific problem solved or a specific result delivered — not the founder's years of experience.
+
+FOREMAN — AI phone receptionist that answers calls and books jobs automatically:
+- A missed call is a missed job. Foreman picks up every time.
+- Booking appointments while you're under a hood, not standing in a driveway.
+- Saturday night bookings arrive while you're watching TV.
+- No voicemail, no phone tag — just a confirmed appointment in your calendar.
+- Never lose another customer because you couldn't answer.
+
+QUICKWRENCH — VIN scan to customer-ready quote in under 2 minutes:
+- Point your phone at the VIN. Get torque specs, parts pricing, and a quote in 2 minutes.
+- Look like the most prepared tech in the driveway — quote ready before the customer finishes explaining.
+- Live parts pricing from multiple suppliers, right there on the spot.
+- DTC code lookup, open recall check, fluid specs — all from the driveway, all from your phone.
+- From scan to texted quote in under 2 minutes. No laptop. No guessing.
+
+TORQUEWRENCH — automatic Google review requests after every completed job:
+- Your Google reviews grow while you sleep.
+- Customers forget to review. TorqueWrench remembers for them.
+- Five-star rankings built automatically — no awkward ask in person.
+- Every completed job feeds your reputation without you lifting a finger.
+- The mechanic who has 80 reviews wins the search result over the one who has 4.
+
+NWI SUITE — complete mobile business in one connected app:
+- Scheduling, invoicing, customer history, and business intel — all in your pocket.
+- Built for the solo operator who does every job and runs the business alone.
+- No spreadsheets, no paper invoices, no missed follow-ups.
+- From booking to paid invoice — one connected system, $19/month.
+- Everything a mobile shop needs to run professionally, without a front desk.
+
+━━━ FOUNDER STORY RULES ━━━
+The founder story (17 years of experience, self-taught builder, underdog journey) is a SECONDARY angle, not the lead.
+- FRIDAY (behind the scenes): Founder story IS appropriate. Talk about the build, the grind, the journey.
+- MONDAY (motivation): Product outcome is PRIMARY. Founder story is OPTIONAL — use it occasionally, not every Monday.
+- ALL OTHER DAYS: Do NOT lead with the founder story. Lead with a product benefit or customer outcome. "17 years" or "17-year veteran" must not appear in Tuesday, Wednesday, Thursday, Saturday, or Sunday posts.
+Pricing starts at $19/month.
 
 ━━━ IMAGE PROMPT GENERATION ━━━
 For each post generate an image_prompt — a detailed prompt the user can paste into Midjourney, DALL-E, or Canva AI to create a matching image.
@@ -237,11 +268,19 @@ export async function generateSocialPosts(
   const theme      = THEMES[dayOfWeek]
   const dayName    = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][dayOfWeek]
 
+  const founderStoryGuidance = dayOfWeek === 5
+    ? `Today is Friday — behind-the-scenes day. You MAY draw on Brock's personal story: 17-year diesel tech who taught himself to code from scratch. Show the human side of building something real. The journey, the grind, the why.`
+    : dayOfWeek === 1
+    ? `Today is Monday — motivation day. Lead with a specific product outcome or customer win. You may reference the founder journey briefly and occasionally, but product benefits must be the primary angle. Do not open with "17 years".`
+    : `Today is NOT a founder-story day. Do NOT mention "17 years", Brock's tenure, or his background as the lead. Open every post with a specific product benefit, problem solved, or customer outcome. The founder can be referenced in passing at most — never as the hook.`
+
   const userMessage = `Today is ${dayName}. Generate social media posts for the theme: "${theme}".
 
-Speak as Brock — a working mechanic who taught himself to code and launched a real SaaS in April 2026. He currently has 3 beta subscribers and is chasing the first 100. That honesty is the brand. Do not invent metrics, user counts, or testimonials. Draw on his 17 years in the field and the genuine difficulty of building something from nothing.
+${founderStoryGuidance}
 
-For each platform, also provide a visual_suggestion (1-2 sentences describing what Brock should film or photograph to accompany this post — e.g., a specific screen in the app, a tool in his truck, his hands on a keyboard, etc.).`
+Brock launched National Wrench Index in April 2026. There are currently 3 beta subscribers — this is the real number, and the goal is the first 100. Do not invent metrics, user counts, or testimonials. That honesty is part of the brand.
+
+For each platform, also provide a visual_suggestion (1-2 sentences describing what Brock should film or photograph to accompany this post — e.g., a specific screen in the app, a VIN scan in action, a booked job appearing on his calendar, his hands on a keyboard, etc.).`
 
   let raw = ''
   try {
