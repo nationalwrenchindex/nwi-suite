@@ -133,12 +133,11 @@ async function callDallE(
   attempt:  number,
 ): Promise<string | null> {
   const requestBody = {
-    model:           'dall-e-3',
+    model:   'dall-e-3',
     prompt,
-    n:               1,
-    size:            DALL_E_SIZES[platform],
-    quality:         'standard',
-    response_format: 'url',
+    n:       1,
+    size:    DALL_E_SIZES[platform],
+    quality: 'standard',
   }
 
   console.log(
