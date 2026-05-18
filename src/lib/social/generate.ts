@@ -106,15 +106,15 @@ Return a JSON array with exactly 5 objects, one per platform, in this order: tik
 Each object must match this schema exactly:
 {"platform":"tiktok","content":"...","visual_suggestion":"...","image_prompt":"..."}`
 
-type DallESize = '1024x1024' | '1024x1792' | '1792x1024'
+type DallESize = '1024x1024' | '1024x1536' | '1536x1024'
 
-// dall-e-3 supported sizes
+// gpt-image-1 supported sizes
 const DALL_E_SIZES: Record<SocialPlatform, DallESize> = {
-  tiktok:    '1024x1792', // 9:16 vertical
+  tiktok:    '1024x1536', // 9:16 portrait
   instagram: '1024x1024', // 1:1 square
-  facebook:  '1024x1024', // 1:1 (16:9 not supported by dall-e-3)
-  linkedin:  '1792x1024', // 16:9 horizontal
-  twitter:   '1792x1024', // 16:9 horizontal
+  facebook:  '1024x1024', // 1:1 square
+  linkedin:  '1536x1024', // 16:9 landscape
+  twitter:   '1536x1024', // 16:9 landscape
 }
 
 // Simplified per-platform fallback prompts — short, generic, safe for content filters
@@ -133,11 +133,10 @@ async function callDallE(
   attempt:  number,
 ): Promise<string | null> {
   const requestBody = {
-    model:   'dall-e-3',
+    model:  'gpt-image-1',
     prompt,
-    n:       1,
-    size:    DALL_E_SIZES[platform],
-    quality: 'standard',
+    n:      1,
+    size:   DALL_E_SIZES[platform],
   }
 
   console.log(
@@ -214,15 +213,19 @@ async function callDallE(
     }
 
     if (!item.url) {
+      if (item.b64_json) {
+        console.log(`[generatePostImage] attempt ${attempt} — no url, using b64_json data URL for ${platform}`)
+        const dataUrl = `data:image/png;base64,${item.b64_json}`
+        return dataUrl
+      }
       console.error(
-        `[generatePostImage] attempt ${attempt} — DALL-E 3 item has no url for ${platform}.\n` +
-        `item keys present: ${Object.keys(item).join(', ')}\n` +
-        `b64_json present: ${!!item.b64_json}`,
+        `[generatePostImage] attempt ${attempt} — gpt-image-1 item has no url or b64_json for ${platform}.\n` +
+        `item keys present: ${Object.keys(item).join(', ')}`,
       )
       return null
     }
 
-    console.log(`[generatePostImage] attempt ${attempt} — DALL-E 3 SUCCESS for ${platform}: ${item.url.slice(0, 80)}…`)
+    console.log(`[generatePostImage] attempt ${attempt} — gpt-image-1 SUCCESS for ${platform}: ${item.url.slice(0, 80)}…`)
     return item.url
   } catch (err) {
     console.error(`[generatePostImage] attempt ${attempt} — fetch error for ${platform}:`, err)
