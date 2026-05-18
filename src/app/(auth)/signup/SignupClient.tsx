@@ -307,17 +307,14 @@ export default function SignupClient({ foremanAvailable }: Props) {
       {/* ── Step 2: Plan selection ── */}
       {step === 2 && (
         <form onSubmit={handleSignup}>
-          {plan !== 'foreman' && (() => {
-            const planData = PLANS.find(p => p.tier === plan)
-            return planData && planData.trialDays > 0 ? (
+          {(() => {
+            const planData = plan === 'foreman' ? null : PLANS.find(p => p.tier === plan)
+            if (!planData || planData.trialDays === 0) return null
+            return (
               <p className="text-white/50 text-xs uppercase tracking-widest mb-4">
                 14-day free trial — no charge until day 15
               </p>
-            ) : planData && planData.trialDays === 0 ? (
-              <p className="text-white/50 text-xs uppercase tracking-widest mb-4">
-                Billed immediately — no free trial
-              </p>
-            ) : null
+            )
           })()}
 
           <div className="space-y-3 mb-5">
@@ -473,11 +470,9 @@ export default function SignupClient({ foremanAvailable }: Props) {
             <button type="submit" disabled={loading} className="flex-1 btn-primary">
               {loading
                 ? 'Creating account…'
-                : plan === 'foreman'
-                ? 'START WITH FOREMAN →'
-                : plan === 'quickwrench'
-                ? 'START WITH QUICKWRENCH →'
-                : 'START FREE TRIAL'}
+                : plan === 'foreman' || plan === 'elite' || plan === 'quickwrench'
+                ? 'GET STARTED TODAY →'
+                : 'START FREE TRIAL →'}
             </button>
           </div>
 
