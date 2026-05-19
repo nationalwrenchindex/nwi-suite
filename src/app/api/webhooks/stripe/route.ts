@@ -7,6 +7,7 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { provisionForemanNumber } from '@/lib/foreman/provision'
 import { isForemanAvailable } from '@/lib/foreman/cap'
 import { FOREMAN_GRACE_PERIOD_DAYS, FOREMAN_WORKING_HOURS_DEFAULT } from '@/lib/foreman/config'
+import { sendSubscriberSms } from '@/lib/twilio'
 
 // Raw body required for Stripe signature verification — do NOT parse JSON
 export async function POST(request: NextRequest) {
@@ -129,6 +130,14 @@ export async function POST(request: NextRequest) {
                 subject: `Foreman add-on activated: ${profile?.full_name ?? userId}`,
                 html: `<p><strong>${profile?.full_name ?? userId}</strong> just subscribed to Foreman ($59/mo).</p><p>Email: ${profile?.email ?? '—'}</p><p>User ID: ${userId}</p>`,
               })
+              const brockPhone = process.env.BROCK_PHONE_NUMBER
+              if (brockPhone) {
+                const ts = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })
+                await sendSubscriberSms({
+                  to:   brockPhone,
+                  body: `New NWI Subscriber! Name: ${profile?.full_name ?? userId} Email: ${profile?.email ?? '—'} Plan: Foreman Add-on Time: ${ts}`,
+                })
+              }
             } catch { /* non-critical */ }
           })()
           break
@@ -230,6 +239,14 @@ export async function POST(request: NextRequest) {
                 <p>User ID: ${userId}</p>
               `,
             })
+            const brockPhone = process.env.BROCK_PHONE_NUMBER
+            if (brockPhone) {
+              const ts = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })
+              await sendSubscriberSms({
+                to:   brockPhone,
+                body: `New NWI Subscriber! Name: ${name} Email: ${email} Plan: ${tier} Time: ${ts}`,
+              })
+            }
           } catch { /* non-critical */ }
         })()
 
