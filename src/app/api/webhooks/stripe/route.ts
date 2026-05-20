@@ -44,7 +44,6 @@ export async function POST(request: NextRequest) {
 
         const userId  = session.metadata?.user_id
         const product = session.metadata?.product
-        const tier    = session.metadata?.tier as PlanTier | undefined
 
         if (!userId) {
           console.error('[webhook] checkout.session.completed: missing user_id', session.metadata)
@@ -143,9 +142,20 @@ export async function POST(request: NextRequest) {
           break
         }
 
-        // ── Base tier checkout ──
+        // ── Base tier checkout — always derive tier from price ID ──
+        if (!subId) {
+          console.error('[webhook] checkout.session.completed: missing subscription id for base tier checkout')
+          break
+        }
+
+        const stripeSub = await stripe.subscriptions.retrieve(subId)
+        const priceId   = stripeSub.items.data[0]?.price?.id ?? null
+        const tier      = priceId ? getTierFromPriceId(priceId) : null
+
+        console.log(`[webhook] checkout.session.completed: price_id=${priceId ?? 'none'} → tier=${tier ?? 'unknown'}`)
+
         if (!tier) {
-          console.error('[webhook] checkout.session.completed: missing tier', session.metadata)
+          console.error(`[webhook] checkout.session.completed: unrecognised price_id "${priceId ?? 'none'}" — subscription not activated, check STRIPE_PRICE_* env vars`)
           break
         }
 
@@ -261,10 +271,11 @@ export async function POST(request: NextRequest) {
           ?? await getUserIdByStripeSubscription(sub.id)
         if (!userId) { console.error('[webhook] subscription.updated: no user_id for', sub.id); break }
 
-        // Determine tier from the price on the subscription
-        const priceId = sub.items.data[0]?.price?.id
-        const tier    = (sub.metadata?.tier as PlanTier | undefined)
-          ?? (priceId ? getTierFromPriceId(priceId) : null)
+        // Determine tier from the price ID only — never trust metadata
+        const priceId = sub.items.data[0]?.price?.id ?? null
+        const tier    = priceId ? getTierFromPriceId(priceId) : null
+
+        console.log(`[webhook] customer.subscription.updated: price_id=${priceId ?? 'none'} → tier=${tier ?? 'unknown'}`)
 
         // Preserve user-selected modules stored in subscription metadata
         const updatedModulesStr = sub.metadata?.selected_modules

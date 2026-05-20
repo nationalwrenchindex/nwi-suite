@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { stripe, getPriceId, TIER_MODULES, type PlanTier } from '@/lib/stripe'
+import { stripe, getPriceId, getTierFromPriceId, TIER_MODULES, type PlanTier } from '@/lib/stripe'
 import { getSubscription } from '@/lib/subscription'
 import { sendFounderAlert } from '@/lib/email-alerts'
 
@@ -48,6 +48,14 @@ export async function POST(request: NextRequest) {
       { error: 'Stripe prices not configured. Add STRIPE_PRICE_* env vars.' },
       { status: 503 },
     )
+  }
+
+  // Verify the price ID round-trips back to the correct tier via env var mapping
+  const verifiedTier = getTierFromPriceId(priceId)
+  console.log(`[checkout] price_id=${priceId} → tier=${verifiedTier ?? 'UNKNOWN — check STRIPE_PRICE_* env vars'}`)
+  if (!verifiedTier) {
+    console.error(`[checkout] STRIPE_PRICE_* misconfiguration: price_id ${priceId} does not map to any known tier`)
+    return NextResponse.json({ error: 'Stripe price configuration error' }, { status: 503 })
   }
 
   const { data: profile } = await supabase
