@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import type { Job, JobStatus, Inspection } from '@/types/jobs'
 import { STATUS_CONFIG, STATUS_TRANSITIONS, formatTime, formatDateShort } from '@/lib/scheduler'
 import MultiPointInspection from '@/components/quickwrench/MultiPointInspection'
@@ -75,6 +75,7 @@ function JobCard({
   onCancel,
   onOpenInspection,
   onJobUpdated,
+  lunchActive,
 }: {
   job: Job
   businessType?: string
@@ -82,6 +83,7 @@ function JobCard({
   onCancel:         (id: string) => Promise<void>
   onOpenInspection: (jobId: string, customerName: string) => void
   onJobUpdated?:    (job: Job) => void
+  lunchActive?:     boolean
 }) {
   const [expanded,        setExpanded]        = useState(false)
   const [updating,        setUpdating]        = useState(false)
@@ -93,15 +95,17 @@ function JobCard({
   const cfg         = STATUS_CONFIG[job.status]
   const transitions = STATUS_TRANSITIONS[job.status] ?? []
 
-  // Live timer — ticks while job is in-progress and has arrived_at but no departed_at
+  // Live timer — ticks while job is in-progress; pauses during lunch break
   useEffect(() => {
     if (!job.arrived_at || job.departed_at) return
-    const t0 = new Date(job.arrived_at).getTime()
-    const tick = () => setElapsedSeconds(Math.floor((Date.now() - t0) / 1000))
+    if (lunchActive) return  // freeze display during break
+    const t0        = new Date(job.arrived_at).getTime()
+    const lunchSecs = (job.lunch_break_minutes ?? 0) * 60
+    const tick = () => setElapsedSeconds(Math.max(0, Math.floor((Date.now() - t0) / 1000) - lunchSecs))
     tick()
     const id = setInterval(tick, 1000)
     return () => clearInterval(id)
-  }, [job.arrived_at, job.departed_at])
+  }, [job.arrived_at, job.departed_at, job.lunch_break_minutes, lunchActive])
 
   async function doStatusChange(next: JobStatus) {
     setUpdating(true)
@@ -163,12 +167,13 @@ function JobCard({
         msg: ok ? 'Sent!' : (json.error ?? detail ?? 'Failed to send'),
       })
 
-      // Record on_my_way_sent_at for audit/activity timeline
+      // Record on_my_way_sent_at and start drive timer
       if (ok && trigger === 'on_my_way') {
+        const now = new Date().toISOString()
         const upd = await fetch(`/api/jobs/${job.id}`, {
           method:  'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ on_my_way_sent_at: new Date().toISOString() }),
+          body:    JSON.stringify({ on_my_way_sent_at: now, drive_started_at: now }),
         })
         if (upd.ok) {
           const { job: updated } = await upd.json()
@@ -210,11 +215,14 @@ function JobCard({
     }
   }
 
-  const isActive       = job.status !== 'cancelled' && job.status !== 'completed' && job.status !== 'no_show'
-  const showOnSite     = job.status === 'in_progress'
-  const showQuote      = job.status === 'on_site'
-  const showArrived    = isActive && !job.arrived_at
-  const showWorking    = isActive && !!job.arrived_at && !job.departed_at
+  const isActive          = job.status !== 'cancelled' && job.status !== 'completed' && job.status !== 'no_show'
+  const showOnSite        = job.status === 'in_progress'
+  const showQuote         = job.status === 'on_site'
+  // OMW button only when customer exists — gates ARRIVED for jobs with customers
+  const showOnMyWayPrimary = isActive && !job.on_my_way_sent_at && !job.arrived_at && !!job.customer
+  // ARRIVED shows after OMW sent (or immediately if no customer to notify)
+  const showArrived       = isActive && (!job.customer || !!job.on_my_way_sent_at) && !job.arrived_at
+  const showWorking       = isActive && !!job.arrived_at && !job.departed_at
   const laborVariance  = job.arrived_at && job.departed_at && job.actual_labor_minutes != null
     ? (job.suggested_labor_minutes ?? job.estimated_duration_minutes ?? null) != null
       ? (job.suggested_labor_minutes ?? job.estimated_duration_minutes)! - job.actual_labor_minutes
@@ -286,6 +294,40 @@ function JobCard({
       </button>
 
       {/* ── Labor Watch action buttons — always visible, no expand needed ── */}
+
+      {/* Step 1: On My Way — sends notification + starts drive timer */}
+      {showOnMyWayPrimary && (
+        <div className="px-4 pb-4">
+          <button
+            disabled={!!notifying}
+            onClick={() => sendNotif('on_my_way')}
+            className="w-full min-h-[56px] rounded-xl bg-orange hover:bg-orange-hover disabled:opacity-50 text-white font-condensed font-bold text-lg tracking-wide transition-colors active:scale-[0.98] flex items-center justify-center gap-3"
+          >
+            {notifying === 'on_my_way' ? (
+              <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/>
+              </svg>
+            ) : (
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/>
+              </svg>
+            )}
+            {notifying === 'on_my_way' ? 'NOTIFYING…' : 'ON MY WAY — NOTIFY CUSTOMER'}
+          </button>
+          {notifResult && (
+            <div className={`mt-2 text-xs px-3 py-2 rounded-lg border ${
+              notifResult.ok
+                ? 'bg-success/10 border-success/30 text-success'
+                : 'bg-danger/10 border-danger/30 text-danger'
+            }`}>
+              {notifResult.ok ? '✓ ' : '✗ '}{notifResult.msg}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Step 2: Arrived — starts labor timer */}
       {showArrived && (
         <div className="px-4 pb-4">
           <button
@@ -302,21 +344,28 @@ function JobCard({
         </div>
       )}
 
+      {/* Step 3: Working timer + Complete */}
       {showWorking && (
         <div className="px-4 pb-4 flex gap-3">
-          {/* Live timer indicator */}
-          <div className="flex-1 min-h-[56px] rounded-xl border border-success/40 bg-success/10 flex items-center justify-center gap-3">
+          {/* Live timer indicator — shows break state when lunch is active */}
+          <div className={`flex-1 min-h-[56px] rounded-xl border flex items-center justify-center gap-3 ${
+            lunchActive
+              ? 'border-amber-500/40 bg-amber-500/10'
+              : 'border-success/40 bg-success/10'
+          }`}>
             <span className="relative flex">
-              <span className="w-2.5 h-2.5 rounded-full bg-success" />
-              <span className="absolute inset-0 rounded-full bg-success animate-ping opacity-60" />
+              <span className={`w-2.5 h-2.5 rounded-full ${lunchActive ? 'bg-amber-400' : 'bg-success'}`} />
+              {!lunchActive && (
+                <span className="absolute inset-0 rounded-full bg-success animate-ping opacity-60" />
+              )}
             </span>
-            <span className="font-condensed font-bold text-success text-xl tracking-wider">
-              WORKING — {formatElapsed(elapsedSeconds)}
+            <span className={`font-condensed font-bold text-xl tracking-wider ${lunchActive ? 'text-amber-400' : 'text-success'}`}>
+              {lunchActive ? 'ON BREAK' : `WORKING — ${formatElapsed(elapsedSeconds)}`}
             </span>
           </div>
           {/* Complete and Invoice */}
           <button
-            disabled={updating}
+            disabled={updating || !!lunchActive}
             onClick={handleCompleteAndInvoice}
             className="flex-1 min-h-[56px] rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-condensed font-bold text-base tracking-wide transition-colors active:scale-[0.98] px-4 flex items-center justify-center gap-2"
           >
@@ -537,9 +586,13 @@ function JobCard({
 export default function MyJobsTab({
   onBookJob,
   businessType,
+  lunchActive  = false,
+  lunchVersion = 0,
 }: {
-  onBookJob: () => void
+  onBookJob:     () => void
   businessType?: string
+  lunchActive?:  boolean
+  lunchVersion?: number
 }) {
   const [jobs,     setJobs]     = useState<Job[]>([])
   const [loading,  setLoading]  = useState(true)
@@ -558,6 +611,9 @@ export default function MyJobsTab({
     customerName: string
   } | null>(null)
   const [mpiLoading, setMpiLoading] = useState(false)
+
+  // Ref so lunchVersion effect can call the latest fetchJobs without stale closure
+  const fetchJobsRef = useRef<() => Promise<void>>(async () => {})
 
   const fetchJobs = useCallback(async () => {
     setLoading(true)
@@ -581,7 +637,10 @@ export default function MyJobsTab({
     }
   }, [status, search, fromDate, toDate])
 
+  useEffect(() => { fetchJobsRef.current = fetchJobs }, [fetchJobs])
   useEffect(() => { fetchJobs() }, [fetchJobs])
+  // Refetch jobs after a lunch break ends so lunch_break_minutes reflects in the timer
+  useEffect(() => { if (lunchVersion > 0) fetchJobsRef.current() }, [lunchVersion])
 
   function applyQuickRange(r: typeof QUICK_RANGES[0]) {
     setFromDate(r.from())
@@ -757,6 +816,7 @@ export default function MyJobsTab({
               onCancel={handleCancel}
               onOpenInspection={handleOpenInspection}
               onJobUpdated={handleJobUpdated}
+              lunchActive={lunchActive}
             />
           ))}
         </div>

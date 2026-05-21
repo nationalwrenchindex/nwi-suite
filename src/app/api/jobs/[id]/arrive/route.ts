@@ -12,15 +12,32 @@ export async function POST(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const now = new Date().toISOString()
+  // Fetch current job to compute drive_minutes from drive_started_at
+  const { data: existing } = await supabase
+    .from('jobs')
+    .select('drive_started_at')
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .single()
+
+  const now            = new Date()
+  const nowIso         = now.toISOString()
+  const driveStartedAt = existing?.drive_started_at ? new Date(existing.drive_started_at) : null
+  const driveMinutes   = driveStartedAt
+    ? Math.round((now.getTime() - driveStartedAt.getTime()) / 60000)
+    : null
+
+  const updatePayload: Record<string, unknown> = {
+    arrived_at:    nowIso,
+    drive_ended_at: nowIso,
+    status:        'in_progress',
+    updated_at:    nowIso,
+  }
+  if (driveMinutes != null) updatePayload.drive_minutes = driveMinutes
 
   const { data: job, error } = await supabase
     .from('jobs')
-    .update({
-      arrived_at: now,
-      status:     'in_progress',
-      updated_at: now,
-    })
+    .update(updatePayload)
     .eq('id', id)
     .eq('user_id', user.id)
     .select('*, customer:customers(id,first_name,last_name,phone,email), vehicle:vehicles(id,year,make,model,color,license_plate)')

@@ -13,7 +13,7 @@ export async function GET() {
   // Fetch completed jobs with labor data this month
   const { data: jobs, error } = await supabase
     .from('jobs')
-    .select('service_type, arrived_at, departed_at, actual_labor_minutes, suggested_labor_minutes, estimated_duration_minutes, labor_rate')
+    .select('service_type, arrived_at, departed_at, actual_labor_minutes, suggested_labor_minutes, estimated_duration_minutes, labor_rate, drive_minutes')
     .eq('user_id', user.id)
     .eq('status', 'completed')
     .not('arrived_at', 'is', null)
@@ -34,6 +34,9 @@ export async function GET() {
       best_service_types:       [],
       worst_service_types:      [],
       weekly_trend:             [],
+      total_drive_minutes:      0,
+      avg_drive_minutes:        null,
+      drive_jobs_count:         0,
     })
   }
 
@@ -119,6 +122,14 @@ export async function GET() {
       efficiency: b.actual > 0 ? Math.round((b.quoted / b.actual) * 100) : null,
     }))
 
+  // Drive time metrics
+  const driveRows          = rows.filter(r => r.drive_minutes != null)
+  const total_drive_minutes = driveRows.reduce((sum, r) => sum + (r.drive_minutes ?? 0), 0)
+  const avg_drive_minutes   = driveRows.length > 0
+    ? Math.round(total_drive_minutes / driveRows.length)
+    : null
+  const drive_jobs_count    = driveRows.length
+
   return NextResponse.json({
     efficiency_score,
     monthly_variance_minutes,
@@ -127,5 +138,8 @@ export async function GET() {
     best_service_types,
     worst_service_types,
     weekly_trend,
+    total_drive_minutes,
+    avg_drive_minutes,
+    drive_jobs_count,
   })
 }

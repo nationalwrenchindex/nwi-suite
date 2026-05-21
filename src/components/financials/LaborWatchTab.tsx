@@ -21,6 +21,9 @@ interface LaborWatchData {
   best_service_types:       ServiceTypeRow[]
   worst_service_types:      ServiceTypeRow[]
   weekly_trend:             WeekEntry[]
+  total_drive_minutes:      number
+  avg_drive_minutes:        number | null
+  drive_jobs_count:         number
 }
 
 function formatMins(mins: number): string {
@@ -28,6 +31,12 @@ function formatMins(mins: number): string {
   const m = Math.abs(mins) % 60
   const sign = mins < 0 ? '-' : '+'
   return h > 0 ? `${sign}${h}h ${m}m` : `${sign}${m}m`
+}
+
+function formatDuration(mins: number): string {
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return h > 0 ? `${h}h ${m}m` : `${m}m`
 }
 
 export default function LaborWatchTab() {
@@ -128,6 +137,30 @@ export default function LaborWatchTab() {
               )}
             </div>
           </div>
+
+          {/* Drive time */}
+          {data.drive_jobs_count > 0 && (
+            <div className="nwi-card border-white/10">
+              <p className="text-white/40 text-xs uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/>
+                </svg>
+                Drive Time
+              </p>
+              <div className="flex items-end gap-4 flex-wrap">
+                {data.avg_drive_minutes != null && (
+                  <div>
+                    <p className="font-condensed font-bold text-2xl text-white">{formatDuration(data.avg_drive_minutes)}</p>
+                    <p className="text-white/30 text-xs mt-0.5">avg per job</p>
+                  </div>
+                )}
+                <div>
+                  <p className="font-condensed font-bold text-2xl text-white/60">{formatDuration(data.total_drive_minutes)}</p>
+                  <p className="text-white/30 text-xs mt-0.5">total · {data.drive_jobs_count} job{data.drive_jobs_count !== 1 ? 's' : ''} tracked</p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Best & Worst service types */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

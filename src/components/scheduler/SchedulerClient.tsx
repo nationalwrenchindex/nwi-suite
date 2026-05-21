@@ -57,10 +57,36 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
 ]
 
 export default function SchedulerClient({ businessType }: { businessType?: string }) {
-  const [activeTab, setActiveTab] = useState<Tab>('calendar')
+  const [activeTab,      setActiveTab]      = useState<Tab>('calendar')
+  const [lunchActive,    setLunchActive]    = useState(false)
+  const [lunchStartedAt, setLunchStartedAt] = useState<number | null>(null)
+  const [lunchVersion,   setLunchVersion]   = useState(0)
 
-  // Allow any tab to navigate to 'book' (e.g. from CalendarTab empty state)
   function goToBook() { setActiveTab('book') }
+
+  function toggleLunch() {
+    if (!lunchActive) {
+      setLunchActive(true)
+      setLunchStartedAt(Date.now())
+      void fetch('/api/lunch-break', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ action: 'start' }),
+      })
+    } else {
+      const mins = lunchStartedAt
+        ? Math.max(1, Math.round((Date.now() - lunchStartedAt) / 60000))
+        : 1
+      setLunchActive(false)
+      setLunchStartedAt(null)
+      setLunchVersion((v) => v + 1)
+      void fetch('/api/lunch-break', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ action: 'end', lunch_minutes: mins }),
+      })
+    }
+  }
 
   return (
     <div>
@@ -82,11 +108,36 @@ export default function SchedulerClient({ businessType }: { businessType?: strin
             {tab.label}
           </button>
         ))}
+
+        {/* Lunch break button — right-aligned in tab bar */}
+        <div className="ml-auto pl-3 flex-shrink-0 flex items-center pb-px">
+          <button
+            onClick={toggleLunch}
+            className={`flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium border transition-colors ${
+              lunchActive
+                ? 'bg-amber-500/20 border-amber-500/50 text-amber-400 animate-pulse'
+                : 'border-dark-border text-white/35 hover:text-white/60 hover:border-white/20'
+            }`}
+          >
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v1m0 16v1M4.22 4.22l.7.7M18.36 18.36l.7.7M3 12h1m16 0h1M4.22 19.78l.7-.7M18.36 5.64l.7-.7"/>
+              <circle cx="12" cy="12" r="4"/>
+            </svg>
+            {lunchActive ? 'ON BREAK' : 'Lunch Break'}
+          </button>
+        </div>
       </div>
 
       {/* ── Tab content ── */}
       {activeTab === 'calendar'      && <CalendarTab onBookJob={goToBook} />}
-      {activeTab === 'jobs'          && <MyJobsTab   onBookJob={goToBook} businessType={businessType} />}
+      {activeTab === 'jobs'          && (
+        <MyJobsTab
+          onBookJob={goToBook}
+          businessType={businessType}
+          lunchActive={lunchActive}
+          lunchVersion={lunchVersion}
+        />
+      )}
       {activeTab === 'book'          && <BookJobTab  onSuccess={() => setActiveTab('jobs')} businessType={businessType} />}
       {activeTab === 'notifications' && <NotificationsTab />}
     </div>

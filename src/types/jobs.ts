@@ -71,6 +71,11 @@ export interface Job {
   actual_labor_minutes:   number | null
   suggested_labor_minutes:number | null
   labor_rate:             number | null
+  drive_started_at:       string | null
+  drive_ended_at:         string | null
+  drive_minutes:          number | null
+  lunch_break_started_at: string | null
+  lunch_break_minutes:    number | null
   created_at: string
   updated_at: string
   // Joined relations

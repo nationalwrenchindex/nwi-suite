@@ -12,10 +12,10 @@ export async function POST(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  // Fetch the current job to get arrived_at
+  // Fetch the current job to get arrived_at and lunch_break_minutes
   const { data: existing } = await supabase
     .from('jobs')
-    .select('arrived_at')
+    .select('arrived_at, lunch_break_minutes')
     .eq('id', id)
     .eq('user_id', user.id)
     .single()
@@ -23,8 +23,9 @@ export async function POST(
   const now        = new Date()
   const nowIso     = now.toISOString()
   const arrivedAt  = existing?.arrived_at ? new Date(existing.arrived_at) : null
+  const lunchMins  = existing?.lunch_break_minutes ?? 0
   const actualMins = arrivedAt
-    ? Math.round((now.getTime() - arrivedAt.getTime()) / 60000)
+    ? Math.max(0, Math.round((now.getTime() - arrivedAt.getTime()) / 60000) - lunchMins)
     : null
 
   const { data: job, error } = await supabase
