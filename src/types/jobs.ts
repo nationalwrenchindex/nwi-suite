@@ -61,11 +61,16 @@ export interface Job {
   notes: string | null
   internal_notes: string | null
   inspection_requested: boolean | null
-  actual_start_at:   string | null
-  actual_end_at:     string | null
-  completed_at:      string | null
-  on_my_way_sent_at: string | null
-  on_site_at:        string | null
+  actual_start_at:        string | null
+  actual_end_at:          string | null
+  completed_at:           string | null
+  on_my_way_sent_at:      string | null
+  on_site_at:             string | null
+  arrived_at:             string | null
+  departed_at:            string | null
+  actual_labor_minutes:   number | null
+  suggested_labor_minutes:number | null
+  labor_rate:             number | null
   created_at: string
   updated_at: string
   // Joined relations

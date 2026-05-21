@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
-import QuotesTab    from './QuotesTab'
-import OverviewTab  from './OverviewTab'
-import InvoicesTab  from './InvoicesTab'
-import ExpensesTab  from './ExpensesTab'
+import QuotesTab      from './QuotesTab'
+import OverviewTab    from './OverviewTab'
+import InvoicesTab    from './InvoicesTab'
+import ExpensesTab    from './ExpensesTab'
+import LaborWatchTab  from './LaborWatchTab'
 
-type Tab = 'quotes' | 'overview' | 'invoices' | 'expenses'
+type Tab = 'quotes' | 'overview' | 'invoices' | 'expenses' | 'labor'
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   {
@@ -48,6 +49,15 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
         <line x1="12" y1="1" x2="12" y2="23" />
         <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+      </svg>
+    ),
+  },
+  {
+    id: 'labor',
+    label: 'Labor Watch',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
       </svg>
     ),
   },
@@ -96,6 +106,7 @@ export default function FinancialsClient({ businessType }: { businessType?: stri
       {activeTab === 'overview' && <OverviewTab businessType={businessType} />}
       {activeTab === 'invoices' && <InvoicesTab />}
       {activeTab === 'expenses' && <ExpensesTab businessType={businessType} />}
+      {activeTab === 'labor'    && <LaborWatchTab />}
     </div>
   )
 }

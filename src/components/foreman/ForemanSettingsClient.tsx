@@ -3,16 +3,38 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
+interface BusinessHoursDay {
+  open:   string
+  close:  string
+  closed: boolean
+}
+
+type BusinessHours = Partial<Record<string, BusinessHoursDay>>
+
+const DEFAULT_BUSINESS_HOURS: BusinessHours = {
+  Mon: { open: '08:00', close: '17:00', closed: false },
+  Tue: { open: '08:00', close: '17:00', closed: false },
+  Wed: { open: '08:00', close: '17:00', closed: false },
+  Thu: { open: '08:00', close: '17:00', closed: false },
+  Fri: { open: '08:00', close: '17:00', closed: false },
+  Sat: { open: '09:00', close: '14:00', closed: false },
+  Sun: { open: '00:00', close: '00:00', closed: true  },
+}
+
 interface ForemanSettings {
-  is_enabled?:          boolean
-  phone_number?:        string | null
-  business_name?:       string | null
-  mechanic_first_name?: string | null
-  mechanic_phone?:      string | null
-  working_hours_start?: string
-  working_hours_end?:   string
-  working_days?:        string[]
-  after_hours_message?: string | null
+  is_enabled?:               boolean
+  phone_number?:             string | null
+  business_name?:            string | null
+  mechanic_first_name?:      string | null
+  mechanic_phone?:           string | null
+  working_hours_start?:      string
+  working_hours_end?:        string
+  working_days?:             string[]
+  after_hours_message?:      string | null
+  auto_job_activation?:      boolean | null
+  auto_hours_activation?:    boolean | null
+  business_hours?:           BusinessHours | null
+  foreman_activated_reason?: string | null
 }
 
 interface Props {
@@ -101,6 +123,13 @@ export default function ForemanSettingsClient({
   const [hoursEnd,           setHoursEnd]           = useState(initialSettings?.working_hours_end   ?? '18:00')
   const [workingDays,        setWorkingDays]        = useState<string[]>(initialSettings?.working_days ?? ['Mon','Tue','Wed','Thu','Fri'])
   const [afterHoursMessage,  setAfterHoursMessage]  = useState(initialSettings?.after_hours_message ?? 'Sorry we missed you — please call back during business hours.')
+  const [autoJobActivation,  setAutoJobActivation]  = useState(initialSettings?.auto_job_activation  ?? false)
+  const [autoHoursActivation,setAutoHoursActivation]= useState(initialSettings?.auto_hours_activation ?? false)
+  const [businessHours,      setBusinessHours]      = useState<BusinessHours>(
+    (initialSettings?.business_hours && Object.keys(initialSettings.business_hours).length > 0)
+      ? initialSettings.business_hours as BusinessHours
+      : DEFAULT_BUSINESS_HOURS
+  )
 
   const [saving,       setSaving]       = useState(false)
   const [saveSuccess,  setSaveSuccess]  = useState(false)
@@ -112,6 +141,13 @@ export default function ForemanSettingsClient({
     )
   }
 
+  function updateBizHours(day: string, field: keyof BusinessHoursDay, value: string | boolean) {
+    setBusinessHours(prev => ({
+      ...prev,
+      [day]: { ...(prev[day] ?? { open: '08:00', close: '17:00', closed: false }), [field]: value },
+    }))
+  }
+
   async function handleSave() {
     setSaving(true)
     setSaveSuccess(false)
@@ -121,14 +157,17 @@ export default function ForemanSettingsClient({
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          is_enabled:          isEnabled,
-          business_name:       bName,
-          mechanic_first_name: mechName,
-          mechanic_phone:      mechPhone,
-          working_hours_start: hoursStart,
-          working_hours_end:   hoursEnd,
-          working_days:        workingDays,
-          after_hours_message: afterHoursMessage,
+          is_enabled:            isEnabled,
+          business_name:         bName,
+          mechanic_first_name:   mechName,
+          mechanic_phone:        mechPhone,
+          working_hours_start:   hoursStart,
+          working_hours_end:     hoursEnd,
+          working_days:          workingDays,
+          after_hours_message:   afterHoursMessage,
+          auto_job_activation:   autoJobActivation,
+          auto_hours_activation: autoHoursActivation,
+          business_hours:        businessHours,
         }),
       })
       const json = await res.json()
@@ -489,6 +528,111 @@ export default function ForemanSettingsClient({
         />
         <p className="text-white/30 text-xs">Foreman reads this message to callers outside your working hours.</p>
       </div>
+
+      {/* ── Automation section ── */}
+      <div className="nwi-card space-y-1">
+        <p className="text-white/40 text-xs uppercase tracking-widest mb-4">Automation</p>
+        <p className="text-white/30 text-xs mb-5">Both toggles default to OFF. You stay in full control — opt in only if you want automatic coverage.</p>
+
+        {/* Toggle 1 — On The Job Coverage */}
+        <div className="flex items-start justify-between gap-4 py-4 border-b border-dark-border">
+          <div className="flex-1 min-w-0">
+            <p className="text-white text-sm font-medium">Auto-activate Foreman when I arrive at a job</p>
+            <p className="text-white/40 text-xs mt-1 leading-relaxed">
+              Foreman answers your calls automatically while you work. Deactivates when you complete the job.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAutoJobActivation(v => !v)}
+            aria-label={autoJobActivation ? 'Disable on-job coverage' : 'Enable on-job coverage'}
+            className={`relative flex-shrink-0 w-12 h-6 rounded-full transition-colors duration-200 focus:outline-none ${
+              autoJobActivation ? 'bg-orange' : 'bg-dark-border'
+            }`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${
+              autoJobActivation ? 'translate-x-6' : 'translate-x-0'
+            }`} />
+          </button>
+        </div>
+
+        {/* Toggle 2 — After Hours Coverage */}
+        <div className="flex items-start justify-between gap-4 py-4">
+          <div className="flex-1 min-w-0">
+            <p className="text-white text-sm font-medium">Auto-activate Foreman outside my business hours</p>
+            <p className="text-white/40 text-xs mt-1 leading-relaxed">
+              Foreman answers automatically before you open and after you close so you never miss a booking.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAutoHoursActivation(v => !v)}
+            aria-label={autoHoursActivation ? 'Disable after-hours coverage' : 'Enable after-hours coverage'}
+            className={`relative flex-shrink-0 w-12 h-6 rounded-full transition-colors duration-200 focus:outline-none ${
+              autoHoursActivation ? 'bg-orange' : 'bg-dark-border'
+            }`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform duration-200 ${
+              autoHoursActivation ? 'translate-x-6' : 'translate-x-0'
+            }`} />
+          </button>
+        </div>
+      </div>
+
+      {/* Business Hours Picker — shown when after-hours toggle is on */}
+      {autoHoursActivation && (
+        <div className="nwi-card space-y-4">
+          <div>
+            <p className="text-white/40 text-xs uppercase tracking-widest">Business Hours</p>
+            <p className="text-white/30 text-xs mt-1">Foreman activates automatically outside these hours. Days marked Closed have Foreman active all day.</p>
+          </div>
+          <div className="space-y-3">
+            {ALL_DAYS.map(day => {
+              const cfg = businessHours[day] ?? { open: '08:00', close: '17:00', closed: false }
+              return (
+                <div key={day} className="flex items-center gap-3">
+                  <span className="text-white/60 text-sm w-10 shrink-0">{day}</span>
+
+                  {/* Closed toggle */}
+                  <button
+                    type="button"
+                    onClick={() => updateBizHours(day, 'closed', !cfg.closed)}
+                    className={`text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors min-w-[60px] ${
+                      cfg.closed
+                        ? 'border-danger/50 bg-danger/15 text-danger'
+                        : 'border-dark-border text-white/40 hover:border-white/20'
+                    }`}
+                  >
+                    {cfg.closed ? 'Closed' : 'Open'}
+                  </button>
+
+                  {!cfg.closed && (
+                    <>
+                      <input
+                        type="time"
+                        value={cfg.open}
+                        onChange={e => updateBizHours(day, 'open', e.target.value)}
+                        className="nwi-input w-auto text-sm py-1.5 px-3"
+                      />
+                      <span className="text-white/30 text-xs">to</span>
+                      <input
+                        type="time"
+                        value={cfg.close}
+                        onChange={e => updateBizHours(day, 'close', e.target.value)}
+                        className="nwi-input w-auto text-sm py-1.5 px-3"
+                      />
+                    </>
+                  )}
+
+                  {cfg.closed && (
+                    <span className="text-white/25 text-xs">Foreman active all day</span>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Save */}
       <div className="flex items-center gap-4">

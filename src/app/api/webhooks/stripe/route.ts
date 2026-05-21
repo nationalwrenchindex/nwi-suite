@@ -2,7 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server'
 import type Stripe from 'stripe'
 import { stripe, TIER_MODULES, getTierFromPriceId, type PlanTier } from '@/lib/stripe'
 import { upsertSubscription, getUserIdByStripeSubscription, getUserIdByForemanSubscription } from '@/lib/subscription'
-import { sendFounderAlert } from '@/lib/email-alerts'
+import { sendFounderAlert, sendNewSubscriberAlert } from '@/lib/email-alerts'
+import { PLANS } from '@/lib/stripe-plans'
 import { createServiceClient } from '@/lib/supabase/service'
 import { provisionForemanNumber } from '@/lib/foreman/provision'
 import { isForemanAvailable } from '@/lib/foreman/cap'
@@ -125,16 +126,18 @@ export async function POST(request: NextRequest) {
 
           void (async () => {
             try {
-              await sendFounderAlert({
-                subject: `Foreman add-on activated: ${profile?.full_name ?? userId}`,
-                html: `<p><strong>${profile?.full_name ?? userId}</strong> just subscribed to Foreman ($59/mo).</p><p>Email: ${profile?.email ?? '—'}</p><p>User ID: ${userId}</p>`,
+              const alertName  = profile?.full_name ?? userId
+              const alertEmail = profile?.email ?? '—'
+              await sendNewSubscriberAlert({
+                name: alertName, email: alertEmail,
+                planName: 'Foreman Add-on', tier: 'foreman_addon', amountDollars: 59,
               })
               const brockPhone = process.env.BROCK_PHONE_NUMBER
               if (brockPhone) {
                 const ts = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })
                 await sendSubscriberSms({
                   to:   brockPhone,
-                  body: `New NWI Subscriber! Name: ${profile?.full_name ?? userId} Email: ${profile?.email ?? '—'} Plan: Foreman Add-on Time: ${ts}`,
+                  body: `New NWI Subscriber! Name: ${alertName} Email: ${alertEmail} Plan: Foreman Add-on Amount: $59/mo Time: ${ts}`,
                 })
               }
             } catch { /* non-critical */ }
@@ -241,20 +244,17 @@ export async function POST(request: NextRequest) {
               .single()
             const name  = profile?.full_name ?? userId
             const email = profile?.email ?? '—'
-            await sendFounderAlert({
-              subject: `New paying customer: ${name} (${tier})`,
-              html: `
-                <p><strong>${name}</strong> just completed checkout for <strong>${tier}</strong>.</p>
-                <p>Email: ${email}</p>
-                <p>User ID: ${userId}</p>
-              `,
-            })
+            const plan  = PLANS.find(p => p.tier === tier)
+            const planName      = plan?.name ?? tier
+            const amountDollars = plan ? plan.price / 100 : null
+            await sendNewSubscriberAlert({ name, email, planName, tier, amountDollars })
             const brockPhone = process.env.BROCK_PHONE_NUMBER
             if (brockPhone) {
-              const ts = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })
+              const ts     = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })
+              const amount = amountDollars != null ? `$${amountDollars}/mo` : '—'
               await sendSubscriberSms({
                 to:   brockPhone,
-                body: `New NWI Subscriber! Name: ${name} Email: ${email} Plan: ${tier} Time: ${ts}`,
+                body: `New NWI Subscriber! Name: ${name} Email: ${email} Plan: ${planName} Amount: ${amount} Time: ${ts}`,
               })
             }
           } catch { /* non-critical */ }

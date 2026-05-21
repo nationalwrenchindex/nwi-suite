@@ -35,6 +35,7 @@ export async function POST(req: NextRequest) {
     'is_enabled', 'business_name', 'mechanic_first_name', 'mechanic_phone',
     'greeting_name', 'working_hours_start', 'working_hours_end',
     'working_days', 'after_hours_message',
+    'auto_job_activation', 'auto_hours_activation', 'business_hours',
   ]
 
   const payload: Record<string, unknown> = {

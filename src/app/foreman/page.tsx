@@ -58,7 +58,14 @@ export default async function ForemanPage() {
       .limit(10),
   ])
 
-  const isOn = foremanSettings?.is_enabled ?? false
+  const isOn   = foremanSettings?.is_enabled ?? false
+  const reason = foremanSettings?.foreman_activated_reason as string | null ?? null
+  const reasonLabel: Record<string, string> = {
+    on_job:      'On Job',
+    after_hours: 'After Hours',
+    manual:      'Manual',
+  }
+  const activeLabel = reason && reasonLabel[reason] ? reasonLabel[reason] : isOn ? 'Active' : 'Standby'
 
   const totalSeconds = (callsThisMonth ?? []).reduce(
     (sum, c) => sum + (c.call_duration_seconds ?? 0), 0,
@@ -99,20 +106,27 @@ export default async function ForemanPage() {
           </div>
 
           {/* Status indicator */}
-          <div className={`flex items-center gap-2 px-4 py-2 rounded-xl border ${
+          <div className={`flex flex-col items-end gap-1 px-4 py-2 rounded-xl border ${
             isOn
               ? 'border-success/30 bg-success/5'
               : 'border-dark-border bg-dark-lighter'
           }`}>
-            <span className="relative flex items-center">
-              <span className={`w-2.5 h-2.5 rounded-full ${isOn ? 'bg-success' : 'bg-white/20'}`} />
-              {isOn && (
-                <span className="absolute inset-0 rounded-full bg-success animate-ping opacity-60" />
-              )}
-            </span>
-            <span className={`text-sm font-medium ${isOn ? 'text-success' : 'text-white/30'}`}>
-              {isOn ? 'ON' : 'OFF'}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="relative flex items-center">
+                <span className={`w-2.5 h-2.5 rounded-full ${isOn ? 'bg-success' : 'bg-white/20'}`} />
+                {isOn && (
+                  <span className="absolute inset-0 rounded-full bg-success animate-ping opacity-60" />
+                )}
+              </span>
+              <span className={`text-sm font-semibold ${isOn ? 'text-success' : 'text-white/30'}`}>
+                {isOn ? 'ACTIVE' : 'STANDBY'}
+              </span>
+            </div>
+            {isOn && reason && (
+              <span className="text-[10px] text-success/60 font-medium uppercase tracking-wider">
+                {activeLabel}
+              </span>
+            )}
           </div>
         </div>
 

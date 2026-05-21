@@ -5,6 +5,21 @@ import type { Job, JobStatus, Inspection } from '@/types/jobs'
 import { STATUS_CONFIG, STATUS_TRANSITIONS, formatTime, formatDateShort } from '@/lib/scheduler'
 import MultiPointInspection from '@/components/quickwrench/MultiPointInspection'
 
+function formatElapsed(secs: number): string {
+  const h = Math.floor(secs / 3600)
+  const m = Math.floor((secs % 3600) / 60)
+  const s = secs % 60
+  return h > 0
+    ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+    : `${m}:${String(s).padStart(2, '0')}`
+}
+
+function formatMinutes(mins: number): string {
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return h > 0 ? `${h}h ${m}m` : `${m}m`
+}
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 const ALL_STATUSES: { value: '' | JobStatus; label: string }[] = [
@@ -74,8 +89,19 @@ function JobCard({
   const [notifying,       setNotifying]       = useState<string | null>(null)
   const [notifResult,     setNotifResult]     = useState<{ ok: boolean; msg: string } | null>(null)
   const [quoteError,      setQuoteError]      = useState<string | null>(null)
+  const [elapsedSeconds,  setElapsedSeconds]  = useState(0)
   const cfg         = STATUS_CONFIG[job.status]
   const transitions = STATUS_TRANSITIONS[job.status] ?? []
+
+  // Live timer — ticks while job is in-progress and has arrived_at but no departed_at
+  useEffect(() => {
+    if (!job.arrived_at || job.departed_at) return
+    const t0 = new Date(job.arrived_at).getTime()
+    const tick = () => setElapsedSeconds(Math.floor((Date.now() - t0) / 1000))
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [job.arrived_at, job.departed_at])
 
   async function doStatusChange(next: JobStatus) {
     setUpdating(true)
@@ -88,6 +114,34 @@ function JobCard({
     setUpdating(true)
     await onCancel(job.id)
     setUpdating(false)
+  }
+
+  async function handleArrive() {
+    setUpdating(true)
+    try {
+      const res = await fetch(`/api/jobs/${job.id}/arrive`, { method: 'POST' })
+      if (res.ok) {
+        const { job: updated } = await res.json()
+        if (updated) onJobUpdated?.(updated)
+      }
+    } finally {
+      setUpdating(false)
+    }
+  }
+
+  async function handleCompleteAndInvoice() {
+    if (!confirm('Mark job complete and go to invoice creation?')) return
+    setUpdating(true)
+    try {
+      const res = await fetch(`/api/jobs/${job.id}/complete-job`, { method: 'POST' })
+      if (res.ok) {
+        const { job: updated } = await res.json()
+        if (updated) onJobUpdated?.(updated)
+        window.location.href = `/financials?tab=invoices`
+      }
+    } finally {
+      setUpdating(false)
+    }
   }
 
   async function sendNotif(trigger: string) {
@@ -156,9 +210,19 @@ function JobCard({
     }
   }
 
-  const isActive   = job.status !== 'cancelled' && job.status !== 'completed' && job.status !== 'no_show'
-  const showOnSite = job.status === 'in_progress'
-  const showQuote  = job.status === 'on_site'
+  const isActive       = job.status !== 'cancelled' && job.status !== 'completed' && job.status !== 'no_show'
+  const showOnSite     = job.status === 'in_progress'
+  const showQuote      = job.status === 'on_site'
+  const showArrived    = isActive && !job.arrived_at
+  const showWorking    = isActive && !!job.arrived_at && !job.departed_at
+  const laborVariance  = job.arrived_at && job.departed_at && job.actual_labor_minutes != null
+    ? (job.suggested_labor_minutes ?? job.estimated_duration_minutes ?? null) != null
+      ? (job.suggested_labor_minutes ?? job.estimated_duration_minutes)! - job.actual_labor_minutes
+      : null
+    : null
+  const laborDollarImpact = laborVariance != null && job.labor_rate
+    ? Math.round((laborVariance / 60) * job.labor_rate)
+    : null
 
   return (
     <div
@@ -220,6 +284,96 @@ function JobCard({
           </svg>
         </div>
       </button>
+
+      {/* ── Labor Watch action buttons — always visible, no expand needed ── */}
+      {showArrived && (
+        <div className="px-4 pb-4">
+          <button
+            disabled={updating}
+            onClick={handleArrive}
+            className="w-full min-h-[56px] rounded-xl bg-orange hover:bg-orange-hover disabled:opacity-50 text-white font-condensed font-bold text-lg tracking-wide transition-colors active:scale-[0.98] flex items-center justify-center gap-3"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+            {updating ? 'RECORDING…' : 'ARRIVED — START TRACKING'}
+          </button>
+        </div>
+      )}
+
+      {showWorking && (
+        <div className="px-4 pb-4 flex gap-3">
+          {/* Live timer indicator */}
+          <div className="flex-1 min-h-[56px] rounded-xl border border-success/40 bg-success/10 flex items-center justify-center gap-3">
+            <span className="relative flex">
+              <span className="w-2.5 h-2.5 rounded-full bg-success" />
+              <span className="absolute inset-0 rounded-full bg-success animate-ping opacity-60" />
+            </span>
+            <span className="font-condensed font-bold text-success text-xl tracking-wider">
+              WORKING — {formatElapsed(elapsedSeconds)}
+            </span>
+          </div>
+          {/* Complete and Invoice */}
+          <button
+            disabled={updating}
+            onClick={handleCompleteAndInvoice}
+            className="flex-1 min-h-[56px] rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white font-condensed font-bold text-base tracking-wide transition-colors active:scale-[0.98] px-4 flex items-center justify-center gap-2"
+          >
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+            {updating ? 'SAVING…' : 'COMPLETE & INVOICE'}
+          </button>
+        </div>
+      )}
+
+      {/* Labor efficiency card — shown on completed jobs with tracking data */}
+      {job.status === 'completed' && job.actual_labor_minutes != null && (
+        <div className="mx-4 mb-4 rounded-xl border border-dark-border bg-dark-lighter p-4">
+          <p className="text-white/30 text-[10px] uppercase tracking-widest mb-3">Labor Efficiency</p>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            {job.arrived_at && (
+              <div>
+                <p className="text-white/40 text-xs">Arrived</p>
+                <p className="text-white/80 text-xs">{new Date(job.arrived_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</p>
+              </div>
+            )}
+            {job.departed_at && (
+              <div>
+                <p className="text-white/40 text-xs">Completed</p>
+                <p className="text-white/80 text-xs">{new Date(job.departed_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</p>
+              </div>
+            )}
+            <div>
+              <p className="text-white/40 text-xs">Time on Job</p>
+              <p className="text-white/80 text-xs font-medium">{formatMinutes(job.actual_labor_minutes)}</p>
+            </div>
+            {(job.suggested_labor_minutes ?? job.estimated_duration_minutes) != null && (
+              <div>
+                <p className="text-white/40 text-xs">Quoted Labor</p>
+                <p className="text-white/80 text-xs">{formatMinutes((job.suggested_labor_minutes ?? job.estimated_duration_minutes)!)}</p>
+              </div>
+            )}
+            {laborVariance != null && (
+              <div>
+                <p className="text-white/40 text-xs">Time Variance</p>
+                <p className={`text-xs font-semibold ${laborVariance >= 0 ? 'text-success' : 'text-danger'}`}>
+                  {laborVariance >= 0 ? '+' : ''}{formatMinutes(Math.abs(laborVariance))} {laborVariance >= 0 ? 'faster' : 'slower'}
+                </p>
+              </div>
+            )}
+            {laborDollarImpact != null && (
+              <div>
+                <p className="text-white/40 text-xs">Dollar Impact</p>
+                <p className={`text-xs font-semibold ${laborDollarImpact >= 0 ? 'text-success' : 'text-danger'}`}>
+                  {laborDollarImpact >= 0 ? '+$' : '-$'}{Math.abs(laborDollarImpact)}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Expanded detail */}
       {expanded && (
