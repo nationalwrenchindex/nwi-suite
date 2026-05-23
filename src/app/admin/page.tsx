@@ -3,6 +3,7 @@ import { unstable_cache } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import AppNav from '@/components/layout/AppNav'
+import CompAccountForm from '@/components/admin/CompAccountForm'
 import Link from 'next/link'
 import { PLANS, TIER_MODULES } from '@/lib/stripe-plans'
 import type { PlanTier } from '@/lib/stripe-plans'
@@ -37,6 +38,7 @@ type Subscription = {
   status: string | null
   stripe_subscription_id: string | null
   current_period_end: string | null
+  is_comped: boolean
 }
 
 const getAdminData = unstable_cache(
@@ -59,7 +61,7 @@ const getAdminData = unstable_cache(
         .order('created_at', { ascending: false }),
       svc
         .from('subscriptions')
-        .select('user_id, tier, status, stripe_subscription_id, current_period_end'),
+        .select('user_id, tier, status, stripe_subscription_id, current_period_end, is_comped'),
       svc
         .from('profiles')
         .select('*', { count: 'exact', head: true })
@@ -291,6 +293,11 @@ export default async function AdminPage() {
                       </td>
                       <td className={td}>
                         <StatusBadge status={sub?.status ?? null} />
+                        {sub?.is_comped && (
+                          <span className="ml-1.5 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-orange/20 text-orange-light">
+                            COMPED
+                          </span>
+                        )}
                       </td>
                       <td className={`${td} text-white/60`}>
                         {sub?.current_period_end ? fmtDate(sub.current_period_end) : '—'}
@@ -318,6 +325,11 @@ export default async function AdminPage() {
               </tbody>
             </table>
           </div>
+        </section>
+
+        {/* ── Grant comp account ────────────────────────────────────────────── */}
+        <section className="mb-10">
+          <CompAccountForm />
         </section>
 
         {/* ── Abandoned carts table ─────────────────────────────────────────── */}

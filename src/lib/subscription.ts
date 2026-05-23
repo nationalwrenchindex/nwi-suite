@@ -11,6 +11,7 @@ export interface Subscription {
   modules:                string[]
   current_period_end:     string | null
   cancel_at_period_end:   boolean
+  is_comped:              boolean
 }
 
 // Used in server components / API routes with auth context

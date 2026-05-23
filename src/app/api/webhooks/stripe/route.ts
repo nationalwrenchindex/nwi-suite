@@ -10,6 +10,18 @@ import { isForemanAvailable } from '@/lib/foreman/cap'
 import { FOREMAN_GRACE_PERIOD_DAYS, FOREMAN_WORKING_HOURS_DEFAULT } from '@/lib/foreman/config'
 import { sendSubscriberSms } from '@/lib/twilio'
 
+// Returns true when a subscription row is flagged as a founder comp account.
+// Webhook mutations must never overwrite comped accounts.
+async function isComped(userId: string): Promise<boolean> {
+  const svc = createServiceClient()
+  const { data } = await svc
+    .from('subscriptions')
+    .select('is_comped')
+    .eq('user_id', userId)
+    .maybeSingle()
+  return data?.is_comped === true
+}
+
 // Raw body required for Stripe signature verification — do NOT parse JSON
 export async function POST(request: NextRequest) {
   const body = await request.text()
@@ -270,6 +282,7 @@ export async function POST(request: NextRequest) {
         const userId = sub.metadata?.user_id
           ?? await getUserIdByStripeSubscription(sub.id)
         if (!userId) { console.error('[webhook] subscription.updated: no user_id for', sub.id); break }
+        if (await isComped(userId)) { console.log('[webhook] subscription.updated: skipping comped account', userId); break }
 
         // Determine tier from the price ID only — never trust metadata
         const priceId = sub.items.data[0]?.price?.id ?? null
@@ -344,6 +357,7 @@ export async function POST(request: NextRequest) {
         const userId = sub.metadata?.user_id
           ?? await getUserIdByStripeSubscription(sub.id)
         if (!userId) { console.error('[webhook] subscription.deleted: no user_id for', sub.id); break }
+        if (await isComped(userId)) { console.log('[webhook] subscription.deleted: skipping comped account', userId); break }
 
         await upsertSubscription({
           user_id:                userId,
@@ -395,6 +409,7 @@ export async function POST(request: NextRequest) {
 
         const userId = await getUserIdByStripeSubscription(subId)
         if (!userId) break
+        if (await isComped(userId)) { console.log('[webhook] invoice.payment_succeeded: skipping comped account', userId); break }
 
         // Refresh subscription object for latest period_end
         const stripeSub = await stripe.subscriptions.retrieve(subId)
@@ -416,6 +431,7 @@ export async function POST(request: NextRequest) {
 
         const userId = await getUserIdByStripeSubscription(subId)
         if (!userId) break
+        if (await isComped(userId)) { console.log('[webhook] invoice.payment_failed: skipping comped account', userId); break }
 
         await upsertSubscription({
           user_id: userId,
