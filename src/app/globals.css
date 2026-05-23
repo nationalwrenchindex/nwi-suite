@@ -1,3 +1,21 @@
+/* ── Theme CSS variables ── */
+html,
+html.dark {
+  --bg-primary:   #1a1a1a;
+  --bg-card:      #2a2a2a;
+  --bg-input:     #2a2a2a;
+  --bg-lighter:   #2e2e2e;
+  --border-color: #333333;
+}
+
+html.light {
+  --bg-primary:   #f5f5f5;
+  --bg-card:      #ffffff;
+  --bg-input:     #f0f0f0;
+  --bg-lighter:   #e8e8e8;
+  --border-color: #e0e0e0;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -7,6 +25,9 @@
   *::before,
   *::after {
     box-sizing: border-box;
+    transition-property: color, background-color, border-color, fill, stroke;
+    transition-timing-function: ease;
+    transition-duration: 0.2s;
   }
 
   html {
@@ -15,14 +36,20 @@
   }
 
   body {
-    @apply bg-dark text-white font-sans;
+    @apply bg-dark font-sans;
+    color: #ffffff;
     min-height: 100dvh;
+  }
+
+  html.light body {
+    color: #1a1a1a;
   }
 
   h1, h2, h3, h4, h5, h6 {
     @apply font-condensed tracking-wide;
   }
 
+  /* ── Autofill: dark mode ── */
   input:-webkit-autofill,
   input:-webkit-autofill:hover,
   input:-webkit-autofill:focus {
@@ -30,15 +57,129 @@
     -webkit-text-fill-color: #ffffff !important;
     caret-color: #ffffff;
   }
+
+  /* ── Autofill: light mode ── */
+  html.light input:-webkit-autofill,
+  html.light input:-webkit-autofill:hover,
+  html.light input:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 1000px #f0f0f0 inset !important;
+    -webkit-text-fill-color: #1a1a1a !important;
+    caret-color: #1a1a1a;
+  }
+
+  /* ════════════════════════════════════════════════
+     LIGHT MODE OVERRIDES
+     All white-based utilities are remapped to their
+     dark-ink equivalents so every page adapts without
+     touching individual components.
+     ════════════════════════════════════════════════ */
+
+  /* text-white variants */
+  html.light .text-white     { color: #1a1a1a; }
+  html.light .text-white\/10 { color: rgb(26 26 26 / 0.10); }
+  html.light .text-white\/15 { color: rgb(26 26 26 / 0.15); }
+  html.light .text-white\/20 { color: rgb(26 26 26 / 0.20); }
+  html.light .text-white\/25 { color: rgb(26 26 26 / 0.25); }
+  html.light .text-white\/30 { color: rgb(26 26 26 / 0.30); }
+  html.light .text-white\/35 { color: rgb(26 26 26 / 0.35); }
+  html.light .text-white\/40 { color: rgb(26 26 26 / 0.40); }
+  html.light .text-white\/50 { color: rgb(26 26 26 / 0.50); }
+  html.light .text-white\/55 { color: rgb(26 26 26 / 0.55); }
+  html.light .text-white\/60 { color: rgb(26 26 26 / 0.60); }
+  html.light .text-white\/65 { color: rgb(26 26 26 / 0.65); }
+  html.light .text-white\/70 { color: rgb(26 26 26 / 0.70); }
+  html.light .text-white\/75 { color: rgb(26 26 26 / 0.75); }
+  html.light .text-white\/80 { color: rgb(26 26 26 / 0.80); }
+  html.light .text-white\/90 { color: rgb(26 26 26 / 0.90); }
+  html.light .hover\:text-white:hover { color: #1a1a1a; }
+
+  /* Preserve white text on brand/accent backgrounds (higher specificity wins) */
+  html.light .bg-orange .text-white,
+  html.light .bg-orange.text-white,
+  html.light .bg-blue .text-white,
+  html.light .bg-blue.text-white,
+  html.light .bg-blue-gradient .text-white,
+  html.light .bg-blue-gradient .text-white\/25,
+  html.light .bg-blue-gradient .text-white\/50,
+  html.light .bg-blue-gradient .text-white\/60,
+  html.light .bg-blue-gradient .text-white\/70,
+  html.light .bg-blue-gradient .text-white\/80,
+  html.light .bg-blue-gradient .text-white\/90,
+  html.light .bg-blue-gradient .hover\:text-white:hover,
+  html.light .btn-primary,
+  html.light .btn-secondary { color: #ffffff; }
+
+  /* bg-white opacity variants */
+  html.light .bg-white\/1    { background-color: rgb(26 26 26 / 0.01); }
+  html.light .bg-white\/2    { background-color: rgb(26 26 26 / 0.02); }
+  html.light .bg-white\/3    { background-color: rgb(26 26 26 / 0.03); }
+  html.light .bg-white\/5    { background-color: rgb(26 26 26 / 0.05); }
+  html.light .bg-white\/8    { background-color: rgb(26 26 26 / 0.08); }
+  html.light .bg-white\/10   { background-color: rgb(26 26 26 / 0.10); }
+  html.light .bg-white\/15   { background-color: rgb(26 26 26 / 0.15); }
+  html.light .bg-white\/20   { background-color: rgb(26 26 26 / 0.20); }
+
+  /* bg-white with arbitrary opacity (bracket notation) */
+  html.light .bg-white\/\[0\.01\] { background-color: rgb(26 26 26 / 0.01); }
+  html.light .bg-white\/\[0\.02\] { background-color: rgb(26 26 26 / 0.02); }
+  html.light .bg-white\/\[0\.03\] { background-color: rgb(26 26 26 / 0.03); }
+  html.light .bg-white\/\[0\.04\] { background-color: rgb(26 26 26 / 0.04); }
+
+  /* hover:bg-white variants */
+  html.light .hover\:bg-white\/2:hover    { background-color: rgb(26 26 26 / 0.02); }
+  html.light .hover\:bg-white\/3:hover    { background-color: rgb(26 26 26 / 0.03); }
+  html.light .hover\:bg-white\/5:hover    { background-color: rgb(26 26 26 / 0.05); }
+  html.light .hover\:bg-white\/10:hover   { background-color: rgb(26 26 26 / 0.10); }
+  html.light .hover\:bg-white\/15:hover   { background-color: rgb(26 26 26 / 0.15); }
+  html.light .hover\:bg-white\/20:hover   { background-color: rgb(26 26 26 / 0.20); }
+  html.light .hover\:bg-white\/\[0\.03\]:hover { background-color: rgb(26 26 26 / 0.03); }
+  html.light .hover\:bg-white\/\[0\.04\]:hover { background-color: rgb(26 26 26 / 0.04); }
+
+  /* border-white opacity variants */
+  html.light .border-white\/5  { border-color: rgb(26 26 26 / 0.05); }
+  html.light .border-white\/8  { border-color: rgb(26 26 26 / 0.08); }
+  html.light .border-white\/10 { border-color: rgb(26 26 26 / 0.10); }
+  html.light .border-white\/15 { border-color: rgb(26 26 26 / 0.15); }
+  html.light .border-white\/20 { border-color: rgb(26 26 26 / 0.20); }
+  html.light .border-white\/25 { border-color: rgb(26 26 26 / 0.25); }
+  html.light .border-white\/30 { border-color: rgb(26 26 26 / 0.30); }
+
+  /* hover:border-white variants */
+  html.light .hover\:border-white\/10:hover { border-color: rgb(26 26 26 / 0.10); }
+  html.light .hover\:border-white\/20:hover { border-color: rgb(26 26 26 / 0.20); }
+  html.light .hover\:border-white\/25:hover { border-color: rgb(26 26 26 / 0.25); }
+  html.light .hover\:border-white\/30:hover { border-color: rgb(26 26 26 / 0.30); }
+  html.light .hover\:border-white\/35:hover { border-color: rgb(26 26 26 / 0.35); }
+  html.light .hover\:border-white\/40:hover { border-color: rgb(26 26 26 / 0.40); }
+  html.light .hover\:border-white\/50:hover { border-color: rgb(26 26 26 / 0.50); }
+
+  /* placeholder variants */
+  html.light .placeholder-white\/20::placeholder      { color: rgb(26 26 26 / 0.20); }
+  html.light .placeholder-white\/30::placeholder      { color: rgb(26 26 26 / 0.30); }
+  html.light .placeholder\:text-white\/20::placeholder { color: rgb(26 26 26 / 0.20); }
+  html.light .placeholder\:text-white\/25::placeholder { color: rgb(26 26 26 / 0.25); }
 }
 
 @layer components {
   /* ── Form inputs ── */
   .nwi-input {
     @apply w-full bg-dark-input border border-dark-border rounded-lg px-4 py-3
-           text-white placeholder-white/30 text-sm
+           text-sm
            focus:outline-none focus:border-orange focus:ring-1 focus:ring-orange
            transition-colors duration-150;
+    color: #ffffff;
+  }
+
+  html.light .nwi-input {
+    color: #1a1a1a;
+  }
+
+  html.light .nwi-input::placeholder {
+    color: rgb(26 26 26 / 0.30);
+  }
+
+  .nwi-input::placeholder {
+    color: rgb(255 255 255 / 0.30);
   }
 
   .nwi-input-error {
@@ -46,27 +187,47 @@
   }
 
   .nwi-label {
-    @apply block text-xs font-medium text-white/60 mb-1.5 uppercase tracking-widest;
+    @apply block text-xs font-medium mb-1.5 uppercase tracking-widest;
+    color: rgb(255 255 255 / 0.60);
+  }
+
+  html.light .nwi-label {
+    color: rgb(26 26 26 / 0.60);
   }
 
   /* ── Buttons ── */
   .btn-primary {
-    @apply w-full bg-orange hover:bg-orange-hover text-white font-condensed font-semibold
+    @apply w-full bg-orange hover:bg-orange-hover font-condensed font-semibold
            text-lg tracking-wider rounded-lg px-6 py-3
            transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed
            focus:outline-none focus:ring-2 focus:ring-orange focus:ring-offset-2 focus:ring-offset-dark;
+    color: #ffffff;
   }
 
   .btn-secondary {
-    @apply w-full bg-blue hover:bg-blue-hover text-white font-condensed font-semibold
+    @apply w-full bg-blue hover:bg-blue-hover font-condensed font-semibold
            text-lg tracking-wider rounded-lg px-6 py-3
            transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed
            focus:outline-none focus:ring-2 focus:ring-blue focus:ring-offset-2 focus:ring-offset-dark;
+    color: #ffffff;
   }
 
   .btn-ghost {
-    @apply text-white/60 hover:text-white text-sm transition-colors duration-150
+    @apply text-sm transition-colors duration-150
            focus:outline-none underline underline-offset-2;
+    color: rgb(255 255 255 / 0.60);
+  }
+
+  .btn-ghost:hover {
+    color: #ffffff;
+  }
+
+  html.light .btn-ghost {
+    color: rgb(26 26 26 / 0.60);
+  }
+
+  html.light .btn-ghost:hover {
+    color: #1a1a1a;
   }
 
   /* ── Cards ── */

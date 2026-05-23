@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import LowStockBell from './LowStockBell'
 import InboxBell from './InboxBell'
+import ThemeToggle from './ThemeToggle'
 
 interface NavItem {
   href:   string
@@ -251,6 +252,9 @@ export default function AppNav({
 
         {/* Low-stock bell (detailers only) */}
         {businessType === 'detailer' && <LowStockBell />}
+
+        {/* Theme toggle */}
+        <ThemeToggle />
 
         {/* Sign out */}
         <button
