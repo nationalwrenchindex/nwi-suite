@@ -12,6 +12,7 @@ export interface Subscription {
   current_period_end:     string | null
   cancel_at_period_end:   boolean
   is_comped:              boolean
+  vertical:               string
 }
 
 // Used in server components / API routes with auth context

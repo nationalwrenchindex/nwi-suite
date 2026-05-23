@@ -189,6 +189,7 @@ export async function POST(request: NextRequest) {
           modules,
           current_period_end:     null,
           cancel_at_period_end:   false,
+          vertical:               session.metadata?.vertical ?? 'light_duty',
         })
 
         // ── Activate Foreman for Elite and Foreman Standalone ──
