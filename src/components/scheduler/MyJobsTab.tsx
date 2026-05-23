@@ -234,7 +234,7 @@ function JobCard({
 
   return (
     <div
-      className={`rounded-xl border transition-colors ${
+      className={`job-card rounded-xl border transition-colors ${
         job.status === 'cancelled' ? 'border-dark-border opacity-60' : 'border-dark-border hover:border-white/20'
       } bg-dark-card`}
     >

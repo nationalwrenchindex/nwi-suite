@@ -25,7 +25,7 @@ html.light {
   *::before,
   *::after {
     box-sizing: border-box;
-    transition-property: color, background-color, border-color, fill, stroke;
+    transition-property: color, background-color, border-color, box-shadow, fill, stroke;
     transition-timing-function: ease;
     transition-duration: 0.2s;
   }
@@ -158,6 +158,52 @@ html.light {
   html.light .placeholder-white\/30::placeholder      { color: rgb(26 26 26 / 0.30); }
   html.light .placeholder\:text-white\/20::placeholder { color: rgb(26 26 26 / 0.20); }
   html.light .placeholder\:text-white\/25::placeholder { color: rgb(26 26 26 / 0.25); }
+
+  /* ════════════════════════════════════════════════
+     LIGHT MODE CARD POLISH
+     ════════════════════════════════════════════════ */
+
+  /* Core nwi-card depth */
+  html.light .nwi-card {
+    border-color: #d0d0d0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  }
+  html.light .nwi-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  }
+
+  /* Dashboard KPI / stat cards — orange left accent */
+  html.light .kpi-card {
+    border-left: 3px solid #FF6600;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  }
+  html.light .kpi-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  }
+
+  /* Scheduler job cards — blue left accent */
+  html.light .job-card {
+    border-left: 3px solid #2969B0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  }
+  html.light .job-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  }
+
+  /* Section headers — slightly darker in light mode */
+  html.light p.uppercase.tracking-widest {
+    color: rgb(26 26 26 / 0.65);
+  }
+
+  /* Hardcoded inline card colors used in SettingsClient, etc. */
+  html.light .bg-\[\#222\]    { background-color: #ffffff; }
+  html.light .bg-\[\#1e1e1e\] { background-color: #f8f8f8; }
+  html.light .border-\[\#333\] { border-color: #d0d0d0; }
+  html.light .border-\[\#444\] { border-color: #d0d0d0; }
+
+  /* Toggle buttons: inactive track in light mode */
+  html.light .bg-\[\#333\]    { background-color: #e0e0e0; }
+  html.light .border-\[\#444\].bg-\[\#333\] { border-color: #d0d0d0; }
 }
 
 @layer components {

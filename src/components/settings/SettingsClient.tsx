@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
+import Link from 'next/link'
 import ShareBookingModal from '@/components/ShareBookingModal'
 import DetailerPricingEditor, { type PricingRow } from '@/components/detailer/DetailerPricingEditor'
 import type { AdjustmentPreset } from '@/types/financials'
+import ExportButton from '@/components/settings/ExportButton'
 
 const BOOKING_BASE = 'https://tools.nationalwrenchindex.com/book'
 
@@ -900,6 +902,30 @@ export default function SettingsClient({
             >
               {savingNotifPhone ? 'Saving…' : 'Save Phone Number'}
             </button>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Data Export ── */}
+      <section>
+        <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Your Data</p>
+        <p className="text-white/30 text-xs mb-4">
+          Download a complete export of all your customers, vehicles, jobs, invoices, expenses, and quotes.
+        </p>
+        <div className="rounded-xl border border-[#333] bg-[#222] p-5 space-y-4">
+          <ExportButton />
+          <div className="border-t border-[#333] pt-4">
+            <Link
+              href="/settings/import"
+              className="flex items-center gap-2 text-white/50 hover:text-orange text-xs transition-colors group"
+            >
+              <svg className="w-3.5 h-3.5 text-white/30 group-hover:text-orange transition-colors" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="3" x2="12" y2="15"/>
+              </svg>
+              Switching from another system? Import your existing data →
+            </Link>
           </div>
         </div>
       </section>

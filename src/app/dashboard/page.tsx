@@ -135,7 +135,7 @@ function KpiCard({
   const borders = { orange: 'border-orange/30', blue: 'border-blue/30', success: 'border-success/30', danger: 'border-danger/30', muted: 'border-white/10' }
   const texts   = { orange: 'text-orange', blue: 'text-blue-light', success: 'text-success', danger: 'text-danger', muted: 'text-white/60' }
   return (
-    <div className={`nwi-card border ${borders[accent]} flex items-start gap-4`}>
+    <div className={`nwi-card kpi-card border ${borders[accent]} flex items-start gap-4`}>
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 bg-current/10`}
         style={{ background: 'rgba(255,255,255,0.04)' }}>
         <span className={texts[accent]}>{icon}</span>
