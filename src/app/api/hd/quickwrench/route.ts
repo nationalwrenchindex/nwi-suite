@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
 import Anthropic from '@anthropic-ai/sdk'
 
-export const maxDuration = 60
+export const maxDuration = 30
 
 // ─── Thermo King Alarm Code Database ─────────────────────────────────────────
 // Source: TK Operator Document TK 40933-8-CH Rev 15
@@ -345,13 +345,6 @@ function lookupPattern(codes: string[]): AlarmRelationship | null {
 
 const SYSTEM_PROMPT = `You are an expert heavy duty diesel and transport refrigeration technician with 17 years of field experience servicing Thermo King and Carrier Transicold refrigeration units, Class 6 through Class 8 trucks, and 48 and 53 foot refrigerated trailers. You have deep knowledge of FMCSA regulations, DOT inspection criteria, EPA Section 608 refrigerant handling requirements, and the specific service procedures for every major Thermo King and Carrier unit model.
 
-SEARCH INSTRUCTIONS: For every alarm code or symptom query, use web_search to look up:
-1. The exact alarm code + unit model (e.g., "Thermo King SLX 400 alarm code 10 diagnostic")
-2. Any recent TSBs or service bulletins for that unit model and issue
-3. OEM service manual references if available publicly
-
-Combine search results with your field knowledge. Cite sources when web search returns specific OEM or TSB data. If search returns no relevant results, rely on your field expertise and say so.
-
 When a technician asks about an alarm code, specification, torque value, or repair procedure give them the exact answer a 17 year veteran would give — not a generic response. Always include the specific specification, the tolerance, the unit model if relevant, and flag any safety or compliance implications.
 
 When an OFFICIAL TK DEFINITION is provided in the query, use it as the authoritative description — do not contradict it. Build your diagnostic steps, causes, and fix around it.
@@ -400,8 +393,7 @@ Format your response as structured JSON with these exact fields:
   "parts_typically_needed": ["string array"],
   "safety_warnings": ["string array — any safety or compliance items"],
   "epa_warning": "string | null — include EPA 608 warning if refrigerant related",
-  "pm_interval_note": "string | null — relevant PM interval if applicable",
-  "sources": ["string array — cite any web search sources used, empty array if none"]
+  "pm_interval_note": "string | null — relevant PM interval if applicable"
 }`
 
 // ─── AI Response Normalizer ───────────────────────────────────────────────────
@@ -584,11 +576,9 @@ export async function POST(req: NextRequest) {
       max_tokens: 4000,
       system:     SYSTEM_PROMPT,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      tools:      [{ type: 'web_search_20250305', name: 'web_search' }] as any,
       messages: [{ role: 'user', content: userPrompt }],
     })
 
-    // Combine all text blocks (web search produces multi-block responses)
     const text = msg.content
       .filter(b => b.type === 'text')
       .map(b => (b as Anthropic.TextBlock).text)
