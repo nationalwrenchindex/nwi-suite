@@ -12,6 +12,14 @@ const CT_TRAILER_MODELS = ['X2 2100', 'X2 2500', 'X4 7300', 'X4 7500']
 
 type Manufacturer = 'Thermo King' | 'Carrier Transicold'
 type UnitType     = 'truck' | 'trailer'
+type TKSeverity   = 'ok_to_run' | 'check_specified' | 'immediate_action'
+
+interface TKSource {
+  description:    string
+  severity:       TKSeverity
+  operatorAction: string
+  source:         'tk_main' | 'tk_dsr'
+}
 
 interface QWResult {
   alarm_meaning:          string
@@ -23,13 +31,22 @@ interface QWResult {
   safety_warnings:        string[]
   epa_warning:            string | null
   pm_interval_note:       string | null
+  sources?:               string[]
 }
 
-const SEVERITY_COLORS = {
+// AI severity fallback colors (used when no TK source)
+const AI_SEVERITY_COLORS = {
   low:      '#22C55E',
   medium:   '#F59E0B',
   high:     '#F97316',
   critical: '#EF4444',
+}
+
+// TK official severity config
+const TK_SEVERITY_CONFIG: Record<TKSeverity, { label: string; color: string; bg: string; border: string }> = {
+  ok_to_run:       { label: 'OK TO RUN',           color: '#22C55E', bg: '#22C55E15', border: '#22C55E40' },
+  check_specified: { label: 'CHECK AS SPECIFIED',  color: '#F59E0B', bg: '#F59E0B15', border: '#F59E0B40' },
+  immediate_action:{ label: 'TAKE IMMEDIATE ACTION', color: '#EF4444', bg: '#EF444415', border: '#EF444440' },
 }
 
 export default function HDQuickWrenchPage() {
@@ -41,6 +58,8 @@ export default function HDQuickWrenchPage() {
   const [symptom,      setSymptom]      = useState('')
   const [loading,      setLoading]      = useState(false)
   const [result,       setResult]       = useState<QWResult | null>(null)
+  const [tkSource,     setTkSource]     = useState<TKSource | null>(null)
+  const [disclaimer,   setDisclaimer]   = useState<string | null>(null)
   const [error,        setError]        = useState<string | null>(null)
 
   const modelOptions =
@@ -53,6 +72,8 @@ export default function HDQuickWrenchPage() {
     if (!model || (!alarmCode && !symptom)) return
     setLoading(true)
     setResult(null)
+    setTkSource(null)
+    setDisclaimer(null)
     setError(null)
     try {
       const res = await fetch('/api/hd/quickwrench', {
@@ -63,6 +84,8 @@ export default function HDQuickWrenchPage() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Request failed')
       setResult(json.result)
+      setTkSource(json.tk_source ?? null)
+      setDisclaimer(json.disclaimer ?? null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
     } finally {
@@ -174,7 +197,7 @@ export default function HDQuickWrenchPage() {
               type="text"
               value={alarmCode}
               onChange={e => setAlarmCode(e.target.value)}
-              placeholder="e.g. 91"
+              placeholder="e.g. 10 or HP or P1E"
               className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
               style={{ background: '#162030', border: '1px solid #1e3040' }}
             />
@@ -226,21 +249,77 @@ export default function HDQuickWrenchPage() {
         {/* Result */}
         {result && (
           <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
-            {/* Header */}
-            <div
-              className="px-5 py-4 flex items-center gap-3"
-              style={{ background: '#162030', borderBottom: '1px solid #1e3040' }}
-            >
+
+            {/* TK Official Severity Banner */}
+            {tkSource && (() => {
+              const cfg = TK_SEVERITY_CONFIG[tkSource.severity]
+              return (
+                <div
+                  className="px-5 py-4 flex items-start gap-4"
+                  style={{ background: cfg.bg, borderBottom: `1px solid ${cfg.border}` }}
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <span
+                        className="text-xs font-bold px-2.5 py-0.5 rounded-full tracking-wide"
+                        style={{ background: cfg.color, color: '#fff' }}
+                      >
+                        {cfg.label}
+                      </span>
+                      <span className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                        {tkSource.source === 'tk_dsr' ? 'DSR Code' : 'TK Code'} · TK 40933-8-CH Rev 15
+                      </span>
+                    </div>
+                    <p className="text-white font-semibold text-sm leading-snug">{tkSource.description}</p>
+                  </div>
+                </div>
+              )
+            })()}
+
+            {/* Operator Action Banner (TK official) */}
+            {tkSource && (
               <div
-                className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wide"
-                style={{ background: `${SEVERITY_COLORS[result.severity]}25`, color: SEVERITY_COLORS[result.severity] }}
+                className="px-5 py-3 flex items-start gap-2"
+                style={{ background: '#162030', borderBottom: '1px solid #1e3040' }}
               >
-                {result.severity}
+                <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke={HD_ORANGE} strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div>
+                  <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Operator Action (TK Official)</p>
+                  <p className="text-sm font-medium text-white">{tkSource.operatorAction}</p>
+                </div>
               </div>
-              <p className="text-white font-semibold text-sm">{result.alarm_meaning}</p>
-            </div>
+            )}
+
+            {/* AI Severity Header (shown when no TK source) */}
+            {!tkSource && (
+              <div
+                className="px-5 py-4 flex items-center gap-3"
+                style={{ background: '#162030', borderBottom: '1px solid #1e3040' }}
+              >
+                <div
+                  className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wide"
+                  style={{
+                    background: `${AI_SEVERITY_COLORS[result.severity]}25`,
+                    color:       AI_SEVERITY_COLORS[result.severity],
+                  }}
+                >
+                  {result.severity}
+                </div>
+                <p className="text-white font-semibold text-sm">{result.alarm_meaning}</p>
+              </div>
+            )}
 
             <div className="p-5 space-y-5" style={{ background: '#111920' }}>
+
+              {/* AI alarm meaning (shown under official header when TK source present) */}
+              {tkSource && (
+                <div>
+                  <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>Tech Analysis</p>
+                  <p className="text-sm text-white">{result.alarm_meaning}</p>
+                </div>
+              )}
 
               {/* EPA Warning */}
               {result.epa_warning && (
@@ -319,6 +398,28 @@ export default function HDQuickWrenchPage() {
                 <div className="rounded-lg p-3" style={{ background: '#162030', border: '1px solid #1e3040' }}>
                   <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>PM Note</p>
                   <p className="text-xs" style={{ color: 'rgba(255,255,255,0.65)' }}>{result.pm_interval_note}</p>
+                </div>
+              )}
+
+              {/* Web search sources */}
+              {result.sources && result.sources.length > 0 && (
+                <div>
+                  <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>Sources</p>
+                  {result.sources.map((s, i) => (
+                    <p key={i} className="text-xs mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>— {s}</p>
+                  ))}
+                </div>
+              )}
+
+              {/* Disclaimer */}
+              {disclaimer && (
+                <div
+                  className="rounded-lg p-3 mt-2"
+                  style={{ background: '#0d1820', border: '1px solid #1e3040' }}
+                >
+                  <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                    {disclaimer}
+                  </p>
                 </div>
               )}
             </div>
