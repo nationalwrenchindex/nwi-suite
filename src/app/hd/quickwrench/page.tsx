@@ -55,6 +55,24 @@ const TK_SEVERITY_CONFIG: Record<TKSeverity, { label: string; color: string; bg:
   immediate_action: { label: 'TAKE IMMEDIATE ACTION', color: '#EF4444', bg: '#EF444415', border: '#EF444440' },
 }
 
+// Safety helpers — if the AI ever returns an object where a string is expected,
+// convert it rather than passing it to React directly (which crashes).
+function safeStr(val: unknown): string {
+  if (val === null || val === undefined) return ''
+  if (typeof val === 'string') return val
+  if (typeof val === 'object') return JSON.stringify(val)
+  return String(val)
+}
+
+function safeArr(val: unknown): string[] {
+  if (!Array.isArray(val)) return []
+  return val.map(item =>
+    typeof item === 'string' ? item
+    : typeof item === 'object' && item !== null ? JSON.stringify(item)
+    : String(item ?? '')
+  )
+}
+
 function TKSeverityBadge({ severity }: { severity: TKSeverity }) {
   const cfg = TK_SEVERITY_CONFIG[severity] ?? TK_SEVERITY_CONFIG.check_specified
   return (
@@ -458,7 +476,7 @@ export default function HDQuickWrenchPage() {
                   >
                     {result.severity}
                   </div>
-                  <p className="text-white font-semibold text-sm">{result.alarm_meaning}</p>
+                  <p className="text-white font-semibold text-sm">{safeStr(result.alarm_meaning)}</p>
                 </div>
               )}
 
@@ -470,14 +488,14 @@ export default function HDQuickWrenchPage() {
                     <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
                       {alarmPattern ? 'Combined Tech Analysis' : 'Tech Analysis'}
                     </p>
-                    <p className="text-sm text-white">{result.alarm_meaning}</p>
+                    <p className="text-sm text-white">{safeStr(result.alarm_meaning)}</p>
                   </div>
                 )}
 
                 {/* EPA Warning */}
                 {result.epa_warning && (
                   <div className="rounded-lg p-3" style={{ background: '#2d0a0a', border: '1px solid #7f1d1d' }}>
-                    <p className="text-xs font-bold text-red-400">⚠ {result.epa_warning}</p>
+                    <p className="text-xs font-bold text-red-400">⚠ {safeStr(result.epa_warning)}</p>
                   </div>
                 )}
 
@@ -485,7 +503,7 @@ export default function HDQuickWrenchPage() {
                 <div>
                   <p className="text-xs uppercase tracking-widest mb-2" style={{ color: HD_ORANGE }}>Most Likely Causes</p>
                   <ol className="space-y-1">
-                    {(result.most_likely_causes ?? []).map((c, i) => (
+                    {safeArr(result.most_likely_causes).map((c, i) => (
                       <li key={i} className="flex gap-2 text-sm" style={{ color: 'rgba(255,255,255,0.8)' }}>
                         <span className="font-bold flex-shrink-0" style={{ color: HD_ORANGE }}>{i + 1}.</span>
                         {c}
@@ -498,7 +516,7 @@ export default function HDQuickWrenchPage() {
                 <div>
                   <p className="text-xs uppercase tracking-widest mb-2" style={{ color: HD_BLUE }}>Diagnostic Steps</p>
                   <ol className="space-y-1.5">
-                    {(result.diagnostic_steps ?? []).map((s, i) => (
+                    {safeArr(result.diagnostic_steps).map((s, i) => (
                       <li key={i} className="flex gap-2 text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
                         <span
                           className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5"
@@ -515,15 +533,15 @@ export default function HDQuickWrenchPage() {
                 {/* Common fix */}
                 <div className="rounded-lg p-4" style={{ background: '#162030' }}>
                   <p className="text-xs uppercase tracking-widest mb-1" style={{ color: '#22C55E' }}>Common Fix</p>
-                  <p className="text-sm text-white">{result.common_fix}</p>
+                  <p className="text-sm text-white">{safeStr(result.common_fix)}</p>
                 </div>
 
                 {/* Parts */}
-                {result.parts_typically_needed?.length > 0 && (
+                {safeArr(result.parts_typically_needed).length > 0 && (
                   <div>
                     <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>Parts Typically Needed</p>
                     <div className="flex flex-wrap gap-2">
-                      {result.parts_typically_needed.map((p, i) => (
+                      {safeArr(result.parts_typically_needed).map((p, i) => (
                         <span
                           key={i}
                           className="text-xs px-2.5 py-1 rounded-full"
@@ -537,10 +555,10 @@ export default function HDQuickWrenchPage() {
                 )}
 
                 {/* Safety warnings */}
-                {result.safety_warnings?.length > 0 && (
+                {safeArr(result.safety_warnings).length > 0 && (
                   <div>
                     <p className="text-xs uppercase tracking-widest mb-2" style={{ color: '#F59E0B' }}>Safety & Compliance</p>
-                    {result.safety_warnings.map((w, i) => (
+                    {safeArr(result.safety_warnings).map((w, i) => (
                       <p key={i} className="text-xs mb-1" style={{ color: 'rgba(255,255,255,0.65)' }}>⚠ {w}</p>
                     ))}
                   </div>
@@ -550,15 +568,15 @@ export default function HDQuickWrenchPage() {
                 {result.pm_interval_note && (
                   <div className="rounded-lg p-3" style={{ background: '#162030', border: '1px solid #1e3040' }}>
                     <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>PM Note</p>
-                    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.65)' }}>{result.pm_interval_note}</p>
+                    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.65)' }}>{safeStr(result.pm_interval_note)}</p>
                   </div>
                 )}
 
                 {/* Web search sources */}
-                {result.sources && result.sources.length > 0 && (
+                {safeArr(result.sources).length > 0 && (
                   <div>
                     <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>Sources</p>
-                    {result.sources.map((s, i) => (
+                    {safeArr(result.sources).map((s, i) => (
                       <p key={i} className="text-xs mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>— {s}</p>
                     ))}
                   </div>

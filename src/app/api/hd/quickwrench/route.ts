@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
 import Anthropic from '@anthropic-ai/sdk'
 
+export const maxDuration = 60
+
 // ─── Thermo King Alarm Code Database ─────────────────────────────────────────
 // Source: TK Operator Document TK 40933-8-CH Rev 15
 
@@ -389,6 +391,75 @@ Format your response as structured JSON with these exact fields:
   "sources": ["string array — cite any web search sources used, empty array if none"]
 }`
 
+// ─── AI Response Normalizer ───────────────────────────────────────────────────
+// Claude sometimes returns a nested object with CODE_N keys + COMBINED_PATTERN_ANALYSIS
+// instead of the flat schema requested. Detect and flatten it.
+
+function normalizeAIResult(raw: Record<string, unknown>): Record<string, unknown> {
+  const codeKeys = Object.keys(raw).filter(k => /^CODE_\d+$/i.test(k) || /^ALARM_\d+$/i.test(k))
+  const hasCombined = 'COMBINED_PATTERN_ANALYSIS' in raw
+
+  // Already flat — nothing to do
+  if (!hasCombined && codeKeys.length === 0) return raw
+
+  // Extract combined analysis text
+  let combinedText: string | null = null
+  if (typeof raw.COMBINED_PATTERN_ANALYSIS === 'string') {
+    combinedText = raw.COMBINED_PATTERN_ANALYSIS
+  } else if (raw.COMBINED_PATTERN_ANALYSIS && typeof raw.COMBINED_PATTERN_ANALYSIS === 'object') {
+    const cp = raw.COMBINED_PATTERN_ANALYSIS as Record<string, unknown>
+    combinedText = typeof cp.alarm_meaning === 'string'
+      ? cp.alarm_meaning
+      : JSON.stringify(raw.COMBINED_PATTERN_ANALYSIS)
+  }
+
+  // Merge per-code sub-objects
+  const subs = codeKeys
+    .map(k => raw[k])
+    .filter((v): v is Record<string, unknown> => typeof v === 'object' && v !== null)
+
+  const strArr = (val: unknown): string[] =>
+    Array.isArray(val) ? val.filter((x): x is string => typeof x === 'string') : []
+
+  const mergedCauses:   string[] = []
+  const mergedSteps:    string[] = []
+  const mergedParts:    string[] = []
+  const mergedWarnings: string[] = []
+  const mergedSources:  string[] = []
+  let severity    = 'high'
+  let commonFix   = ''
+  let epаWarning: string | null = null
+  let pmNote:     string | null = null
+  let alarmMeaning = ''
+
+  for (const sub of subs) {
+    mergedCauses.push(...strArr(sub.most_likely_causes))
+    mergedSteps.push(...strArr(sub.diagnostic_steps))
+    mergedParts.push(...strArr(sub.parts_typically_needed))
+    mergedWarnings.push(...strArr(sub.safety_warnings))
+    mergedSources.push(...strArr(sub.sources))
+    if (typeof sub.severity      === 'string') severity   = sub.severity
+    if (typeof sub.common_fix    === 'string' && sub.common_fix)    commonFix  = sub.common_fix
+    if (typeof sub.epa_warning   === 'string' && sub.epa_warning)   epаWarning = sub.epa_warning
+    if (typeof sub.pm_interval_note === 'string' && sub.pm_interval_note) pmNote = sub.pm_interval_note
+    if (typeof sub.alarm_meaning === 'string' && sub.alarm_meaning)
+      alarmMeaning += (alarmMeaning ? ' / ' : '') + sub.alarm_meaning
+  }
+
+  return {
+    alarm_meaning:          combinedText ?? (alarmMeaning || 'Multi-alarm combined analysis'),
+    severity,
+    most_likely_causes:     mergedCauses,
+    diagnostic_steps:       mergedSteps,
+    common_fix:             commonFix || 'See combined alarm analysis above',
+    parts_typically_needed: mergedParts,
+    safety_warnings:        mergedWarnings,
+    epa_warning:            epаWarning,
+    pm_interval_note:       pmNote,
+    sources:                mergedSources,
+  }
+}
+
 // ─── Route Handler ────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -500,7 +571,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Could not parse AI response', raw: text }, { status: 502 })
     }
 
-    const result = JSON.parse(jsonMatch[0])
+    const result = normalizeAIResult(JSON.parse(jsonMatch[0]))
 
     return NextResponse.json({
       result,
