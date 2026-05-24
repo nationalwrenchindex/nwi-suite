@@ -35,6 +35,35 @@ const TK_SEVERITY_CONFIG: Record<TKSeverity, { label: string; color: string; bg:
   immediate_action: { label: 'TAKE IMMEDIATE ACTION', color: '#EF4444', bg: '#EF444415', border: '#EF444440' },
 }
 
+// ─── Refrigerant Pressure Calculator ─────────────────────────────────────────
+
+type RefrigerantType = 'R-404A' | 'R-452A'
+
+// [temp°F, low PSI, high PSI]
+const SUCTION_REFS: Record<RefrigerantType, [number, number, number][]> = {
+  'R-404A': [[0,8,15],[10,15,22],[20,22,30],[35,35,45]],
+  'R-452A': [[0,7,13],[10,13,20],[20,20,28],[35,32,42]],
+}
+const DISCHARGE_REFS: Record<RefrigerantType, [number, number, number][]> = {
+  'R-404A': [[70,185,215],[80,210,240],[90,240,275],[95,260,295],[100,280,320],[105,300,340]],
+  'R-452A': [[70,178,208],[80,202,232],[90,231,266],[95,250,285],[100,270,310],[105,290,330]],
+}
+
+function interpolatePressure(x: number, refs: [number, number, number][]): [number, number] {
+  if (x <= refs[0][0]) return [refs[0][1], refs[0][2]]
+  if (x >= refs[refs.length - 1][0]) return [refs[refs.length - 1][1], refs[refs.length - 1][2]]
+  for (let i = 0; i < refs.length - 1; i++) {
+    if (x >= refs[i][0] && x <= refs[i + 1][0]) {
+      const t = (x - refs[i][0]) / (refs[i + 1][0] - refs[i][0])
+      return [
+        Math.round(refs[i][1] + t * (refs[i + 1][1] - refs[i][1])),
+        Math.round(refs[i][2] + t * (refs[i + 1][2] - refs[i][2])),
+      ]
+    }
+  }
+  return [refs[refs.length - 1][1], refs[refs.length - 1][2]]
+}
+
 // ─── Plain-text section parser ────────────────────────────────────────────────
 
 const SECTION_DEFS = [
@@ -191,6 +220,15 @@ function TKCodeRow({ src }: { src: TKSource }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function HDQuickWrenchPage() {
+  // ── Calculator state ──
+  const [calcOpen,            setCalcOpen]            = useState(false)
+  const [calcAmbient,         setCalcAmbient]         = useState('')
+  const [calcSetpoint,        setCalcSetpoint]        = useState('')
+  const [calcRefrigerant,     setCalcRefrigerant]     = useState<RefrigerantType>('R-404A')
+  const [calcActualSuction,   setCalcActualSuction]   = useState('')
+  const [calcActualDischarge, setCalcActualDischarge] = useState('')
+
+  // ── QuickWrench state ──
   const [manufacturer,         setManufacturer]         = useState<Manufacturer>('Thermo King')
   const [unitType,             setUnitType]             = useState<UnitType>('trailer')
   const [model,                setModel]                = useState('')
@@ -206,6 +244,19 @@ export default function HDQuickWrenchPage() {
   const [alarmPattern,         setAlarmPattern]         = useState<AlarmPattern | null>(null)
   const [disclaimer,           setDisclaimer]           = useState<string | null>(null)
   const [error,                setError]                = useState<string | null>(null)
+
+  // ── Calculator derived values ──
+  const ambientNum   = parseFloat(calcAmbient)
+  const setpointNum  = parseFloat(calcSetpoint)
+  const hasCalcInputs = !isNaN(ambientNum) && !isNaN(setpointNum)
+  const [suctionLow,   suctionHigh]   = hasCalcInputs ? interpolatePressure(setpointNum, SUCTION_REFS[calcRefrigerant])   : [0, 0]
+  const [dischargeLow, dischargeHigh] = hasCalcInputs ? interpolatePressure(ambientNum,  DISCHARGE_REFS[calcRefrigerant]) : [0, 0]
+  const actualSuction    = parseFloat(calcActualSuction)
+  const actualDischarge  = parseFloat(calcActualDischarge)
+  const hasSuctionActual    = !isNaN(actualSuction)
+  const hasDischargeActual  = !isNaN(actualDischarge)
+  const suctionInRange      = hasSuctionActual   && actualSuction   >= suctionLow   && actualSuction   <= suctionHigh
+  const dischargeInRange    = hasDischargeActual && actualDischarge >= dischargeLow && actualDischarge <= dischargeHigh
 
   const modelOptions =
     manufacturer === 'Thermo King'
@@ -294,6 +345,202 @@ export default function HDQuickWrenchPage() {
           <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
             Alarm codes, specs, and repair procedures from a 17-year field veteran.
           </p>
+        </div>
+
+        {/* ── Refrigerant Pressure Calculator ── */}
+        <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
+
+          {/* Collapsible header */}
+          <button
+            type="button"
+            onClick={() => setCalcOpen(o => !o)}
+            className="w-full px-5 py-4 flex items-center gap-3 text-left"
+            style={{ background: '#111920' }}
+          >
+            <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke={HD_BLUE} strokeWidth={1.8} viewBox="0 0 24 24">
+              <rect x="4" y="2" width="16" height="20" rx="2" strokeLinecap="round" strokeLinejoin="round" />
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 6h2m4 0h2M8 10h2m4 0h2M8 14h2m4 0h2M8 18h2m4 0h2" />
+            </svg>
+            <div className="flex-1">
+              <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>Reference Tool</p>
+              <p className="font-condensed font-bold text-white text-lg tracking-wide">Refrigerant Pressure Calculator</p>
+            </div>
+            <svg
+              className="w-4 h-4 flex-shrink-0 transition-transform duration-200"
+              style={{
+                color: 'rgba(255,255,255,0.35)',
+                transform: calcOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+              }}
+              fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {/* Expanded content */}
+          {calcOpen && (
+            <div className="px-5 pb-5 space-y-4" style={{ background: '#111920', borderTop: '1px solid #1e3040' }}>
+
+              {/* Inputs */}
+              <div className="grid grid-cols-3 gap-3 pt-4">
+                <div>
+                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                    Ambient Temp (°F)
+                  </label>
+                  <input
+                    type="number"
+                    value={calcAmbient}
+                    onChange={e => setCalcAmbient(e.target.value)}
+                    placeholder="e.g. 90"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+                    style={{ background: '#162030', border: '1px solid #1e3040' }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                    Box Setpoint (°F)
+                  </label>
+                  <input
+                    type="number"
+                    value={calcSetpoint}
+                    onChange={e => setCalcSetpoint(e.target.value)}
+                    placeholder="e.g. 35"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+                    style={{ background: '#162030', border: '1px solid #1e3040' }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                    Refrigerant
+                  </label>
+                  <select
+                    value={calcRefrigerant}
+                    onChange={e => setCalcRefrigerant(e.target.value as RefrigerantType)}
+                    className="w-full px-3 py-2.5 rounded-lg text-sm text-white"
+                    style={{ background: '#162030', border: '1px solid #1e3040' }}
+                  >
+                    <option value="R-404A">R-404A</option>
+                    <option value="R-452A">R-452A</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Results */}
+              {hasCalcInputs ? (
+                <div className="space-y-3">
+
+                  {/* Suction */}
+                  <div className="rounded-lg p-4" style={{ background: '#162030', border: '1px solid #1e3040' }}>
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-xs uppercase tracking-widest font-bold" style={{ color: HD_BLUE }}>Suction Pressure</p>
+                      <span className="text-sm font-bold text-white">
+                        {suctionLow}–{suctionHigh} PSI
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1">
+                        <label className="block text-xs mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                          Your gauge reading (PSI)
+                        </label>
+                        <input
+                          type="number"
+                          value={calcActualSuction}
+                          onChange={e => setCalcActualSuction(e.target.value)}
+                          placeholder="Enter actual"
+                          className="w-full px-3 py-2 rounded-lg text-sm text-white placeholder-white/20"
+                          style={{ background: '#111920', border: '1px solid #1e3040' }}
+                        />
+                      </div>
+                      {hasSuctionActual && (
+                        <div className="flex-shrink-0 mt-4">
+                          <span
+                            className="text-xs font-bold px-3 py-1.5 rounded-full"
+                            style={{
+                              background: suctionInRange ? '#22C55E20' : '#EF444420',
+                              color:      suctionInRange ? '#22C55E'   : '#EF4444',
+                              border:     `1px solid ${suctionInRange ? '#22C55E50' : '#EF444450'}`,
+                            }}
+                          >
+                            {suctionInRange ? 'NORMAL' : actualSuction < suctionLow ? 'LOW' : 'HIGH'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Discharge */}
+                  <div className="rounded-lg p-4" style={{ background: '#162030', border: '1px solid #1e3040' }}>
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-xs uppercase tracking-widest font-bold" style={{ color: HD_ORANGE }}>Discharge Pressure</p>
+                      <span className="text-sm font-bold text-white">
+                        {dischargeLow}–{dischargeHigh} PSI
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <div className="flex-1">
+                        <label className="block text-xs mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                          Your gauge reading (PSI)
+                        </label>
+                        <input
+                          type="number"
+                          value={calcActualDischarge}
+                          onChange={e => setCalcActualDischarge(e.target.value)}
+                          placeholder="Enter actual"
+                          className="w-full px-3 py-2 rounded-lg text-sm text-white placeholder-white/20"
+                          style={{ background: '#111920', border: '1px solid #1e3040' }}
+                        />
+                      </div>
+                      {hasDischargeActual && (
+                        <div className="flex-shrink-0 mt-4">
+                          <span
+                            className="text-xs font-bold px-3 py-1.5 rounded-full"
+                            style={{
+                              background: dischargeInRange ? '#22C55E20' : '#EF444420',
+                              color:      dischargeInRange ? '#22C55E'   : '#EF4444',
+                              border:     `1px solid ${dischargeInRange ? '#22C55E50' : '#EF444450'}`,
+                            }}
+                          >
+                            {dischargeInRange ? 'NORMAL' : actualDischarge < dischargeLow ? 'LOW' : 'HIGH'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Fixed targets */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-lg p-3" style={{ background: '#162030', border: '1px solid #1e3040' }}>
+                      <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>Subcooling Target</p>
+                      <p className="text-sm font-bold text-white">10–15°F</p>
+                    </div>
+                    <div className="rounded-lg p-3" style={{ background: '#162030', border: '1px solid #1e3040' }}>
+                      <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>Superheat Target</p>
+                      <p className="text-sm font-bold text-white">10–20°F</p>
+                      <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>at evaporator outlet</p>
+                    </div>
+                  </div>
+
+                </div>
+              ) : (
+                <div className="rounded-lg py-6 text-center" style={{ background: '#162030', border: '1px solid #1e3040' }}>
+                  <p className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                    Enter ambient and setpoint temperatures to calculate target pressures
+                  </p>
+                </div>
+              )}
+
+              {/* Safety warning */}
+              <div className="rounded-lg p-3" style={{ background: '#1a1000', border: '1px solid #F59E0B30' }}>
+                <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                  <span style={{ color: '#F59E0B' }}>⚠</span>{' '}
+                  Pressure values are reference ranges only. Always verify against unit-specific service documentation.
+                  All refrigerant work must be performed by EPA 608 certified technicians only.
+                  {calcRefrigerant === 'R-452A' && ' R-452A values are approximate — consult the service manual for your specific unit.'}
+                </p>
+              </div>
+
+            </div>
+          )}
         </div>
 
         {/* Query form */}
