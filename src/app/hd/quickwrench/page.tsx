@@ -29,49 +29,110 @@ interface AlarmPattern {
   severity:      'critical' | 'warning'
 }
 
-interface QWResult {
-  alarm_meaning:          string
-  severity:               'low' | 'medium' | 'high' | 'critical'
-  most_likely_causes:     string[]
-  diagnostic_steps:       string[]
-  common_fix:             string
-  parts_typically_needed: string[]
-  safety_warnings:        string[]
-  epa_warning:            string | null
-  pm_interval_note:       string | null
-  sources?:               string[]
-}
-
-const AI_SEVERITY_COLORS = {
-  low:      '#22C55E',
-  medium:   '#F59E0B',
-  high:     '#F97316',
-  critical: '#EF4444',
-}
-
 const TK_SEVERITY_CONFIG: Record<TKSeverity, { label: string; color: string; bg: string; border: string }> = {
-  ok_to_run:        { label: 'OK TO RUN',            color: '#22C55E', bg: '#22C55E15', border: '#22C55E40' },
-  check_specified:  { label: 'CHECK AS SPECIFIED',   color: '#F59E0B', bg: '#F59E0B15', border: '#F59E0B40' },
+  ok_to_run:        { label: 'OK TO RUN',             color: '#22C55E', bg: '#22C55E15', border: '#22C55E40' },
+  check_specified:  { label: 'CHECK AS SPECIFIED',    color: '#F59E0B', bg: '#F59E0B15', border: '#F59E0B40' },
   immediate_action: { label: 'TAKE IMMEDIATE ACTION', color: '#EF4444', bg: '#EF444415', border: '#EF444440' },
 }
 
-// Safety helpers — if the AI ever returns an object where a string is expected,
-// convert it rather than passing it to React directly (which crashes).
-function safeStr(val: unknown): string {
-  if (val === null || val === undefined) return ''
-  if (typeof val === 'string') return val
-  if (typeof val === 'object') return JSON.stringify(val)
-  return String(val)
+// ─── Plain-text section parser ────────────────────────────────────────────────
+
+const SECTION_DEFS = [
+  { key: 'ALARM MEANING',      label: 'Alarm Meaning',       color: 'rgba(255,255,255,0.9)', bg: null,      accent: null      },
+  { key: 'MOST LIKELY CAUSES', label: 'Most Likely Causes',  color: HD_ORANGE,               bg: null,      accent: HD_ORANGE },
+  { key: 'DIAGNOSTIC STEPS',   label: 'Diagnostic Steps',    color: HD_BLUE,                 bg: null,      accent: HD_BLUE   },
+  { key: 'COMMON FIX',         label: 'Common Fix',          color: '#22C55E',               bg: '#162030', accent: null      },
+  { key: 'PARTS NEEDED',       label: 'Parts Needed',        color: 'rgba(255,255,255,0.4)', bg: null,      accent: null      },
+  { key: 'SAFETY WARNINGS',    label: 'Safety & Compliance', color: '#F59E0B',               bg: null,      accent: null      },
+  { key: 'PM NOTE',            label: 'PM Note',             color: 'rgba(255,255,255,0.4)', bg: null,      accent: null      },
+] as const
+
+type SectionKey = typeof SECTION_DEFS[number]['key']
+
+function parseAnalysis(text: string): Array<{ key: SectionKey; content: string }> {
+  const keys = SECTION_DEFS.map(s => s.key)
+  // Build a pattern that matches any header colon at start of a line
+  const escapedKeys = keys.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+  const headerRe = new RegExp(`(${escapedKeys.join('|')}):`, 'g')
+
+  const positions: Array<{ key: SectionKey; contentStart: number; headerStart: number }> = []
+  let m
+  while ((m = headerRe.exec(text)) !== null) {
+    positions.push({ key: m[1] as SectionKey, headerStart: m.index, contentStart: m.index + m[0].length })
+  }
+
+  return positions
+    .map((pos, i) => ({
+      key: pos.key,
+      content: text.slice(pos.contentStart, positions[i + 1]?.headerStart ?? text.length).trim(),
+    }))
+    .filter(s => s.content && s.content.toLowerCase() !== 'none.' && s.content.toLowerCase() !== 'none')
 }
 
-function safeArr(val: unknown): string[] {
-  if (!Array.isArray(val)) return []
-  return val.map(item =>
-    typeof item === 'string' ? item
-    : typeof item === 'object' && item !== null ? JSON.stringify(item)
-    : String(item ?? '')
+function SectionContent({ sectionKey, content }: { sectionKey: SectionKey; content: string }) {
+  const def = SECTION_DEFS.find(s => s.key === sectionKey)!
+
+  if (sectionKey === 'MOST LIKELY CAUSES' || sectionKey === 'DIAGNOSTIC STEPS') {
+    const lines = content.split('\n').map(l => l.replace(/^\d+\.\s*/, '').trim()).filter(Boolean)
+    return (
+      <ol className="space-y-1.5">
+        {lines.map((line, i) => (
+          <li key={i} className="flex gap-2 text-sm" style={{ color: 'rgba(255,255,255,0.82)' }}>
+            {sectionKey === 'DIAGNOSTIC STEPS' ? (
+              <span
+                className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5"
+                style={{ background: '#1e3040', color: HD_BLUE }}
+              >
+                {i + 1}
+              </span>
+            ) : (
+              <span className="font-bold flex-shrink-0" style={{ color: HD_ORANGE }}>{i + 1}.</span>
+            )}
+            {line}
+          </li>
+        ))}
+      </ol>
+    )
+  }
+
+  if (sectionKey === 'PARTS NEEDED') {
+    const items = content.split('\n').map(l => l.replace(/^[-•]\s*/, '').trim()).filter(Boolean)
+    return (
+      <div className="flex flex-wrap gap-2">
+        {items.map((p, i) => (
+          <span key={i} className="text-xs px-2.5 py-1 rounded-full" style={{ background: '#1e3040', color: 'rgba(255,255,255,0.7)' }}>
+            {p}
+          </span>
+        ))}
+      </div>
+    )
+  }
+
+  if (sectionKey === 'SAFETY WARNINGS') {
+    const lines = content.split('\n').map(l => l.replace(/^[-•]\s*/, '').trim()).filter(Boolean)
+    return (
+      <div className="space-y-1">
+        {lines.map((w, i) => (
+          <p key={i} className="text-xs" style={{ color: 'rgba(255,255,255,0.65)' }}>⚠ {w}</p>
+        ))}
+      </div>
+    )
+  }
+
+  // Default: plain paragraph(s)
+  const paragraphs = content.split('\n').filter(l => l.trim())
+  return (
+    <div className="space-y-1">
+      {paragraphs.map((p, i) => (
+        <p key={i} className="text-sm leading-relaxed" style={{ color: def.color }}>
+          {p}
+        </p>
+      ))}
+    </div>
   )
 }
+
+// ─── TK UI components ─────────────────────────────────────────────────────────
 
 function TKSeverityBadge({ severity }: { severity: TKSeverity }) {
   const cfg = TK_SEVERITY_CONFIG[severity] ?? TK_SEVERITY_CONFIG.check_specified
@@ -127,22 +188,24 @@ function TKCodeRow({ src }: { src: TKSource }) {
   )
 }
 
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function HDQuickWrenchPage() {
-  const [manufacturer,         setManufacturer]        = useState<Manufacturer>('Thermo King')
-  const [unitType,             setUnitType]            = useState<UnitType>('trailer')
-  const [model,                setModel]               = useState('')
-  const [serialNumber,         setSerialNumber]        = useState('')
-  const [alarmCode,            setAlarmCode]           = useState('')
-  const [additionalAlarmInput, setAdditionalAlarmInput]= useState('')
-  const [symptom,              setSymptom]             = useState('')
-  const [loading,              setLoading]             = useState(false)
-  const [loadingMessage,       setLoadingMessage]      = useState('Looking up alarm codes...')
+  const [manufacturer,         setManufacturer]         = useState<Manufacturer>('Thermo King')
+  const [unitType,             setUnitType]             = useState<UnitType>('trailer')
+  const [model,                setModel]                = useState('')
+  const [serialNumber,         setSerialNumber]         = useState('')
+  const [alarmCode,            setAlarmCode]            = useState('')
+  const [additionalAlarmInput, setAdditionalAlarmInput] = useState('')
+  const [symptom,              setSymptom]              = useState('')
+  const [loading,              setLoading]              = useState(false)
+  const [loadingMessage,       setLoadingMessage]       = useState('Looking up alarm codes...')
   const loadingStartRef = useRef<number>(0)
-  const [result,               setResult]              = useState<QWResult | null>(null)
-  const [tkSources,            setTkSources]           = useState<TKSource[]>([])
-  const [alarmPattern,         setAlarmPattern]        = useState<AlarmPattern | null>(null)
-  const [disclaimer,           setDisclaimer]          = useState<string | null>(null)
-  const [error,                setError]               = useState<string | null>(null)
+  const [analysis,             setAnalysis]             = useState<string | null>(null)
+  const [tkSources,            setTkSources]            = useState<TKSource[]>([])
+  const [alarmPattern,         setAlarmPattern]         = useState<AlarmPattern | null>(null)
+  const [disclaimer,           setDisclaimer]           = useState<string | null>(null)
+  const [error,                setError]                = useState<string | null>(null)
 
   const modelOptions =
     manufacturer === 'Thermo King'
@@ -167,13 +230,12 @@ export default function HDQuickWrenchPage() {
     if (!model || (!alarmCode && !symptom)) return
     loadingStartRef.current = Date.now()
     setLoading(true)
-    setResult(null)
+    setAnalysis(null)
     setTkSources([])
     setAlarmPattern(null)
     setDisclaimer(null)
     setError(null)
 
-    // Parse comma-separated additional codes
     const additionalAlarmCodes = additionalAlarmInput
       .split(',')
       .map(c => c.trim())
@@ -190,30 +252,19 @@ export default function HDQuickWrenchPage() {
         }),
       })
 
-      // Always parse as text first — if the server returns an HTML error page
-      // (Vercel 502, timeout, etc.) res.json() would throw "Unexpected token A"
       const text = await res.text()
       let json: Record<string, unknown> = {}
       try {
         json = JSON.parse(text) as Record<string, unknown>
       } catch {
-        throw new Error(
-          `Server returned an unexpected response (status ${res.status}). Please try again.`
-        )
+        throw new Error(`Server returned an unexpected response (status ${res.status}). Please try again.`)
       }
 
       if (!res.ok) {
-        throw new Error(
-          typeof json.error === 'string' ? json.error : `Request failed (${res.status})`
-        )
+        throw new Error(typeof json.error === 'string' ? json.error : `Request failed (${res.status})`)
       }
 
-      // Defensively extract each field — guard against undefined/wrong shape
-      const rawResult = json.result
-      setResult(rawResult != null && typeof rawResult === 'object'
-        ? rawResult as QWResult
-        : null
-      )
+      setAnalysis(typeof json.analysis === 'string' ? json.analysis : null)
       setTkSources(Array.isArray(json.tk_sources) ? json.tk_sources as TKSource[] : [])
       setAlarmPattern(
         json.alarm_pattern != null && typeof json.alarm_pattern === 'object'
@@ -228,8 +279,8 @@ export default function HDQuickWrenchPage() {
     }
   }
 
-  // Primary TK source (first code entered)
   const primaryTkSource = tkSources[0] ?? null
+  const parsedSections  = analysis ? parseAnalysis(analysis) : []
 
   return (
     <main className="flex-1 p-6">
@@ -311,7 +362,7 @@ export default function HDQuickWrenchPage() {
             </select>
           </div>
 
-          {/* Serial Number (optional) */}
+          {/* Serial Number */}
           <div>
             <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
               Serial Number <span style={{ color: 'rgba(255,255,255,0.25)' }}>(optional)</span>
@@ -402,8 +453,8 @@ export default function HDQuickWrenchPage() {
           </div>
         )}
 
-        {/* Result — only render when result is a non-null object */}
-        {result !== null && typeof result === 'object' && (
+        {/* Results */}
+        {analysis !== null && (
           <div className="space-y-4">
 
             {/* ── MULTI-ALARM PATTERN BANNER ── */}
@@ -414,12 +465,9 @@ export default function HDQuickWrenchPage() {
                   border: alarmPattern.severity === 'critical' ? '2px solid #EF4444' : `2px solid ${HD_ORANGE}`,
                 }}
               >
-                {/* Banner header */}
                 <div
                   className="px-5 py-3 flex items-center gap-3"
-                  style={{
-                    background: alarmPattern.severity === 'critical' ? '#EF4444' : HD_ORANGE,
-                  }}
+                  style={{ background: alarmPattern.severity === 'critical' ? '#EF4444' : HD_ORANGE }}
                 >
                   <svg className="w-5 h-5 text-white flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
@@ -437,13 +485,10 @@ export default function HDQuickWrenchPage() {
 
                 <div
                   className="p-5 space-y-4"
-                  style={{
-                    background: alarmPattern.severity === 'critical' ? '#1a0505' : '#1a0a00',
-                  }}
+                  style={{ background: alarmPattern.severity === 'critical' ? '#1a0505' : '#1a0a00' }}
                 >
-                  {/* DO NOT diagnose independently */}
                   <div
-                    className="rounded-lg px-4 py-3 flex items-start gap-2"
+                    className="rounded-lg px-4 py-3"
                     style={{
                       background: alarmPattern.severity === 'critical' ? '#EF444420' : `${HD_ORANGE}20`,
                       border:     alarmPattern.severity === 'critical' ? '1px solid #EF444450' : `1px solid ${HD_ORANGE}50`,
@@ -454,13 +499,11 @@ export default function HDQuickWrenchPage() {
                     </span>
                   </div>
 
-                  {/* Pattern description */}
                   <div>
                     <p className="text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Pattern</p>
                     <p className="text-sm text-white leading-relaxed">{alarmPattern.pattern}</p>
                   </div>
 
-                  {/* Diagnose first */}
                   <div className="rounded-lg p-4" style={{ background: '#162030' }}>
                     <p className="text-xs uppercase tracking-widest mb-1.5" style={{ color: alarmPattern.severity === 'critical' ? '#EF4444' : HD_ORANGE }}>
                       Diagnose First
@@ -468,7 +511,6 @@ export default function HDQuickWrenchPage() {
                     <p className="text-sm font-bold text-white leading-relaxed">{alarmPattern.diagnoseFirst}</p>
                   </div>
 
-                  {/* Individual code badges for all codes in pattern */}
                   {tkSources.length > 0 && (
                     <div className="space-y-2">
                       <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Official TK Definitions</p>
@@ -479,15 +521,15 @@ export default function HDQuickWrenchPage() {
               </div>
             )}
 
-            {/* ── SINGLE-ALARM TK OFFICIAL RESULT ── */}
+            {/* ── ANALYSIS CARD ── */}
             <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
 
-              {/* TK Official Severity Banner (single code or primary code when no pattern) */}
+              {/* TK official severity banner — single code, no pattern */}
               {primaryTkSource && !alarmPattern && (
                 <PrimaryTKBanner src={primaryTkSource} />
               )}
 
-              {/* Operator Action (single code, no pattern) */}
+              {/* Operator action — single code, no pattern */}
               {primaryTkSource && !alarmPattern && (
                 <div
                   className="px-5 py-3 flex items-start gap-2"
@@ -497,139 +539,42 @@ export default function HDQuickWrenchPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <div>
-                    <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Operator Action (TK Official)</p>
+                    <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                      Operator Action (TK Official)
+                    </p>
                     <p className="text-sm font-medium text-white">{primaryTkSource.operatorAction}</p>
                   </div>
                 </div>
               )}
 
-              {/* AI Severity header (shown when no TK source at all) */}
-              {!primaryTkSource && (
-                <div
-                  className="px-5 py-4 flex items-center gap-3"
-                  style={{ background: '#162030', borderBottom: '1px solid #1e3040' }}
-                >
-                  <div
-                    className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wide"
-                    style={{
-                      background: `${AI_SEVERITY_COLORS[result.severity] ?? '#6B7280'}25`,
-                      color:       AI_SEVERITY_COLORS[result.severity] ?? '#6B7280',
-                    }}
-                  >
-                    {result.severity}
-                  </div>
-                  <p className="text-white font-semibold text-sm">{safeStr(result.alarm_meaning)}</p>
-                </div>
-              )}
-
+              {/* Parsed analysis sections */}
               <div className="p-5 space-y-5" style={{ background: '#111920' }}>
-
-                {/* Tech analysis label when TK source present */}
-                {(primaryTkSource || alarmPattern) && (
-                  <div>
-                    <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                      {alarmPattern ? 'Combined Tech Analysis' : 'Tech Analysis'}
-                    </p>
-                    <p className="text-sm text-white">{safeStr(result.alarm_meaning)}</p>
-                  </div>
-                )}
-
-                {/* EPA Warning */}
-                {result.epa_warning && (
-                  <div className="rounded-lg p-3" style={{ background: '#2d0a0a', border: '1px solid #7f1d1d' }}>
-                    <p className="text-xs font-bold text-red-400">⚠ {safeStr(result.epa_warning)}</p>
-                  </div>
-                )}
-
-                {/* Most likely causes */}
-                <div>
-                  <p className="text-xs uppercase tracking-widest mb-2" style={{ color: HD_ORANGE }}>Most Likely Causes</p>
-                  <ol className="space-y-1">
-                    {safeArr(result.most_likely_causes).map((c, i) => (
-                      <li key={i} className="flex gap-2 text-sm" style={{ color: 'rgba(255,255,255,0.8)' }}>
-                        <span className="font-bold flex-shrink-0" style={{ color: HD_ORANGE }}>{i + 1}.</span>
-                        {c}
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-
-                {/* Diagnostic steps */}
-                <div>
-                  <p className="text-xs uppercase tracking-widest mb-2" style={{ color: HD_BLUE }}>Diagnostic Steps</p>
-                  <ol className="space-y-1.5">
-                    {safeArr(result.diagnostic_steps).map((s, i) => (
-                      <li key={i} className="flex gap-2 text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                        <span
-                          className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5"
-                          style={{ background: '#1e3040', color: HD_BLUE }}
-                        >
-                          {i + 1}
-                        </span>
-                        {s}
-                      </li>
-                    ))}
-                  </ol>
-                </div>
-
-                {/* Common fix */}
-                <div className="rounded-lg p-4" style={{ background: '#162030' }}>
-                  <p className="text-xs uppercase tracking-widest mb-1" style={{ color: '#22C55E' }}>Common Fix</p>
-                  <p className="text-sm text-white">{safeStr(result.common_fix)}</p>
-                </div>
-
-                {/* Parts */}
-                {safeArr(result.parts_typically_needed).length > 0 && (
-                  <div>
-                    <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>Parts Typically Needed</p>
-                    <div className="flex flex-wrap gap-2">
-                      {safeArr(result.parts_typically_needed).map((p, i) => (
-                        <span
-                          key={i}
-                          className="text-xs px-2.5 py-1 rounded-full"
-                          style={{ background: '#1e3040', color: 'rgba(255,255,255,0.7)' }}
-                        >
-                          {p}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Safety warnings */}
-                {safeArr(result.safety_warnings).length > 0 && (
-                  <div>
-                    <p className="text-xs uppercase tracking-widest mb-2" style={{ color: '#F59E0B' }}>Safety & Compliance</p>
-                    {safeArr(result.safety_warnings).map((w, i) => (
-                      <p key={i} className="text-xs mb-1" style={{ color: 'rgba(255,255,255,0.65)' }}>⚠ {w}</p>
-                    ))}
-                  </div>
-                )}
-
-                {/* PM note */}
-                {result.pm_interval_note && (
-                  <div className="rounded-lg p-3" style={{ background: '#162030', border: '1px solid #1e3040' }}>
-                    <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>PM Note</p>
-                    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.65)' }}>{safeStr(result.pm_interval_note)}</p>
-                  </div>
-                )}
-
-                {/* Web search sources */}
-                {safeArr(result.sources).length > 0 && (
-                  <div>
-                    <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>Sources</p>
-                    {safeArr(result.sources).map((s, i) => (
-                      <p key={i} className="text-xs mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>— {s}</p>
-                    ))}
-                  </div>
+                {parsedSections.length > 0 ? (
+                  parsedSections.map(({ key, content }) => {
+                    const def = SECTION_DEFS.find(s => s.key === key)!
+                    return (
+                      <div
+                        key={key}
+                        className={def.bg ? 'rounded-lg p-4' : ''}
+                        style={def.bg ? { background: def.bg } : {}}
+                      >
+                        <p className="text-xs uppercase tracking-widest mb-2" style={{ color: def.color }}>
+                          {def.label}
+                        </p>
+                        <SectionContent sectionKey={key} content={content} />
+                      </div>
+                    )
+                  })
+                ) : (
+                  // Fallback: no headers found — render raw text
+                  <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.8)' }}>
+                    {analysis}
+                  </p>
                 )}
 
                 {/* Disclaimer */}
                 {disclaimer && (
-                  <div
-                    className="rounded-lg p-3"
-                    style={{ background: '#0d1820', border: '1px solid #1e3040' }}
-                  >
+                  <div className="rounded-lg p-3" style={{ background: '#0d1820', border: '1px solid #1e3040' }}>
                     <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.3)' }}>
                       {disclaimer}
                     </p>

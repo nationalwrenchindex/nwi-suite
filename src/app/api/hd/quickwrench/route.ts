@@ -128,20 +128,17 @@ ENGINE WILL NOT GO TO HIGH SPEED — Related Alarms 40:
 - Speed solenoid not engaging — check for proper voltage to solenoid — check diode at solenoid — check for seized speed plunger — check speed solenoid linkage
 - Low cylinder compression — remove injectors and test each cylinder
 
-Respond with ONLY valid JSON. No markdown, no code blocks, no explanation. Start your response with { and end with }.
+Respond in plain text only. No JSON. No code blocks. No markdown. Use these exact section headers followed by a colon on their own line:
 
-The response must be valid JSON with exactly these fields:
-{
-  "alarm_meaning": "string - what this alarm means in plain field tech language",
-  "most_likely_causes": ["string array - ranked by probability"],
-  "diagnostic_steps": ["string array - numbered steps in order"],
-  "common_fix": "string - most common resolution",
-  "parts_typically_needed": ["string array"],
-  "safety_warnings": ["string array"],
-  "pm_interval_note": "string - relevant PM note if applicable, or empty string if none"
-}
+ALARM MEANING:
+MOST LIKELY CAUSES:
+DIAGNOSTIC STEPS:
+COMMON FIX:
+PARTS NEEDED:
+SAFETY WARNINGS:
+PM NOTE:
 
-Rules: Do not use nested objects. Do not use objects as array items. Every field must be a string or array of strings only. Keep each string concise.`
+Write your response under each header. Use numbered lists (1. 2. 3.) under MOST LIKELY CAUSES and DIAGNOSTIC STEPS. Use plain sentences under all other headers. If a section has no relevant content write None. Keep each entry concise.`
 
 // ─── User Prompt Builder ──────────────────────────────────────────────────────
 // Injects only the alarm definitions the tech actually needs (entered codes +
@@ -209,99 +206,17 @@ function buildUserPrompt({
   return parts.filter(Boolean).join('\n')
 }
 
-// ─── AI Response Normalizer ───────────────────────────────────────────────────
-// Claude sometimes returns a nested object with CODE_N keys + COMBINED_PATTERN_ANALYSIS
-// instead of the flat schema requested. Detect and flatten it.
+// ─── Fallback analysis when AI is unavailable ────────────────────────────────
 
-function normalizeAIResult(raw: Record<string, unknown>): Record<string, unknown> {
-  const codeKeys = Object.keys(raw).filter(k => /^CODE_\d+$/i.test(k) || /^ALARM_\d+$/i.test(k))
-  const hasCombined = 'COMBINED_PATTERN_ANALYSIS' in raw
+const FALLBACK_ANALYSIS = `ALARM MEANING:
+Diagnostic service temporarily unavailable. Please consult the official operator manual for this alarm code.
 
-  console.log('[normalizeAIResult] codeKeys:', codeKeys, 'hasCombined:', hasCombined)
+DIAGNOSTIC STEPS:
+1. Consult the official Thermo King or Carrier Transicold operator manual for this alarm code
+2. Contact your authorized service dealer for assistance
 
-  // Already flat — nothing to do
-  if (!hasCombined && codeKeys.length === 0) {
-    console.log('[normalizeAIResult] returning raw (already flat)')
-    return raw
-  }
-
-  // Extract combined analysis text
-  let combinedText: string | null = null
-  if (typeof raw.COMBINED_PATTERN_ANALYSIS === 'string') {
-    combinedText = raw.COMBINED_PATTERN_ANALYSIS
-  } else if (raw.COMBINED_PATTERN_ANALYSIS && typeof raw.COMBINED_PATTERN_ANALYSIS === 'object') {
-    const cp = raw.COMBINED_PATTERN_ANALYSIS as Record<string, unknown>
-    combinedText = typeof cp.alarm_meaning === 'string'
-      ? cp.alarm_meaning
-      : JSON.stringify(raw.COMBINED_PATTERN_ANALYSIS)
-  }
-
-  // Merge per-code sub-objects
-  const subs = codeKeys
-    .map(k => raw[k])
-    .filter((v): v is Record<string, unknown> => typeof v === 'object' && v !== null)
-
-  const strArr = (val: unknown): string[] =>
-    Array.isArray(val) ? val.filter((x): x is string => typeof x === 'string') : []
-
-  const mergedCauses:   string[] = []
-  const mergedSteps:    string[] = []
-  const mergedParts:    string[] = []
-  const mergedWarnings: string[] = []
-  const mergedSources:  string[] = []
-  let severity    = 'high'
-  let commonFix   = ''
-  let epaWarning: string | null = null
-  let pmNote:     string | null = null
-  let alarmMeaning = ''
-
-  for (const sub of subs) {
-    mergedCauses.push(...strArr(sub.most_likely_causes))
-    mergedSteps.push(...strArr(sub.diagnostic_steps))
-    mergedParts.push(...strArr(sub.parts_typically_needed))
-    mergedWarnings.push(...strArr(sub.safety_warnings))
-    mergedSources.push(...strArr(sub.sources))
-    if (typeof sub.severity      === 'string') severity   = sub.severity
-    if (typeof sub.common_fix    === 'string' && sub.common_fix)    commonFix  = sub.common_fix
-    if (typeof sub.epa_warning   === 'string' && sub.epa_warning)   epaWarning = sub.epa_warning
-    if (typeof sub.pm_interval_note === 'string' && sub.pm_interval_note) pmNote = sub.pm_interval_note
-    if (typeof sub.alarm_meaning === 'string' && sub.alarm_meaning)
-      alarmMeaning += (alarmMeaning ? ' / ' : '') + sub.alarm_meaning
-  }
-
-  return {
-    alarm_meaning:          combinedText ?? (alarmMeaning || 'Multi-alarm combined analysis'),
-    severity,
-    most_likely_causes:     mergedCauses,
-    diagnostic_steps:       mergedSteps,
-    common_fix:             commonFix || 'See combined alarm analysis above',
-    parts_typically_needed: mergedParts,
-    safety_warnings:        mergedWarnings,
-    epa_warning:            epaWarning,
-    pm_interval_note:       pmNote,
-    sources:                mergedSources,
-  }
-}
-
-// ─── Fallback result when AI is unavailable ───────────────────────────────────
-
-function fallbackResult(message: string): Record<string, unknown> {
-  return {
-    alarm_meaning:          message,
-    severity:               'high',
-    most_likely_causes:     ['Unable to complete AI analysis — service error'],
-    diagnostic_steps:       [
-      'Consult the official Thermo King or Carrier Transicold operator manual for this alarm code',
-      'Contact your authorized service dealer for assistance',
-    ],
-    common_fix:             'Please try again in a moment.',
-    parts_typically_needed: [],
-    safety_warnings:        [],
-    epa_warning:            null,
-    pm_interval_note:       null,
-    sources:                [],
-  }
-}
+SAFETY WARNINGS:
+Do not operate a unit with an unresolved immediate-action alarm.`
 
 // ─── Route Handler ────────────────────────────────────────────────────────────
 
@@ -370,63 +285,21 @@ export async function POST(req: NextRequest) {
       model:      'claude-sonnet-4-6',
       max_tokens: 1500,
       system:     SYSTEM_PROMPT,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       messages: [{ role: 'user', content: userPrompt }],
     })
 
-    const text = msg.content
+    const analysis = msg.content
       .filter(b => b.type === 'text')
       .map(b => (b as Anthropic.TextBlock).text)
       .join('\n')
-
-    console.log('[quickwrench] raw AI text length:', text.length)
-    console.log('[quickwrench] raw AI text:', text)
-    console.log('[quickwrench] stop_reason:', msg.stop_reason, 'usage:', JSON.stringify(msg.usage))
-
-    const cleaned = text
-      .replace(/^```json\s*/m, '')
-      .replace(/^```\s*/m,     '')
-      .replace(/```\s*$/m,     '')
       .trim()
 
-    console.log('[quickwrench] cleaned text:', cleaned)
-
-    const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
-    console.log('[quickwrench] jsonMatch found:', !!jsonMatch, jsonMatch ? `(${jsonMatch[0].length} chars)` : '')
-
-    if (!jsonMatch) {
-      console.error('[quickwrench] No JSON object found in response. Full cleaned text:', cleaned)
-      return NextResponse.json({
-        result: fallbackResult('Diagnostic analysis returned an unexpected format. Please try again.'),
-        tk_sources:    tkSources,
-        alarm_pattern: alarmPattern,
-        disclaimer:    TK_DISCLAIMER,
-      })
-    }
-
-    let parsedRaw: Record<string, unknown>
-    try {
-      parsedRaw = JSON.parse(jsonMatch[0]) as Record<string, unknown>
-    } catch (parseErr) {
-      console.error('[quickwrench] JSON.parse failed:', parseErr)
-      console.error('[quickwrench] JSON string that failed:', jsonMatch[0])
-      return NextResponse.json({
-        result: fallbackResult('Diagnostic analysis could not be parsed. Please try again.'),
-        tk_sources:    tkSources,
-        alarm_pattern: alarmPattern,
-        disclaimer:    TK_DISCLAIMER,
-      })
-    }
-
-    console.log('[quickwrench] parsed keys:', Object.keys(parsedRaw))
-    console.log('[quickwrench] parsed raw:', JSON.stringify(parsedRaw).slice(0, 500))
-
-    const result = normalizeAIResult(parsedRaw)
-    console.log('[quickwrench] normalized result keys:', Object.keys(result))
-    console.log('[quickwrench] alarm_meaning:', result.alarm_meaning)
+    console.log('[quickwrench] stop_reason:', msg.stop_reason, 'tokens:', JSON.stringify(msg.usage))
+    console.log('[quickwrench] analysis length:', analysis.length)
+    console.log('[quickwrench] analysis:', analysis)
 
     return NextResponse.json({
-      result,
+      analysis,
       tk_sources:    tkSources,
       alarm_pattern: alarmPattern,
       disclaimer:    TK_DISCLAIMER,
@@ -434,7 +307,7 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     console.error('[hd/quickwrench] AI call failed', err)
     return NextResponse.json({
-      result: fallbackResult('Diagnostic service temporarily unavailable. Consult the official TK operator manual for this alarm code or contact your authorized dealer.'),
+      analysis:      FALLBACK_ANALYSIS,
       tk_sources:    tkSources,
       alarm_pattern: alarmPattern,
       disclaimer:    TK_DISCLAIMER,
