@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
 import Anthropic from '@anthropic-ai/sdk'
 
-export const maxDuration = 30
+export const maxDuration = 45
 
 // ─── Thermo King Alarm Code Database ─────────────────────────────────────────
 // Source: TK Operator Document TK 40933-8-CH Rev 15
@@ -342,59 +342,105 @@ function lookupPattern(codes: string[]): AlarmRelationship | null {
 }
 
 // ─── System Prompt ────────────────────────────────────────────────────────────
+// Kept lean — no reference data (PM intervals, refrigerant specs) to minimise
+// prompt tokens. Reference data is injected contextually in buildUserPrompt().
 
-const SYSTEM_PROMPT = `You are an expert heavy duty diesel and transport refrigeration technician with 17 years of field experience servicing Thermo King and Carrier Transicold refrigeration units, Class 6 through Class 8 trucks, and 48 and 53 foot refrigerated trailers. You have deep knowledge of FMCSA regulations, DOT inspection criteria, EPA Section 608 refrigerant handling requirements, and the specific service procedures for every major Thermo King and Carrier unit model.
+const SYSTEM_PROMPT = `You are an expert heavy duty diesel and transport refrigeration technician with 17 years of field experience servicing Thermo King and Carrier Transicold units, Class 6-8 trucks, and refrigerated trailers. You have deep knowledge of FMCSA regulations, DOT inspection criteria, EPA Section 608 requirements, and service procedures for every major TK and Carrier model.
 
-When a technician asks about an alarm code, specification, torque value, or repair procedure give them the exact answer a 17 year veteran would give — not a generic response. Always include the specific specification, the tolerance, the unit model if relevant, and flag any safety or compliance implications.
+Give the exact answer a 17-year veteran would give — specific specs, tolerances, model relevance, and safety implications. Never be generic.
 
-When an OFFICIAL TK DEFINITION is provided in the query, use it as the authoritative description — do not contradict it. Build your diagnostic steps, causes, and fix around it.
+When an OFFICIAL TK DEFINITION is provided in the query, treat it as authoritative — do not contradict it. Build your analysis around it.
 
-For any refrigerant related answer always include this warning: ALL REFRIGERANT CHECKS AND REPAIRS MUST BE PERFORMED BY EPA 608 LICENSED AND EXPERIENCED TECHNICIANS ONLY. Refrigerant exposure is extremely dangerous — risk of burns, eye damage, and gas poisoning. Always wear proper PPE. Never work alone on refrigerant systems.
+For any refrigerant work always state: ALL REFRIGERANT WORK MUST BE PERFORMED BY EPA 608 CERTIFIED TECHNICIANS ONLY. Risk of burns, eye damage, and gas poisoning. Always wear PPE.
 
-When you do not know something with certainty say so clearly rather than guessing — accuracy matters more than completeness in field service situations.
+ELECTRICAL DIAGNOSTIC RULE — applies to every electrical alarm (alternator, solenoid, controller, sensor, CAN, motor, relay, circuit):
+Step 1 is ALWAYS a battery load test before any other diagnosis.
+- Static voltage: 12.4–12.7V minimum. Charging voltage: 13.8–14.4V with unit running.
+- CCA: 800 minimum, 1050 maximum. Below 800 CCA: replace immediately.
+- If voltage below 10.5V DC: stop. Confirm or replace battery before proceeding.
+- A weak battery causes false electrical alarms, CAN errors, sensor faults, solenoid failures — battery replacement often resolves them without further diagnosis.
+Always list battery check as diagnostic_steps[0].
 
-PM Intervals reference:
-THERMO KING:
-- Visual inspection: every 1500 hours
-- Full service with TK filters (fluids and filters): every 3000 hours
-- Full service with aftermarket filters (Napa, Luberfiner, Fleetguard): every 750-1000 hours maximum
-- Coolant flush recommended: every 6000 hours / Coolant flush required: every 12000 hours
+When you do not know something with certainty, say so — accuracy over completeness.
 
-CARRIER TRANSICOLD:
-- Visual and tool inspection: every 750 hours
-- Fluid and filter change: every 1500 hours
-- Annual PM with coolant flush: every 6000 hours
-- Coolant flush with HD coolant formula: every 12000 hours
-
-Battery specs: HD unit range 800 CCA minimum — 1050 CCA maximum. Below 800 CCA: recommend immediate replacement. Battery tester required — visual inspection not sufficient.
-
-Refrigerant types: Most units use R-404A. Newer Thermo King units use R-452A (note: R-452A units are typically still under warranty — refer to authorized dealer for refrigerant service).
-
-UNIVERSAL ELECTRICAL DIAGNOSTIC RULE — This rule applies to ALL electrical alarm codes including but not limited to alternator alarms, solenoid circuit alarms, controller alarms, sensor alarms, CAN communication alarms, motor alarms, and any alarm involving circuits, relays, or electronic components.
-
-Before diagnosing any electrical alarm the technician must perform a battery test first:
-- Test battery voltage with a dedicated battery load tester — visual inspection is not sufficient
-- Static voltage must be 12.4V to 12.7V minimum
-- Charging voltage must be 13.8V to 14.4V with unit running
-- Battery CCA must meet minimum specification — HD reefer units require 800 CCA minimum, 1050 CCA maximum
-- If battery voltage is below 10.5V DC do not proceed with further electrical diagnosis until battery condition is confirmed or replaced
-- A weak or failing battery below 10.5V DC can cause false electrical alarms, intermittent controller faults, CAN communication errors, solenoid failures, and sensor out of range codes that disappear once battery is replaced or charged
-- Many experienced technicians skip this step — always perform it anyway — it is proper diagnostic procedure and prevents misdiagnosis
-
-When diagnosing any electrical alarm always include battery check as Step 1 in diagnostic_steps before any other diagnostic steps.
-
-Format your response as structured JSON with these exact fields:
+Respond with ONLY a JSON object using exactly these fields:
 {
-  "alarm_meaning": "string — what this alarm code means",
+  "alarm_meaning": "string",
   "severity": "low | medium | high | critical",
-  "most_likely_causes": ["string array ranked by probability"],
-  "diagnostic_steps": ["string array in order"],
-  "common_fix": "string — most common resolution with estimated repair time",
+  "most_likely_causes": ["ranked string array"],
+  "diagnostic_steps": ["ordered string array"],
+  "common_fix": "string with estimated repair time",
   "parts_typically_needed": ["string array"],
-  "safety_warnings": ["string array — any safety or compliance items"],
-  "epa_warning": "string | null — include EPA 608 warning if refrigerant related",
-  "pm_interval_note": "string | null — relevant PM interval if applicable"
+  "safety_warnings": ["string array"],
+  "epa_warning": "string | null",
+  "pm_interval_note": "string | null"
 }`
+
+// ─── User Prompt Builder ──────────────────────────────────────────────────────
+// Injects only the alarm definitions the tech actually needs (entered codes +
+// companion codes from the cross-reference map), capped at 5 total.
+
+interface BuildUserPromptParams {
+  manufacturer:  string
+  model:         string
+  unitType?:     string
+  allCodes:      string[]
+  symptom?:      string
+  serialNumber?: string
+  tkSources:     Array<{ code: string; description: string; severity: string; operatorAction: string; source: string }>
+  alarmPattern:  AlarmRelationship | null
+}
+
+function buildUserPrompt({
+  manufacturer, model, unitType, allCodes, symptom, serialNumber, tkSources, alarmPattern,
+}: BuildUserPromptParams): string {
+  const parts: (string | null)[] = [
+    `Unit: ${manufacturer} ${model} (${unitType ?? 'unknown type'})`,
+    allCodes.length > 0 ? `Alarm Code(s): ${allCodes.join(', ')}` : null,
+    symptom      ? `Symptom/Question: ${symptom}` : null,
+    serialNumber ? `Serial Number: ${serialNumber}` : null,
+  ]
+
+  // Inject definitions: start with entered codes, then add companion codes from
+  // the cross-reference pattern up to a cap of 5 definitions total.
+  const defsToShow: typeof tkSources = [...tkSources]
+
+  if (manufacturer === 'Thermo King' && alarmPattern) {
+    for (const companionCode of alarmPattern.codes) {
+      if (defsToShow.length >= 5) break
+      if (defsToShow.some(s => s.code === companionCode)) continue
+      const found = lookupTKCode(companionCode)
+      if (found) {
+        defsToShow.push({
+          code:           companionCode,
+          description:    found.description,
+          severity:       found.severity,
+          operatorAction: found.operatorAction,
+          source:         found.source,
+        })
+      }
+    }
+  }
+
+  if (defsToShow.length > 0) {
+    parts.push('\nOFFICIAL TK DEFINITIONS (TK 40933-8-CH Rev 15):')
+    for (const src of defsToShow) {
+      parts.push(`Code ${src.code}: ${src.description} | Severity: ${src.severity.replace(/_/g, ' ').toUpperCase()} | Operator Action: ${src.operatorAction}`)
+    }
+    parts.push('Use these as the authoritative basis — do not contradict them.')
+  }
+
+  if (alarmPattern) {
+    parts.push(
+      '\nMULTI-ALARM PATTERN DETECTED:',
+      `Pattern: ${alarmPattern.pattern}`,
+      `Diagnose first: ${alarmPattern.diagnoseFirst}`,
+      'Provide ONE combined diagnostic analysis. Do NOT treat these alarms independently.',
+    )
+  }
+
+  return parts.filter(Boolean).join('\n')
+}
 
 // ─── AI Response Normalizer ───────────────────────────────────────────────────
 // Claude sometimes returns a nested object with CODE_N keys + COMBINED_PATTERN_ANALYSIS
@@ -540,40 +586,17 @@ export async function POST(req: NextRequest) {
   // Multi-alarm cross reference
   const alarmPattern = allCodes.length >= 2 ? lookupPattern(allCodes) : null
 
-  // Build prompt
-  const promptParts: (string | null)[] = [
-    `Unit: ${manufacturer} ${model} (${unitType ?? 'unknown type'})`,
-    allCodes.length > 0 ? `Alarm Code(s): ${allCodes.join(', ')}` : null,
-    symptom      ? `Symptom/Question: ${symptom}` : null,
-    body.serialNumber ? `Serial Number: ${body.serialNumber}` : null,
-  ]
-
-  if (tkSources.length > 0) {
-    promptParts.push('\nOFFICIAL TK DEFINITIONS (TK 40933-8-CH Rev 15):')
-    for (const src of tkSources) {
-      promptParts.push(
-        `Code ${src.code}: ${src.description} | Severity: ${src.severity.replace(/_/g, ' ').toUpperCase()} | Operator Action: ${src.operatorAction}`
-      )
-    }
-    promptParts.push('Use these official definitions as the authoritative basis — do not contradict them.')
-  }
-
-  if (alarmPattern) {
-    promptParts.push(
-      '\nMULTI-ALARM PATTERN DETECTED:',
-      `Pattern: ${alarmPattern.pattern}`,
-      `Diagnose first: ${alarmPattern.diagnoseFirst}`,
-      'IMPORTANT: These alarms are related. Provide a COMBINED diagnostic analysis addressing both codes together — do NOT treat them as independent issues. Your response should explain the relationship and give a single unified diagnostic path.',
-    )
-  }
-
-  const userPrompt = promptParts.filter(Boolean).join('\n')
+  const userPrompt = buildUserPrompt({
+    manufacturer, model, unitType, allCodes,
+    symptom, serialNumber: body.serialNumber,
+    tkSources, alarmPattern,
+  })
 
   try {
     const client = new Anthropic({ apiKey })
     const msg = await client.messages.create({
-      model:      'claude-haiku-4-5-20251001',
-      max_tokens: 2000,
+      model:      'claude-sonnet-4-6',
+      max_tokens: 3000,
       system:     SYSTEM_PROMPT,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       messages: [{ role: 'user', content: userPrompt }],
