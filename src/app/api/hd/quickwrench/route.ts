@@ -572,8 +572,8 @@ export async function POST(req: NextRequest) {
   try {
     const client = new Anthropic({ apiKey })
     const msg = await client.messages.create({
-      model:      'claude-sonnet-4-6',
-      max_tokens: 4000,
+      model:      'claude-haiku-4-5-20251001',
+      max_tokens: 2000,
       system:     SYSTEM_PROMPT,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       messages: [{ role: 'user', content: userPrompt }],
