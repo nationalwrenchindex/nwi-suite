@@ -12,6 +12,7 @@ const TIER_OPTIONS = [
     { value: 'elite',           label: 'LD Elite'           },
   ]},
   { group: 'Heavy Duty', options: [
+    { value: 'hd_reefer',  label: 'HD Reefer Standalone' },
     { value: 'hd_starter', label: 'HD Starter' },
     { value: 'hd_pro',     label: 'HD Pro'     },
     { value: 'hd_elite',   label: 'HD Elite'   },

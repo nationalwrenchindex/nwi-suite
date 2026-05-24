@@ -9,24 +9,31 @@ const HD_BLUE   = '#1A6BAF'
 
 const PLANS: { key: string; name: string; price: number; priceKey: string; badge?: string; features: string[] }[] = [
   {
+    key:      'hd_reefer',
+    name:     'Reefer Standalone',
+    price:    79,
+    priceKey: 'STRIPE_PRICE_HD_REEFER',
+    features: ['HD QuickWrench', 'EPA 608 Refrigerant Log', 'PM Interval Calculator', 'Alarm Code Lookup'],
+  },
+  {
     key:      'starter',
     name:     'HD Starter',
-    price:    49,
+    price:    149,
     priceKey: 'STRIPE_PRICE_HD_STARTER',
-    features: ['Work Orders', 'Fleet Units', 'PM Checklist', 'Fleet Accounts'],
+    features: ['Work Orders', 'Fleet Units', 'PM Checklist', 'Fleet Accounts', 'Scheduler'],
   },
   {
     key:      'pro',
     name:     'HD Pro',
-    price:    99,
+    price:    249,
     priceKey: 'STRIPE_PRICE_HD_PRO',
     badge:    'Most Popular',
-    features: ['Everything in HD Starter', 'HD QuickWrench', 'EPA 608 Log', 'DOT Inspections', 'Invoicing'],
+    features: ['Everything in HD Starter', 'HD QuickWrench', 'EPA 608 Log', 'DOT Inspections', 'Invoicing', 'Financials'],
   },
   {
     key:      'elite',
     name:     'HD Elite',
-    price:    199,
+    price:    399,
     priceKey: 'STRIPE_PRICE_HD_ELITE',
     badge:    'All-In-One',
     features: ['Everything in HD Pro', 'Foreman AI Receptionist', 'Reefer Module', 'Community Knowledge Base'],
@@ -103,7 +110,7 @@ export default function HDSignupPage() {
 
         {step === 'plan' && (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
               {PLANS.map(p => (
                 <button
                   key={p.key}

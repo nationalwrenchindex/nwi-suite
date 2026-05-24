@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { checkHDStarterAccess } from '@/lib/hd-access'
 
 export const metadata = { title: 'Work Orders — NWI HD Suite' }
 
@@ -21,6 +22,9 @@ export default async function WorkOrdersPage({
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
+
+  const hasStarterAccess = await checkHDStarterAccess(user.id)
+  if (!hasStarterAccess) redirect('/hd/upgrade')
 
   const params   = await searchParams
   const showForm = params.new === '1'

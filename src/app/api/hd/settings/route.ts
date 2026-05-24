@@ -6,13 +6,18 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  let body: { labor_rate?: number }
+  let body: { hd_labor_rate?: number | null; hd_tech_name?: string | null; hd_epa_cert_number?: string | null }
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid body' }, { status: 400 }) }
 
-  if (typeof body.labor_rate === 'number') {
+  const updates: Record<string, unknown> = {}
+  if ('hd_labor_rate'      in body) updates.hd_labor_rate      = body.hd_labor_rate
+  if ('hd_tech_name'       in body) updates.hd_tech_name       = body.hd_tech_name
+  if ('hd_epa_cert_number' in body) updates.hd_epa_cert_number = body.hd_epa_cert_number
+
+  if (Object.keys(updates).length > 0) {
     const { error } = await supabase
       .from('profiles')
-      .update({ hd_labor_rate: body.labor_rate })
+      .update(updates)
       .eq('id', user.id)
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   }

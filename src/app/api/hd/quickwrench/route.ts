@@ -5,6 +5,13 @@ import Anthropic from '@anthropic-ai/sdk'
 
 const SYSTEM_PROMPT = `You are an expert heavy duty diesel and transport refrigeration technician with 17 years of field experience servicing Thermo King and Carrier Transicold refrigeration units, Class 6 through Class 8 trucks, and 48 and 53 foot refrigerated trailers. You have deep knowledge of FMCSA regulations, DOT inspection criteria, EPA Section 608 refrigerant handling requirements, and the specific service procedures for every major Thermo King and Carrier unit model.
 
+SEARCH INSTRUCTIONS: For every alarm code or symptom query, use web_search to look up:
+1. The exact alarm code + unit model (e.g., "Thermo King SLX 400 alarm code 10 diagnostic")
+2. Any recent TSBs or service bulletins for that unit model and issue
+3. OEM service manual references if available publicly
+
+Combine search results with your field knowledge. Cite sources when web search returns specific OEM or TSB data. If search returns no relevant results, rely on your field expertise and say so.
+
 When a technician asks about an alarm code, specification, torque value, or repair procedure give them the exact answer a 17 year veteran would give — not a generic response. Always include the specific specification, the tolerance, the unit model if relevant, and flag any safety or compliance implications.
 
 For any refrigerant related answer always include this warning: ALL REFRIGERANT CHECKS AND REPAIRS MUST BE PERFORMED BY EPA 608 LICENSED AND EXPERIENCED TECHNICIANS ONLY. Refrigerant exposure is extremely dangerous — risk of burns, eye damage, and gas poisoning. Always wear proper PPE. Never work alone on refrigerant systems.
@@ -38,7 +45,8 @@ Format your response as structured JSON with these exact fields:
   "parts_typically_needed": ["string array"],
   "safety_warnings": ["string array — any safety or compliance items"],
   "epa_warning": "string | null — include EPA 608 warning if refrigerant related",
-  "pm_interval_note": "string | null — relevant PM interval if applicable"
+  "pm_interval_note": "string | null — relevant PM interval if applicable",
+  "sources": ["string array — cite any web search sources used, empty array if none"]
 }`
 
 export async function POST(req: NextRequest) {
@@ -87,10 +95,16 @@ export async function POST(req: NextRequest) {
       model:      'claude-sonnet-4-6',
       max_tokens: 4000,
       system:     SYSTEM_PROMPT,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      tools:      [{ type: 'web_search_20250305', name: 'web_search' }] as any,
       messages: [{ role: 'user', content: userPrompt }],
     })
 
-    const text = msg.content[0]?.type === 'text' ? msg.content[0].text : ''
+    // Combine all text blocks (web search produces multi-block responses)
+    const text = msg.content
+      .filter(b => b.type === 'text')
+      .map(b => (b as Anthropic.TextBlock).text)
+      .join('\n')
 
     const cleaned = text
       .replace(/^```json\s*/, '')

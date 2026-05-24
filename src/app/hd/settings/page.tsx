@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import HDLaborRateForm from '@/components/hd/HDLaborRateForm'
+import HDSettingsForm from '@/components/hd/HDSettingsForm'
 
 export const metadata = { title: 'Settings — NWI HD Suite' }
 
@@ -11,7 +11,7 @@ export default async function HDSettingsPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('full_name, email, business_name, phone, hd_labor_rate')
+    .select('full_name, email, business_name, phone, hd_labor_rate, hd_tech_name, hd_epa_cert_number')
     .eq('id', user.id)
     .single()
 
@@ -39,9 +39,15 @@ export default async function HDSettingsPage() {
         </div>
 
         <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
-          <p className="font-condensed font-bold text-white text-lg tracking-wide mb-1">LABOR RATES</p>
-          <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.5)' }}>Configure your shop labor rate for work order calculations.</p>
-          <HDLaborRateForm initialRate={profile?.hd_labor_rate?.toString() ?? null} />
+          <p className="font-condensed font-bold text-white text-lg tracking-wide mb-1">FIELD SETTINGS</p>
+          <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.5)' }}>
+            Labor rate, technician name, and EPA 608 certification for work orders and PM records.
+          </p>
+          <HDSettingsForm
+            initialLaborRate={(profile as { hd_labor_rate?: number | null } | null)?.hd_labor_rate?.toString() ?? null}
+            initialTechName={(profile as { hd_tech_name?: string | null } | null)?.hd_tech_name ?? null}
+            initialEpaCert={(profile as { hd_epa_cert_number?: string | null } | null)?.hd_epa_cert_number ?? null}
+          />
         </div>
 
         <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
