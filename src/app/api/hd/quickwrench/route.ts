@@ -363,6 +363,45 @@ Always list battery check as diagnostic_steps[0].
 
 When you do not know something with certainty, say so — accuracy over completeness.
 
+FIELD DIAGNOSTIC KNOWLEDGE BASE — real-world findings from 17 years of transport refrigeration field service. Reference these patterns when the tech describes matching symptoms or alarm codes. Prioritize these over generic textbook responses.
+
+ENGINE WILL NOT CRANK — Related Alarms 17:
+- Always test battery first — must be 10.5V DC or higher and greater than 400 CCA before diagnosing further
+- Defective starter or starter solenoid — check voltage to 8S wire at starter solenoid when start is initiated — if battery voltage is present replace starter
+- Water in cylinders hydrolock — remove injectors and turn engine by hand — if engine still will not turn deeper engine repair is required
+
+ENGINE TURNS BUT WILL NOT FIRE — Related Alarms 63, 27:
+- Check fuel level gauge and verify actual tank level
+- Fuel solenoid — check ohm value — 8DP wire: 0.2 to 0.5 ohms — 8D wire: 24 to 30 ohms — test between CH wire to 8D or 8DP on solenoid harness
+- Electric fuel pump — check for battery voltage at pump when unit is attempting to start
+- Worn primary pump — hand prime pump to build pressure — unit will start and run for a few seconds to a minute then die out slowly confirming worn pump
+- Faulty injection pump — no fuel reaching injectors
+- Air in fuel system from running tank low — crack open injection pump banjo bolt to bleed — pump until fuel flows without air bubbles
+- Dirty or clogged fuel inlet screen — fully remove injection pump banjo bolt — pull fuel inlet screen from inside banjo bolt — clean and reinstall — replace copper crush washer on each side of banjo bolt
+- Clogged air filter — open air filter housing and ensure filter is not collapsed or covered in soot
+- Low cylinder compression — remove injectors and test each cylinder for proper compression
+- Clogged fuel filter — replace if over 3000 engine hours since last service — also replace anytime inlet screen was found clogged
+
+STARTS BUT STOPS QUICKLY — Related Alarms 63:
+- Fuel solenoid — check ohm value — 8DP: 0.2 to 0.5 ohms — 8D: 24 to 30 ohms — test between CH wire to 8D or 8DP on solenoid harness
+- Air in fuel system — crack injection pump banjo bolt and bleed until fuel flows without air bubbles
+- Fuel tank vent check valve — verify tank is not pulling into a vacuum while running — check valve is located above fuel tank — brass fitting with 90 degree bend
+- Clogged fuel filter — replace if over 3000 engine hours or if inlet screen was found clogged
+
+ENGINE SPEED TOO HIGH — Related Alarms 33, 07:
+- Engine RPM out of adjustment — check high speed RPM is not exceeding factory recommended settings — generally over 2600 RPM is too high
+
+ENGINE SPEED TOO LOW — Related Alarms 33, 07:
+- Clogged air filter — inspect for collapsed filter or soot buildup
+- Dirty or clogged fuel inlet screen — remove banjo bolt — pull and clean screen — reinstall with new copper crush washers on both sides
+
+ENGINE WILL NOT GO TO HIGH SPEED — Related Alarms 40:
+- Clogged fuel filter — replace if over 3000 engine hours
+- Clogged air filter — inspect for collapse or soot
+- Dirty or clogged fuel inlet screen — full banjo bolt removal and cleaning procedure
+- Speed solenoid not engaging — check for proper voltage to solenoid — check diode at solenoid — check for seized speed plunger — check speed solenoid linkage
+- Low cylinder compression — remove injectors and test each cylinder
+
 Respond with ONLY a JSON object using exactly these fields:
 {
   "alarm_meaning": "string",
