@@ -39,6 +39,7 @@ type Subscription = {
   stripe_subscription_id: string | null
   current_period_end: string | null
   is_comped: boolean
+  vertical: string | null
 }
 
 const getAdminData = unstable_cache(
@@ -61,7 +62,7 @@ const getAdminData = unstable_cache(
         .order('created_at', { ascending: false }),
       svc
         .from('subscriptions')
-        .select('user_id, tier, status, stripe_subscription_id, current_period_end, is_comped'),
+        .select('user_id, tier, status, stripe_subscription_id, current_period_end, is_comped, vertical'),
       svc
         .from('profiles')
         .select('*', { count: 'exact', head: true })
@@ -148,6 +149,13 @@ function StatusBadge({ status }: { status: string | null }) {
       {status ?? 'no sub'}
     </span>
   )
+}
+
+function VerticalBadge({ vertical }: { vertical: string | null }) {
+  if (!vertical || vertical === 'light_duty') {
+    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-white/10 text-white/40">LD</span>
+  }
+  return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-500/15 text-blue-400">HD</span>
 }
 
 export default async function AdminPage() {
@@ -268,6 +276,7 @@ export default async function AdminPage() {
                   <th className={th}>Name</th>
                   <th className={th}>Email</th>
                   <th className={th}>Plan</th>
+                  <th className={th}>Vertical</th>
                   <th className={th}>Type</th>
                   <th className={th}>Status</th>
                   <th className={th}>Trial End</th>
@@ -288,6 +297,9 @@ export default async function AdminPage() {
                       <td className={td}>{p.full_name ?? '—'}</td>
                       <td className={`${td} text-white/60`}>{p.email ?? '—'}</td>
                       <td className={td}>{tierLabel}</td>
+                      <td className={td}>
+                        <VerticalBadge vertical={sub?.vertical ?? null} />
+                      </td>
                       <td className={td}>
                         <TypeBadge accountType={getAccountType(p.business_type, sub?.tier ?? null)} />
                       </td>
@@ -317,7 +329,7 @@ export default async function AdminPage() {
                 })}
                 {nonFounderProfiles.length === 0 && (
                   <tr>
-                    <td colSpan={8} className="px-4 py-8 text-center text-white/30 text-sm">
+                    <td colSpan={9} className="px-4 py-8 text-center text-white/30 text-sm">
                       No signups yet
                     </td>
                   </tr>
