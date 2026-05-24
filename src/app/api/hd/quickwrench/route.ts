@@ -206,6 +206,42 @@ function buildUserPrompt({
   return parts.filter(Boolean).join('\n')
 }
 
+// ─── Truck Engine System Prompt ──────────────────────────────────────────────
+
+const TRUCK_DISCLAIMER = "Truck engine diagnostics reference SAE J1939 standard and OEM documentation. Always verify fault codes using OEM diagnostic software — Cummins Insite, Detroit Diesel DiagnosticLink, or Mercedes-Benz Xentry. Fault code definitions and repair procedures vary by engine software version."
+
+const TRUCK_SYSTEM_PROMPT = `You are an expert heavy duty diesel technician with deep knowledge of Cummins, Detroit Diesel, and Mercedes-Benz truck engines. You specialize in fault code diagnostics using J1939 SPN and FMI codes. When a technician provides an SPN and FMI code you identify the exact fault, explain what system is affected and how it failed based on the FMI, provide ranked probable causes from most to least common in real world field conditions, provide step by step diagnostic procedure starting with battery and charging system verification, identify common fixes with estimated repair time, list parts typically needed, and flag any safety or emissions compliance implications. Always start electrical diagnosis with battery load test — static voltage 12.4 to 12.7V minimum, charging voltage 13.8 to 14.4V, CCA minimum 800. For emissions related codes always note if the fault will trigger a derate or shutdown condition and at what threshold. For DPF related codes always note regen requirements and ash cleaning intervals. Never guess — if a specific SPN is not in your training data say so clearly and direct the tech to the OEM diagnostic software.
+
+ELECTRICAL DIAGNOSTIC RULE — applies to every electrical fault (alternator, solenoid, controller, sensor, CAN, motor, relay, circuit):
+Step 1 is ALWAYS a battery load test before any other diagnosis.
+- Static voltage: 12.4–12.7V minimum. Charging voltage: 13.8–14.4V with engine running.
+- CCA: 800 minimum. Below 800 CCA: replace immediately.
+- If voltage below 10.5V DC: stop. Confirm or replace battery before proceeding.
+- A weak battery causes false electrical faults, CAN errors, sensor faults, solenoid failures — battery replacement often resolves them without further diagnosis.
+Always list battery check as the first diagnostic step.
+
+Respond in plain text only. No JSON. No code blocks. No markdown. Use these exact section headers followed by a colon on their own line:
+
+ALARM MEANING:
+MOST LIKELY CAUSES:
+DIAGNOSTIC STEPS:
+COMMON FIX:
+PARTS NEEDED:
+SAFETY WARNINGS:
+PM NOTE:
+
+Write your response under each header. Use numbered lists (1. 2. 3.) under MOST LIKELY CAUSES and DIAGNOSTIC STEPS. Use plain sentences under all other headers. If a section has no relevant content write None. Keep each entry concise.`
+
+const TRUCK_FALLBACK_ANALYSIS = `ALARM MEANING:
+Diagnostic service temporarily unavailable. Please consult OEM diagnostic software for this fault code.
+
+DIAGNOSTIC STEPS:
+1. Use Cummins Insite, Detroit Diesel DiagnosticLink, or Mercedes-Benz Xentry to read active fault codes
+2. Contact your authorized dealer for assistance
+
+SAFETY WARNINGS:
+Do not operate a vehicle with an active derate or shutdown fault condition.`
+
 // ─── Fallback analysis when AI is unavailable ────────────────────────────────
 
 const FALLBACK_ANALYSIS = `ALARM MEANING:
@@ -233,6 +269,8 @@ export async function POST(req: NextRequest) {
   if (!apiKey) return NextResponse.json({ error: 'AI service not configured' }, { status: 503 })
 
   let body: {
+    mode?: 'reefer' | 'truck'
+    // reefer fields
     manufacturer?: string
     model?: string
     unitType?: string
@@ -240,6 +278,11 @@ export async function POST(req: NextRequest) {
     additionalAlarmCodes?: string[]
     symptom?: string
     serialNumber?: string
+    // truck fields
+    truckBrand?: string
+    engineModel?: string
+    spn?: string
+    fmi?: string
   }
   try {
     body = await req.json()
@@ -247,6 +290,46 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid body' }, { status: 400 })
   }
 
+  const mode = body.mode ?? 'reefer'
+
+  // ── Truck engine branch ───────────────────────────────────────────────────
+  if (mode === 'truck') {
+    const { truckBrand, engineModel, spn, fmi, symptom: truckSymptom } = body
+    if (!truckBrand || !engineModel) {
+      return NextResponse.json({ error: 'truckBrand and engineModel required' }, { status: 400 })
+    }
+    if (!spn && !fmi && !truckSymptom) {
+      return NextResponse.json({ error: 'SPN, FMI, or symptom required' }, { status: 400 })
+    }
+
+    const parts: string[] = [`Engine: ${truckBrand} ${engineModel}`]
+    if (spn)          parts.push(`SPN (Suspect Parameter Number): ${spn}`)
+    if (fmi !== undefined && fmi !== '') parts.push(`FMI (Failure Mode Identifier): ${fmi}`)
+    if (truckSymptom) parts.push(`Symptom/Question: ${truckSymptom}`)
+    const truckUserPrompt = parts.join('\n')
+
+    try {
+      const client = new Anthropic({ apiKey })
+      const msg = await client.messages.create({
+        model:      'claude-sonnet-4-6',
+        max_tokens: 1500,
+        system:     TRUCK_SYSTEM_PROMPT,
+        messages:   [{ role: 'user', content: truckUserPrompt }],
+      })
+      const analysis = msg.content
+        .filter(b => b.type === 'text')
+        .map(b => (b as Anthropic.TextBlock).text)
+        .join('\n')
+        .trim()
+      console.log('[quickwrench/truck] stop_reason:', msg.stop_reason, 'tokens:', JSON.stringify(msg.usage))
+      return NextResponse.json({ analysis, tk_sources: [], alarm_pattern: null, disclaimer: TRUCK_DISCLAIMER })
+    } catch (err) {
+      console.error('[hd/quickwrench] Truck AI call failed', err)
+      return NextResponse.json({ analysis: TRUCK_FALLBACK_ANALYSIS, tk_sources: [], alarm_pattern: null, disclaimer: TRUCK_DISCLAIMER })
+    }
+  }
+
+  // ── Reefer branch ─────────────────────────────────────────────────────────
   const { manufacturer, model, unitType, alarmCode, symptom } = body
   if (!manufacturer || !model) {
     return NextResponse.json({ error: 'manufacturer and model required' }, { status: 400 })

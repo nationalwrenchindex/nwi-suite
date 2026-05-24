@@ -10,9 +10,36 @@ const TK_TRAILER_MODELS = ['SB-100', 'SB-200', 'SB-300', 'Precedent C-600', 'Pre
 const CT_TRUCK_MODELS   = ['Supra 960', 'Supra 1250']
 const CT_TRAILER_MODELS = ['X2 2100', 'X2 2500', 'X4 7300', 'X4 7500']
 
-type Manufacturer = 'Thermo King' | 'Carrier Transicold'
-type UnitType     = 'truck' | 'trailer'
-type TKSeverity   = 'ok_to_run' | 'check_specified' | 'immediate_action'
+const ENGINE_MODELS: Record<string, string[]> = {
+  'Cummins':        ['ISB', 'ISC', 'ISL', 'ISX', 'X15', 'X12'],
+  'Detroit Diesel': ['DD13', 'DD15', 'DD16', 'Series 60'],
+  'Mercedes-Benz':  ['OM936', 'OM470', 'OM471', 'OM473'],
+}
+
+const FMI_CODES = [
+  { fmi:  0, desc: 'Data valid but above normal operational range' },
+  { fmi:  1, desc: 'Data valid but below normal operational range' },
+  { fmi:  2, desc: 'Data erratic, intermittent, or incorrect' },
+  { fmi:  3, desc: 'Voltage above normal or shorted to high source' },
+  { fmi:  4, desc: 'Voltage below normal or shorted to low source' },
+  { fmi:  5, desc: 'Current below normal or open circuit' },
+  { fmi:  6, desc: 'Current above normal or grounded circuit' },
+  { fmi:  7, desc: 'Mechanical system not responding or out of adjustment' },
+  { fmi:  8, desc: 'Abnormal frequency, pulse width, or period' },
+  { fmi:  9, desc: 'Abnormal update rate' },
+  { fmi: 10, desc: 'Abnormal rate of change' },
+  { fmi: 11, desc: 'Root cause not known' },
+  { fmi: 12, desc: 'Bad intelligent device or component' },
+  { fmi: 13, desc: 'Out of calibration' },
+  { fmi: 14, desc: 'Special instructions' },
+  { fmi: 15, desc: 'Reserved for future assignment' },
+]
+
+type Manufacturer  = 'Thermo King' | 'Carrier Transicold'
+type UnitType      = 'truck' | 'trailer'
+type EngineBrand   = 'Cummins' | 'Detroit Diesel' | 'Mercedes-Benz'
+type ActiveTab     = 'reefer' | 'truck'
+type TKSeverity    = 'ok_to_run' | 'check_specified' | 'immediate_action'
 
 interface TKSource {
   code:           string
@@ -80,7 +107,6 @@ type SectionKey = typeof SECTION_DEFS[number]['key']
 
 function parseAnalysis(text: string): Array<{ key: SectionKey; content: string }> {
   const keys = SECTION_DEFS.map(s => s.key)
-  // Build a pattern that matches any header colon at start of a line
   const escapedKeys = keys.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
   const headerRe = new RegExp(`(${escapedKeys.join('|')}):`, 'g')
 
@@ -148,7 +174,6 @@ function SectionContent({ sectionKey, content }: { sectionKey: SectionKey; conte
     )
   }
 
-  // Default: plain paragraph(s)
   const paragraphs = content.split('\n').filter(l => l.trim())
   return (
     <div className="space-y-1">
@@ -272,11 +297,9 @@ function ManifoldGauge({
 
   return (
     <svg viewBox="0 0 200 200" style={{ display: 'block', width: '100%' }}>
-      {/* Face */}
       <circle cx={G.CX} cy={G.CY} r={G.R} fill="#0d1820" />
       <circle cx={G.CX} cy={G.CY} r={G.R} fill="none" stroke={accentColor} strokeWidth="2.5" opacity="0.45" />
 
-      {/* Arc band zones */}
       {hasRange ? (
         <>
           {nLo > G.START + 0.5 && <path d={gArc(G.BAND_OUT, G.BAND_IN, G.START, nLo)} fill="#EF444428" />}
@@ -287,14 +310,12 @@ function ManifoldGauge({
         <path d={gArc(G.BAND_OUT, G.BAND_IN, G.START, gaugeEnd)} fill="#162030" />
       )}
 
-      {/* Minor ticks */}
       {minorTicks.map(v => {
         const a = gAngle(v, minPsi, maxPsi)
         const p1 = gXY(G.TICK_MIN_OUT, a), p2 = gXY(G.TICK_MIN_IN, a)
         return <line key={v} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
       })}
 
-      {/* Major ticks + labels */}
       {majorTicks.map(v => {
         const a = gAngle(v, minPsi, maxPsi)
         const p1 = gXY(G.TICK_MAJ_OUT, a), p2 = gXY(G.TICK_MAJ_IN, a)
@@ -312,7 +333,6 @@ function ManifoldGauge({
         )
       })}
 
-      {/* Digital readout */}
       <text x={G.CX} y={G.CY + 25}
         fill={hasReading ? needleColor : 'rgba(255,255,255,0.3)'}
         fontSize="16" fontWeight="bold" fontFamily="monospace"
@@ -325,7 +345,6 @@ function ManifoldGauge({
         PSI
       </text>
 
-      {/* Needle */}
       <g style={{
         transform: `rotate(${needleAngle}deg)`,
         transformOrigin: `${G.CX}px ${G.CY}px`,
@@ -337,16 +356,159 @@ function ManifoldGauge({
           stroke={needleColor} strokeWidth="2" strokeLinecap="round" />
       </g>
 
-      {/* Hub */}
       <circle cx={G.CX} cy={G.CY} r={G.HUB} fill={accentColor} opacity="0.65" />
       <circle cx={G.CX} cy={G.CY} r={G.HUB - 2.5} fill="#0d1820" />
     </svg>
   )
 }
 
+// ─── Shared analysis card ─────────────────────────────────────────────────────
+
+function AnalysisCard({
+  parsedSections,
+  analysis,
+  disclaimer,
+  primaryTkSource,
+  alarmPattern,
+  tkSources,
+}: {
+  parsedSections: Array<{ key: SectionKey; content: string }>
+  analysis: string
+  disclaimer: string | null
+  primaryTkSource: TKSource | null
+  alarmPattern: AlarmPattern | null
+  tkSources: TKSource[]
+}) {
+  return (
+    <div className="space-y-4">
+      {alarmPattern && (
+        <div
+          className="rounded-xl overflow-hidden"
+          style={{
+            border: alarmPattern.severity === 'critical' ? '2px solid #EF4444' : `2px solid ${HD_ORANGE}`,
+          }}
+        >
+          <div
+            className="px-5 py-3 flex items-center gap-3"
+            style={{ background: alarmPattern.severity === 'critical' ? '#EF4444' : HD_ORANGE }}
+          >
+            <svg className="w-5 h-5 text-white flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+            </svg>
+            <p className="font-condensed font-bold text-white text-base tracking-widest uppercase">
+              Multi-Alarm Pattern Detected
+            </p>
+            <span
+              className="ml-auto text-xs font-bold px-2 py-0.5 rounded-full"
+              style={{ background: 'rgba(0,0,0,0.25)', color: '#fff' }}
+            >
+              {alarmPattern.severity === 'critical' ? 'CRITICAL' : 'WARNING'}
+            </span>
+          </div>
+
+          <div
+            className="p-5 space-y-4"
+            style={{ background: alarmPattern.severity === 'critical' ? '#1a0505' : '#1a0a00' }}
+          >
+            <div
+              className="rounded-lg px-4 py-3"
+              style={{
+                background: alarmPattern.severity === 'critical' ? '#EF444420' : `${HD_ORANGE}20`,
+                border:     alarmPattern.severity === 'critical' ? '1px solid #EF444450' : `1px solid ${HD_ORANGE}50`,
+              }}
+            >
+              <span className="font-bold text-sm" style={{ color: alarmPattern.severity === 'critical' ? '#EF4444' : HD_ORANGE }}>
+                DO NOT diagnose these alarms independently — they are related.
+              </span>
+            </div>
+
+            <div>
+              <p className="text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Pattern</p>
+              <p className="text-sm text-white leading-relaxed">{alarmPattern.pattern}</p>
+            </div>
+
+            <div className="rounded-lg p-4" style={{ background: '#162030' }}>
+              <p className="text-xs uppercase tracking-widest mb-1.5" style={{ color: alarmPattern.severity === 'critical' ? '#EF4444' : HD_ORANGE }}>
+                Diagnose First
+              </p>
+              <p className="text-sm font-bold text-white leading-relaxed">{alarmPattern.diagnoseFirst}</p>
+            </div>
+
+            {tkSources.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Official TK Definitions</p>
+                {tkSources.map(src => <TKCodeRow key={src.code} src={src} />)}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
+        {primaryTkSource && !alarmPattern && (
+          <PrimaryTKBanner src={primaryTkSource} />
+        )}
+
+        {primaryTkSource && !alarmPattern && (
+          <div
+            className="px-5 py-3 flex items-start gap-2"
+            style={{ background: '#162030', borderBottom: '1px solid #1e3040' }}
+          >
+            <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke={HD_ORANGE} strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <div>
+              <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                Operator Action (TK Official)
+              </p>
+              <p className="text-sm font-medium text-white">{primaryTkSource.operatorAction}</p>
+            </div>
+          </div>
+        )}
+
+        <div className="p-5 space-y-5" style={{ background: '#111920' }}>
+          {parsedSections.length > 0 ? (
+            parsedSections.map(({ key, content }) => {
+              const def = SECTION_DEFS.find(s => s.key === key)!
+              return (
+                <div
+                  key={key}
+                  className={def.bg ? 'rounded-lg p-4' : ''}
+                  style={def.bg ? { background: def.bg } : {}}
+                >
+                  <p className="text-xs uppercase tracking-widest mb-2" style={{ color: def.color }}>
+                    {def.label}
+                  </p>
+                  <SectionContent sectionKey={key} content={content} />
+                </div>
+              )
+            })
+          ) : (
+            <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.8)' }}>
+              {analysis}
+            </p>
+          )}
+
+          {disclaimer && (
+            <div className="rounded-lg p-3" style={{ background: '#0d1820', border: '1px solid #1e3040' }}>
+              <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                {disclaimer}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function HDQuickWrenchPage() {
+
+  // ── Tab ──
+  const [activeTab, setActiveTab] = useState<ActiveTab>('reefer')
+
   // ── Calculator state ──
   const [calcOpen,            setCalcOpen]            = useState(false)
   const [calcAmbient,         setCalcAmbient]         = useState('')
@@ -355,7 +517,7 @@ export default function HDQuickWrenchPage() {
   const [calcActualSuction,   setCalcActualSuction]   = useState('')
   const [calcActualDischarge, setCalcActualDischarge] = useState('')
 
-  // ── QuickWrench state ──
+  // ── Reefer state ──
   const [manufacturer,         setManufacturer]         = useState<Manufacturer>('Thermo King')
   const [unitType,             setUnitType]             = useState<UnitType>('trailer')
   const [model,                setModel]                = useState('')
@@ -371,6 +533,20 @@ export default function HDQuickWrenchPage() {
   const [alarmPattern,         setAlarmPattern]         = useState<AlarmPattern | null>(null)
   const [disclaimer,           setDisclaimer]           = useState<string | null>(null)
   const [error,                setError]                = useState<string | null>(null)
+
+  // ── Truck state ──
+  const [truckBrand,        setTruckBrand]        = useState<EngineBrand>('Cummins')
+  const [engineModel,       setEngineModel]       = useState('')
+  const [spn,               setSpn]               = useState('')
+  const [fmi,               setFmi]               = useState('')
+  const [truckSymptom,      setTruckSymptom]      = useState('')
+  const [fmiGuideOpen,      setFmiGuideOpen]      = useState(false)
+  const [truckLoading,      setTruckLoading]      = useState(false)
+  const [truckLoadingMsg,   setTruckLoadingMsg]   = useState('Analyzing fault code...')
+  const truckLoadingRef = useRef<number>(0)
+  const [truckAnalysis,     setTruckAnalysis]     = useState<string | null>(null)
+  const [truckDisclaimer,   setTruckDisclaimer]   = useState<string | null>(null)
+  const [truckError,        setTruckError]        = useState<string | null>(null)
 
   // ── Calculator derived values ──
   const ambientNum   = parseFloat(calcAmbient)
@@ -390,6 +566,9 @@ export default function HDQuickWrenchPage() {
       ? unitType === 'truck' ? TK_TRUCK_MODELS : TK_TRAILER_MODELS
       : unitType === 'truck' ? CT_TRUCK_MODELS : CT_TRAILER_MODELS
 
+  const truckModelOptions = ENGINE_MODELS[truckBrand] ?? []
+
+  // ── Loading message effects ──
   useEffect(() => {
     if (!loading) return
     setLoadingMessage('Looking up alarm codes...')
@@ -403,6 +582,20 @@ export default function HDQuickWrenchPage() {
     return () => clearInterval(interval)
   }, [loading])
 
+  useEffect(() => {
+    if (!truckLoading) return
+    setTruckLoadingMsg('Analyzing fault code...')
+    const interval = setInterval(() => {
+      const elapsed = (Date.now() - truckLoadingRef.current) / 1000
+      if      (elapsed < 5)  setTruckLoadingMsg('Analyzing fault code...')
+      else if (elapsed < 12) setTruckLoadingMsg('Searching diagnostic databases...')
+      else if (elapsed < 22) setTruckLoadingMsg('Generating repair procedure...')
+      else                   setTruckLoadingMsg('Almost ready...')
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [truckLoading])
+
+  // ── Reefer submit ──
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!model || (!alarmCode && !symptom)) return
@@ -424,6 +617,7 @@ export default function HDQuickWrenchPage() {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
+          mode: 'reefer',
           manufacturer, model, unitType,
           alarmCode, additionalAlarmCodes,
           symptom, serialNumber,
@@ -457,8 +651,50 @@ export default function HDQuickWrenchPage() {
     }
   }
 
+  // ── Truck submit ──
+  async function handleTruckSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!engineModel || (!spn && !fmi && !truckSymptom)) return
+    truckLoadingRef.current = Date.now()
+    setTruckLoading(true)
+    setTruckAnalysis(null)
+    setTruckDisclaimer(null)
+    setTruckError(null)
+
+    try {
+      const res = await fetch('/api/hd/quickwrench', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          mode: 'truck',
+          truckBrand, engineModel, spn, fmi, symptom: truckSymptom,
+        }),
+      })
+
+      const text = await res.text()
+      let json: Record<string, unknown> = {}
+      try {
+        json = JSON.parse(text) as Record<string, unknown>
+      } catch {
+        throw new Error(`Server returned an unexpected response (status ${res.status}). Please try again.`)
+      }
+
+      if (!res.ok) {
+        throw new Error(typeof json.error === 'string' ? json.error : `Request failed (${res.status})`)
+      }
+
+      setTruckAnalysis(typeof json.analysis === 'string' ? json.analysis : null)
+      setTruckDisclaimer(typeof json.disclaimer === 'string' ? json.disclaimer : null)
+    } catch (err) {
+      setTruckError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+    } finally {
+      setTruckLoading(false)
+    }
+  }
+
   const primaryTkSource = tkSources[0] ?? null
   const parsedSections  = analysis ? parseAnalysis(analysis) : []
+  const truckParsedSections = truckAnalysis ? parseAnalysis(truckAnalysis) : []
 
   return (
     <main className="flex-1 p-6">
@@ -474,485 +710,548 @@ export default function HDQuickWrenchPage() {
           </p>
         </div>
 
-        {/* ── Refrigerant Pressure Calculator ── */}
-        <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
-
-          {/* Collapsible header */}
-          <button
-            type="button"
-            onClick={() => setCalcOpen(o => !o)}
-            className="w-full px-5 py-4 flex items-center gap-3 text-left"
-            style={{ background: '#111920' }}
-          >
-            <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke={HD_BLUE} strokeWidth={1.8} viewBox="0 0 24 24">
-              <rect x="4" y="2" width="16" height="20" rx="2" strokeLinecap="round" strokeLinejoin="round" />
-              <path strokeLinecap="round" strokeLinejoin="round" d="M8 6h2m4 0h2M8 10h2m4 0h2M8 14h2m4 0h2M8 18h2m4 0h2" />
-            </svg>
-            <div className="flex-1">
-              <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>Reference Tool</p>
-              <p className="font-condensed font-bold text-white text-lg tracking-wide">Refrigerant Pressure Calculator</p>
-            </div>
-            <svg
-              className="w-4 h-4 flex-shrink-0 transition-transform duration-200"
-              style={{
-                color: 'rgba(255,255,255,0.35)',
-                transform: calcOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-              }}
-              fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"
+        {/* ── Tab switcher ── */}
+        <div className="flex gap-2">
+          {([
+            { key: 'reefer', label: 'Reefer Unit' },
+            { key: 'truck',  label: 'Truck Engine' },
+          ] as { key: ActiveTab; label: string }[]).map(tab => (
+            <button
+              key={tab.key}
+              type="button"
+              onClick={() => setActiveTab(tab.key)}
+              className="px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors"
+              style={activeTab === tab.key
+                ? { background: HD_ORANGE, color: '#fff' }
+                : { background: '#111920', color: 'rgba(255,255,255,0.45)', border: '1px solid #1e3040' }
+              }
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
+              {tab.label}
+            </button>
+          ))}
+        </div>
 
-          {/* Expanded content */}
-          {calcOpen && (
-            <div className="px-5 pb-5 space-y-4" style={{ background: '#111920', borderTop: '1px solid #1e3040' }}>
+        {/* ══════════════════════════════════════════════════════════════════════
+            REEFER TAB
+        ══════════════════════════════════════════════════════════════════════ */}
+        {activeTab === 'reefer' && (
+          <>
+            {/* ── Refrigerant Pressure Calculator ── */}
+            <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
 
-              {/* Inputs */}
-              <div className="grid grid-cols-3 gap-3 pt-4">
-                <div>
-                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                    Ambient Temp (°F)
-                  </label>
-                  <input
-                    type="number"
-                    value={calcAmbient}
-                    onChange={e => setCalcAmbient(e.target.value)}
-                    placeholder="e.g. 90"
-                    className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
-                    style={{ background: '#162030', border: '1px solid #1e3040' }}
-                  />
+              <button
+                type="button"
+                onClick={() => setCalcOpen(o => !o)}
+                className="w-full px-5 py-4 flex items-center gap-3 text-left"
+                style={{ background: '#111920' }}
+              >
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke={HD_BLUE} strokeWidth={1.8} viewBox="0 0 24 24">
+                  <rect x="4" y="2" width="16" height="20" rx="2" strokeLinecap="round" strokeLinejoin="round" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 6h2m4 0h2M8 10h2m4 0h2M8 14h2m4 0h2M8 18h2m4 0h2" />
+                </svg>
+                <div className="flex-1">
+                  <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>Reference Tool</p>
+                  <p className="font-condensed font-bold text-white text-lg tracking-wide">Refrigerant Pressure Calculator</p>
                 </div>
-                <div>
-                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                    Box Setpoint (°F)
-                  </label>
-                  <input
-                    type="number"
-                    value={calcSetpoint}
-                    onChange={e => setCalcSetpoint(e.target.value)}
-                    placeholder="e.g. 35"
-                    className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
-                    style={{ background: '#162030', border: '1px solid #1e3040' }}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                    Refrigerant
-                  </label>
-                  <select
-                    value={calcRefrigerant}
-                    onChange={e => setCalcRefrigerant(e.target.value as RefrigerantType)}
-                    className="w-full px-3 py-2.5 rounded-lg text-sm text-white"
-                    style={{ background: '#162030', border: '1px solid #1e3040' }}
-                  >
-                    <option value="R-404A">R-404A</option>
-                    <option value="R-452A">R-452A</option>
-                  </select>
-                </div>
-              </div>
+                <svg
+                  className="w-4 h-4 flex-shrink-0 transition-transform duration-200"
+                  style={{ color: 'rgba(255,255,255,0.35)', transform: calcOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                  fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
 
-              {/* Gauge display — always shown, zones update when inputs filled */}
-              <div className="grid grid-cols-2 gap-3">
+              {calcOpen && (
+                <div className="px-5 pb-5 space-y-4" style={{ background: '#111920', borderTop: '1px solid #1e3040' }}>
 
-                {/* Suction gauge column */}
-                <div className="flex flex-col items-center gap-2">
-                  <ManifoldGauge
-                    accentColor={HD_BLUE}
-                    minPsi={-30} maxPsi={150}
-                    majorTicks={[-30, 0, 30, 60, 90, 120, 150]}
-                    minorTicks={[-20, -10, 10, 20, 40, 50, 70, 80, 100, 110, 130, 140]}
-                    normalLow={hasCalcInputs ? suctionLow : null}
-                    normalHigh={hasCalcInputs ? suctionHigh : null}
-                    actualPsi={hasSuctionActual ? actualSuction : null}
-                  />
-                  <p className="text-xs font-bold tracking-widest" style={{ color: HD_BLUE }}>
-                    LOW SIDE SUCTION
+                  <div className="grid grid-cols-3 gap-3 pt-4">
+                    <div>
+                      <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                        Ambient Temp (°F)
+                      </label>
+                      <input
+                        type="number"
+                        value={calcAmbient}
+                        onChange={e => setCalcAmbient(e.target.value)}
+                        placeholder="e.g. 90"
+                        className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+                        style={{ background: '#162030', border: '1px solid #1e3040' }}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                        Box Setpoint (°F)
+                      </label>
+                      <input
+                        type="number"
+                        value={calcSetpoint}
+                        onChange={e => setCalcSetpoint(e.target.value)}
+                        placeholder="e.g. 35"
+                        className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+                        style={{ background: '#162030', border: '1px solid #1e3040' }}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                        Refrigerant
+                      </label>
+                      <select
+                        value={calcRefrigerant}
+                        onChange={e => setCalcRefrigerant(e.target.value as RefrigerantType)}
+                        className="w-full px-3 py-2.5 rounded-lg text-sm text-white"
+                        style={{ background: '#162030', border: '1px solid #1e3040' }}
+                      >
+                        <option value="R-404A">R-404A</option>
+                        <option value="R-452A">R-452A</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="flex flex-col items-center gap-2">
+                      <ManifoldGauge
+                        accentColor={HD_BLUE}
+                        minPsi={-30} maxPsi={150}
+                        majorTicks={[-30, 0, 30, 60, 90, 120, 150]}
+                        minorTicks={[-20, -10, 10, 20, 40, 50, 70, 80, 100, 110, 130, 140]}
+                        normalLow={hasCalcInputs ? suctionLow : null}
+                        normalHigh={hasCalcInputs ? suctionHigh : null}
+                        actualPsi={hasSuctionActual ? actualSuction : null}
+                      />
+                      <p className="text-xs font-bold tracking-widest" style={{ color: HD_BLUE }}>LOW SIDE SUCTION</p>
+                      {hasCalcInputs && (
+                        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                          Target: {suctionLow}–{suctionHigh} PSI
+                        </p>
+                      )}
+                      <input
+                        type="number"
+                        value={calcActualSuction}
+                        onChange={e => setCalcActualSuction(e.target.value)}
+                        placeholder="Gauge reading (PSI)"
+                        className="w-full px-3 py-2 rounded-lg text-sm text-white text-center placeholder-white/20"
+                        style={{ background: '#162030', border: '1px solid #1e3040' }}
+                      />
+                      {hasSuctionActual && hasCalcInputs && (
+                        <span className="text-xs font-bold px-3 py-1 rounded-full" style={{
+                          background: suctionInRange ? '#22C55E20' : '#EF444420',
+                          color:      suctionInRange ? '#22C55E'   : '#EF4444',
+                          border:     `1px solid ${suctionInRange ? '#22C55E50' : '#EF444450'}`,
+                        }}>
+                          {suctionInRange ? 'IN RANGE' : actualSuction < suctionLow ? 'LOW' : 'HIGH'}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex flex-col items-center gap-2">
+                      <ManifoldGauge
+                        accentColor="#EF4444"
+                        minPsi={0} maxPsi={500}
+                        majorTicks={[0, 100, 200, 300, 400, 500]}
+                        minorTicks={[25, 50, 75, 125, 150, 175, 225, 250, 275, 325, 350, 375, 425, 450, 475]}
+                        normalLow={hasCalcInputs ? dischargeLow : null}
+                        normalHigh={hasCalcInputs ? dischargeHigh : null}
+                        actualPsi={hasDischargeActual ? actualDischarge : null}
+                      />
+                      <p className="text-xs font-bold tracking-widest" style={{ color: '#EF4444' }}>HIGH SIDE DISCHARGE</p>
+                      {hasCalcInputs && (
+                        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                          Target: {dischargeLow}–{dischargeHigh} PSI
+                        </p>
+                      )}
+                      <input
+                        type="number"
+                        value={calcActualDischarge}
+                        onChange={e => setCalcActualDischarge(e.target.value)}
+                        placeholder="Gauge reading (PSI)"
+                        className="w-full px-3 py-2 rounded-lg text-sm text-white text-center placeholder-white/20"
+                        style={{ background: '#162030', border: '1px solid #1e3040' }}
+                      />
+                      {hasDischargeActual && hasCalcInputs && (
+                        <span className="text-xs font-bold px-3 py-1 rounded-full" style={{
+                          background: dischargeInRange ? '#22C55E20' : '#EF444420',
+                          color:      dischargeInRange ? '#22C55E'   : '#EF4444',
+                          border:     `1px solid ${dischargeInRange ? '#22C55E50' : '#EF444450'}`,
+                        }}>
+                          {dischargeInRange ? 'IN RANGE' : actualDischarge < dischargeLow ? 'LOW' : 'HIGH'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-lg p-3" style={{ background: '#162030', border: '1px solid #1e3040' }}>
+                      <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>Subcooling Target</p>
+                      <p className="text-sm font-bold text-white">10–15°F</p>
+                    </div>
+                    <div className="rounded-lg p-3" style={{ background: '#162030', border: '1px solid #1e3040' }}>
+                      <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>Superheat Target</p>
+                      <p className="text-sm font-bold text-white">10–20°F</p>
+                      <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>at evaporator outlet</p>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-center leading-relaxed" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                    Visual reference only. Always use calibrated manifold gauges for actual pressure readings.
+                    All refrigerant work requires EPA 608 certification.
                   </p>
-                  {hasCalcInputs && (
-                    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                      Target: {suctionLow}–{suctionHigh} PSI
-                    </p>
-                  )}
-                  <input
-                    type="number"
-                    value={calcActualSuction}
-                    onChange={e => setCalcActualSuction(e.target.value)}
-                    placeholder="Gauge reading (PSI)"
-                    className="w-full px-3 py-2 rounded-lg text-sm text-white text-center placeholder-white/20"
-                    style={{ background: '#162030', border: '1px solid #1e3040' }}
-                  />
-                  {hasSuctionActual && hasCalcInputs && (
-                    <span className="text-xs font-bold px-3 py-1 rounded-full" style={{
-                      background: suctionInRange ? '#22C55E20' : '#EF444420',
-                      color:      suctionInRange ? '#22C55E'   : '#EF4444',
-                      border:     `1px solid ${suctionInRange ? '#22C55E50' : '#EF444450'}`,
-                    }}>
-                      {suctionInRange ? 'IN RANGE' : actualSuction < suctionLow ? 'LOW' : 'HIGH'}
-                    </span>
-                  )}
-                </div>
 
-                {/* Discharge gauge column */}
-                <div className="flex flex-col items-center gap-2">
-                  <ManifoldGauge
-                    accentColor="#EF4444"
-                    minPsi={0} maxPsi={500}
-                    majorTicks={[0, 100, 200, 300, 400, 500]}
-                    minorTicks={[25, 50, 75, 125, 150, 175, 225, 250, 275, 325, 350, 375, 425, 450, 475]}
-                    normalLow={hasCalcInputs ? dischargeLow : null}
-                    normalHigh={hasCalcInputs ? dischargeHigh : null}
-                    actualPsi={hasDischargeActual ? actualDischarge : null}
-                  />
-                  <p className="text-xs font-bold tracking-widest" style={{ color: '#EF4444' }}>
-                    HIGH SIDE DISCHARGE
-                  </p>
-                  {hasCalcInputs && (
-                    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                      Target: {dischargeLow}–{dischargeHigh} PSI
+                  <div className="rounded-lg p-3" style={{ background: '#1a1000', border: '1px solid #F59E0B30' }}>
+                    <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                      <span style={{ color: '#F59E0B' }}>⚠</span>{' '}
+                      Pressure values are reference ranges only. Always verify against unit-specific service documentation.
+                      All refrigerant work must be performed by EPA 608 certified technicians only.
+                      {calcRefrigerant === 'R-452A' && ' R-452A values are approximate — consult the service manual for your specific unit.'}
                     </p>
-                  )}
-                  <input
-                    type="number"
-                    value={calcActualDischarge}
-                    onChange={e => setCalcActualDischarge(e.target.value)}
-                    placeholder="Gauge reading (PSI)"
-                    className="w-full px-3 py-2 rounded-lg text-sm text-white text-center placeholder-white/20"
-                    style={{ background: '#162030', border: '1px solid #1e3040' }}
-                  />
-                  {hasDischargeActual && hasCalcInputs && (
-                    <span className="text-xs font-bold px-3 py-1 rounded-full" style={{
-                      background: dischargeInRange ? '#22C55E20' : '#EF444420',
-                      color:      dischargeInRange ? '#22C55E'   : '#EF4444',
-                      border:     `1px solid ${dischargeInRange ? '#22C55E50' : '#EF444450'}`,
-                    }}>
-                      {dischargeInRange ? 'IN RANGE' : actualDischarge < dischargeLow ? 'LOW' : 'HIGH'}
-                    </span>
-                  )}
+                  </div>
+
+                </div>
+              )}
+            </div>
+
+            {/* ── Reefer query form ── */}
+            <form onSubmit={handleSubmit} className="rounded-xl p-6 space-y-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                    Manufacturer
+                  </label>
+                  <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid #1e3040' }}>
+                    {(['Thermo King', 'Carrier Transicold'] as Manufacturer[]).map(m => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => { setManufacturer(m); setModel('') }}
+                        className="flex-1 py-2 text-xs font-semibold transition-colors"
+                        style={{
+                          background: manufacturer === m ? HD_ORANGE : '#162030',
+                          color:      manufacturer === m ? '#fff' : 'rgba(255,255,255,0.4)',
+                        }}
+                      >
+                        {m === 'Thermo King' ? 'Thermo King' : 'Carrier'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                    Unit Type
+                  </label>
+                  <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid #1e3040' }}>
+                    {(['truck', 'trailer'] as UnitType[]).map(t => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => { setUnitType(t); setModel('') }}
+                        className="flex-1 py-2 text-xs font-semibold transition-colors capitalize"
+                        style={{
+                          background: unitType === t ? HD_BLUE : '#162030',
+                          color:      unitType === t ? '#fff' : 'rgba(255,255,255,0.4)',
+                        }}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
-              {/* Subcooling + Superheat */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-lg p-3" style={{ background: '#162030', border: '1px solid #1e3040' }}>
-                  <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>Subcooling Target</p>
-                  <p className="text-sm font-bold text-white">10–15°F</p>
-                </div>
-                <div className="rounded-lg p-3" style={{ background: '#162030', border: '1px solid #1e3040' }}>
-                  <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>Superheat Target</p>
-                  <p className="text-sm font-bold text-white">10–20°F</p>
-                  <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>at evaporator outlet</p>
-                </div>
+              <div>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                  Model
+                </label>
+                <select
+                  value={model}
+                  onChange={e => setModel(e.target.value)}
+                  required
+                  className="w-full px-3 py-2.5 rounded-lg text-sm text-white"
+                  style={{ background: '#162030', border: '1px solid #1e3040' }}
+                >
+                  <option value="">— Select model —</option>
+                  {modelOptions.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
               </div>
 
-              {/* Visual reference note */}
-              <p className="text-xs text-center leading-relaxed" style={{ color: 'rgba(255,255,255,0.25)' }}>
-                Visual reference only. Always use calibrated manifold gauges for actual pressure readings.
-                All refrigerant work requires EPA 608 certification.
-              </p>
+              <div>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                  Serial Number <span style={{ color: 'rgba(255,255,255,0.25)' }}>(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={serialNumber}
+                  onChange={e => setSerialNumber(e.target.value)}
+                  placeholder="Unit serial number"
+                  className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+                  style={{ background: '#162030', border: '1px solid #1e3040' }}
+                />
+              </div>
 
-              {/* Safety warning */}
-              <div className="rounded-lg p-3" style={{ background: '#1a1000', border: '1px solid #F59E0B30' }}>
-                <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                  <span style={{ color: '#F59E0B' }}>⚠</span>{' '}
-                  Pressure values are reference ranges only. Always verify against unit-specific service documentation.
-                  All refrigerant work must be performed by EPA 608 certified technicians only.
-                  {calcRefrigerant === 'R-452A' && ' R-452A values are approximate — consult the service manual for your specific unit.'}
+              <div>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                  Alarm Code
+                </label>
+                <input
+                  type="text"
+                  value={alarmCode}
+                  onChange={e => setAlarmCode(e.target.value)}
+                  placeholder="e.g. 10 or HP or P1E"
+                  className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+                  style={{ background: '#162030', border: '1px solid #1e3040' }}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                  Additional Alarm Codes <span style={{ color: 'rgba(255,255,255,0.25)' }}>(optional)</span>
+                </label>
+                <input
+                  type="text"
+                  value={additionalAlarmInput}
+                  onChange={e => setAdditionalAlarmInput(e.target.value)}
+                  placeholder="e.g. 42, 48"
+                  className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+                  style={{ background: '#162030', border: '1px solid #1e3040' }}
+                />
+                <p className="text-xs mt-1.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                  Enter multiple codes separated by commas — example: 10, 42, 48
                 </p>
               </div>
 
-            </div>
-          )}
-        </div>
-
-        {/* Query form */}
-        <form onSubmit={handleSubmit} className="rounded-xl p-6 space-y-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
-
-          {/* Manufacturer + Unit Type */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                Manufacturer
-              </label>
-              <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid #1e3040' }}>
-                {(['Thermo King', 'Carrier Transicold'] as Manufacturer[]).map(m => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => { setManufacturer(m); setModel('') }}
-                    className="flex-1 py-2 text-xs font-semibold transition-colors"
-                    style={{
-                      background: manufacturer === m ? HD_ORANGE : '#162030',
-                      color:      manufacturer === m ? '#fff' : 'rgba(255,255,255,0.4)',
-                    }}
-                  >
-                    {m === 'Thermo King' ? 'Thermo King' : 'Carrier'}
-                  </button>
-                ))}
+              <div>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                  Symptom / Question
+                </label>
+                <textarea
+                  value={symptom}
+                  onChange={e => setSymptom(e.target.value)}
+                  rows={3}
+                  placeholder="Describe what the unit is doing, or ask a technical question…"
+                  className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20 resize-none"
+                  style={{ background: '#162030', border: '1px solid #1e3040' }}
+                />
               </div>
-            </div>
-            <div>
-              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                Unit Type
-              </label>
-              <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid #1e3040' }}>
-                {(['truck', 'trailer'] as UnitType[]).map(t => (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => { setUnitType(t); setModel('') }}
-                    className="flex-1 py-2 text-xs font-semibold transition-colors capitalize"
-                    style={{
-                      background: unitType === t ? HD_BLUE : '#162030',
-                      color:      unitType === t ? '#fff' : 'rgba(255,255,255,0.4)',
-                    }}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
-            </div>
-          </div>
 
-          {/* Model */}
-          <div>
-            <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
-              Model
-            </label>
-            <select
-              value={model}
-              onChange={e => setModel(e.target.value)}
-              required
-              className="w-full px-3 py-2.5 rounded-lg text-sm text-white"
-              style={{ background: '#162030', border: '1px solid #1e3040' }}
-            >
-              <option value="">— Select model —</option>
-              {modelOptions.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
-          </div>
-
-          {/* Serial Number */}
-          <div>
-            <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
-              Serial Number <span style={{ color: 'rgba(255,255,255,0.25)' }}>(optional)</span>
-            </label>
-            <input
-              type="text"
-              value={serialNumber}
-              onChange={e => setSerialNumber(e.target.value)}
-              placeholder="Unit serial number"
-              className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
-              style={{ background: '#162030', border: '1px solid #1e3040' }}
-            />
-          </div>
-
-          {/* Alarm Code */}
-          <div>
-            <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
-              Alarm Code
-            </label>
-            <input
-              type="text"
-              value={alarmCode}
-              onChange={e => setAlarmCode(e.target.value)}
-              placeholder="e.g. 10 or HP or P1E"
-              className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
-              style={{ background: '#162030', border: '1px solid #1e3040' }}
-            />
-          </div>
-
-          {/* Additional Alarm Codes */}
-          <div>
-            <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
-              Additional Alarm Codes <span style={{ color: 'rgba(255,255,255,0.25)' }}>(optional)</span>
-            </label>
-            <input
-              type="text"
-              value={additionalAlarmInput}
-              onChange={e => setAdditionalAlarmInput(e.target.value)}
-              placeholder="e.g. 42, 48"
-              className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
-              style={{ background: '#162030', border: '1px solid #1e3040' }}
-            />
-            <p className="text-xs mt-1.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
-              Enter multiple codes separated by commas — example: 10, 42, 48
-            </p>
-          </div>
-
-          {/* Symptom */}
-          <div>
-            <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
-              Symptom / Question
-            </label>
-            <textarea
-              value={symptom}
-              onChange={e => setSymptom(e.target.value)}
-              rows={3}
-              placeholder="Describe what the unit is doing, or ask a technical question…"
-              className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20 resize-none"
-              style={{ background: '#162030', border: '1px solid #1e3040' }}
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading || !model || (!alarmCode && !symptom)}
-            className="w-full py-3 rounded-xl font-bold text-white text-sm transition-opacity"
-            style={{
-              background: HD_ORANGE,
-              opacity:    loading || !model || (!alarmCode && !symptom) ? 0.5 : 1,
-            }}
-          >
-            {loading ? (
-              <span className="flex items-center justify-center gap-2">
-                <svg className="w-4 h-4 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                {loadingMessage}
-              </span>
-            ) : 'Run HD QuickWrench'}
-          </button>
-        </form>
-
-        {/* Error */}
-        {error && (
-          <div className="rounded-xl p-4" style={{ background: '#2d0a0a', border: '1px solid #7f1d1d' }}>
-            <p className="text-sm text-red-400">{error}</p>
-          </div>
-        )}
-
-        {/* Results */}
-        {analysis !== null && (
-          <div className="space-y-4">
-
-            {/* ── MULTI-ALARM PATTERN BANNER ── */}
-            {alarmPattern && (
-              <div
-                className="rounded-xl overflow-hidden"
+              <button
+                type="submit"
+                disabled={loading || !model || (!alarmCode && !symptom)}
+                className="w-full py-3 rounded-xl font-bold text-white text-sm transition-opacity"
                 style={{
-                  border: alarmPattern.severity === 'critical' ? '2px solid #EF4444' : `2px solid ${HD_ORANGE}`,
+                  background: HD_ORANGE,
+                  opacity:    loading || !model || (!alarmCode && !symptom) ? 0.5 : 1,
                 }}
               >
-                <div
-                  className="px-5 py-3 flex items-center gap-3"
-                  style={{ background: alarmPattern.severity === 'critical' ? '#EF4444' : HD_ORANGE }}
-                >
-                  <svg className="w-5 h-5 text-white flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-                  </svg>
-                  <p className="font-condensed font-bold text-white text-base tracking-widest uppercase">
-                    Multi-Alarm Pattern Detected
-                  </p>
-                  <span
-                    className="ml-auto text-xs font-bold px-2 py-0.5 rounded-full"
-                    style={{ background: 'rgba(0,0,0,0.25)', color: '#fff' }}
-                  >
-                    {alarmPattern.severity === 'critical' ? 'CRITICAL' : 'WARNING'}
+                {loading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="w-4 h-4 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    {loadingMessage}
                   </span>
-                </div>
+                ) : 'Run HD QuickWrench'}
+              </button>
+            </form>
 
-                <div
-                  className="p-5 space-y-4"
-                  style={{ background: alarmPattern.severity === 'critical' ? '#1a0505' : '#1a0a00' }}
-                >
-                  <div
-                    className="rounded-lg px-4 py-3"
-                    style={{
-                      background: alarmPattern.severity === 'critical' ? '#EF444420' : `${HD_ORANGE}20`,
-                      border:     alarmPattern.severity === 'critical' ? '1px solid #EF444450' : `1px solid ${HD_ORANGE}50`,
-                    }}
-                  >
-                    <span className="font-bold text-sm" style={{ color: alarmPattern.severity === 'critical' ? '#EF4444' : HD_ORANGE }}>
-                      DO NOT diagnose these alarms independently — they are related.
-                    </span>
-                  </div>
-
-                  <div>
-                    <p className="text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Pattern</p>
-                    <p className="text-sm text-white leading-relaxed">{alarmPattern.pattern}</p>
-                  </div>
-
-                  <div className="rounded-lg p-4" style={{ background: '#162030' }}>
-                    <p className="text-xs uppercase tracking-widest mb-1.5" style={{ color: alarmPattern.severity === 'critical' ? '#EF4444' : HD_ORANGE }}>
-                      Diagnose First
-                    </p>
-                    <p className="text-sm font-bold text-white leading-relaxed">{alarmPattern.diagnoseFirst}</p>
-                  </div>
-
-                  {tkSources.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Official TK Definitions</p>
-                      {tkSources.map(src => <TKCodeRow key={src.code} src={src} />)}
-                    </div>
-                  )}
-                </div>
+            {error && (
+              <div className="rounded-xl p-4" style={{ background: '#2d0a0a', border: '1px solid #7f1d1d' }}>
+                <p className="text-sm text-red-400">{error}</p>
               </div>
             )}
 
-            {/* ── ANALYSIS CARD ── */}
+            {analysis !== null && (
+              <AnalysisCard
+                parsedSections={parsedSections}
+                analysis={analysis}
+                disclaimer={disclaimer}
+                primaryTkSource={primaryTkSource}
+                alarmPattern={alarmPattern}
+                tkSources={tkSources}
+              />
+            )}
+          </>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            TRUCK ENGINE TAB
+        ══════════════════════════════════════════════════════════════════════ */}
+        {activeTab === 'truck' && (
+          <>
+            {/* ── FMI Reference Guide ── */}
             <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
-
-              {/* TK official severity banner — single code, no pattern */}
-              {primaryTkSource && !alarmPattern && (
-                <PrimaryTKBanner src={primaryTkSource} />
-              )}
-
-              {/* Operator action — single code, no pattern */}
-              {primaryTkSource && !alarmPattern && (
-                <div
-                  className="px-5 py-3 flex items-start gap-2"
-                  style={{ background: '#162030', borderBottom: '1px solid #1e3040' }}
+              <button
+                type="button"
+                onClick={() => setFmiGuideOpen(o => !o)}
+                className="w-full px-5 py-4 flex items-center gap-3 text-left"
+                style={{ background: '#111920' }}
+              >
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke={HD_BLUE} strokeWidth={1.8} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <div className="flex-1">
+                  <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>SAE J1939 Standard</p>
+                  <p className="font-condensed font-bold text-white text-lg tracking-wide">FMI Reference Guide</p>
+                </div>
+                <svg
+                  className="w-4 h-4 flex-shrink-0 transition-transform duration-200"
+                  style={{ color: 'rgba(255,255,255,0.35)', transform: fmiGuideOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                  fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"
                 >
-                  <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke={HD_ORANGE} strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <div>
-                    <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                      Operator Action (TK Official)
-                    </p>
-                    <p className="text-sm font-medium text-white">{primaryTkSource.operatorAction}</p>
-                  </div>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {fmiGuideOpen && (
+                <div className="px-5 pb-5 pt-4 space-y-1" style={{ background: '#111920', borderTop: '1px solid #1e3040' }}>
+                  <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                    Failure Mode Identifier — defines how a parameter has failed, independent of which parameter (SPN) is faulting.
+                  </p>
+                  {FMI_CODES.map(({ fmi: f, desc }) => (
+                    <div key={f} className="flex gap-3 py-1.5 items-baseline" style={{ borderBottom: '1px solid #1e304050' }}>
+                      <span
+                        className="text-xs font-bold font-mono flex-shrink-0 w-8 text-right"
+                        style={{ color: HD_BLUE }}
+                      >
+                        {f}
+                      </span>
+                      <span className="text-xs" style={{ color: 'rgba(255,255,255,0.65)' }}>{desc}</span>
+                    </div>
+                  ))}
                 </div>
               )}
-
-              {/* Parsed analysis sections */}
-              <div className="p-5 space-y-5" style={{ background: '#111920' }}>
-                {parsedSections.length > 0 ? (
-                  parsedSections.map(({ key, content }) => {
-                    const def = SECTION_DEFS.find(s => s.key === key)!
-                    return (
-                      <div
-                        key={key}
-                        className={def.bg ? 'rounded-lg p-4' : ''}
-                        style={def.bg ? { background: def.bg } : {}}
-                      >
-                        <p className="text-xs uppercase tracking-widest mb-2" style={{ color: def.color }}>
-                          {def.label}
-                        </p>
-                        <SectionContent sectionKey={key} content={content} />
-                      </div>
-                    )
-                  })
-                ) : (
-                  // Fallback: no headers found — render raw text
-                  <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.8)' }}>
-                    {analysis}
-                  </p>
-                )}
-
-                {/* Disclaimer */}
-                {disclaimer && (
-                  <div className="rounded-lg p-3" style={{ background: '#0d1820', border: '1px solid #1e3040' }}>
-                    <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                      {disclaimer}
-                    </p>
-                  </div>
-                )}
-              </div>
             </div>
-          </div>
+
+            {/* ── Truck engine form ── */}
+            <form onSubmit={handleTruckSubmit} className="rounded-xl p-6 space-y-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+
+              {/* Engine Brand */}
+              <div>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                  Engine Brand
+                </label>
+                <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid #1e3040' }}>
+                  {(['Cummins', 'Detroit Diesel', 'Mercedes-Benz'] as EngineBrand[]).map(b => (
+                    <button
+                      key={b}
+                      type="button"
+                      onClick={() => { setTruckBrand(b); setEngineModel('') }}
+                      className="flex-1 py-2 text-xs font-semibold transition-colors"
+                      style={{
+                        background: truckBrand === b ? HD_ORANGE : '#162030',
+                        color:      truckBrand === b ? '#fff' : 'rgba(255,255,255,0.4)',
+                      }}
+                    >
+                      {b}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Engine Model */}
+              <div>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                  Engine Model
+                </label>
+                <select
+                  value={engineModel}
+                  onChange={e => setEngineModel(e.target.value)}
+                  required
+                  className="w-full px-3 py-2.5 rounded-lg text-sm text-white"
+                  style={{ background: '#162030', border: '1px solid #1e3040' }}
+                >
+                  <option value="">— Select model —</option>
+                  {truckModelOptions.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+
+              {/* SPN + FMI */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                    SPN <span style={{ color: 'rgba(255,255,255,0.25)' }}>(Suspect Parameter Number)</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={spn}
+                    onChange={e => setSpn(e.target.value)}
+                    placeholder="e.g. 3031"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+                    style={{ background: '#162030', border: '1px solid #1e3040' }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                    FMI <span style={{ color: 'rgba(255,255,255,0.25)' }}>(Failure Mode Identifier)</span>
+                  </label>
+                  <input
+                    type="number"
+                    value={fmi}
+                    onChange={e => setFmi(e.target.value)}
+                    placeholder="0–15"
+                    min="0"
+                    max="15"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+                    style={{ background: '#162030', border: '1px solid #1e3040' }}
+                  />
+                </div>
+              </div>
+
+              {/* Symptom */}
+              <div>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                  Symptom / Question
+                </label>
+                <textarea
+                  value={truckSymptom}
+                  onChange={e => setTruckSymptom(e.target.value)}
+                  rows={3}
+                  placeholder="Describe the fault condition, symptoms, or ask a technical question…"
+                  className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20 resize-none"
+                  style={{ background: '#162030', border: '1px solid #1e3040' }}
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={truckLoading || !engineModel || (!spn && !fmi && !truckSymptom)}
+                className="w-full py-3 rounded-xl font-bold text-white text-sm transition-opacity"
+                style={{
+                  background: HD_ORANGE,
+                  opacity:    truckLoading || !engineModel || (!spn && !fmi && !truckSymptom) ? 0.5 : 1,
+                }}
+              >
+                {truckLoading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="w-4 h-4 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    {truckLoadingMsg}
+                  </span>
+                ) : 'Run HD QuickWrench'}
+              </button>
+            </form>
+
+            {truckError && (
+              <div className="rounded-xl p-4" style={{ background: '#2d0a0a', border: '1px solid #7f1d1d' }}>
+                <p className="text-sm text-red-400">{truckError}</p>
+              </div>
+            )}
+
+            {truckAnalysis !== null && (
+              <AnalysisCard
+                parsedSections={truckParsedSections}
+                analysis={truckAnalysis}
+                disclaimer={truckDisclaimer}
+                primaryTkSource={null}
+                alarmPattern={null}
+                tkSources={[]}
+              />
+            )}
+          </>
         )}
+
       </div>
     </main>
   )
