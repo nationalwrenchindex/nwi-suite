@@ -68,12 +68,12 @@ type RefrigerantType = 'R-404A' | 'R-452A'
 
 // [temp°F, low PSI, high PSI]
 const SUCTION_REFS: Record<RefrigerantType, [number, number, number][]> = {
-  'R-404A': [[0,8,15],[10,15,22],[20,22,30],[35,35,45]],
-  'R-452A': [[0,7,13],[10,13,20],[20,20,28],[35,32,42]],
+  'R-404A': [[-20,2,8],[-10,5,12],[0,8,16],[10,14,22],[20,20,30],[35,32,44],[65,58,72]],
+  'R-452A': [[-20,2,7],[-10,4,11],[0,7,14],[10,12,20],[20,18,27],[35,29,40],[65,52,65]],
 }
 const DISCHARGE_REFS: Record<RefrigerantType, [number, number, number][]> = {
   'R-404A': [[70,185,215],[80,210,240],[90,240,275],[95,260,295],[100,280,320],[105,300,340]],
-  'R-452A': [[70,178,208],[80,202,232],[90,231,266],[95,250,285],[100,270,310],[105,290,330]],
+  'R-452A': [[70,167,194],[80,189,216],[90,216,248],[95,234,266],[100,252,288],[105,270,306]],
 }
 
 function interpolatePressure(x: number, refs: [number, number, number][]): [number, number] {
@@ -514,6 +514,7 @@ export default function HDQuickWrenchPage() {
   const [calcAmbient,         setCalcAmbient]         = useState('')
   const [calcSetpoint,        setCalcSetpoint]        = useState('')
   const [calcRefrigerant,     setCalcRefrigerant]     = useState<RefrigerantType>('R-404A')
+  const [calcActualBoxTemp,   setCalcActualBoxTemp]   = useState('')
   const [calcActualSuction,   setCalcActualSuction]   = useState('')
   const [calcActualDischarge, setCalcActualDischarge] = useState('')
 
@@ -549,11 +550,14 @@ export default function HDQuickWrenchPage() {
   const [truckError,        setTruckError]        = useState<string | null>(null)
 
   // ── Calculator derived values ──
-  const ambientNum   = parseFloat(calcAmbient)
-  const setpointNum  = parseFloat(calcSetpoint)
-  const hasCalcInputs = !isNaN(ambientNum) && !isNaN(setpointNum)
-  const [suctionLow,   suctionHigh]   = hasCalcInputs ? interpolatePressure(setpointNum, SUCTION_REFS[calcRefrigerant])   : [0, 0]
-  const [dischargeLow, dischargeHigh] = hasCalcInputs ? interpolatePressure(ambientNum,  DISCHARGE_REFS[calcRefrigerant]) : [0, 0]
+  const ambientNum       = parseFloat(calcAmbient)
+  const setpointNum      = parseFloat(calcSetpoint)
+  const actualBoxTempNum = parseFloat(calcActualBoxTemp)
+  const hasCalcInputs    = !isNaN(ambientNum) && !isNaN(setpointNum)
+  const isPulldown       = !isNaN(actualBoxTempNum) && !isNaN(setpointNum) && actualBoxTempNum > setpointNum + 10
+  const suctionTempToUse = isPulldown ? actualBoxTempNum : setpointNum
+  const [suctionLow,   suctionHigh]   = hasCalcInputs ? interpolatePressure(suctionTempToUse, SUCTION_REFS[calcRefrigerant])   : [0, 0]
+  const [dischargeLow, dischargeHigh] = hasCalcInputs ? interpolatePressure(ambientNum,        DISCHARGE_REFS[calcRefrigerant]) : [0, 0]
   const actualSuction    = parseFloat(calcActualSuction)
   const actualDischarge  = parseFloat(calcActualDischarge)
   const hasSuctionActual    = !isNaN(actualSuction)
@@ -765,7 +769,7 @@ export default function HDQuickWrenchPage() {
               {calcOpen && (
                 <div className="px-5 pb-5 space-y-4" style={{ background: '#111920', borderTop: '1px solid #1e3040' }}>
 
-                  <div className="grid grid-cols-3 gap-3 pt-4">
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-4">
                     <div>
                       <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
                         Ambient Temp (°F)
@@ -794,6 +798,19 @@ export default function HDQuickWrenchPage() {
                     </div>
                     <div>
                       <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                        Actual Box Temp (°F)
+                      </label>
+                      <input
+                        type="number"
+                        value={calcActualBoxTemp}
+                        onChange={e => setCalcActualBoxTemp(e.target.value)}
+                        placeholder="e.g. 55"
+                        className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+                        style={{ background: '#162030', border: '1px solid #1e3040' }}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
                         Refrigerant
                       </label>
                       <select
@@ -807,6 +824,19 @@ export default function HDQuickWrenchPage() {
                       </select>
                     </div>
                   </div>
+
+                  {isPulldown && (
+                    <div className="rounded-lg p-3 flex gap-3 items-start" style={{ background: '#1a1200', border: '1px solid #F59E0B50' }}>
+                      <span style={{ color: '#F59E0B', fontSize: 18, lineHeight: 1.2 }}>⚠</span>
+                      <div>
+                        <p className="text-xs font-bold mb-0.5" style={{ color: '#F59E0B' }}>PULLDOWN MODE DETECTED</p>
+                        <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                          Unit is in pulldown mode — pressures will be higher than steady state. This is normal.
+                          Suction target is calculated from actual box temp ({actualBoxTempNum}°F) rather than setpoint.
+                        </p>
+                      </div>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="flex flex-col items-center gap-2">
