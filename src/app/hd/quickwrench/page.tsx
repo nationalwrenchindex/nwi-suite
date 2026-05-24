@@ -189,14 +189,40 @@ export default function HDQuickWrenchPage() {
           symptom, serialNumber,
         }),
       })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? 'Request failed')
-      setResult(json.result)
-      setTkSources(json.tk_sources ?? [])
-      setAlarmPattern(json.alarm_pattern ?? null)
-      setDisclaimer(json.disclaimer ?? null)
+
+      // Always parse as text first — if the server returns an HTML error page
+      // (Vercel 502, timeout, etc.) res.json() would throw "Unexpected token A"
+      const text = await res.text()
+      let json: Record<string, unknown> = {}
+      try {
+        json = JSON.parse(text) as Record<string, unknown>
+      } catch {
+        throw new Error(
+          `Server returned an unexpected response (status ${res.status}). Please try again.`
+        )
+      }
+
+      if (!res.ok) {
+        throw new Error(
+          typeof json.error === 'string' ? json.error : `Request failed (${res.status})`
+        )
+      }
+
+      // Defensively extract each field — guard against undefined/wrong shape
+      const rawResult = json.result
+      setResult(rawResult != null && typeof rawResult === 'object'
+        ? rawResult as QWResult
+        : null
+      )
+      setTkSources(Array.isArray(json.tk_sources) ? json.tk_sources as TKSource[] : [])
+      setAlarmPattern(
+        json.alarm_pattern != null && typeof json.alarm_pattern === 'object'
+          ? json.alarm_pattern as AlarmPattern
+          : null
+      )
+      setDisclaimer(typeof json.disclaimer === 'string' ? json.disclaimer : null)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong')
+      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -376,8 +402,8 @@ export default function HDQuickWrenchPage() {
           </div>
         )}
 
-        {/* Result */}
-        {result && (
+        {/* Result — only render when result is a non-null object */}
+        {result !== null && typeof result === 'object' && (
           <div className="space-y-4">
 
             {/* ── MULTI-ALARM PATTERN BANNER ── */}
