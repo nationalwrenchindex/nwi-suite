@@ -296,6 +296,49 @@ function lookupTKCode(code: string): (TKAlarmEntry & { source: 'tk_main' | 'tk_d
   return null
 }
 
+// ─── Multi-Alarm Cross Reference ─────────────────────────────────────────────
+
+interface AlarmRelationship {
+  codes:         string[]
+  pattern:       string
+  diagnoseFirst: string
+  severity:      'critical' | 'warning'
+}
+
+const TK_ALARM_RELATIONSHIPS: Record<string, AlarmRelationship> = {
+  "10,42": { codes: ["10","42"], pattern: "High discharge pressure forcing unit to low speed. Classic condenser system failure pattern.", diagnoseFirst: "Diagnose Alarm 10 first — condenser coil fouling, failed condenser fan motor or belt, refrigerant overcharge.", severity: "warning" },
+  "10,48": { codes: ["10","48"], pattern: "High discharge pressure with belt or clutch fault. Condenser fan belt failure is the most likely single root cause for both alarms simultaneously.", diagnoseFirst: "Inspect condenser fan belt immediately — a broken or slipping belt causes both high discharge pressure and triggers belt check alarm.", severity: "critical" },
+  "10,46": { codes: ["10","46"], pattern: "High discharge pressure with airflow restriction. Condenser coil blockage is primary suspect.", diagnoseFirst: "Inspect and clean condenser coil before any refrigerant work.", severity: "warning" },
+  "18,42": { codes: ["18","42"], pattern: "High engine coolant temperature forcing unit to low speed. Engine overheating protection activated.", diagnoseFirst: "Diagnose Alarm 18 first — check coolant level, thermostat, water pump, and radiator before assuming refrigerant issue.", severity: "critical" },
+  "41,42": { codes: ["41","42"], pattern: "Coolant temperature sensor issue forcing low speed. May be false overheating signal from faulty sensor.", diagnoseFirst: "Check coolant temp sensor resistance and circuit continuity before assuming true overheating condition.", severity: "warning" },
+  "40,42": { codes: ["40","42"], pattern: "High speed circuit fault combined with forced low speed. Electrical failure in high speed control circuit.", diagnoseFirst: "Test high speed solenoid resistance — should read 10 to 15 ohms. Check solenoid relay and wiring harness for damage.", severity: "warning" },
+  "19,63": { codes: ["19","63"], pattern: "Low oil pressure caused engine to stop. CRITICAL — do not restart unit until root cause confirmed.", diagnoseFirst: "Check engine oil level immediately. Do not restart unit. Inspect for oil leaks. Check oil pressure switch.", severity: "critical" },
+  "18,63": { codes: ["18","63"], pattern: "High coolant temperature caused engine to stop. CRITICAL — do not restart until cooling system inspected.", diagnoseFirst: "Allow engine to cool completely. Check coolant level before restarting. Inspect for coolant leaks.", severity: "critical" },
+  "32,26": { codes: ["32","26"], pattern: "Refrigeration capacity shutdown with prior capacity warning. Full refrigerant system failure — unit cannot maintain temperature.", diagnoseFirst: "Connect manifold gauges to assess system pressures. Full refrigerant system diagnosis required. EPA 608 required.", severity: "critical" },
+  "23,10": { codes: ["23","10"], pattern: "Cooling cycle fault combined with high discharge pressure. Compressor or refrigerant system failure likely.", diagnoseFirst: "Check compressor operation and refrigerant system pressures. High probability of compressor failure or major refrigerant leak.", severity: "critical" },
+  "20,17": { codes: ["20","17"], pattern: "Engine failed to start AND failed to crank. Complete starting system failure.", diagnoseFirst: "Check battery voltage and CCA. Check starter motor. Check fuel system and fuel shutoff solenoid.", severity: "critical" },
+  "15,20": { codes: ["15","20"], pattern: "Glow plug failure combined with engine failed to start. Cold weather starting failure pattern.", diagnoseFirst: "Test individual glow plugs for resistance. Failed glow plugs prevent cold starting on Yanmar diesel units.", severity: "warning" },
+  "61,36": { codes: ["61","36"], pattern: "Low battery voltage caused electric motor failure. Power supply issue preventing electric standby operation.", diagnoseFirst: "Check shore power connection, voltage at plug, and battery condition before diagnosing electric motor.", severity: "warning" },
+  "9,26":  { codes: ["9","26"],  pattern: "High evaporator temperature combined with refrigeration capacity check. Unit struggling to maintain temperature — possible refrigerant loss or evaporator issue.", diagnoseFirst: "Check evaporator coil for ice buildup or dirt fouling. Check defrost cycle operation. Then assess refrigerant charge.", severity: "warning" },
+}
+
+function normalizeCodeForRelationship(code: string): string {
+  const trimmed = code.trim()
+  // Numeric codes: strip leading zeros for relationship key matching (stored as "10" not "010")
+  if (/^\d+$/.test(trimmed)) return String(parseInt(trimmed, 10))
+  return trimmed.toUpperCase()
+}
+
+function lookupPattern(codes: string[]): AlarmRelationship | null {
+  if (codes.length < 2) return null
+  const normalized = codes.map(normalizeCodeForRelationship)
+  for (const rel of Object.values(TK_ALARM_RELATIONSHIPS)) {
+    const relNorm = rel.codes.map(normalizeCodeForRelationship)
+    if (relNorm.every(rc => normalized.includes(rc))) return rel
+  }
+  return null
+}
+
 // ─── System Prompt ────────────────────────────────────────────────────────────
 
 const SYSTEM_PROMPT = `You are an expert heavy duty diesel and transport refrigeration technician with 17 years of field experience servicing Thermo King and Carrier Transicold refrigeration units, Class 6 through Class 8 trucks, and 48 and 53 foot refrigerated trailers. You have deep knowledge of FMCSA regulations, DOT inspection criteria, EPA Section 608 refrigerant handling requirements, and the specific service procedures for every major Thermo King and Carrier unit model.
@@ -364,6 +407,7 @@ export async function POST(req: NextRequest) {
     model?: string
     unitType?: string
     alarmCode?: string
+    additionalAlarmCodes?: string[]
     symptom?: string
     serialNumber?: string
   }
@@ -381,26 +425,48 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'alarmCode or symptom required' }, { status: 400 })
   }
 
-  // Look up alarm code in TK database (Thermo King only)
-  const tkSource = alarmCode && manufacturer === 'Thermo King'
-    ? lookupTKCode(alarmCode)
-    : null
+  // Collect all alarm codes submitted
+  const allCodes = [alarmCode, ...(body.additionalAlarmCodes ?? [])]
+    .filter((c): c is string => typeof c === 'string' && c.trim().length > 0)
+    .map(c => c.trim())
 
-  // Build user prompt — inject official definition when found
-  const promptParts = [
+  // Look up each code in TK DB (Thermo King only)
+  const tkSources = manufacturer === 'Thermo King'
+    ? allCodes
+        .map(code => {
+          const found = lookupTKCode(code)
+          return found ? { code, description: found.description, severity: found.severity, operatorAction: found.operatorAction, source: found.source } : null
+        })
+        .filter((s): s is NonNullable<typeof s> => s !== null)
+    : []
+
+  // Multi-alarm cross reference
+  const alarmPattern = allCodes.length >= 2 ? lookupPattern(allCodes) : null
+
+  // Build prompt
+  const promptParts: (string | null)[] = [
     `Unit: ${manufacturer} ${model} (${unitType ?? 'unknown type'})`,
-    alarmCode ? `Alarm Code: ${alarmCode}` : null,
-    symptom   ? `Symptom/Question: ${symptom}` : null,
+    allCodes.length > 0 ? `Alarm Code(s): ${allCodes.join(', ')}` : null,
+    symptom      ? `Symptom/Question: ${symptom}` : null,
     body.serialNumber ? `Serial Number: ${body.serialNumber}` : null,
   ]
 
-  if (tkSource) {
+  if (tkSources.length > 0) {
+    promptParts.push('\nOFFICIAL TK DEFINITIONS (TK 40933-8-CH Rev 15):')
+    for (const src of tkSources) {
+      promptParts.push(
+        `Code ${src.code}: ${src.description} | Severity: ${src.severity.replace(/_/g, ' ').toUpperCase()} | Operator Action: ${src.operatorAction}`
+      )
+    }
+    promptParts.push('Use these official definitions as the authoritative basis — do not contradict them.')
+  }
+
+  if (alarmPattern) {
     promptParts.push(
-      `\nOFFICIAL TK DEFINITION (TK 40933-8-CH Rev 15):`,
-      `Description: ${tkSource.description}`,
-      `TK Severity: ${tkSource.severity.replace(/_/g, ' ').toUpperCase()}`,
-      `Operator Action: ${tkSource.operatorAction}`,
-      `\nUse this official definition as the authoritative basis. Provide full tech diagnostic detail.`,
+      '\nMULTI-ALARM PATTERN DETECTED:',
+      `Pattern: ${alarmPattern.pattern}`,
+      `Diagnose first: ${alarmPattern.diagnoseFirst}`,
+      'IMPORTANT: These alarms are related. Provide a COMBINED diagnostic analysis addressing both codes together — do NOT treat them as independent issues. Your response should explain the relationship and give a single unified diagnostic path.',
     )
   }
 
@@ -438,8 +504,9 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       result,
-      tk_source:  tkSource  ? { description: tkSource.description, severity: tkSource.severity, operatorAction: tkSource.operatorAction, source: tkSource.source } : null,
-      disclaimer: TK_DISCLAIMER,
+      tk_sources:    tkSources,
+      alarm_pattern: alarmPattern,
+      disclaimer:    TK_DISCLAIMER,
     })
   } catch (err) {
     console.error('[hd/quickwrench]', err)

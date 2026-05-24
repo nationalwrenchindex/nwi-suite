@@ -15,10 +15,18 @@ type UnitType     = 'truck' | 'trailer'
 type TKSeverity   = 'ok_to_run' | 'check_specified' | 'immediate_action'
 
 interface TKSource {
+  code:           string
   description:    string
   severity:       TKSeverity
   operatorAction: string
   source:         'tk_main' | 'tk_dsr'
+}
+
+interface AlarmPattern {
+  codes:         string[]
+  pattern:       string
+  diagnoseFirst: string
+  severity:      'critical' | 'warning'
 }
 
 interface QWResult {
@@ -34,7 +42,6 @@ interface QWResult {
   sources?:               string[]
 }
 
-// AI severity fallback colors (used when no TK source)
 const AI_SEVERITY_COLORS = {
   low:      '#22C55E',
   medium:   '#F59E0B',
@@ -42,25 +49,60 @@ const AI_SEVERITY_COLORS = {
   critical: '#EF4444',
 }
 
-// TK official severity config
 const TK_SEVERITY_CONFIG: Record<TKSeverity, { label: string; color: string; bg: string; border: string }> = {
-  ok_to_run:       { label: 'OK TO RUN',           color: '#22C55E', bg: '#22C55E15', border: '#22C55E40' },
-  check_specified: { label: 'CHECK AS SPECIFIED',  color: '#F59E0B', bg: '#F59E0B15', border: '#F59E0B40' },
-  immediate_action:{ label: 'TAKE IMMEDIATE ACTION', color: '#EF4444', bg: '#EF444415', border: '#EF444440' },
+  ok_to_run:        { label: 'OK TO RUN',            color: '#22C55E', bg: '#22C55E15', border: '#22C55E40' },
+  check_specified:  { label: 'CHECK AS SPECIFIED',   color: '#F59E0B', bg: '#F59E0B15', border: '#F59E0B40' },
+  immediate_action: { label: 'TAKE IMMEDIATE ACTION', color: '#EF4444', bg: '#EF444415', border: '#EF444440' },
+}
+
+function TKSeverityBadge({ severity }: { severity: TKSeverity }) {
+  const cfg = TK_SEVERITY_CONFIG[severity]
+  return (
+    <span
+      className="text-xs font-bold px-2.5 py-0.5 rounded-full tracking-wide whitespace-nowrap"
+      style={{ background: cfg.color, color: '#fff' }}
+    >
+      {cfg.label}
+    </span>
+  )
+}
+
+function TKCodeRow({ src }: { src: TKSource }) {
+  const cfg = TK_SEVERITY_CONFIG[src.severity]
+  return (
+    <div
+      className="rounded-lg p-3"
+      style={{ background: cfg.bg, border: `1px solid ${cfg.border}` }}
+    >
+      <div className="flex items-center gap-2 mb-1">
+        <span className="font-condensed font-bold text-white text-sm">Code {src.code}</span>
+        <TKSeverityBadge severity={src.severity} />
+        <span className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
+          {src.source === 'tk_dsr' ? 'DSR' : 'TK'} · TK 40933-8-CH Rev 15
+        </span>
+      </div>
+      <p className="text-sm text-white font-medium leading-snug">{src.description}</p>
+      <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.55)' }}>
+        Operator action: {src.operatorAction}
+      </p>
+    </div>
+  )
 }
 
 export default function HDQuickWrenchPage() {
-  const [manufacturer, setManufacturer] = useState<Manufacturer>('Thermo King')
-  const [unitType,     setUnitType]     = useState<UnitType>('trailer')
-  const [model,        setModel]        = useState('')
-  const [serialNumber, setSerialNumber] = useState('')
-  const [alarmCode,    setAlarmCode]    = useState('')
-  const [symptom,      setSymptom]      = useState('')
-  const [loading,      setLoading]      = useState(false)
-  const [result,       setResult]       = useState<QWResult | null>(null)
-  const [tkSource,     setTkSource]     = useState<TKSource | null>(null)
-  const [disclaimer,   setDisclaimer]   = useState<string | null>(null)
-  const [error,        setError]        = useState<string | null>(null)
+  const [manufacturer,         setManufacturer]        = useState<Manufacturer>('Thermo King')
+  const [unitType,             setUnitType]            = useState<UnitType>('trailer')
+  const [model,                setModel]               = useState('')
+  const [serialNumber,         setSerialNumber]        = useState('')
+  const [alarmCode,            setAlarmCode]           = useState('')
+  const [additionalAlarmInput, setAdditionalAlarmInput]= useState('')
+  const [symptom,              setSymptom]             = useState('')
+  const [loading,              setLoading]             = useState(false)
+  const [result,               setResult]              = useState<QWResult | null>(null)
+  const [tkSources,            setTkSources]           = useState<TKSource[]>([])
+  const [alarmPattern,         setAlarmPattern]        = useState<AlarmPattern | null>(null)
+  const [disclaimer,           setDisclaimer]          = useState<string | null>(null)
+  const [error,                setError]               = useState<string | null>(null)
 
   const modelOptions =
     manufacturer === 'Thermo King'
@@ -72,19 +114,32 @@ export default function HDQuickWrenchPage() {
     if (!model || (!alarmCode && !symptom)) return
     setLoading(true)
     setResult(null)
-    setTkSource(null)
+    setTkSources([])
+    setAlarmPattern(null)
     setDisclaimer(null)
     setError(null)
+
+    // Parse comma-separated additional codes
+    const additionalAlarmCodes = additionalAlarmInput
+      .split(',')
+      .map(c => c.trim())
+      .filter(Boolean)
+
     try {
       const res = await fetch('/api/hd/quickwrench', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ manufacturer, model, unitType, alarmCode, symptom, serialNumber }),
+        body:    JSON.stringify({
+          manufacturer, model, unitType,
+          alarmCode, additionalAlarmCodes,
+          symptom, serialNumber,
+        }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Request failed')
       setResult(json.result)
-      setTkSource(json.tk_source ?? null)
+      setTkSources(json.tk_sources ?? [])
+      setAlarmPattern(json.alarm_pattern ?? null)
       setDisclaimer(json.disclaimer ?? null)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
@@ -92,6 +147,9 @@ export default function HDQuickWrenchPage() {
       setLoading(false)
     }
   }
+
+  // Primary TK source (first code entered)
+  const primaryTkSource = tkSources[0] ?? null
 
   return (
     <main className="flex-1 p-6">
@@ -203,6 +261,24 @@ export default function HDQuickWrenchPage() {
             />
           </div>
 
+          {/* Additional Alarm Codes */}
+          <div>
+            <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+              Additional Alarm Codes <span style={{ color: 'rgba(255,255,255,0.25)' }}>(optional)</span>
+            </label>
+            <input
+              type="text"
+              value={additionalAlarmInput}
+              onChange={e => setAdditionalAlarmInput(e.target.value)}
+              placeholder="e.g. 42, 48"
+              className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+              style={{ background: '#162030', border: '1px solid #1e3040' }}
+            />
+            <p className="text-xs mt-1.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
+              Enter multiple codes separated by commas — example: 10, 42, 48
+            </p>
+          </div>
+
           {/* Symptom */}
           <div>
             <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
@@ -248,180 +324,254 @@ export default function HDQuickWrenchPage() {
 
         {/* Result */}
         {result && (
-          <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
+          <div className="space-y-4">
 
-            {/* TK Official Severity Banner */}
-            {tkSource && (() => {
-              const cfg = TK_SEVERITY_CONFIG[tkSource.severity]
-              return (
-                <div
-                  className="px-5 py-4 flex items-start gap-4"
-                  style={{ background: cfg.bg, borderBottom: `1px solid ${cfg.border}` }}
-                >
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2 mb-1.5">
-                      <span
-                        className="text-xs font-bold px-2.5 py-0.5 rounded-full tracking-wide"
-                        style={{ background: cfg.color, color: '#fff' }}
-                      >
-                        {cfg.label}
-                      </span>
-                      <span className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                        {tkSource.source === 'tk_dsr' ? 'DSR Code' : 'TK Code'} · TK 40933-8-CH Rev 15
-                      </span>
-                    </div>
-                    <p className="text-white font-semibold text-sm leading-snug">{tkSource.description}</p>
-                  </div>
-                </div>
-              )
-            })()}
-
-            {/* Operator Action Banner (TK official) */}
-            {tkSource && (
+            {/* ── MULTI-ALARM PATTERN BANNER ── */}
+            {alarmPattern && (
               <div
-                className="px-5 py-3 flex items-start gap-2"
-                style={{ background: '#162030', borderBottom: '1px solid #1e3040' }}
+                className="rounded-xl overflow-hidden"
+                style={{
+                  border: alarmPattern.severity === 'critical' ? '2px solid #EF4444' : `2px solid ${HD_ORANGE}`,
+                }}
               >
-                <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke={HD_ORANGE} strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <div>
-                  <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Operator Action (TK Official)</p>
-                  <p className="text-sm font-medium text-white">{tkSource.operatorAction}</p>
-                </div>
-              </div>
-            )}
-
-            {/* AI Severity Header (shown when no TK source) */}
-            {!tkSource && (
-              <div
-                className="px-5 py-4 flex items-center gap-3"
-                style={{ background: '#162030', borderBottom: '1px solid #1e3040' }}
-              >
+                {/* Banner header */}
                 <div
-                  className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wide"
+                  className="px-5 py-3 flex items-center gap-3"
                   style={{
-                    background: `${AI_SEVERITY_COLORS[result.severity]}25`,
-                    color:       AI_SEVERITY_COLORS[result.severity],
+                    background: alarmPattern.severity === 'critical' ? '#EF4444' : HD_ORANGE,
                   }}
                 >
-                  {result.severity}
+                  <svg className="w-5 h-5 text-white flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                  </svg>
+                  <p className="font-condensed font-bold text-white text-base tracking-widest uppercase">
+                    Multi-Alarm Pattern Detected
+                  </p>
+                  <span
+                    className="ml-auto text-xs font-bold px-2 py-0.5 rounded-full"
+                    style={{ background: 'rgba(0,0,0,0.25)', color: '#fff' }}
+                  >
+                    {alarmPattern.severity === 'critical' ? 'CRITICAL' : 'WARNING'}
+                  </span>
                 </div>
-                <p className="text-white font-semibold text-sm">{result.alarm_meaning}</p>
+
+                <div
+                  className="p-5 space-y-4"
+                  style={{
+                    background: alarmPattern.severity === 'critical' ? '#1a0505' : '#1a0a00',
+                  }}
+                >
+                  {/* DO NOT diagnose independently */}
+                  <div
+                    className="rounded-lg px-4 py-3 flex items-start gap-2"
+                    style={{
+                      background: alarmPattern.severity === 'critical' ? '#EF444420' : `${HD_ORANGE}20`,
+                      border:     alarmPattern.severity === 'critical' ? '1px solid #EF444450' : `1px solid ${HD_ORANGE}50`,
+                    }}
+                  >
+                    <span className="font-bold text-sm" style={{ color: alarmPattern.severity === 'critical' ? '#EF4444' : HD_ORANGE }}>
+                      DO NOT diagnose these alarms independently — they are related.
+                    </span>
+                  </div>
+
+                  {/* Pattern description */}
+                  <div>
+                    <p className="text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Pattern</p>
+                    <p className="text-sm text-white leading-relaxed">{alarmPattern.pattern}</p>
+                  </div>
+
+                  {/* Diagnose first */}
+                  <div className="rounded-lg p-4" style={{ background: '#162030' }}>
+                    <p className="text-xs uppercase tracking-widest mb-1.5" style={{ color: alarmPattern.severity === 'critical' ? '#EF4444' : HD_ORANGE }}>
+                      Diagnose First
+                    </p>
+                    <p className="text-sm font-bold text-white leading-relaxed">{alarmPattern.diagnoseFirst}</p>
+                  </div>
+
+                  {/* Individual code badges for all codes in pattern */}
+                  {tkSources.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Official TK Definitions</p>
+                      {tkSources.map(src => <TKCodeRow key={src.code} src={src} />)}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
-            <div className="p-5 space-y-5" style={{ background: '#111920' }}>
+            {/* ── SINGLE-ALARM TK OFFICIAL RESULT ── */}
+            <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
 
-              {/* AI alarm meaning (shown under official header when TK source present) */}
-              {tkSource && (
-                <div>
-                  <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>Tech Analysis</p>
-                  <p className="text-sm text-white">{result.alarm_meaning}</p>
-                </div>
-              )}
+              {/* TK Official Severity Banner (single code or primary code when no pattern) */}
+              {primaryTkSource && !alarmPattern && (() => {
+                const cfg = TK_SEVERITY_CONFIG[primaryTkSource.severity]
+                return (
+                  <div
+                    className="px-5 py-4 flex items-start gap-4"
+                    style={{ background: cfg.bg, borderBottom: `1px solid ${cfg.border}` }}
+                  >
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <TKSeverityBadge severity={primaryTkSource.severity} />
+                        <span className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                          {primaryTkSource.source === 'tk_dsr' ? 'DSR Code' : 'TK Code'} · TK 40933-8-CH Rev 15
+                        </span>
+                      </div>
+                      <p className="text-white font-semibold text-sm leading-snug">{primaryTkSource.description}</p>
+                    </div>
+                  </div>
+                )
+              })()}
 
-              {/* EPA Warning */}
-              {result.epa_warning && (
-                <div className="rounded-lg p-3" style={{ background: '#2d0a0a', border: '1px solid #7f1d1d' }}>
-                  <p className="text-xs font-bold text-red-400">⚠ {result.epa_warning}</p>
-                </div>
-              )}
-
-              {/* Most likely causes */}
-              <div>
-                <p className="text-xs uppercase tracking-widest mb-2" style={{ color: HD_ORANGE }}>Most Likely Causes</p>
-                <ol className="space-y-1">
-                  {result.most_likely_causes.map((c, i) => (
-                    <li key={i} className="flex gap-2 text-sm" style={{ color: 'rgba(255,255,255,0.8)' }}>
-                      <span className="font-bold flex-shrink-0" style={{ color: HD_ORANGE }}>{i + 1}.</span>
-                      {c}
-                    </li>
-                  ))}
-                </ol>
-              </div>
-
-              {/* Diagnostic steps */}
-              <div>
-                <p className="text-xs uppercase tracking-widest mb-2" style={{ color: HD_BLUE }}>Diagnostic Steps</p>
-                <ol className="space-y-1.5">
-                  {result.diagnostic_steps.map((s, i) => (
-                    <li key={i} className="flex gap-2 text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                      <span
-                        className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5"
-                        style={{ background: '#1e3040', color: HD_BLUE }}
-                      >
-                        {i + 1}
-                      </span>
-                      {s}
-                    </li>
-                  ))}
-                </ol>
-              </div>
-
-              {/* Common fix */}
-              <div className="rounded-lg p-4" style={{ background: '#162030' }}>
-                <p className="text-xs uppercase tracking-widest mb-1" style={{ color: '#22C55E' }}>Common Fix</p>
-                <p className="text-sm text-white">{result.common_fix}</p>
-              </div>
-
-              {/* Parts */}
-              {result.parts_typically_needed?.length > 0 && (
-                <div>
-                  <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>Parts Typically Needed</p>
-                  <div className="flex flex-wrap gap-2">
-                    {result.parts_typically_needed.map((p, i) => (
-                      <span
-                        key={i}
-                        className="text-xs px-2.5 py-1 rounded-full"
-                        style={{ background: '#1e3040', color: 'rgba(255,255,255,0.7)' }}
-                      >
-                        {p}
-                      </span>
-                    ))}
+              {/* Operator Action (single code, no pattern) */}
+              {primaryTkSource && !alarmPattern && (
+                <div
+                  className="px-5 py-3 flex items-start gap-2"
+                  style={{ background: '#162030', borderBottom: '1px solid #1e3040' }}
+                >
+                  <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke={HD_ORANGE} strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div>
+                    <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Operator Action (TK Official)</p>
+                    <p className="text-sm font-medium text-white">{primaryTkSource.operatorAction}</p>
                   </div>
                 </div>
               )}
 
-              {/* Safety warnings */}
-              {result.safety_warnings?.length > 0 && (
-                <div>
-                  <p className="text-xs uppercase tracking-widest mb-2" style={{ color: '#F59E0B' }}>Safety & Compliance</p>
-                  {result.safety_warnings.map((w, i) => (
-                    <p key={i} className="text-xs mb-1" style={{ color: 'rgba(255,255,255,0.65)' }}>⚠ {w}</p>
-                  ))}
-                </div>
-              )}
-
-              {/* PM note */}
-              {result.pm_interval_note && (
-                <div className="rounded-lg p-3" style={{ background: '#162030', border: '1px solid #1e3040' }}>
-                  <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>PM Note</p>
-                  <p className="text-xs" style={{ color: 'rgba(255,255,255,0.65)' }}>{result.pm_interval_note}</p>
-                </div>
-              )}
-
-              {/* Web search sources */}
-              {result.sources && result.sources.length > 0 && (
-                <div>
-                  <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>Sources</p>
-                  {result.sources.map((s, i) => (
-                    <p key={i} className="text-xs mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>— {s}</p>
-                  ))}
-                </div>
-              )}
-
-              {/* Disclaimer */}
-              {disclaimer && (
+              {/* AI Severity header (shown when no TK source at all) */}
+              {!primaryTkSource && (
                 <div
-                  className="rounded-lg p-3 mt-2"
-                  style={{ background: '#0d1820', border: '1px solid #1e3040' }}
+                  className="px-5 py-4 flex items-center gap-3"
+                  style={{ background: '#162030', borderBottom: '1px solid #1e3040' }}
                 >
-                  <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                    {disclaimer}
-                  </p>
+                  <div
+                    className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wide"
+                    style={{
+                      background: `${AI_SEVERITY_COLORS[result.severity]}25`,
+                      color:       AI_SEVERITY_COLORS[result.severity],
+                    }}
+                  >
+                    {result.severity}
+                  </div>
+                  <p className="text-white font-semibold text-sm">{result.alarm_meaning}</p>
                 </div>
               )}
+
+              <div className="p-5 space-y-5" style={{ background: '#111920' }}>
+
+                {/* Tech analysis label when TK source present */}
+                {(primaryTkSource || alarmPattern) && (
+                  <div>
+                    <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                      {alarmPattern ? 'Combined Tech Analysis' : 'Tech Analysis'}
+                    </p>
+                    <p className="text-sm text-white">{result.alarm_meaning}</p>
+                  </div>
+                )}
+
+                {/* EPA Warning */}
+                {result.epa_warning && (
+                  <div className="rounded-lg p-3" style={{ background: '#2d0a0a', border: '1px solid #7f1d1d' }}>
+                    <p className="text-xs font-bold text-red-400">⚠ {result.epa_warning}</p>
+                  </div>
+                )}
+
+                {/* Most likely causes */}
+                <div>
+                  <p className="text-xs uppercase tracking-widest mb-2" style={{ color: HD_ORANGE }}>Most Likely Causes</p>
+                  <ol className="space-y-1">
+                    {result.most_likely_causes.map((c, i) => (
+                      <li key={i} className="flex gap-2 text-sm" style={{ color: 'rgba(255,255,255,0.8)' }}>
+                        <span className="font-bold flex-shrink-0" style={{ color: HD_ORANGE }}>{i + 1}.</span>
+                        {c}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+
+                {/* Diagnostic steps */}
+                <div>
+                  <p className="text-xs uppercase tracking-widest mb-2" style={{ color: HD_BLUE }}>Diagnostic Steps</p>
+                  <ol className="space-y-1.5">
+                    {result.diagnostic_steps.map((s, i) => (
+                      <li key={i} className="flex gap-2 text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                        <span
+                          className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5"
+                          style={{ background: '#1e3040', color: HD_BLUE }}
+                        >
+                          {i + 1}
+                        </span>
+                        {s}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+
+                {/* Common fix */}
+                <div className="rounded-lg p-4" style={{ background: '#162030' }}>
+                  <p className="text-xs uppercase tracking-widest mb-1" style={{ color: '#22C55E' }}>Common Fix</p>
+                  <p className="text-sm text-white">{result.common_fix}</p>
+                </div>
+
+                {/* Parts */}
+                {result.parts_typically_needed?.length > 0 && (
+                  <div>
+                    <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>Parts Typically Needed</p>
+                    <div className="flex flex-wrap gap-2">
+                      {result.parts_typically_needed.map((p, i) => (
+                        <span
+                          key={i}
+                          className="text-xs px-2.5 py-1 rounded-full"
+                          style={{ background: '#1e3040', color: 'rgba(255,255,255,0.7)' }}
+                        >
+                          {p}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Safety warnings */}
+                {result.safety_warnings?.length > 0 && (
+                  <div>
+                    <p className="text-xs uppercase tracking-widest mb-2" style={{ color: '#F59E0B' }}>Safety & Compliance</p>
+                    {result.safety_warnings.map((w, i) => (
+                      <p key={i} className="text-xs mb-1" style={{ color: 'rgba(255,255,255,0.65)' }}>⚠ {w}</p>
+                    ))}
+                  </div>
+                )}
+
+                {/* PM note */}
+                {result.pm_interval_note && (
+                  <div className="rounded-lg p-3" style={{ background: '#162030', border: '1px solid #1e3040' }}>
+                    <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>PM Note</p>
+                    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.65)' }}>{result.pm_interval_note}</p>
+                  </div>
+                )}
+
+                {/* Web search sources */}
+                {result.sources && result.sources.length > 0 && (
+                  <div>
+                    <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>Sources</p>
+                    {result.sources.map((s, i) => (
+                      <p key={i} className="text-xs mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>— {s}</p>
+                    ))}
+                  </div>
+                )}
+
+                {/* Disclaimer */}
+                {disclaimer && (
+                  <div
+                    className="rounded-lg p-3"
+                    style={{ background: '#0d1820', border: '1px solid #1e3040' }}
+                  >
+                    <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                      {disclaimer}
+                    </p>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
