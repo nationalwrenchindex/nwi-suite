@@ -128,18 +128,20 @@ ENGINE WILL NOT GO TO HIGH SPEED — Related Alarms 40:
 - Speed solenoid not engaging — check for proper voltage to solenoid — check diode at solenoid — check for seized speed plunger — check speed solenoid linkage
 - Low cylinder compression — remove injectors and test each cylinder
 
-Respond with ONLY a JSON object using exactly these fields:
+Respond with ONLY valid JSON. No markdown, no code blocks, no explanation. Start your response with { and end with }.
+
+The response must be valid JSON with exactly these fields:
 {
-  "alarm_meaning": "string",
-  "severity": "low | medium | high | critical",
-  "most_likely_causes": ["ranked string array"],
-  "diagnostic_steps": ["ordered string array"],
-  "common_fix": "string with estimated repair time",
+  "alarm_meaning": "string - what this alarm means in plain field tech language",
+  "most_likely_causes": ["string array - ranked by probability"],
+  "diagnostic_steps": ["string array - numbered steps in order"],
+  "common_fix": "string - most common resolution",
   "parts_typically_needed": ["string array"],
   "safety_warnings": ["string array"],
-  "epa_warning": "string | null",
-  "pm_interval_note": "string | null"
-}`
+  "pm_interval_note": "string - relevant PM note if applicable, or empty string if none"
+}
+
+Rules: Do not use nested objects. Do not use objects as array items. Every field must be a string or array of strings only. Keep each string concise.`
 
 // ─── User Prompt Builder ──────────────────────────────────────────────────────
 // Injects only the alarm definitions the tech actually needs (entered codes +
@@ -215,8 +217,13 @@ function normalizeAIResult(raw: Record<string, unknown>): Record<string, unknown
   const codeKeys = Object.keys(raw).filter(k => /^CODE_\d+$/i.test(k) || /^ALARM_\d+$/i.test(k))
   const hasCombined = 'COMBINED_PATTERN_ANALYSIS' in raw
 
+  console.log('[normalizeAIResult] codeKeys:', codeKeys, 'hasCombined:', hasCombined)
+
   // Already flat — nothing to do
-  if (!hasCombined && codeKeys.length === 0) return raw
+  if (!hasCombined && codeKeys.length === 0) {
+    console.log('[normalizeAIResult] returning raw (already flat)')
+    return raw
+  }
 
   // Extract combined analysis text
   let combinedText: string | null = null
@@ -372,14 +379,23 @@ export async function POST(req: NextRequest) {
       .map(b => (b as Anthropic.TextBlock).text)
       .join('\n')
 
+    console.log('[quickwrench] raw AI text length:', text.length)
+    console.log('[quickwrench] raw AI text:', text)
+    console.log('[quickwrench] stop_reason:', msg.stop_reason, 'usage:', JSON.stringify(msg.usage))
+
     const cleaned = text
       .replace(/^```json\s*/m, '')
       .replace(/^```\s*/m,     '')
       .replace(/```\s*$/m,     '')
       .trim()
 
+    console.log('[quickwrench] cleaned text:', cleaned)
+
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
+    console.log('[quickwrench] jsonMatch found:', !!jsonMatch, jsonMatch ? `(${jsonMatch[0].length} chars)` : '')
+
     if (!jsonMatch) {
+      console.error('[quickwrench] No JSON object found in response. Full cleaned text:', cleaned)
       return NextResponse.json({
         result: fallbackResult('Diagnostic analysis returned an unexpected format. Please try again.'),
         tk_sources:    tkSources,
@@ -388,7 +404,26 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    const result = normalizeAIResult(JSON.parse(jsonMatch[0]))
+    let parsedRaw: Record<string, unknown>
+    try {
+      parsedRaw = JSON.parse(jsonMatch[0]) as Record<string, unknown>
+    } catch (parseErr) {
+      console.error('[quickwrench] JSON.parse failed:', parseErr)
+      console.error('[quickwrench] JSON string that failed:', jsonMatch[0])
+      return NextResponse.json({
+        result: fallbackResult('Diagnostic analysis could not be parsed. Please try again.'),
+        tk_sources:    tkSources,
+        alarm_pattern: alarmPattern,
+        disclaimer:    TK_DISCLAIMER,
+      })
+    }
+
+    console.log('[quickwrench] parsed keys:', Object.keys(parsedRaw))
+    console.log('[quickwrench] parsed raw:', JSON.stringify(parsedRaw).slice(0, 500))
+
+    const result = normalizeAIResult(parsedRaw)
+    console.log('[quickwrench] normalized result keys:', Object.keys(result))
+    console.log('[quickwrench] alarm_meaning:', result.alarm_meaning)
 
     return NextResponse.json({
       result,
