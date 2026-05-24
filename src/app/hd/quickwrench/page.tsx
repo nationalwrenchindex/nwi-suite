@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 const HD_ORANGE = '#E85D24'
 const HD_BLUE   = '#1A6BAF'
@@ -136,6 +136,8 @@ export default function HDQuickWrenchPage() {
   const [additionalAlarmInput, setAdditionalAlarmInput]= useState('')
   const [symptom,              setSymptom]             = useState('')
   const [loading,              setLoading]             = useState(false)
+  const [loadingMessage,       setLoadingMessage]      = useState('Looking up alarm codes...')
+  const loadingStartRef = useRef<number>(0)
   const [result,               setResult]              = useState<QWResult | null>(null)
   const [tkSources,            setTkSources]           = useState<TKSource[]>([])
   const [alarmPattern,         setAlarmPattern]        = useState<AlarmPattern | null>(null)
@@ -147,9 +149,23 @@ export default function HDQuickWrenchPage() {
       ? unitType === 'truck' ? TK_TRUCK_MODELS : TK_TRAILER_MODELS
       : unitType === 'truck' ? CT_TRUCK_MODELS : CT_TRAILER_MODELS
 
+  useEffect(() => {
+    if (!loading) return
+    setLoadingMessage('Looking up alarm codes...')
+    const interval = setInterval(() => {
+      const elapsed = (Date.now() - loadingStartRef.current) / 1000
+      if      (elapsed < 5)  setLoadingMessage('Looking up alarm codes...')
+      else if (elapsed < 10) setLoadingMessage('Searching technical databases...')
+      else if (elapsed < 20) setLoadingMessage('Generating diagnostic analysis...')
+      else                   setLoadingMessage('Almost ready — complex multi-alarm analysis takes a moment...')
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [loading])
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!model || (!alarmCode && !symptom)) return
+    loadingStartRef.current = Date.now()
     setLoading(true)
     setResult(null)
     setTkSources([])
@@ -343,11 +359,11 @@ export default function HDQuickWrenchPage() {
           >
             {loading ? (
               <span className="flex items-center justify-center gap-2">
-                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                Diagnosing…
+                {loadingMessage}
               </span>
             ) : 'Run HD QuickWrench'}
           </button>

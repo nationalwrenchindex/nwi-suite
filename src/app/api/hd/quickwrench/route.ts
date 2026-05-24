@@ -377,6 +377,19 @@ Battery specs: HD unit range 800 CCA minimum — 1050 CCA maximum. Below 800 CCA
 
 Refrigerant types: Most units use R-404A. Newer Thermo King units use R-452A (note: R-452A units are typically still under warranty — refer to authorized dealer for refrigerant service).
 
+UNIVERSAL ELECTRICAL DIAGNOSTIC RULE — This rule applies to ALL electrical alarm codes including but not limited to alternator alarms, solenoid circuit alarms, controller alarms, sensor alarms, CAN communication alarms, motor alarms, and any alarm involving circuits, relays, or electronic components.
+
+Before diagnosing any electrical alarm the technician must perform a battery test first:
+- Test battery voltage with a dedicated battery load tester — visual inspection is not sufficient
+- Static voltage must be 12.4V to 12.7V minimum
+- Charging voltage must be 13.8V to 14.4V with unit running
+- Battery CCA must meet minimum specification — HD reefer units require 800 CCA minimum, 1050 CCA maximum
+- If battery voltage is below 10.5V DC do not proceed with further electrical diagnosis until battery condition is confirmed or replaced
+- A weak or failing battery below 10.5V DC can cause false electrical alarms, intermittent controller faults, CAN communication errors, solenoid failures, and sensor out of range codes that disappear once battery is replaced or charged
+- Many experienced technicians skip this step — always perform it anyway — it is proper diagnostic procedure and prevents misdiagnosis
+
+When diagnosing any electrical alarm always include battery check as Step 1 in diagnostic_steps before any other diagnostic steps.
+
 Format your response as structured JSON with these exact fields:
 {
   "alarm_meaning": "string — what this alarm code means",
@@ -460,9 +473,30 @@ function normalizeAIResult(raw: Record<string, unknown>): Record<string, unknown
   }
 }
 
+// ─── Fallback result when AI is unavailable ───────────────────────────────────
+
+function fallbackResult(message: string): Record<string, unknown> {
+  return {
+    alarm_meaning:          message,
+    severity:               'high',
+    most_likely_causes:     ['Unable to complete AI analysis — service error'],
+    diagnostic_steps:       [
+      'Consult the official Thermo King or Carrier Transicold operator manual for this alarm code',
+      'Contact your authorized service dealer for assistance',
+    ],
+    common_fix:             'Please try again in a moment.',
+    parts_typically_needed: [],
+    safety_warnings:        [],
+    epa_warning:            null,
+    pm_interval_note:       null,
+    sources:                [],
+  }
+}
+
 // ─── Route Handler ────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
+  try {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -568,7 +602,12 @@ export async function POST(req: NextRequest) {
 
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
     if (!jsonMatch) {
-      return NextResponse.json({ error: 'Could not parse AI response', raw: text }, { status: 502 })
+      return NextResponse.json({
+        result: fallbackResult('Diagnostic analysis returned an unexpected format. Please try again.'),
+        tk_sources:    tkSources,
+        alarm_pattern: alarmPattern,
+        disclaimer:    TK_DISCLAIMER,
+      })
     }
 
     const result = normalizeAIResult(JSON.parse(jsonMatch[0]))
@@ -580,7 +619,17 @@ export async function POST(req: NextRequest) {
       disclaimer:    TK_DISCLAIMER,
     })
   } catch (err) {
-    console.error('[hd/quickwrench]', err)
-    return NextResponse.json({ error: 'AI request failed' }, { status: 502 })
+    console.error('[hd/quickwrench] AI call failed', err)
+    return NextResponse.json({
+      result: fallbackResult('Diagnostic service temporarily unavailable. Consult the official TK operator manual for this alarm code or contact your authorized dealer.'),
+      tk_sources:    tkSources,
+      alarm_pattern: alarmPattern,
+      disclaimer:    TK_DISCLAIMER,
+    })
+  }
+
+  } catch (err) {
+    console.error('[hd/quickwrench] Unhandled error', err)
+    return NextResponse.json({ error: 'An unexpected error occurred. Please try again.' }, { status: 500 })
   }
 }
