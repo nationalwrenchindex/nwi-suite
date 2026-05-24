@@ -56,7 +56,7 @@ const TK_SEVERITY_CONFIG: Record<TKSeverity, { label: string; color: string; bg:
 }
 
 function TKSeverityBadge({ severity }: { severity: TKSeverity }) {
-  const cfg = TK_SEVERITY_CONFIG[severity]
+  const cfg = TK_SEVERITY_CONFIG[severity] ?? TK_SEVERITY_CONFIG.check_specified
   return (
     <span
       className="text-xs font-bold px-2.5 py-0.5 rounded-full tracking-wide whitespace-nowrap"
@@ -67,8 +67,28 @@ function TKSeverityBadge({ severity }: { severity: TKSeverity }) {
   )
 }
 
+function PrimaryTKBanner({ src }: { src: TKSource }) {
+  const cfg = TK_SEVERITY_CONFIG[src.severity] ?? TK_SEVERITY_CONFIG.check_specified
+  return (
+    <div
+      className="px-5 py-4 flex items-start gap-4"
+      style={{ background: cfg.bg, borderBottom: `1px solid ${cfg.border}` }}
+    >
+      <div className="flex-1">
+        <div className="flex items-center gap-2 mb-1.5">
+          <TKSeverityBadge severity={src.severity} />
+          <span className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.4)' }}>
+            {src.source === 'tk_dsr' ? 'DSR Code' : 'TK Code'} · TK 40933-8-CH Rev 15
+          </span>
+        </div>
+        <p className="text-white font-semibold text-sm leading-snug">{src.description}</p>
+      </div>
+    </div>
+  )
+}
+
 function TKCodeRow({ src }: { src: TKSource }) {
-  const cfg = TK_SEVERITY_CONFIG[src.severity]
+  const cfg = TK_SEVERITY_CONFIG[src.severity] ?? TK_SEVERITY_CONFIG.check_specified
   return (
     <div
       className="rounded-lg p-3"
@@ -403,25 +423,9 @@ export default function HDQuickWrenchPage() {
             <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
 
               {/* TK Official Severity Banner (single code or primary code when no pattern) */}
-              {primaryTkSource && !alarmPattern && (() => {
-                const cfg = TK_SEVERITY_CONFIG[primaryTkSource.severity]
-                return (
-                  <div
-                    className="px-5 py-4 flex items-start gap-4"
-                    style={{ background: cfg.bg, borderBottom: `1px solid ${cfg.border}` }}
-                  >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1.5">
-                        <TKSeverityBadge severity={primaryTkSource.severity} />
-                        <span className="text-xs font-medium" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                          {primaryTkSource.source === 'tk_dsr' ? 'DSR Code' : 'TK Code'} · TK 40933-8-CH Rev 15
-                        </span>
-                      </div>
-                      <p className="text-white font-semibold text-sm leading-snug">{primaryTkSource.description}</p>
-                    </div>
-                  </div>
-                )
-              })()}
+              {primaryTkSource && !alarmPattern && (
+                <PrimaryTKBanner src={primaryTkSource} />
+              )}
 
               {/* Operator Action (single code, no pattern) */}
               {primaryTkSource && !alarmPattern && (
@@ -448,8 +452,8 @@ export default function HDQuickWrenchPage() {
                   <div
                     className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wide"
                     style={{
-                      background: `${AI_SEVERITY_COLORS[result.severity]}25`,
-                      color:       AI_SEVERITY_COLORS[result.severity],
+                      background: `${AI_SEVERITY_COLORS[result.severity] ?? '#6B7280'}25`,
+                      color:       AI_SEVERITY_COLORS[result.severity] ?? '#6B7280',
                     }}
                   >
                     {result.severity}
@@ -481,7 +485,7 @@ export default function HDQuickWrenchPage() {
                 <div>
                   <p className="text-xs uppercase tracking-widest mb-2" style={{ color: HD_ORANGE }}>Most Likely Causes</p>
                   <ol className="space-y-1">
-                    {result.most_likely_causes.map((c, i) => (
+                    {(result.most_likely_causes ?? []).map((c, i) => (
                       <li key={i} className="flex gap-2 text-sm" style={{ color: 'rgba(255,255,255,0.8)' }}>
                         <span className="font-bold flex-shrink-0" style={{ color: HD_ORANGE }}>{i + 1}.</span>
                         {c}
@@ -494,7 +498,7 @@ export default function HDQuickWrenchPage() {
                 <div>
                   <p className="text-xs uppercase tracking-widest mb-2" style={{ color: HD_BLUE }}>Diagnostic Steps</p>
                   <ol className="space-y-1.5">
-                    {result.diagnostic_steps.map((s, i) => (
+                    {(result.diagnostic_steps ?? []).map((s, i) => (
                       <li key={i} className="flex gap-2 text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
                         <span
                           className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5"
