@@ -85,15 +85,20 @@ export async function POST(req: NextRequest) {
     const client = new Anthropic({ apiKey })
     const msg = await client.messages.create({
       model:      'claude-sonnet-4-6',
-      max_tokens: 1500,
+      max_tokens: 4000,
       system:     SYSTEM_PROMPT,
       messages: [{ role: 'user', content: userPrompt }],
     })
 
     const text = msg.content[0]?.type === 'text' ? msg.content[0].text : ''
 
-    // Extract JSON from response
-    const jsonMatch = text.match(/\{[\s\S]*\}/)
+    const cleaned = text
+      .replace(/^```json\s*/, '')
+      .replace(/^```\s*/, '')
+      .replace(/```\s*$/, '')
+      .trim()
+
+    const jsonMatch = cleaned.match(/\{[\s\S]*\}/)
     if (!jsonMatch) {
       return NextResponse.json({ error: 'Could not parse AI response', raw: text }, { status: 502 })
     }
