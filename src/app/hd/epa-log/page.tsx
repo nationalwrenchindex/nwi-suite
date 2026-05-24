@@ -1,14 +1,22 @@
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 
 export const metadata = { title: 'EPA 608 Log — NWI HD Suite' }
 
 const HD_ORANGE = '#E85D24'
 
-export default async function EPALogPage() {
+export default async function EPALogPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
+
+  const params   = await searchParams
+  const showForm = params.new === '1'
 
   const { data: log } = await supabase
     .from('hd_epa_log')
@@ -30,10 +38,29 @@ export default async function EPALogPage() {
             EPA 608 licensed technicians only.
           </p>
         </div>
-        <button className="px-4 py-2.5 rounded-lg text-sm font-semibold text-white" style={{ background: HD_ORANGE }}>
+        <Link
+          href="?new=1"
+          className="px-4 py-2.5 rounded-lg text-sm font-semibold text-white"
+          style={{ background: HD_ORANGE }}
+        >
           + Log Entry
-        </button>
+        </Link>
       </div>
+
+      {showForm && (
+        <div className="rounded-xl p-5 mb-6" style={{ background: '#111920', border: `1px solid ${HD_ORANGE}50` }}>
+          <p className="font-condensed font-bold text-white text-lg tracking-wide mb-1">LOG REFRIGERANT ENTRY</p>
+          <p className="text-sm mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>
+            Full EPA log entry form coming in the next update. All refrigerant work must be performed by EPA 608 certified technicians only.
+          </p>
+          <p className="text-xs font-semibold mb-4" style={{ color: '#EF4444' }}>
+            ⚠ Federal regulation requires tracking all refrigerant recovered, added, and charged.
+          </p>
+          <Link href="/hd/epa-log" className="text-xs px-4 py-2 rounded-lg" style={{ color: 'rgba(255,255,255,0.3)', border: '1px solid #1e3040' }}>
+            Cancel
+          </Link>
+        </div>
+      )}
 
       <div className="rounded-xl p-4 mb-6" style={{ background: '#2d0a0a', border: '1px solid #7f1d1d' }}>
         <p className="text-xs font-bold" style={{ color: '#EF4444' }}>

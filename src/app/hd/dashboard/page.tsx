@@ -36,8 +36,6 @@ export default async function HDDashboardPage() {
     .eq('id', user.id)
     .single()
 
-  if (!profile?.business_name) redirect('/onboarding')
-
   // Parallel data fetch
   const [
     { data: units,      count: unitCount },
@@ -117,9 +115,9 @@ export default async function HDDashboardPage() {
             HD Suite · {dayLabel}
           </p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">
-            {profile.full_name ?? user.email}
+            {profile?.full_name ?? user.email}
           </h1>
-          <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.6)' }}>{profile.business_name}</p>
+          <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.6)' }}>{profile?.business_name ?? 'HD Suite'}</p>
         </div>
       </div>
 

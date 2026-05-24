@@ -13,10 +13,17 @@ function statusLabel(s: string) {
   return s === 'in_progress' ? 'In Progress' : s === 'completed' ? 'Completed' : s === 'invoiced' ? 'Invoiced' : 'Open'
 }
 
-export default async function WorkOrdersPage() {
+export default async function WorkOrdersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
+}) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
+
+  const params   = await searchParams
+  const showForm = params.new === '1'
 
   const { data: workOrders } = await supabase
     .from('hd_work_orders')
@@ -37,13 +44,34 @@ export default async function WorkOrdersPage() {
           <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>HD Suite</p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">WORK ORDERS</h1>
         </div>
-        <button
+        <Link
+          href="?new=1"
           className="px-4 py-2.5 rounded-lg text-sm font-semibold text-white"
           style={{ background: HD_ORANGE }}
         >
           + New Work Order
-        </button>
+        </Link>
       </div>
+
+      {showForm && (
+        <div className="rounded-xl p-5 mb-6" style={{ background: '#111920', border: `1px solid ${HD_ORANGE}50` }}>
+          <p className="font-condensed font-bold text-white text-lg tracking-wide mb-1">NEW WORK ORDER</p>
+          <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.4)' }}>
+            Full work order creation form coming in the next update. Add a fleet unit and fleet account first, then work orders will be available here.
+          </p>
+          <div className="flex gap-3">
+            <Link href="/hd/fleet-units?new=1" className="text-xs px-4 py-2 rounded-lg font-semibold" style={{ background: `${HD_ORANGE}20`, color: HD_ORANGE, border: `1px solid ${HD_ORANGE}40` }}>
+              Add Fleet Unit →
+            </Link>
+            <Link href="/hd/fleet-accounts?new=1" className="text-xs px-4 py-2 rounded-lg font-semibold" style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.5)', border: '1px solid #1e3040' }}>
+              Add Fleet Account →
+            </Link>
+            <Link href="/hd/work-orders" className="text-xs px-4 py-2 rounded-lg" style={{ color: 'rgba(255,255,255,0.3)', border: '1px solid #1e3040' }}>
+              Cancel
+            </Link>
+          </div>
+        </div>
+      )}
 
       <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
         {!workOrders || workOrders.length === 0 ? (

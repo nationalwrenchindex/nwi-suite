@@ -84,6 +84,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(homeUrl)
   }
 
+  supabaseResponse.headers.set('x-pathname', effectivePath)
   return supabaseResponse
 }
 

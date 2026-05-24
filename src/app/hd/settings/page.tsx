@@ -1,9 +1,8 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import HDLaborRateForm from '@/components/hd/HDLaborRateForm'
 
 export const metadata = { title: 'Settings — NWI HD Suite' }
-
-const HD_ORANGE = '#E85D24'
 
 export default async function HDSettingsPage() {
   const supabase = await createClient()
@@ -12,7 +11,7 @@ export default async function HDSettingsPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('full_name, email, business_name, phone')
+    .select('full_name, email, business_name, phone, hd_labor_rate')
     .eq('id', user.id)
     .single()
 
@@ -27,10 +26,10 @@ export default async function HDSettingsPage() {
         <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide mb-4">ACCOUNT</p>
           {[
-            { label: 'Name', value: profile?.full_name ?? '—' },
-            { label: 'Email', value: profile?.email ?? user.email ?? '—' },
+            { label: 'Name',     value: profile?.full_name     ?? '—' },
+            { label: 'Email',    value: profile?.email         ?? user.email ?? '—' },
             { label: 'Business', value: profile?.business_name ?? '—' },
-            { label: 'Phone', value: profile?.phone ?? '—' },
+            { label: 'Phone',    value: profile?.phone         ?? '—' },
           ].map(({ label, value }) => (
             <div key={label} className="flex justify-between py-3 border-b text-sm" style={{ borderColor: '#1e3040' }}>
               <span style={{ color: 'rgba(255,255,255,0.4)' }}>{label}</span>
@@ -40,18 +39,9 @@ export default async function HDSettingsPage() {
         </div>
 
         <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
-          <p className="font-condensed font-bold text-white text-lg tracking-wide mb-4">LABOR RATES</p>
-          <p className="text-sm mb-3" style={{ color: 'rgba(255,255,255,0.5)' }}>Configure your shop labor rate for work order calculations.</p>
-          <div className="flex gap-3">
-            <input
-              type="number"
-              placeholder="e.g. 125"
-              className="flex-1 px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
-              style={{ background: '#162030', border: '1px solid #1e3040' }}
-            />
-            <span className="flex items-center text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>/hr</span>
-            <button className="px-4 py-2.5 rounded-lg text-sm font-semibold text-white" style={{ background: HD_ORANGE }}>Save</button>
-          </div>
+          <p className="font-condensed font-bold text-white text-lg tracking-wide mb-1">LABOR RATES</p>
+          <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.5)' }}>Configure your shop labor rate for work order calculations.</p>
+          <HDLaborRateForm initialRate={profile?.hd_labor_rate?.toString() ?? null} />
         </div>
 
         <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
