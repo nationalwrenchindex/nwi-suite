@@ -217,6 +217,133 @@ function TKCodeRow({ src }: { src: TKSource }) {
   )
 }
 
+// ─── Manifold Gauge SVG ───────────────────────────────────────────────────────
+
+const G = {
+  CX: 100, CY: 100, R: 96,
+  BAND_OUT: 92, BAND_IN: 74,
+  TICK_MAJ_OUT: 90, TICK_MAJ_IN: 79,
+  TICK_MIN_OUT: 90, TICK_MIN_IN: 85,
+  LABEL_R: 67,
+  NEEDLE: 83, TAIL: 15, HUB: 8,
+  START: 135, SWEEP: 270,
+} as const
+
+function gAngle(v: number, lo: number, hi: number): number {
+  return G.START + Math.max(0, Math.min(1, (v - lo) / (hi - lo))) * G.SWEEP
+}
+
+function gXY(r: number, deg: number): { x: number; y: number } {
+  const a = deg * Math.PI / 180
+  return { x: G.CX + r * Math.cos(a), y: G.CY + r * Math.sin(a) }
+}
+
+function gArc(rOut: number, rIn: number, a1: number, a2: number): string {
+  const span = ((a2 - a1) % 360 + 360) % 360
+  if (span < 0.5) return ''
+  const lg = span > 180 ? 1 : 0
+  const p1 = gXY(rOut, a1), p2 = gXY(rOut, a2)
+  const p3 = gXY(rIn,  a2), p4 = gXY(rIn,  a1)
+  const f = (n: number) => n.toFixed(1)
+  return `M${f(p1.x)},${f(p1.y)} A${rOut},${rOut} 0 ${lg},1 ${f(p2.x)},${f(p2.y)} L${f(p3.x)},${f(p3.y)} A${rIn},${rIn} 0 ${lg},0 ${f(p4.x)},${f(p4.y)}Z`
+}
+
+function ManifoldGauge({
+  accentColor, minPsi, maxPsi, majorTicks, minorTicks,
+  normalLow, normalHigh, actualPsi,
+}: {
+  accentColor: string
+  minPsi: number; maxPsi: number
+  majorTicks: number[]; minorTicks: number[]
+  normalLow: number | null; normalHigh: number | null
+  actualPsi: number | null
+}) {
+  const gaugeEnd = G.START + G.SWEEP
+  const hasRange = normalLow !== null && normalHigh !== null
+  const nLo = hasRange ? gAngle(normalLow!, minPsi, maxPsi) : G.START
+  const nHi = hasRange ? gAngle(normalHigh!, minPsi, maxPsi) : G.START
+
+  const hasReading = actualPsi !== null
+  const inRange = hasRange && hasReading
+    ? actualPsi! >= normalLow! && actualPsi! <= normalHigh!
+    : null
+  const needleAngle = hasReading ? gAngle(actualPsi!, minPsi, maxPsi) : G.START
+  const needleColor = inRange === true ? '#22C55E' : inRange === false ? '#EF4444' : 'rgba(255,255,255,0.85)'
+
+  return (
+    <svg viewBox="0 0 200 200" style={{ display: 'block', width: '100%' }}>
+      {/* Face */}
+      <circle cx={G.CX} cy={G.CY} r={G.R} fill="#0d1820" />
+      <circle cx={G.CX} cy={G.CY} r={G.R} fill="none" stroke={accentColor} strokeWidth="2.5" opacity="0.45" />
+
+      {/* Arc band zones */}
+      {hasRange ? (
+        <>
+          {nLo > G.START + 0.5 && <path d={gArc(G.BAND_OUT, G.BAND_IN, G.START, nLo)} fill="#EF444428" />}
+          <path d={gArc(G.BAND_OUT, G.BAND_IN, nLo, nHi)} fill="#22C55E45" />
+          {nHi < gaugeEnd - 0.5 && <path d={gArc(G.BAND_OUT, G.BAND_IN, nHi, gaugeEnd)} fill="#EF444428" />}
+        </>
+      ) : (
+        <path d={gArc(G.BAND_OUT, G.BAND_IN, G.START, gaugeEnd)} fill="#162030" />
+      )}
+
+      {/* Minor ticks */}
+      {minorTicks.map(v => {
+        const a = gAngle(v, minPsi, maxPsi)
+        const p1 = gXY(G.TICK_MIN_OUT, a), p2 = gXY(G.TICK_MIN_IN, a)
+        return <line key={v} x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
+      })}
+
+      {/* Major ticks + labels */}
+      {majorTicks.map(v => {
+        const a = gAngle(v, minPsi, maxPsi)
+        const p1 = gXY(G.TICK_MAJ_OUT, a), p2 = gXY(G.TICK_MAJ_IN, a)
+        const lp = gXY(G.LABEL_R, a)
+        return (
+          <g key={v}>
+            <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
+              stroke="rgba(255,255,255,0.65)" strokeWidth="2" strokeLinecap="round" />
+            <text x={lp.x} y={lp.y}
+              fill="rgba(255,255,255,0.6)" fontSize="9" fontFamily="monospace"
+              textAnchor="middle" dominantBaseline="middle">
+              {v}
+            </text>
+          </g>
+        )
+      })}
+
+      {/* Digital readout */}
+      <text x={G.CX} y={G.CY + 25}
+        fill={hasReading ? needleColor : 'rgba(255,255,255,0.3)'}
+        fontSize="16" fontWeight="bold" fontFamily="monospace"
+        textAnchor="middle" dominantBaseline="middle">
+        {hasReading ? Math.round(actualPsi!) : '---'}
+      </text>
+      <text x={G.CX} y={G.CY + 38}
+        fill="rgba(255,255,255,0.25)" fontSize="7" fontFamily="monospace"
+        textAnchor="middle" letterSpacing="1">
+        PSI
+      </text>
+
+      {/* Needle */}
+      <g style={{
+        transform: `rotate(${needleAngle}deg)`,
+        transformOrigin: `${G.CX}px ${G.CY}px`,
+        transition: hasReading ? 'transform 0.45s cubic-bezier(0.34,1.56,0.64,1)' : 'none',
+      }}>
+        <line x1={G.CX - G.TAIL} y1={G.CY} x2={G.CX} y2={G.CY}
+          stroke="rgba(255,255,255,0.25)" strokeWidth="3" strokeLinecap="round" />
+        <line x1={G.CX} y1={G.CY} x2={G.CX + G.NEEDLE} y2={G.CY}
+          stroke={needleColor} strokeWidth="2" strokeLinecap="round" />
+      </g>
+
+      {/* Hub */}
+      <circle cx={G.CX} cy={G.CY} r={G.HUB} fill={accentColor} opacity="0.65" />
+      <circle cx={G.CX} cy={G.CY} r={G.HUB - 2.5} fill="#0d1820" />
+    </svg>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function HDQuickWrenchPage() {
@@ -425,109 +552,104 @@ export default function HDQuickWrenchPage() {
                 </div>
               </div>
 
-              {/* Results */}
-              {hasCalcInputs ? (
-                <div className="space-y-3">
+              {/* Gauge display — always shown, zones update when inputs filled */}
+              <div className="grid grid-cols-2 gap-3">
 
-                  {/* Suction */}
-                  <div className="rounded-lg p-4" style={{ background: '#162030', border: '1px solid #1e3040' }}>
-                    <div className="flex items-center justify-between mb-3">
-                      <p className="text-xs uppercase tracking-widest font-bold" style={{ color: HD_BLUE }}>Suction Pressure</p>
-                      <span className="text-sm font-bold text-white">
-                        {suctionLow}–{suctionHigh} PSI
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1">
-                        <label className="block text-xs mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                          Your gauge reading (PSI)
-                        </label>
-                        <input
-                          type="number"
-                          value={calcActualSuction}
-                          onChange={e => setCalcActualSuction(e.target.value)}
-                          placeholder="Enter actual"
-                          className="w-full px-3 py-2 rounded-lg text-sm text-white placeholder-white/20"
-                          style={{ background: '#111920', border: '1px solid #1e3040' }}
-                        />
-                      </div>
-                      {hasSuctionActual && (
-                        <div className="flex-shrink-0 mt-4">
-                          <span
-                            className="text-xs font-bold px-3 py-1.5 rounded-full"
-                            style={{
-                              background: suctionInRange ? '#22C55E20' : '#EF444420',
-                              color:      suctionInRange ? '#22C55E'   : '#EF4444',
-                              border:     `1px solid ${suctionInRange ? '#22C55E50' : '#EF444450'}`,
-                            }}
-                          >
-                            {suctionInRange ? 'NORMAL' : actualSuction < suctionLow ? 'LOW' : 'HIGH'}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Discharge */}
-                  <div className="rounded-lg p-4" style={{ background: '#162030', border: '1px solid #1e3040' }}>
-                    <div className="flex items-center justify-between mb-3">
-                      <p className="text-xs uppercase tracking-widest font-bold" style={{ color: HD_ORANGE }}>Discharge Pressure</p>
-                      <span className="text-sm font-bold text-white">
-                        {dischargeLow}–{dischargeHigh} PSI
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <div className="flex-1">
-                        <label className="block text-xs mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
-                          Your gauge reading (PSI)
-                        </label>
-                        <input
-                          type="number"
-                          value={calcActualDischarge}
-                          onChange={e => setCalcActualDischarge(e.target.value)}
-                          placeholder="Enter actual"
-                          className="w-full px-3 py-2 rounded-lg text-sm text-white placeholder-white/20"
-                          style={{ background: '#111920', border: '1px solid #1e3040' }}
-                        />
-                      </div>
-                      {hasDischargeActual && (
-                        <div className="flex-shrink-0 mt-4">
-                          <span
-                            className="text-xs font-bold px-3 py-1.5 rounded-full"
-                            style={{
-                              background: dischargeInRange ? '#22C55E20' : '#EF444420',
-                              color:      dischargeInRange ? '#22C55E'   : '#EF4444',
-                              border:     `1px solid ${dischargeInRange ? '#22C55E50' : '#EF444450'}`,
-                            }}
-                          >
-                            {dischargeInRange ? 'NORMAL' : actualDischarge < dischargeLow ? 'LOW' : 'HIGH'}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Fixed targets */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="rounded-lg p-3" style={{ background: '#162030', border: '1px solid #1e3040' }}>
-                      <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>Subcooling Target</p>
-                      <p className="text-sm font-bold text-white">10–15°F</p>
-                    </div>
-                    <div className="rounded-lg p-3" style={{ background: '#162030', border: '1px solid #1e3040' }}>
-                      <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>Superheat Target</p>
-                      <p className="text-sm font-bold text-white">10–20°F</p>
-                      <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>at evaporator outlet</p>
-                    </div>
-                  </div>
-
-                </div>
-              ) : (
-                <div className="rounded-lg py-6 text-center" style={{ background: '#162030', border: '1px solid #1e3040' }}>
-                  <p className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                    Enter ambient and setpoint temperatures to calculate target pressures
+                {/* Suction gauge column */}
+                <div className="flex flex-col items-center gap-2">
+                  <ManifoldGauge
+                    accentColor={HD_BLUE}
+                    minPsi={-30} maxPsi={150}
+                    majorTicks={[-30, 0, 30, 60, 90, 120, 150]}
+                    minorTicks={[-20, -10, 10, 20, 40, 50, 70, 80, 100, 110, 130, 140]}
+                    normalLow={hasCalcInputs ? suctionLow : null}
+                    normalHigh={hasCalcInputs ? suctionHigh : null}
+                    actualPsi={hasSuctionActual ? actualSuction : null}
+                  />
+                  <p className="text-xs font-bold tracking-widest" style={{ color: HD_BLUE }}>
+                    LOW SIDE SUCTION
                   </p>
+                  {hasCalcInputs && (
+                    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                      Target: {suctionLow}–{suctionHigh} PSI
+                    </p>
+                  )}
+                  <input
+                    type="number"
+                    value={calcActualSuction}
+                    onChange={e => setCalcActualSuction(e.target.value)}
+                    placeholder="Gauge reading (PSI)"
+                    className="w-full px-3 py-2 rounded-lg text-sm text-white text-center placeholder-white/20"
+                    style={{ background: '#162030', border: '1px solid #1e3040' }}
+                  />
+                  {hasSuctionActual && hasCalcInputs && (
+                    <span className="text-xs font-bold px-3 py-1 rounded-full" style={{
+                      background: suctionInRange ? '#22C55E20' : '#EF444420',
+                      color:      suctionInRange ? '#22C55E'   : '#EF4444',
+                      border:     `1px solid ${suctionInRange ? '#22C55E50' : '#EF444450'}`,
+                    }}>
+                      {suctionInRange ? 'IN RANGE' : actualSuction < suctionLow ? 'LOW' : 'HIGH'}
+                    </span>
+                  )}
                 </div>
-              )}
+
+                {/* Discharge gauge column */}
+                <div className="flex flex-col items-center gap-2">
+                  <ManifoldGauge
+                    accentColor="#EF4444"
+                    minPsi={0} maxPsi={500}
+                    majorTicks={[0, 100, 200, 300, 400, 500]}
+                    minorTicks={[25, 50, 75, 125, 150, 175, 225, 250, 275, 325, 350, 375, 425, 450, 475]}
+                    normalLow={hasCalcInputs ? dischargeLow : null}
+                    normalHigh={hasCalcInputs ? dischargeHigh : null}
+                    actualPsi={hasDischargeActual ? actualDischarge : null}
+                  />
+                  <p className="text-xs font-bold tracking-widest" style={{ color: '#EF4444' }}>
+                    HIGH SIDE DISCHARGE
+                  </p>
+                  {hasCalcInputs && (
+                    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                      Target: {dischargeLow}–{dischargeHigh} PSI
+                    </p>
+                  )}
+                  <input
+                    type="number"
+                    value={calcActualDischarge}
+                    onChange={e => setCalcActualDischarge(e.target.value)}
+                    placeholder="Gauge reading (PSI)"
+                    className="w-full px-3 py-2 rounded-lg text-sm text-white text-center placeholder-white/20"
+                    style={{ background: '#162030', border: '1px solid #1e3040' }}
+                  />
+                  {hasDischargeActual && hasCalcInputs && (
+                    <span className="text-xs font-bold px-3 py-1 rounded-full" style={{
+                      background: dischargeInRange ? '#22C55E20' : '#EF444420',
+                      color:      dischargeInRange ? '#22C55E'   : '#EF4444',
+                      border:     `1px solid ${dischargeInRange ? '#22C55E50' : '#EF444450'}`,
+                    }}>
+                      {dischargeInRange ? 'IN RANGE' : actualDischarge < dischargeLow ? 'LOW' : 'HIGH'}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Subcooling + Superheat */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-lg p-3" style={{ background: '#162030', border: '1px solid #1e3040' }}>
+                  <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>Subcooling Target</p>
+                  <p className="text-sm font-bold text-white">10–15°F</p>
+                </div>
+                <div className="rounded-lg p-3" style={{ background: '#162030', border: '1px solid #1e3040' }}>
+                  <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>Superheat Target</p>
+                  <p className="text-sm font-bold text-white">10–20°F</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>at evaporator outlet</p>
+                </div>
+              </div>
+
+              {/* Visual reference note */}
+              <p className="text-xs text-center leading-relaxed" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                Visual reference only. Always use calibrated manifold gauges for actual pressure readings.
+                All refrigerant work requires EPA 608 certification.
+              </p>
 
               {/* Safety warning */}
               <div className="rounded-lg p-3" style={{ background: '#1a1000', border: '1px solid #F59E0B30' }}>
