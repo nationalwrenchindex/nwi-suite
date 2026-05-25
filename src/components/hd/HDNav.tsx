@@ -101,6 +101,13 @@ function navIcon(path: string) {
         <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.44 2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6 6l.92-.92a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
       </svg>
     ),
+    resources: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
+        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" />
+        <line x1="9" y1="7" x2="15" y2="7" /><line x1="9" y1="11" x2="15" y2="11" />
+      </svg>
+    ),
     settings: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="3"/>
@@ -126,6 +133,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/hd/quickwrench',     label: 'HD QuickWrench'},
   { href: '/hd/reefer',          label: 'Reefer Module' },
   { href: '/hd/foreman',         label: 'Foreman'       },
+  { href: '/hd/resources',       label: 'OEM Resources' },
   { href: '/hd/settings',        label: 'Settings'      },
 ].map(item => ({
   ...item,

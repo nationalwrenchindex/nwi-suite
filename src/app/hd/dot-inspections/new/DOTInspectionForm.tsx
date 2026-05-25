@@ -3,7 +3,15 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { INSPECTION_CATEGORIES, type InspectionResult, initialInspectionData, type InspectionData } from '@/lib/hd/dot-categories'
+import {
+  INSPECTION_CATEGORIES,
+  CATEGORY_ITEMS,
+  type InspectionResult,
+  type InspectionData,
+  type SubItemData,
+  categoryResult,
+  initialInspectionData,
+} from '@/lib/hd/dot-categories'
 
 const HD_ORANGE = '#E85D24'
 const HD_BLUE   = '#1A6BAF'
@@ -34,163 +42,46 @@ interface Props {
   initialUnitId: string | null
 }
 
-// ─── Signature Canvas ─────────────────────────────────────────────────────────
+// ─── Sub-item row ─────────────────────────────────────────────────────────────
 
-function SignatureCanvas({
-  onHasSignature,
-}: {
-  onHasSignature: (has: boolean) => void
-}) {
-  const canvasRef   = useRef<HTMLCanvasElement>(null)
-  const hasDrawn    = useRef(false)
-
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-
-    const dpr   = window.devicePixelRatio || 1
-    const cssW  = canvas.clientWidth
-    const cssH  = canvas.clientHeight
-    canvas.width  = cssW * dpr
-    canvas.height = cssH * dpr
-
-    const ctx = canvas.getContext('2d')!
-    ctx.scale(dpr, dpr)
-    ctx.strokeStyle = HD_ORANGE
-    ctx.lineWidth   = 2.5
-    ctx.lineCap     = 'round'
-    ctx.lineJoin    = 'round'
-
-    const isDown = { current: false }
-
-    function pos(e: MouseEvent | TouchEvent) {
-      const rect = canvas!.getBoundingClientRect()
-      const src  = 'touches' in e ? e.touches[0] : e as MouseEvent
-      return { x: src.clientX - rect.left, y: src.clientY - rect.top }
-    }
-
-    function onStart(e: MouseEvent | TouchEvent) {
-      e.preventDefault()
-      isDown.current = true
-      const { x, y } = pos(e)
-      ctx.beginPath()
-      ctx.moveTo(x, y)
-    }
-
-    function onDraw(e: MouseEvent | TouchEvent) {
-      if (!isDown.current) return
-      e.preventDefault()
-      const { x, y } = pos(e)
-      ctx.lineTo(x, y)
-      ctx.stroke()
-      if (!hasDrawn.current) {
-        hasDrawn.current = true
-        onHasSignature(true)
-      }
-    }
-
-    function onEnd() { isDown.current = false }
-
-    canvas.addEventListener('mousedown',  onStart)
-    canvas.addEventListener('mousemove',  onDraw)
-    canvas.addEventListener('mouseup',    onEnd)
-    canvas.addEventListener('mouseleave', onEnd)
-    canvas.addEventListener('touchstart', onStart, { passive: false })
-    canvas.addEventListener('touchmove',  onDraw,  { passive: false })
-    canvas.addEventListener('touchend',   onEnd)
-
-    return () => {
-      canvas.removeEventListener('mousedown',  onStart)
-      canvas.removeEventListener('mousemove',  onDraw)
-      canvas.removeEventListener('mouseup',    onEnd)
-      canvas.removeEventListener('mouseleave', onEnd)
-      canvas.removeEventListener('touchstart', onStart)
-      canvas.removeEventListener('touchmove',  onDraw)
-      canvas.removeEventListener('touchend',   onEnd)
-    }
-  }, [onHasSignature])
-
-  function clear() {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')!
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-    hasDrawn.current = false
-    onHasSignature(false)
-  }
-
-  return (
-    <div>
-      <canvas
-        ref={canvasRef}
-        className="w-full rounded-lg touch-none"
-        style={{
-          height: 120,
-          background: '#162030',
-          border: '1px solid #1e3040',
-          cursor: 'crosshair',
-          display: 'block',
-        }}
-      />
-      <div className="flex items-center justify-between mt-2">
-        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>
-          Sign above with mouse or finger
-        </p>
-        <button
-          type="button"
-          onClick={clear}
-          className="text-xs px-2 py-1 rounded transition-colors"
-          style={{ color: 'rgba(255,255,255,0.35)', border: '1px solid #1e3040' }}
-        >
-          Clear
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ─── Category Row ─────────────────────────────────────────────────────────────
-
-function CategoryRow({
-  num,
+function SubItemRow({
   label,
-  catId,
+  safetyCritical,
   state,
   onChange,
 }: {
-  num: number
   label: string
-  catId: string
-  state: { result: InspectionResult; notes: string }
-  onChange: (catId: string, field: 'result' | 'notes', value: string) => void
+  safetyCritical?: boolean
+  state: SubItemData
+  onChange: (field: 'result' | 'notes', value: string) => void
 }) {
   const isFail = state.result === 'fail'
-
   return (
-    <div
-      className="rounded-lg"
-      style={{ border: `1px solid ${isFail ? '#EF444460' : '#1e3040'}`, background: isFail ? '#1a0505' : '#111920' }}
-    >
-      <div className="flex items-center gap-3 px-4 py-3">
-        <span
-          className="text-xs font-mono font-bold w-6 text-right flex-shrink-0"
-          style={{ color: 'rgba(255,255,255,0.25)' }}
-        >
-          {num}
-        </span>
-        <p className="flex-1 text-sm text-white font-medium">{label}</p>
+    <div style={{ borderTop: '1px solid #1e3040' }}>
+      <div className="flex items-center gap-2 px-4 py-2">
+        <div className="flex-1 min-w-0">
+          <p className="text-xs" style={{ color: isFail ? '#EF4444CC' : 'rgba(255,255,255,0.65)', lineHeight: 1.4 }}>
+            {label}
+          </p>
+          {safetyCritical && (
+            <span className="text-xs font-bold tracking-wider" style={{ color: '#F59E0B', fontSize: 10 }}>
+              ⚠ SAFETY CRITICAL
+            </span>
+          )}
+        </div>
         <div className="flex gap-1 flex-shrink-0">
           {(['pass', 'fail', 'na'] as const).map(r => (
             <button
               key={r}
               type="button"
-              onClick={() => onChange(catId, 'result', r)}
-              className="px-2.5 py-1.5 text-xs font-bold rounded transition-colors"
+              onClick={() => onChange('result', r)}
+              className="text-xs font-bold rounded transition-colors"
               style={{
+                padding: '3px 8px',
                 background: state.result === r
-                  ? r === 'pass' ? '#22C55E'  : r === 'fail' ? '#EF4444' : '#4B5563'
+                  ? r === 'pass' ? '#22C55E' : r === 'fail' ? '#EF4444' : '#4B5563'
                   : '#162030',
-                color: state.result === r ? '#fff' : 'rgba(255,255,255,0.35)',
+                color: state.result === r ? '#fff' : 'rgba(255,255,255,0.3)',
               }}
             >
               {r === 'na' ? 'N/A' : r.toUpperCase()}
@@ -198,19 +89,94 @@ function CategoryRow({
           ))}
         </div>
       </div>
-
       {isFail && (
-        <div className="px-4 pb-3 pt-0">
+        <div className="px-4 pb-2.5 pt-0">
           <textarea
             value={state.notes}
-            onChange={e => onChange(catId, 'notes', e.target.value)}
+            onChange={e => onChange('notes', e.target.value)}
             placeholder="Describe violation found…"
             rows={2}
             className="w-full px-3 py-2 rounded text-xs text-white placeholder-white/20 resize-none"
-            style={{ background: '#162030', border: '1px solid #EF444440' }}
+            style={{ background: '#1a0505', border: '1px solid #EF444440' }}
           />
         </div>
       )}
+    </div>
+  )
+}
+
+// ─── Category block ───────────────────────────────────────────────────────────
+
+function CategoryBlock({
+  num,
+  catId,
+  label,
+  state,
+  onChange,
+}: {
+  num: number
+  catId: string
+  label: string
+  state: { items: Record<string, SubItemData> }
+  onChange: (itemId: string, field: 'result' | 'notes', value: string) => void
+}) {
+  const [expanded, setExpanded] = useState(true)
+  const items = CATEGORY_ITEMS[catId] ?? []
+  const derived = categoryResult(state)
+  const isFail  = derived === 'fail'
+
+  const itemFailCount = items.filter(i => state.items[i.id]?.result === 'fail').length
+
+  return (
+    <div
+      className="rounded-lg overflow-hidden"
+      style={{ border: `1px solid ${isFail ? '#EF444460' : '#1e3040'}`, background: isFail ? '#150505' : '#111920' }}
+    >
+      {/* Category header */}
+      <button
+        type="button"
+        onClick={() => setExpanded(e => !e)}
+        className="w-full flex items-center gap-3 px-4 py-3 text-left"
+      >
+        <span className="text-xs font-mono font-bold w-6 text-right flex-shrink-0" style={{ color: 'rgba(255,255,255,0.25)' }}>
+          {num}
+        </span>
+        <p className="flex-1 text-sm text-white font-semibold">{label}</p>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {itemFailCount > 0 && (
+            <span className="text-xs font-bold px-1.5 py-0.5 rounded" style={{ background: '#EF444420', color: '#EF4444' }}>
+              {itemFailCount} FAIL
+            </span>
+          )}
+          <span
+            className="text-xs font-bold px-2 py-0.5 rounded-full"
+            style={{
+              background: isFail ? '#EF444420' : derived === 'na' ? '#6B728020' : '#22C55E20',
+              color:      isFail ? '#EF4444'   : derived === 'na' ? '#9CA3AF'   : '#22C55E',
+            }}
+          >
+            {isFail ? 'FAIL' : derived === 'na' ? 'N/A' : 'PASS'}
+          </span>
+          <svg
+            className="w-4 h-4 transition-transform duration-150"
+            style={{ color: 'rgba(255,255,255,0.3)', transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+            fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </button>
+
+      {/* Sub-items */}
+      {expanded && items.map(item => (
+        <SubItemRow
+          key={item.id}
+          label={item.label}
+          safetyCritical={item.safetyCritical}
+          state={state.items[item.id] ?? { result: 'pass', notes: '' }}
+          onChange={(field, value) => onChange(item.id, field, value)}
+        />
+      ))}
     </div>
   )
 }
@@ -232,8 +198,6 @@ export default function DOTInspectionForm({ units, fleetAccounts, profile, initi
   const [error,           setError]          = useState<string | null>(null)
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
-
-  // Get canvas element from DOM for data capture on submit
   useEffect(() => {
     canvasRef.current = document.getElementById('sig-canvas') as HTMLCanvasElement | null
   }, [])
@@ -241,11 +205,30 @@ export default function DOTInspectionForm({ units, fleetAccounts, profile, initi
   const selectedUnit    = units.find(u => u.id === selectedUnitId) ?? null
   const selectedAccount = fleetAccounts.find(a => a.id === (selectedUnit?.fleet_account_id ?? '')) ?? null
 
-  function updateCategory(catId: string, field: 'result' | 'notes', value: string) {
-    setInspData(prev => ({ ...prev, [catId]: { ...prev[catId], [field]: value } }))
+  function updateItem(catId: string, itemId: string, field: 'result' | 'notes', value: string) {
+    setInspData(prev => ({
+      ...prev,
+      [catId]: {
+        items: {
+          ...prev[catId].items,
+          [itemId]: { ...prev[catId].items[itemId], [field]: value },
+        },
+      },
+    }))
   }
 
-  const failCount = Object.values(inspData).filter(c => c.result === 'fail').length
+  // Derived counts (item-level)
+  const allItems   = Object.values(inspData).flatMap(cat => Object.values(cat.items))
+  const passCount  = allItems.filter(i => i.result === 'pass').length
+  const failCount  = allItems.filter(i => i.result === 'fail').length
+  const naCount    = allItems.filter(i => i.result === 'na').length
+
+  // Safety-critical fail detection
+  const hasSafetyCriticalFail = INSPECTION_CATEGORIES.some(cat =>
+    CATEGORY_ITEMS[cat.id]?.some(item =>
+      item.safetyCritical && inspData[cat.id]?.items[item.id]?.result === 'fail'
+    )
+  )
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -412,7 +395,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, profile, initi
               type="text"
               value={inspectorCert}
               onChange={e => setInspectorCert(e.target.value)}
-              placeholder="e.g. EPA 608 cert #"
+              placeholder="e.g. state inspector cert #"
               className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
               style={{ background: '#162030', border: '1px solid #1e3040' }}
             />
@@ -434,52 +417,52 @@ export default function DOTInspectionForm({ units, fleetAccounts, profile, initi
         </div>
       </div>
 
-      {/* ── 18 CVSA Categories ── */}
+      {/* ── CVSA Categories ── */}
       <div className="rounded-xl p-5 space-y-3" style={{ background: '#111920', border: '1px solid #1e3040' }}>
         <div className="flex items-center justify-between mb-1">
-          <p className="font-condensed font-bold text-white text-lg tracking-wide">CVSA INSPECTION CATEGORIES</p>
-          <div className="flex gap-3 text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>
-            <span>
-              {Object.values(inspData).filter(c => c.result === 'pass').length} Pass
-            </span>
-            {failCount > 0 && (
-              <span style={{ color: '#EF4444' }}>
-                {failCount} Fail
-              </span>
-            )}
-            <span>
-              {Object.values(inspData).filter(c => c.result === 'na').length} N/A
-            </span>
+          <p className="font-condensed font-bold text-white text-lg tracking-wide">CVSA INSPECTION ITEMS</p>
+          <div className="flex gap-3 text-xs">
+            <span style={{ color: '#22C55E' }}>{passCount} Pass</span>
+            {failCount > 0 && <span style={{ color: '#EF4444' }}>{failCount} Fail</span>}
+            <span style={{ color: 'rgba(255,255,255,0.4)' }}>{naCount} N/A</span>
           </div>
         </div>
 
-        <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.3)' }}>
-          Mark each category PASS, FAIL, or N/A. Failed categories require a violation description.
+        <p className="text-xs pb-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
+          Mark each item PASS, FAIL, or N/A. Failed items require a violation description.
+          Safety-critical failures automatically fail the overall inspection.
         </p>
 
         {INSPECTION_CATEGORIES.map(cat => (
-          <CategoryRow
+          <CategoryBlock
             key={cat.id}
             num={cat.num}
-            label={cat.label}
             catId={cat.id}
+            label={cat.label}
             state={inspData[cat.id]}
-            onChange={updateCategory}
+            onChange={(itemId, field, value) => updateItem(cat.id, itemId, field, value)}
           />
         ))}
 
-        {/* Overall indicator */}
+        {/* Overall fail summary */}
         {failCount > 0 && (
           <div
-            className="rounded-lg p-4 flex items-center gap-3"
+            className="rounded-lg p-4"
             style={{ background: '#EF444420', border: '1px solid #EF444450' }}
           >
-            <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="#EF4444" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-            </svg>
-            <p className="text-sm font-bold" style={{ color: '#EF4444' }}>
-              INSPECTION FAILS — {failCount} violation{failCount !== 1 ? 's' : ''} found
-            </p>
+            <div className="flex items-center gap-3">
+              <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="#EF4444" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              </svg>
+              <p className="text-sm font-bold" style={{ color: '#EF4444' }}>
+                INSPECTION FAILS — {failCount} violation{failCount !== 1 ? 's' : ''} found
+              </p>
+            </div>
+            {hasSafetyCriticalFail && (
+              <p className="text-xs mt-2 ml-8" style={{ color: '#F59E0B' }}>
+                ⚠ One or more safety-critical items failed — vehicle must be taken out of service.
+              </p>
+            )}
           </div>
         )}
       </div>
@@ -488,10 +471,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, profile, initi
       <div className="rounded-xl p-5 space-y-4" style={{ background: '#111920', border: '1px solid #1e3040' }}>
         <p className="font-condensed font-bold text-white text-lg tracking-wide">ELECTRONIC SIGNATURE</p>
 
-        <div
-          className="rounded-lg p-4"
-          style={{ background: '#0d1820', border: '1px solid #1A6BAF30' }}
-        >
+        <div className="rounded-lg p-4" style={{ background: '#0d1820', border: '1px solid #1A6BAF30' }}>
           <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.5)' }}>
             By signing below, I certify that this vehicle has been inspected in accordance with FMCSA 49 CFR Part 396
             and that all defects found have been noted. I am a qualified inspector as defined by 49 CFR 396.19.
@@ -578,7 +558,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, profile, initi
   )
 }
 
-// Separate component to set up canvas event listeners without polluting the main form
+// Separate component to set up canvas event listeners without stale closure issues
 function SignatureCanvasSetup({ onHasSignature }: { onHasSignature: (v: boolean) => void }) {
   useEffect(() => {
     const canvas = document.getElementById('sig-canvas') as HTMLCanvasElement | null
@@ -597,11 +577,12 @@ function SignatureCanvasSetup({ onHasSignature }: { onHasSignature: (v: boolean)
     ctx.lineCap     = 'round'
     ctx.lineJoin    = 'round'
 
-    const isDown = { current: false }
-    const onHasRef = { current: onHasSignature }
+    const isDown    = { current: false }
+    const hasDrawn  = { current: false }
+    const onHasRef  = { current: onHasSignature }
     onHasRef.current = onHasSignature
 
-    function getPos(e: MouseEvent | TouchEvent) {
+    function pos(e: MouseEvent | TouchEvent) {
       const rect = canvas!.getBoundingClientRect()
       const src  = 'touches' in e ? e.touches[0] : e as MouseEvent
       return { x: src.clientX - rect.left, y: src.clientY - rect.top }
@@ -610,7 +591,7 @@ function SignatureCanvasSetup({ onHasSignature }: { onHasSignature: (v: boolean)
     function onStart(e: MouseEvent | TouchEvent) {
       e.preventDefault()
       isDown.current = true
-      const { x, y } = getPos(e)
+      const { x, y } = pos(e)
       ctx.beginPath()
       ctx.moveTo(x, y)
     }
@@ -618,10 +599,13 @@ function SignatureCanvasSetup({ onHasSignature }: { onHasSignature: (v: boolean)
     function onDraw(e: MouseEvent | TouchEvent) {
       if (!isDown.current) return
       e.preventDefault()
-      const { x, y } = getPos(e)
+      const { x, y } = pos(e)
       ctx.lineTo(x, y)
       ctx.stroke()
-      onHasRef.current(true)
+      if (!hasDrawn.current) {
+        hasDrawn.current = true
+        onHasRef.current(true)
+      }
     }
 
     function onEnd() { isDown.current = false }

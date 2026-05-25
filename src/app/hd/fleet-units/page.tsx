@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import PartsComingSoon from '@/components/hd/PartsComingSoon'
 
 export const metadata = { title: 'Fleet Units — NWI HD Suite' }
 
@@ -185,6 +186,8 @@ export default async function FleetUnitsPage({
           </table>
         )}
       </div>
+
+      <PartsComingSoon />
     </main>
   )
 }

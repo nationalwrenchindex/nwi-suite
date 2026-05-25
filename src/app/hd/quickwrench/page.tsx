@@ -1279,6 +1279,56 @@ export default function HDQuickWrenchPage() {
                 tkSources={[]}
               />
             )}
+
+            {truckAnalysis !== null && (
+              <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
+                <div className="px-5 py-3" style={{ background: '#0d1820', borderBottom: '1px solid #1e3040' }}>
+                  <p className="text-xs uppercase tracking-widest font-bold" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                    OEM Service Resources
+                  </p>
+                </div>
+                <div className="p-4 space-y-2" style={{ background: '#111920' }}>
+                  {(truckBrand === 'Cummins' ? [
+                    { name: 'Cummins QuickServe Online',     url: 'https://quickserve.cummins.com',    note: 'Free fault code lookup and service manuals' },
+                    { name: 'FMCSA 49 CFR Part 396',         url: 'https://www.ecfr.gov/current/title-49/subtitle-B/chapter-III/subchapter-B/part-396', note: 'Federal inspection requirements' },
+                  ] : truckBrand === 'Detroit Diesel' ? [
+                    { name: 'Detroit Diesel DiagnosticLink', url: 'https://dda.detroit-diesel.com',    note: 'DD13 / DD15 / DD16 service information' },
+                    { name: 'FMCSA 49 CFR Part 396',         url: 'https://www.ecfr.gov/current/title-49/subtitle-B/chapter-III/subchapter-B/part-396', note: 'Federal inspection requirements' },
+                  ] : [
+                    { name: 'Mercedes-Benz Trucks Service',  url: 'https://www.mercedes-benz-trucks.com/en_GB/brand/actions-and-events/truckstore/service.html', note: 'MBE 4000 / OM 926 LA service portal' },
+                    { name: 'FMCSA 49 CFR Part 396',         url: 'https://www.ecfr.gov/current/title-49/subtitle-B/chapter-III/subchapter-B/part-396', note: 'Federal inspection requirements' },
+                  ]).map(link => (
+                    <a
+                      key={link.url}
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors"
+                      style={{ border: '1px solid #1e3040' }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#162030')}
+                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                    >
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-white">{link.name}</p>
+                        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>{link.note}</p>
+                      </div>
+                      <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </a>
+                  ))}
+                  <a
+                    href="/hd/resources"
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition-colors"
+                    style={{ color: HD_ORANGE, border: `1px solid ${HD_ORANGE}30` }}
+                    onMouseEnter={e => (e.currentTarget.style.background = `${HD_ORANGE}10`)}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    View all OEM resources →
+                  </a>
+                </div>
+              </div>
+            )}
           </>
         )}
 

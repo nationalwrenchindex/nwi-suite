@@ -1,13 +1,25 @@
 'use client'
 
 import Link from 'next/link'
-import { INSPECTION_CATEGORIES, categoryLabel } from '@/lib/hd/dot-categories'
+import {
+  INSPECTION_CATEGORIES,
+  CATEGORY_ITEMS,
+  categoryLabel,
+  categoryResult,
+  type CategoryData,
+  type SubItemData,
+} from '@/lib/hd/dot-categories'
 
 const HD_ORANGE = '#E85D24'
 const HD_BLUE   = '#1A6BAF'
 
-interface CategoryRecord { result: string; notes: string }
-interface Violation { category: string; notes: string }
+interface ViolationRecord {
+  category: string
+  item: string
+  label: string
+  notes: string
+  safetyCritical: boolean
+}
 
 interface DOTInspection {
   id: string
@@ -17,8 +29,8 @@ interface DOTInspection {
   inspector_cert_number: string | null
   odometer_hours: string | null
   location: string | null
-  inspection_data: Record<string, CategoryRecord>
-  violations: Violation[] | null
+  inspection_data: Record<string, { items: Record<string, { result: string; notes: string }> }>
+  violations: ViolationRecord[] | null
   overall_result: string
   signature_data: string | null
   locked: boolean
@@ -46,16 +58,24 @@ function ResultBadge({ result }: { result: string }) {
   )
 }
 
+function deriveCategoryResult(catData: { items: Record<string, { result: string; notes: string }> } | undefined): string {
+  if (!catData?.items) return 'na'
+  const results = Object.values(catData.items).map(i => i.result)
+  if (results.some(r => r === 'fail')) return 'fail'
+  if (results.length > 0 && results.every(r => r === 'na')) return 'na'
+  return 'pass'
+}
+
 export default function DOTInspectionDetail({ inspection }: { inspection: DOTInspection }) {
-  const isPassed  = inspection.overall_result === 'pass'
-  const inspDate  = new Date(inspection.inspection_date + 'T12:00:00').toLocaleDateString('en-US', {
+  const isPassed   = inspection.overall_result === 'pass'
+  const inspDate   = new Date(inspection.inspection_date + 'T12:00:00').toLocaleDateString('en-US', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
   })
-  const lockedAt  = inspection.locked_at
+  const lockedAt   = inspection.locked_at
     ? new Date(inspection.locked_at).toLocaleString()
     : null
-  const inspId    = inspection.inspection_id ?? `DOT-${inspection.id.slice(0, 8).toUpperCase()}`
-  const violations = inspection.violations ?? []
+  const inspId     = inspection.inspection_id ?? `DOT-${inspection.id.slice(0, 8).toUpperCase()}`
+  const violations = (inspection.violations ?? []) as ViolationRecord[]
 
   return (
     <>
@@ -64,7 +84,7 @@ export default function DOTInspectionDetail({ inspection }: { inspection: DOTIns
         @media print {
           .no-print { display: none !important; }
           .print-show { display: block !important; }
-          @page { size: letter; margin: 0.65in; }
+          @page { size: letter; margin: 0.5in; }
           body { background: white !important; color: black !important; }
           #print-root { position: fixed; inset: 0; background: white; z-index: 9999; padding: 0; }
         }
@@ -170,37 +190,70 @@ export default function DOTInspectionDetail({ inspection }: { inspection: DOTIns
           </div>
         </div>
 
-        {/* Categories */}
+        {/* Categories with sub-items */}
         <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide mb-4">INSPECTION RESULTS</p>
-          <div className="space-y-1">
+          <div className="space-y-1.5">
             {INSPECTION_CATEGORIES.map(cat => {
-              const d = inspection.inspection_data[cat.id] ?? { result: 'na', notes: '' }
-              const isFail = d.result === 'fail'
+              const catData  = inspection.inspection_data[cat.id]
+              const derived  = deriveCategoryResult(catData)
+              const isFail   = derived === 'fail'
+              const items    = CATEGORY_ITEMS[cat.id] ?? []
+              const failedItems = items.filter(item => catData?.items?.[item.id]?.result === 'fail')
+
               return (
-                <div
-                  key={cat.id}
-                  className="rounded-lg"
-                  style={{
-                    background: isFail ? '#1a0505' : '#0f1820',
-                    border: `1px solid ${isFail ? '#EF444430' : '#1e3040'}`,
-                  }}
-                >
-                  <div className="flex items-center gap-3 px-4 py-2.5">
+                <details key={cat.id} open={isFail}>
+                  <summary
+                    className="flex items-center gap-3 px-4 py-2.5 rounded-lg cursor-pointer list-none select-none"
+                    style={{
+                      background: isFail ? '#1a0505' : '#0f1820',
+                      border: `1px solid ${isFail ? '#EF444430' : '#1e3040'}`,
+                    }}
+                  >
                     <span className="text-xs font-mono font-bold w-6 text-right flex-shrink-0" style={{ color: 'rgba(255,255,255,0.25)' }}>
                       {cat.num}
                     </span>
                     <p className="flex-1 text-sm text-white">{cat.label}</p>
-                    <ResultBadge result={d.result} />
+                    <ResultBadge result={derived} />
+                  </summary>
+
+                  <div className="ml-4 mt-1 space-y-0.5 mb-1">
+                    {items.map(item => {
+                      const itemData = catData?.items?.[item.id]
+                      const result   = itemData?.result ?? 'na'
+                      const isItemFail = result === 'fail'
+                      const cfg = RESULT_CFG[result as keyof typeof RESULT_CFG] ?? RESULT_CFG.na
+                      return (
+                        <div
+                          key={item.id}
+                          className="flex items-start gap-2 px-3 py-2 rounded"
+                          style={{
+                            background: isItemFail ? '#1a0505' : '#0d1820',
+                            border: `1px solid ${isItemFail ? '#EF444425' : '#1e3040'}`,
+                          }}
+                        >
+                          <p className="flex-1 text-xs leading-relaxed" style={{ color: isItemFail ? '#EF4444CC' : 'rgba(255,255,255,0.5)' }}>
+                            {item.label}
+                            {item.safetyCritical && (
+                              <span className="ml-1.5 text-xs font-bold" style={{ color: '#F59E0B', fontSize: 9 }}>⚠ SAFETY CRITICAL</span>
+                            )}
+                            {isItemFail && itemData?.notes && (
+                              <span className="block mt-0.5" style={{ color: '#EF4444AA', fontSize: 11 }}>
+                                Violation: {itemData.notes}
+                              </span>
+                            )}
+                          </p>
+                          <span
+                            className="text-xs font-bold px-1.5 py-0.5 rounded flex-shrink-0"
+                            style={{ background: cfg.bg, color: cfg.color, fontSize: 10 }}
+                          >
+                            {cfg.label}
+                          </span>
+                        </div>
+                      )
+                    })}
                   </div>
-                  {isFail && d.notes && (
-                    <div className="px-4 pb-3 ml-9">
-                      <p className="text-xs leading-relaxed" style={{ color: '#EF4444CC' }}>
-                        Violation: {d.notes}
-                      </p>
-                    </div>
-                  )}
-                </div>
+                </details>
               )
             })}
           </div>
@@ -215,10 +268,20 @@ export default function DOTInspectionDetail({ inspection }: { inspection: DOTIns
             <div className="space-y-2">
               {violations.map((v, i) => (
                 <div key={i} className="rounded-lg p-3" style={{ background: '#EF444415', border: '1px solid #EF444430' }}>
-                  <p className="text-xs font-bold uppercase tracking-wide mb-0.5" style={{ color: '#EF4444' }}>
-                    {categoryLabel(v.category)}
-                  </p>
-                  <p className="text-sm text-white">{v.notes || '(No description provided)'}</p>
+                  <div className="flex items-start gap-2">
+                    {v.safetyCritical && (
+                      <span className="text-xs font-bold flex-shrink-0 mt-0.5" style={{ color: '#F59E0B' }}>⚠</span>
+                    )}
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-wide mb-0.5" style={{ color: '#EF4444' }}>
+                        {categoryLabel(v.category)}
+                      </p>
+                      <p className="text-xs" style={{ color: 'rgba(255,255,255,0.7)' }}>{v.label}</p>
+                      {v.notes && (
+                        <p className="text-sm text-white mt-1">{v.notes}</p>
+                      )}
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -243,11 +306,7 @@ export default function DOTInspectionDetail({ inspection }: { inspection: DOTIns
               <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.35)' }}>Signature</p>
               <div className="rounded-lg p-3" style={{ background: '#162030', border: '1px solid #1e3040' }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={inspection.signature_data}
-                  alt="Inspector signature"
-                  className="max-h-24 w-auto"
-                />
+                <img src={inspection.signature_data} alt="Inspector signature" className="max-h-24 w-auto" />
               </div>
             </div>
           )}
@@ -264,7 +323,7 @@ export default function DOTInspectionDetail({ inspection }: { inspection: DOTIns
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════════
-          PRINT-ONLY LAYOUT (hidden on screen, shown when printing)
+          PRINT-ONLY LAYOUT
       ══════════════════════════════════════════════════════════════════════ */}
       <div id="print-root" className="print-show" style={{ fontFamily: 'Arial, sans-serif', color: '#111', lineHeight: 1.4 }}>
         {/* Print header */}
@@ -295,8 +354,8 @@ export default function DOTInspectionDetail({ inspection }: { inspection: DOTIns
         </div>
 
         {/* Unit info table */}
-        <div style={{ border: '1px solid #ccc', borderRadius: 4, marginBottom: 14 }}>
-          <div style={{ background: '#f5f5f5', padding: '6px 12px', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', borderBottom: '1px solid #ccc' }}>
+        <div style={{ border: '1px solid #ccc', borderRadius: 4, marginBottom: 12 }}>
+          <div style={{ background: '#f5f5f5', padding: '5px 10px', fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', borderBottom: '1px solid #ccc' }}>
             Unit Information
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 0 }}>
@@ -311,57 +370,71 @@ export default function DOTInspectionDetail({ inspection }: { inspection: DOTIns
               { label: 'Inspector',      value: inspection.inspector_name        ?? '—' },
               { label: 'Cert #',         value: inspection.inspector_cert_number ?? '—' },
             ].map(({ label, value }, i) => (
-              <div key={i} style={{ padding: '6px 12px', borderBottom: i < 6 ? '1px solid #eee' : undefined, borderRight: i % 3 < 2 ? '1px solid #eee' : undefined }}>
-                <div style={{ fontSize: 8, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
-                <div style={{ fontSize: 11, fontWeight: 600, marginTop: 1 }}>{value}</div>
+              <div key={i} style={{ padding: '5px 10px', borderBottom: i < 6 ? '1px solid #eee' : undefined, borderRight: i % 3 < 2 ? '1px solid #eee' : undefined }}>
+                <div style={{ fontSize: 7, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
+                <div style={{ fontSize: 10, fontWeight: 600, marginTop: 1 }}>{value}</div>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Categories */}
-        <div style={{ border: '1px solid #ccc', borderRadius: 4, marginBottom: 14 }}>
-          <div style={{ background: '#f5f5f5', padding: '6px 12px', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', borderBottom: '1px solid #ccc' }}>
-            CVSA Inspection Categories
+        {/* Categories — compact pass/fail grid, expand failures with item detail */}
+        <div style={{ border: '1px solid #ccc', borderRadius: 4, marginBottom: 12 }}>
+          <div style={{ background: '#f5f5f5', padding: '5px 10px', fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', borderBottom: '1px solid #ccc' }}>
+            CVSA Inspection Results — 18 Categories
           </div>
           {INSPECTION_CATEGORIES.map((cat, i) => {
-            const d      = inspection.inspection_data[cat.id] ?? { result: 'na', notes: '' }
-            const isFail = d.result === 'fail'
-            const cfg    = RESULT_CFG[d.result as keyof typeof RESULT_CFG] ?? RESULT_CFG.na
+            const catData  = inspection.inspection_data[cat.id]
+            const derived  = deriveCategoryResult(catData)
+            const isFail   = derived === 'fail'
+            const cfg      = RESULT_CFG[derived as keyof typeof RESULT_CFG] ?? RESULT_CFG.na
+            const items    = CATEGORY_ITEMS[cat.id] ?? []
+            const failedItems = items.filter(item => catData?.items?.[item.id]?.result === 'fail')
+
             return (
               <div key={cat.id} style={{ borderBottom: i < 17 ? '1px solid #eee' : undefined, background: isFail ? '#fff8f8' : undefined }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '5px 12px' }}>
-                  <span style={{ fontSize: 9, color: '#999', width: 20, textAlign: 'right', flexShrink: 0 }}>{cat.num}</span>
-                  <span style={{ flex: 1, fontSize: 11 }}>{cat.label}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px' }}>
+                  <span style={{ fontSize: 8, color: '#999', width: 16, textAlign: 'right', flexShrink: 0 }}>{cat.num}</span>
+                  <span style={{ flex: 1, fontSize: 10 }}>{cat.label}</span>
                   <span style={{
-                    fontSize: 9, fontWeight: 700, padding: '2px 7px', borderRadius: 10,
+                    fontSize: 8, fontWeight: 700, padding: '1px 6px', borderRadius: 8,
                     background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`,
                   }}>
                     {cfg.label}
                   </span>
                 </div>
-                {isFail && d.notes && (
-                  <div style={{ marginLeft: 40, paddingRight: 12, paddingBottom: 5, fontSize: 10, color: '#c00' }}>
-                    Violation: {d.notes}
+                {isFail && failedItems.map(item => (
+                  <div key={item.id} style={{ marginLeft: 32, paddingRight: 10, paddingBottom: 4 }}>
+                    <div style={{ fontSize: 9, color: '#c00', display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+                      <span style={{ flexShrink: 0 }}>{item.safetyCritical ? '⚠' : '✗'}</span>
+                      <div>
+                        <span style={{ fontWeight: 600 }}>{item.label}</span>
+                        {catData?.items?.[item.id]?.notes && (
+                          <span style={{ display: 'block', color: '#900', fontSize: 8, marginTop: 1 }}>
+                            Note: {catData.items[item.id].notes}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </div>
-                )}
+                ))}
               </div>
             )
           })}
         </div>
 
         {/* Signature section */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
           <div style={{ border: '1px solid #ccc', borderRadius: 4 }}>
-            <div style={{ background: '#f5f5f5', padding: '6px 12px', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', borderBottom: '1px solid #ccc' }}>
+            <div style={{ background: '#f5f5f5', padding: '5px 10px', fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', borderBottom: '1px solid #ccc' }}>
               Inspector Certification
             </div>
-            <div style={{ padding: 12 }}>
-              <div style={{ fontSize: 9, color: '#888', textTransform: 'uppercase', marginBottom: 2 }}>Name</div>
-              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>{inspection.inspector_name ?? '—'}</div>
-              <div style={{ fontSize: 9, color: '#888', textTransform: 'uppercase', marginBottom: 2 }}>Certification #</div>
-              <div style={{ fontSize: 11 }}>{inspection.inspector_cert_number ?? '—'}</div>
-              <div style={{ marginTop: 10, fontSize: 9, color: '#888', lineHeight: 1.4 }}>
+            <div style={{ padding: 10 }}>
+              <div style={{ fontSize: 8, color: '#888', textTransform: 'uppercase', marginBottom: 2 }}>Name</div>
+              <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 6 }}>{inspection.inspector_name ?? '—'}</div>
+              <div style={{ fontSize: 8, color: '#888', textTransform: 'uppercase', marginBottom: 2 }}>Certification #</div>
+              <div style={{ fontSize: 10 }}>{inspection.inspector_cert_number ?? '—'}</div>
+              <div style={{ marginTop: 8, fontSize: 8, color: '#888', lineHeight: 1.4 }}>
                 I certify this vehicle has been inspected per FMCSA 49 CFR 396 and I am a qualified inspector
                 as defined by 49 CFR 396.19.
               </div>
@@ -369,17 +442,17 @@ export default function DOTInspectionDetail({ inspection }: { inspection: DOTIns
           </div>
 
           <div style={{ border: '1px solid #ccc', borderRadius: 4 }}>
-            <div style={{ background: '#f5f5f5', padding: '6px 12px', fontSize: 10, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', borderBottom: '1px solid #ccc' }}>
+            <div style={{ background: '#f5f5f5', padding: '5px 10px', fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', borderBottom: '1px solid #ccc' }}>
               Electronic Signature
             </div>
-            <div style={{ padding: 12 }}>
+            <div style={{ padding: 10 }}>
               {inspection.signature_data ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={inspection.signature_data} alt="Signature" style={{ maxHeight: 80, maxWidth: '100%' }} />
+                <img src={inspection.signature_data} alt="Signature" style={{ maxHeight: 70, maxWidth: '100%' }} />
               ) : (
-                <div style={{ fontSize: 10, color: '#999' }}>No signature captured</div>
+                <div style={{ fontSize: 9, color: '#999' }}>No signature captured</div>
               )}
-              <div style={{ marginTop: 4, fontSize: 8, color: '#aaa' }}>
+              <div style={{ marginTop: 4, fontSize: 7, color: '#aaa' }}>
                 Electronically signed {lockedAt ?? ''}
               </div>
             </div>
@@ -387,11 +460,8 @@ export default function DOTInspectionDetail({ inspection }: { inspection: DOTIns
         </div>
 
         {/* Footer */}
-        <div style={{ borderTop: '1px solid #ccc', paddingTop: 8, fontSize: 9, color: '#999', display: 'flex', justifyContent: 'space-between' }}>
-          <span>
-            Inspection ID: {inspId} · Generated by NWI HD Suite ·
-            This record was electronically signed and is locked.
-          </span>
+        <div style={{ borderTop: '1px solid #ccc', paddingTop: 6, fontSize: 8, color: '#999', display: 'flex', justifyContent: 'space-between' }}>
+          <span>Inspection ID: {inspId} · Generated by NWI HD Suite · This record was electronically signed and is locked.</span>
           <span>Generated {new Date(inspection.created_at).toLocaleString()}</span>
         </div>
       </div>

@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDStarterAccess } from '@/lib/hd-access'
+import PartsComingSoon from '@/components/hd/PartsComingSoon'
 
 export const metadata = { title: 'Work Orders — NWI HD Suite' }
 
@@ -127,6 +128,8 @@ export default async function WorkOrdersPage({
           </table>
         )}
       </div>
+
+      <PartsComingSoon />
     </main>
   )
 }
