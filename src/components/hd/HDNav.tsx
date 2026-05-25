@@ -108,6 +108,13 @@ function navIcon(path: string) {
         <line x1="9" y1="7" x2="15" y2="7" /><line x1="9" y1="11" x2="15" y2="11" />
       </svg>
     ),
+    import: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+        <polyline points="17 8 12 3 7 8" />
+        <line x1="12" y1="3" x2="12" y2="15" />
+      </svg>
+    ),
     settings: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
         <circle cx="12" cy="12" r="3"/>
@@ -134,6 +141,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/hd/reefer',          label: 'Reefer Module' },
   { href: '/hd/foreman',         label: 'Foreman'       },
   { href: '/hd/resources',       label: 'OEM Resources' },
+  { href: '/hd/import',          label: 'Import Data'   },
   { href: '/hd/settings',        label: 'Settings'      },
 ].map(item => ({
   ...item,

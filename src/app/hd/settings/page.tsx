@@ -1,8 +1,8 @@
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import HDSettingsForm from '@/components/hd/HDSettingsForm'
 import ExportData from '@/components/hd/ExportData'
-import ImportData from '@/components/hd/ImportData'
 
 export const metadata = { title: 'Settings — NWI HD Suite' }
 
@@ -75,9 +75,15 @@ export default async function HDSettingsPage() {
         <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide mb-1">DATA IMPORT</p>
           <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.5)' }}>
-            Import fleet units and work orders from a CSV file. AI maps your column headers automatically.
+            Import from your current invoice app, Fullbay, or any CSV with AI column mapping.
           </p>
-          <ImportData />
+          <Link
+            href="/hd/import"
+            className="inline-block px-5 py-2.5 rounded-lg text-sm font-semibold"
+            style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.7)', border: '1px solid #1e3040' }}
+          >
+            Open Import Wizard →
+          </Link>
         </div>
 
         <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
