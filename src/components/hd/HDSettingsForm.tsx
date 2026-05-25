@@ -8,12 +8,14 @@ interface Props {
   initialLaborRate: string | null
   initialTechName:  string | null
   initialEpaCert:   string | null
+  initialLogoUrl:   string | null
 }
 
-export default function HDSettingsForm({ initialLaborRate, initialTechName, initialEpaCert }: Props) {
+export default function HDSettingsForm({ initialLaborRate, initialTechName, initialEpaCert, initialLogoUrl }: Props) {
   const [laborRate, setLaborRate] = useState(initialLaborRate ?? '')
   const [techName,  setTechName]  = useState(initialTechName  ?? '')
   const [epaCert,   setEpaCert]   = useState(initialEpaCert   ?? '')
+  const [logoUrl,   setLogoUrl]   = useState(initialLogoUrl   ?? '')
   const [saving, setSaving] = useState(false)
   const [saved,  setSaved]  = useState(false)
   const [error,  setError]  = useState<string | null>(null)
@@ -28,9 +30,10 @@ export default function HDSettingsForm({ initialLaborRate, initialTechName, init
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          hd_labor_rate:       laborRate ? Number(laborRate) : null,
-          hd_tech_name:        techName  || null,
-          hd_epa_cert_number:  epaCert   || null,
+          hd_labor_rate:        laborRate ? Number(laborRate) : null,
+          hd_tech_name:         techName  || null,
+          hd_epa_cert_number:   epaCert   || null,
+          hd_company_logo_url:  logoUrl   || null,
         }),
       })
       if (!res.ok) {
@@ -93,6 +96,29 @@ export default function HDSettingsForm({ initialLaborRate, initialTechName, init
         <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
           Auto-populates EPA 608 log entries
         </p>
+      </div>
+
+      <div>
+        <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+          Company Logo URL
+        </label>
+        <input
+          type="url"
+          value={logoUrl}
+          onChange={e => setLogoUrl(e.target.value)}
+          placeholder="https://example.com/logo.png"
+          className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+          style={{ background: '#162030', border: '1px solid #1e3040' }}
+        />
+        <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
+          Appears on DOT inspection reports and printed documents
+        </p>
+        {logoUrl && (
+          <div className="mt-2 p-2 rounded-lg inline-block" style={{ background: '#162030', border: '1px solid #1e3040' }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={logoUrl} alt="Company logo preview" className="h-10 w-auto object-contain" onError={e => (e.currentTarget.style.display = 'none')} />
+          </div>
+        )}
       </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}

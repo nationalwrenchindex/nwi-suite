@@ -1,6 +1,8 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import HDSettingsForm from '@/components/hd/HDSettingsForm'
+import ExportData from '@/components/hd/ExportData'
+import ImportData from '@/components/hd/ImportData'
 
 export const metadata = { title: 'Settings — NWI HD Suite' }
 
@@ -11,9 +13,20 @@ export default async function HDSettingsPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('full_name, email, business_name, phone, hd_labor_rate, hd_tech_name, hd_epa_cert_number')
+    .select('full_name, email, business_name, phone, hd_labor_rate, hd_tech_name, hd_epa_cert_number, hd_company_logo_url')
     .eq('id', user.id)
     .single()
+
+  const p = profile as {
+    full_name?: string | null
+    email?: string | null
+    business_name?: string | null
+    phone?: string | null
+    hd_labor_rate?: number | null
+    hd_tech_name?: string | null
+    hd_epa_cert_number?: string | null
+    hd_company_logo_url?: string | null
+  } | null
 
   return (
     <main className="flex-1 p-6">
@@ -26,10 +39,10 @@ export default async function HDSettingsPage() {
         <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide mb-4">ACCOUNT</p>
           {[
-            { label: 'Name',     value: profile?.full_name     ?? '—' },
-            { label: 'Email',    value: profile?.email         ?? user.email ?? '—' },
-            { label: 'Business', value: profile?.business_name ?? '—' },
-            { label: 'Phone',    value: profile?.phone         ?? '—' },
+            { label: 'Name',     value: p?.full_name     ?? '—' },
+            { label: 'Email',    value: p?.email         ?? user.email ?? '—' },
+            { label: 'Business', value: p?.business_name ?? '—' },
+            { label: 'Phone',    value: p?.phone         ?? '—' },
           ].map(({ label, value }) => (
             <div key={label} className="flex justify-between py-3 border-b text-sm" style={{ borderColor: '#1e3040' }}>
               <span style={{ color: 'rgba(255,255,255,0.4)' }}>{label}</span>
@@ -41,13 +54,30 @@ export default async function HDSettingsPage() {
         <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide mb-1">FIELD SETTINGS</p>
           <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.5)' }}>
-            Labor rate, technician name, and EPA 608 certification for work orders and PM records.
+            Labor rate, technician name, EPA 608 certification, and company logo for printed documents.
           </p>
           <HDSettingsForm
-            initialLaborRate={(profile as { hd_labor_rate?: number | null } | null)?.hd_labor_rate?.toString() ?? null}
-            initialTechName={(profile as { hd_tech_name?: string | null } | null)?.hd_tech_name ?? null}
-            initialEpaCert={(profile as { hd_epa_cert_number?: string | null } | null)?.hd_epa_cert_number ?? null}
+            initialLaborRate={p?.hd_labor_rate?.toString() ?? null}
+            initialTechName={p?.hd_tech_name ?? null}
+            initialEpaCert={p?.hd_epa_cert_number ?? null}
+            initialLogoUrl={p?.hd_company_logo_url ?? null}
           />
+        </div>
+
+        <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+          <p className="font-condensed font-bold text-white text-lg tracking-wide mb-1">DATA EXPORT</p>
+          <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.5)' }}>
+            Download all your fleet data as CSV files in a ZIP archive.
+          </p>
+          <ExportData />
+        </div>
+
+        <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+          <p className="font-condensed font-bold text-white text-lg tracking-wide mb-1">DATA IMPORT</p>
+          <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.5)' }}>
+            Import fleet units and work orders from a CSV file. AI maps your column headers automatically.
+          </p>
+          <ImportData />
         </div>
 
         <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>

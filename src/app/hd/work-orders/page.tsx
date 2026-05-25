@@ -101,26 +101,40 @@ export default async function WorkOrdersPage({
                 unit: { unit_number: string; manufacturer: string; model: string } | null
                 fleet: { fleet_name: string } | null
               }[]).map((wo, i) => (
-                <tr key={wo.id} style={{ borderTop: i > 0 ? '1px solid #1e3040' : undefined }}>
+                <tr key={wo.id} className="cursor-pointer hover:bg-white/[0.02] transition-colors" style={{ borderTop: i > 0 ? '1px solid #1e3040' : undefined }}>
                   <td className="px-4 py-3 text-sm text-white font-medium">
-                    {wo.work_order_number ?? `WO-${wo.id.slice(0, 6).toUpperCase()}`}
+                    <Link href={`/hd/work-orders/${wo.id}`} className="hover:underline">
+                      {wo.work_order_number ?? `WO-${wo.id.slice(0, 6).toUpperCase()}`}
+                    </Link>
                   </td>
                   <td className="px-4 py-3 text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>
-                    {wo.fleet?.fleet_name ?? '—'}
-                    {wo.unit && <span className="block text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>{wo.unit.unit_number} — {wo.unit.manufacturer}</span>}
+                    <Link href={`/hd/work-orders/${wo.id}`} className="block">
+                      {wo.fleet?.fleet_name ?? '—'}
+                      {wo.unit && <span className="block text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>{wo.unit.unit_number} — {wo.unit.manufacturer}</span>}
+                    </Link>
                   </td>
-                  <td className="px-4 py-3 text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>{wo.service_type ?? '—'}</td>
-                  <td className="px-4 py-3 text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>{wo.tech_name ?? '—'}</td>
+                  <td className="px-4 py-3 text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                    <Link href={`/hd/work-orders/${wo.id}`} className="block">{wo.service_type ?? '—'}</Link>
+                  </td>
+                  <td className="px-4 py-3 text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                    <Link href={`/hd/work-orders/${wo.id}`} className="block">{wo.tech_name ?? '—'}</Link>
+                  </td>
                   <td className="px-4 py-3">
-                    <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: `${statusColor(wo.status)}20`, color: statusColor(wo.status) }}>
-                      {statusLabel(wo.status)}
-                    </span>
+                    <Link href={`/hd/work-orders/${wo.id}`} className="block">
+                      <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: `${statusColor(wo.status)}20`, color: statusColor(wo.status) }}>
+                        {statusLabel(wo.status)}
+                      </span>
+                    </Link>
                   </td>
                   <td className="px-4 py-3 text-sm text-white">
-                    {wo.total_amount ? `$${Number(wo.total_amount).toFixed(2)}` : '—'}
+                    <Link href={`/hd/work-orders/${wo.id}`} className="block">
+                      {wo.total_amount ? `$${Number(wo.total_amount).toFixed(2)}` : '—'}
+                    </Link>
                   </td>
                   <td className="px-4 py-3 text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                    {new Date(wo.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    <Link href={`/hd/work-orders/${wo.id}`} className="block">
+                      {new Date(wo.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </Link>
                   </td>
                 </tr>
               ))}
