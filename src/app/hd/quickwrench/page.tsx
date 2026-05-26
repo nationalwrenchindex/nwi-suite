@@ -8,26 +8,37 @@ const HD_BLUE   = '#1A6BAF'
 interface ModelGroup { group: string; models: string[] }
 
 const TK_TRUCK_GROUPS: ModelGroup[] = [
-  { group: 'MD Series',   models: ['MD-100', 'MD-200', 'MD-300'] },
-  { group: 'T Series',    models: ['T-880', 'T-880S', 'T-1000', 'T-1080S'] },
-  { group: 'SL Series',   models: ['SL-100', 'SL-200', 'SL-400'] },
-  { group: 'SLXi Series', models: ['SLXi-100', 'SLXi-200', 'SLXi-300', 'SLXi-400'] },
+  { group: 'MD Series',  models: ['MD-100', 'MD-200', 'MD-300'] },
+  { group: 'T Series',   models: ['T-880', 'T-880S', 'T-1000', 'T-1080S'] },
+  { group: 'T-R Series', models: ['T-560R', 'T-580R', 'T-600R', 'T-680R', 'T-800R', 'T-880R', 'T-1000R', 'T-1200R'] },
+  { group: 'II Series',  models: ['KDII', 'MDII', 'RDII', 'TDII'] },
 ]
 
 const TK_TRAILER_GROUPS: ModelGroup[] = [
-  { group: 'SB Series',        models: ['SB-100', 'SB-200', 'SB-300'] },
-  { group: 'Precedent Series', models: ['Precedent C-600', 'Precedent S-600', 'Precedent C-600M'] },
-  { group: 'TS Series',        models: ['TS-600', 'TS-800', 'TS-1000'] },
+  { group: 'SB Series',        models: ['SB-100', 'SB-110', 'SB-130', 'SB-190', 'SB-200', 'SB-210', 'SB-230', 'SB-300', 'SB-310', 'SB-330', 'SB-400'] },
+  { group: 'Precedent Series', models: ['Precedent C-600', 'Precedent S-600', 'Precedent S-610', 'Precedent S-610M', 'Precedent S-610DE', 'Precedent S-700', 'Precedent S-710', 'Precedent S-750i'] },
+  { group: 'SLX Series',       models: ['SLX-100', 'SLX-200', 'SLX-300', 'SLX-400'] },
+  { group: 'Classic Series',   models: ['Super II', 'Sentry', 'Sentry II', 'SMX', 'SMX II', 'SMX SR', 'URD', 'URD-III Max'] },
+  { group: 'APU',              models: ['TriPac APU'] },
 ]
 
 const CT_TRUCK_GROUPS: ModelGroup[] = [
-  { group: 'Supra Series', models: ['Supra 550', 'Supra 650', 'Supra 750', 'Supra 850', 'Supra 950', 'Supra 960', 'Supra 1250'] },
+  { group: 'Supra Series',   models: ['Supra 322', 'Supra 422', 'Supra 444', 'Supra 522', 'Supra 544', 'Supra 550', 'Supra 560', 'Supra 622', 'Supra 644', 'Supra 650', 'Supra 660', 'Supra 722', 'Supra 744', 'Supra 750', 'Supra 760', 'Supra 822', 'Supra 844', 'Supra 850', 'Supra 860', 'Supra 922', 'Supra 944', 'Supra 950', 'Supra 960'] },
+  { group: 'Supra S Series', models: ['Supra S5', 'Supra S6', 'Supra S7', 'Supra S8', 'Supra S9', 'Supra S10'] },
+  { group: 'Metrobird',      models: ['Metrobird'] },
 ]
 
 const CT_TRAILER_GROUPS: ModelGroup[] = [
-  { group: 'Ultima Series', models: ['Ultima 53', 'Ultima XT'] },
-  { group: 'X2 Series',     models: ['X2 2100', 'X2 2200', 'X2 2500'] },
-  { group: 'X4 Series',     models: ['X4 7300', 'X4 7500'] },
+  { group: 'Eagle / Classic', models: ['Eagle', 'Eagle Plus', 'Extra', 'Extra XT', 'Extra XTC', 'Thunderbird', 'Advantage'] },
+  { group: 'Phoenix Series',  models: ['Euro Phoenix', 'Phoenix Ultra', 'Phoenix Ultra XL', 'Phoenix Advantage'] },
+  { group: 'Genesis Series',  models: ['Genesis R70', 'Genesis R90', 'Genesis TM900', 'Genesis TM1000', 'Genesis TR100'] },
+  { group: 'Mistral Series',  models: ['Mistral 410', 'Mistral 500', 'Mistral 700'] },
+  { group: 'Optima / Ultra',  models: ['Optima', 'Ultra', 'Ultra XTC', 'Ultra XL'] },
+  { group: 'Ultima Series',   models: ['Ultima 53', 'Ultima XT', 'Ultima XTC'] },
+  { group: 'Maxima Series',   models: ['Maxima 1000', 'Maxima 1200', 'Maxima 1200MT', 'Maxima 1300', 'Maxima 1300MT'] },
+  { group: 'Vector Series',   models: ['Vector 1350', 'Vector 1550', 'Vector 1800', 'Vector 1800MT', 'Vector 1850', 'Vector 1950', 'Vector 1950MT', 'Vector 6500', 'Vector 6600'] },
+  { group: 'X2 / X4 Series',  models: ['X2 2100', 'X2 2500', 'X4 7300', 'X4 7500'] },
+  { group: 'ComfortPro APU',  models: ['ComfortPro PC5000', 'ComfortPro PC6000'] },
 ]
 
 const ENGINE_MODELS: Record<string, string[]> = {
