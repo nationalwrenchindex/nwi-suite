@@ -7,8 +7,8 @@ const HD_BLUE   = '#1A6BAF'
 
 const TK_TRUCK_MODELS   = ['MD-200', 'MD-300', 'T-880', 'T-880S', 'T-1000', 'T-1080S']
 const TK_TRAILER_MODELS = ['SB-100', 'SB-200', 'SB-300', 'Precedent C-600', 'Precedent S-600', 'Precedent C-600M']
-const CT_TRUCK_MODELS   = ['Supra 960', 'Supra 1250']
-const CT_TRAILER_MODELS = ['X2 2100', 'X2 2500', 'X4 7300', 'X4 7500']
+const CT_TRUCK_MODELS   = ['Supra 550', 'Supra 650', 'Supra 750', 'Supra 850', 'Supra 950', 'Supra 960', 'Supra 1250']
+const CT_TRAILER_MODELS = ['Ultima 53', 'Ultima XT', 'X2 2100', 'X2 2200', 'X2 2500', 'X4 7300', 'X4 7500']
 
 const ENGINE_MODELS: Record<string, string[]> = {
   'Cummins':        ['ISB', 'ISC', 'ISL', 'ISX', 'X15', 'X12'],

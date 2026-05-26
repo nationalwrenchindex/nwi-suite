@@ -2,9 +2,11 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
 import Anthropic from '@anthropic-ai/sdk'
-import { type TKSeverity, type TKAlarmEntry, TK_ALARM_CODES, TK_DSR_ALARM_CODES, TK_DISCLAIMER } from '@/lib/hd/alarm-codes'
+import { type TKSeverity, type TKAlarmEntry, TK_ALARM_CODES, TK_DSR_ALARM_CODES, TK_DISCLAIMER, CARRIER_ALARM_CODES, CARRIER_PRETRIP_CODES } from '@/lib/hd/alarm-codes'
 
 export const maxDuration = 45
+
+const CARRIER_DISCLAIMER = "Alarm code definitions sourced from publicly available Carrier Transicold operator reference information. Not all codes apply to all unit models. Always verify against official Carrier documentation and consult your company for final decisions."
 
 // ─── Alarm Code Lookup ────────────────────────────────────────────────────────
 
@@ -20,6 +22,24 @@ function lookupTKCode(code: string): (TKAlarmEntry & { source: 'tk_main' | 'tk_d
   if (TK_ALARM_CODES[raw])            return { ...TK_ALARM_CODES[raw],            source: 'tk_main', codeKey: raw }
   const padded = raw.padStart(2, '0')
   if (TK_ALARM_CODES[padded])         return { ...TK_ALARM_CODES[padded],         source: 'tk_main', codeKey: padded }
+
+  return null
+}
+
+function lookupCarrierCode(code: string): { description: string; severity: string; operatorAction: string; source: 'carrier_main' | 'carrier_pretrip' } | null {
+  const trimmed = code.trim()
+  const upper   = trimmed.toUpperCase()
+
+  // Pretrip P-codes first (P141, P143, etc.)
+  const pretrip = CARRIER_PRETRIP_CODES[upper]
+  if (pretrip) return { ...pretrip, source: 'carrier_pretrip' }
+
+  // Numeric codes — try exact key, then strip leading zeros
+  if (CARRIER_ALARM_CODES[trimmed]) return { ...CARRIER_ALARM_CODES[trimmed], source: 'carrier_main' }
+  if (/^\d+$/.test(trimmed)) {
+    const stripped = String(parseInt(trimmed, 10))
+    if (CARRIER_ALARM_CODES[stripped]) return { ...CARRIER_ALARM_CODES[stripped], source: 'carrier_main' }
+  }
 
   return null
 }
@@ -215,12 +235,12 @@ interface BuildUserPromptParams {
   allCodes:      string[]
   symptom?:      string
   serialNumber?: string
-  tkSources:     Array<{ code: string; description: string; severity: string; operatorAction: string; source: string }>
+  alarmSources:  Array<{ code: string; description: string; severity: string; operatorAction: string; source: string }>
   alarmPattern:  AlarmRelationship | null
 }
 
 function buildUserPrompt({
-  manufacturer, model, unitType, allCodes, symptom, serialNumber, tkSources, alarmPattern,
+  manufacturer, model, unitType, allCodes, symptom, serialNumber, alarmSources, alarmPattern,
 }: BuildUserPromptParams): string {
   const parts: (string | null)[] = [
     `Unit: ${manufacturer} ${model} (${unitType ?? 'unknown type'})`,
@@ -231,7 +251,7 @@ function buildUserPrompt({
 
   // Inject definitions: start with entered codes, then add companion codes from
   // the cross-reference pattern up to a cap of 5 definitions total.
-  const defsToShow: typeof tkSources = [...tkSources]
+  const defsToShow: typeof alarmSources = [...alarmSources]
 
   if (manufacturer === 'Thermo King' && alarmPattern) {
     for (const companionCode of alarmPattern.codes) {
@@ -251,7 +271,10 @@ function buildUserPrompt({
   }
 
   if (defsToShow.length > 0) {
-    parts.push('\nOFFICIAL TK DEFINITIONS (TK 40933-8-CH Rev 15):')
+    const defHeader = manufacturer === 'Carrier Transicold'
+      ? '\nOFFICIAL CARRIER DEFINITIONS (Carrier Transicold Operator Reference):'
+      : '\nOFFICIAL TK DEFINITIONS (TK 40933-8-CH Rev 15):'
+    parts.push(defHeader)
     for (const src of defsToShow) {
       parts.push(`Code ${src.code}: ${src.description} | Severity: ${src.severity.replace(/_/g, ' ').toUpperCase()} | Operator Action: ${src.operatorAction}`)
     }
@@ -407,24 +430,33 @@ export async function POST(req: NextRequest) {
     .filter((c): c is string => typeof c === 'string' && c.trim().length > 0)
     .map(c => c.trim())
 
-  // Look up each code in TK DB (Thermo King only)
-  const tkSources = manufacturer === 'Thermo King'
+  // Look up each code in the appropriate alarm database
+  const alarmSources = manufacturer === 'Thermo King'
     ? allCodes
         .map(code => {
           const found = lookupTKCode(code)
           return found ? { code, description: found.description, severity: found.severity, operatorAction: found.operatorAction, source: found.source } : null
         })
         .filter((s): s is NonNullable<typeof s> => s !== null)
+    : manufacturer === 'Carrier Transicold'
+    ? allCodes
+        .map(code => {
+          const found = lookupCarrierCode(code)
+          return found ? { code, description: found.description, severity: found.severity, operatorAction: found.operatorAction, source: found.source } : null
+        })
+        .filter((s): s is NonNullable<typeof s> => s !== null)
     : []
 
-  // Multi-alarm cross reference
+  // Multi-alarm cross reference (TK only — no Carrier relationship map yet)
   const alarmPattern = allCodes.length >= 2 ? lookupPattern(allCodes) : null
 
   const userPrompt = buildUserPrompt({
     manufacturer, model, unitType, allCodes,
     symptom, serialNumber: body.serialNumber,
-    tkSources, alarmPattern,
+    alarmSources, alarmPattern,
   })
+
+  const disclaimer = manufacturer === 'Carrier Transicold' ? CARRIER_DISCLAIMER : TK_DISCLAIMER
 
   try {
     const client = new Anthropic({ apiKey })
@@ -447,17 +479,17 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       analysis,
-      tk_sources:    tkSources,
+      tk_sources:    alarmSources,
       alarm_pattern: alarmPattern,
-      disclaimer:    TK_DISCLAIMER,
+      disclaimer,
     })
   } catch (err) {
     console.error('[hd/quickwrench] AI call failed', err)
     return NextResponse.json({
       analysis:      FALLBACK_ANALYSIS,
-      tk_sources:    tkSources,
+      tk_sources:    alarmSources,
       alarm_pattern: alarmPattern,
-      disclaimer:    TK_DISCLAIMER,
+      disclaimer,
     })
   }
 
