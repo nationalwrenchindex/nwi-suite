@@ -5,10 +5,30 @@ import { useState, useEffect, useRef } from 'react'
 const HD_ORANGE = '#E85D24'
 const HD_BLUE   = '#1A6BAF'
 
-const TK_TRUCK_MODELS   = ['MD-200', 'MD-300', 'T-880', 'T-880S', 'T-1000', 'T-1080S']
-const TK_TRAILER_MODELS = ['SB-100', 'SB-200', 'SB-300', 'Precedent C-600', 'Precedent S-600', 'Precedent C-600M']
-const CT_TRUCK_MODELS   = ['Supra 550', 'Supra 650', 'Supra 750', 'Supra 850', 'Supra 950', 'Supra 960', 'Supra 1250']
-const CT_TRAILER_MODELS = ['Ultima 53', 'Ultima XT', 'X2 2100', 'X2 2200', 'X2 2500', 'X4 7300', 'X4 7500']
+interface ModelGroup { group: string; models: string[] }
+
+const TK_TRUCK_GROUPS: ModelGroup[] = [
+  { group: 'MD Series',   models: ['MD-100', 'MD-200', 'MD-300'] },
+  { group: 'T Series',    models: ['T-880', 'T-880S', 'T-1000', 'T-1080S'] },
+  { group: 'SL Series',   models: ['SL-100', 'SL-200', 'SL-400'] },
+  { group: 'SLXi Series', models: ['SLXi-100', 'SLXi-200', 'SLXi-300', 'SLXi-400'] },
+]
+
+const TK_TRAILER_GROUPS: ModelGroup[] = [
+  { group: 'SB Series',        models: ['SB-100', 'SB-200', 'SB-300'] },
+  { group: 'Precedent Series', models: ['Precedent C-600', 'Precedent S-600', 'Precedent C-600M'] },
+  { group: 'TS Series',        models: ['TS-600', 'TS-800', 'TS-1000'] },
+]
+
+const CT_TRUCK_GROUPS: ModelGroup[] = [
+  { group: 'Supra Series', models: ['Supra 550', 'Supra 650', 'Supra 750', 'Supra 850', 'Supra 950', 'Supra 960', 'Supra 1250'] },
+]
+
+const CT_TRAILER_GROUPS: ModelGroup[] = [
+  { group: 'Ultima Series', models: ['Ultima 53', 'Ultima XT'] },
+  { group: 'X2 Series',     models: ['X2 2100', 'X2 2200', 'X2 2500'] },
+  { group: 'X4 Series',     models: ['X4 7300', 'X4 7500'] },
+]
 
 const ENGINE_MODELS: Record<string, string[]> = {
   'Cummins':        ['ISB', 'ISC', 'ISL', 'ISX', 'X15', 'X12'],
@@ -565,10 +585,10 @@ export default function HDQuickWrenchPage() {
   const suctionInRange      = hasSuctionActual   && actualSuction   >= suctionLow   && actualSuction   <= suctionHigh
   const dischargeInRange    = hasDischargeActual && actualDischarge >= dischargeLow && actualDischarge <= dischargeHigh
 
-  const modelOptions =
+  const modelGroups =
     manufacturer === 'Thermo King'
-      ? unitType === 'truck' ? TK_TRUCK_MODELS : TK_TRAILER_MODELS
-      : unitType === 'truck' ? CT_TRUCK_MODELS : CT_TRAILER_MODELS
+      ? unitType === 'truck' ? TK_TRUCK_GROUPS : TK_TRAILER_GROUPS
+      : unitType === 'truck' ? CT_TRUCK_GROUPS : CT_TRAILER_GROUPS
 
   const truckModelOptions = ENGINE_MODELS[truckBrand] ?? []
 
@@ -1000,7 +1020,11 @@ export default function HDQuickWrenchPage() {
                   style={{ background: '#162030', border: '1px solid #1e3040' }}
                 >
                   <option value="">— Select model —</option>
-                  {modelOptions.map(m => <option key={m} value={m}>{m}</option>)}
+                  {modelGroups.map(g => (
+                    <optgroup key={g.group} label={g.group}>
+                      {g.models.map(m => <option key={m} value={m}>{m}</option>)}
+                    </optgroup>
+                  ))}
                 </select>
               </div>
 
