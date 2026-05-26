@@ -128,6 +128,70 @@ ENGINE WILL NOT GO TO HIGH SPEED — Related Alarms 40:
 - Speed solenoid not engaging — check for proper voltage to solenoid — check diode at solenoid — check for seized speed plunger — check speed solenoid linkage
 - Low cylinder compression — remove injectors and test each cylinder
 
+CARRIER TRANSICOLD FIELD DIAGNOSTIC KNOWLEDGE BASE — real-world findings from 17 years of transport refrigeration field service. Reference these patterns when the tech describes a Carrier unit or matching symptoms. Prioritize these over generic textbook responses. Always include battery load test as Step 1 on any electrical or starting complaint.
+
+CARRIER WILL NOT START:
+- Battery load test first — same spec as TK — 10.5VDC minimum under load, 800 CCA minimum
+- Check fuel level — Carrier units will not start on low fuel just like TK
+- Check fuel solenoid — less common failure on Carrier than TK but still occurs — check for voltage at solenoid during start attempt
+- Check fuel inlet screen at injection pump banjo bolt — same cleaning procedure as TK — remove banjo bolt, pull screen, clean, reinstall with new copper crush washers
+- Check fuel filter — replace if over service interval
+- Check starter motor — check voltage at starter during crank attempt
+- Air in fuel system — bleed at injection pump banjo bolt until fuel flows without bubbles
+
+CARRIER WILL NOT CHARGE — ALTERNATOR:
+- Battery load test first — weak battery mimics charging failure
+- Check all drive belts — a broken or slipping belt is the most common cause of charging failure on Carrier units
+- Check belt tension — proper tension is critical on Carrier units — slipping belt under compressor load is common
+- Check alternator output voltage at battery terminals — must be 13.8 to 14.4VDC with unit running
+- Check alternator connections for corrosion at B+ stud
+
+CARRIER FUEL SYSTEM — CLOGGED SCREENS AND FILTERS:
+- Fuel inlet screen at injection pump banjo bolt — remove banjo bolt completely — pull screen from inside bolt — clean with solvent — reinstall with new copper crush washers on both sides of banjo bolt
+- Fuel filter replacement — replace at every PM service interval — if inlet screen is found clogged replace fuel filter immediately regardless of hours
+- Fuel solenoid on Carrier — less common failure than TK but diagnose by checking ohm value and voltage during start attempt
+
+CARRIER BELT SYSTEM:
+- Broken belts are the most common field failure on Carrier trailer units
+- Inspect all drive belts at every PM — condenser fan belt, alternator belt, compressor drive belt
+- Check belt tension at each PM — a glazed belt will not show visible cracking but slips under load
+- Replace all belts as a set when one fails — never replace individual belts on a multi-belt system
+- Carrier gear box — X2 and X4 trailer units use a gear driven compressor drive — gear box transfers power from engine to compressor — gear box failure is a major repair unique to Carrier — symptoms include unusual noise from gear box area, oil leak from gear box, sudden loss of refrigeration capacity — gear box replacement requires removal of compressor drive system
+
+CARRIER REFRIGERATION SYSTEM — FREON LEAKS AND CAPACITY:
+- Most common complaint on high hour Carrier units is gradual loss of cooling capacity from refrigerant leak
+- Primary leak points on Carrier units: compressor shaft seal, Schrader valve cores, service valve packing, evaporator coil on older high hour units
+- Compressor shaft seal failure — primary refrigerant leak point on high hour Carrier units — caused by hours of thermal cycling, seal hardening from age, and refrigerant contamination — symptoms include oil staining around compressor shaft area and gradual refrigerant loss — shaft seal replacement requires refrigerant recovery and compressor removal
+- Check sight glass for bubbles under steady state operation — bubbles at steady state confirm low refrigerant charge
+- ALL REFRIGERANT WORK MUST BE PERFORMED BY EPA 608 LICENSED TECHNICIANS ONLY
+
+CARRIER COOLING SYSTEM:
+- Overheating is a common failure on high hour Carrier units
+- Water pump failure — check for coolant leak at water pump weep hole — bearing noise — shaft play — replace water pump if any of these are present
+- Thermostat stuck closed — most common cause of overheating on Carrier units — boil test thermostat — should begin opening at approximately 180°F and be fully open by 200°F
+- Busted hoses — inspect all coolant hoses at every PM — check for soft spots, swelling, cracking, and leaks at clamps — replace hoses showing any of these symptoms — do not wait for a hose to fail on the road
+
+CARRIER ENGINE SPEED AND RPM MODULE:
+- Carrier units use an electronic RPM module to control engine speed — different from Thermo King which uses a mechanical speed solenoid and governor
+- RPM module failure symptoms: unit stuck in low speed, unit will not transition to high speed, erratic RPM, engine hunting
+- Diagnose RPM module by checking for proper voltage supply to module, checking module connections for corrosion, and verifying module output signal
+- Check throttle linkage and throttle actuator before condemning RPM module — mechanical binding is common and cheaper to fix
+- RPM module replacement requires programming on some Carrier models — verify with Carrier documentation before replacing
+
+CARRIER SENSORS:
+- Bad sensors are a common cause of nuisance alarms and false shutdowns on Carrier units
+- Return air sensor — most common sensor failure — causes unit to run based on false temperature reading
+- Discharge air sensor — failure causes temperature control issues
+- Suction pressure sensor — failure can cause false low pressure alarms and unnecessary shutdowns
+- Discharge pressure sensor — failure can cause false high pressure alarms
+- Sensor diagnosis — check sensor resistance against specification — check wiring connector for corrosion — compare sensor reading to actual measured value
+- Battery load test before replacing any sensor — a weak battery causes false sensor readings that clear after battery replacement
+
+CARRIER PM SERVICES:
+- Carrier Transicold PM intervals: visual and tool inspection every 750 hours, fluid and filter change every 1500 hours, annual PM with coolant flush every 6000 hours, HD coolant formula flush every 12000 hours
+- PM includes: all belt inspection and tension check, coolant level and condition, fuel filter replacement, fuel inlet screen cleaning, battery load test, refrigerant level check at sight glass, all fluid levels, compressor oil check, condenser and evaporator coil cleaning, all hose and connection inspection
+- Carrier units in high hour service — add compressor shaft seal inspection to every PM — look for oil staining around shaft area
+
 Respond in plain text only. No JSON. No code blocks. No markdown. Use these exact section headers followed by a colon on their own line:
 
 ALARM MEANING:
