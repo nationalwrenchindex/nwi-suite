@@ -101,6 +101,12 @@ function navIcon(path: string) {
         <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.44 2 2 0 0 1 3.6 1.27h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.91a16 16 0 0 0 6 6l.92-.92a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/>
       </svg>
     ),
+    parts: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+        <line x1="11" y1="8" x2="11" y2="14" /><line x1="8" y1="11" x2="14" y2="11" />
+      </svg>
+    ),
     resources: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
         <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" />
@@ -138,6 +144,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/hd/pm-schedules',    label: 'PM Schedules'  },
   { href: '/hd/epa-log',         label: 'EPA 608 Log'   },
   { href: '/hd/quickwrench',     label: 'HD QuickWrench'},
+  { href: '/hd/parts',           label: 'Parts Lookup'  },
   { href: '/hd/reefer',          label: 'Reefer Module' },
   { href: '/hd/foreman',         label: 'Foreman'       },
   { href: '/hd/resources',       label: 'OEM Resources' },

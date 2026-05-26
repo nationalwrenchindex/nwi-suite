@@ -4,6 +4,47 @@ import { checkHDAccess } from '@/lib/hd-access'
 import Anthropic from '@anthropic-ai/sdk'
 import { type TKSeverity, type TKAlarmEntry, TK_ALARM_CODES, TK_DSR_ALARM_CODES, TK_DISCLAIMER, CARRIER_ALARM_CODES, CARRIER_PRETRIP_CODES } from '@/lib/hd/alarm-codes'
 
+// ─── Alarm → Parts Category Mapping ──────────────────────────────────────────
+
+const TK_CODE_CATEGORIES: Record<string, string[]> = {
+  '17': ['starter'],
+  '20': ['starter', 'fuel_pump', 'solenoid', 'glow_plug'],
+  '15': ['glow_plug'],
+  '25': ['alternator', 'belt'],
+  '51': ['alternator', 'belt'],
+  '10': ['belt', 'compressor'],
+  '46': ['belt', 'filter'],
+  '48': ['belt'],
+  '40': ['solenoid'],
+  '31': ['solenoid'],
+  '32': ['solenoid'],
+  '35': ['solenoid'],
+  '18': ['thermostat', 'water_pump'],
+  '41': ['sensor'],
+  '12': ['sensor'],
+  '37': ['sensor'],
+  '19': ['switch'],
+  '11': ['filter'],
+  '223': ['filter'],
+  '224': ['filter'],
+  '225': ['filter'],
+  '226': ['filter'],
+  '227': ['filter'],
+  '228': ['filter'],
+  '229': ['filter'],
+  '230': ['filter'],
+}
+
+function categoriesToFetchForCodes(codes: string[]): string[] {
+  const cats = new Set<string>()
+  for (const c of codes) {
+    const normalized = String(parseInt(c, 10))
+    const entries = TK_CODE_CATEGORIES[normalized] ?? TK_CODE_CATEGORIES[c] ?? []
+    for (const cat of entries) cats.add(cat)
+  }
+  return [...cats]
+}
+
 export const maxDuration = 45
 
 const CARRIER_DISCLAIMER = "Alarm code definitions sourced from publicly available Carrier Transicold operator reference information. Not all codes apply to all unit models. Always verify against official Carrier documentation and consult your company for final decisions."
@@ -211,6 +252,9 @@ CARRIER PM SERVICES:
 - Carrier Transicold PM intervals: visual and tool inspection every 750 hours, fluid and filter change every 1500 hours, annual PM with coolant flush every 6000 hours, HD coolant formula flush every 12000 hours
 - PM includes: all belt inspection and tension check, coolant level and condition, fuel filter replacement, fuel inlet screen cleaning, battery load test, refrigerant level check at sight glass, all fluid levels, compressor oil check, condenser and evaporator coil cleaning, all hose and connection inspection
 - Carrier units in high hour service — add compressor shaft seal inspection to every PM — look for oil staining around shaft area
+
+DIELECTRIC GREASE — FIELD TIP (mention when relevant to electrical work):
+Apply dielectric grease to ALL electrical connectors during reassembly — sensor connectors, solenoid harnesses, battery terminals, starter terminals. A single tube of dielectric grease prevents more nuisance alarms and callbacks than most parts replacements. Never reassemble an electrical connection without it in a transport refrigeration environment. This includes every connector you touch during diagnosis, not just the failed component.
 
 Respond in plain text only. No JSON. No code blocks. No markdown. Use these exact section headers followed by a colon on their own line:
 
@@ -458,40 +502,81 @@ export async function POST(req: NextRequest) {
 
   const disclaimer = manufacturer === 'Carrier Transicold' ? CARRIER_DISCLAIMER : TK_DISCLAIMER
 
-  try {
-    const client = new Anthropic({ apiKey })
-    const msg = await client.messages.create({
-      model:      'claude-sonnet-4-6',
-      max_tokens: 1500,
-      system:     SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: userPrompt }],
-    })
+  // Alarm → parts category lookup (only for Thermo King — we have TK code→category mapping)
+  const partsCategories = manufacturer === 'Thermo King' ? categoriesToFetchForCodes(allCodes) : []
 
-    const analysis = msg.content
+  // Run AI call + parts DB query in parallel
+  const [aiResult, partsResult] = await Promise.allSettled([
+    (async () => {
+      const client = new Anthropic({ apiKey })
+      return client.messages.create({
+        model:      'claude-sonnet-4-6',
+        max_tokens: 1500,
+        system:     SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: userPrompt }],
+      })
+    })(),
+    (async () => {
+      if (partsCategories.length === 0) return []
+      const { data } = await supabase
+        .from('hd_parts')
+        .select('part_number, description, category, unit_models, notes, field_critical')
+        .eq('manufacturer', manufacturer)
+        .in('category', partsCategories)
+        .limit(12)
+      return data ?? []
+    })(),
+  ])
+
+  // Build analysis string
+  let analysis: string
+  if (aiResult.status === 'fulfilled') {
+    const msg = aiResult.value
+    analysis = msg.content
       .filter(b => b.type === 'text')
       .map(b => (b as Anthropic.TextBlock).text)
       .join('\n')
       .trim()
-
     console.log('[quickwrench] stop_reason:', msg.stop_reason, 'tokens:', JSON.stringify(msg.usage))
-    console.log('[quickwrench] analysis length:', analysis.length)
-    console.log('[quickwrench] analysis:', analysis)
-
-    return NextResponse.json({
-      analysis,
-      tk_sources:    alarmSources,
-      alarm_pattern: alarmPattern,
-      disclaimer,
-    })
-  } catch (err) {
-    console.error('[hd/quickwrench] AI call failed', err)
-    return NextResponse.json({
-      analysis:      FALLBACK_ANALYSIS,
-      tk_sources:    alarmSources,
-      alarm_pattern: alarmPattern,
-      disclaimer,
-    })
+  } else {
+    console.error('[hd/quickwrench] AI call failed', aiResult.reason)
+    analysis = FALLBACK_ANALYSIS
   }
+
+  // Append PARTS REFERENCE section if parts were found
+  if (partsResult.status === 'fulfilled') {
+    const parts = partsResult.value as Array<{
+      part_number: string; description: string; category: string
+      unit_models: string[]; notes?: string; field_critical: boolean
+    }>
+
+    if (parts.length > 0) {
+      const relevantParts = model
+        ? parts.filter(p => p.unit_models.length === 0 || p.unit_models.includes(model))
+        : parts
+
+      const toShow = relevantParts.length > 0 ? relevantParts : parts.slice(0, 8)
+
+      if (toShow.length > 0) {
+        const partsSection = [
+          `\nPARTS REFERENCE — ${manufacturer} ${model}`,
+          ...toShow.map(p =>
+            `Part Number: ${p.part_number} — ${p.description}${p.field_critical ? ' [FIELD CRITICAL]' : ''}${p.notes ? ` — ${p.notes}` : ''}`
+          ),
+          'Note: Part numbers are reference only. Verify fitment before ordering. Always replace superseded part numbers with current replacement.',
+        ].join('\n')
+
+        analysis = analysis + partsSection
+      }
+    }
+  }
+
+  return NextResponse.json({
+    analysis,
+    tk_sources:    alarmSources,
+    alarm_pattern: alarmPattern,
+    disclaimer,
+  })
 
   } catch (err) {
     console.error('[hd/quickwrench] Unhandled error', err)
