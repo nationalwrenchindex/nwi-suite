@@ -347,24 +347,27 @@ export async function seedHDParts() {
     { part_number: '22-02804-00', cross_mfr: 'Carrier OEM', cross_part: '22-02804-02' },
   ]
 
-  // Upsert parts
-  const { error: partsError } = await supabase
-    .from('hd_parts')
-    .upsert(parts, { onConflict: 'part_number' })
-
-  if (partsError) {
-    console.error('Parts seed error:', partsError)
-    return { success: false, error: partsError.message }
+  // Upsert parts in batches of 50 to avoid request timeout
+  const BATCH = 50
+  for (let i = 0; i < parts.length; i += BATCH) {
+    const { error } = await supabase
+      .from('hd_parts')
+      .upsert(parts.slice(i, i + BATCH), { onConflict: 'part_number' })
+    if (error) {
+      console.error('Parts seed error (batch', i, '):', error)
+      return { success: false, error: error.message }
+    }
   }
 
-  // Upsert cross refs
-  const { error: xrefError } = await supabase
-    .from('hd_parts_cross_ref')
-    .upsert(crossRefs, { onConflict: 'part_number,cross_mfr,cross_part' })
-
-  if (xrefError) {
-    console.error('Cross ref seed error:', xrefError)
-    return { success: false, error: xrefError.message }
+  // Upsert cross refs in batches
+  for (let i = 0; i < crossRefs.length; i += BATCH) {
+    const { error } = await supabase
+      .from('hd_parts_cross_ref')
+      .upsert(crossRefs.slice(i, i + BATCH), { onConflict: 'part_number,cross_mfr,cross_part' })
+    if (error) {
+      console.error('Cross ref seed error (batch', i, '):', error)
+      return { success: false, error: error.message }
+    }
   }
 
   return { success: true, parts_count: parts.length, xref_count: crossRefs.length }

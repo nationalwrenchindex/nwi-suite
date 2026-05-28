@@ -109,10 +109,10 @@ function PartRow({ part, expanded, onToggle }: {
             <span>{part.manufacturer}</span>
             <span>·</span>
             <span>{categoryLabel(part.category)}</span>
-            {part.unit_models.length > 0 && (
+            {(part.unit_models ?? []).length > 0 && (
               <>
                 <span>·</span>
-                <span>{part.unit_models.slice(0, 3).join(', ')}{part.unit_models.length > 3 ? ` +${part.unit_models.length - 3}` : ''}</span>
+                <span>{(part.unit_models ?? []).slice(0, 3).join(', ')}{(part.unit_models ?? []).length > 3 ? ` +${(part.unit_models ?? []).length - 3}` : ''}</span>
               </>
             )}
           </div>
@@ -148,11 +148,11 @@ function PartRow({ part, expanded, onToggle }: {
             </div>
           )}
 
-          {part.unit_models.length > 3 && (
+          {(part.unit_models ?? []).length > 3 && (
             <div className="mt-2">
               <p className="text-xs font-bold uppercase tracking-wide mb-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>All Compatible Models</p>
               <div className="flex flex-wrap gap-1.5">
-                {part.unit_models.map(m => (
+                {(part.unit_models ?? []).map(m => (
                   <span key={m} className="px-2 py-0.5 rounded text-xs" style={{ background: 'rgba(255,255,255,0.06)', color: 'rgba(255,255,255,0.6)' }}>
                     {m}
                   </span>
