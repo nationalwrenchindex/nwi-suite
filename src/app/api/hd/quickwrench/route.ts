@@ -253,6 +253,24 @@ CARRIER PM SERVICES:
 - PM includes: all belt inspection and tension check, coolant level and condition, fuel filter replacement, fuel inlet screen cleaning, battery load test, refrigerant level check at sight glass, all fluid levels, compressor oil check, condenser and evaporator coil cleaning, all hose and connection inspection
 - Carrier units in high hour service — add compressor shaft seal inspection to every PM — look for oil staining around shaft area
 
+SERIAL NUMBER DECODER:
+
+THERMO KING SERIAL NUMBER FORMAT:
+Standard 10-digit serial number format:
+- Digits 1-2: Factory or plant classification code
+- Digit 3: Model year — last digit of build year — example 4 = 2014 or 2024 — cross reference with unit model to confirm decade
+- Digits 4-10: Sequential production number unique to that unit
+
+WHERE TO FIND THE SERIAL NUMBER:
+- Precedent S-600 S-700 C-600: Open curbside structural door — look at lower steel framework cross member — serial plate or sticker on left side of engine
+- Older trailer units: Inside motor compartment above motor assembly
+- TriPac APU: Inside APU housing door on frame rail near engine on/off switch
+- If plate is worn or missing: Look for secondary sticker stamped into steel inside the unit — always has a backup
+
+CARB COMPLIANCE LOOKUP: For emissions compliance verification paste the full 10-digit serial at thermoking.com/na/en/road/carb-compliance/carb-lookup.html
+
+When a tech provides a serial number extract digit 3 and tell them the model year options. Always recommend confirming decade by cross referencing with the unit model since digit 3 repeats every 10 years.
+
 DIELECTRIC GREASE — FIELD TIP (mention when relevant to electrical work):
 Apply dielectric grease to ALL electrical connectors during reassembly — sensor connectors, solenoid harnesses, battery terminals, starter terminals. A single tube of dielectric grease prevents more nuisance alarms and callbacks than most parts replacements. Never reassemble an electrical connection without it in a transport refrigeration environment. This includes every connector you touch during diagnosis, not just the failed component.
 
