@@ -27,17 +27,12 @@ export async function GET(req: NextRequest) {
     .order('manufacturer')
     .order('category')
     .order('part_number')
-    .limit(200)
+    .limit(500)
 
   if (manufacturer)  query = query.eq('manufacturer', manufacturer)
   if (category)      query = query.eq('category', category)
   if (unit_model)    query = query.contains('unit_models', [unit_model])
   if (part_number)   query = query.eq('part_number', part_number)
-  if (search) {
-    query = query.or(
-      `part_number.ilike.%${search}%,description.ilike.%${search}%,notes.ilike.%${search}%`
-    )
-  }
 
   const { data, error } = await query
 
@@ -46,5 +41,22 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ parts: data ?? [] })
+  type PartRow = { id: string; part_number: string; description: string; notes: string | null; [k: string]: unknown }
+  let parts = (data ?? []) as unknown as PartRow[]
+
+  // Text search: strip dashes/spaces from both the search term and each part_number
+  // before comparing so "452324" matches "45-2324". Description and notes use plain
+  // case-insensitive substring matching.
+  if (search) {
+    const normalize = (s: string) => s.replace(/[-\s]/g, '').toLowerCase()
+    const normSearch = normalize(search)
+    const lower = search.toLowerCase()
+    parts = parts.filter(p =>
+      normalize(p.part_number).includes(normSearch) ||
+      p.description.toLowerCase().includes(lower) ||
+      (p.notes ?? '').toLowerCase().includes(lower)
+    )
+  }
+
+  return NextResponse.json({ parts })
 }
