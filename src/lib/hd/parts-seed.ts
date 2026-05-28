@@ -319,6 +319,9 @@ export async function seedHDParts() {
     { part_number: '50-01171-02', manufacturer: 'Carrier Transicold', description: 'Clutch Truck Unit — Supra 369 Engine', category: 'mechanical', subcategory: 'clutch', unit_models: ['Supra 922','Supra 944','Genesis R90'], engine: 'Kubota CT3-69' },
     { part_number: '50-01173-03', manufacturer: 'Carrier Transicold', description: 'Clutch Assembly Condenser Fan — Ultra XTC X2 X4', category: 'mechanical', subcategory: 'clutch', unit_models: ['Ultra XTC','X2 2100','X2 2500','X4 7300','X4 7500'], notes: 'Replaces 50-01173-00' },
     { part_number: '50-01173-00', manufacturer: 'Carrier Transicold', description: 'Clutch Condenser Fan XT XTC', category: 'mechanical', subcategory: 'clutch', superseded_by: '50-01173-03' },
+
+    // ── THERMO KING T-SERIES CLUTCH ───────────────────────────────────────────
+    { part_number: '37-107-349', manufacturer: 'Thermo King', description: 'Clutch Assembly — T-Series Truck Units Centrifugal', category: 'mechanical', subcategory: 'clutch', unit_models: ['T-580R','T-600R','T-680R','T-800R','T-880R','T-1000','T-1000R','T-1080S','T-1200R'], notes: 'CENTRIFUGAL clutch — NOT electric or magnetic — engages via RPM and centrifugal force on clutch shoes — diagnose shoe wear and drum glazing not coil resistance or air gap', field_critical: true },
   ]
 
   // Cross references

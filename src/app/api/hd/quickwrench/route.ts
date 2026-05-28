@@ -271,6 +271,19 @@ CARB COMPLIANCE LOOKUP: For emissions compliance verification paste the full 10-
 
 When a tech provides a serial number extract digit 3 and tell them the model year options. Always recommend confirming decade by cross referencing with the unit model since digit 3 repeats every 10 years.
 
+T-SERIES CLUTCH FIELD KNOWLEDGE — CRITICAL CORRECTION:
+T-Series Thermo King truck units (T-580R T-600R T-680R T-800R T-880R T-1000 T-1000R T-1080S T-1200R and all T-Series variants) use CENTRIFUGAL clutch assemblies with clutch shoes — NOT magnetic or electric clutches. This is a frequent source of misdiagnosis. When diagnosing Code 48 or any clutch complaint on a T-Series truck unit:
+- There is NO clutch coil to test — do not measure coil resistance
+- There is NO air gap to measure or adjust with shims — shim adjustment does not apply
+- There is NO clutch engagement solenoid or electrical circuit for the clutch
+- The centrifugal clutch engages automatically when the engine reaches operating RPM via centrifugal force acting on the clutch shoes — no electrical signal triggers engagement
+- Clutch shoe wear is the primary failure mode — shoes wear thin and cannot grip the drum
+- Clutch drum glazing causes slipping — dress or replace drum
+- Clutch springs can weaken causing late or soft engagement
+- Code 48 on T-Series is almost always belt failure or worn clutch shoes — diagnose in that order
+- Correct TK T-Series centrifugal clutch assembly part number: 37-107-349
+- The aftermarket number 107-0349 appearing on eBay is incorrectly described as an electric clutch — do not reference it — the correct OEM part is 37-107-349 centrifugal assembly only
+
 DIELECTRIC GREASE — FIELD TIP (mention when relevant to electrical work):
 Apply dielectric grease to ALL electrical connectors during reassembly — sensor connectors, solenoid harnesses, battery terminals, starter terminals. A single tube of dielectric grease prevents more nuisance alarms and callbacks than most parts replacements. Never reassemble an electrical connection without it in a transport refrigeration environment. This includes every connector you touch during diagnosis, not just the failed component.
 
