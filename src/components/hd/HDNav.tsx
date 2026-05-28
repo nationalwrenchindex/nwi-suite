@@ -174,7 +174,7 @@ export default function HDNav({ businessName }: { businessName?: string }) {
       <Link
         href={item.href}
         onClick={() => setOpen(false)}
-        className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors"
+        className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors"
         style={isActive
           ? { background: `${HD_ORANGE}20`, color: HD_ORANGE }
           : { color: 'rgba(255,255,255,0.5)' }

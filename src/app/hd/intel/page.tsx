@@ -74,7 +74,7 @@ export default async function IntelHubPage({
   }
 
   return (
-    <main className="flex-1 p-6">
+    <main className="flex-1 p-4 sm:p-6">
       <div className="flex items-center justify-between mb-6">
         <div>
           <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>HD Suite</p>
@@ -91,7 +91,7 @@ export default async function IntelHubPage({
             name="q"
             defaultValue={q}
             placeholder="Search by unit #, serial, model, manufacturer…"
-            className="flex-1 px-4 py-2.5 rounded-lg text-sm text-white placeholder-white/30"
+            className="flex-1 min-w-0 px-4 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/30"
             style={{ background: '#111920', border: '1px solid #1e3040' }}
           />
           <button

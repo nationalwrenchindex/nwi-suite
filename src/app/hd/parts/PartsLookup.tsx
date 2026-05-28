@@ -259,7 +259,7 @@ export default function PartsLookup() {
   }
 
   return (
-    <main className="flex-1 p-6">
+    <main className="flex-1 p-4 sm:p-6">
       <div className="mb-6">
         <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>HD Suite</p>
         <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">PARTS LOOKUP</h1>
@@ -294,7 +294,7 @@ export default function PartsLookup() {
           placeholder="Search part number, description…"
           value={search}
           onChange={e => applyFilters(e.target.value, manufacturer, category)}
-          className="flex-1 min-w-[220px] px-3 py-2 rounded-lg text-sm text-white placeholder:text-white/30 outline-none"
+          className="flex-1 min-w-[220px] px-3 py-2 rounded-lg text-base sm:text-sm text-white placeholder:text-white/30 outline-none"
           style={{ background: '#111920', border: '1px solid #1e3040' }}
         />
         <select

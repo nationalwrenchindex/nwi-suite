@@ -127,9 +127,9 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
   const woLabel = wo.work_order_number ?? `WO-${wo.id.slice(0, 6).toUpperCase()}`
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-4 sm:p-6 max-w-4xl mx-auto">
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div>
           <Link href="/hd/work-orders" className="text-xs mb-2 inline-block" style={{ color: 'rgba(255,255,255,0.4)' }}>
             ← Work Orders
@@ -142,7 +142,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
             {wo.service_type && <span className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>{wo.service_type}</span>}
           </div>
         </div>
-        <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+        <p className="text-xs mt-1 flex-shrink-0" style={{ color: 'rgba(255,255,255,0.4)' }}>
           {new Date(wo.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
         </p>
       </div>

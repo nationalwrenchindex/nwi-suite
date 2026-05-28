@@ -374,7 +374,7 @@ export default function PMChecklistClient({
               <select
                 value={selectedWO}
                 onChange={e => setSelectedWO(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg text-sm text-white"
+                className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white"
                 style={{ background: '#162030', border: '1px solid #1e3040' }}
               >
                 <option value="">— Select work order —</option>
@@ -393,7 +393,7 @@ export default function PMChecklistClient({
               <select
                 value={selectedUnit}
                 onChange={e => setSelectedUnit(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg text-sm text-white"
+                className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white"
                 style={{ background: '#162030', border: '1px solid #1e3040' }}
               >
                 <option value="">— Select unit —</option>
@@ -413,7 +413,7 @@ export default function PMChecklistClient({
               <select
                 value={pmType}
                 onChange={e => setPmType(e.target.value as PMTypeValue)}
-                className="w-full px-3 py-2.5 rounded-lg text-sm text-white"
+                className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white"
                 style={{ background: '#162030', border: '1px solid #1e3040' }}
               >
                 {PM_TYPES.map(t => (
@@ -431,7 +431,7 @@ export default function PMChecklistClient({
                 value={techName}
                 onChange={e => setTechName(e.target.value)}
                 placeholder="Technician name"
-                className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/30"
+                className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/30"
                 style={{ background: '#162030', border: '1px solid #1e3040' }}
               />
             </div>

@@ -393,7 +393,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, profile, initi
               Select Unit
             </label>
             <select value={selectedUnitId} onChange={e => setSelectedUnitId(e.target.value)}
-              className="flex-1 px-3 py-2 rounded-lg text-sm text-white"
+              className="flex-1 px-3 py-2 rounded-lg text-base sm:text-sm text-white"
               style={{ background: '#162030', border: '1px solid #1e3040' }}>
               <option value="">— No unit selected —</option>
               {units.map(u => (
@@ -510,7 +510,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, profile, initi
               </label>
               <input type="text" value={inspectorName} onChange={e => setInspectorName(e.target.value)}
                 placeholder="Full name" required
-                className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+                className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20"
                 style={{ background: '#162030', border: '1px solid #1e3040' }} />
             </div>
             <div>
@@ -519,7 +519,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, profile, initi
               </label>
               <input type="text" value={inspectorCert} onChange={e => setInspectorCert(e.target.value)}
                 placeholder="Inspector cert #"
-                className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+                className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20"
                 style={{ background: '#162030', border: '1px solid #1e3040' }} />
             </div>
           </div>

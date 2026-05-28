@@ -118,15 +118,15 @@ export default async function HDFinancialsPage({
   const laborPct     = totalRevenue > 0 ? (laborRevenue / totalRevenue) * 100 : 0
 
   return (
-    <main className="flex-1 p-6 space-y-6">
+    <main className="flex-1 p-4 sm:p-6 space-y-6">
 
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>HD Suite</p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">FINANCIALS</h1>
           <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>{periodLabel}</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-shrink-0">
           {[
             { key: 'mtd', label: 'MTD' },
             { key: '90d', label: '90D' },

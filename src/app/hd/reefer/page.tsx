@@ -19,7 +19,7 @@ export default async function ReeferPage() {
     .order('unit_number')
 
   return (
-    <main className="flex-1 p-6">
+    <main className="flex-1 p-4 sm:p-6">
       <div className="mb-6">
         <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>HD Suite</p>
         <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">REEFER MODULE</h1>

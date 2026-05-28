@@ -43,8 +43,8 @@ export default async function WorkOrdersPage({
     .limit(100)
 
   return (
-    <main className="flex-1 p-6">
-      <div className="flex items-center justify-between mb-6">
+    <main className="flex-1 p-4 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>HD Suite</p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">WORK ORDERS</h1>
@@ -64,7 +64,7 @@ export default async function WorkOrdersPage({
           <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.4)' }}>
             Full work order creation form coming in the next update. Add a fleet unit and fleet account first, then work orders will be available here.
           </p>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2">
             <Link href="/hd/fleet-units?new=1" className="text-xs px-4 py-2 rounded-lg font-semibold" style={{ background: `${HD_ORANGE}20`, color: HD_ORANGE, border: `1px solid ${HD_ORANGE}40` }}>
               Add Fleet Unit →
             </Link>
@@ -85,7 +85,8 @@ export default async function WorkOrdersPage({
             <p className="text-xs" style={{ color: 'rgba(255,255,255,0.2)' }}>Create a work order to track service on a fleet unit</p>
           </div>
         ) : (
-          <table className="w-full" style={{ background: '#111920' }}>
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px]" style={{ background: '#111920' }}>
             <thead style={{ background: '#162030' }}>
               <tr>
                 {['WO #', 'Fleet / Unit', 'Service', 'Tech', 'Status', 'Total', 'Date'].map(h => (
@@ -140,6 +141,7 @@ export default async function WorkOrdersPage({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

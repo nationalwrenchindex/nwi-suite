@@ -738,7 +738,7 @@ export default function HDQuickWrenchPage() {
   const truckParsedSections = truckAnalysis ? parseAnalysis(truckAnalysis) : []
 
   return (
-    <main className="flex-1 p-6">
+    <main className="flex-1 p-4 sm:p-6">
       <div className="max-w-3xl mx-auto space-y-6">
 
         <div>

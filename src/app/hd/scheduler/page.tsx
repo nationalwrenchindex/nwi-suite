@@ -47,9 +47,9 @@ export default async function HDSchedulerPage() {
   ).length
 
   return (
-    <main className="flex-1 p-6">
+    <main className="flex-1 p-4 sm:p-6">
 
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>HD Suite</p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">SCHEDULER</h1>
@@ -57,7 +57,7 @@ export default async function HDSchedulerPage() {
             <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>{techName}</p>
           )}
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-shrink-0">
           {activeCount > 0 && (
             <span
               className="text-sm font-bold px-3 py-1.5 rounded-full"

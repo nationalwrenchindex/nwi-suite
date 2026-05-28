@@ -92,7 +92,7 @@ export default function DOTInspectionDetail({ inspection }: { inspection: DOTIns
       ` }} />
 
       {/* ── WEB VIEW ── */}
-      <div className="no-print max-w-3xl mx-auto space-y-5">
+      <div className="no-print max-w-3xl mx-auto space-y-5 p-4 sm:p-6">
 
         {/* Header */}
         <div className="flex items-start justify-between">

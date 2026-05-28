@@ -20,8 +20,8 @@ export default async function PMSchedulesPage() {
     .order('unit_number')
 
   return (
-    <main className="flex-1 p-6">
-      <div className="flex items-center justify-between mb-6">
+    <main className="flex-1 p-4 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>HD Suite</p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">PM SCHEDULES</h1>
@@ -82,7 +82,8 @@ export default async function PMSchedulesPage() {
             <p className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>No active units — add fleet units to track PM schedules</p>
           </div>
         ) : (
-          <table className="w-full" style={{ background: '#111920' }}>
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px]" style={{ background: '#111920' }}>
             <thead style={{ background: '#162030' }}>
               <tr>
                 {['Unit', 'Manufacturer / Model', 'Total Hours', 'Last PM', 'Next PM Due', 'Hours Until PM', 'Status'].map(h => (
@@ -132,6 +133,7 @@ export default async function PMSchedulesPage() {
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </main>

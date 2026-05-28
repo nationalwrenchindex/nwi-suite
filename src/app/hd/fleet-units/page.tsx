@@ -53,8 +53,8 @@ export default async function FleetUnitsPage({
     s === 'active' ? '#22C55E' : s === 'out_of_service' ? '#EF4444' : 'rgba(255,255,255,0.4)'
 
   return (
-    <main className="flex-1 p-6">
-      <div className="flex items-center justify-between mb-6">
+    <main className="flex-1 p-4 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>HD Suite</p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">FLEET UNITS</h1>
@@ -75,33 +75,33 @@ export default async function FleetUnitsPage({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Unit # *</label>
-              <input name="unit_number" required placeholder="e.g. TRL-001" className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20" style={{ background: '#162030', border: '1px solid #1e3040' }} />
+              <input name="unit_number" required placeholder="e.g. TRL-001" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={{ background: '#162030', border: '1px solid #1e3040' }} />
             </div>
             <div>
               <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Manufacturer *</label>
-              <select name="manufacturer" className="w-full px-3 py-2.5 rounded-lg text-sm text-white" style={{ background: '#162030', border: '1px solid #1e3040' }}>
+              <select name="manufacturer" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white" style={{ background: '#162030', border: '1px solid #1e3040' }}>
                 <option value="Thermo King">Thermo King</option>
                 <option value="Carrier Transicold">Carrier Transicold</option>
               </select>
             </div>
             <div>
               <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Model *</label>
-              <input name="model" required placeholder="e.g. Precedent S-600" className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20" style={{ background: '#162030', border: '1px solid #1e3040' }} />
+              <input name="model" required placeholder="e.g. Precedent S-600" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={{ background: '#162030', border: '1px solid #1e3040' }} />
             </div>
             <div>
               <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Unit Type</label>
-              <select name="unit_type" className="w-full px-3 py-2.5 rounded-lg text-sm text-white" style={{ background: '#162030', border: '1px solid #1e3040' }}>
+              <select name="unit_type" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white" style={{ background: '#162030', border: '1px solid #1e3040' }}>
                 <option value="trailer">Trailer</option>
                 <option value="truck">Truck</option>
               </select>
             </div>
             <div>
               <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Year</label>
-              <input name="year" type="number" placeholder="e.g. 2020" min="1990" max="2030" className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20" style={{ background: '#162030', border: '1px solid #1e3040' }} />
+              <input name="year" type="number" placeholder="e.g. 2020" min="1990" max="2030" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={{ background: '#162030', border: '1px solid #1e3040' }} />
             </div>
             <div>
               <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Refrigerant</label>
-              <select name="refrigerant_type" className="w-full px-3 py-2.5 rounded-lg text-sm text-white" style={{ background: '#162030', border: '1px solid #1e3040' }}>
+              <select name="refrigerant_type" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white" style={{ background: '#162030', border: '1px solid #1e3040' }}>
                 <option value="R-404A">R-404A</option>
                 <option value="R-452A">R-452A</option>
                 <option value="R-22">R-22</option>
@@ -110,7 +110,7 @@ export default async function FleetUnitsPage({
             </div>
             <div>
               <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Current Hours</label>
-              <input name="total_hours" type="number" placeholder="e.g. 4500" min="0" className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20" style={{ background: '#162030', border: '1px solid #1e3040' }} />
+              <input name="total_hours" type="number" placeholder="e.g. 4500" min="0" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={{ background: '#162030', border: '1px solid #1e3040' }} />
             </div>
           </div>
           <div className="flex gap-3 pt-2">
@@ -138,7 +138,8 @@ export default async function FleetUnitsPage({
             </Link>
           </div>
         ) : (
-          <table className="w-full" style={{ background: '#111920' }}>
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[700px]" style={{ background: '#111920' }}>
             <thead style={{ background: '#162030' }}>
               <tr>
                 {['Unit #', 'Fleet', 'Manufacturer / Model', 'Year', 'Refrigerant', 'Total Hours', 'Next PM', 'Status'].map(h => (
@@ -184,6 +185,7 @@ export default async function FleetUnitsPage({
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

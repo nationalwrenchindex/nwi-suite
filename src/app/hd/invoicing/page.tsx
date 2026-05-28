@@ -22,8 +22,8 @@ export default async function InvoicingPage() {
   const totalOutstanding = (workOrders ?? []).filter(w => w.status === 'completed').reduce((s, w) => s + Number(w.total_amount ?? 0), 0)
 
   return (
-    <main className="flex-1 p-6">
-      <div className="flex items-center justify-between mb-6">
+    <main className="flex-1 p-4 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
           <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>HD Suite</p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">INVOICING</h1>
@@ -53,7 +53,8 @@ export default async function InvoicingPage() {
             <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.2)' }}>Complete work orders will appear here for invoicing</p>
           </div>
         ) : (
-          <table className="w-full" style={{ background: '#111920' }}>
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[520px]" style={{ background: '#111920' }}>
             <thead style={{ background: '#162030' }}>
               <tr>
                 {['Work Order', 'Fleet', 'Unit', 'Amount', 'Status', 'Completed'].map(h => (
@@ -93,6 +94,7 @@ export default async function InvoicingPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </main>

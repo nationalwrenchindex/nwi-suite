@@ -62,7 +62,7 @@ export default function HDSettingsForm({ initialLaborRate, initialTechName, init
           value={laborRate}
           onChange={e => setLaborRate(e.target.value)}
           placeholder="125.00"
-          className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+          className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20"
           style={{ background: '#162030', border: '1px solid #1e3040' }}
         />
       </div>
@@ -76,7 +76,7 @@ export default function HDSettingsForm({ initialLaborRate, initialTechName, init
           value={techName}
           onChange={e => setTechName(e.target.value)}
           placeholder="John Smith"
-          className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+          className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20"
           style={{ background: '#162030', border: '1px solid #1e3040' }}
         />
       </div>
@@ -90,7 +90,7 @@ export default function HDSettingsForm({ initialLaborRate, initialTechName, init
           value={epaCert}
           onChange={e => setEpaCert(e.target.value)}
           placeholder="XXX-XXXXXXXX"
-          className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+          className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20"
           style={{ background: '#162030', border: '1px solid #1e3040' }}
         />
         <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
@@ -107,7 +107,7 @@ export default function HDSettingsForm({ initialLaborRate, initialTechName, init
           value={logoUrl}
           onChange={e => setLogoUrl(e.target.value)}
           placeholder="https://example.com/logo.png"
-          className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+          className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20"
           style={{ background: '#162030', border: '1px solid #1e3040' }}
         />
         <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>

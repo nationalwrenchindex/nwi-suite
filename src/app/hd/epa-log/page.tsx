@@ -28,8 +28,8 @@ export default async function EPALogPage({
   const totalLbs = (log ?? []).reduce((s, e) => s + Number(e.pounds), 0)
 
   return (
-    <main className="flex-1 p-6">
-      <div className="flex items-center justify-between mb-6">
+    <main className="flex-1 p-4 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div>
           <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>HD Suite — Compliance</p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">EPA 608 REFRIGERANT LOG</h1>
@@ -89,7 +89,8 @@ export default async function EPALogPage({
             <p className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>No EPA log entries yet</p>
           </div>
         ) : (
-          <table className="w-full" style={{ background: '#111920' }}>
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[600px]" style={{ background: '#111920' }}>
             <thead style={{ background: '#162030' }}>
               <tr>
                 {['Date', 'Unit', 'Refrigerant', 'Action', 'Pounds', 'Reason', 'Cert #'].map(h => (
@@ -117,6 +118,7 @@ export default async function EPALogPage({
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </main>
