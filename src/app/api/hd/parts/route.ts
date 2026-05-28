@@ -41,21 +41,56 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  type PartRow = { id: string; part_number: string; description: string; notes: string | null; [k: string]: unknown }
+  type CrossRefMatch = { cross_part: string; cross_mfr: string }
+  type PartRow = { id: string; part_number: string; description: string; notes: string | null; _cross_ref_match?: CrossRefMatch[]; [k: string]: unknown }
   let parts = (data ?? []) as unknown as PartRow[]
 
-  // Text search: strip dashes/spaces from both the search term and each part_number
-  // before comparing so "452324" matches "45-2324". Description and notes use plain
-  // case-insensitive substring matching.
   if (search) {
     const normalize = (s: string) => s.replace(/[-\s]/g, '').toLowerCase()
     const normSearch = normalize(search)
-    const lower = search.toLowerCase()
+    const lower      = search.toLowerCase()
+
+    // 1. Filter main results — normalized part_number + plain description/notes
     parts = parts.filter(p =>
       normalize(p.part_number).includes(normSearch) ||
       p.description.toLowerCase().includes(lower) ||
       (p.notes ?? '').toLowerCase().includes(lower)
     )
+
+    // 2. Cross-ref search — find OEM parts where any cross_part matches the normalized term
+    const { data: allXrefs } = await supabase
+      .from('hd_parts_cross_ref')
+      .select('part_number, cross_mfr, cross_part')
+
+    const matchedXrefs = (allXrefs ?? []).filter(xr =>
+      normalize(xr.cross_part as string).includes(normSearch)
+    )
+
+    if (matchedXrefs.length > 0) {
+      const xrefPartNumbers = [...new Set(matchedXrefs.map(x => x.part_number as string))]
+
+      let xrefQuery = supabase
+        .from('hd_parts')
+        .select(cross_ref ? '*, hd_parts_cross_ref(*)' : '*')
+        .in('part_number', xrefPartNumbers)
+
+      // Apply the same manufacturer/category filters to the OEM parts
+      if (manufacturer) xrefQuery = xrefQuery.eq('manufacturer', manufacturer)
+      if (category)     xrefQuery = xrefQuery.eq('category', category)
+
+      const { data: xrefParts } = await xrefQuery
+
+      const tagged = ((xrefParts ?? []) as unknown as PartRow[]).map(p => ({
+        ...p,
+        _cross_ref_match: matchedXrefs
+          .filter(xr => xr.part_number === p.part_number)
+          .map(xr => ({ cross_part: xr.cross_part as string, cross_mfr: xr.cross_mfr as string })),
+      }))
+
+      // Cross-ref matches go first; deduplicate against text-search results by id
+      const xrefIds = new Set(tagged.map(p => p.id))
+      parts = [...tagged, ...parts.filter(p => !xrefIds.has(p.id))]
+    }
   }
 
   return NextResponse.json({ parts })

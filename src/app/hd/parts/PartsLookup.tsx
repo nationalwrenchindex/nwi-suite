@@ -12,17 +12,23 @@ interface CrossRef {
   cross_notes?: string
 }
 
+interface CrossRefMatch {
+  cross_part: string
+  cross_mfr:  string
+}
+
 interface Part {
-  id:             string
-  part_number:    string
-  manufacturer:   string
-  description:    string
-  category:       string
-  unit_models:    string[]
-  notes?:         string
-  superseded_by?: string
-  field_critical: boolean
+  id:              string
+  part_number:     string
+  manufacturer:    string
+  description:     string
+  category:        string
+  unit_models:     string[]
+  notes?:          string
+  superseded_by?:  string
+  field_critical:  boolean
   hd_parts_cross_ref?: CrossRef[]
+  _cross_ref_match?: CrossRefMatch[]
 }
 
 const CATEGORIES = [
@@ -77,11 +83,29 @@ function PartRow({ part, expanded, onToggle }: {
   const hasXref = (part.hd_parts_cross_ref?.length ?? 0) > 0
   const hasMeta = part.notes || part.superseded_by || hasXref
 
+  const crossRefMatches = part._cross_ref_match ?? []
+
   return (
     <div
       className="rounded-lg overflow-hidden transition-all"
-      style={{ background: '#111920', border: '1px solid #1e3040' }}
+      style={{ background: '#111920', border: `1px solid ${crossRefMatches.length > 0 ? '#1e3a5f' : '#1e3040'}` }}
     >
+      {crossRefMatches.length > 0 && (
+        <div
+          className="px-4 py-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs"
+          style={{ background: '#071828', borderBottom: '1px solid #1e3a5f' }}
+        >
+          <span style={{ color: 'rgba(255,255,255,0.45)' }}>Found via cross reference:</span>
+          {crossRefMatches.map(xr => (
+            <span key={xr.cross_part} className="flex items-center gap-1">
+              <span className="font-mono font-bold" style={{ color: '#60a5fa' }}>{xr.cross_part}</span>
+              <span style={{ color: 'rgba(255,255,255,0.35)' }}>({xr.cross_mfr})</span>
+              <span style={{ color: 'rgba(255,255,255,0.35)' }}>→ OEM:</span>
+              <span className="font-mono font-bold" style={{ color: HD_ORANGE }}>{part.part_number}</span>
+            </span>
+          ))}
+        </div>
+      )}
       <button
         onClick={onToggle}
         className="w-full text-left px-4 py-3 flex items-start gap-3 hover:bg-white/5 transition-colors"
@@ -291,7 +315,7 @@ export default function PartsLookup() {
       <div className="mb-4 flex flex-wrap gap-3">
         <input
           type="text"
-          placeholder="Search part number, description…"
+          placeholder="Search part #, description, or cross-ref number…"
           value={search}
           onChange={e => applyFilters(e.target.value, manufacturer, category)}
           className="flex-1 min-w-[220px] px-3 py-2 rounded-lg text-base sm:text-sm text-white placeholder:text-white/30 outline-none"
