@@ -154,13 +154,10 @@ export default async function PublicInvoicePage(
               <img src={p.business_logo_url} alt={bizName} className="h-full w-auto object-contain p-1" />
             </div>
           ) : (
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <div className="h-16 sm:h-20 w-16 sm:w-20 rounded-md bg-[#FF6600] flex items-center justify-center">
-                <svg className="w-8 sm:w-10 h-8 sm:h-10 text-white" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                  <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-                </svg>
-              </div>
-              <span className="font-bold text-sm text-white/80 tracking-wide">National Wrench Index</span>
+            <div className="h-16 sm:h-20 w-16 sm:w-20 rounded-md bg-[#FF6600] flex items-center justify-center flex-shrink-0">
+              <svg className="w-8 sm:w-10 h-8 sm:h-10 text-white" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+              </svg>
             </div>
           )}
           <div className="h-4 w-px bg-white/15" />
@@ -444,9 +441,6 @@ export default async function PublicInvoicePage(
           </p>
         )}
 
-        <p className="text-center text-white/15 text-xs pb-4">
-          Powered by National Wrench Index
-        </p>
 
       </div>
 

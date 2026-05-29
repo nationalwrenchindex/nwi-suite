@@ -1188,10 +1188,6 @@ function BookingHeader({ bizName, profile, isDetailer }: { bizName: string; prof
             {profLabel}{profile.service_area_description ? ` · ${profile.service_area_description}` : ''}
           </p>
         </div>
-        <div className="hidden sm:flex flex-col items-end">
-          <p className="text-white/20 text-[9px] uppercase tracking-widest">Powered by</p>
-          <p className="font-condensed font-bold text-white/40 text-xs tracking-wide">NATIONAL WRENCH INDEX SUITE</p>
-        </div>
       </div>
     </header>
   )
