@@ -16,7 +16,7 @@ export default async function LogoPage() {
     .eq('id', user.id)
     .single()
 
-  if (!profile?.business_name) redirect('/onboarding')
+  if (profile != null && !profile.business_name?.trim()) redirect('/onboarding')
 
   const p = profile as { business_name: string; business_type?: string | null; business_logo_url?: string | null }
 

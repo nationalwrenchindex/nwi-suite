@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
 async function compressLogo(file: File): Promise<{ blob: Blob; ext: string }> {
@@ -39,6 +40,7 @@ async function blobToBase64(blob: Blob): Promise<string> {
 }
 
 export default function LogoUploadClient({ initialLogoUrl }: { initialLogoUrl: string | null }) {
+  const router = useRouter()
   const [logoUrl,   setLogoUrl]   = useState(initialLogoUrl)
   const [preview,   setPreview]   = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -63,9 +65,12 @@ export default function LogoUploadClient({ initialLogoUrl }: { initialLogoUrl: s
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Upload failed')
-      setLogoUrl(data.url)
+      // Append cache-bust so the browser fetches fresh even though the storage
+      // path (and therefore URL) is the same after upsert.
+      setLogoUrl(`${data.url}?v=${Date.now()}`)
       setPreview(null)
       setSaved(true)
+      router.refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Upload failed')
       setPreview(null)
@@ -83,6 +88,7 @@ export default function LogoUploadClient({ initialLogoUrl }: { initialLogoUrl: s
       const res = await fetch('/api/settings/logo', { method: 'DELETE' })
       if (!res.ok) throw new Error('Delete failed')
       setLogoUrl(null)
+      router.refresh()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Delete failed')
     } finally {
