@@ -150,13 +150,13 @@ export default async function PublicInvoicePage(
       <div className="bg-[#1a1a1a] border-b border-white/10">
         <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-3">
           {p?.business_logo_url ? (
-            <div className="w-8 h-8 rounded-md overflow-hidden border border-white/10 bg-white/5 flex-shrink-0">
-              <img src={p.business_logo_url} alt={bizName} className="w-full h-full object-contain p-0.5" />
+            <div className="h-16 sm:h-20 max-w-[240px] rounded-md overflow-hidden border border-white/10 bg-white/5 flex-shrink-0 inline-flex">
+              <img src={p.business_logo_url} alt={bizName} className="h-full w-auto object-contain p-1" />
             </div>
           ) : (
-            <div className="flex items-center gap-2">
-              <div className="w-7 h-7 rounded-md bg-[#FF6600] flex items-center justify-center">
-                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="h-16 sm:h-20 w-16 sm:w-20 rounded-md bg-[#FF6600] flex items-center justify-center">
+                <svg className="w-8 sm:w-10 h-8 sm:h-10 text-white" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                   <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
                 </svg>
               </div>
