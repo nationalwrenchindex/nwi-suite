@@ -31,7 +31,11 @@ export default async function SettingsPage() {
       .order('sort_order', { ascending: true }),
   ])
 
-  if (!profile?.business_name) redirect('/onboarding')
+  // Redirect to onboarding ONLY when setup is genuinely incomplete.
+  // Never redirect on a DB query error (profile === null) — that is a different failure mode.
+  if (profile != null && (!profile.business_name?.trim() || !profile.slug?.trim() || !profile.business_type)) {
+    redirect('/onboarding')
+  }
 
   const p = profile as {
     full_name?: string
