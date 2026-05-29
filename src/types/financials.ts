@@ -334,6 +334,7 @@ export interface FinancialsOverview {
   avg_job_profit: number
   avg_time_variance: number | null   // minutes; positive = over estimate
   top_service: string | null
+  service_breakdown: { service_type: string; count: number }[]
   invoice_count: number
   paid_invoice_count: number
   overdue_invoice_count: number

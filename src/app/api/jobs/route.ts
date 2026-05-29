@@ -90,6 +90,8 @@ export async function POST(request: NextRequest) {
       estimated_duration_minutes: body.estimated_duration_minutes ?? null,
       notes:                      body.notes                      ?? null,
       internal_notes:             body.internal_notes             ?? null,
+      tire_size_type:             body.tire_size_type             ?? null,
+      tire_size:                  body.tire_size                  ?? null,
     })
     .select(JOB_SELECT)
     .single()

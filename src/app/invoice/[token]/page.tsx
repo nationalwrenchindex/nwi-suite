@@ -59,11 +59,11 @@ export default async function PublicInvoicePage(
 
   const { data: profile } = await sc
     .from('profiles')
-    .select('full_name, business_name, phone, email, business_type, bill_consumables_separately, default_payment_instructions')
+    .select('full_name, business_name, phone, email, business_type, bill_consumables_separately, default_payment_instructions, business_logo_url')
     .eq('id', invoice.user_id)
     .single()
 
-  const p = profile as { full_name?: string; business_name?: string; phone?: string; business_type?: string; bill_consumables_separately?: boolean; default_payment_instructions?: string | null } | null
+  const p = profile as { full_name?: string; business_name?: string; phone?: string; business_type?: string; bill_consumables_separately?: boolean; default_payment_instructions?: string | null; business_logo_url?: string | null } | null
   const bizName             = p?.business_name             ?? 'Your Technician'
   const techPhone           = p?.phone                     ?? null
   const billConsumables     = p?.bill_consumables_separately ?? false
@@ -149,14 +149,20 @@ export default async function PublicInvoicePage(
       {/* Header */}
       <div className="bg-[#1a1a1a] border-b border-white/10">
         <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-md bg-[#FF6600] flex items-center justify-center">
-              <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
-              </svg>
+          {p?.business_logo_url ? (
+            <div className="w-8 h-8 rounded-md overflow-hidden border border-white/10 bg-white/5 flex-shrink-0">
+              <img src={p.business_logo_url} alt={bizName} className="w-full h-full object-contain p-0.5" />
             </div>
-            <span className="font-bold text-sm text-white/80 tracking-wide">National Wrench Index</span>
-          </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-md bg-[#FF6600] flex items-center justify-center">
+                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+                </svg>
+              </div>
+              <span className="font-bold text-sm text-white/80 tracking-wide">National Wrench Index</span>
+            </div>
+          )}
           <div className="h-4 w-px bg-white/15" />
           <p className="text-white/50 text-sm">Invoice from {bizName}</p>
         </div>

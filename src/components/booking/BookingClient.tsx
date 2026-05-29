@@ -14,6 +14,7 @@ export interface PublicProfile {
   profession_type:          string | null
   service_area_description: string | null
   working_hours:            WorkingHours | null
+  business_logo_url?:       string | null
 }
 
 // ─── Service duration estimates (minutes) ─────────────────────────────────────
@@ -24,6 +25,8 @@ const SERVICE_DURATIONS: Record<string, number> = {
   'Brake Service':               120,
   'Tire Rotation':                30,
   'Tire Replacement':             90,
+  'Tire Balancing':               45,
+  'TPMS Sensor Replacement':      60,
   'Battery Replacement':          30,
   'Engine Diagnostic':            60,
   'A/C Service':                  90,
@@ -423,6 +426,10 @@ export default function BookingClient({
   const [vMake,     setVMake]     = useState('')
   const [vModel,    setVModel]    = useState('')
 
+  // Tire info (shown when Tire Replacement is selected)
+  const [tireSizeType, setTireSizeType] = useState<'oem' | 'aftermarket'>('oem')
+  const [tireSize,     setTireSize]     = useState('')
+
   // Step 4 — booking submit
   const [submitting, setSubmitting] = useState(false)
   const [submitted,  setSubmitted]  = useState(false)
@@ -530,6 +537,10 @@ export default function BookingClient({
           make:  vMake.trim(),
           model: vModel.trim(),
         }
+      }
+      if (selectedServices.includes('Tire Replacement')) {
+        payload.tire_size_type = tireSizeType
+        payload.tire_size      = tireSize.trim() || null
       }
 
       const res = await fetch(`/api/book/${techSlug}`, {
@@ -896,6 +907,46 @@ export default function BookingClient({
                   </div>
                 </div>
 
+                {/* Tire info — shown when Tire Replacement is selected */}
+                {selectedServices.includes('Tire Replacement') && (
+                  <div className="border-t border-dark-border pt-4">
+                    <p className="font-condensed font-bold text-white/60 text-sm tracking-wide mb-3">
+                      TIRE INFO <span className="font-normal normal-case text-white/30 text-xs ml-1">optional</span>
+                    </p>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="nwi-label">Tire type</label>
+                        <div className="flex gap-2">
+                          {(['oem', 'aftermarket'] as const).map(t => (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => setTireSizeType(t)}
+                              className={`flex-1 rounded-lg border px-3 py-2.5 text-sm font-medium transition-all ${
+                                tireSizeType === t
+                                  ? 'border-orange bg-orange/10 text-orange'
+                                  : 'border-dark-border text-white/50 hover:border-white/20 hover:text-white/80'
+                              }`}
+                            >
+                              {t === 'oem' ? 'OEM / Factory' : 'Aftermarket'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="nwi-label">Tire size <span className="text-white/30">(optional)</span></label>
+                        <input
+                          className="nwi-input"
+                          placeholder="e.g. 265/70R17"
+                          value={tireSize}
+                          onChange={e => setTireSize(e.target.value)}
+                        />
+                        <p className="text-white/25 text-xs mt-1">Found on the door jamb sticker or sidewall of your current tires.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Photo upload — detailer bookings only */}
                 {isDetailer && (
                   <div className="border-t border-dark-border pt-4">
@@ -975,6 +1026,12 @@ export default function BookingClient({
                   <div className="pb-3 border-b border-dark-border">
                     <p className="text-white/30 text-[10px] uppercase tracking-widest mb-1">Vehicle</p>
                     <p className="text-white text-sm">{[vYear, vMake, vModel].filter(Boolean).join(' ')}</p>
+                  </div>
+                )}
+                {selectedServices.includes('Tire Replacement') && (
+                  <div className="pb-3 border-b border-dark-border">
+                    <p className="text-white/30 text-[10px] uppercase tracking-widest mb-1">Tire Info</p>
+                    <p className="text-white text-sm">{tireSizeType === 'oem' ? 'OEM / Factory' : 'Aftermarket'}{tireSize ? ` · ${tireSize}` : ''}</p>
                   </div>
                 )}
                 {notes && (
@@ -1114,11 +1171,17 @@ function BookingHeader({ bizName, profile, isDetailer }: { bizName: string; prof
   return (
     <header className="border-b border-dark-border bg-dark-card px-4 sm:px-8 py-4">
       <div className="max-w-xl mx-auto flex items-center gap-4">
-        <div className="w-10 h-10 bg-orange rounded-xl flex items-center justify-center flex-shrink-0">
-          <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
-            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-          </svg>
-        </div>
+        {profile.business_logo_url ? (
+          <div className="w-10 h-10 rounded-xl overflow-hidden border border-dark-border bg-dark-card flex-shrink-0">
+            <img src={profile.business_logo_url} alt={bizName} className="w-full h-full object-contain p-0.5" />
+          </div>
+        ) : (
+          <div className="w-10 h-10 bg-orange rounded-xl flex items-center justify-center flex-shrink-0">
+            <svg className="w-5 h-5 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+            </svg>
+          </div>
+        )}
         <div className="flex-1 min-w-0">
           <p className="font-condensed font-bold text-white text-lg leading-none truncate">{bizName}</p>
           <p className="text-white/40 text-xs mt-0.5">

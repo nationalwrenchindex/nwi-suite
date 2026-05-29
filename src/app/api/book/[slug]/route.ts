@@ -371,6 +371,8 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
 
   const vehicleCategory = typeof body.vehicle_category === 'string' ? body.vehicle_category : null
   const photos          = Array.isArray(body.photos) ? (body.photos as string[]).filter(u => typeof u === 'string') : []
+  const tireSizeType    = typeof body.tire_size_type === 'string' ? body.tire_size_type : null
+  const tireSize        = typeof body.tire_size === 'string' ? body.tire_size : null
 
   // ── Create job ──
   const { data: job, error: jobErr } = await supabase
@@ -390,6 +392,8 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       sms_consent:                smsConsent,
       vehicle_category:           vehicleCategory,
       photos:                     photos,
+      tire_size_type:             tireSizeType,
+      tire_size:                  tireSize,
     })
     .select('id, job_date, job_time, service_type')
     .single()

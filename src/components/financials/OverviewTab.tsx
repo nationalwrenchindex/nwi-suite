@@ -344,6 +344,32 @@ export default function OverviewTab({ businessType }: { businessType?: string })
             />
           </div>
 
+          {/* ── Service breakdown ── */}
+          {overview.service_breakdown && overview.service_breakdown.length > 0 && (
+            <div className="nwi-card">
+              <p className="text-white/40 text-xs font-medium uppercase tracking-widest mb-4">Jobs by Service</p>
+              <div className="space-y-2.5">
+                {overview.service_breakdown.map(({ service_type, count }) => {
+                  const maxCount = overview.service_breakdown[0].count
+                  const pct = maxCount > 0 ? (count / maxCount) * 100 : 0
+                  const isTire = service_type.toLowerCase().startsWith('tire') || service_type === 'TPMS Sensor Replacement'
+                  return (
+                    <div key={service_type} className="flex items-center gap-3">
+                      <span className="text-white/60 text-xs w-40 truncate flex-shrink-0">{service_type}</span>
+                      <div className="flex-1 h-1.5 rounded-full bg-dark-border overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${isTire ? 'bg-blue' : 'bg-orange'}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className={`text-xs font-bold tabular-nums w-6 text-right ${isTire ? 'text-blue' : 'text-orange'}`}>{count}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           {/* ── Invoice breakdown ── */}
           <div className="nwi-card">
             <p className="text-white/40 text-xs font-medium uppercase tracking-widest mb-4">

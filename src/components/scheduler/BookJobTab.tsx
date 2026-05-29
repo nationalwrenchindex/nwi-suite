@@ -15,6 +15,8 @@ interface FormState {
   estimated_duration_minutes: string
   notes: string
   internal_notes: string
+  tire_size_type: 'oem' | 'aftermarket'
+  tire_size: string
 }
 
 function makeDefaultForm(): FormState {
@@ -29,6 +31,8 @@ function makeDefaultForm(): FormState {
     estimated_duration_minutes: '60',
     notes:                      '',
     internal_notes:             '',
+    tire_size_type:             'oem',
+    tire_size:                  '',
   }
 }
 
@@ -82,7 +86,7 @@ export default function BookJobTab({ onSuccess, businessType }: { onSuccess: () 
 
     const svcType = form.service_type === 'Other' ? form.custom_service : form.service_type
 
-    const payload = {
+    const payload: Record<string, unknown> = {
       job_date:                   form.job_date,
       job_time:                   form.job_time || null,
       service_type:               svcType,
@@ -94,6 +98,11 @@ export default function BookJobTab({ onSuccess, businessType }: { onSuccess: () 
                                     : null,
       notes:                      form.notes         || null,
       internal_notes:             form.internal_notes || null,
+    }
+
+    if (svcType === 'Tire Replacement') {
+      payload.tire_size_type = form.tire_size_type
+      payload.tire_size      = form.tire_size || null
     }
 
     try {
@@ -193,6 +202,41 @@ export default function BookJobTab({ onSuccess, businessType }: { onSuccess: () 
                 placeholder="e.g. Steering rack replacement"
                 className="nwi-input"
               />
+            </div>
+          )}
+
+          {form.service_type === 'Tire Replacement' && (
+            <div className="space-y-3 pt-1 border-t border-dark-border">
+              <p className="text-white/50 text-xs uppercase tracking-widest font-semibold">Tire Info</p>
+              <div>
+                <label className="nwi-label">Tire type</label>
+                <div className="flex gap-2">
+                  {(['oem', 'aftermarket'] as const).map(t => (
+                    <button
+                      key={t}
+                      type="button"
+                      onClick={() => set('tire_size_type', t)}
+                      className={`flex-1 rounded-lg border px-3 py-2 text-sm font-medium transition-all ${
+                        form.tire_size_type === t
+                          ? 'border-orange bg-orange/10 text-orange'
+                          : 'border-dark-border text-white/50 hover:border-white/20 hover:text-white/80'
+                      }`}
+                    >
+                      {t === 'oem' ? 'OEM / Factory' : 'Aftermarket'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="nwi-label">Tire size <span className="text-white/30">(optional)</span></label>
+                <input
+                  type="text"
+                  value={form.tire_size}
+                  onChange={(e) => set('tire_size', e.target.value)}
+                  placeholder="e.g. 265/70R17"
+                  className="nwi-input"
+                />
+              </div>
             </div>
           )}
 

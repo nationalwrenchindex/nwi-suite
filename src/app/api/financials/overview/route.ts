@@ -113,6 +113,10 @@ export async function GET(request: NextRequest) {
     return acc
   }, {})
   const top_service = Object.entries(serviceCount).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+  const service_breakdown = Object.entries(serviceCount)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([service_type, count]) => ({ service_type, count }))
 
   // Estimate vs actual time variance
   let avg_time_variance: number | null = null
@@ -207,6 +211,7 @@ export async function GET(request: NextRequest) {
       avg_job_profit,
       avg_time_variance,
       top_service,
+      service_breakdown,
       invoice_count:         invoices.length,
       paid_invoice_count:    paidInvoices.length,
       overdue_invoice_count: overdueInvoices.length,

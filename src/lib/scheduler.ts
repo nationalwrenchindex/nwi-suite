@@ -30,6 +30,8 @@ export const MECHANIC_SERVICES = [
   'Brake Service',
   'Tire Rotation',
   'Tire Replacement',
+  'Tire Balancing',
+  'TPMS Sensor Replacement',
   'Battery Replacement',
   'Engine Diagnostic',
   'A/C Service',
