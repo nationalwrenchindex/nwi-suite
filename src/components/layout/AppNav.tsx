@@ -1,5 +1,6 @@
 'use client'
 
+import { useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -39,6 +40,14 @@ export default function AppNav({
 }) {
   const pathname = usePathname()
   const router   = useRouter()
+  const navRef   = useRef<HTMLElement>(null)
+
+  // Force iOS Safari to initialise the overflow-x scroll container on mount.
+  // Without this, the sticky-header scroll area is unresponsive until the
+  // user's first manual tap.
+  useEffect(() => {
+    if (navRef.current) navRef.current.scrollTo(0, 0)
+  }, [])
 
   async function signOut() {
     const supabase = createClient()
@@ -198,7 +207,7 @@ export default function AppNav({
         </Link>
 
         {/* Nav items */}
-        <nav className="flex items-center gap-1 flex-1 overflow-x-auto hide-scrollbar">
+        <nav ref={navRef} className="flex items-center gap-1 flex-1 overflow-x-auto hide-scrollbar">
           {visibleNavItems.map((item) => {
             const isComingSoon = item.href === '#'
             const locked       = isLocked(item.href)

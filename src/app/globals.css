@@ -206,6 +206,17 @@ html.light {
   html.light .border-\[\#444\].bg-\[\#333\] { border-color: #d0d0d0; }
 }
 
+@layer utilities {
+  /* Hide scrollbar cross-browser while keeping scroll functionality */
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @layer components {
   /* ── Form inputs ── */
   .nwi-input {
