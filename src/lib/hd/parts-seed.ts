@@ -12,8 +12,12 @@ export async function seedHDParts() {
 
   const parts = [
     // ── THERMO KING STARTERS ──────────────────────────────────────────────────
-    { part_number: '45-2324', manufacturer: 'Thermo King', description: 'Starter Assembly — Yanmar 486V Tier 2', category: 'starter', unit_models: ['SB-190','SB-200','SB-210','SB-300','SB-310','SL-100','SL-200','SL-300','SL-400'], engine: 'Yanmar 486V Tier 2', notes: 'Most common TK trailer starter. Verify engine serial before ordering.' },
+    { part_number: '45-2324', manufacturer: 'Thermo King', description: 'Starter Assembly — Yanmar 486V Tier 2', category: 'starter', unit_models: ['SB-190','SB-200','SB-210','SB-300','SB-310','SL-100','SL-200','SL-300','SL-400','Precedent G-700'], engine: 'Yanmar 486V Tier 2', notes: 'Most common TK trailer starter. Verify engine serial before ordering.' },
     { part_number: '45-2323', manufacturer: 'Thermo King', description: 'Starter Assembly — Yanmar 486E Tier 1', category: 'starter', unit_models: ['SB-110','MD-II'], engine: 'Yanmar 486E Tier 1', superseded_by: '45-2324', notes: 'Superseded — order 45-2324 instead' },
+    { part_number: '45-2326', manufacturer: 'Thermo King', description: 'Starter Assembly — Yanmar 370/376 Tier 2/4', category: 'starter', unit_models: ['T-600','T-680','T-800','T-1000','MD-200','MD-300'], engine: 'Yanmar 370/376 Tier 2/4' },
+    { part_number: '45-2176', manufacturer: 'Thermo King', description: 'Starter Assembly — Yanmar 270 Tier 1', category: 'starter', unit_models: ['TriPac pre-July 2006','Heat King'], engine: 'Yanmar 270 Tier 1' },
+    { part_number: '45-2325', manufacturer: 'Thermo King', description: 'Starter Assembly — Yanmar DI SE Legacy', category: 'starter', unit_models: ['SB-II','SB-III','Super II'], engine: 'Yanmar DI SE' },
+    { part_number: '44-2918', manufacturer: 'Thermo King', description: 'Starter Assembly — Isuzu C201 2.2L', category: 'starter', unit_models: ['SB-I','SB-II','Sentry','Super NWD'], engine: 'Isuzu C201 2.2L' },
     { part_number: '45-1718', manufacturer: 'Thermo King', description: 'Starter Assembly — TriPac APU', category: 'starter', unit_models: ['TriPac'], engine: 'Yanmar TK270 TK370' },
     { part_number: '45-1688', manufacturer: 'Thermo King', description: 'Starter Assembly — Yanmar 482 486E', category: 'starter', engine: 'Yanmar 482 486E' },
     { part_number: '45-1993', manufacturer: 'Thermo King', description: 'Starter Assembly — Isuzu 2.2DI', category: 'starter', engine: 'Isuzu 2.2DI SE' },
@@ -166,6 +170,8 @@ export async function seedHDParts() {
     { part_number: '37-92-8893', manufacturer: 'Thermo King', description: 'Engine Vibration Mount', category: 'mount', notes: 'Replaces 37-91-2338' },
 
     // ── THERMO KING SOLENOIDS ─────────────────────────────────────────────────
+    { part_number: '66-8560', manufacturer: 'Thermo King', description: 'Pilot Solenoid Valve', category: 'solenoid', subcategory: 'pilot', unit_models: ['SLXi','TS-series','SLX','KD-series','MD-series','RD-series','TD-series','SL-series','SLXE'], notes: 'FIELD CRITICAL — pilot solenoid failure causes Code 67 — test coil 10-30 ohms' },
+    { part_number: '66-7636', manufacturer: 'Thermo King', description: 'Pilot Solenoid Valve', category: 'solenoid', subcategory: 'pilot', unit_models: ['SLXi','Spectrum','SB-series','SLX','B-series','SL-series','V-series','T-series'], notes: 'FIELD CRITICAL — pilot solenoid failure causes Code 67 — test coil 10-30 ohms' },
     { part_number: '37-44-6424', manufacturer: 'Thermo King', description: 'Starter Solenoid — Isuzu C201 2.2DI', category: 'solenoid', subcategory: 'starter', engine: 'Isuzu C201 2.2DI' },
     { part_number: '37-44-6544', manufacturer: 'Thermo King', description: 'Speed Shut Off Solenoid', category: 'solenoid', subcategory: 'speed' },
     { part_number: '37-44-6727', manufacturer: 'Thermo King', description: 'Injection Pump Solenoid', category: 'solenoid', subcategory: 'fuel' },
@@ -348,6 +354,9 @@ export async function seedHDParts() {
     { part_number: '12-00352-13', cross_mfr: 'Carrier OEM', cross_part: '12-00352-03' },
     { part_number: '12-00352-14', cross_mfr: 'Carrier OEM', cross_part: '12-00352-04' },
     { part_number: '22-02804-00', cross_mfr: 'Carrier OEM', cross_part: '22-02804-02' },
+    { part_number: '78-1687', cross_mfr: 'Thermo King Legacy', cross_part: '78-1688' },
+    { part_number: '78-1688', cross_mfr: 'Cross Reference', cross_part: 'CP10513' },
+    { part_number: '45-2324', cross_mfr: 'Hitachi', cross_part: 'S13-407' },
   ]
 
   // Upsert parts in batches of 50 to avoid request timeout
