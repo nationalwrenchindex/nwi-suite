@@ -382,6 +382,246 @@ Step 1 is ALWAYS a battery load test before any other diagnosis.
 - A weak battery causes false electrical faults, CAN errors, sensor faults, solenoid failures — battery replacement often resolves them without further diagnosis.
 Always list battery check as the first diagnostic step.
 
+CUMMINS ISB ISC ISL FAULT CODES AND FIELD DIAGNOSIS
+
+CUMMINS NO START DIAGNOSIS SEQUENCE:
+1. Check battery voltage — must be above 12.4V to crank properly
+2. Check fuel level and fuel shutoff solenoid
+3. Check fuel filter restriction — replace if over service interval
+4. Check air filter restriction indicator
+5. Check for active fault codes before any other diagnosis
+6. Fault code 559 — battery voltage high — check alternator output and battery condition
+7. Fault code 415 — oil pressure low — do not start — check oil level first
+8. Fault code 111 — ECM critical internal failure — requires ECM replacement or reprogramming
+9. Fault code 449 — fuel pressure low — check lift pump, fuel filter, fuel lines for restriction
+10. Fault code 283 — injector response time — individual injector fault — cylinder specific
+11. Fault code 271 — injector solenoid — check injector wiring harness before replacing injector
+12. Fault code 595 — throttle position — check TPS sensor and wiring
+
+CUMMINS ISB FIELD NOTES:
+- High pressure common rail system — NEVER check for leaks with bare hands — injection pressure exceeds 20000 PSI — penetrates skin and causes serious injection injuries
+- Fuel filter is the first thing to replace on any fuel system complaint — cheap insurance
+- Lift pump failure is common on high mileage ISB — weak lift pump starves high pressure pump and causes hard start and low power
+- EGR cooler failure causes white smoke and coolant loss — pressure test cooling system before condemning head gasket
+- Air compressor governor failure causes air dryer cycling constantly — check governor before replacing dryer
+
+CUMMINS ISC ISL ADDITIONAL:
+- ISL is larger displacement version of ISC — same diagnostic approach
+- VGT turbo actuator failure is common — causes low power and black smoke — check actuator response before replacing turbo
+- DPF regeneration issues — check exhaust back pressure sensor before condemning DPF
+
+MERCEDES MBE900 MBE4000 FAULT CODES
+
+MBE900 COMMON FAULT CODES:
+- Code 168 — battery voltage — check charging system
+- Code 100 — oil pressure — stop engine immediately — check oil level
+- Code 110 — coolant temperature high — check coolant level, thermostat, water pump
+- Code 91 — throttle position sensor — check sensor and wiring before replacing
+- Code 94 — fuel pressure — check fuel filter and lift pump
+
+MBE900 FIELD NOTES:
+- MBE900 is a Mercedes OM904 engine — used heavily in Freightliner M2 and Sterling Acterra
+- Timing chain tensioner failure is a known issue on high mileage MBE900 — rattling on cold start is the tell
+- Fuel system is sensitive to contaminated fuel — replace filter first on any fuel complaint
+- Jake brake adjustment required every PM — improper adjustment causes excessive valve train wear
+
+MBE4000 FIELD NOTES:
+- Larger engine — used in Class 8 applications
+- EGR system prone to clogging — similar cleaning procedure to TK 486V EGR
+- Turbocharger oil feed line restriction causes premature turbo failure — check oil feed before replacing turbo
+
+CATERPILLAR C7 C9 FAULT CODES
+
+CAT C7 COMMON CODES:
+- Code 42 — throttle position sensor
+- Code 46 — low oil pressure — stop engine
+- Code 61 — coolant level low
+- Code 84 — vehicle speed sensor
+- Code 91 — throttle position
+- Code 168 — battery voltage
+
+CAT C7 FIELD NOTES:
+- C7 ACERT engine had known issues with oil consumption — check for oil in intake before other diagnosis
+- Injector cup failure causes coolant in oil — check for milky oil before diagnosing hard start
+- High pressure oil system — HEUI injection — low oil level causes hard start and misfire
+- Oil must be correct viscosity — wrong oil causes injector performance issues on HEUI system
+
+CAT C9 FIELD NOTES:
+- C9 is more reliable than C7 — fewer known issues
+- Same HEUI injection system — oil level and quality critical
+- Turbo wastegate actuator failure causes low power — check actuator before replacing turbo
+
+ALLISON TRANSMISSION FAULT CODES
+
+ALLISON 1000 2000 3000 SERIES COMMON CODES:
+- Code P0700 — transmission control system — check TCM for specific fault
+- Code P0729 — gear 6 incorrect ratio — check solenoid pack
+- Code P0740 — torque converter clutch — check fluid level and condition first
+- Code P0750 — shift solenoid A — check wiring before replacing solenoid
+- Code P0780 — shift malfunction — check fluid level and condition
+
+ALLISON FIELD NOTES:
+- Transmission fluid level and condition is the first check on ANY Allison complaint
+- Allison requires specific TES 295 or TES 389 fluid — wrong fluid causes shift issues and damage
+- Range inhibit active means transmission will not shift out of current range — check for engine fault codes first — engine protection mode causes range inhibit
+- Allison World Transmission diagnostic requires Allison DOC software for full fault code access
+- Shift selector display codes: — means no communication with TCM — check power and ground to TCM first
+- Allison 3000 and 4000 series in buses and severe service — same diagnostic approach as 1000 2000 series
+
+MERITOR BENDIX ABS AND BRAKE SYSTEM
+
+ABS FAULT DIAGNOSIS:
+- ABS light on with no active fault — likely a wheel speed sensor gap issue — recheck sensor gap before replacing
+- Wheel speed sensor gap: 0.020 to 0.050 inch on most Meritor systems
+- Sensor resistance: 900 to 2000 ohms — outside this range replace sensor
+- Tone ring damage causes erratic ABS activation — inspect tone ring for missing or damaged teeth
+- ABS valve solenoid resistance: 3 to 8 ohms — check before replacing valve
+
+BENDIX FIELD NOTES:
+- Bendix EC-60 is most common ABS controller on Class 6 through 8 trucks
+- Blink code diagnosis — key on — count blinks on ABS warning lamp — first sequence is fault code
+- Code 2-1 — wheel speed sensor — most common fault
+- Code 3-1 — ABS solenoid valve — check wiring before replacing valve
+- Code 4-1 — retarder relay — check relay and wiring
+
+AIR BRAKE SYSTEM:
+- Air dryer purging constantly — failed governor or leaking check valve — check governor first
+- Slow air buildup — restricted air dryer desiccant or worn compressor rings
+- Air loss with engine off — find leak with soapy water — check glad hands, valves, and chambers
+- Brake chamber stroke — measure pushrod travel — maximum 2 inches on standard chamber before adjustment required
+
+FREIGHTLINER CHASSIS FAULT CODES
+
+FREIGHTLINER M2 COMMON ISSUES:
+- MID 136 — ABS controller faults — see Bendix section above
+- MID 140 — instrument cluster — check power and ground before replacing cluster
+- Body builder module faults — check CAN bus communication between modules
+- Cascadia specific — Detroit DD13 DD15 DD16 — different diagnostic approach than M2
+
+FREIGHTLINER NO START SEQUENCE:
+1. Check battery voltage — both batteries in series — must read 24V total or 12V each
+2. Check battery disconnect switch — common cause of no start
+3. Check neutral safety switch — transmission must be in neutral or park
+4. Check clutch switch on manual transmission equipped trucks
+5. Check for active fault codes — engine protection shutdown active
+6. Check fuel shutoff solenoid — audible click when key on
+7. Check primary and secondary fuel filters
+8. Check primer pump operation
+9. If cranks but no start — check fuel pressure at secondary filter housing
+
+AFTERTREATMENT DEF DPF FAULT DIAGNOSIS
+
+DEF SYSTEM DIAGNOSIS:
+- DEF quality fault — drain and refill with fresh DEF before any other diagnosis — contaminated DEF is most common cause
+- DEF level sensor fault — check sensor wiring before replacing — DEF is corrosive and damages connectors
+- SCR catalyst efficiency fault — check DEF quality and dosing rate before condemning catalyst
+- DEF injector fault — check for crystallized DEF around injector — clean before replacing
+
+DPF DIAGNOSIS:
+- High exhaust back pressure — DPF needs cleaning or replacement
+- Regen inhibited — check for active fault codes preventing regen — low oil pressure, high coolant temp, and low vehicle speed all inhibit regen
+- Forced regen procedure varies by engine manufacturer — use manufacturer specific procedure
+- DPF cleaning interval approximately 200000 to 300000 miles depending on duty cycle
+
+AFTERTREATMENT FIELD NOTES:
+- Never delete or bypass aftertreatment systems — federal violation — EPA fines up to 44539 dollars per day per violation
+- DEF freezes at 12 degrees Fahrenheit — system has heat lines to prevent freezing — if truck sat in extreme cold allow system to thaw before diagnosing
+- Urea deposits in exhaust system cause NOx efficiency faults — inspect for crystallization at joints and sensors
+
+J1939 SPN FMI FAULT CODE INTERPRETATION
+
+J1939 IS THE STANDARD COMMUNICATION PROTOCOL FOR HEAVY DUTY TRUCKS:
+Every fault code has two parts — SPN and FMI
+
+SPN — Suspect Parameter Number — identifies what system or component has the fault
+FMI — Failure Mode Identifier — identifies what type of failure occurred
+
+COMMON FMI CODES AND WHAT THEY MEAN:
+FMI 0 — Data valid but above normal range — reading too high
+FMI 1 — Data valid but below normal range — reading too low
+FMI 2 — Data erratic, intermittent, or incorrect
+FMI 3 — Voltage above normal or shorted high — check for short to power in wiring
+FMI 4 — Voltage below normal or shorted low — check for short to ground in wiring
+FMI 5 — Current below normal or open circuit — check for broken wire or connector
+FMI 6 — Current above normal or grounded circuit — check for short to ground
+FMI 7 — Mechanical system not responding properly — mechanical failure not electrical
+FMI 8 — Abnormal frequency, pulse width, or period
+FMI 9 — Abnormal update rate — communication fault between modules
+FMI 10 — Abnormal rate of change
+FMI 11 — Root cause not known
+FMI 12 — Bad intelligent device or component — module failure
+FMI 13 — Out of calibration
+FMI 14 — Special instructions
+FMI 15 — Data valid but above normal range — least severe
+FMI 16 — Data valid but above normal range — moderately severe
+FMI 17 — Data valid but below normal range — least severe
+FMI 18 — Data valid but below normal range — moderately severe
+FMI 19 — Received network data in error
+FMI 31 — Condition exists — general fault active
+
+COMMON SPN NUMBERS:
+SPN 91 — throttle position
+SPN 94 — fuel delivery pressure
+SPN 100 — engine oil pressure
+SPN 101 — crankcase pressure
+SPN 102 — boost pressure
+SPN 105 — intake manifold temperature
+SPN 108 — barometric pressure
+SPN 110 — coolant temperature
+SPN 157 — injector metering rail pressure
+SPN 168 — battery voltage
+SPN 171 — ambient air temperature
+SPN 174 — fuel temperature
+SPN 175 — engine oil temperature
+SPN 190 — engine RPM
+SPN 411 — EGR differential pressure
+SPN 412 — EGR temperature
+SPN 651 through 658 — individual injector cylinders 1 through 8
+SPN 1569 — engine protection torque derate — engine going into protection mode
+SPN 3216 — aftertreatment SCR intake NOx
+SPN 3226 — aftertreatment SCR outlet NOx
+SPN 3251 — DPF differential pressure
+SPN 3361 — DEF injector
+SPN 3363 — DEF quality
+SPN 4094 — aftertreatment SCR operator inducement — DEF related derate active
+
+FIELD USE OF SPN FMI:
+When a tech has a fault code in SPN FMI format — first identify the SPN to know what system is affected — then use the FMI to know what type of failure occurred — FMI 3 and 4 are almost always wiring faults — check connectors and harness before replacing components — FMI 7 is almost always mechanical — FMI 12 is almost always a module
+
+HD LABOR GUIDE — COMMON REPAIR TIME ESTIMATES
+
+These are field realistic time estimates for mobile HD repair — not dealer flat rate times.
+
+ENGINE:
+- Oil and filter service — 0.5 hours
+- Fuel filter service primary and secondary — 0.5 hours
+- Air filter replacement — 0.3 hours
+- Belt replacement serpentine — 1.0 to 1.5 hours
+- Thermostat replacement — 1.5 to 2.5 hours depending on accessibility
+- Water pump replacement — 3.0 to 5.0 hours
+- Injector replacement single — 2.0 to 3.0 hours
+- EGR valve replacement — 2.0 to 3.0 hours
+- Turbocharger replacement — 3.0 to 5.0 hours
+- Head gasket replacement — 12.0 to 16.0 hours
+
+TRANSMISSION:
+- Allison fluid and filter service — 1.0 to 1.5 hours
+- Manual transmission fluid service — 0.5 hours
+- Clutch replacement — 6.0 to 10.0 hours
+
+BRAKES:
+- Brake adjustment all wheels — 0.5 to 1.0 hours
+- Brake chamber replacement single — 1.0 to 1.5 hours
+- Slack adjuster replacement single — 0.5 to 1.0 hours
+- Wheel seal replacement single — 1.5 to 2.5 hours
+- Air dryer replacement — 1.0 to 2.0 hours
+
+ELECTRICAL:
+- Alternator replacement — 1.0 to 2.0 hours
+- Starter replacement — 1.5 to 2.5 hours
+- Battery replacement pair — 0.5 to 1.0 hours
+- Wheel speed sensor replacement — 0.5 to 1.0 hours
+
 Respond in plain text only. No JSON. No code blocks. No markdown. Use these exact section headers followed by a colon on their own line:
 
 ALARM MEANING:
