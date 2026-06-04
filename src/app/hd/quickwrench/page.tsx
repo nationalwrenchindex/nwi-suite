@@ -72,10 +72,19 @@ const FMI_CODES = [
   { fmi: 15, desc: 'Reserved for future assignment' },
 ]
 
-type Manufacturer  = 'Thermo King' | 'Carrier Transicold'
-type UnitType      = 'truck' | 'trailer'
-type EngineBrand   = 'Cummins' | 'Detroit Diesel' | 'Mercedes-Benz'
-type ActiveTab     = 'reefer' | 'truck'
+type Manufacturer     = 'Thermo King' | 'Carrier Transicold'
+type UnitType         = 'truck' | 'trailer'
+type EngineBrand      = 'Cummins' | 'Detroit Diesel' | 'Mercedes-Benz'
+type ActiveTab        = 'reefer' | 'truck' | 'electrical'
+type ElectricalTopic  = 'Component Library' | 'Schematic Reading' | 'Fault Tracing' | 'Multimeter Guide' | 'Wire Repair'
+
+const ELECTRICAL_TOPICS: { key: ElectricalTopic; desc: string }[] = [
+  { key: 'Component Library', desc: 'Relays, diodes, solenoids, fuses, sensors — how they work and how to test them' },
+  { key: 'Schematic Reading', desc: 'Wiring diagrams, connector pinouts, circuit symbols, tracing a circuit' },
+  { key: 'Fault Tracing',     desc: 'Systematic diagnosis of open circuits, shorts, high resistance, intermittents' },
+  { key: 'Multimeter Guide',  desc: 'Voltage, resistance, current, diode test, voltage drop — step by step' },
+  { key: 'Wire Repair',       desc: 'Splicing, connector repair, fusible links, chafe repair, proper methods' },
+]
 type TKSeverity    = 'ok_to_run' | 'check_specified' | 'immediate_action'
 
 interface TKSource {
@@ -586,6 +595,15 @@ export default function HDQuickWrenchPage() {
   const [truckDisclaimer,   setTruckDisclaimer]   = useState<string | null>(null)
   const [truckError,        setTruckError]        = useState<string | null>(null)
 
+  // ── Electrical state ──
+  const [elecTopic,     setElecTopic]     = useState<ElectricalTopic>('Fault Tracing')
+  const [elecQuestion,  setElecQuestion]  = useState('')
+  const [elecLoading,   setElecLoading]   = useState(false)
+  const [elecLoadingMsg,setElecLoadingMsg]= useState('Searching electrical knowledge base...')
+  const elecLoadingRef = useRef<number>(0)
+  const [elecAnalysis,  setElecAnalysis]  = useState<string | null>(null)
+  const [elecError,     setElecError]     = useState<string | null>(null)
+
   // ── Calculator derived values ──
   const ambientNum       = parseFloat(calcAmbient)
   const setpointNum      = parseFloat(calcSetpoint)
@@ -635,6 +653,18 @@ export default function HDQuickWrenchPage() {
     }, 1000)
     return () => clearInterval(interval)
   }, [truckLoading])
+
+  useEffect(() => {
+    if (!elecLoading) return
+    setElecLoadingMsg('Searching electrical knowledge base...')
+    const interval = setInterval(() => {
+      const elapsed = (Date.now() - elecLoadingRef.current) / 1000
+      if      (elapsed < 5)  setElecLoadingMsg('Searching electrical knowledge base...')
+      else if (elapsed < 12) setElecLoadingMsg('Building field diagnosis...')
+      else                   setElecLoadingMsg('Almost ready...')
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [elecLoading])
 
   // ── Reefer submit ──
   async function handleSubmit(e: React.FormEvent) {
@@ -733,9 +763,39 @@ export default function HDQuickWrenchPage() {
     }
   }
 
+  // ── Electrical submit ──
+  async function handleElecSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!elecQuestion.trim()) return
+    elecLoadingRef.current = Date.now()
+    setElecLoading(true)
+    setElecAnalysis(null)
+    setElecError(null)
+
+    try {
+      const res = await fetch('/api/hd/quickwrench', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ mode: 'electrical', topic: elecTopic, question: elecQuestion }),
+      })
+      const text = await res.text()
+      let json: Record<string, unknown> = {}
+      try { json = JSON.parse(text) as Record<string, unknown> } catch {
+        throw new Error(`Server returned an unexpected response (status ${res.status}). Please try again.`)
+      }
+      if (!res.ok) throw new Error(typeof json.error === 'string' ? json.error : `Request failed (${res.status})`)
+      setElecAnalysis(typeof json.analysis === 'string' ? json.analysis : null)
+    } catch (err) {
+      setElecError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
+    } finally {
+      setElecLoading(false)
+    }
+  }
+
   const primaryTkSource = tkSources[0] ?? null
   const parsedSections  = analysis ? parseAnalysis(analysis) : []
   const truckParsedSections = truckAnalysis ? parseAnalysis(truckAnalysis) : []
+  const elecParsedSections  = elecAnalysis  ? parseAnalysis(elecAnalysis)  : []
 
   return (
     <main className="flex-1 p-4 sm:p-6">
@@ -752,10 +812,11 @@ export default function HDQuickWrenchPage() {
         </div>
 
         {/* ── Tab switcher ── */}
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {([
-            { key: 'reefer', label: 'Reefer Unit' },
-            { key: 'truck',  label: 'Truck Engine' },
+            { key: 'reefer',     label: 'Reefer Unit'        },
+            { key: 'truck',      label: 'Truck Engine'       },
+            { key: 'electrical', label: 'Electrical Systems' },
           ] as { key: ActiveTab; label: string }[]).map(tab => (
             <button
               key={tab.key}
@@ -1372,6 +1433,111 @@ export default function HDQuickWrenchPage() {
                   </a>
                 </div>
               </div>
+            )}
+          </>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            ELECTRICAL SYSTEMS TAB
+        ══════════════════════════════════════════════════════════════════════ */}
+        {activeTab === 'electrical' && (
+          <>
+            {/* Topic selector */}
+            <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
+              <div className="px-5 py-3" style={{ background: '#0d1820', borderBottom: '1px solid #1e3040' }}>
+                <p className="text-xs uppercase tracking-widest font-bold" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                  Select Topic
+                </p>
+              </div>
+              <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-2" style={{ background: '#111920' }}>
+                {ELECTRICAL_TOPICS.map(t => (
+                  <button
+                    key={t.key}
+                    type="button"
+                    onClick={() => setElecTopic(t.key)}
+                    className="text-left px-4 py-3 rounded-lg transition-colors"
+                    style={elecTopic === t.key
+                      ? { background: `${HD_ORANGE}20`, border: `1px solid ${HD_ORANGE}60`, minHeight: 44 }
+                      : { background: '#0d1820',         border: '1px solid #1e3040',         minHeight: 44 }
+                    }
+                  >
+                    <p
+                      className="text-sm font-semibold leading-tight"
+                      style={{ color: elecTopic === t.key ? HD_ORANGE : 'rgba(255,255,255,0.75)' }}
+                    >
+                      {t.key}
+                    </p>
+                    <p className="text-xs mt-0.5 leading-snug" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                      {t.desc}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Question form */}
+            <form
+              onSubmit={handleElecSubmit}
+              className="rounded-xl p-6 space-y-5"
+              style={{ background: '#111920', border: '1px solid #1e3040' }}
+            >
+              <div>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                  {elecTopic === 'Component Library'  && 'Which component do you need to understand or test?'}
+                  {elecTopic === 'Schematic Reading'  && 'What do you need help reading or understanding?'}
+                  {elecTopic === 'Fault Tracing'      && 'Describe the fault — what is not working and what you have checked so far'}
+                  {elecTopic === 'Multimeter Guide'   && 'What do you need to test and what meter function are you unsure about?'}
+                  {elecTopic === 'Wire Repair'        && 'Describe the wire or connector damage that needs repair'}
+                </label>
+                <textarea
+                  value={elecQuestion}
+                  onChange={e => setElecQuestion(e.target.value)}
+                  rows={4}
+                  placeholder={
+                    elecTopic === 'Component Library' ? 'e.g. How does a relay work and how do I test one with a multimeter?' :
+                    elecTopic === 'Schematic Reading' ? 'e.g. How do I trace the power feed for a circuit from the fuse panel to the load?' :
+                    elecTopic === 'Fault Tracing'     ? 'e.g. ABS light on, sensor resistance checks good, but fault code keeps coming back when I wiggle the harness...' :
+                    elecTopic === 'Multimeter Guide'  ? 'e.g. How do I perform a voltage drop test on a ground strap?' :
+                    'e.g. Wire chafed through at a grommet — what is the proper way to repair it?'
+                  }
+                  className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20 resize-none"
+                  style={{ background: '#162030', border: '1px solid #1e3040' }}
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={elecLoading || !elecQuestion.trim()}
+                className="w-full py-3 rounded-xl font-bold text-white text-sm transition-opacity"
+                style={{ background: HD_ORANGE, opacity: elecLoading || !elecQuestion.trim() ? 0.5 : 1 }}
+              >
+                {elecLoading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="w-4 h-4 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
+                    {elecLoadingMsg}
+                  </span>
+                ) : `Ask HD QuickWrench — ${elecTopic}`}
+              </button>
+            </form>
+
+            {elecError && (
+              <div className="rounded-xl p-4" style={{ background: '#2d0a0a', border: '1px solid #7f1d1d' }}>
+                <p className="text-sm text-red-400">{elecError}</p>
+              </div>
+            )}
+
+            {elecAnalysis !== null && (
+              <AnalysisCard
+                parsedSections={elecParsedSections}
+                analysis={elecAnalysis}
+                disclaimer={null}
+                primaryTkSource={null}
+                alarmPattern={null}
+                tkSources={[]}
+              />
             )}
           </>
         )}
