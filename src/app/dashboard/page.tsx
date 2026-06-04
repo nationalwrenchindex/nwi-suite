@@ -8,6 +8,7 @@ import type { JobStatus } from '@/types/jobs'
 import DashboardShareButton from '@/components/dashboard/DashboardShareButton'
 import BookingPageCard from '@/components/dashboard/BookingPageCard'
 import DashboardQuickWrenchCard from '@/components/dashboard/DashboardQuickWrenchCard'
+import InboxBell from '@/components/layout/InboxBell'
 
 export const metadata = { title: 'Dashboard — National Wrench Index Suite\u2122' }
 
@@ -397,6 +398,15 @@ export default async function DashboardPage({
       <AppNav businessName={profile.business_name} businessType={businessType} />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+        {/* ── Page header ── */}
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Overview</p>
+            <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">DASHBOARD</h1>
+          </div>
+          <InboxBell />
+        </div>
 
         {/* ── Welcome banner ── */}
         <div className="bg-blue-gradient rounded-2xl px-6 sm:px-8 py-7 relative overflow-hidden">

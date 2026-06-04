@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import AppNav from '@/components/layout/AppNav'
 import SettingsClient from '@/components/settings/SettingsClient'
+import ThemeToggle from '@/components/layout/ThemeToggle'
 import { hasQuickWrenchAccess } from '@/lib/subscription'
 import type { PricingRow } from '@/components/detailer/DetailerPricingEditor'
 import Link from 'next/link'
@@ -12,6 +13,13 @@ export default async function SettingsPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
+
+  async function signOut() {
+    'use server'
+    const supabase = await createClient()
+    await supabase.auth.signOut()
+    redirect('/login')
+  }
 
   const [{ data: profile }, hasQW, { data: pricingRows }, { data: adjPresets }] = await Promise.all([
     supabase
@@ -98,6 +106,18 @@ export default async function SettingsPage() {
           </svg>
         </Link>
 
+        {/* Display */}
+        <div className="rounded-xl border border-[#333] bg-[#222] px-5 py-4 mb-6">
+          <p className="text-white/40 text-xs uppercase tracking-widest mb-3">Display</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-semibold text-white text-sm">Color Theme</p>
+              <p className="text-white/40 text-xs mt-0.5">Switch between dark and light mode</p>
+            </div>
+            <ThemeToggle />
+          </div>
+        </div>
+
         <SettingsClient
           slug={p.slug ?? null}
           businessName={p.business_name ?? ''}
@@ -123,6 +143,25 @@ export default async function SettingsPage() {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           initialAdjustmentPresets={(adjPresets ?? []) as any[]}
         />
+
+        {/* Sign out */}
+        <div className="rounded-xl border border-[#333] bg-[#222] px-5 py-4 mt-6">
+          <p className="text-white/40 text-xs uppercase tracking-widest mb-3">Session</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-semibold text-white text-sm">Sign out</p>
+              <p className="text-white/40 text-xs mt-0.5">Sign out of your NWI account on this device</p>
+            </div>
+            <form action={signOut}>
+              <button
+                type="submit"
+                className="text-xs font-medium text-danger hover:text-danger/70 border border-danger/30 hover:border-danger/50 rounded-lg px-4 py-2 transition-colors"
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
+        </div>
       </main>
     </div>
   )

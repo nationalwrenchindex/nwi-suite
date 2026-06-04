@@ -3,11 +3,7 @@
 import { useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import LowStockBell from './LowStockBell'
-import InboxBell from './InboxBell'
-import ThemeToggle from './ThemeToggle'
 
 interface NavItem {
   href:   string
@@ -48,12 +44,6 @@ export default function AppNav({
   useEffect(() => {
     if (navRef.current) navRef.current.scrollTo(0, 0)
   }, [])
-
-  async function signOut() {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push('/login')
-  }
 
   const navItems: NavItem[] = [
     {
@@ -194,7 +184,7 @@ export default function AppNav({
 
   return (
     <header className="border-b border-dark-border bg-dark-card sticky top-0 z-40">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center gap-6 h-16 sm:h-14">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center gap-4 h-16 sm:h-14">
         {/* Logo */}
         <Link href="/dashboard" className="flex-shrink-0 flex items-center gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -206,7 +196,7 @@ export default function AppNav({
           </span>
         </Link>
 
-        {/* Nav items */}
+        {/* Nav items — full remaining width, horizontally scrollable */}
         <nav ref={navRef} className="flex items-center gap-1 flex-1 overflow-x-auto hide-scrollbar">
           {visibleNavItems.map((item) => {
             const isComingSoon = item.href === '#'
@@ -259,23 +249,6 @@ export default function AppNav({
             )
           })}
         </nav>
-
-        {/* In-app notification inbox (all users) */}
-        <InboxBell />
-
-        {/* Low-stock bell (detailers only) */}
-        {businessType === 'detailer' && <LowStockBell />}
-
-        {/* Theme toggle */}
-        <ThemeToggle />
-
-        {/* Sign out */}
-        <button
-          onClick={signOut}
-          className="flex-shrink-0 text-white/40 hover:text-white text-xs transition-colors border border-dark-border rounded-lg px-3 py-1.5 hover:border-white/20"
-        >
-          Sign out
-        </button>
       </div>
     </header>
   )
