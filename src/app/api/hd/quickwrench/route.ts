@@ -832,6 +832,174 @@ ELECTRICAL:
 - Battery replacement pair — 0.5 to 1.0 hours
 - Wheel speed sensor replacement — 0.5 to 1.0 hours
 
+DETROIT DIESEL DD13 DD15 DD16 ENGINE KNOWLEDGE
+
+DETROIT OVERVIEW:
+Detroit DD13, DD15, and DD16 are the most common engines in Freightliner Cascadia trucks on the road today. DD15 is the most widely used. All three share the same basic architecture — inline 6 cylinder, common rail fuel injection, EGR, DPF, and SCR aftertreatment. DD16 is the high output version for heavy haul. DD13 is the smaller displacement version.
+
+DETROIT NO START DIAGNOSIS SEQUENCE:
+1. Check both batteries — Detroit requires strong battery voltage — below 12.4V per battery causes no start and false fault codes
+2. Check battery disconnect switch — located on frame rail — common cause of no start especially after service
+3. Check for active fault codes using Detroit DiagnosticLink software — always pull codes before touching anything
+4. Check fuel level — fuel sender pickup can be uncovered on low fuel with truck on a grade
+5. Listen for fuel pump prime cycle on key on — should hear electric fuel pump run for 2 to 3 seconds — no prime cycle means fuel pump or circuit fault
+6. Check fuel filters — primary and secondary — replace if unknown service history
+7. Check DEF level — low DEF causes severe derate that can prevent start on newer calibrations
+8. Check for engine protection shutdown active — low oil pressure, high coolant temp, or previous fault can latch a shutdown
+
+DETROIT COMMON FAULT CODES:
+SPN 94 FMI 1 — Fuel delivery pressure low — check fuel filters and lift pump before condemning high pressure pump
+SPN 100 FMI 1 — Engine oil pressure low — stop engine immediately — check oil level — check oil pressure sensor before assuming mechanical failure
+SPN 110 FMI 0 — Coolant temperature high — check coolant level, thermostat, water pump, and cooling fan operation
+SPN 157 FMI 18 — Injector metering rail pressure low — check fuel filters first — low fuel pressure starves the high pressure pump
+SPN 190 FMI 0 — Engine overspeed — check for runaway condition — check fuel system for uncontrolled fuel delivery
+SPN 411 FMI 2 — EGR differential pressure erratic — check EGR differential pressure sensor and tubing for cracks or blockage before replacing sensor
+SPN 412 FMI 3 — EGR temperature sensor voltage high — check sensor wiring and connector before replacing sensor
+SPN 3251 FMI 0 — DPF differential pressure high — DPF needs cleaning or replacement — check for active regen inhibit faults first
+SPN 3363 FMI 31 — DEF quality poor — drain DEF tank completely — refill with fresh DEF — clear codes — retest before condemning SCR catalyst
+SPN 4094 FMI 31 — SCR operator inducement active — DEF related derate — truck will derate to 5 MPH if not addressed — check DEF level and quality first
+SPN 651 through 656 FMI 5 — Individual injector open circuit — check injector wiring harness connector at valve cover before replacing injector — connector corrosion is common cause
+SPN 1569 FMI 31 — Engine protection torque derate active — find and fix the fault causing derate — clearing code without fixing cause will not remove derate
+
+DETROIT EGR SYSTEM:
+EGR cooler failure is a known issue on DD15 — symptoms are white smoke, coolant loss, and coolant in oil. EGR valve sticking is common — causes rough idle, black smoke, and EGR differential pressure faults. EGR cooler bypass valve failure causes EGR system faults and reduced EGR flow. Always pressure test cooling system before condemning head gasket on coolant loss complaint — EGR cooler failure is more common than head gasket failure on DD15. EGR cleaning interval is critical — follow Detroit service bulletin for cleaning procedure — neglecting EGR cleaning causes accelerated wear and expensive repairs.
+
+DETROIT TURBOCHARGER:
+DD15 uses a variable geometry turbocharger — VGT — with an electronic actuator. VGT actuator failure causes low power, black smoke, and turbo-related fault codes. Check actuator response with DiagnosticLink before condemning turbocharger body. Turbo oil feed line restriction causes premature bearing failure — check oil feed before replacing turbo. Carbon buildup on VGT vanes causes sticking — cleaning procedure available before replacement in many cases.
+
+DETROIT FUEL SYSTEM:
+High pressure common rail — DO NOT check for leaks with bare hands while engine is running — injection pressure exceeds 26000 PSI — causes serious injection injury. Fuel filter service interval — every 25000 miles or annually — earlier in dirty fuel conditions. High pressure fuel pump failure is uncommon but occurs on high mileage engines — always eliminate fuel filter restriction and lift pump issues before condemning high pressure pump. Fuel contamination — water in fuel causes injector damage — check fuel for water at every PM.
+
+DETROIT COOLING SYSTEM:
+DD15 uses a large capacity cooling system — coolant level critical — low coolant causes rapid overheating. Thermostat failure — stuck closed causes overheating — stuck open causes slow warmup and heater performance issues. Water pump failure — check weep hole for coolant seeping — replace before complete failure. Cooling fan clutch failure — fan not engaging causes overheating at low speed and idle — common failure on high mileage trucks. EGR cooler failure is the most common cause of coolant loss on DD15 — see EGR section above.
+
+DETROIT AFTERTREATMENT:
+DPF regen — active regen requires vehicle speed above 40 MPH for highway regen — parked regen available through DiagnosticLink — regen inhibited by low oil pressure, high coolant temp, and low fuel level. SCR system — requires DEF — NOx sensor failure causes SCR efficiency faults — check DEF quality before condemning NOx sensor or SCR catalyst. DOC — diesel oxidation catalyst — upstream of DPF — failure causes DPF loading issues — check DOC condition before replacing DPF.
+
+DETROIT FIELD NOTES:
+DiagnosticLink is the required software for full DD15 diagnosis — basic fault code reading available with generic J1939 scan tools but full functionality requires DiagnosticLink. Detroit engines have a strong dealer network — for programming, injector coding, and aftertreatment resets DiagnosticLink and dealer access may be required. Common failure pattern on high mileage DD15 — injector cup failure allows coolant into combustion chamber — check for milky oil and white smoke before any other diagnosis on a coolant loss complaint.
+
+COMPREHENSIVE TRUCK AND TRAILER LABOR GUIDE
+
+IMPORTANT NOTE ON LABOR TIMES:
+These are field realistic times for mobile HD repair. Times are based on general industry knowledge and field experience. Always adjust for truck condition, accessibility, and shop versus roadside environment. Mobile repair adds 10 to 20 percent to most times due to limited equipment and working conditions.
+
+ENGINE LABOR TIMES:
+- Oil and filter service — 0.5 to 0.7 hours
+- Fuel filter service primary and secondary — 0.5 hours
+- Air filter replacement — 0.3 hours
+- Serpentine belt replacement — 1.0 to 1.5 hours
+- Thermostat replacement — 1.5 to 2.5 hours depending on accessibility
+- Water pump replacement — 3.0 to 5.0 hours
+- Injector replacement single — 2.0 to 3.0 hours
+- EGR valve replacement — 2.0 to 3.0 hours
+- EGR cooler replacement — 4.0 to 6.0 hours
+- Turbocharger replacement — 3.0 to 5.0 hours
+- Head gasket replacement — 12.0 to 18.0 hours
+- Engine replacement — 20.0 to 30.0 hours
+- Crankshaft seal front — 2.0 to 3.0 hours
+- Crankshaft seal rear — 6.0 to 8.0 hours
+- Valve adjustment — 2.0 to 3.0 hours
+- Compression test all cylinders — 1.0 to 1.5 hours
+
+FUEL SYSTEM LABOR TIMES:
+- Fuel filter service — 0.5 hours
+- Lift pump replacement — 1.5 to 2.0 hours
+- Fuel tank replacement — 2.0 to 3.0 hours
+- Injector replacement single — 2.0 to 3.0 hours
+- Injector replacement all — 4.0 to 6.0 hours
+- High pressure fuel pump replacement — 3.0 to 5.0 hours
+- Fuel line repair each — 0.5 hours
+
+COOLING SYSTEM LABOR TIMES:
+- Coolant drain and refill — 0.5 hours
+- Thermostat replacement — 1.5 to 2.5 hours
+- Water pump replacement — 3.0 to 5.0 hours
+- Radiator replacement — 3.0 to 5.0 hours
+- Radiator hose replacement each — 0.5 hours
+- Cooling fan clutch replacement — 2.0 to 3.0 hours
+- Pressure test cooling system — 0.5 hours
+- Flush contaminated cooling system — 1.0 to 1.5 hours
+
+ELECTRICAL LABOR TIMES:
+- Alternator replacement — 1.0 to 2.0 hours
+- Starter replacement — 1.5 to 2.5 hours
+- Battery replacement pair — 0.5 to 1.0 hours
+- Battery cable repair — 0.5 to 1.0 hours
+- Wheel speed sensor replacement — 0.5 to 1.0 hours
+- ECM replacement — 1.5 to 2.5 hours plus programming time
+- Wiring harness repair per location — 0.5 to 2.0 hours depending on severity
+- Relay replacement — 0.3 to 0.5 hours
+- Fuse panel service — 0.3 to 0.5 hours
+
+TRANSMISSION LABOR TIMES:
+- Allison fluid and filter service — 1.0 to 1.5 hours
+- Manual transmission fluid service — 0.5 hours
+- Clutch replacement — 6.0 to 10.0 hours
+- Clutch adjustment — 0.5 to 1.0 hours
+- Transmission mount replacement — 1.0 to 2.0 hours
+- Shift linkage adjustment — 0.5 to 1.0 hours
+
+BRAKE SYSTEM LABOR TIMES:
+- Brake adjustment all wheels — 0.5 to 1.0 hours
+- Brake chamber replacement single — 1.0 to 1.5 hours
+- Slack adjuster replacement single — 0.5 to 1.0 hours
+- Brake lining replacement per axle — 2.0 to 3.0 hours
+- Wheel seal replacement single — 1.5 to 2.5 hours
+- Hub bearing replacement single — 2.0 to 3.0 hours
+- Air dryer replacement — 1.0 to 2.0 hours
+- Air dryer cartridge service — 0.5 to 1.0 hours
+- Governor replacement — 0.5 to 1.0 hours
+- Glad hand replacement — 0.3 to 0.5 hours
+
+AFTERTREATMENT LABOR TIMES:
+- DPF removal and cleaning — 1.5 to 2.5 hours
+- DPF replacement — 2.0 to 3.0 hours
+- DOC replacement — 1.5 to 2.5 hours
+- SCR catalyst replacement — 2.0 to 3.0 hours
+- DEF injector replacement — 1.0 to 1.5 hours
+- NOx sensor replacement — 0.5 to 1.0 hours
+- DPF pressure sensor replacement — 0.3 to 0.5 hours
+- Forced regen procedure — 0.5 to 1.0 hours
+- Aftertreatment system diagnosis — 1.0 to 2.0 hours
+
+SUSPENSION AND STEERING LABOR TIMES:
+- Air bag replacement single — 1.0 to 1.5 hours
+- Shock absorber replacement single — 0.5 to 1.0 hours
+- Tie rod end replacement single — 1.0 to 1.5 hours
+- Drag link replacement — 1.0 to 1.5 hours
+- King pin replacement single — 3.0 to 5.0 hours
+- Wheel alignment — 1.0 to 1.5 hours
+
+TRAILER LABOR TIMES:
+- Trailer brake adjustment all wheels — 0.5 to 1.0 hours
+- Trailer wheel seal replacement single — 1.5 to 2.5 hours
+- Trailer hub bearing replacement single — 2.0 to 3.0 hours
+- Trailer brake chamber replacement single — 1.0 to 1.5 hours
+- Trailer glad hand replacement — 0.3 to 0.5 hours
+- Trailer ABS sensor replacement single — 0.5 to 1.0 hours
+- Trailer landing gear repair — 1.0 to 2.0 hours
+- Trailer door hinge replacement — 0.5 to 1.0 hours
+- Trailer door seal replacement — 1.0 to 2.0 hours
+- Trailer light repair per light — 0.3 to 0.5 hours
+- Trailer wiring harness repair — 0.5 to 2.0 hours
+- Reefer unit removal and reinstall — 1.0 to 1.5 hours
+
+DIAGNOSTIC AND SHOP FEES:
+- Standard diagnostic fee — 1.0 hour labor
+- Road call fee — add 0.5 to 1.0 hour to any job for mobile response
+- After hours premium — add 25 to 50 percent to total labor for after hours calls
+- Emergency response — add 1.0 hour minimum for immediate response calls
+
+LABOR GUIDE DISPLAY RULE:
+When a tech asks about any repair or receives a diagnostic result always include the estimated labor time at the bottom of the response. Format it as:
+
+Estimated Labor: [time range] hours
+At $[rate]/hr: $[calculated range]
+Diagnostic fee: 1.0 hour if applicable
+
+Always note that mobile repair may add 10 to 20 percent to standard shop times.
+
 Respond in plain text only. No JSON. No code blocks. No markdown. Use these exact section headers followed by a colon on their own line:
 
 ALARM MEANING:
