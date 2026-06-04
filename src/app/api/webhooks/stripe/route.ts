@@ -276,6 +276,32 @@ export async function POST(request: NextRequest) {
         break
       }
 
+      // ── Subscription created → admin SMS notification ─────────────────────
+      case 'customer.subscription.created': {
+        const sub        = event.data.object as Stripe.Subscription
+        const adminPhone = process.env.ADMIN_PHONE_NUMBER
+        if (adminPhone) {
+          void (async () => {
+            try {
+              const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer.id
+              const customer   = await stripe.customers.retrieve(customerId)
+              const name       = !customer.deleted ? (customer.name ?? '—') : '—'
+              const email      = !customer.deleted ? (customer.email ?? '—') : '—'
+              const priceId    = sub.items.data[0]?.price?.id ?? null
+              const tier       = priceId ? getTierFromPriceId(priceId) : null
+              const plan       = tier ? PLANS.find(p => p.tier === tier) : null
+              const planName   = plan?.name ?? tier ?? '—'
+              const ts         = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })
+              await sendSubscriberSms({
+                to:   adminPhone,
+                body: `NEW NWI SUBSCRIBER - Name: ${name} - Email: ${email} - Plan: ${planName} - Time: ${ts}`,
+              })
+            } catch { /* non-critical */ }
+          })()
+        }
+        break
+      }
+
       // ── Subscription updated (upgrade/downgrade/renewal/status change) ─────
       case 'customer.subscription.updated': {
         const sub = event.data.object as Stripe.Subscription
@@ -315,8 +341,30 @@ export async function POST(request: NextRequest) {
 
       // ── Subscription deleted (cancelled at end of period) ──────────────────
       case 'customer.subscription.deleted': {
-        const sub = event.data.object as Stripe.Subscription
+        const sub      = event.data.object as Stripe.Subscription
         const tierMeta = sub.metadata?.tier as PlanTier | undefined
+
+        // Admin SMS — fire-and-forget, runs for every cancellation type
+        const adminPhoneDel = process.env.ADMIN_PHONE_NUMBER
+        if (adminPhoneDel) {
+          void (async () => {
+            try {
+              const customerId = typeof sub.customer === 'string' ? sub.customer : sub.customer.id
+              const customer   = await stripe.customers.retrieve(customerId)
+              const name       = !customer.deleted ? (customer.name ?? '—') : '—'
+              const email      = !customer.deleted ? (customer.email ?? '—') : '—'
+              const priceId    = sub.items.data[0]?.price?.id ?? null
+              const tier       = priceId ? getTierFromPriceId(priceId) : null
+              const plan       = tier ? PLANS.find(p => p.tier === tier) : null
+              const planName   = plan?.name ?? (typeof tierMeta === 'string' ? tierMeta : '—')
+              const ts         = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })
+              await sendSubscriberSms({
+                to:   adminPhoneDel,
+                body: `NWI CANCELLATION - Name: ${name} - Email: ${email} - Plan: ${planName} - Time: ${ts}`,
+              })
+            } catch { /* non-critical */ }
+          })()
+        }
 
         // Check if this is a Foreman add-on subscription first.
         // Elite and Foreman Standalone tiers have tier metadata, so skip the
