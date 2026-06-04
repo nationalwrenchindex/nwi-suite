@@ -202,7 +202,9 @@ export default function AppNav({
           {visibleNavItems.map((item) => {
             const isComingSoon = item.href === '#'
             const locked       = isLocked(item.href)
-            const base         = 'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap'
+            // Mobile: stacked (icon above label), min 44px touch target
+            // Desktop: inline (icon beside label), compact
+            const base = 'flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-2 sm:px-3 min-h-[44px] justify-center rounded-lg transition-colors whitespace-nowrap'
 
             if (isComingSoon) {
               return (
@@ -211,8 +213,8 @@ export default function AppNav({
                   title="Coming soon"
                   className={`${base} text-white/20 cursor-not-allowed`}
                 >
-                  {item.icon}
-                  <span className="hidden sm:inline">{item.label}</span>
+                  <span className="flex [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-4 sm:[&>svg]:h-4">{item.icon}</span>
+                  <span className="text-[10px] sm:text-xs font-medium leading-none">{item.label}</span>
                 </span>
               )
             }
@@ -222,11 +224,13 @@ export default function AppNav({
                   key={item.href}
                   onClick={() => router.push(upgradeHref(item.href))}
                   title="Upgrade to access"
-                  className={`${base} text-white/25 hover:text-white/40 opacity-50 cursor-pointer relative`}
+                  className={`${base} text-white/25 hover:text-white/40 opacity-50 cursor-pointer`}
                 >
-                  {item.icon}
-                  <span className="hidden sm:inline">{item.label}</span>
-                  <LockIcon />
+                  <span className="relative flex [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-4 sm:[&>svg]:h-4">
+                    {item.icon}
+                    <span className="absolute -top-1 -right-1"><LockIcon /></span>
+                  </span>
+                  <span className="text-[10px] sm:text-xs font-medium leading-none">{item.label}</span>
                 </button>
               )
             }
@@ -240,8 +244,8 @@ export default function AppNav({
                     : 'text-white/50 hover:text-white hover:bg-white/5'
                 }`}
               >
-                {item.icon}
-                <span className="hidden sm:inline">{item.label}</span>
+                <span className="flex [&>svg]:w-5 [&>svg]:h-5 sm:[&>svg]:w-4 sm:[&>svg]:h-4">{item.icon}</span>
+                <span className="text-[10px] sm:text-xs font-medium leading-none">{item.label}</span>
               </Link>
             )
           })}
