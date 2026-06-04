@@ -497,6 +497,214 @@ If delta T is less than 8°F check refrigerant charge before condemning TXV. A s
 CARRIER RPM MODULE AND SPEED CONTROL:
 Carrier units use Electronic Speed Control (ESC) on newer models. ESC faults can cause unit stuck at low speed, erratic speed hunting, or alarm codes related to RPM sensor circuit. Check RPM sensor gap and output voltage (same procedure as TK RPM sensor) before condemning ESC module.
 
+REEFER LABOR GUIDE — THERMO KING AND CARRIER TRANSICOLD
+
+CRITICAL RULE FOR LABOR GUIDE DISPLAY:
+Every time a tech asks about a repair or receives a diagnostic result always include estimated labor time at the bottom of the response in this exact format:
+
+Book Time: [time] hours
+Mobile Field Time: [book time + 0.5 to 0.75 hours] hours
+At $[rate]/hr: $[calculated range using mobile field time]
+Diagnostic fee: 1.0 hour
+Refrigeration recovery and recharge: [include when system must be opened — 1.5 to 2.5 hours]
+Road call fee: 0.5 to 1.0 hour
+
+NOTE TO DISPLAY ON EVERY QUOTE:
+"Mobile field time reflects real world conditions — working without a lift, in weather, without dealer tooling. Book time is dealer flat rate for a controlled shop environment."
+
+THERMO KING LABOR GUIDE
+
+PREVENTIVE MAINTENANCE:
+Complete PM service — book 1.0 hour — mobile 1.5 to 1.75 hours — includes oil change oil filter fuel filter air filter belt inspection battery load test pre-trip
+Manual pre-trip inspection — book 1.0 hour — mobile 1.5 to 1.75 hours
+Automated pre-trip and visual inspection — book 0.5 hour — mobile 1.0 hour
+Run and check operation — book 0.5 hour — mobile 1.0 hour
+Check and add oil and coolant — book 0.3 hour — mobile 0.8 hour
+Download datalogger — book 0.5 hour — mobile 1.0 hour
+
+FUEL SYSTEM:
+R&R fuel filters — book 0.3 hour — mobile 0.8 to 1.0 hour
+R&R fuel filter base including filters and hoses — book 1.0 hour — mobile 1.5 to 1.75 hours
+R&R fuel line each — book 0.5 hour — mobile 1.0 hour
+R&R primer pump — book 0.4 hour — mobile 0.9 hour
+R&R transfer pump — book 0.8 hour — mobile 1.3 to 1.5 hours
+R&R fuel solenoid — book 0.5 hour — mobile 1.0 hour
+Prime and start unit — book 0.5 hour — mobile 1.0 hour
+Add fuel and prime and start — book 0.7 hour — mobile 1.2 hour
+Check for losing prime — book 1.0 hour — mobile 1.5 to 1.75 hours
+Thaw out fuel system — book 1.0 hour — mobile 1.5 to 2.0 hours
+Clean transfer pump screen — book 0.3 hour — mobile 0.8 hour
+
+COOLING SYSTEM:
+Drain and refill coolant — book 0.5 hour — mobile 1.0 hour
+R&R engine thermostat — book 1.0 hour — mobile 1.5 to 1.75 hours
+R&R radiator hose — book 0.5 hour — mobile 1.0 hour
+R&R water pump standard engine — book 4.0 hours — mobile 4.5 to 5.0 hours
+R&R water pump Yanmar — book 2.0 hours — mobile 2.5 to 2.75 hours
+Pressure test cooling system — book 0.5 hour — mobile 1.0 hour
+Flush contaminated cooling system — book 1.0 hour — mobile 1.5 to 1.75 hours
+R&R radiator including drain and refill — book 2.0 hours — mobile 2.5 to 2.75 hours
+
+CYLINDER HEAD AND VALVES:
+R&R valve cover and gasket — book 1.0 hour — mobile 1.5 to 1.75 hours
+Adjust valves including R&R cover — book 1.0 hour — mobile 1.5 to 1.75 hours
+R&R head gasket and adjust valves — book 5.0 hours — mobile 10.0 to 14.0 hours
+NOTE on head gasket: mobile repair adds significant time due to access constraints in reefer cabinet — always quote mobile field time — includes coolant flush thermostat replacement head bolt replacement extended test run — never quote book time for this job
+
+LUBRICATION:
+Change oil and filter — book 0.7 hour — mobile 1.2 hour
+R&R oil filter spin-on — book 0.5 hour — mobile 1.0 hour
+Check for oil leak — book 0.5 hour — mobile 1.0 hour
+
+ENGINE BLOCK:
+R&R flywheel RPM sensor including adjustment — book 0.5 hour — mobile 1.0 hour
+Adjust RPM sensor only — book 0.3 hour — mobile 0.8 hour
+R&R rear engine main seal — book 6.0 hours — mobile 6.5 to 7.0 hours
+R&R engine on floor — book 5.0 hours — mobile 6.0 to 7.0 hours
+Major engine overhaul on bench — book 22.0 hours — mobile shop only
+
+COMPRESSOR:
+R&R compressor — book 3.0 hours — mobile 3.5 to 4.0 hours — add refrigeration recovery and recharge
+R&R compressor seal — book 2.5 hours — mobile 3.0 to 3.25 hours — add recovery and recharge
+R&R compressor head valve plates and gaskets one head — book 1.0 hour — mobile 1.5 to 1.75 hours
+R&R compressor heads both — book 1.5 hours — mobile 2.0 to 2.25 hours
+R&R compressor oil including pump down — book 0.5 hour — mobile 1.0 hour
+Compressor inspection — book 0.7 hour — mobile 1.2 hour
+Major compressor overhaul on bench — book 6.0 hours — mobile shop only
+
+ELECTRICAL — STARTER AND CHARGING:
+R&R starter — book 0.5 hour — mobile 1.0 hour
+R&R starter solenoid on bench — book 0.5 hour — mobile 1.0 hour
+R&R glow plug each — book 0.5 hour — mobile 1.0 hour
+R&R glow plugs all — book 1.0 hour — mobile 1.5 to 1.75 hours
+Rebuild starter not including R&R — book 1.5 hours — mobile 2.0 hours
+R&R alternator — book 1.0 to 1.5 hours — mobile 1.5 to 2.25 hours
+Check charging system — book 0.5 hour — mobile 1.0 hour
+R&R battery — book 0.5 hour — mobile 1.0 hour
+Check and service battery and cables — book 0.3 hour — mobile 0.8 hour
+Battery load test — book 0.2 hour — mobile 0.7 hour
+R&R voltage regulator — book 0.8 hour — mobile 1.3 hour
+
+ELECTRICAL — CONTROLS AND SENSORS:
+R&R microprocessor controller all models — book 1.0 hour — mobile 1.5 to 1.75 hours — includes setup
+R&R relay board assembly — book 0.7 hour — mobile 1.2 hour
+R&R relay any — book 0.5 hour — mobile 1.0 hour
+R&R fuse any — book 0.3 hour — mobile 0.8 hour
+R&R fuel speed solenoid — book 0.5 hour — mobile 1.0 hour
+R&R pressure switch — book 0.5 hour — mobile 1.0 hour
+R&R water temp switch — book 0.5 hour — mobile 1.0 hour
+R&R oil pressure switch — book 0.5 hour — mobile 1.0 hour
+R&R return air sensor — book 0.8 hour — mobile 1.3 hour
+R&R supply air sensor — book 0.8 hour — mobile 1.3 hour
+R&R ambient air sensor — book 0.8 hour — mobile 1.3 hour
+R&R evaporator coil sensor — book 0.8 hour — mobile 1.3 hour
+R&R compressor temp sensor — book 0.8 hour — mobile 1.3 hour
+R&R water temp sending unit — book 1.0 hour — mobile 1.5 to 1.75 hours — includes drain and refill coolant
+R&R solenoid coil — book 0.5 hour — mobile 1.0 hour
+Diagnosis of code — book 1.0 hour — mobile 1.0 hour — standard diagnostic fee does not change
+Test relay board — book 0.5 hour — mobile 1.0 hour
+R&R main wire harness — book 1.0 to 2.5 hours — mobile 1.5 to 3.0 hours
+
+REFRIGERATION SYSTEM:
+R&R filter drier including pump down — book 0.5 hour — mobile 1.0 hour — add recovery and recharge
+R&R vibrasorber discharge — book 1.0 hour — mobile 1.5 hours — add recovery and recharge
+R&R vibrasorber suction — book 1.0 hour — mobile 1.5 hours — add recovery and recharge
+NOTE on vibrasorbers: replace both suction and discharge simultaneously on high hour units — combined mobile time 2.5 hours — cheaper than two separate jobs
+R&R expansion valve — book 1.0 hour — mobile 1.5 hours — add recovery and recharge
+R&R suction solenoid valve — book 1.0 hour — mobile 1.5 hours — add recovery and recharge
+R&R throttling valve — book 1.0 hour — mobile 1.5 hours — add recovery and recharge
+R&R check valve — book 1.0 hour — mobile 1.5 hours
+R&R safety valve — book 0.5 hour — mobile 1.0 hour
+R&R sight glass — book 0.5 hour — mobile 1.0 hour
+R&R receiver tank — book 1.5 hours — mobile 2.0 to 2.25 hours — add recovery and recharge
+System pump down procedure and testing — book 0.5 hour — mobile 1.0 hour
+Low charge leak check add charge — book 1.0 hour — mobile 1.5 hours
+Recovery repair leak check drier evacuate recharge — book 1.8 hours — mobile 2.3 to 2.5 hours
+Full leak check recovery repair leak check drier evacuate recharge — book 2.0 hours — mobile 2.5 to 2.75 hours
+Repair broken refrigerant line — book 1.0 hour — mobile 1.5 hours — add recovery and recharge
+Wash out condenser and radiator — book 0.5 hour — mobile 1.0 hour
+Wash out evaporator — book 0.5 hour — mobile 1.0 hour
+Clean defrost drain tubes — book 0.5 hour — mobile 1.0 hour
+
+DRIVE SYSTEM:
+R&R fan drive belt — book 0.5 hour — mobile 1.0 hour
+Adjust belts — book 0.5 hour — mobile 1.0 hour
+R&R condenser or radiator fan — book 1.0 hour — mobile 1.5 hours
+R&R evaporator fan blower — book 1.0 hour — mobile 1.5 hours
+R&R idler pulley assembly including belt adjustment — book 0.5 hour — mobile 1.0 hour
+R&R coupling — book 2.0 hours — mobile 2.5 to 2.75 hours
+R&R engine front drive pulley — book 1.0 hour — mobile 1.5 hours
+
+STRUCTURAL:
+R&R engine mounts all rubber — book 2.0 hours — mobile 2.5 to 2.75 hours
+R&R unit — book 0.8 hour — mobile 1.3 hour
+Install new unit and check — book 1.5 hours — mobile 2.0 to 2.25 hours
+Remove unit — book 0.5 hour — mobile 1.0 hour
+Steam clean unit — book 0.5 hour — mobile 1.0 hour
+
+PILOT SOLENOID COMPLETE JOB:
+R&R pilot solenoid valve — book 0.5 hour — mobile 1.5 to 2.5 hours mechanical
+Add refrigeration recovery leak check evacuation and recharge — 1.8 hours
+Total complete job mobile — 3.3 to 4.3 hours minimum
+With complications roadside — 4.0 to 5.5 hours
+NOTE: pilot solenoid failure causes Code 67 — always include refrigeration system work in quote — system must be opened to access this valve
+
+3-WAY VALVE COMPLETE JOB:
+R&R 3-way valve — book 1.0 to 2.0 hours — mobile 2.0 to 3.0 hours mechanical
+Add refrigeration recovery leak check evacuation and recharge — 1.8 hours
+Total complete job mobile — 3.8 to 4.8 hours
+With complications — 5.0 to 6.0 hours
+
+CARRIER TRANSICOLD LABOR GUIDE
+
+PREVENTIVE MAINTENANCE:
+PM A service dry inspection — book 0.75 to 1.0 hour — mobile 1.25 to 1.75 hours
+PM B service wet inspection — book 1.5 to 2.0 hours — mobile 2.0 to 2.75 hours — includes PM A plus oil change oil filter fuel filter air filter
+Drive belt replacement single — book 0.5 to 1.0 hour — mobile 1.0 to 1.75 hours
+
+REFRIGERATION SYSTEM:
+Filter drier replacement — book 0.5 hour — mobile 1.0 hour
+Pressure transducer threaded — book 0.5 hour — mobile 1.0 hour
+Pressure transducer brazed — book 2.5 hours — mobile 3.0 to 3.25 hours — requires recovery brazing and deep system evacuation
+Expansion valve TXV or EEV — book 2.25 to 3.25 hours — mobile 2.75 to 4.0 hours — requires system evacuation and recharge
+Suction modulation valve stem kit — book 1.0 hour — mobile 1.5 hours
+Liquid line valve king valve — book 1.75 to 2.0 hours — mobile 2.25 to 2.75 hours
+Discharge pressure regulator valve — book 2.25 to 4.25 hours — mobile 2.75 to 5.0 hours
+In-line moisture indicator — book 1.75 hours — mobile 2.25 hours
+System evacuation and recharge baseline — book 1.25 to 1.5 hours — mobile 1.75 to 2.25 hours
+
+COMPRESSOR:
+Compressor replacement — book 4.0 to 6.0 hours — mobile 4.5 to 6.75 hours — includes recovery swap drier replacement vacuum to 500 microns and recharge
+NOTE: filter drier replacement is absorbed into compressor replacement time — do not charge separately
+
+ELECTRICAL:
+Control board or display module replacement — book 1.0 to 1.5 hours — mobile 1.5 to 2.25 hours — includes programming and software updates
+Sensor replacement ambient defrost or return air — book 0.5 to 1.0 hour — mobile 1.0 to 1.75 hours
+
+FANS:
+Evaporator or condenser fan motor — book 1.5 to 2.5 hours — mobile 2.0 to 3.25 hours
+
+CARRIER LABOR RULES:
+Overlap logic — when two jobs overlap shorter job time is absorbed into longer — compressor replacement absorbs filter drier time — do not stack both times
+Always add refrigeration recovery and recharge when any refrigeration component requires opening the system
+Always replace filter drier when opening refrigeration system — this is not optional
+
+REFRIGERATION RECOVERY AND RECHARGE — APPLIES TO BOTH TK AND CARRIER:
+Any repair requiring refrigeration system to be opened must include:
+EPA 608 certified technician required by federal law
+Refrigerant recovery — 0.3 to 0.5 hour
+System evacuation to 500 microns minimum — 0.5 to 1.0 hour
+Leak check after repair — 0.3 to 0.5 hour
+Refrigerant recharge by weight — 0.3 to 0.5 hour
+Total refrigeration system add-on — 1.5 to 2.5 hours
+Always include new filter drier when opening refrigeration system
+
+DIAGNOSTIC FEE RULE:
+Standard diagnostic fee — 1.0 hour — applies to every service call
+After hours premium — add 25 to 50 percent to total labor
+Road call fee — add 0.5 to 1.0 hour minimum
+Emergency response — add 1.0 hour minimum
+
 Respond in plain text only. No JSON. No code blocks. No markdown. Use these exact section headers followed by a colon on their own line:
 
 ALARM MEANING:
