@@ -92,17 +92,13 @@ function PartRow({ part, expanded, onToggle }: {
     >
       {crossRefMatches.length > 0 && (
         <div
-          className="px-4 py-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs"
-          style={{ background: '#071828', borderBottom: '1px solid #1e3a5f' }}
+          className="px-4 py-3 text-xs text-white"
+          style={{ background: '#2969B0', borderRadius: '8px 8px 0 0' }}
         >
-          <span style={{ color: 'rgba(255,255,255,0.45)' }}>Found via cross reference:</span>
           {crossRefMatches.map(xr => (
-            <span key={xr.cross_part} className="flex items-center gap-1">
-              <span className="font-mono font-bold" style={{ color: '#60a5fa' }}>{xr.cross_part}</span>
-              <span style={{ color: 'rgba(255,255,255,0.35)' }}>({xr.cross_mfr})</span>
-              <span style={{ color: 'rgba(255,255,255,0.35)' }}>→ OEM:</span>
-              <span className="font-mono font-bold" style={{ color: HD_ORANGE }}>{part.part_number}</span>
-            </span>
+            <p key={xr.cross_part}>
+              Found via cross reference: <strong>{xr.cross_part}</strong> ({xr.cross_mfr}) to TK OEM Part: <strong>{part.part_number}</strong>
+            </p>
           ))}
         </div>
       )}
@@ -312,26 +308,28 @@ export default function PartsLookup() {
       )}
 
       {/* Search + Filters */}
-      <div className="mb-4 flex flex-wrap gap-3">
+      <div className="mb-4 flex flex-col sm:flex-row sm:flex-wrap gap-3">
         <input
           type="text"
           placeholder="Search part #, description, or cross-ref number…"
           value={search}
           onChange={e => applyFilters(e.target.value, manufacturer, category)}
-          className="flex-1 min-w-[220px] px-3 py-2 rounded-lg text-base sm:text-sm text-white placeholder:text-white/30 outline-none"
-          style={{ background: '#111920', border: '1px solid #1e3040' }}
+          className="w-full sm:flex-1 sm:min-w-[220px] px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder:text-white/30 outline-none"
+          style={{ background: '#111920', border: '1px solid #1e3040', minHeight: 44 }}
         />
         <select
           value={manufacturer}
           onChange={e => applyFilters(search, e.target.value, category)}
-          style={selectStyle}
+          className="w-full sm:w-auto"
+          style={{ ...selectStyle, minHeight: 44 }}
         >
           {MANUFACTURERS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
         </select>
         <select
           value={category}
           onChange={e => applyFilters(search, manufacturer, e.target.value)}
-          style={selectStyle}
+          className="w-full sm:w-auto"
+          style={{ ...selectStyle, minHeight: 44 }}
         >
           {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
         </select>

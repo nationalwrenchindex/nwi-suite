@@ -761,10 +761,10 @@ export default function HDQuickWrenchPage() {
               key={tab.key}
               type="button"
               onClick={() => setActiveTab(tab.key)}
-              className="px-5 py-2.5 rounded-lg text-sm font-semibold transition-colors"
+              className="flex-1 sm:flex-none px-5 py-3 rounded-lg text-sm font-semibold transition-colors"
               style={activeTab === tab.key
-                ? { background: HD_ORANGE, color: '#fff' }
-                : { background: '#111920', color: 'rgba(255,255,255,0.45)', border: '1px solid #1e3040' }
+                ? { background: HD_ORANGE, color: '#fff', minHeight: 44 }
+                : { background: '#111920', color: 'rgba(255,255,255,0.45)', border: '1px solid #1e3040', minHeight: 44 }
               }
             >
               {tab.label}
@@ -980,7 +980,7 @@ export default function HDQuickWrenchPage() {
             {/* ── Reefer query form ── */}
             <form onSubmit={handleSubmit} className="rounded-xl p-6 space-y-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
                     Manufacturer
@@ -991,10 +991,11 @@ export default function HDQuickWrenchPage() {
                         key={m}
                         type="button"
                         onClick={() => { setManufacturer(m); setModel('') }}
-                        className="flex-1 py-2 text-xs font-semibold transition-colors"
+                        className="flex-1 text-xs font-semibold transition-colors"
                         style={{
                           background: manufacturer === m ? HD_ORANGE : '#162030',
                           color:      manufacturer === m ? '#fff' : 'rgba(255,255,255,0.4)',
+                          minHeight: 44,
                         }}
                       >
                         {m === 'Thermo King' ? 'Thermo King' : 'Carrier'}
@@ -1012,10 +1013,11 @@ export default function HDQuickWrenchPage() {
                         key={t}
                         type="button"
                         onClick={() => { setUnitType(t); setModel('') }}
-                        className="flex-1 py-2 text-xs font-semibold transition-colors capitalize"
+                        className="flex-1 text-xs font-semibold transition-colors capitalize"
                         style={{
                           background: unitType === t ? HD_BLUE : '#162030',
                           color:      unitType === t ? '#fff' : 'rgba(255,255,255,0.4)',
+                          minHeight: 44,
                         }}
                       >
                         {t}
@@ -1201,16 +1203,17 @@ export default function HDQuickWrenchPage() {
                 <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
                   Engine Brand
                 </label>
-                <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid #1e3040' }}>
+                <div className="grid grid-cols-3 rounded-lg overflow-hidden" style={{ border: '1px solid #1e3040' }}>
                   {(['Cummins', 'Detroit Diesel', 'Mercedes-Benz'] as EngineBrand[]).map(b => (
                     <button
                       key={b}
                       type="button"
                       onClick={() => { setTruckBrand(b); setEngineModel('') }}
-                      className="flex-1 py-2 text-xs font-semibold transition-colors"
+                      className="text-xs font-semibold transition-colors px-1 leading-tight"
                       style={{
                         background: truckBrand === b ? HD_ORANGE : '#162030',
                         color:      truckBrand === b ? '#fff' : 'rgba(255,255,255,0.4)',
+                        minHeight: 44,
                       }}
                     >
                       {b}
@@ -1237,7 +1240,7 @@ export default function HDQuickWrenchPage() {
               </div>
 
               {/* SPN + FMI */}
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
                     SPN <span style={{ color: 'rgba(255,255,255,0.25)' }}>(Suspect Parameter Number)</span>

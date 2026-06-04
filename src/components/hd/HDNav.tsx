@@ -174,10 +174,10 @@ export default function HDNav({ businessName }: { businessName?: string }) {
       <Link
         href={item.href}
         onClick={() => setOpen(false)}
-        className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors"
+        className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-colors"
         style={isActive
-          ? { background: `${HD_ORANGE}20`, color: HD_ORANGE }
-          : { color: 'rgba(255,255,255,0.5)' }
+          ? { background: `${HD_ORANGE}20`, color: HD_ORANGE, minHeight: 44 }
+          : { color: 'rgba(255,255,255,0.5)', minHeight: 44 }
         }
         onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.9)' }}
         onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.5)' }}
@@ -248,23 +248,23 @@ export default function HDNav({ businessName }: { businessName?: string }) {
 
   return (
     <>
-      {/* Desktop sidebar */}
+      {/* Desktop sidebar — visible at md (768px) and up */}
       <aside
-        className="hidden lg:flex flex-col w-56 flex-shrink-0 min-h-dvh sticky top-0"
+        className="hidden md:flex flex-col w-56 flex-shrink-0 min-h-dvh sticky top-0"
         style={{ background: '#0a0f14', borderRight: '1px solid #1e3040' }}
       >
         {sidebarContent}
       </aside>
 
-      {/* Mobile top bar */}
+      {/* Mobile top bar — visible below md (768px) */}
       <header
-        className="lg:hidden flex items-center gap-3 px-4 h-14 sticky top-0 z-40"
+        className="md:hidden flex items-center gap-3 px-4 h-14 sticky top-0 z-40"
         style={{ background: '#0a0f14', borderBottom: '1px solid #1e3040' }}
       >
         <button
           onClick={() => setOpen(true)}
-          className="p-1.5 rounded-lg transition-colors"
-          style={{ color: 'rgba(255,255,255,0.6)' }}
+          className="flex items-center justify-center rounded-lg transition-colors"
+          style={{ color: 'rgba(255,255,255,0.6)', minWidth: 44, minHeight: 44 }}
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <line x1="3" y1="12" x2="21" y2="12" />
@@ -293,7 +293,7 @@ export default function HDNav({ businessName }: { businessName?: string }) {
 
       {/* Mobile drawer */}
       {open && (
-        <div className="lg:hidden fixed inset-0 z-50 flex">
+        <div className="md:hidden fixed inset-0 z-50 flex">
           <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
           <aside
             className="relative flex flex-col w-64 max-h-dvh overflow-y-auto"
