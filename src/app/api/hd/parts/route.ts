@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
 
+export const dynamic = 'force-dynamic'
+
 export async function GET(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -11,8 +13,8 @@ export async function GET(req: NextRequest) {
   if (!hasAccess) return NextResponse.json({ error: 'HD subscription required' }, { status: 403 })
 
   const { searchParams } = new URL(req.url)
-  const manufacturer = searchParams.get('manufacturer')
-  const category     = searchParams.get('category')
+  const manufacturer = searchParams.get('manufacturer')?.trim() ?? ''
+  const category     = searchParams.get('category')?.trim() ?? ''
   const unit_model   = searchParams.get('unit_model')
   const part_number  = searchParams.get('part_number')
   const search       = searchParams.get('search')
@@ -29,8 +31,8 @@ export async function GET(req: NextRequest) {
     .order('part_number')
     .limit(500)
 
-  if (manufacturer)  query = query.eq('manufacturer', manufacturer)
-  if (category)      query = query.eq('category', category)
+  if (manufacturer)  query = query.ilike('manufacturer', manufacturer)
+  if (category)      query = query.ilike('category', category)
   if (unit_model)    query = query.contains('unit_models', [unit_model])
   if (part_number)   query = query.eq('part_number', part_number)
 
@@ -75,8 +77,8 @@ export async function GET(req: NextRequest) {
         .in('part_number', xrefPartNumbers)
 
       // Apply the same manufacturer/category filters to the OEM parts
-      if (manufacturer) xrefQuery = xrefQuery.eq('manufacturer', manufacturer)
-      if (category)     xrefQuery = xrefQuery.eq('category', category)
+      if (manufacturer) xrefQuery = xrefQuery.ilike('manufacturer', manufacturer)
+      if (category)     xrefQuery = xrefQuery.ilike('category', category)
 
       const { data: xrefParts } = await xrefQuery
 

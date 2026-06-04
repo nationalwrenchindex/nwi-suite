@@ -354,7 +354,7 @@ export async function seedHDParts() {
     { part_number: '12-00352-13', cross_mfr: 'Carrier OEM', cross_part: '12-00352-03' },
     { part_number: '12-00352-14', cross_mfr: 'Carrier OEM', cross_part: '12-00352-04' },
     { part_number: '22-02804-00', cross_mfr: 'Carrier OEM', cross_part: '22-02804-02' },
-    { part_number: '78-1687', cross_mfr: 'Thermo King Legacy', cross_part: '78-1688' },
+    { part_number: '78-1688', cross_mfr: 'Thermo King Legacy', cross_part: '78-1687' },
     { part_number: '78-1688', cross_mfr: 'Cross Reference', cross_part: 'CP10513' },
     { part_number: '45-2324', cross_mfr: 'Hitachi', cross_part: 'S13-407' },
   ]
