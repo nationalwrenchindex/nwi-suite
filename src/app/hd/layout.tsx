@@ -36,7 +36,7 @@ export default async function HDLayout({ children }: { children: React.ReactNode
     .single()
 
   return (
-    <div className="min-h-dvh flex" style={{ background: '#0a0f14' }}>
+    <div className="min-h-dvh flex flex-col md:flex-row" style={{ background: '#0a0f14' }}>
       <HDNav businessName={profile?.business_name ?? undefined} />
       <div className="flex-1 min-w-0 flex flex-col">
         {children}
