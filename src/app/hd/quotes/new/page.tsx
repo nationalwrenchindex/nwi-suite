@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { LABOR_GUIDE, type LaborGuideItem } from '@/lib/hd/labor-guide'
 
 const ORANGE  = '#FF6600'
 const BLUE    = '#2969B0'
@@ -18,18 +19,20 @@ interface LineItem {
   id: string
   type: 'labor' | 'parts'
   description: string
+  // labor — supports time ranges
   book_hours: number
+  book_hours_max: number
   mobile_hours: number
+  mobile_hours_max: number
+  requires_refrigeration: boolean
+  recharge_added: boolean
+  // parts
   part_number: string
   quantity: number
   unit_cost: number
+  // billing amount uses mobile_hours (lower); amount_max for display
   amount: number
-}
-
-interface LaborDraft {
-  description: string
-  book_hours: string
-  mobile_hours: string
+  amount_max: number
 }
 
 interface PartsDraft {
@@ -43,6 +46,19 @@ interface PartResult {
   part_number: string
   description: string
   category: string
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function fmtHrs(min: number, max: number, shopOnly = false): string {
+  if (shopOnly) return 'Shop only'
+  if (Math.abs(min - max) < 0.01) return `${min} hrs`
+  return `${min} to ${max} hrs`
+}
+
+function fmtAmtRange(min: number, max: number): string {
+  if (Math.abs(min - max) < 0.5) return `$${min.toFixed(0)}`
+  return `$${Math.floor(min)} to $${Math.ceil(max)}`
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
@@ -98,7 +114,13 @@ export default function NewQuotePage() {
   const [partsResults, setPartsResults]   = useState<PartResult[]>([])
   const [partsSearching, setPartsSearching] = useState(false)
 
-  const [labor, setLabor] = useState<LaborDraft>({ description: '', book_hours: '1.0', mobile_hours: '1.5' })
+  // Labor modal state
+  const [laborSearch, setLaborSearch]       = useState('')
+  const [laborSelected, setLaborSelected]   = useState<LaborGuideItem | null>(null)
+  const [laborMobileMin, setLaborMobileMin] = useState('0')
+  const [laborMobileMax, setLaborMobileMax] = useState('0')
+  const [laborRecharge, setLaborRecharge]   = useState(false)
+
   const [parts, setParts] = useState<PartsDraft>({ part_number: '', description: '', quantity: '1', unit_cost: '0.00' })
 
   const [form, setForm] = useState({
@@ -141,27 +163,53 @@ export default function NewQuotePage() {
 
   function fmt(n: number) { return `$${n.toFixed(2)}` }
 
-  // ── Labor modal ──
-  function onLaborBookChange(val: string) {
-    const bh = parseFloat(val) || 0
-    setLabor(l => ({ ...l, book_hours: val, mobile_hours: (bh + 0.5).toFixed(1) }))
+  // ── Labor modal helpers ──────────────────────────────────────────────────
+
+  const filteredGuide = laborSearch.trim()
+    ? LABOR_GUIDE.filter(i => i.label.toLowerCase().includes(laborSearch.toLowerCase()))
+    : LABOR_GUIDE
+
+  function selectLaborItem(item: LaborGuideItem) {
+    setLaborSelected(item)
+    setLaborMobileMin(String(item.mobile_min))
+    setLaborMobileMax(String(item.mobile_max))
+    setLaborRecharge(item.requires_refrigeration)
   }
 
+  function closeLaborModal() {
+    setLaborModal(false)
+    setLaborSearch('')
+    setLaborSelected(null)
+    setLaborMobileMin('0')
+    setLaborMobileMax('0')
+    setLaborRecharge(false)
+  }
+
+  const rechargeAddMin  = laborRecharge ? 1.5 : 0
+  const rechargeAddMax  = laborRecharge ? 2.5 : 0
+  const totalMobileMin  = (parseFloat(laborMobileMin) || 0) + rechargeAddMin
+  const totalMobileMax  = (parseFloat(laborMobileMax) || 0) + rechargeAddMax
+  const previewAmtMin   = totalMobileMin * form.labor_rate
+  const previewAmtMax   = totalMobileMax * form.labor_rate
+
   function addLaborItem() {
-    const bh  = parseFloat(labor.book_hours)  || 0
-    const mh  = parseFloat(labor.mobile_hours) || 0
-    if (!labor.description.trim()) { setToast('Enter a description.'); return }
+    if (!laborSelected) { setToast('Select a labor item from the guide.'); return }
     const item: LineItem = {
       id: crypto.randomUUID(),
       type: 'labor',
-      description: labor.description.trim(),
-      book_hours: bh, mobile_hours: mh,
+      description: laborSelected.label,
+      book_hours: laborSelected.book_min,
+      book_hours_max: laborSelected.book_max,
+      mobile_hours: parseFloat(totalMobileMin.toFixed(2)),
+      mobile_hours_max: parseFloat(totalMobileMax.toFixed(2)),
+      requires_refrigeration: laborRecharge,
+      recharge_added: laborRecharge,
       part_number: '', quantity: 0, unit_cost: 0,
-      amount: parseFloat((mh * form.labor_rate).toFixed(2)),
+      amount: parseFloat((totalMobileMin * form.labor_rate).toFixed(2)),
+      amount_max: parseFloat((totalMobileMax * form.labor_rate).toFixed(2)),
     }
     setLineItems(l => [...l, item])
-    setLabor({ description: '', book_hours: '1.0', mobile_hours: '1.5' })
-    setLaborModal(false)
+    closeLaborModal()
   }
 
   // ── Parts modal ──
@@ -191,10 +239,13 @@ export default function NewQuotePage() {
       id: crypto.randomUUID(),
       type: 'parts',
       description: parts.description.trim(),
-      book_hours: 0, mobile_hours: 0,
+      book_hours: 0, book_hours_max: 0,
+      mobile_hours: 0, mobile_hours_max: 0,
+      requires_refrigeration: false, recharge_added: false,
       part_number: parts.part_number.trim(),
       quantity: qty, unit_cost: cost,
       amount: parseFloat((qty * cost).toFixed(2)),
+      amount_max: parseFloat((qty * cost).toFixed(2)),
     }
     setLineItems(l => [...l, item])
     setParts({ part_number: '', description: '', quantity: '1', unit_cost: '0.00' })
@@ -416,7 +467,6 @@ export default function NewQuotePage() {
         <div style={cardStyle}>
           <SectionTitle>Line Items</SectionTitle>
 
-          {/* Add buttons */}
           <div className="flex gap-3 mb-4">
             <button
               onClick={() => setLaborModal(true)}
@@ -443,32 +493,63 @@ export default function NewQuotePage() {
           {/* Line items table */}
           {lineItems.length > 0 ? (
             <div style={{ border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden' }}>
-              <div className="grid text-xs font-semibold uppercase tracking-wide px-4 py-2.5" style={{ gridTemplateColumns: '80px 1fr auto auto auto', background: '#F9FAFB', color: MUTED, borderBottom: `1px solid ${BORDER}` }}>
-                <span>Type</span><span>Description</span><span className="text-right pr-8">Hrs / Qty</span><span className="text-right pr-8">Rate</span><span className="text-right">Amount</span>
+              <div
+                className="grid text-xs font-semibold uppercase tracking-wide px-4 py-2.5"
+                style={{ gridTemplateColumns: '1fr 90px 110px 80px 90px 28px', gap: 8, background: '#F9FAFB', color: MUTED, borderBottom: `1px solid ${BORDER}` }}
+              >
+                <span>Description</span>
+                <span className="text-right">Book</span>
+                <span className="text-right">Mobile</span>
+                <span className="text-right">Rate</span>
+                <span className="text-right">Amount</span>
+                <span />
               </div>
               {lineItems.map(item => (
-                <div key={item.id} className="grid items-center px-4 py-3 gap-2" style={{ gridTemplateColumns: '80px 1fr auto auto auto', borderBottom: `1px solid #F9FAFB` }}>
-                  <span className="text-xs px-2 py-0.5 rounded-full font-semibold w-fit" style={item.type === 'labor' ? { background: '#FFF7ED', color: ORANGE } : { background: '#EBF5FF', color: BLUE }}>
-                    {item.type}
-                  </span>
+                <div
+                  key={item.id}
+                  className="grid items-center px-4 py-3 gap-2"
+                  style={{ gridTemplateColumns: '1fr 90px 110px 80px 90px 28px', borderBottom: `1px solid #F9FAFB` }}
+                >
                   <div>
-                    <span className="text-sm" style={{ color: TEXT }}>{item.description}</span>
-                    {item.part_number && <span className="block text-xs" style={{ color: MUTED }}>{item.part_number}</span>}
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="text-xs px-1.5 py-0.5 rounded font-semibold shrink-0"
+                        style={item.type === 'labor' ? { background: '#FFF7ED', color: ORANGE } : { background: '#EBF5FF', color: BLUE }}
+                      >
+                        {item.type === 'labor' ? 'LAB' : 'PRT'}
+                      </span>
+                      <span className="text-sm" style={{ color: TEXT }}>{item.description}</span>
+                    </div>
+                    {item.part_number && (
+                      <span className="block text-xs font-mono mt-0.5 ml-7" style={{ color: MUTED }}>{item.part_number}</span>
+                    )}
+                    {item.recharge_added && (
+                      <span className="block text-xs mt-0.5 ml-7" style={{ color: '#9A3412' }}>+ refrigeration recovery &amp; recharge</span>
+                    )}
                   </div>
-                  <span className="text-sm text-right pr-8" style={{ color: MUTED }}>
-                    {item.type === 'labor' ? `${item.mobile_hours}h` : `${item.quantity}×`}
+                  <span className="text-xs text-right" style={{ color: MUTED }}>
+                    {item.type === 'labor'
+                      ? fmtHrs(item.book_hours, item.book_hours_max ?? item.book_hours)
+                      : `${item.quantity}×`}
                   </span>
-                  <span className="text-sm text-right pr-8" style={{ color: MUTED }}>
-                    {item.type === 'labor' ? `${fmt(form.labor_rate)}/hr` : fmt(item.unit_cost)}
+                  <span className="text-xs text-right" style={{ color: MUTED }}>
+                    {item.type === 'labor'
+                      ? fmtHrs(item.mobile_hours, item.mobile_hours_max ?? item.mobile_hours)
+                      : fmt(item.unit_cost)}
                   </span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold" style={{ color: TEXT }}>{fmt(item.amount)}</span>
-                    <button onClick={() => removeItem(item.id)} style={{ color: '#9CA3AF', lineHeight: 1 }}>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                        <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
-                      </svg>
-                    </button>
-                  </div>
+                  <span className="text-xs text-right" style={{ color: MUTED }}>
+                    {item.type === 'labor' ? `${fmt(form.labor_rate)}/hr` : ''}
+                  </span>
+                  <span className="text-sm font-semibold text-right" style={{ color: TEXT }}>
+                    {(item.amount_max ?? item.amount) - item.amount > 0.5
+                      ? fmtAmtRange(item.amount, item.amount_max)
+                      : fmt(item.amount)}
+                  </span>
+                  <button onClick={() => removeItem(item.id)} style={{ color: '#9CA3AF', lineHeight: 1 }}>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
                 </div>
               ))}
             </div>
@@ -555,36 +636,214 @@ export default function NewQuotePage() {
 
       {/* ─ Labor Modal ─ */}
       {laborModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.4)' }}>
-          <div style={{ background: CARD, borderRadius: 12, padding: 24, width: '100%', maxWidth: 480 }}>
-            <h3 className="font-condensed font-bold text-xl mb-4" style={{ color: TEXT }}>ADD LABOR LINE</h3>
-            <div className="flex flex-col gap-4">
-              <Field label="Description">
-                <input style={inp} value={labor.description} onChange={e => setLabor(l => ({ ...l, description: e.target.value }))} placeholder="e.g. R&R compressor" autoFocus />
-              </Field>
-              <div className="grid grid-cols-2 gap-4">
-                <Field label="Book Time (hrs)">
-                  <input style={inp} type="number" min={0} step={0.25} value={labor.book_hours} onChange={e => onLaborBookChange(e.target.value)} />
-                </Field>
-                <Field label="Mobile Field Time (hrs)">
-                  <input style={inp} type="number" min={0} step={0.25} value={labor.mobile_hours} onChange={e => setLabor(l => ({ ...l, mobile_hours: e.target.value }))} />
-                </Field>
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
+          style={{ background: 'rgba(0,0,0,0.5)' }}
+        >
+          <div
+            style={{
+              background: CARD,
+              borderRadius: '12px 12px 0 0',
+              width: '100%',
+              maxWidth: 540,
+              maxHeight: '90dvh',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+            className="sm:rounded-xl"
+          >
+            {/* Modal header */}
+            <div className="flex items-center justify-between px-5 pt-5 pb-3 shrink-0" style={{ borderBottom: `1px solid ${BORDER}` }}>
+              <h3 className="font-condensed font-bold text-xl" style={{ color: TEXT }}>ADD LABOR LINE</h3>
+              <button onClick={closeLaborModal} style={{ color: MUTED }}>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Search input */}
+            <div className="px-5 pt-4 pb-2 shrink-0">
+              <div className="relative">
+                <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke={MUTED} strokeWidth={2} viewBox="0 0 24 24">
+                  <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                </svg>
+                <input
+                  autoFocus
+                  style={{ ...inp, paddingLeft: 34 }}
+                  placeholder="Search 107 labor guide items..."
+                  value={laborSearch}
+                  onChange={e => setLaborSearch(e.target.value)}
+                />
               </div>
-              <div className="p-3 rounded-lg" style={{ background: '#FFF7ED', border: `1px solid #FED7AA` }}>
-                <p className="text-xs" style={{ color: '#C2410C' }}>
-                  Mobile field time reflects real-world conditions. Book time is dealer flat rate.
-                </p>
-                <p className="text-sm font-semibold mt-1" style={{ color: TEXT }}>
-                  Amount: {fmt((parseFloat(labor.mobile_hours) || 0) * form.labor_rate)}
-                  <span className="text-xs font-normal ml-2" style={{ color: MUTED }}>
-                    ({labor.mobile_hours} hrs × {fmt(form.labor_rate)}/hr)
-                  </span>
-                </p>
+            </div>
+
+            {/* Scrollable item list */}
+            <div
+              style={{
+                overflowY: 'auto',
+                flex: laborSelected ? '0 0 auto' : '1 1 auto',
+                maxHeight: laborSelected ? 220 : 340,
+                borderBottom: `1px solid ${BORDER}`,
+              }}
+            >
+              {filteredGuide.length === 0 && (
+                <p className="text-sm text-center py-6" style={{ color: MUTED }}>No items match &ldquo;{laborSearch}&rdquo;</p>
+              )}
+              {filteredGuide.map(item => {
+                const isSelected = laborSelected?.label === item.label
+                return (
+                  <button
+                    key={item.label}
+                    onClick={() => selectLaborItem(item)}
+                    className="w-full text-left px-5 py-2.5 flex items-center gap-3"
+                    style={{
+                      background: isSelected ? '#FFF7ED' : 'transparent',
+                      borderLeft: isSelected ? `3px solid ${ORANGE}` : '3px solid transparent',
+                      borderBottom: `1px solid #F9FAFB`,
+                    }}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate" style={{ color: isSelected ? ORANGE : TEXT }}>{item.label}</p>
+                      <p className="text-xs mt-0.5" style={{ color: MUTED }}>
+                        Book: {fmtHrs(item.book_min, item.book_max, item.shop_only)}
+                        &nbsp;&bull;&nbsp;
+                        Mobile: {fmtHrs(item.mobile_min, item.mobile_max, item.shop_only)}
+                        {item.requires_refrigeration && (
+                          <span className="ml-2 font-semibold" style={{ color: '#2563EB' }}>❄ Refrig.</span>
+                        )}
+                      </p>
+                    </div>
+                    {isSelected && (
+                      <svg className="w-4 h-4 shrink-0" fill="none" stroke={ORANGE} strokeWidth={2.5} viewBox="0 0 24 24">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+
+            {/* Selected item detail panel */}
+            {laborSelected && (
+              <div className="px-5 py-4 flex flex-col gap-3" style={{ overflowY: 'auto' }}>
+
+                {/* Time fields */}
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Book Time (flat rate)">
+                    <div
+                      className="flex items-center px-3 rounded-lg text-sm"
+                      style={{ ...inp, background: '#F9FAFB', color: MUTED, cursor: 'default' }}
+                    >
+                      {fmtHrs(laborSelected.book_min, laborSelected.book_max, laborSelected.shop_only)}
+                    </div>
+                  </Field>
+                  <div>
+                    <label className="text-xs font-semibold uppercase tracking-wide block mb-1" style={{ color: MUTED }}>
+                      Mobile Field Time (hrs)
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.25}
+                        value={laborMobileMin}
+                        onChange={e => setLaborMobileMin(e.target.value)}
+                        style={{ ...inp, textAlign: 'center' }}
+                      />
+                      {Math.abs((parseFloat(laborMobileMin) || 0) - (parseFloat(laborMobileMax) || 0)) > 0.01 && (
+                        <>
+                          <span style={{ color: MUTED, fontSize: 12, whiteSpace: 'nowrap' }}>to</span>
+                          <input
+                            type="number"
+                            min={0}
+                            step={0.25}
+                            value={laborMobileMax}
+                            onChange={e => setLaborMobileMax(e.target.value)}
+                            style={{ ...inp, textAlign: 'center' }}
+                          />
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Refrigeration recovery checkbox */}
+                {laborSelected.requires_refrigeration && (
+                  <label
+                    className="flex items-start gap-3 p-3 rounded-lg cursor-pointer"
+                    style={{ background: '#EFF6FF', border: '1px solid #BFDBFE' }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={laborRecharge}
+                      onChange={e => setLaborRecharge(e.target.checked)}
+                      className="mt-0.5 w-4 h-4"
+                      style={{ accentColor: '#2563EB' }}
+                    />
+                    <div>
+                      <p className="text-sm font-semibold" style={{ color: '#1D4ED8' }}>Add refrigeration recovery &amp; recharge</p>
+                      <p className="text-xs mt-0.5" style={{ color: '#3B82F6' }}>Adds 1.5 to 2.5 hrs to mobile field time</p>
+                    </div>
+                  </label>
+                )}
+
+                {/* Filter drier reminder */}
+                {laborRecharge && (
+                  <div
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg"
+                    style={{ background: '#FFFBEB', border: '1px solid #FDE68A' }}
+                  >
+                    <svg className="w-4 h-4 shrink-0" fill="none" stroke="#D97706" strokeWidth={2} viewBox="0 0 24 24">
+                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                      <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                    </svg>
+                    <p className="text-xs font-semibold" style={{ color: '#92400E' }}>
+                      Remember to add filter drier to the parts list.
+                    </p>
+                  </div>
+                )}
+
+                {/* Amount preview */}
+                <div className="p-3 rounded-lg" style={{ background: '#FFF7ED', border: `1px solid #FED7AA` }}>
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-medium" style={{ color: '#C2410C' }}>
+                        Mobile: {fmtHrs(totalMobileMin, totalMobileMax)}
+                        {laborRecharge && <span className="ml-1">(incl. recharge)</span>}
+                      </p>
+                      <p className="text-xs mt-0.5" style={{ color: MUTED }}>
+                        Book: {fmtHrs(laborSelected.book_min, laborSelected.book_max, laborSelected.shop_only)} flat rate
+                      </p>
+                    </div>
+                    <p className="text-lg font-bold shrink-0" style={{ color: ORANGE }}>
+                      {fmtAmtRange(previewAmtMin, previewAmtMax)}
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div className="flex gap-3">
-                <button onClick={() => { setLaborModal(false); setLabor({ description: '', book_hours: '1.0', mobile_hours: '1.5' }) }} className="flex-1 py-2.5 rounded-lg font-semibold text-sm" style={{ background: '#F3F4F6', color: '#374151' }}>Cancel</button>
-                <button onClick={addLaborItem} className="flex-1 py-2.5 rounded-lg font-semibold text-sm text-white" style={{ background: ORANGE }}>Add Line</button>
-              </div>
+            )}
+
+            {/* Footer buttons */}
+            <div
+              className="flex gap-3 px-5 pb-5 pt-3 shrink-0"
+              style={{ borderTop: laborSelected ? `1px solid ${BORDER}` : 'none' }}
+            >
+              <button
+                onClick={closeLaborModal}
+                className="flex-1 py-2.5 rounded-lg font-semibold text-sm"
+                style={{ background: '#F3F4F6', color: '#374151' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={addLaborItem}
+                disabled={!laborSelected}
+                className="flex-1 py-2.5 rounded-lg font-semibold text-sm text-white disabled:opacity-40"
+                style={{ background: ORANGE }}
+              >
+                Add Line
+              </button>
             </div>
           </div>
         </div>
@@ -614,7 +873,6 @@ export default function NewQuotePage() {
                 </div>
               </div>
 
-              {/* Search results */}
               {partsResults.length > 0 && (
                 <div style={{ border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden' }}>
                   {partsResults.map(p => (
@@ -651,8 +909,16 @@ export default function NewQuotePage() {
                 </Field>
               </div>
               <div className="flex gap-3">
-                <button onClick={() => { setPartsModal(false); setParts({ part_number: '', description: '', quantity: '1', unit_cost: '0.00' }); setPartsResults([]) }} className="flex-1 py-2.5 rounded-lg font-semibold text-sm" style={{ background: '#F3F4F6', color: '#374151' }}>Cancel</button>
-                <button onClick={addPartsItem} className="flex-1 py-2.5 rounded-lg font-semibold text-sm text-white" style={{ background: BLUE }}>Add Line</button>
+                <button
+                  onClick={() => { setPartsModal(false); setParts({ part_number: '', description: '', quantity: '1', unit_cost: '0.00' }); setPartsResults([]) }}
+                  className="flex-1 py-2.5 rounded-lg font-semibold text-sm"
+                  style={{ background: '#F3F4F6', color: '#374151' }}
+                >
+                  Cancel
+                </button>
+                <button onClick={addPartsItem} className="flex-1 py-2.5 rounded-lg font-semibold text-sm text-white" style={{ background: BLUE }}>
+                  Add Line
+                </button>
               </div>
             </div>
           </div>
