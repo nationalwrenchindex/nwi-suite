@@ -29,6 +29,7 @@ interface DiagStep {
   unit?:     string
   placeholder?: string
   hint?:     string
+  note?:     string
   branches:  Branch[]
 }
 
@@ -97,19 +98,9 @@ const STEPS: Record<string, DiagStep> = {
     inputType: 'number', unit: 'V DC', placeholder: 'e.g. 13.8',
     hint: 'Measure directly at battery terminals with unit at full throttle. Normal range: 13.2–14.7 V DC.',
     branches: [
-      { kind: 'number', condition: 'lt',      threshold: 13.2,             next: 'step4'  },
-      { kind: 'number', condition: 'between', min: 13.2,       max: 14.7,  next: 'step3a' },
-      { kind: 'number', condition: 'gt',      threshold: 14.7,             next: 'step3b' },
-    ],
-  },
-  step3a: {
-    id: 'step3a', label: 'K1 Relay — Voltage Normal',
-    question: 'Is the K1 relay LED lit on the relay board while the unit is running?',
-    inputType: 'yesno',
-    hint: 'K1 is the alternator field relay. The LED should be solid ON during operation. Charging voltage is in normal range.',
-    branches: [
-      { kind: 'yesno', answer: 'no',  next: 'k1_relay_normal_voltage' },
-      { kind: 'yesno', answer: 'yes', next: 'intermittent_fault'      },
+      { kind: 'number', condition: 'lt',      threshold: 13.2,             next: 'step5'           },
+      { kind: 'number', condition: 'between', min: 13.2,       max: 14.7,  next: 'intermittent_fault' },
+      { kind: 'number', condition: 'gt',      threshold: 14.7,             next: 'step3b'          },
     ],
   },
   step3b: {
@@ -122,28 +113,19 @@ const STEPS: Record<string, DiagStep> = {
       { kind: 'number', condition: 'lte', threshold: 0.5, next: 'voltage_regulator_failed'     },
     ],
   },
-  step4: {
-    id: 'step4', label: 'K1 Relay — Low Voltage',
-    question: 'Is the K1 relay LED lit on the relay board while the unit is running?',
-    inputType: 'yesno',
-    hint: 'K1 provides field excitation to the alternator. If K1 is OFF, the alternator cannot generate charge current.',
-    branches: [
-      { kind: 'yesno', answer: 'no',  next: 'k1_relay_no_field' },
-      { kind: 'yesno', answer: 'yes', next: 'step5'             },
-    ],
-  },
   step5: {
-    id: 'step5', label: 'Fuse Check — F2 / F4 / F20',
-    question: 'Are all three fuses — F2, F4, and F20 — good?',
+    id: 'step5', label: 'Fuse Check — F2 / F20',
+    question: 'Are fuses F2 and F20 good?',
     inputType: 'yesno',
     hint: 'Pull and visually inspect each fuse. Replace with the same amperage rating only.',
+    note: 'F4 fuse is only present on units equipped with Bosch alternators — check F4 if a Bosch alternator is installed.',
     branches: [
       { kind: 'yesno', answer: 'no',  next: 'blown_fuse' },
       { kind: 'yesno', answer: 'yes', next: 'step6'      },
     ],
   },
   step6: {
-    id: 'step6', label: 'Sense Wire Resistance — Low Voltage',
+    id: 'step6', label: 'Sense Wire Resistance',
     question: 'What is the resistance of the orange sense wire from alternator to battery positive?',
     inputType: 'number', unit: 'Ω', placeholder: 'e.g. 0.1',
     hint: 'Disconnect both ends. Measure wire resistance only. Normal: 0.5 Ω or less.',
@@ -153,13 +135,13 @@ const STEPS: Record<string, DiagStep> = {
     ],
   },
   step7: {
-    id: 'step7', label: 'Ground Strap Resistance',
-    question: 'What is the resistance of the ground strap from unit frame to trailer chassis?',
-    inputType: 'number', unit: 'Ω', placeholder: 'e.g. 0.05',
-    hint: 'Clean both connection points before measuring. Normal: 0.3 Ω or less.',
+    id: 'step7', label: 'Ground Strap Inspection',
+    question: 'Visually inspect the ground strap from unit frame to trailer chassis. Is it clean, tight, and free of corrosion and damage?',
+    inputType: 'yesno',
+    hint: 'Check both connection points at the unit frame and the trailer chassis rail. Look for corrosion, loose hardware, and damaged strap.',
     branches: [
-      { kind: 'number', condition: 'gt',  threshold: 0.3, next: 'ground_strap'      },
-      { kind: 'number', condition: 'lte', threshold: 0.3, next: 'alternator_failed' },
+      { kind: 'yesno', answer: 'no',  next: 'ground_strap'      },
+      { kind: 'yesno', answer: 'yes', next: 'alternator_failed' },
     ],
   },
 }
@@ -189,22 +171,10 @@ const CONCLUSIONS: Record<string, Conclusion> = {
     complaint: 'Code 25 — Unit not charging',
     generateQuote: true,
   },
-  k1_relay_normal_voltage: {
-    id: 'k1_relay_normal_voltage',
-    title: 'K1 Relay Failure',
-    rootCause: 'Charging voltage is within spec but K1 relay is not closing. Controller detected relay dropout and set Code 25.',
-    repair: 'Replace K1 relay. Clear code and retest.',
-    parts: ['K1 relay — confirm relay board part number for unit serial'],
-    laborDescription: 'Relay R&R — any',
-    laborBook: 0.5, laborBookMax: 0.5,
-    laborMobile: 1.0, laborMobileMax: 1.0,
-    complaint: 'Code 25 — Alternator check',
-    generateQuote: true,
-  },
   intermittent_fault: {
     id: 'intermittent_fault',
     title: 'Intermittent Fault — No Defect Found',
-    rootCause: 'Charging voltage is normal and K1 relay is operating correctly. Code 25 is intermittent — likely connector corrosion or a high-resistance connection.',
+    rootCause: 'Charging voltage is normal. Code 25 is intermittent — likely connector corrosion or a high-resistance connection in the charging circuit.',
     repair: 'Inspect and clean all connectors in the charging circuit. Apply dielectric grease. Clear code and monitor.',
     parts: ['Dielectric grease'],
     laborDescription: 'Charging system check',
@@ -238,24 +208,12 @@ const CONCLUSIONS: Record<string, Conclusion> = {
     complaint: 'Code 25 — Alternator overcharge',
     generateQuote: true,
   },
-  k1_relay_no_field: {
-    id: 'k1_relay_no_field',
-    title: 'K1 Relay Failure — No Field Excitation',
-    rootCause: 'K1 relay is not closing. Alternator has no field excitation and cannot produce charging voltage.',
-    repair: 'Replace K1 relay. Retest charging voltage after replacement.',
-    parts: ['K1 relay — confirm relay board part number for unit serial'],
-    laborDescription: 'Relay R&R — any',
-    laborBook: 0.5, laborBookMax: 0.5,
-    laborMobile: 1.0, laborMobileMax: 1.0,
-    complaint: 'Code 25 — Unit not charging',
-    generateQuote: true,
-  },
   blown_fuse: {
     id: 'blown_fuse',
     title: 'Blown Fuse in Charging Circuit',
-    rootCause: 'One or more fuses (F2, F4, or F20) are blown, interrupting power to the charging circuit.',
+    rootCause: 'One or more fuses (F2 or F20) are blown, interrupting power to the charging circuit. On units with a Bosch alternator, F4 may also be blown.',
     repair: 'Replace blown fuse. Identify and correct root cause before returning unit to service.',
-    parts: ['Fuses F2, F4, F20 — carry spares on service vehicle'],
+    parts: ['Fuses F2, F20 (and F4 if Bosch alternator) — carry spares on service vehicle'],
     laborDescription: 'Electrical repair',
     laborBook: 0.3, laborBookMax: 0.3,
     laborMobile: 0.8, laborMobileMax: 0.8,
@@ -276,9 +234,9 @@ const CONCLUSIONS: Record<string, Conclusion> = {
   },
   ground_strap: {
     id: 'ground_strap',
-    title: 'High Resistance Ground Strap',
-    rootCause: 'High resistance in the unit frame to trailer chassis ground strap is degrading the charging system voltage reference.',
-    repair: 'Clean both connection points or replace ground strap. Retest charging voltage.',
+    title: 'High Resistance Ground Path — Ground Strap',
+    rootCause: 'High resistance ground path suspected — ground strap is corroded, loose, or damaged.',
+    repair: 'Clean both connection points with a wire brush. Replace ground strap if damaged. Retest charging voltage.',
     parts: ['Ground strap', 'Hardware', 'Dielectric grease'],
     laborDescription: 'Electrical repair',
     laborBook: 0.5, laborBookMax: 0.5,
@@ -289,7 +247,7 @@ const CONCLUSIONS: Record<string, Conclusion> = {
   alternator_failed: {
     id: 'alternator_failed',
     title: 'Alternator Internal Failure',
-    rootCause: 'All other charging circuit components have been verified. Alternator has failed internally.',
+    rootCause: 'All other charging circuit components have been eliminated. Alternator has failed internally.',
     repair: 'Replace with TK OEM alternator only. Do not use aftermarket.',
     parts: [
       'TK OEM alternator — application specific by serial number',
@@ -335,12 +293,10 @@ function isPass(stepId: string, value: string): boolean {
     case 'step1a': return n >= 800
     case 'step2':  return value === 'yes'
     case 'step3':  return n >= 13.2 && n <= 14.7
-    case 'step3a': return value === 'yes'
     case 'step3b': return n <= 0.5
-    case 'step4':  return value === 'yes'
     case 'step5':  return value === 'yes'
     case 'step6':  return n <= 0.5
-    case 'step7':  return n <= 0.3
+    case 'step7':  return value === 'yes'
     default:       return true
   }
 }
@@ -353,12 +309,10 @@ function buildDiagnosisSummary(history: HistoryEntry[], conclusion: Conclusion):
       case 'step1a': tests.push(`Battery CCA ${h.displayValue}`); break
       case 'step2':  tests.push(`Belt ${h.value === 'yes' ? 'inspected — good condition' : 'found failed or glazed'}`); break
       case 'step3':  tests.push(`Charging voltage ${h.displayValue} at high speed`); break
-      case 'step3a': tests.push(`K1 relay LED ${h.value === 'yes' ? 'confirmed lit' : 'found not lit'}`); break
       case 'step3b': tests.push(`Orange sense wire resistance ${h.displayValue}`); break
-      case 'step4':  tests.push(`K1 relay LED ${h.value === 'yes' ? 'confirmed lit' : 'found not lit'}`); break
-      case 'step5':  tests.push(`Fuses F2/F4/F20 ${h.value === 'yes' ? 'all good' : 'found blown'}`); break
-      case 'step6':  tests.push(`Orange sense wire resistance ${h.displayValue}`); break
-      case 'step7':  tests.push(`Ground strap resistance ${h.displayValue}`); break
+      case 'step5':  tests.push(`Fuses F2/F20 ${h.value === 'yes' ? 'all good' : 'found blown'}`); break
+      case 'step6':  tests.push(`Sense wire resistance ${h.displayValue}`); break
+      case 'step7':  tests.push(`Ground strap ${h.value === 'yes' ? 'inspected — clean and tight' : 'found corroded or damaged'}`); break
     }
   }
   return `${tests.join('. ')}. ${conclusion.rootCause}`
@@ -537,6 +491,15 @@ export default function GuidedDiagnostic({ alarmCode }: { alarmCode: string }) {
                 <p className="text-sm leading-relaxed" style={{ color: MUTED }}>
                   {step.hint}
                 </p>
+              )}
+
+              {step.note && (
+                <div
+                  className="px-3 py-2.5 rounded-lg text-xs leading-relaxed"
+                  style={{ background: '#FEF3C7', border: '1px solid #FCD34D', color: '#92400E' }}
+                >
+                  <span className="font-bold">Note: </span>{step.note}
+                </div>
               )}
 
               {step.inputType === 'number' ? (
