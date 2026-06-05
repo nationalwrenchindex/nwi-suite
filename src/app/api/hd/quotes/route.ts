@@ -1,0 +1,62 @@
+import { NextResponse, type NextRequest } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+import { checkHDAccess } from '@/lib/hd-access'
+
+export const dynamic = 'force-dynamic'
+
+export async function GET() {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const hasAccess = await checkHDAccess(user.id)
+  if (!hasAccess) return NextResponse.json({ error: 'HD subscription required' }, { status: 403 })
+
+  const { data, error } = await supabase
+    .from('hd_quotes')
+    .select('id, quote_number, customer_name, unit_manufacturer, unit_model, total, status, created_at, valid_until')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(200)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ quotes: data })
+}
+
+export async function POST(req: NextRequest) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const hasAccess = await checkHDAccess(user.id)
+  if (!hasAccess) return NextResponse.json({ error: 'HD subscription required' }, { status: 403 })
+
+  let body: Record<string, unknown>
+  try {
+    body = await req.json()
+  } catch {
+    return NextResponse.json({ error: 'Invalid body' }, { status: 400 })
+  }
+
+  if (!body.customer_name) {
+    return NextResponse.json({ error: 'customer_name required' }, { status: 400 })
+  }
+
+  const { count } = await supabase
+    .from('hd_quotes')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+
+  const year = new Date().getFullYear()
+  const seq = String((count ?? 0) + 1).padStart(4, '0')
+  const quote_number = `Q-${year}-${seq}`
+
+  const { data, error } = await supabase
+    .from('hd_quotes')
+    .insert({ ...body, user_id: user.id, quote_number })
+    .select()
+    .single()
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ quote: data }, { status: 201 })
+}
