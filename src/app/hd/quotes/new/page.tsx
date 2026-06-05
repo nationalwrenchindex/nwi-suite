@@ -111,6 +111,7 @@ export default function NewQuotePage() {
   const [partsModal, setPartsModal]       = useState(false)
   const [lineItems, setLineItems]         = useState<LineItem[]>([])
   const [qwAvailable, setQwAvailable]     = useState(false)
+  const [qwPulledNote, setQwPulledNote]   = useState('')
   const [partsResults, setPartsResults]   = useState<PartResult[]>([])
   const [partsSearching, setPartsSearching] = useState(false)
 
@@ -135,17 +136,35 @@ export default function NewQuotePage() {
 
   useEffect(() => {
     try {
-      const stored = sessionStorage.getItem('hd_quickwrench_analysis') ?? localStorage.getItem('hd_quickwrench_analysis')
-      setQwAvailable(!!stored)
+      const raw = localStorage.getItem('hd_last_quickwrench_result')
+      if (raw) {
+        const stored = JSON.parse(raw) as { timestamp: string }
+        const age = Date.now() - new Date(stored.timestamp).getTime()
+        setQwAvailable(age < 24 * 60 * 60 * 1000)
+      }
     } catch {}
   }, [])
 
   function pullFromQW() {
     try {
-      const stored = sessionStorage.getItem('hd_quickwrench_analysis') ?? localStorage.getItem('hd_quickwrench_analysis') ?? ''
-      if (stored) setForm(f => ({ ...f, diagnosis: stored }))
-      else setToast('No QuickWrench result found — run a diagnosis first.')
-    } catch {}
+      const raw = localStorage.getItem('hd_last_quickwrench_result')
+      if (!raw) {
+        setToast('No recent QuickWrench results — run a diagnosis first.')
+        return
+      }
+      const stored = JSON.parse(raw) as { analysis: string; timestamp: string; model?: string }
+      const age = Date.now() - new Date(stored.timestamp).getTime()
+      if (age >= 24 * 60 * 60 * 1000) {
+        setToast('No recent QuickWrench results — run a diagnosis first.')
+        setQwAvailable(false)
+        return
+      }
+      setForm(f => ({ ...f, diagnosis: stored.analysis }))
+      const ts = new Date(stored.timestamp).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+      setQwPulledNote(`Pulled from QuickWrench — ${stored.model ?? ''} at ${ts}`)
+    } catch {
+      setToast('No recent QuickWrench results — run a diagnosis first.')
+    }
   }
 
   function setField(k: string, v: string | number | boolean) {
@@ -391,9 +410,13 @@ export default function NewQuotePage() {
                 </svg>
                 Pull from QuickWrench
               </button>
-              <p className="text-xs mt-1.5" style={{ color: MUTED }}>
-                {qwAvailable ? 'Last QuickWrench result is available.' : 'Run a QuickWrench diagnosis first to enable this.'}
-              </p>
+              {qwPulledNote ? (
+                <p className="text-xs mt-1.5 font-medium" style={{ color: BLUE }}>{qwPulledNote}</p>
+              ) : (
+                <p className="text-xs mt-1.5" style={{ color: MUTED }}>
+                  {qwAvailable ? 'Recent QuickWrench result available (within 24 hrs).' : 'No recent QuickWrench results — run a diagnosis first.'}
+                </p>
+              )}
             </div>
           </div>
         </div>

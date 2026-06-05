@@ -707,7 +707,19 @@ export default function HDQuickWrenchPage() {
         throw new Error(typeof json.error === 'string' ? json.error : `Request failed (${res.status})`)
       }
 
-      setAnalysis(typeof json.analysis === 'string' ? json.analysis : null)
+      const reeferAnalysis = typeof json.analysis === 'string' ? json.analysis : null
+      setAnalysis(reeferAnalysis)
+      if (reeferAnalysis) {
+        try {
+          localStorage.setItem('hd_last_quickwrench_result', JSON.stringify({
+            analysis:      reeferAnalysis,
+            timestamp:     new Date().toISOString(),
+            manufacturer,
+            model:         `${manufacturer} ${model}`,
+            symptom:       symptom || alarmCode,
+          }))
+        } catch {}
+      }
       setTkSources(Array.isArray(json.tk_sources) ? json.tk_sources as TKSource[] : [])
       setAlarmPattern(
         json.alarm_pattern != null && typeof json.alarm_pattern === 'object'
@@ -754,7 +766,19 @@ export default function HDQuickWrenchPage() {
         throw new Error(typeof json.error === 'string' ? json.error : `Request failed (${res.status})`)
       }
 
-      setTruckAnalysis(typeof json.analysis === 'string' ? json.analysis : null)
+      const truckAnalysisResult = typeof json.analysis === 'string' ? json.analysis : null
+      setTruckAnalysis(truckAnalysisResult)
+      if (truckAnalysisResult) {
+        try {
+          localStorage.setItem('hd_last_quickwrench_result', JSON.stringify({
+            analysis:      truckAnalysisResult,
+            timestamp:     new Date().toISOString(),
+            manufacturer:  truckBrand,
+            model:         `${truckBrand} ${engineModel}`,
+            symptom:       truckSymptom || [spn && `SPN ${spn}`, fmi && `FMI ${fmi}`].filter(Boolean).join(' '),
+          }))
+        } catch {}
+      }
       setTruckDisclaimer(typeof json.disclaimer === 'string' ? json.disclaimer : null)
     } catch (err) {
       setTruckError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
@@ -784,7 +808,19 @@ export default function HDQuickWrenchPage() {
         throw new Error(`Server returned an unexpected response (status ${res.status}). Please try again.`)
       }
       if (!res.ok) throw new Error(typeof json.error === 'string' ? json.error : `Request failed (${res.status})`)
-      setElecAnalysis(typeof json.analysis === 'string' ? json.analysis : null)
+      const elecAnalysisResult = typeof json.analysis === 'string' ? json.analysis : null
+      setElecAnalysis(elecAnalysisResult)
+      if (elecAnalysisResult) {
+        try {
+          localStorage.setItem('hd_last_quickwrench_result', JSON.stringify({
+            analysis:      elecAnalysisResult,
+            timestamp:     new Date().toISOString(),
+            manufacturer:  'Electrical Systems',
+            model:         elecTopic,
+            symptom:       elecQuestion,
+          }))
+        } catch {}
+      }
     } catch (err) {
       setElecError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
     } finally {
