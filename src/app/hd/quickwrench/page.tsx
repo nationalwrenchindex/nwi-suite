@@ -1074,6 +1074,39 @@ export default function HDQuickWrenchPage() {
               )}
             </div>
 
+            {/* ── Guided Diagnostics ── */}
+            <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
+              <div className="px-5 py-3" style={{ background: '#0d1820', borderBottom: '1px solid #1e3040' }}>
+                <p className="text-xs uppercase tracking-widest font-bold" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                  Guided Diagnostics
+                </p>
+              </div>
+              <div className="p-3" style={{ background: '#111920' }}>
+                <a
+                  href="/hd/quickwrench/guided?alarm=25"
+                  className="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-semibold transition-colors"
+                  style={{
+                    background: '#162030',
+                    border:     '1px solid #1e3040',
+                    color:      'rgba(255,255,255,0.8)',
+                    minHeight:  48,
+                    textDecoration: 'none',
+                  }}
+                >
+                  <span
+                    className="text-xs font-bold px-2 py-0.5 rounded"
+                    style={{ background: HD_ORANGE + '20', color: HD_ORANGE, fontFamily: 'monospace', border: `1px solid ${HD_ORANGE}40` }}
+                  >
+                    CODE 25
+                  </span>
+                  <span>Guided Diagnostic — Alternator Check</span>
+                  <svg className="w-4 h-4 ml-auto flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path d="M9 18l6-6-6-6" />
+                  </svg>
+                </a>
+              </div>
+            </div>
+
             {/* ── Reefer query form ── */}
             <form onSubmit={handleSubmit} className="rounded-xl p-6 space-y-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
 

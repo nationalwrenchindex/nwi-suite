@@ -145,6 +145,47 @@ export default function NewQuotePage() {
     } catch {}
   }, [])
 
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('hd_guided_diagnostic_prefill')
+      if (!raw) return
+      localStorage.removeItem('hd_guided_diagnostic_prefill')
+      const prefill = JSON.parse(raw) as {
+        complaint?: string
+        diagnosis?: string
+        notes?: string
+        lineItems?: Array<{
+          description: string
+          book_hours: number; book_hours_max: number
+          mobile_hours: number; mobile_hours_max: number
+        }>
+      }
+      setForm(f => ({
+        ...f,
+        ...(prefill.complaint ? { complaint:  prefill.complaint  } : {}),
+        ...(prefill.diagnosis ? { diagnosis:  prefill.diagnosis  } : {}),
+        ...(prefill.notes     ? { notes:      prefill.notes      } : {}),
+      }))
+      if (prefill.lineItems?.length) {
+        const rate = 125
+        setLineItems(prefill.lineItems.map(li => ({
+          id:                     crypto.randomUUID(),
+          type:                   'labor' as const,
+          description:            li.description,
+          book_hours:             li.book_hours,
+          book_hours_max:         li.book_hours_max,
+          mobile_hours:           li.mobile_hours,
+          mobile_hours_max:       li.mobile_hours_max,
+          requires_refrigeration: false,
+          recharge_added:         false,
+          part_number: '', quantity: 0, unit_cost: 0,
+          amount:     parseFloat((li.mobile_hours     * rate).toFixed(2)),
+          amount_max: parseFloat((li.mobile_hours_max * rate).toFixed(2)),
+        })))
+      }
+    } catch {}
+  }, [])
+
   function pullFromQW() {
     try {
       const raw = localStorage.getItem('hd_last_quickwrench_result')
