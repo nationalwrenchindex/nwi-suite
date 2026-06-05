@@ -1065,79 +1065,129 @@ export default function HDQuickWrenchPage() {
                   {gaugeDiag && (
                     <div className="space-y-3">
 
-                      {/* Danger alert */}
+                      {/* Danger alert — discharge > 400 PSI */}
                       {gaugeDiag.dangerAlert && (
                         <div className="rounded-lg p-4 flex gap-3 items-start" style={{ background: '#1a0000', border: '2px solid #EF4444' }}>
-                          <span className="text-2xl flex-shrink-0" style={{ lineHeight: 1.1 }}>⛔</span>
+                          <span style={{ fontSize: 20, lineHeight: 1.2, flexShrink: 0 }}>⛔</span>
                           <div>
-                            <p className="text-sm font-bold mb-1" style={{ color: '#EF4444' }}>DANGER — DISCHARGE PRESSURE CRITICALLY HIGH</p>
+                            <p className="text-sm font-bold mb-1" style={{ color: '#EF4444' }}>DANGER — DISCHARGE PRESSURE CRITICALLY HIGH (&gt;400 PSI)</p>
                             <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                              Discharge pressure exceeds 400 PSI. Shut off the unit immediately. Do not disconnect fittings or open valves until pressure drops below 250 PSI. High-pressure refrigerant exposure risk.
+                              Shut unit off immediately. Do not disconnect fittings or open any valves until discharge pressure drops below 250 PSI. High-pressure refrigerant exposure risk.
                             </p>
                           </div>
                         </div>
                       )}
 
-                      {/* Primary diagnosis */}
-                      {gaugeDiag.primary && (() => {
-                        const sev = SEVERITY_CONFIG[gaugeDiag.primary.severity]
+                      {/* Pattern result card */}
+                      {gaugeDiag.pattern && (() => {
+                        const p   = gaugeDiag.pattern
+                        const sev = SEVERITY_CONFIG[p.severity]
                         return (
-                          <div className="rounded-lg overflow-hidden" style={{ border: `1px solid ${sev.border}` }}>
-                            <div className="px-4 py-3 flex items-center gap-3" style={{ background: sev.bg }}>
-                              <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: sev.color + '30', color: sev.color, border: `1px solid ${sev.color}60` }}>
-                                {sev.label.toUpperCase()}
-                              </span>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>{gaugeDiag.primary.category}</p>
-                                <p className="font-bold text-sm text-white">{gaugeDiag.primary.title}</p>
-                              </div>
-                              {gaugeDiag.primary.recoveryRequired && (
-                                <span className="text-xs px-2 py-0.5 rounded flex-shrink-0" style={{ background: '#F59E0B20', color: '#F59E0B', border: '1px solid #F59E0B40' }}>
-                                  Recovery req.
+                          <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${sev.border}` }}>
+
+                            {/* Header */}
+                            <div className="px-4 pt-4 pb-3" style={{ background: '#162030' }}>
+                              <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                                Pressure Pattern
+                              </p>
+                              <p className="font-condensed font-bold text-white text-lg tracking-wide leading-tight mb-3">
+                                {p.patternLabel}
+                              </p>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="text-xs font-bold px-3 py-1 rounded-full"
+                                  style={{ background: sev.color + '25', color: sev.color, border: `1px solid ${sev.color}50` }}>
+                                  {sev.label.toUpperCase()}
                                 </span>
-                              )}
-                            </div>
-                            <div className="px-4 py-4 space-y-4" style={{ background: '#162030' }}>
-
-                              <div>
-                                <p className="text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>What This Means</p>
-                                <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.75)' }}>{gaugeDiag.primary.whatThisMeans}</p>
+                                {p.recoveryRequired && (
+                                  <span className="text-xs px-2.5 py-1 rounded-full"
+                                    style={{ background: '#F59E0B18', color: '#F59E0B', border: '1px solid #F59E0B40' }}>
+                                    Recovery Required
+                                  </span>
+                                )}
                               </div>
+                            </div>
 
-                              <div>
-                                <p className="text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>Field Verification</p>
-                                <ol className="space-y-1.5">
-                                  {gaugeDiag.primary.fieldVerification.map((step, i) => (
-                                    <li key={i} className="flex gap-2 text-sm" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                                      <span className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5"
-                                        style={{ background: '#1e3040', color: HD_BLUE }}>
+                            <div className="divide-y" style={{ borderColor: '#1e3040' }}>
+
+                              {/* Most likely causes */}
+                              <div className="px-4 py-4" style={{ background: '#111920' }}>
+                                <p className="text-xs uppercase tracking-widest mb-3" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                                  Most Likely Causes — Ranked by Probability
+                                </p>
+                                <ol className="space-y-2">
+                                  {p.causes.map((cause, i) => (
+                                    <li key={i} className="flex gap-3 text-sm leading-snug">
+                                      <span className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5"
+                                        style={{
+                                          background: i === 0 ? HD_ORANGE + '25' : '#1e3040',
+                                          color:      i === 0 ? HD_ORANGE        : 'rgba(255,255,255,0.35)',
+                                        }}>
                                         {i + 1}
                                       </span>
+                                      <span style={{ color: i === 0 ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.6)' }}>
+                                        {cause}
+                                      </span>
+                                    </li>
+                                  ))}
+                                </ol>
+                              </div>
+
+                              {/* Field verification */}
+                              <div className="px-4 py-4" style={{ background: '#111920' }}>
+                                <p className="text-xs uppercase tracking-widest mb-3" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                                  Field Verification
+                                </p>
+                                <ul className="space-y-2">
+                                  {p.fieldVerification.map((step, i) => (
+                                    <li key={i} className="flex gap-2 text-sm leading-snug" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                                      <span className="flex-shrink-0 mt-1.5 w-1.5 h-1.5 rounded-full" style={{ background: HD_BLUE }} />
+                                      {step}
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+
+                              {/* Recommended action */}
+                              <div className="px-4 py-4" style={{ background: '#111920' }}>
+                                <p className="text-xs uppercase tracking-widest mb-3" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                                  Recommended Action
+                                </p>
+                                <ol className="space-y-2">
+                                  {p.recommendedAction.map((step, i) => (
+                                    <li key={i} className="flex gap-3 text-sm leading-snug" style={{ color: 'rgba(255,255,255,0.82)' }}>
+                                      <span className="font-bold flex-shrink-0 mt-0.5" style={{ color: HD_ORANGE, minWidth: '1.1rem' }}>{i + 1}.</span>
                                       {step}
                                     </li>
                                   ))}
                                 </ol>
                               </div>
 
-                              <div>
-                                <p className="text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.35)' }}>Recommended Action</p>
-                                <ol className="space-y-1.5">
-                                  {gaugeDiag.primary.recommendedAction.map((step, i) => (
-                                    <li key={i} className="flex gap-2 text-sm" style={{ color: 'rgba(255,255,255,0.82)' }}>
-                                      <span className="font-bold flex-shrink-0" style={{ color: HD_ORANGE }}>{i + 1}.</span>
-                                      {step}
-                                    </li>
-                                  ))}
-                                </ol>
-                              </div>
+                              {/* Refrigerant note */}
+                              {(p.refrigerantNote || calcRefrigerant === 'R-452A') && (
+                                <div className="px-4 py-3" style={{ background: '#0f1a12' }}>
+                                  {p.refrigerantNote && (
+                                    <p className="text-xs leading-relaxed mb-1" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                                      <span className="font-bold" style={{ color: '#22C55E' }}>Refrigerant Note: </span>
+                                      {p.refrigerantNote}
+                                    </p>
+                                  )}
+                                  {calcRefrigerant === 'R-452A' && (
+                                    <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                                      <span className="font-bold" style={{ color: '#F59E0B' }}>R-452A: </span>
+                                      Never top off after a refrigerant leak — R-452A is a blended refrigerant and fractionation during a leak changes the blend ratio. Full recovery and recharge to nameplate weight required after any leak.
+                                    </p>
+                                  )}
+                                </div>
+                              )}
 
-                              <div className="flex items-center gap-2 pt-1">
-                                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth={1.5} viewBox="0 0 24 24">
+                              {/* Labor estimate */}
+                              <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#162030' }}>
+                                <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth={1.5} viewBox="0 0 24 24">
                                   <circle cx="12" cy="12" r="10" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2" />
                                 </svg>
                                 <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                                  <span className="font-semibold" style={{ color: 'rgba(255,255,255,0.55)' }}>Labor estimate: </span>
-                                  {gaugeDiag.primary.laborEstimate}
+                                  <span className="font-semibold" style={{ color: 'rgba(255,255,255,0.5)' }}>Labor estimate: </span>
+                                  {p.laborEstimate}
                                 </p>
                               </div>
 
@@ -1146,33 +1196,8 @@ export default function HDQuickWrenchPage() {
                         )
                       })()}
 
-                      {/* Secondary diagnoses */}
-                      {gaugeDiag.secondary.length > 0 && (
-                        <div>
-                          <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.25)' }}>
-                            Also Consider
-                          </p>
-                          <div className="space-y-2">
-                            {gaugeDiag.secondary.map(result => {
-                              const sev = SEVERITY_CONFIG[result.severity]
-                              return (
-                                <div key={result.id} className="rounded-lg px-4 py-3 flex items-center gap-3"
-                                  style={{ background: '#162030', border: `1px solid ${sev.border}` }}>
-                                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: sev.color }} />
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-medium text-white truncate">{result.title}</p>
-                                    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>{result.category}</p>
-                                  </div>
-                                  <span className="text-xs flex-shrink-0" style={{ color: sev.color }}>{sev.label}</span>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        </div>
-                      )}
-
                       <p className="text-xs" style={{ color: 'rgba(255,255,255,0.2)' }}>
-                        Diagnostic results are for field guidance only. Verify all conditions with calibrated instruments before performing repairs.
+                        Diagnostic results are field guidance only. Verify all conditions with calibrated instruments and service documentation before performing repairs.
                       </p>
                     </div>
                   )}
