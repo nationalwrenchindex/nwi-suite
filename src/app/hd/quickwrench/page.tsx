@@ -103,6 +103,33 @@ interface AlarmPattern {
   severity:      'critical' | 'warning'
 }
 
+interface AlarmCodeResult {
+  id:                  string
+  manufacturer:        string
+  unit_family:         string
+  alarm_code:          string | null
+  display_text:        string | null
+  meaning:             string
+  severity:            string
+  common_causes:       string | null
+  diagnostic_steps:    string | null
+  field_notes:         string | null
+  common_fix:          string | null
+  parts_needed:        string | null
+  safety_warning:      string | null
+  shore_power_warning: boolean
+  wiring_reference:    string | null
+  book_time:           number | null
+  mobile_time:         number | null
+}
+
+const AC_SEVERITY_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
+  immediate:   { label: 'IMMEDIATE ACTION', color: '#EF4444', bg: '#EF444415', border: '#EF444440' },
+  check:       { label: 'CHECK AS SPECIFIED', color: '#F59E0B', bg: '#F59E0B15', border: '#F59E0B40' },
+  maintenance: { label: 'MAINTENANCE DUE',  color: '#1A6BAF', bg: '#1A6BAF15', border: '#1A6BAF40' },
+  info:        { label: 'INFO',             color: '#22C55E', bg: '#22C55E15', border: '#22C55E40' },
+}
+
 const TK_SEVERITY_CONFIG: Record<TKSeverity, { label: string; color: string; bg: string; border: string }> = {
   ok_to_run:        { label: 'OK TO RUN',             color: '#22C55E', bg: '#22C55E15', border: '#22C55E40' },
   check_specified:  { label: 'CHECK AS SPECIFIED',    color: '#F59E0B', bg: '#F59E0B15', border: '#F59E0B40' },
@@ -582,6 +609,18 @@ export default function HDQuickWrenchPage() {
   const [disclaimer,           setDisclaimer]           = useState<string | null>(null)
   const [error,                setError]                = useState<string | null>(null)
 
+  // ── Alarm Code Lookup state ──
+  const [acOpen,    setAcOpen]    = useState(false)
+  const [acManuf,   setAcManuf]   = useState<'TK' | 'Carrier'>('TK')
+  const [acFamily,  setAcFamily]  = useState('All')
+  const [acCode,    setAcCode]    = useState('')
+  const [acText,    setAcText]    = useState('')
+  const [acMode,    setAcMode]    = useState<'code' | 'text'>('code')
+  const [acLoading, setAcLoading] = useState(false)
+  const [acResults, setAcResults] = useState<AlarmCodeResult[]>([])
+  const [acWarning, setAcWarning] = useState<string | null>(null)
+  const [acError,   setAcError]   = useState<string | null>(null)
+
   // ── Truck state ──
   const [truckBrand,        setTruckBrand]        = useState<EngineBrand>('Cummins')
   const [engineModel,       setEngineModel]       = useState('')
@@ -686,6 +725,37 @@ export default function HDQuickWrenchPage() {
     }, 1000)
     return () => clearInterval(interval)
   }, [elecLoading])
+
+  // ── Alarm Code Lookup ──
+  async function handleAlarmLookup() {
+    const codeVal = acCode.trim()
+    const textVal = acText.trim()
+    if (acMode === 'code' && !codeVal) return
+    if (acMode === 'text' && !textVal) return
+
+    setAcLoading(true)
+    setAcResults([])
+    setAcWarning(null)
+    setAcError(null)
+
+    const params = new URLSearchParams({ manufacturer: acManuf })
+    const resolvedFamily = acManuf === 'TK' ? 'TK' : acFamily !== 'All' ? acFamily : ''
+    if (resolvedFamily) params.set('unit_family', resolvedFamily)
+    if (acMode === 'code') params.set('alarm_code', codeVal)
+    else params.set('display_text', textVal)
+
+    try {
+      const res  = await fetch(`/api/hd/alarm-codes?${params}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Lookup failed')
+      setAcResults(data.results ?? [])
+      setAcWarning(data.multi_family_warning ?? null)
+    } catch (e) {
+      setAcError(e instanceof Error ? e.message : 'Lookup failed')
+    } finally {
+      setAcLoading(false)
+    }
+  }
 
   // ── Reefer submit ──
   async function handleSubmit(e: React.FormEvent) {
@@ -895,6 +965,351 @@ export default function HDQuickWrenchPage() {
         ══════════════════════════════════════════════════════════════════════ */}
         {activeTab === 'reefer' && (
           <>
+            {/* ── Alarm Code Lookup ── */}
+            <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
+
+              <button
+                type="button"
+                onClick={() => setAcOpen(o => !o)}
+                className="w-full px-5 py-4 flex items-center gap-3 text-left"
+                style={{ background: '#111920' }}
+              >
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke={HD_ORANGE} strokeWidth={1.8} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <div className="flex-1">
+                  <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>Verified Database</p>
+                  <p className="font-condensed font-bold text-white text-lg tracking-wide">Alarm Code Lookup</p>
+                </div>
+                <svg
+                  className="w-4 h-4 flex-shrink-0 transition-transform duration-200"
+                  style={{ color: 'rgba(255,255,255,0.35)', transform: acOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                  fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+
+              {acOpen && (
+                <div className="px-5 pb-5 space-y-4" style={{ background: '#111920', borderTop: '1px solid #1e3040' }}>
+
+                  {/* Manufacturer toggle */}
+                  <div className="pt-4">
+                    <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>Manufacturer</p>
+                    <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid #1e3040' }}>
+                      {(['TK', 'Carrier'] as const).map(m => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => { setAcManuf(m); setAcFamily('All'); setAcResults([]); setAcWarning(null); setAcError(null) }}
+                          className="flex-1 py-2.5 text-sm font-semibold transition-colors"
+                          style={acManuf === m
+                            ? { background: HD_ORANGE, color: '#fff' }
+                            : { background: '#162030', color: 'rgba(255,255,255,0.45)' }}
+                        >
+                          {m === 'TK' ? 'Thermo King' : 'Carrier Transicold'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Carrier unit family */}
+                  {acManuf === 'Carrier' && (
+                    <div>
+                      <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>Unit Model Family</p>
+                      <div className="flex gap-2 flex-wrap">
+                        {(['All', 'X2', 'Vector'] as const).map(f => (
+                          <button
+                            key={f}
+                            type="button"
+                            onClick={() => { setAcFamily(f); setAcResults([]); setAcWarning(null) }}
+                            className="px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
+                            style={acFamily === f
+                              ? { background: HD_BLUE, color: '#fff' }
+                              : { background: '#162030', color: 'rgba(255,255,255,0.45)', border: '1px solid #1e3040' }}
+                          >
+                            {f === 'All' ? 'All Models' : f}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Search mode toggle */}
+                  <div>
+                    <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>Search By</p>
+                    <div className="flex gap-2">
+                      {([
+                        { key: 'code', label: 'Alarm Code Number' },
+                        { key: 'text', label: 'Description / Keyword' },
+                      ] as { key: 'code' | 'text'; label: string }[]).map(opt => (
+                        <button
+                          key={opt.key}
+                          type="button"
+                          onClick={() => { setAcMode(opt.key); setAcResults([]); setAcWarning(null); setAcError(null) }}
+                          className="flex-1 py-2 rounded-lg text-xs font-semibold transition-colors"
+                          style={acMode === opt.key
+                            ? { background: '#1e3040', color: '#fff', border: `1px solid ${HD_ORANGE}` }
+                            : { background: '#162030', color: 'rgba(255,255,255,0.4)', border: '1px solid #1e3040' }}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Search input */}
+                  {acMode === 'code' ? (
+                    <div>
+                      <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                        Alarm Code Number
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={acCode}
+                          onChange={e => setAcCode(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && handleAlarmLookup()}
+                          placeholder={acManuf === 'TK' ? 'e.g. 10, 25, 89' : 'e.g. A00073, A05036'}
+                          className="flex-1 px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+                          style={{ background: '#162030', border: '1px solid #1e3040', fontFamily: 'monospace' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAlarmLookup}
+                          disabled={acLoading || !acCode.trim()}
+                          className="px-5 py-2.5 rounded-lg text-sm font-bold transition-colors"
+                          style={{ background: acLoading || !acCode.trim() ? '#1e3040' : HD_ORANGE, color: '#fff', minWidth: 80 }}
+                        >
+                          {acLoading ? '...' : 'Look Up'}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                        Description or Keyword
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={acText}
+                          onChange={e => setAcText(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && handleAlarmLookup()}
+                          placeholder="e.g. High Discharge, Alternator, ETV"
+                          className="flex-1 px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+                          style={{ background: '#162030', border: '1px solid #1e3040' }}
+                        />
+                        <button
+                          type="button"
+                          onClick={handleAlarmLookup}
+                          disabled={acLoading || !acText.trim()}
+                          className="px-5 py-2.5 rounded-lg text-sm font-bold transition-colors"
+                          style={{ background: acLoading || !acText.trim() ? '#1e3040' : HD_ORANGE, color: '#fff', minWidth: 80 }}
+                        >
+                          {acLoading ? '...' : 'Search'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Multi-family warning */}
+                  {acWarning && (
+                    <div className="rounded-lg px-4 py-3" style={{ background: '#1a1000', border: '1px solid #F59E0B40' }}>
+                      <p className="text-sm" style={{ color: '#F59E0B' }}>⚠ {acWarning}</p>
+                    </div>
+                  )}
+
+                  {/* Error */}
+                  {acError && (
+                    <div className="rounded-lg px-4 py-3" style={{ background: '#1a0000', border: '1px solid #EF444440' }}>
+                      <p className="text-sm" style={{ color: '#EF4444' }}>{acError}</p>
+                    </div>
+                  )}
+
+                  {/* No results */}
+                  {!acLoading && !acError && acResults.length === 0 && (acCode.trim() || acText.trim()) && (
+                    <p className="text-sm text-center py-2" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                      No results found. Try a different code or keyword.
+                    </p>
+                  )}
+
+                  {/* Results */}
+                  {acResults.map(r => {
+                    const sev = AC_SEVERITY_CONFIG[r.severity] ?? AC_SEVERITY_CONFIG.check
+                    const steps = r.diagnostic_steps ? r.diagnostic_steps.split('\n').filter(Boolean) : []
+                    const causes = r.common_causes ? r.common_causes.split(',').map(s => s.trim()).filter(Boolean) : []
+                    return (
+                      <div key={r.id} className="rounded-xl overflow-hidden" style={{ border: `1px solid ${sev.border}` }}>
+
+                        {/* Header */}
+                        <div className="px-4 py-3 flex items-start justify-between gap-3" style={{ background: sev.bg }}>
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 flex-wrap mb-1">
+                              {r.alarm_code && (
+                                <span
+                                  className="text-sm font-bold px-2.5 py-0.5 rounded"
+                                  style={{ background: '#0d1820', color: HD_ORANGE, fontFamily: 'monospace', border: `1px solid ${HD_ORANGE}40` }}
+                                >
+                                  {r.manufacturer === 'TK' ? `Code ${r.alarm_code}` : r.alarm_code}
+                                </span>
+                              )}
+                              <span
+                                className="text-xs font-bold px-2.5 py-0.5 rounded-full tracking-wide"
+                                style={{ background: sev.color, color: '#fff' }}
+                              >
+                                {sev.label}
+                              </span>
+                              {acManuf === 'Carrier' && (
+                                <span className="text-xs px-2 py-0.5 rounded" style={{ background: '#162030', color: 'rgba(255,255,255,0.5)' }}>
+                                  {r.unit_family}
+                                </span>
+                              )}
+                            </div>
+                            <p className="font-bold text-white text-sm leading-snug">{r.display_text ?? r.meaning}</p>
+                          </div>
+                        </div>
+
+                        {/* Meaning */}
+                        <div className="px-4 py-3" style={{ borderTop: '1px solid #1e3040' }}>
+                          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>Alarm Meaning</p>
+                          <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.85)' }}>{r.meaning}</p>
+                        </div>
+
+                        {/* Shore power warning — always first if applicable */}
+                        {r.shore_power_warning && (
+                          <div className="px-4 py-3" style={{ background: '#1a0505', borderTop: '1px solid #EF444440' }}>
+                            <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: '#EF4444' }}>⚡ High Voltage Warning</p>
+                            <p className="text-sm leading-relaxed" style={{ color: '#EF4444' }}>
+                              Shore power on this unit operates at 460–480V three-phase. This is LETHAL VOLTAGE.
+                              Only qualified electricians may work on shore power connections.
+                              Disconnect and lock out power before servicing the power inlet.
+                            </p>
+                          </div>
+                        )}
+
+                        {/* Safety warning */}
+                        {r.safety_warning && (
+                          <div className="px-4 py-3" style={{ borderTop: '1px solid #1e3040' }}>
+                            <p className="text-xs uppercase tracking-widest mb-1" style={{ color: '#F59E0B' }}>⚠ Safety</p>
+                            <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.7)' }}>{r.safety_warning}</p>
+                          </div>
+                        )}
+
+                        {/* Battery warning — always shown */}
+                        <div className="px-4 py-3" style={{ background: '#0d1c10', borderTop: '1px solid #22C55E30' }}>
+                          <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: '#22C55E' }}>🔋 Field Protocol</p>
+                          <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                            Always perform a battery load test before any other diagnosis on TK and Carrier units.
+                            A weak battery causes false sensor readings and false alarm codes on microprocessor controlled units.
+                          </p>
+                        </div>
+
+                        {/* Most likely causes */}
+                        {causes.length > 0 && (
+                          <div className="px-4 py-3" style={{ borderTop: '1px solid #1e3040' }}>
+                            <p className="text-xs uppercase tracking-widest mb-2" style={{ color: HD_ORANGE }}>Most Likely Causes</p>
+                            <ol className="space-y-1">
+                              {causes.map((c, i) => (
+                                <li key={i} className="flex gap-2 text-sm" style={{ color: 'rgba(255,255,255,0.8)' }}>
+                                  <span className="font-bold flex-shrink-0" style={{ color: HD_ORANGE }}>{i + 1}.</span>
+                                  {c}
+                                </li>
+                              ))}
+                            </ol>
+                          </div>
+                        )}
+
+                        {/* Diagnostic steps */}
+                        {steps.length > 0 && (
+                          <div className="px-4 py-3" style={{ borderTop: '1px solid #1e3040' }}>
+                            <p className="text-xs uppercase tracking-widest mb-2" style={{ color: HD_BLUE }}>Diagnostic Steps</p>
+                            <ol className="space-y-2">
+                              {steps.map((step, i) => (
+                                <li key={i} className="flex gap-2 text-sm" style={{ color: 'rgba(255,255,255,0.82)' }}>
+                                  <span
+                                    className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5"
+                                    style={{ background: '#1e3040', color: HD_BLUE }}
+                                  >
+                                    {i + 1}
+                                  </span>
+                                  {step.replace(/^\d+\.\s*/, '')}
+                                </li>
+                              ))}
+                            </ol>
+                          </div>
+                        )}
+
+                        {/* Common fix */}
+                        {r.common_fix && (
+                          <div className="px-4 py-3" style={{ background: '#162030', borderTop: '1px solid #1e3040' }}>
+                            <p className="text-xs uppercase tracking-widest mb-1" style={{ color: '#22C55E' }}>Common Fix</p>
+                            <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.85)' }}>{r.common_fix}</p>
+                          </div>
+                        )}
+
+                        {/* Parts needed */}
+                        {r.parts_needed && r.parts_needed !== 'None' && (
+                          <div className="px-4 py-3" style={{ borderTop: '1px solid #1e3040' }}>
+                            <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>Parts Needed</p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {r.parts_needed.split(',').map(p => p.trim()).filter(Boolean).map((p, i) => (
+                                <span key={i} className="text-xs px-2.5 py-1 rounded-full" style={{ background: '#1e3040', color: 'rgba(255,255,255,0.7)' }}>
+                                  {p}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Wiring reference */}
+                        {r.wiring_reference && (
+                          <div className="px-4 py-3" style={{ borderTop: '1px solid #1e3040' }}>
+                            <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>Wiring Reference</p>
+                            <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.55)' }}>{r.wiring_reference}</p>
+                          </div>
+                        )}
+
+                        {/* Field notes */}
+                        {r.field_notes && (
+                          <div className="px-4 py-3" style={{ background: '#0d1820', borderTop: '1px solid #1e3040' }}>
+                            <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>Field Notes</p>
+                            <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.5)' }}>{r.field_notes}</p>
+                          </div>
+                        )}
+
+                        {/* Labor estimate */}
+                        {(r.book_time != null || r.mobile_time != null) && (
+                          <div className="px-4 py-2.5 flex items-center gap-4" style={{ background: '#162030', borderTop: '1px solid #1e3040' }}>
+                            <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth={1.5} viewBox="0 0 24 24">
+                              <circle cx="12" cy="12" r="10" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2" />
+                            </svg>
+                            {r.book_time != null && (
+                              <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                <span className="font-semibold" style={{ color: 'rgba(255,255,255,0.5)' }}>Book: </span>
+                                {r.book_time}h
+                              </p>
+                            )}
+                            {r.mobile_time != null && (
+                              <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                                <span className="font-semibold" style={{ color: 'rgba(255,255,255,0.5)' }}>Mobile: </span>
+                                {r.mobile_time}h
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                      </div>
+                    )
+                  })}
+
+                  <p className="text-xs text-center" style={{ color: 'rgba(255,255,255,0.2)' }}>
+                    Field-verified data · Battery load test required before all diagnoses
+                  </p>
+                </div>
+              )}
+            </div>
+
             {/* ── Refrigerant Pressure Calculator ── */}
             <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
 
