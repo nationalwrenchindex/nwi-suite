@@ -1351,13 +1351,25 @@ export const ALARM_CODE_SEED: AlarmCodeSeedEntry[] = [
 export async function seedAlarmCodes() {
   const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-  const { error } = await supabase
+  // Delete all existing rows first — no unique constraint on the table so we
+  // can't upsert; service role bypasses RLS so the delete filter is unrestricted.
+  const { error: deleteError } = await supabase
     .from('hd_alarm_codes')
-    .upsert(ALARM_CODE_SEED, { onConflict: 'manufacturer,unit_family,alarm_code' })
+    .delete()
+    .not('id', 'is', null)
 
-  if (error) {
-    console.error('Alarm code seed error:', error.message)
-    throw error
+  if (deleteError) {
+    console.error('Alarm code delete error:', deleteError.message)
+    throw new Error(deleteError.message)
+  }
+
+  const { error: insertError } = await supabase
+    .from('hd_alarm_codes')
+    .insert(ALARM_CODE_SEED)
+
+  if (insertError) {
+    console.error('Alarm code insert error:', insertError.message)
+    throw new Error(insertError.message)
   }
 
   console.log(`Seeded ${ALARM_CODE_SEED.length} alarm codes successfully.`)

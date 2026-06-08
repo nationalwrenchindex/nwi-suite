@@ -19,9 +19,11 @@ export async function POST(_req: NextRequest) {
       message: `${ALARM_CODE_SEED.length} alarm codes seeded successfully.`,
     })
   } catch (e) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'Seed failed' },
-      { status: 500 },
-    )
+    const msg = e instanceof Error
+      ? e.message
+      : (typeof e === 'object' && e !== null && 'message' in e)
+        ? String((e as { message: unknown }).message)
+        : 'Seed failed'
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 }
