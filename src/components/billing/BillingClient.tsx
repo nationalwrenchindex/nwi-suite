@@ -350,6 +350,35 @@ function ActiveSubscriptionView({
 
   return (
     <div className="space-y-6">
+      {/* Trial banner */}
+      {subscription.status === 'trialing' && subscription.current_period_end && (() => {
+        const end  = new Date(subscription.current_period_end)
+        const days = Math.max(0, Math.ceil((end.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
+        return (
+          <div
+            className="bg-blue/10 border border-blue/30 rounded-xl px-4 py-3 flex items-start gap-3"
+            suppressHydrationWarning
+          >
+            <span className="text-lg leading-none mt-0.5" aria-hidden>🎉</span>
+            <div className="flex-1">
+              <p className="text-blue-light font-medium text-sm">
+                Free Trial Active — {days} day{days !== 1 ? 's' : ''} remaining
+              </p>
+              <p className="text-blue-light/60 text-xs mt-0.5">
+                Your first payment will be on {fmtPeriodEnd(subscription.current_period_end)}.
+                {' '}Cancel anytime before then with no charge.
+              </p>
+            </div>
+            <button
+              onClick={onOpenPortal}
+              className="text-blue-light/40 hover:text-blue-light text-xs underline whitespace-nowrap mt-0.5"
+            >
+              Cancel trial
+            </button>
+          </div>
+        )
+      })()}
+
       {/* Current plan card */}
       <div className="nwi-card">
         <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -431,9 +460,13 @@ export default function BillingClient({
   foremanAddonActive: boolean
 }) {
   const searchParams  = useSearchParams()
-  const [loadingPlan,   setLoadingPlan]   = useState<PlanTier | null>(null)
-  const [loadingPortal, setLoadingPortal] = useState(false)
-  const [toast,         setToast]         = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
+  const [loadingPlan,      setLoadingPlan]      = useState<PlanTier | null>(null)
+  const [loadingPortal,    setLoadingPortal]    = useState(false)
+  const [toast,            setToast]            = useState<{ type: 'success' | 'error'; msg: string } | null>(null)
+  const [promoInput,       setPromoInput]       = useState('')
+  const [promoStatus,      setPromoStatus]      = useState<'idle' | 'checking' | 'valid' | 'invalid'>('idle')
+  const [promoError,       setPromoError]       = useState<string | null>(null)
+  const [promotionCodeId,  setPromotionCodeId]  = useState<string | null>(null)
 
   const isActive     = subscription && ['active', 'trialing', 'past_due'].includes(subscription.status)
   const isForemanOnly = foremanAddonActive && !subscription?.tier
@@ -454,18 +487,55 @@ export default function BillingClient({
     return () => clearTimeout(t)
   }, [toast])
 
+  async function handleApplyPromo() {
+    if (!promoInput.trim()) return
+    setPromoStatus('checking')
+    setPromoError(null)
+    try {
+      const res  = await fetch('/api/stripe/validate-promo', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ code: promoInput.trim() }),
+      })
+      const data = await res.json()
+      if (data.valid) {
+        setPromoStatus('valid')
+        setPromotionCodeId(data.promotionCodeId)
+      } else {
+        setPromoStatus('invalid')
+        setPromoError(data.error ?? 'Invalid promo code')
+        setPromotionCodeId(null)
+      }
+    } catch {
+      setPromoStatus('invalid')
+      setPromoError('Unable to validate code — please try again')
+    }
+  }
+
+  function handleRemovePromo() {
+    setPromoInput('')
+    setPromoStatus('idle')
+    setPromoError(null)
+    setPromotionCodeId(null)
+  }
+
   async function handleSelectPlan(tier: PlanTier) {
     // Starter and Pro require module selection before checkout
     if (MODULE_PICK_COUNT[tier]) {
-      window.location.href = `/billing/select?plan=${tier}`
+      const url = promotionCodeId
+        ? `/billing/select?plan=${tier}&promo=${promotionCodeId}`
+        : `/billing/select?plan=${tier}`
+      window.location.href = url
       return
     }
     setLoadingPlan(tier)
     try {
+      const body: Record<string, unknown> = { tier }
+      if (promotionCodeId) body.promotionCodeId = promotionCodeId
       const res  = await fetch('/api/stripe/checkout', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ tier }),
+        body:    JSON.stringify(body),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Checkout failed')
@@ -557,6 +627,61 @@ export default function BillingClient({
         />
       ) : (
         <div>
+          {/* Promo code */}
+          <div className="mb-6">
+            {promoStatus === 'valid' ? (
+              <div className="bg-success/10 border border-success/30 rounded-xl px-4 py-3 flex items-start gap-3">
+                <svg className="w-4 h-4 text-success flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+                </svg>
+                <div className="flex-1" suppressHydrationWarning>
+                  <p className="text-success font-medium text-sm">90-day free trial applied</p>
+                  <p className="text-success/70 text-xs mt-0.5">
+                    {(() => {
+                      const d = new Date()
+                      d.setDate(d.getDate() + 90)
+                      const fmt = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+                      return `You will not be charged for 90 days. Your first payment will be on ${fmt}.`
+                    })()}
+                  </p>
+                  <button
+                    onClick={handleRemovePromo}
+                    className="text-success/50 hover:text-success/80 text-xs mt-1.5 underline"
+                  >
+                    Remove code
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div>
+                <p className="text-white/30 text-xs mb-2">Have a promo code?</p>
+                <div className="flex gap-2 max-w-sm">
+                  <input
+                    type="text"
+                    value={promoInput}
+                    onChange={e => {
+                      setPromoInput(e.target.value)
+                      if (promoStatus !== 'idle') { setPromoStatus('idle'); setPromoError(null) }
+                    }}
+                    onKeyDown={e => { if (e.key === 'Enter') handleApplyPromo() }}
+                    placeholder="Enter code"
+                    className="flex-1 bg-dark-card border border-dark-border rounded-xl px-3 py-2 text-white text-sm placeholder:text-white/20 focus:outline-none focus:border-white/20 min-w-0"
+                  />
+                  <button
+                    onClick={handleApplyPromo}
+                    disabled={!promoInput.trim() || promoStatus === 'checking'}
+                    className="px-4 py-2 rounded-xl border border-dark-border text-white/60 hover:text-white hover:border-white/20 text-sm transition-colors disabled:opacity-40 whitespace-nowrap"
+                  >
+                    {promoStatus === 'checking' ? <Spinner /> : 'Apply'}
+                  </button>
+                </div>
+                {promoStatus === 'invalid' && promoError && (
+                  <p className="text-danger text-xs mt-1.5">{promoError}</p>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* NWI Suite Plans */}
           <p className="text-white/30 text-[11px] uppercase tracking-widest mb-3">NWI Suite Plans</p>
 

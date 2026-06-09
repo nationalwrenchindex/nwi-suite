@@ -1,3 +1,21 @@
+// ─── Stripe promo code setup (run once in Stripe dashboard) ──────────────────
+// 1. Coupons → Create coupon:
+//      Name: NWI Free Trial 90 Days
+//      Discount: 100% off
+//      Duration: Forever (the trial_period_days controls billing; coupon is for tracking)
+//      Leave "Applies to" blank
+// 2. Promotion codes → Create a code from that coupon:
+//      Code: choose e.g. NWI-BROCK-001
+//      Max redemptions: 1
+//      Expiry: set if desired
+//    Create one unique code per prospect. Distribute only via direct message.
+// 3. When a valid code is submitted here, the checkout session gets trial_period_days: 90
+//    instead of the default 14. The promotion code is NOT applied as a discount to the
+//    subscription — it is used only to validate the code and then discarded server-side.
+//    This means Stripe's max_redemptions counter does NOT decrement. If you want single-use
+//    enforcement, mark codes as inactive in Stripe after sharing, or track redemptions in your DB.
+// ─────────────────────────────────────────────────────────────────────────────
+
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { stripe, getPriceId, getTierFromPriceId, TIER_MODULES, type PlanTier } from '@/lib/stripe'
@@ -12,7 +30,7 @@ export async function POST(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  let body: { tier?: string; source?: string; selectedModules?: string[] }
+  let body: { tier?: string; source?: string; selectedModules?: string[]; promotionCodeId?: string }
   try { body = await request.json() }
   catch { return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 }) }
 
@@ -82,6 +100,9 @@ export async function POST(request: NextRequest) {
     customerId = customer.id
   }
 
+  const hasPromo  = !!body.promotionCodeId && !NO_TRIAL_TIERS.includes(tier)
+  const trialDays = hasPromo ? 90 : 14
+
   let session
   try {
     session = await stripe.checkout.sessions.create({
@@ -90,7 +111,7 @@ export async function POST(request: NextRequest) {
       payment_method_types: ['card'],
       line_items: [{ price: priceId, quantity: 1 }],
       subscription_data: {
-        ...(NO_TRIAL_TIERS.includes(tier) ? {} : { trial_period_days: 14 }),
+        ...(NO_TRIAL_TIERS.includes(tier) ? {} : { trial_period_days: trialDays }),
         metadata: {
           user_id: user.id,
           tier,
@@ -104,7 +125,8 @@ export async function POST(request: NextRequest) {
       },
       success_url: `${appUrl}${successPath}?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url:  `${appUrl}/billing?canceled=true`,
-      allow_promotion_codes: true,
+      // When a promo code was pre-validated on our side, hide Stripe's promo field to avoid confusion
+      ...(hasPromo ? {} : { allow_promotion_codes: true }),
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Stripe checkout session creation failed'

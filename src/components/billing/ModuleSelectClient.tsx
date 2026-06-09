@@ -59,7 +59,13 @@ const PLAN_META: Record<'starter' | 'pro', { name: string; price: string; pickCo
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function ModuleSelectClient({ plan }: { plan: 'starter' | 'pro' }) {
+export default function ModuleSelectClient({
+  plan,
+  promotionCodeId,
+}: {
+  plan:            'starter' | 'pro'
+  promotionCodeId: string | null
+}) {
   const [selected,  setSelected]  = useState<SelectableModule[]>([])
   const [loading,   setLoading]   = useState(false)
   const [error,     setError]     = useState<string | null>(null)
@@ -82,10 +88,12 @@ export default function ModuleSelectClient({ plan }: { plan: 'starter' | 'pro' }
     setLoading(true)
     setError(null)
     try {
+      const checkoutBody: Record<string, unknown> = { tier: plan as PlanTier, selectedModules: selected }
+      if (promotionCodeId) checkoutBody.promotionCodeId = promotionCodeId
       const res  = await fetch('/api/stripe/checkout', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ tier: plan as PlanTier, selectedModules: selected }),
+        body:    JSON.stringify(checkoutBody),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Checkout failed')
@@ -113,7 +121,7 @@ export default function ModuleSelectClient({ plan }: { plan: 'starter' | 'pro' }
       {/* Header */}
       <div className="mb-8">
         <p className="text-white/40 text-xs uppercase tracking-widest mb-1">
-          {meta.name} · {meta.price}/month · 14-day free trial
+          {meta.name} · {meta.price}/month · {promotionCodeId ? '90-day free trial' : '14-day free trial'}
         </p>
         <h1 className="font-condensed font-bold text-3xl sm:text-4xl text-white tracking-wide mb-2">
           {meta.heading}

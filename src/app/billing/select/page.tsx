@@ -8,10 +8,11 @@ export const metadata = { title: 'Choose Your Modules — National Wrench Index 
 export default async function BillingSelectPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ plan?: string }>
+  searchParams?: Promise<{ plan?: string; promo?: string }>
 }) {
-  const sp   = searchParams ? await searchParams : {}
-  const plan = sp?.plan
+  const sp    = searchParams ? await searchParams : {}
+  const plan  = sp?.plan
+  const promo = sp?.promo ?? null
 
   if (plan !== 'starter' && plan !== 'pro') redirect('/billing')
 
@@ -33,7 +34,7 @@ export default async function BillingSelectPage({
         businessName={profile.business_name}
         businessType={profile.business_type ?? undefined}
       />
-      <ModuleSelectClient plan={plan} />
+      <ModuleSelectClient plan={plan} promotionCodeId={promo} />
     </div>
   )
 }
