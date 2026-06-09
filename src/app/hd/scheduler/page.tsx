@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDStarterAccess } from '@/lib/hd-access'
-import HDSchedulerClient from '@/components/hd/HDSchedulerClient'
+import HDSchedulerTabsClient from '@/components/hd/HDSchedulerTabsClient'
 
 export const metadata = { title: 'Scheduler — NWI HD Suite' }
 
@@ -76,19 +76,11 @@ export default async function HDSchedulerPage() {
         </div>
       </div>
 
-      {!workOrders || workOrders.length === 0 ? (
-        <div className="py-20 text-center rounded-xl" style={{ background: '#111920', border: '1px solid #1e3040' }}>
-          <p className="text-sm mb-2" style={{ color: 'rgba(255,255,255,0.3)' }}>No jobs scheduled</p>
-          <Link href="/hd/work-orders?new=1" className="text-xs" style={{ color: HD_ORANGE }}>
-            + Create your first work order
-          </Link>
-        </div>
-      ) : (
-        <HDSchedulerClient
-          workOrders={workOrders as unknown as Parameters<typeof HDSchedulerClient>[0]['workOrders']}
-          laborRate={laborRate}
-        />
-      )}
+      <HDSchedulerTabsClient
+        workOrders={workOrders as unknown as Parameters<typeof HDSchedulerTabsClient>[0]['workOrders']}
+        laborRate={laborRate}
+        activeCount={activeCount}
+      />
     </main>
   )
 }
