@@ -75,32 +75,37 @@ function PlanCard({
   onSelect:  (tier: PlanTier) => void
   loading:   PlanTier | null
 }) {
-  const isLoading  = loading === plan.tier
-  const pickCount  = MODULE_PICK_COUNT[plan.tier]
-  const noTrial    = plan.trialDays === 0
+  const isLoading    = loading === plan.tier
+  const pickCount    = MODULE_PICK_COUNT[plan.tier]
+  const noTrial      = plan.trialDays === 0
+  const isRecommended = plan.badge === 'RECOMMENDED'
 
   const borderClass = isCurrent
-    ? 'border-orange bg-orange/5 ring-1 ring-orange/20'
+    ? 'border border-orange bg-orange/5 ring-1 ring-orange/20'
+    : isRecommended
+    ? 'border-2 border-orange bg-orange/5 scale-[1.02]'
     : plan.badge === 'Most Popular'
-    ? 'border-blue/40 bg-blue/5'
-    : plan.badge === 'Best Value'
-    ? 'border-orange/30 bg-orange/5'
+    ? 'border border-blue/40 bg-blue/5'
     : plan.badge === 'All-In-One'
-    ? 'border-purple-500/40 bg-purple-500/5'
+    ? 'border border-purple-500/40 bg-purple-500/5'
     : plan.badge === 'STANDALONE'
-    ? 'border-white/15 bg-dark-card hover:border-white/25'
-    : 'border-dark-border bg-dark-card hover:border-white/20'
+    ? 'border border-white/15 bg-dark-card hover:border-white/25'
+    : 'border border-dark-border bg-dark-card hover:border-white/20'
+
+  const cardStyle = isRecommended
+    ? { boxShadow: '0 0 0 3px rgba(255,102,0,0.2)' }
+    : {}
 
   return (
-    <div className={`relative rounded-2xl border p-6 flex flex-col transition-all ${borderClass}`}>
+    <div className={`relative rounded-2xl p-6 flex flex-col transition-all ${borderClass}`} style={cardStyle}>
 
       {plan.badge && (
         <div className="absolute -top-3 left-1/2 -translate-x-1/2">
           <span className={`text-[10px] font-bold px-3 py-1 rounded-full tracking-wide uppercase
-            ${plan.badge === 'Most Popular' ? 'bg-blue text-white' :
-              plan.badge === 'Best Value'   ? 'bg-orange text-white' :
-              plan.badge === 'All-In-One'   ? 'bg-purple-600 text-white' :
-              plan.badge === 'STANDALONE'   ? 'bg-dark-lighter border border-white/20 text-white/60' :
+            ${plan.badge === 'Most Popular'  ? 'bg-blue text-white' :
+              plan.badge === 'RECOMMENDED'   ? 'bg-orange text-white' :
+              plan.badge === 'All-In-One'    ? 'bg-purple-600 text-white' :
+              plan.badge === 'STANDALONE'    ? 'bg-dark-lighter border border-white/20 text-white/60' :
               'bg-dark-lighter border border-dark-border text-white'}`}>
             {plan.badge}
           </span>
@@ -183,7 +188,7 @@ function PlanCard({
           className={`w-full py-2.5 rounded-xl text-sm font-condensed font-bold transition-colors disabled:opacity-50
             ${plan.badge === 'Most Popular'
               ? 'bg-blue hover:bg-blue/90 text-white'
-              : plan.badge === 'Best Value'
+              : plan.badge === 'RECOMMENDED'
               ? 'bg-orange hover:bg-orange-hover text-white'
               : plan.badge === 'All-In-One'
               ? 'bg-purple-600 hover:bg-purple-700 text-white'

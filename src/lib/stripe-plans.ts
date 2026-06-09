@@ -71,7 +71,7 @@ export const PLANS: {
     priceKey:  'FULL_SUITE_PLUS',
     modules:   ['scheduler', 'intel', 'financials', 'quickwrench', 'torquewrench'],
     trialDays: 14,
-    badge:     'Best Value',
+    badge:     'RECOMMENDED',
     features: [
       'Everything in Full Suite',
       'QuickWrench — VIN scan, AI tech guide, parts pricing',

@@ -102,6 +102,17 @@ export default function AppNav({
       ),
     },
     {
+      href: '/parts',
+      label: 'Parts',
+      active: pathname === '/parts',
+      icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.07 4.93A10 10 0 0 1 20.9 8.6l-2.8.4a7 7 0 0 0-1.07-2.58l1.94-1.59zM19.07 19.07A10 10 0 0 1 15.4 20.9l-.4-2.8a7 7 0 0 0 2.58-1.07l1.49 1.04zM4.93 19.07A10 10 0 0 1 3.1 15.4l2.8-.4a7 7 0 0 0 1.07 2.58l-1.04 1.49zM4.93 4.93A10 10 0 0 1 8.6 3.1l.4 2.8A7 7 0 0 0 6.42 7l-1.49-1.07z"/>
+        </svg>
+      ),
+    },
+    {
       href: '/foreman',
       label: 'Foreman',
       active: pathname.startsWith('/foreman'),
