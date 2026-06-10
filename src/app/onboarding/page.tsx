@@ -160,7 +160,20 @@ export default function OnboardingPage() {
     }))
   }
 
-  async function selectBusinessType(type: 'mechanic' | 'detailer') {
+  async function selectBusinessType(type: 'mechanic' | 'detailer' | 'hd_tech') {
+    if (type === 'hd_tech') {
+      setSavingType(true)
+      try {
+        const supabase = createClient()
+        const { data: { user } } = await supabase.auth.getUser()
+        if (user) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          await supabase.from('profiles').update({ business_type: 'hd_tech' } as any).eq('id', user.id)
+        }
+      } catch { /* ignore */ }
+      router.push('/hd/subscribe')
+      return
+    }
     setBusinessType(type)
     setSavingType(true)
     try {
@@ -276,7 +289,7 @@ export default function OnboardingPage() {
               This determines your tools, services, and workflow.
             </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
               {/* Mobile Mechanic */}
               <button
                 type="button"
@@ -330,6 +343,36 @@ export default function OnboardingPage() {
                 </p>
                 {businessType === 'detailer' && (
                   <p className="text-orange text-xs font-semibold mt-2">Selected</p>
+                )}
+              </button>
+
+              {/* HD Tech */}
+              <button
+                type="button"
+                disabled={savingType}
+                onClick={() => selectBusinessType('hd_tech')}
+                className="rounded-2xl border p-5 text-left transition-all border-dark-border bg-dark-card hover:border-white/20 hover:bg-dark-input"
+                style={savingType ? { opacity: 0.6 } : undefined}
+              >
+                <div className="w-10 h-10 rounded-xl mb-3 flex items-center justify-center bg-white/5">
+                  <svg className="w-5 h-5 text-white/40" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                    <rect x="1" y="3" width="15" height="13" rx="2" />
+                    <path d="M16 8h4l3 5v3h-7V8z" />
+                    <circle cx="5.5" cy="18.5" r="2.5" />
+                    <circle cx="18.5" cy="18.5" r="2.5" />
+                  </svg>
+                </div>
+                <p className="font-condensed font-bold text-lg tracking-wide mb-1 text-white">
+                  HD Tech
+                </p>
+                <p className="text-white/40 text-xs leading-relaxed mb-1">
+                  Transport Refrigeration and Heavy Duty
+                </p>
+                <p className="text-white/25 text-xs leading-relaxed">
+                  HD Suite — Reefer diagnostics, truck engines, labor guides, quotes and invoices
+                </p>
+                {savingType && (
+                  <p className="text-white/40 text-xs font-semibold mt-2">Opening HD Suite…</p>
                 )}
               </button>
             </div>
