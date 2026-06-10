@@ -1,8 +1,16 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import HDTrialBanner from '@/components/hd/HDTrialBanner'
 
 export const metadata = { title: 'Dashboard — NWI HD Suite' }
+
+const HD_TIER_PRICES: Record<string, number> = {
+  hd_reefer:  79,
+  hd_starter: 149,
+  hd_pro:     249,
+  hd_elite:   399,
+}
 
 const HD_ORANGE = '#E85D24'
 const HD_BLUE   = '#1A6BAF'
@@ -30,11 +38,22 @@ export default async function HDDashboardPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('full_name, business_name')
-    .eq('id', user.id)
-    .single()
+  const [{ data: profile }, { data: hdSub }] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('full_name, business_name')
+      .eq('id', user.id)
+      .single(),
+    supabase
+      .from('subscriptions')
+      .select('status, current_period_end, tier')
+      .eq('user_id', user.id)
+      .eq('vertical', 'heavy_duty')
+      .maybeSingle(),
+  ])
+
+  const isTrialing      = hdSub?.status === 'trialing' && !!hdSub.current_period_end
+  const trialMonthPrice = HD_TIER_PRICES[hdSub?.tier ?? ''] ?? 149
 
   // Parallel data fetch
   const [
@@ -102,6 +121,14 @@ export default async function HDDashboardPage() {
 
   return (
     <main className="flex-1 p-4 sm:p-6 space-y-6">
+
+      {/* Trial banner */}
+      {isTrialing && hdSub?.current_period_end && (
+        <HDTrialBanner
+          trialEndISO={hdSub.current_period_end}
+          monthlyPrice={trialMonthPrice}
+        />
+      )}
 
       {/* Header */}
       <div
