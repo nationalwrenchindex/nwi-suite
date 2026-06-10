@@ -17,6 +17,7 @@ interface Plan {
   name:      string
   price:     number
   priceKey:  string
+  priceId?:  string
   modules:   string[]
   badge?:    string
   features:  string[]
@@ -78,12 +79,12 @@ function PlanCard({
   const isLoading    = loading === plan.tier
   const pickCount    = MODULE_PICK_COUNT[plan.tier]
   const noTrial      = plan.trialDays === 0
-  const isRecommended = plan.badge === 'RECOMMENDED'
+  const isRecommended = plan.priceId === 'price_1TPTFEBalq9wt09kKvpgwyfR'
 
   const borderClass = isCurrent
     ? 'border border-orange bg-orange/5 ring-1 ring-orange/20'
     : isRecommended
-    ? 'border-2 border-orange bg-orange/5 scale-[1.02]'
+    ? 'border-2 border-orange-500 bg-orange/5 scale-[1.02]'
     : plan.badge === 'Most Popular'
     ? 'border border-blue/40 bg-blue/5'
     : plan.badge === 'All-In-One'

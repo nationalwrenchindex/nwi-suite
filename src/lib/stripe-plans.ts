@@ -15,6 +15,7 @@ export const PLANS: {
   name:      string
   price:     number           // USD cents
   priceKey:  string           // STRIPE_PRICE_<priceKey> env var suffix
+  priceId?:  string           // Actual Stripe price ID (used for highlight logic)
   modules:   string[]
   features:  string[]
   badge?:    string
@@ -69,6 +70,7 @@ export const PLANS: {
     name:      'NWI Full Suite Plus',
     price:     9900,
     priceKey:  'FULL_SUITE_PLUS',
+    priceId:   'price_1TPTFEBalq9wt09kKvpgwyfR',
     modules:   ['scheduler', 'intel', 'financials', 'quickwrench', 'torquewrench'],
     trialDays: 14,
     badge:     'RECOMMENDED',

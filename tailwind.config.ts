@@ -11,6 +11,7 @@ const config: Config = {
       colors: {
         orange: {
           DEFAULT: '#FF6600',
+          '500':   '#FF6600',
           hover:   '#E55A00',
           light:   '#FF8533',
           muted:   '#FF660020',
