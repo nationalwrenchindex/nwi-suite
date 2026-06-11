@@ -18,27 +18,27 @@ const PLANS: {
     key:      'hd_reefer',
     name:     'Reefer Standalone',
     price:    79,
-    features: ['HD QuickWrench', 'EPA 608 Refrigerant Log', 'PM Interval Calculator', 'Alarm Code Lookup'],
+    features: ['Reefer Alarm Codes (TK, Carrier)', 'Reefer QuickWrench Diagnostics', 'EPA 608 Refrigerant Log', 'PM Interval Calculator'],
   },
   {
     key:      'starter',
     name:     'HD Starter',
     price:    49,
-    features: ['Work Orders', 'Fleet Units', 'PM Checklist', 'Fleet Accounts', 'Scheduler'],
+    features: ['Quoting & Invoicing', 'Parts Inventory', 'Work Orders & Scheduler', 'Fleet Management', 'Truck Engine Diagnostics'],
   },
   {
     key:      'pro',
     name:     'HD Pro',
     price:    99,
     badge:    'Most Popular',
-    features: ['Everything in HD Starter', 'HD QuickWrench', 'EPA 608 Log', 'DOT Inspections', 'Invoicing', 'Financials'],
+    features: ['Everything in HD Starter', 'DOT Inspection Reports', 'EPA 608 Refrigerant Log', 'Financials & P&L'],
   },
   {
     key:      'elite',
     name:     'HD Elite',
     price:    199,
     badge:    'RECOMMENDED',
-    features: ['Everything in HD Pro', 'Foreman AI Receptionist', 'Reefer Module', 'Community Knowledge Base'],
+    features: ['Everything in HD Pro', 'Reefer Module (alarm codes)', 'Foreman AI Receptionist'],
   },
 ]
 

@@ -12,10 +12,14 @@ const TIER_CONFIG: Record<string, { modules: string[]; vertical: string }> = {
   full_suite:      { modules: ['scheduler', 'intel', 'financials', 'quickwrench'],       vertical: 'light_duty' },
   full_suite_plus: { modules: ['scheduler', 'intel', 'financials', 'quickwrench'],       vertical: 'light_duty' },
   elite:           { modules: ['scheduler', 'intel', 'financials', 'quickwrench'],       vertical: 'light_duty' },
-  hd_reefer:       { modules: ['hd_quickwrench', 'hd_epa'],                             vertical: 'heavy_duty' },
-  hd_starter:      { modules: ['hd_fleet', 'hd_pm', 'hd_work_orders'],                  vertical: 'heavy_duty' },
-  hd_pro:          { modules: ['hd_fleet', 'hd_pm', 'hd_work_orders', 'hd_quickwrench', 'hd_epa'], vertical: 'heavy_duty' },
-  hd_elite:        { modules: ['hd_fleet', 'hd_pm', 'hd_work_orders', 'hd_quickwrench', 'hd_epa', 'hd_reefer', 'hd_foreman'], vertical: 'heavy_duty' },
+  // Reefer Standalone — reefer diagnostics only, no suite features
+  hd_reefer:  { modules: ['hd_quickwrench', 'hd_reefer', 'hd_epa'],                                                                                               vertical: 'heavy_duty' },
+  // Starter — full suite: quoting, invoicing, parts, fleet, work orders, scheduler, truck diagnostics
+  hd_starter: { modules: ['hd_quotes', 'hd_invoices', 'hd_parts', 'hd_fleet', 'hd_pm', 'hd_work_orders', 'hd_quickwrench'],                                      vertical: 'heavy_duty' },
+  // Pro — Starter + DOT inspections, EPA 608, financials
+  hd_pro:     { modules: ['hd_quotes', 'hd_invoices', 'hd_parts', 'hd_fleet', 'hd_pm', 'hd_work_orders', 'hd_quickwrench', 'hd_dot', 'hd_epa', 'hd_financials'], vertical: 'heavy_duty' },
+  // Elite — Pro + Reefer Module + Foreman AI (both locked during trial; active subscription required)
+  hd_elite:   { modules: ['hd_quotes', 'hd_invoices', 'hd_parts', 'hd_fleet', 'hd_pm', 'hd_work_orders', 'hd_quickwrench', 'hd_dot', 'hd_epa', 'hd_financials', 'hd_reefer', 'hd_foreman'], vertical: 'heavy_duty' },
 }
 
 export async function POST(request: NextRequest) {
