@@ -15,20 +15,20 @@ const PLANS: {
   {
     key:      'starter',
     name:     'HD Starter',
-    price:    149,
+    price:    49,
     features: ['Work Orders', 'Fleet Units', 'PM Checklist', 'Fleet Accounts', 'Scheduler'],
   },
   {
     key:      'pro',
     name:     'HD Pro',
-    price:    249,
+    price:    99,
     badge:    'Most Popular',
     features: ['Everything in HD Starter', 'HD QuickWrench', 'EPA 608 Log', 'DOT Inspections', 'Invoicing', 'Financials'],
   },
   {
     key:      'elite',
     name:     'HD Elite',
-    price:    399,
+    price:    199,
     badge:    'RECOMMENDED',
     features: ['Everything in HD Pro', 'Foreman AI Receptionist', 'Reefer Module', 'OEM Knowledge Base'],
   },

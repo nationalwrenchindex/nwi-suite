@@ -7,9 +7,9 @@ export const metadata = { title: 'Dashboard — NWI HD Suite' }
 
 const HD_TIER_PRICES: Record<string, number> = {
   hd_reefer:  79,
-  hd_starter: 149,
-  hd_pro:     249,
-  hd_elite:   399,
+  hd_starter: 49,
+  hd_pro:     99,
+  hd_elite:   199,
 }
 
 const HD_ORANGE = '#E85D24'
@@ -53,7 +53,7 @@ export default async function HDDashboardPage() {
   ])
 
   const isTrialing      = hdSub?.status === 'trialing' && !!hdSub.current_period_end
-  const trialMonthPrice = HD_TIER_PRICES[hdSub?.tier ?? ''] ?? 149
+  const trialMonthPrice = HD_TIER_PRICES[hdSub?.tier ?? ''] ?? 49
 
   // Parallel data fetch
   const [
