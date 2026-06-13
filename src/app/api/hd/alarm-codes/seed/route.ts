@@ -1,16 +1,21 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/service'
 import { ALARM_CODE_SEED } from '@/lib/hd/alarm-code-seed'
 
 const FOUNDER_ID  = '4a8c046f-7db3-42bb-8422-fd47efb7678c'
 const BATCH_SIZE  = 10
 
 export async function POST(_req: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  // Auth check via user-session client
+  const authClient = await createClient()
+  const { data: { user } } = await authClient.auth.getUser()
 
   if (!user)                  return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (user.id !== FOUNDER_ID) return NextResponse.json({ error: 'Forbidden' },    { status: 403 })
+
+  // All DB operations use the service-role client to bypass RLS
+  const supabase = createServiceClient()
 
   // ── Step 1: connection test ──────────────────────────────────────────────────
   const { count, error: countError } = await supabase
