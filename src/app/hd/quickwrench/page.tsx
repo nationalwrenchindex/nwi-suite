@@ -76,7 +76,7 @@ const FMI_CODES = [
 type Manufacturer     = 'Thermo King' | 'Carrier Transicold'
 type UnitType         = 'truck' | 'trailer'
 type EngineBrand      = 'Cummins' | 'Detroit Diesel' | 'Mercedes-Benz'
-type ActiveTab        = 'reefer' | 'truck' | 'electrical'
+type ActiveTab        = 'reefer' | 'truck' | 'electrical' | 'procedures'
 type ElectricalTopic  = 'Component Library' | 'Schematic Reading' | 'Fault Tracing' | 'Multimeter Guide' | 'Wire Repair'
 
 const ELECTRICAL_TOPICS: { key: ElectricalTopic; desc: string }[] = [
@@ -739,7 +739,7 @@ export default function HDQuickWrenchPage() {
     setAcError(null)
 
     const params = new URLSearchParams({ manufacturer: acManuf })
-    const resolvedFamily = acManuf === 'TK' ? 'TK' : acFamily !== 'All' ? acFamily : ''
+    const resolvedFamily = acManuf === 'TK' ? '' : acFamily !== 'All' ? acFamily : ''
     if (resolvedFamily) params.set('unit_family', resolvedFamily)
     if (acMode === 'code') params.set('alarm_code', codeVal)
     else params.set('display_text', textVal)
@@ -941,9 +941,10 @@ export default function HDQuickWrenchPage() {
         {/* ── Tab switcher ── */}
         <div className="flex flex-wrap gap-2">
           {([
-            { key: 'reefer',     label: 'Reefer Unit'        },
-            { key: 'truck',      label: 'Truck Engine'       },
-            { key: 'electrical', label: 'Electrical Systems' },
+            { key: 'reefer',      label: 'Reefer Unit'        },
+            { key: 'truck',       label: 'Truck Engine'       },
+            { key: 'electrical',  label: 'Electrical Systems' },
+            { key: 'procedures',  label: 'Procedures'         },
           ] as { key: ActiveTab; label: string }[]).map(tab => (
             <button
               key={tab.key}
@@ -2181,7 +2182,253 @@ export default function HDQuickWrenchPage() {
           </>
         )}
 
+        {/* ══════════════════════════════════════════════════════════════════════
+            PROCEDURES TAB
+        ══════════════════════════════════════════════════════════════════════ */}
+        {activeTab === 'procedures' && (
+          <ProceduresPanel />
+        )}
+
       </div>
     </main>
+  )
+}
+
+// ─── Procedures Panel ─────────────────────────────────────────────────────────
+
+const PROCEDURE_CARDS = [
+  {
+    id: 'pump-down',
+    name: 'Compressor Pump Down',
+    category: 'Refrigeration',
+    appliesTo: 'TK and Carrier — reciprocating compressors only',
+    labor: '0.50 hr',
+    safetyWarnings: [
+      'NEVER run a scroll compressor with the suction service valve front seated — this WILL damage the scroll compressor.',
+      'ALWAYS fully recover all refrigerant before opening a system with a scroll compressor.',
+      'Disconnect HPCO to prevent remote start. Battery stays connected for testing.',
+      'Set temperature setpoint to 0°F before beginning.',
+    ],
+    prerequisites: 'Set setpoint to 0°F. Verify refrigerant level is adequate before starting — a low system gives inaccurate results.',
+    steps: [
+      'Attach gauges.',
+      'Run unit minimum 20 minutes to boil all refrigerant out of compressor oil.',
+      'Disconnect both unloader valves at top of both compressor heads.',
+      'With unit RUNNING fully front seat LOW SIDE (SUCTION) service valve ONLY. DO NOT front seat HIGH SIDE (DISCHARGE) service valve while unit is running.',
+      'Once low side pulls into slight vacuum shut unit down.',
+      'Fully front seat discharge side to isolate compressor from rest of unit.',
+      'Open both valves — residual gas from high side brings low side out of vacuum and keeps non-condensables from being sucked into system.',
+      'Always recover any residual into approved vessel before opening system to atmosphere.',
+    ],
+    notes: 'Run and check unit. Perform full pre-trip. Confirm no active codes. Return unit to service.',
+  },
+  {
+    id: 'low-side-pump-down',
+    name: 'Low Side Pump Down',
+    category: 'Refrigeration',
+    appliesTo: 'TK and Carrier — all systems',
+    labor: '0.50 hr',
+    safetyWarnings: [
+      'NEVER run a scroll compressor with the suction service valve front seated.',
+      'ALWAYS fully recover all refrigerant before opening a scroll system.',
+      'Disconnect HPCO to prevent remote start.',
+      'A 4-port manifold gauge set is essential for this procedure.',
+      'Set temperature setpoint to 0°F before beginning.',
+    ],
+    prerequisites: 'Set setpoint to 0°F. Check and record static pressure and ambient temperature. Verify system has adequate refrigerant charge.',
+    steps: [
+      'Attach manifold gauges. Run unit minimum 20 minutes to boil all refrigerant from compressor oil.',
+      'Remove service cap — TK at receiver tank, Carrier at king valve. Attach hose from that port to manifold gauge set.',
+      'With unit still running, front seat receiver tank service valve (TK) or king valve (Carrier) and pump low side into vacuum. Target: 0 to -30 on suction gauge.',
+      'Shut unit off when pumped down.',
+      'Fully front seat high side (discharge) to isolate system from low side.',
+      'Watch suction gauge for 2 minutes. Holds vacuum = no leak. Rises to 0 = low side leak. Rises ABOVE 0 = high-to-low side leak — valve plates or reed valves.',
+      'To confirm: open discharge side while suction still seated, restart unit, pump suction back to vacuum, shut off, seat discharge. If it climbs again — confirmed internal leak.',
+      'Once confirmed holding vacuum — open discharge to suction and equalize pressures.',
+      'Recover any pressure above 0 into approved vessel. Keep all refrigerants out of atmosphere.',
+      'RETURN TO SERVICE — back seat discharge valve 3 to 1/4 turns — open both service valves to running position.',
+      'Back seat receiver tank valve. Remove yellow hose, attach to manifold gauge body. Open discharge and suction manifold knobs to pull discharge gas to low side to reduce refrigerant loss. Back seat suction side. Remove all hoses.',
+    ],
+    notes: 'What you can do during low side pump down — expansion valve replacement, evaporator, pan heater bar, solenoids or valves on the low side that do NOT tap into discharge side. Run and check unit. Perform full pre-trip. Confirm no active codes. Return unit to service.',
+  },
+  {
+    id: 'refrigerant-level',
+    name: 'Quick Refrigerant Level Check',
+    category: 'Refrigeration',
+    appliesTo: 'TK and Carrier — all systems',
+    labor: '0.75 hr',
+    safetyWarnings: [
+      'Disconnect HPCO to prevent remote start.',
+      'All refrigerant work must be performed by EPA 608 certified technicians only.',
+      'Never use liquid leak detection spray — use electronic leak detector or UV dye only.',
+      'Running undercharged OR overcharged system causes damage.',
+      'Set temperature setpoint to 0°F before beginning.',
+    ],
+    prerequisites: 'Identify refrigerant type before hooking up. 2022+ TK or Carrier = almost certainly R-452A. Pre-2022 = likely R-404A. Older truck = R-134A. Very old = R-22 (reclaimed only). Use correct PT chart for YOUR refrigerant.',
+    steps: [
+      'Attach manifold gauges to unit service valves — suction side and discharge side.',
+      'Check and record static pressure — suction and discharge equalized (unit off).',
+      'Start unit and run High Speed Cool for minimum 20 minutes to stabilize. Low ambient: cover condenser to replicate 100°F ambient. Use refrigerant PT chart for target pressures.',
+      'Suction pressure should be near appropriate pressure for 0°F box temperature per PT chart.',
+      'Sight glass check — refrigerant should be clear. Ball should float at top of sight glass. Continuous bubbling = low charge. Empty sight glass = significantly low or empty system.',
+      'If low, add slowly to suction side only. Add no more than 30 PSI above actual running suction pressure at a time. Stop when ball floats and sight glass clears.',
+      'Always check refrigerant level before returning any unit to service after any refrigeration repair.',
+    ],
+    notes: 'PT Reference: R-404A suction ~18-22 PSI / discharge ~225-275 PSI at 95°F. R-452A suction ~16-20 PSI / discharge ~210-260 PSI. R-134A suction ~10-15 PSI / discharge ~150-200 PSI. R-22 suction ~18-22 PSI / discharge ~200-250 PSI. Always use manufacturer PT chart for exact specs.',
+  },
+  {
+    id: 'capacity-test',
+    name: 'Compressor Capacity Test',
+    category: 'Refrigeration',
+    appliesTo: 'TK and Carrier — reciprocating compressors only',
+    labor: '0.25 hr',
+    safetyWarnings: [
+      'Disconnect HPCO to prevent remote start.',
+      'All refrigerant work must be performed by EPA 608 certified technicians only.',
+      'NEVER run a scroll compressor with suction service valve front seated.',
+      'Set temperature setpoint to 0°F before beginning.',
+    ],
+    prerequisites: 'Three prerequisites MUST be confirmed first: (1) Engine RPMs dialed in — wrong RPM gives wrong results. (2) Refrigerant level confirmed full — run Quick Refrigerant Level Check first. (3) Low Side Pump Down completed — confirm no internal leaks before capacity test.',
+    steps: [
+      'Attach manifold gauges to suction and discharge service valves.',
+      'Start unit in High Speed Cool. Cover condenser and build discharge to target — R-404A and R-452A: 350 PSI, R-134A: 250 PSI. Cover condenser to replicate 100°F ambient if needed.',
+      'With condenser still covered and discharge holding at target, front seat low side (suction) service valve to begin pumping down.',
+      'Pump compressor down to -10 inches of vacuum on suction side.',
+      'Record discharge pressure at the moment suction hits -10 vacuum.',
+      'Read results — R-134A should read 250 PSI discharge at -10 suction. R-404A and R-452A should read 200-250 PSI or higher discharge at -10 suction. Below spec = failed or failing compressor.',
+      'Back seat suction service valve. Follow Low Side Pump Down gauge removal steps to properly remove gauges and minimize refrigerant loss.',
+    ],
+    notes: 'A failing compressor may still cool but takes significantly longer and will eventually fail completely. Express repairs with urgency. DOCUMENT TEST RESULTS ON THE INVOICE — record discharge pressure at -10 vacuum and note against spec. This is your proof of condition and protects you legally if customer declines repair and unit fails later. Run and check unit. Perform full pre-trip. Confirm no active codes. Return unit to service.',
+  },
+]
+
+function ProceduresPanel() {
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  const selected = PROCEDURE_CARDS.find(p => p.id === selectedId) ?? null
+
+  if (selected) {
+    return (
+      <div className="space-y-4">
+        <button
+          type="button"
+          onClick={() => setSelectedId(null)}
+          className="flex items-center gap-2 text-sm font-semibold"
+          style={{ color: 'rgba(255,255,255,0.55)' }}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+          Back to Procedures
+        </button>
+
+        <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
+          <div className="px-5 py-4" style={{ background: '#162030' }}>
+            <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
+              {selected.category} · {selected.appliesTo}
+            </p>
+            <h2 className="font-condensed font-bold text-xl text-white tracking-wide">{selected.name}</h2>
+            <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.35)' }}>Labor: {selected.labor}</p>
+          </div>
+
+          <div className="p-5 space-y-5" style={{ background: '#111920' }}>
+            {/* Safety warnings */}
+            <div className="rounded-lg p-4" style={{ background: '#1a0a00', border: '1px solid #F59E0B40' }}>
+              <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: '#F59E0B' }}>⚠ Safety Requirements</p>
+              <ul className="space-y-1.5">
+                {selected.safetyWarnings.map((w, i) => (
+                  <li key={i} className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                    • {w}
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {/* Prerequisites */}
+            <div>
+              <p className="text-xs uppercase tracking-widest mb-2" style={{ color: HD_ORANGE }}>Prerequisites</p>
+              <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.8)' }}>{selected.prerequisites}</p>
+            </div>
+
+            {/* Steps */}
+            <div>
+              <p className="text-xs uppercase tracking-widest mb-3" style={{ color: HD_BLUE }}>Steps</p>
+              <ol className="space-y-3">
+                {selected.steps.map((step, i) => (
+                  <li key={i} className="flex gap-3">
+                    <span
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5"
+                      style={{ background: '#1e3040', color: HD_BLUE }}
+                    >
+                      {i + 1}
+                    </span>
+                    <p className="text-sm leading-relaxed pt-0.5" style={{ color: 'rgba(255,255,255,0.85)' }}>{step}</p>
+                  </li>
+                ))}
+              </ol>
+            </div>
+
+            {/* Notes */}
+            {selected.notes && (
+              <div className="rounded-lg p-4" style={{ background: '#162030' }}>
+                <p className="text-xs uppercase tracking-widest mb-1.5" style={{ color: '#22C55E' }}>Field Notes / Closeout</p>
+                <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.75)' }}>{selected.notes}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
+          Field-Verified · 17-Year Reefer Tech
+        </p>
+        <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>
+          Standard refrigeration procedures. Tap any card for full step-by-step walkthrough.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        {PROCEDURE_CARDS.map(proc => (
+          <button
+            key={proc.id}
+            type="button"
+            onClick={() => setSelectedId(proc.id)}
+            className="w-full rounded-xl p-4 text-left transition-opacity active:opacity-70"
+            style={{ background: '#111920', border: '1px solid #1e3040' }}
+          >
+            <div className="flex items-start gap-3">
+              <div
+                className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+                style={{ background: '#162030' }}
+              >
+                <svg className="w-5 h-5" fill="none" stroke={HD_BLUE} strokeWidth={1.8} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-condensed font-bold text-white text-base leading-tight">{proc.name}</p>
+                <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                  {proc.category} · {proc.appliesTo} · {proc.labor}
+                </p>
+                <p className="text-xs mt-1.5 font-medium" style={{ color: '#F59E0B' }}>
+                  {proc.steps.length} steps
+                </p>
+              </div>
+              <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      <p className="text-xs text-center" style={{ color: 'rgba(255,255,255,0.2)' }}>
+        Field-verified procedures · EPA 608 certification required for all refrigerant work
+      </p>
+    </div>
   )
 }
