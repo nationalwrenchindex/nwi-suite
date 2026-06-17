@@ -76,7 +76,7 @@ const FMI_CODES = [
 type Manufacturer     = 'Thermo King' | 'Carrier Transicold'
 type UnitType         = 'truck' | 'trailer'
 type EngineBrand      = 'Cummins' | 'Detroit Diesel' | 'Mercedes-Benz'
-type ActiveTab        = 'reefer' | 'truck' | 'electrical' | 'procedures'
+type ActiveTab        = 'reefer' | 'truck' | 'electrical' | 'procedures' | 'parts'
 type ElectricalTopic  = 'Component Library' | 'Schematic Reading' | 'Fault Tracing' | 'Multimeter Guide' | 'Wire Repair'
 
 const ELECTRICAL_TOPICS: { key: ElectricalTopic; desc: string }[] = [
@@ -945,6 +945,7 @@ export default function HDQuickWrenchPage() {
             { key: 'truck',       label: 'Truck Engine'       },
             { key: 'electrical',  label: 'Electrical Systems' },
             { key: 'procedures',  label: 'Procedures'         },
+            { key: 'parts',       label: 'Parts Ref'          },
           ] as { key: ActiveTab; label: string }[]).map(tab => (
             <button
               key={tab.key}
@@ -2189,6 +2190,10 @@ export default function HDQuickWrenchPage() {
           <ProceduresPanel />
         )}
 
+        {activeTab === 'parts' && (
+          <PartsReferencePanel />
+        )}
+
       </div>
     </main>
   )
@@ -2391,6 +2396,7 @@ function ProceduresPanel() {
         </p>
       </div>
 
+
       <div className="space-y-3">
         {PROCEDURE_CARDS.map(proc => (
           <button
@@ -2429,6 +2435,348 @@ function ProceduresPanel() {
       <p className="text-xs text-center" style={{ color: 'rgba(255,255,255,0.2)' }}>
         Field-verified procedures · EPA 608 certification required for all refrigerant work
       </p>
+    </div>
+  )
+}
+
+// ─── Parts Reference Panel ────────────────────────────────────────────────────
+
+interface PartsRefEntry {
+  id:              string
+  manufacturer:    string
+  unit_family:     string | null
+  part_category:   string
+  part_function:   string
+  oem_part_number: string | null
+  baldwin:         string | null
+  napa_gold:       string | null
+  luber_finer:     string | null
+  donaldson:       string | null
+  fleetguard:      string | null
+  wix:             string | null
+  dayco:           string | null
+  continental:     string | null
+  gates:           string | null
+  notes:           string | null
+}
+
+type PartsFilter = 'all' | 'Filter' | 'Belt' | 'Thermostat' | 'Note' | 'TK' | 'Carrier'
+
+const CHIP_CONFIG: Record<string, { label: string; bg: string; color: string }> = {
+  baldwin:     { label: 'Baldwin',     bg: '#1A6BAF25', color: '#60A5FA' },
+  napa_gold:   { label: 'NAPA Gold',   bg: '#F59E0B25', color: '#F59E0B' },
+  luber_finer: { label: 'Luber-finer', bg: '#22C55E25', color: '#4ADE80' },
+  donaldson:   { label: 'Donaldson',   bg: '#E85D2425', color: '#FB923C' },
+  fleetguard:  { label: 'Fleetguard',  bg: '#EF444425', color: '#F87171' },
+  wix:         { label: 'WIX',         bg: '#8B5CF625', color: '#A78BFA' },
+  dayco:       { label: 'Dayco',       bg: '#0EA5E925', color: '#38BDF8' },
+  continental: { label: 'Continental', bg: '#6B728025', color: '#9CA3AF' },
+  gates:       { label: 'Gates',       bg: '#1D4ED825', color: '#93C5FD' },
+}
+
+function PartsReferencePanel() {
+  const [parts,   setParts]   = useState<PartsRefEntry[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error,   setError]   = useState<string | null>(null)
+  const [search,  setSearch]  = useState('')
+  const [filter,  setFilter]  = useState<PartsFilter>('all')
+
+  useEffect(() => {
+    fetch('/api/hd/parts-reference')
+      .then(r => r.json())
+      .then(data => { setParts(data.parts ?? []); setLoading(false) })
+      .catch(() => { setError('Failed to load parts reference data.'); setLoading(false) })
+  }, [])
+
+  const q = search.toLowerCase().trim()
+
+  const byFilter = parts.filter(p => {
+    if (filter === 'Filter')     return p.part_category === 'Filter'
+    if (filter === 'Belt')       return p.part_category === 'Belt' || p.part_category === 'Stocking Note'
+    if (filter === 'Thermostat') return p.part_category === 'Thermostat'
+    if (filter === 'Note')       return p.part_category === 'Stocking Note' || p.part_category === 'Hardware'
+    if (filter === 'TK')         return p.manufacturer === 'TK'
+    if (filter === 'Carrier')    return p.manufacturer === 'Carrier' || p.manufacturer === 'Both'
+    return true
+  })
+
+  const filtered = byFilter.filter(p => {
+    if (!q) return true
+    return [
+      p.manufacturer, p.unit_family, p.part_category, p.part_function,
+      p.oem_part_number, p.baldwin, p.napa_gold, p.luber_finer,
+      p.donaldson, p.fleetguard, p.wix, p.dayco, p.continental, p.gates, p.notes,
+    ].some(v => v?.toLowerCase().includes(q))
+  })
+
+  const stockingNotes = filtered.filter(p => p.part_category === 'Stocking Note' || p.part_category === 'Hardware')
+  const regularParts  = filtered.filter(p => p.part_category !== 'Stocking Note' && p.part_category !== 'Hardware')
+  const showNotesAtTop = (filter === 'all' || filter === 'Belt') && stockingNotes.length > 0
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="text-center">
+          <svg className="w-6 h-6 animate-spin mx-auto mb-3" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke={HD_ORANGE} strokeWidth="4" />
+            <path className="opacity-75" fill={HD_ORANGE} d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>Loading parts reference...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-xl p-4" style={{ background: '#2d0a0a', border: '1px solid #7f1d1d' }}>
+        <p className="text-sm text-red-400">{error}</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+
+      <div>
+        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
+          Field-Verified Cross-Reference
+        </p>
+        <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>
+          Find the right part number for whatever supplier is nearby.
+        </p>
+      </div>
+
+      {/* Search bar */}
+      <input
+        type="text"
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        placeholder="Search by OEM part number, Baldwin, NAPA, Dayco, description, or unit model…"
+        className="w-full px-4 py-3 rounded-xl text-sm text-white placeholder-white/20"
+        style={{ background: '#111920', border: '1px solid #1e3040' }}
+      />
+
+      {/* Filter buttons */}
+      <div className="flex flex-wrap gap-2">
+        {([
+          { key: 'all',        label: 'All'         },
+          { key: 'Filter',     label: 'Filters'     },
+          { key: 'Belt',       label: 'Belts'       },
+          { key: 'Thermostat', label: 'Thermostats' },
+          { key: 'Note',       label: 'Notes'       },
+          { key: 'TK',         label: 'TK'          },
+          { key: 'Carrier',    label: 'Carrier'     },
+        ] as { key: PartsFilter; label: string }[]).map(f => (
+          <button
+            key={f.key}
+            type="button"
+            onClick={() => setFilter(f.key)}
+            className="px-4 py-2 rounded-lg text-xs font-semibold transition-colors"
+            style={filter === f.key
+              ? { background: HD_ORANGE, color: '#fff' }
+              : { background: '#111920', color: 'rgba(255,255,255,0.45)', border: '1px solid #1e3040' }
+            }
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Stocking notes at top (All and Belts filters) */}
+      {showNotesAtTop && (
+        <div className="space-y-2">
+          <p className="text-xs uppercase tracking-widest" style={{ color: HD_ORANGE }}>
+            Stocking Notes
+          </p>
+          {stockingNotes.map(note => (
+            <div
+              key={note.id}
+              className="rounded-xl p-4"
+              style={{ background: '#1a0a00', border: `1px solid ${HD_ORANGE}40` }}
+            >
+              <div className="flex items-start gap-2 mb-2">
+                <span style={{ color: HD_ORANGE, fontSize: 15, lineHeight: '1.3', flexShrink: 0 }}>⚑</span>
+                <p className="font-semibold text-sm leading-snug" style={{ color: HD_ORANGE }}>
+                  {note.part_function}
+                </p>
+              </div>
+              {note.notes && (
+                <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                  {note.notes}
+                </p>
+              )}
+              <div className="flex gap-2 mt-2 flex-wrap">
+                <span className="text-xs px-2 py-0.5 rounded" style={{ background: '#162030', color: 'rgba(255,255,255,0.4)' }}>
+                  {note.manufacturer === 'Both' ? 'TK + Carrier' : note.manufacturer}
+                </span>
+                {note.unit_family && note.unit_family !== 'ALL' && (
+                  <span className="text-xs px-2 py-0.5 rounded" style={{ background: '#162030', color: 'rgba(255,255,255,0.4)' }}>
+                    {note.unit_family}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Notes-only view (filter === Note) */}
+      {filter === 'Note' && stockingNotes.length > 0 && (
+        <div className="space-y-2">
+          {stockingNotes.map(note => (
+            <div
+              key={note.id}
+              className="rounded-xl p-4"
+              style={{ background: '#1a0a00', border: `1px solid ${HD_ORANGE}40` }}
+            >
+              <p className="font-semibold text-sm mb-2" style={{ color: HD_ORANGE }}>
+                {note.part_function}
+              </p>
+              {note.notes && (
+                <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                  {note.notes}
+                </p>
+              )}
+              <div className="flex gap-2 mt-2 flex-wrap">
+                <span className="text-xs px-2 py-0.5 rounded" style={{ background: '#162030', color: 'rgba(255,255,255,0.4)' }}>
+                  {note.manufacturer === 'Both' ? 'TK + Carrier' : note.manufacturer}
+                </span>
+                {note.unit_family && note.unit_family !== 'ALL' && (
+                  <span className="text-xs px-2 py-0.5 rounded" style={{ background: '#162030', color: 'rgba(255,255,255,0.4)' }}>
+                    {note.unit_family}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Regular parts cards */}
+      {regularParts.length === 0 && !showNotesAtTop && filter !== 'Note' && (
+        <p className="text-sm text-center py-8" style={{ color: 'rgba(255,255,255,0.3)' }}>
+          No results. Try a different search or filter.
+        </p>
+      )}
+
+      {regularParts.length > 0 && (
+        <div className="space-y-3">
+          {!q && filter === 'all' && (
+            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>
+              {regularParts.length} parts — search or filter to narrow results
+            </p>
+          )}
+
+          {regularParts.map(part => {
+            const chips = ([
+              { key: 'baldwin',     val: part.baldwin     },
+              { key: 'napa_gold',   val: part.napa_gold   },
+              { key: 'luber_finer', val: part.luber_finer },
+              { key: 'donaldson',   val: part.donaldson   },
+              { key: 'fleetguard',  val: part.fleetguard  },
+              { key: 'wix',         val: part.wix         },
+              { key: 'dayco',       val: part.dayco       },
+              { key: 'continental', val: part.continental },
+              { key: 'gates',       val: part.gates       },
+            ] as { key: string; val: string | null }[]).filter(c => c.val)
+
+            const mfgColor =
+              part.manufacturer === 'TK'      ? '#60A5FA' :
+              part.manufacturer === 'Both'    ? '#9CA3AF' : '#FB923C'
+            const mfgBg =
+              part.manufacturer === 'TK'      ? '#1A6BAF22' :
+              part.manufacturer === 'Both'    ? '#6B728022' : '#E85D2422'
+
+            return (
+              <div
+                key={part.id}
+                className="rounded-xl overflow-hidden"
+                style={{ border: '1px solid #1e3040' }}
+              >
+                {/* Header */}
+                <div className="px-4 pt-3 pb-3" style={{ background: '#162030' }}>
+                  <div className="flex items-start gap-2 justify-between">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs mb-1 leading-snug" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                        {part.part_function}
+                      </p>
+                      {part.oem_part_number ? (
+                        <p
+                          className="font-bold text-2xl leading-tight"
+                          style={{ color: HD_ORANGE, fontFamily: 'monospace', wordBreak: 'break-all' }}
+                        >
+                          {part.oem_part_number}
+                        </p>
+                      ) : (
+                        <p className="text-sm italic" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                          No OEM number
+                        </p>
+                      )}
+                    </div>
+                    <span
+                      className="text-xs font-bold px-2 py-0.5 rounded flex-shrink-0 mt-0.5"
+                      style={{ background: mfgBg, color: mfgColor }}
+                    >
+                      {part.manufacturer === 'Both' ? 'TK+CT' : part.manufacturer}
+                    </span>
+                  </div>
+                  {part.unit_family && (
+                    <p className="text-xs mt-1.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                      {part.unit_family}
+                    </p>
+                  )}
+                </div>
+
+                {/* Cross-reference chips */}
+                {chips.length > 0 && (
+                  <div className="px-4 py-3" style={{ background: '#111920', borderTop: '1px solid #1e3040' }}>
+                    <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                      Cross-Reference
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {chips.map(c => {
+                        const cfg = CHIP_CONFIG[c.key]
+                        return (
+                          <div
+                            key={c.key}
+                            className="flex flex-col px-2.5 py-1.5 rounded-lg"
+                            style={{ background: cfg.bg, border: `1px solid ${cfg.color}30` }}
+                          >
+                            <span className="text-xs font-bold leading-none mb-0.5" style={{ color: cfg.color }}>
+                              {cfg.label}
+                            </span>
+                            <span className="text-xs font-mono text-white leading-none">{c.val}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Notes */}
+                {part.notes && (
+                  <div className="px-4 py-3" style={{ background: '#0d1820', borderTop: '1px solid #1e3040' }}>
+                    <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                      {part.notes}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Disclaimer */}
+      <div className="rounded-lg p-3" style={{ background: '#0d1820', border: '1px solid #1e3040' }}>
+        <p className="text-xs leading-relaxed text-center" style={{ color: 'rgba(255,255,255,0.2)' }}>
+          Part numbers provided for cross-reference and field reference purposes only.
+          Always verify fitment for your specific unit model, engine type, and year before ordering.
+          National Wrench Index is not responsible for incorrect part selection.
+        </p>
+      </div>
+
     </div>
   )
 }
