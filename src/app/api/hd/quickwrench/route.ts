@@ -1304,6 +1304,25 @@ DIAGNOSTIC STEPS:
 SAFETY WARNINGS:
 Do not operate a unit with an unresolved immediate-action alarm.`
 
+// ─── Web Search Directive ─────────────────────────────────────────────────────
+// Prepended to SYSTEM_PROMPT for the reefer branch so unverified alarm codes are
+// researched via web search instead of guessed. The full field knowledge base
+// (SYSTEM_PROMPT) is retained below it for verified codes and symptom queries.
+
+const WEB_SEARCH_DIRECTIVE = `You are an expert transport refrigeration diagnostic assistant specializing in Thermo King and Carrier Transicold units. You have access to web search — always search for the specific alarm code and unit model before answering.
+
+When answering about an alarm code provide:
+- What the code means with exact display text
+- Severity level — shutdown warning or check
+- Common causes in order of likelihood
+- Diagnostic steps in field order
+- Labor time estimate
+- Any cross-reference to the other brand
+
+Always search first. Never guess. If you cannot find verified information for this specific code say clearly: This alarm code could not be verified through available sources. Please consult your Carrier or TK dealer for this specific code.
+
+A wrong answer costs the tech time and money. Accuracy is more important than always having an answer.`
+
 // ─── Route Handler ────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -1469,7 +1488,13 @@ export async function POST(req: NextRequest) {
       return client.messages.create({
         model:      'claude-sonnet-4-6',
         max_tokens: 1500,
-        system:     SYSTEM_PROMPT,
+        system:     `${WEB_SEARCH_DIRECTIVE}\n\n${SYSTEM_PROMPT}`,
+        tools: [
+          {
+            type: 'web_search_20250305',
+            name: 'web_search',
+          },
+        ],
         messages: [{ role: 'user', content: userPrompt }],
       })
     })(),

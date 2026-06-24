@@ -541,6 +541,24 @@ function AnalysisCard({
         )}
 
         <div className="p-5 space-y-5" style={{ background: '#111920' }}>
+          {/* Provenance badge — green = verified DB entry, yellow = AI assisted */}
+          {tkSources.length > 0 ? (
+            <span
+              className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full tracking-wide"
+              style={{ background: '#0f2f1c', color: '#34D399', border: '1px solid #1c5c34' }}
+            >
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#34D399' }} />
+              VERIFIED DATABASE ENTRY
+            </span>
+          ) : (
+            <span
+              className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full tracking-wide"
+              style={{ background: '#352a06', color: '#FBBF24', border: '1px solid #6b520f' }}
+            >
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#FBBF24' }} />
+              AI ASSISTED · VERIFY BEFORE RELYING
+            </span>
+          )}
           {parsedSections.length > 0 ? (
             parsedSections.map(({ key, content }) => {
               const def = SECTION_DEFS.find(s => s.key === key)!
