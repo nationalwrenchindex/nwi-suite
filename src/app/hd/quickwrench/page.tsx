@@ -445,6 +445,7 @@ function AnalysisCard({
   primaryTkSource,
   alarmPattern,
   tkSources,
+  codeStatus = 'ai',
 }: {
   parsedSections: Array<{ key: SectionKey; content: string }>
   analysis: string
@@ -452,6 +453,7 @@ function AnalysisCard({
   primaryTkSource: TKSource | null
   alarmPattern: AlarmPattern | null
   tkSources: TKSource[]
+  codeStatus?: 'verified' | 'ai' | 'unverified'
 }) {
   return (
     <div className="space-y-4">
@@ -541,7 +543,8 @@ function AnalysisCard({
         )}
 
         <div className="p-5 space-y-5" style={{ background: '#111920' }}>
-          {/* Provenance badge — green = verified DB entry, yellow = AI assisted */}
+          {/* Provenance badge — green = verified DB entry, yellow = AI assisted,
+              neutral blue = code could not be verified anywhere */}
           {tkSources.length > 0 ? (
             <span
               className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full tracking-wide"
@@ -549,6 +552,14 @@ function AnalysisCard({
             >
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#34D399' }} />
               VERIFIED DATABASE ENTRY
+            </span>
+          ) : codeStatus === 'unverified' ? (
+            <span
+              className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full tracking-wide"
+              style={{ background: '#172534', color: '#93C5FD', border: '1px solid #2c4a66' }}
+            >
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#93C5FD' }} />
+              CODE NOT FOUND · DOUBLE-CHECK ENTRY
             </span>
           ) : (
             <span
@@ -623,6 +634,7 @@ export default function HDQuickWrenchPage() {
   const loadingStartRef = useRef<number>(0)
   const [analysis,             setAnalysis]             = useState<string | null>(null)
   const [tkSources,            setTkSources]            = useState<TKSource[]>([])
+  const [codeStatus,           setCodeStatus]           = useState<'verified' | 'ai' | 'unverified'>('ai')
   const [alarmPattern,         setAlarmPattern]         = useState<AlarmPattern | null>(null)
   const [disclaimer,           setDisclaimer]           = useState<string | null>(null)
   const [error,                setError]                = useState<string | null>(null)
@@ -783,6 +795,7 @@ export default function HDQuickWrenchPage() {
     setLoading(true)
     setAnalysis(null)
     setTkSources([])
+    setCodeStatus('ai')
     setAlarmPattern(null)
     setDisclaimer(null)
     setError(null)
@@ -830,6 +843,11 @@ export default function HDQuickWrenchPage() {
         } catch {}
       }
       setTkSources(Array.isArray(json.tk_sources) ? json.tk_sources as TKSource[] : [])
+      setCodeStatus(
+        json.code_status === 'verified' || json.code_status === 'unverified'
+          ? json.code_status
+          : 'ai'
+      )
       setAlarmPattern(
         json.alarm_pattern != null && typeof json.alarm_pattern === 'object'
           ? json.alarm_pattern as AlarmPattern
@@ -1861,6 +1879,7 @@ export default function HDQuickWrenchPage() {
                 primaryTkSource={primaryTkSource}
                 alarmPattern={alarmPattern}
                 tkSources={tkSources}
+                codeStatus={codeStatus}
               />
             )}
           </>

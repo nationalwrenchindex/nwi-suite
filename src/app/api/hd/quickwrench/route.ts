@@ -1485,18 +1485,40 @@ export async function POST(req: NextRequest) {
   const [aiResult, partsResult] = await Promise.allSettled([
     (async () => {
       const client = new Anthropic({ apiKey })
-      return client.messages.create({
-        model:      'claude-sonnet-4-6',
-        max_tokens: 1500,
-        system:     `${WEB_SEARCH_DIRECTIVE}\n\n${SYSTEM_PROMPT}`,
-        tools: [
+
+      // First attempt: web search enabled — best answer for obscure codes.
+      // Web search can be slow and occasionally times out at the platform
+      // edge (504). Cap it well under maxDuration and, on ANY error, fall
+      // back to the standard Claude call without web search so the tech
+      // never sees a raw 504 or server error.
+      try {
+        return await client.messages.create(
           {
-            type: 'web_search_20250305',
-            name: 'web_search',
+            model:      'claude-sonnet-4-6',
+            max_tokens: 1500,
+            system:     `${WEB_SEARCH_DIRECTIVE}\n\n${SYSTEM_PROMPT}`,
+            tools: [
+              {
+                type: 'web_search_20250305',
+                name: 'web_search',
+              },
+            ],
+            messages: [{ role: 'user', content: userPrompt }],
           },
-        ],
-        messages: [{ role: 'user', content: userPrompt }],
-      })
+          { timeout: 30_000, maxRetries: 0 },
+        )
+      } catch (err) {
+        console.error('[hd/quickwrench] web search call failed — falling back to standard call', err)
+        return await client.messages.create(
+          {
+            model:      'claude-sonnet-4-6',
+            max_tokens: 1500,
+            system:     SYSTEM_PROMPT,
+            messages:   [{ role: 'user', content: userPrompt }],
+          },
+          { timeout: 12_000, maxRetries: 0 },
+        )
+      }
     })(),
     (async () => {
       if (partsCategories.length === 0) return []
@@ -1553,11 +1575,35 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Provenance: verified DB entry, AI assisted, or genuinely unverifiable.
+  // If there was no DB match for a submitted code AND the AI (with web search)
+  // reported it could not verify the code, show a structured "double-check the
+  // code" message rather than jumping straight to "consult your dealer".
+  let codeStatus: 'verified' | 'ai' | 'unverified' = alarmSources.length > 0 ? 'verified' : 'ai'
+
+  if (
+    alarmSources.length === 0 &&
+    allCodes.length > 0 &&
+    /could not be verified/i.test(analysis)
+  ) {
+    codeStatus = 'unverified'
+    const codeLabel = allCodes.join(', ')
+    analysis = `We could not find alarm code ${codeLabel} in our database or through web search.
+
+Before contacting your dealer please verify:
+• Is this the exact code shown on your display panel?
+• Check for typos — for example 0 vs O, 1 vs I, 5 vs S
+• Some codes are model-specific — confirm your unit model and controller type
+
+If the code is confirmed correct and you cannot find information — contact your TK or Carrier dealer with your unit serial number and the exact code displayed.`
+  }
+
   return NextResponse.json({
     analysis,
     tk_sources:    alarmSources,
     alarm_pattern: alarmPattern,
     disclaimer,
+    code_status:   codeStatus,
   })
 
   } catch (err) {
