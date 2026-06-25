@@ -31,14 +31,17 @@ interface DsEvent {
 }
 
 interface SessionData {
-  best_lat:       number | null
-  best_lon:       number | null
-  best_location:  string | null
-  rssi:           number | null
-  bars:           number | null
-  voltage:        number | null
-  tower_location: string | null
-  received:       number | null
+  best_lat:           number | null
+  best_lon:           number | null
+  best_location:      string | null
+  best_location_type: string | null
+  rssi:               number | null
+  bars:               number | null
+  voltage:            number | null
+  tower_lat:          number | null
+  tower_lon:          number | null
+  tower_location:     string | null
+  received:           number | null
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────────
@@ -181,8 +184,16 @@ export default function CargoWatchPage() {
   const bars       = barsFromRssi(session?.rssi ?? null)
   const hasTempData = events.length > 0
 
-  const mapsUrl = session?.best_lat != null && session?.best_lon != null
-    ? `https://www.google.com/maps?q=${session.best_lat},${session.best_lon}`
+  // Prefer GPS-accurate best_lat/best_lon. Only fall back to tower
+  // triangulation coordinates when a best fix is unavailable.
+  const usingBest = session?.best_lat != null && session?.best_lon != null
+  const locLat = usingBest ? session!.best_lat : (session?.tower_lat ?? null)
+  const locLon = usingBest ? session!.best_lon : (session?.tower_lon ?? null)
+  const isGpsFix = usingBest && session?.best_location_type === 'gps'
+  const hasLocation = locLat != null && locLon != null
+
+  const mapsUrl = hasLocation
+    ? `https://www.google.com/maps?q=${locLat},${locLon}`
     : null
 
   return (
@@ -356,7 +367,23 @@ export default function CargoWatchPage() {
 
         {/* ── GPS Location Card ── */}
         <section className="rounded-xl p-5 mb-4" style={{ background: SURFACE, border: `1px solid ${BORDER}` }}>
-          <p className="text-xs uppercase tracking-widest mb-3" style={{ color: FAINT }}>GPS Location</p>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-xs uppercase tracking-widest" style={{ color: FAINT }}>GPS Location</p>
+            {hasLocation && (
+              <span
+                className="inline-flex items-center gap-1.5 text-xs font-bold px-2 py-0.5 rounded-full"
+                style={isGpsFix
+                  ? { background: '#0f2f1c', color: '#22C55E', border: '1px solid #1c5c34' }
+                  : { background: '#2a2105', color: '#EAB308', border: '1px solid #5c4a0f' }}
+              >
+                <span
+                  className="w-1.5 h-1.5 rounded-full"
+                  style={{ background: isGpsFix ? '#22C55E' : '#EAB308' }}
+                />
+                {isGpsFix ? 'GPS' : 'Estimated'}
+              </span>
+            )}
+          </div>
 
           <div className="space-y-2.5">
             <div className="flex items-center justify-between">
@@ -366,13 +393,13 @@ export default function CargoWatchPage() {
             <div className="flex items-center justify-between">
               <span className="text-xs" style={{ color: MUTED }}>Coordinates</span>
               <span className="text-sm font-mono text-white text-right">
-                {session?.best_lat != null && session?.best_lon != null
-                  ? `${session.best_lat.toFixed(5)}, ${session.best_lon.toFixed(5)}`
+                {hasLocation
+                  ? `${locLat!.toFixed(5)}, ${locLon!.toFixed(5)}`
                   : '—'}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-xs" style={{ color: MUTED }}>Last GPS fix</span>
+              <span className="text-xs" style={{ color: MUTED }}>Last fix</span>
               <span className="text-sm text-white text-right">
                 {session?.received ? fmtDateTime(session.received * 1000) : '—'}
               </span>

@@ -67,14 +67,17 @@ export async function GET() {
 
     return NextResponse.json({
       session: {
-        best_lat:       num(latest.best_lat, body.best_lat),
-        best_lon:       num(latest.best_lon, body.best_lon),
-        best_location:  str(latest.best_location, body.best_location),
-        rssi:           num(latest.rssi, body.rssi),
-        bars:           num(latest.bars, body.bars),
-        voltage:        num(latest.voltage, body.voltage),
-        tower_location: str(latest.tower_location, body.tower_location),
-        received:       num(latest.received, latest.when),
+        best_lat:           num(latest.best_lat, body.best_lat),
+        best_lon:           num(latest.best_lon, body.best_lon),
+        best_location:      str(latest.best_location, body.best_location),
+        best_location_type: str(latest.best_location_type, body.best_location_type),
+        rssi:               num(latest.rssi, body.rssi),
+        bars:               num(latest.bars, body.bars),
+        voltage:            num(latest.voltage, body.voltage),
+        tower_lat:          num(latest.tower_lat, body.tower_lat),
+        tower_lon:          num(latest.tower_lon, body.tower_lon),
+        tower_location:     str(latest.tower_location, body.tower_location),
+        received:           num(latest.received, latest.when),
       },
     })
   } catch (err) {
