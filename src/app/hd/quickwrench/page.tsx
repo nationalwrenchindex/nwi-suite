@@ -915,11 +915,10 @@ export default function HDQuickWrenchPage() {
     setTruckError(null)
 
     try {
-      const res = await fetch('/api/hd/quickwrench', {
+      const res = await fetch('/api/hd/truck-diagnostic', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          mode: 'truck',
           truckBrand, engineModel, spn, fmi, symptom: truckSymptom,
           vehicleYear, vehicleMake, vehicleModel, vehicleEngine,
         }),
