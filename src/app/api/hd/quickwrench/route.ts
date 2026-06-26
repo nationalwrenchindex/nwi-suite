@@ -1323,6 +1323,26 @@ Always search first. Never guess. If you cannot find verified information for th
 
 A wrong answer costs the tech time and money. Accuracy is more important than always having an answer.`
 
+// ─── Truck Engine Web Search Directive ─────────────────────────────────────────
+// Prepended to TRUCK_SYSTEM_PROMPT so DTC diagnosis is vehicle-specific: the
+// model searches the web for the exact code + year/make/model before answering.
+
+const TRUCK_WEB_SEARCH_DIRECTIVE = `You are an expert heavy duty truck engine diagnostic assistant. You have access to web search — always search for the specific DTC code AND the year, make, and model before answering.
+
+For every DTC code provide:
+- What the code means for this specific vehicle
+- Most likely causes in order for this year make and model
+- Known TSBs or recalls for this specific vehicle and code
+- Diagnostic steps in field order
+- Part location on this specific engine
+- Torque specs for any related repairs
+- Labor time estimate
+- OEM and aftermarket part numbers if available
+
+Always search for year + make + model + DTC code
+Never give a generic answer when vehicle specific information is available.
+If the tech did not enter a model — ask them to specify year make and model for accurate results.`
+
 // ─── Verified DB Analysis Builder ──────────────────────────────────────────────
 // hd_alarm_codes holds human-verified, curated alarm-code content. When a code
 // has an entry there it is authoritative — we render it directly (formatted into
@@ -1406,6 +1426,9 @@ export async function POST(req: NextRequest) {
     engineModel?: string
     spn?: string
     fmi?: string
+    vehicleYear?: string
+    vehicleMake?: string
+    vehicleModel?: string
     // electrical fields
     topic?: string
     question?: string
@@ -1455,7 +1478,7 @@ export async function POST(req: NextRequest) {
 
   // ── Truck engine branch ───────────────────────────────────────────────────
   if (mode === 'truck') {
-    const { truckBrand, engineModel, spn, fmi, symptom: truckSymptom } = body
+    const { truckBrand, engineModel, spn, fmi, symptom: truckSymptom, vehicleYear, vehicleMake, vehicleModel } = body
     if (!truckBrand || !engineModel) {
       return NextResponse.json({ error: 'truckBrand and engineModel required' }, { status: 400 })
     }
@@ -1463,7 +1486,18 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'SPN, FMI, or symptom required' }, { status: 400 })
     }
 
-    const parts: string[] = [`Engine: ${truckBrand} ${engineModel}`]
+    // Vehicle identity drives vehicle-specific results — surface it first so the
+    // model searches for the exact year/make/model + code (or asks if missing).
+    const vehicleBits = [
+      vehicleYear?.trim()  ? `Year: ${vehicleYear.trim()}`   : null,
+      vehicleMake?.trim()  ? `Make: ${vehicleMake.trim()}`   : null,
+      vehicleModel?.trim() ? `Model: ${vehicleModel.trim()}` : null,
+    ].filter(Boolean)
+
+    const parts: string[] = []
+    if (vehicleBits.length > 0) parts.push(`Vehicle — ${vehicleBits.join(', ')}`)
+    else parts.push('Vehicle: not specified — ask the tech for year, make, and model before giving a vehicle-specific answer.')
+    parts.push(`Engine: ${truckBrand} ${engineModel}`)
     if (spn)          parts.push(`SPN (Suspect Parameter Number): ${spn}`)
     if (fmi !== undefined && fmi !== '') parts.push(`FMI (Failure Mode Identifier): ${fmi}`)
     if (truckSymptom) parts.push(`Symptom/Question: ${truckSymptom}`)
@@ -1471,19 +1505,47 @@ export async function POST(req: NextRequest) {
 
     try {
       const client = new Anthropic({ apiKey })
-      const msg = await client.messages.create({
-        model:      'claude-sonnet-4-6',
-        max_tokens: 1500,
-        system:     TRUCK_SYSTEM_PROMPT,
-        messages:   [{ role: 'user', content: truckUserPrompt }],
-      })
+
+      // Web search first for vehicle-specific results (TSBs, recalls, part
+      // numbers). On any timeout/error, fall back to a standard call so the
+      // tech still gets an answer rather than a raw error.
+      let msg
+      try {
+        msg = await client.messages.create(
+          {
+            model:      'claude-sonnet-4-6',
+            max_tokens: 1500,
+            system:     `${TRUCK_WEB_SEARCH_DIRECTIVE}\n\n${TRUCK_SYSTEM_PROMPT}`,
+            tools: [
+              {
+                type: 'web_search_20250305',
+                name: 'web_search',
+              },
+            ],
+            messages:   [{ role: 'user', content: truckUserPrompt }],
+          },
+          { timeout: 25_000, maxRetries: 0 },
+        )
+      } catch (searchErr) {
+        console.error('[hd/quickwrench/truck] web search call failed — falling back to standard call', searchErr)
+        msg = await client.messages.create(
+          {
+            model:      'claude-sonnet-4-6',
+            max_tokens: 1500,
+            system:     `${TRUCK_WEB_SEARCH_DIRECTIVE}\n\n${TRUCK_SYSTEM_PROMPT}`,
+            messages:   [{ role: 'user', content: truckUserPrompt }],
+          },
+          { timeout: 18_000, maxRetries: 0 },
+        )
+      }
+
       const analysis = msg.content
         .filter(b => b.type === 'text')
         .map(b => (b as Anthropic.TextBlock).text)
         .join('\n')
         .trim()
       console.log('[quickwrench/truck] stop_reason:', msg.stop_reason, 'tokens:', JSON.stringify(msg.usage))
-      return NextResponse.json({ analysis, tk_sources: [], alarm_pattern: null, disclaimer: TRUCK_DISCLAIMER })
+      return NextResponse.json({ analysis: analysis || TRUCK_FALLBACK_ANALYSIS, tk_sources: [], alarm_pattern: null, disclaimer: TRUCK_DISCLAIMER })
     } catch (err) {
       console.error('[hd/quickwrench] Truck AI call failed', err)
       return NextResponse.json({ analysis: TRUCK_FALLBACK_ANALYSIS, tk_sources: [], alarm_pattern: null, disclaimer: TRUCK_DISCLAIMER })

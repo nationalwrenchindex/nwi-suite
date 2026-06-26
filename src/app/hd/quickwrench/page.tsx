@@ -652,6 +652,9 @@ export default function HDQuickWrenchPage() {
   const [acError,   setAcError]   = useState<string | null>(null)
 
   // ── Truck state ──
+  const [vehicleYear,       setVehicleYear]       = useState('')
+  const [vehicleMake,       setVehicleMake]       = useState('')
+  const [vehicleModel,      setVehicleModel]      = useState('')
   const [truckBrand,        setTruckBrand]        = useState<EngineBrand>('Cummins')
   const [engineModel,       setEngineModel]       = useState('')
   const [spn,               setSpn]               = useState('')
@@ -878,6 +881,7 @@ export default function HDQuickWrenchPage() {
         body:    JSON.stringify({
           mode: 'truck',
           truckBrand, engineModel, spn, fmi, symptom: truckSymptom,
+          vehicleYear, vehicleMake, vehicleModel,
         }),
       })
 
@@ -1936,6 +1940,39 @@ export default function HDQuickWrenchPage() {
 
             {/* ── Truck engine form ── */}
             <form onSubmit={handleTruckSubmit} className="rounded-xl p-6 space-y-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+
+              {/* Vehicle — Year / Make / Model (drives vehicle-specific results) */}
+              <div>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                  Vehicle <span style={{ color: 'rgba(255,255,255,0.25)' }}>(year, make, model — for vehicle-specific results)</span>
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <input
+                    type="text"
+                    value={vehicleYear}
+                    onChange={e => setVehicleYear(e.target.value)}
+                    placeholder="Year — e.g. 2020"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+                    style={{ background: '#162030', border: '1px solid #1e3040' }}
+                  />
+                  <input
+                    type="text"
+                    value={vehicleMake}
+                    onChange={e => setVehicleMake(e.target.value)}
+                    placeholder="Make — e.g. Freightliner"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+                    style={{ background: '#162030', border: '1px solid #1e3040' }}
+                  />
+                  <input
+                    type="text"
+                    value={vehicleModel}
+                    onChange={e => setVehicleModel(e.target.value)}
+                    placeholder="Model — e.g. Cascadia"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20 col-span-2 sm:col-span-1"
+                    style={{ background: '#162030', border: '1px solid #1e3040' }}
+                  />
+                </div>
+              </div>
 
               {/* Engine Brand */}
               <div>
