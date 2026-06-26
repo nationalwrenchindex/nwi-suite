@@ -652,9 +652,14 @@ export default function HDQuickWrenchPage() {
   const [acError,   setAcError]   = useState<string | null>(null)
 
   // ── Truck state ──
+  const [vin,               setVin]               = useState('')
+  const [vinLoading,        setVinLoading]        = useState(false)
+  const [vinError,          setVinError]          = useState<string | null>(null)
+  const [vinDecoded,        setVinDecoded]        = useState<string | null>(null)
   const [vehicleYear,       setVehicleYear]       = useState('')
   const [vehicleMake,       setVehicleMake]       = useState('')
   const [vehicleModel,      setVehicleModel]      = useState('')
+  const [vehicleEngine,     setVehicleEngine]     = useState('')
   const [truckBrand,        setTruckBrand]        = useState<EngineBrand>('Cummins')
   const [engineModel,       setEngineModel]       = useState('')
   const [spn,               setSpn]               = useState('')
@@ -864,6 +869,41 @@ export default function HDQuickWrenchPage() {
     }
   }
 
+  // ── VIN decode (NHTSA) — optional; auto-populates year/make/model/engine ──
+  async function decodeVin() {
+    const v = vin.trim().toUpperCase()
+    if (v.length !== 17) {
+      setVinError('VIN not found — please enter vehicle info manually')
+      setVinDecoded(null)
+      return
+    }
+    setVinLoading(true)
+    setVinError(null)
+    try {
+      const res  = await fetch(`/api/hd/quickwrench/vin/${v}`)
+      const json = await res.json()
+      if (!res.ok || !json.vehicle) {
+        setVinError(typeof json.error === 'string' ? json.error : 'VIN not found — please enter vehicle info manually')
+        setVinDecoded(null)
+        return
+      }
+      const vehicle = json.vehicle as { year?: string; make?: string; model?: string; engine?: string | null }
+      if (vehicle.year)   setVehicleYear(vehicle.year)
+      if (vehicle.make)   setVehicleMake(vehicle.make)
+      if (vehicle.model)  setVehicleModel(vehicle.model)
+      setVehicleEngine(vehicle.engine ?? '')
+      setVinDecoded(
+        [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ') +
+        (vehicle.engine ? ` — ${vehicle.engine}` : '')
+      )
+    } catch {
+      setVinError('VIN not found — please enter vehicle info manually')
+      setVinDecoded(null)
+    } finally {
+      setVinLoading(false)
+    }
+  }
+
   // ── Truck submit ──
   async function handleTruckSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -881,7 +921,7 @@ export default function HDQuickWrenchPage() {
         body:    JSON.stringify({
           mode: 'truck',
           truckBrand, engineModel, spn, fmi, symptom: truckSymptom,
-          vehicleYear, vehicleMake, vehicleModel,
+          vehicleYear, vehicleMake, vehicleModel, vehicleEngine,
         }),
       })
 
@@ -1941,12 +1981,46 @@ export default function HDQuickWrenchPage() {
             {/* ── Truck engine form ── */}
             <form onSubmit={handleTruckSubmit} className="rounded-xl p-6 space-y-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
 
-              {/* Vehicle — Year / Make / Model (drives vehicle-specific results) */}
+              {/* VIN decode (optional) — auto-populates year/make/model/engine */}
+              <div>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                  VIN <span style={{ color: 'rgba(255,255,255,0.25)' }}>(optional — auto-decodes vehicle info)</span>
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={vin}
+                    onChange={e => { setVin(e.target.value.toUpperCase()); setVinError(null) }}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); decodeVin() } }}
+                    maxLength={17}
+                    placeholder="17-character VIN"
+                    className="flex-1 min-w-0 px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20 font-mono tracking-widest uppercase"
+                    style={{ background: '#162030', border: '1px solid #1e3040' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={decodeVin}
+                    disabled={vinLoading || vin.trim().length !== 17}
+                    className="px-4 py-2.5 rounded-lg text-sm font-bold text-white whitespace-nowrap transition-opacity"
+                    style={{ background: HD_BLUE, opacity: vinLoading || vin.trim().length !== 17 ? 0.5 : 1 }}
+                  >
+                    {vinLoading ? 'Decoding…' : 'Decode'}
+                  </button>
+                </div>
+                {vinError && (
+                  <p className="text-xs mt-1.5" style={{ color: '#F59E0B' }}>{vinError}</p>
+                )}
+                {vinDecoded && !vinError && (
+                  <p className="text-xs mt-1.5" style={{ color: '#22C55E' }}>✓ {vinDecoded} — confirm or edit below before running.</p>
+                )}
+              </div>
+
+              {/* Vehicle — Year / Make / Model / Engine (editable; override decoded values) */}
               <div>
                 <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
                   Vehicle <span style={{ color: 'rgba(255,255,255,0.25)' }}>(year, make, model — for vehicle-specific results)</span>
                 </label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <input
                     type="text"
                     value={vehicleYear}
@@ -1968,7 +2042,15 @@ export default function HDQuickWrenchPage() {
                     value={vehicleModel}
                     onChange={e => setVehicleModel(e.target.value)}
                     placeholder="Model — e.g. Cascadia"
-                    className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20 col-span-2 sm:col-span-1"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+                    style={{ background: '#162030', border: '1px solid #1e3040' }}
+                  />
+                  <input
+                    type="text"
+                    value={vehicleEngine}
+                    onChange={e => setVehicleEngine(e.target.value)}
+                    placeholder="Engine — e.g. 12.8L"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
                     style={{ background: '#162030', border: '1px solid #1e3040' }}
                   />
                 </div>

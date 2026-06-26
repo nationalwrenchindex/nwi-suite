@@ -45,7 +45,10 @@ function categoriesToFetchForCodes(codes: string[]): string[] {
   return [...cats]
 }
 
-export const maxDuration = 45
+// 75s headroom so the truck web-search path (35s) plus its fallback (25s) can
+// both run without the platform killing the function (which surfaced as the
+// "Diagnostic service temporarily unavailable" placeholder on slow queries).
+export const maxDuration = 75
 
 const CARRIER_DISCLAIMER = "Alarm code definitions sourced from publicly available Carrier Transicold operator reference information. Not all codes apply to all unit models. Always verify against official Carrier documentation and consult your company for final decisions."
 
@@ -1429,6 +1432,7 @@ export async function POST(req: NextRequest) {
     vehicleYear?: string
     vehicleMake?: string
     vehicleModel?: string
+    vehicleEngine?: string
     // electrical fields
     topic?: string
     question?: string
@@ -1478,7 +1482,7 @@ export async function POST(req: NextRequest) {
 
   // ── Truck engine branch ───────────────────────────────────────────────────
   if (mode === 'truck') {
-    const { truckBrand, engineModel, spn, fmi, symptom: truckSymptom, vehicleYear, vehicleMake, vehicleModel } = body
+    const { truckBrand, engineModel, spn, fmi, symptom: truckSymptom, vehicleYear, vehicleMake, vehicleModel, vehicleEngine } = body
     if (!truckBrand || !engineModel) {
       return NextResponse.json({ error: 'truckBrand and engineModel required' }, { status: 400 })
     }
@@ -1489,10 +1493,24 @@ export async function POST(req: NextRequest) {
     // Vehicle identity drives vehicle-specific results — surface it first so the
     // model searches for the exact year/make/model + code (or asks if missing).
     const vehicleBits = [
-      vehicleYear?.trim()  ? `Year: ${vehicleYear.trim()}`   : null,
-      vehicleMake?.trim()  ? `Make: ${vehicleMake.trim()}`   : null,
-      vehicleModel?.trim() ? `Model: ${vehicleModel.trim()}` : null,
+      vehicleYear?.trim()   ? `Year: ${vehicleYear.trim()}`     : null,
+      vehicleMake?.trim()   ? `Make: ${vehicleMake.trim()}`     : null,
+      vehicleModel?.trim()  ? `Model: ${vehicleModel.trim()}`   : null,
+      vehicleEngine?.trim() ? `Engine: ${vehicleEngine.trim()}` : null,
     ].filter(Boolean)
+
+    // Build the explicit web search query so it always includes year, make,
+    // model, engine brand, engine model, SPN and FMI — never the SPN alone.
+    // e.g. "2020 Freightliner Cascadia DD13 SPN 3031 FMI 3 diagnostic repair procedure"
+    const searchQuery = [
+      vehicleYear?.trim(),
+      vehicleMake?.trim(),
+      vehicleModel?.trim(),
+      truckBrand,
+      engineModel,
+      spn ? `SPN ${spn}` : null,
+      (fmi !== undefined && fmi !== '') ? `FMI ${fmi}` : null,
+    ].filter(Boolean).join(' ').trim()
 
     const parts: string[] = []
     if (vehicleBits.length > 0) parts.push(`Vehicle — ${vehicleBits.join(', ')}`)
@@ -1501,6 +1519,7 @@ export async function POST(req: NextRequest) {
     if (spn)          parts.push(`SPN (Suspect Parameter Number): ${spn}`)
     if (fmi !== undefined && fmi !== '') parts.push(`FMI (Failure Mode Identifier): ${fmi}`)
     if (truckSymptom) parts.push(`Symptom/Question: ${truckSymptom}`)
+    if (searchQuery)  parts.push(`Run this web search first: "${searchQuery} diagnostic repair procedure"`)
     const truckUserPrompt = parts.join('\n')
 
     try {
@@ -1524,7 +1543,7 @@ export async function POST(req: NextRequest) {
             ],
             messages:   [{ role: 'user', content: truckUserPrompt }],
           },
-          { timeout: 25_000, maxRetries: 0 },
+          { timeout: 35_000, maxRetries: 0 },
         )
       } catch (searchErr) {
         console.error('[hd/quickwrench/truck] web search call failed — falling back to standard call', searchErr)
@@ -1535,7 +1554,7 @@ export async function POST(req: NextRequest) {
             system:     `${TRUCK_WEB_SEARCH_DIRECTIVE}\n\n${TRUCK_SYSTEM_PROMPT}`,
             messages:   [{ role: 'user', content: truckUserPrompt }],
           },
-          { timeout: 18_000, maxRetries: 0 },
+          { timeout: 25_000, maxRetries: 0 },
         )
       }
 
