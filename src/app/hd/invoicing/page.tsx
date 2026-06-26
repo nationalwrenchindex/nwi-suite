@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 
 export const metadata = { title: 'Invoicing — NWI HD Suite' }
@@ -28,9 +29,13 @@ export default async function InvoicingPage() {
           <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>HD Suite</p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">INVOICING</h1>
         </div>
-        <button className="px-4 py-2.5 rounded-lg text-sm font-semibold text-white" style={{ background: HD_ORANGE }}>
+        <Link
+          href="/hd/quotes/new"
+          className="px-4 py-2.5 rounded-lg text-sm font-semibold text-white inline-flex items-center"
+          style={{ background: HD_ORANGE, minHeight: 44 }}
+        >
           + Create Invoice
-        </button>
+        </Link>
       </div>
 
       <div className="grid grid-cols-2 gap-4 mb-6">
