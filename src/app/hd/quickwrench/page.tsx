@@ -545,7 +545,7 @@ function AnalysisCard({
         <div className="p-5 space-y-5" style={{ background: '#111920' }}>
           {/* Provenance badge — green = verified DB entry, yellow = AI assisted,
               neutral blue = code could not be verified anywhere */}
-          {tkSources.length > 0 ? (
+          {(tkSources.length > 0 || codeStatus === 'verified') ? (
             <span
               className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full tracking-wide"
               style={{ background: '#0f2f1c', color: '#34D399', border: '1px solid #1c5c34' }}

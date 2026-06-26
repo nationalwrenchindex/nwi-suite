@@ -1323,6 +1323,60 @@ Always search first. Never guess. If you cannot find verified information for th
 
 A wrong answer costs the tech time and money. Accuracy is more important than always having an answer.`
 
+// ─── Verified DB Analysis Builder ──────────────────────────────────────────────
+// hd_alarm_codes holds human-verified, curated alarm-code content. When a code
+// has an entry there it is authoritative — we render it directly (formatted into
+// the page's section headers) so a verified code NEVER falls through to AI
+// placeholder text, even if the AI call fails or times out.
+
+interface VerifiedAlarmRow {
+  meaning:          string
+  common_causes:    string | null
+  diagnostic_steps: string | null
+  common_fix:       string | null
+  field_notes:      string | null
+  safety_warning:   string | null
+  parts_needed:     string | null
+  book_time:        number | null
+  mobile_time:      number | null
+  unit_family:      string
+  alarm_code:       string | null
+}
+
+function buildVerifiedAnalysis(e: VerifiedAlarmRow): string {
+  const sections: string[] = [`ALARM MEANING:\n${e.meaning}`]
+  if (e.common_causes?.trim())    sections.push(`MOST LIKELY CAUSES:\n${e.common_causes.trim()}`)
+  if (e.diagnostic_steps?.trim()) sections.push(`DIAGNOSTIC STEPS:\n${e.diagnostic_steps.trim()}`)
+  if (e.common_fix?.trim())       sections.push(`COMMON FIX:\n${e.common_fix.trim()}`)
+  if (e.parts_needed?.trim() && e.parts_needed.trim().toLowerCase() !== 'none')
+    sections.push(`PARTS NEEDED:\n${e.parts_needed.trim()}`)
+
+  const safety = [
+    e.safety_warning?.trim() || null,
+    e.field_notes?.trim() ? `Field note: ${e.field_notes.trim()}` : null,
+  ].filter(Boolean).join('\n\n')
+  if (safety) sections.push(`SAFETY WARNINGS:\n${safety}`)
+
+  let out = sections.join('\n\n')
+  if (e.book_time != null || e.mobile_time != null) {
+    const book   = e.book_time   != null ? `${e.book_time}`   : 'see notes'
+    const mobile = e.mobile_time != null ? `${e.mobile_time}` : 'see notes'
+    out += `\n\nBook Time: ${book} hours\nMobile Field Time: ${mobile} hours`
+  }
+  return out
+}
+
+// Code may be entered as "28", "08", "8" — match the common variants in the DB.
+function alarmCodeCandidates(code: string): string[] {
+  const raw = code.trim()
+  const set = new Set<string>([raw, raw.toUpperCase()])
+  if (/^\d+$/.test(raw)) {
+    set.add(raw.padStart(2, '0'))
+    set.add(String(parseInt(raw, 10)))
+  }
+  return [...set]
+}
+
 // ─── Route Handler ────────────────────────────────────────────────────────────
 
 export async function POST(req: NextRequest) {
@@ -1470,6 +1524,36 @@ export async function POST(req: NextRequest) {
   // Multi-alarm cross reference (TK only — no Carrier relationship map yet)
   const alarmPattern = allCodes.length >= 2 ? lookupPattern(allCodes) : null
 
+  // ── Verified DB lookup (authoritative) ──
+  // If the primary submitted code has a curated entry in hd_alarm_codes, that
+  // content is used directly. The diagnostic-form manufacturer uses full names;
+  // the table stores 'TK' / 'Carrier'.
+  const dbManufacturer = manufacturer === 'Thermo King' ? 'TK'
+    : manufacturer === 'Carrier Transicold' ? 'Carrier'
+    : null
+
+  let verifiedEntry: VerifiedAlarmRow | null = null
+  if (dbManufacturer && allCodes.length > 0) {
+    const { data: rows, error: dbErr } = await supabase
+      .from('hd_alarm_codes')
+      .select('meaning, common_causes, diagnostic_steps, common_fix, field_notes, safety_warning, parts_needed, book_time, mobile_time, unit_family, alarm_code')
+      .eq('manufacturer', dbManufacturer)
+      .in('alarm_code', alarmCodeCandidates(allCodes[0]))
+      .limit(10)
+
+    if (dbErr) console.error('[hd/quickwrench] hd_alarm_codes lookup failed', dbErr)
+    if (rows && rows.length > 0) {
+      const m = model?.toLowerCase() ?? ''
+      verifiedEntry = (rows.find(r =>
+        m && r.unit_family && (m.includes(r.unit_family.toLowerCase()) || r.unit_family.toLowerCase().includes(m))
+      ) ?? rows[0]) as VerifiedAlarmRow
+    }
+  }
+
+  // For a single verified code, DB content is sufficient — skip the AI call
+  // entirely (faster, and immune to AI/web-search failure).
+  const useVerifiedOnly = !!verifiedEntry && allCodes.length === 1
+
   const userPrompt = buildUserPrompt({
     manufacturer, model, unitType, allCodes,
     symptom, serialNumber: body.serialNumber,
@@ -1484,13 +1568,17 @@ export async function POST(req: NextRequest) {
   // Run AI call + parts DB query in parallel
   const [aiResult, partsResult] = await Promise.allSettled([
     (async () => {
+      // Verified DB content will be used — no need to call the model at all.
+      if (useVerifiedOnly) return null
+
       const client = new Anthropic({ apiKey })
 
       // First attempt: web search enabled — best answer for obscure codes.
       // Web search can be slow and occasionally times out at the platform
-      // edge (504). Cap it well under maxDuration and, on ANY error, fall
-      // back to the standard Claude call without web search so the tech
-      // never sees a raw 504 or server error.
+      // edge (504). Cap it under maxDuration and, on ANY error, fall back to
+      // the standard Claude call without web search. The fallback gets a
+      // generous budget so it can actually finish generating — a too-short
+      // timeout here is what previously caused the placeholder to show.
       try {
         return await client.messages.create(
           {
@@ -1505,7 +1593,7 @@ export async function POST(req: NextRequest) {
             ],
             messages: [{ role: 'user', content: userPrompt }],
           },
-          { timeout: 30_000, maxRetries: 0 },
+          { timeout: 25_000, maxRetries: 0 },
         )
       } catch (err) {
         console.error('[hd/quickwrench] web search call failed — falling back to standard call', err)
@@ -1516,7 +1604,7 @@ export async function POST(req: NextRequest) {
             system:     SYSTEM_PROMPT,
             messages:   [{ role: 'user', content: userPrompt }],
           },
-          { timeout: 12_000, maxRetries: 0 },
+          { timeout: 18_000, maxRetries: 0 },
         )
       }
     })(),
@@ -1532,19 +1620,35 @@ export async function POST(req: NextRequest) {
     })(),
   ])
 
-  // Build analysis string
-  let analysis: string
-  if (aiResult.status === 'fulfilled') {
+  // Extract AI text (may be skipped/failed)
+  let aiText = ''
+  if (aiResult.status === 'fulfilled' && aiResult.value) {
     const msg = aiResult.value
-    analysis = msg.content
+    aiText = msg.content
       .filter(b => b.type === 'text')
       .map(b => (b as Anthropic.TextBlock).text)
       .join('\n')
       .trim()
     console.log('[quickwrench] stop_reason:', msg.stop_reason, 'tokens:', JSON.stringify(msg.usage))
-  } else {
+  } else if (aiResult.status === 'rejected') {
     console.error('[hd/quickwrench] AI call failed', aiResult.reason)
-    analysis = FALLBACK_ANALYSIS
+  }
+  const aiUsable = aiText.length > 0 && aiText !== FALLBACK_ANALYSIS
+
+  // Build analysis — verified DB content is authoritative and is NEVER replaced
+  // by the AI placeholder. AI text is used for codes/symptoms without a curated
+  // entry (and as the richer source on multi-alarm queries when it succeeds).
+  let analysis: string
+  let codeStatus: 'verified' | 'ai' | 'unverified'
+  if (verifiedEntry && (allCodes.length === 1 || !aiUsable)) {
+    analysis   = buildVerifiedAnalysis(verifiedEntry)
+    codeStatus = 'verified'
+  } else if (aiUsable) {
+    analysis   = aiText
+    codeStatus = (alarmSources.length > 0 || verifiedEntry) ? 'verified' : 'ai'
+  } else {
+    analysis   = verifiedEntry ? buildVerifiedAnalysis(verifiedEntry) : FALLBACK_ANALYSIS
+    codeStatus = verifiedEntry ? 'verified' : 'ai'
   }
 
   // Append PARTS REFERENCE section if parts were found
@@ -1575,13 +1679,12 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Provenance: verified DB entry, AI assisted, or genuinely unverifiable.
-  // If there was no DB match for a submitted code AND the AI (with web search)
-  // reported it could not verify the code, show a structured "double-check the
-  // code" message rather than jumping straight to "consult your dealer".
-  let codeStatus: 'verified' | 'ai' | 'unverified' = alarmSources.length > 0 ? 'verified' : 'ai'
-
+  // Provenance refinement: only when this is NOT a verified entry and the AI
+  // (with web search) reported it could not verify the code, show a structured
+  // "double-check the code" message rather than jumping straight to the dealer.
   if (
+    codeStatus !== 'verified' &&
+    !verifiedEntry &&
     alarmSources.length === 0 &&
     allCodes.length > 0 &&
     /could not be verified/i.test(analysis)
