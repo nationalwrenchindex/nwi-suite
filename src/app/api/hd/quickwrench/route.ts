@@ -1610,11 +1610,17 @@ export async function POST(req: NextRequest) {
     })(),
     (async () => {
       if (partsCategories.length === 0) return []
+      // No model selected — don't query; the UI prompts the tech to pick one.
+      if (!model) return []
+      // Strict model match: only parts whose unit_models array contains the
+      // exact selected model. Showing the wrong belt for the wrong unit is a
+      // critical failure, so universal/unscoped parts are intentionally excluded.
       const { data } = await supabase
         .from('hd_parts')
         .select('part_number, description, category, unit_models, notes, field_critical')
         .eq('manufacturer', manufacturer)
         .in('category', partsCategories)
+        .contains('unit_models', [model])
         .limit(12)
       return data ?? []
     })(),
@@ -1651,32 +1657,44 @@ export async function POST(req: NextRequest) {
     codeStatus = verifiedEntry ? 'verified' : 'ai'
   }
 
-  // Append PARTS REFERENCE section if parts were found
-  if (partsResult.status === 'fulfilled') {
-    const parts = partsResult.value as Array<{
-      part_number: string; description: string; category: string
-      unit_models: string[]; notes?: string; field_critical: boolean
-    }>
+  // Append PARTS REFERENCE section — strictly model-specific.
+  // Shown only for alarm codes that map to part categories. The parts are
+  // already filtered to the selected model + manufacturer at the query level.
+  if (partsCategories.length > 0) {
+    const header = `\nPARTS REFERENCE — ${manufacturer}${model ? ` ${model}` : ''}`
+    let partsSection: string
 
-    if (parts.length > 0) {
-      const relevantParts = model
-        ? parts.filter(p => p.unit_models.length === 0 || p.unit_models.includes(model))
-        : parts
+    if (!model) {
+      // No model selected — never dump all parts; prompt the tech to pick one.
+      partsSection = [
+        header,
+        'Select a unit model above to see model-specific parts for this repair.',
+      ].join('\n')
+    } else {
+      const parts = partsResult.status === 'fulfilled'
+        ? partsResult.value as Array<{
+            part_number: string; description: string; category: string
+            unit_models: string[]; notes?: string; field_critical: boolean
+          }>
+        : []
 
-      const toShow = relevantParts.length > 0 ? relevantParts : parts.slice(0, 8)
-
-      if (toShow.length > 0) {
-        const partsSection = [
-          `\nPARTS REFERENCE — ${manufacturer} ${model}`,
-          ...toShow.map(p =>
+      if (parts.length === 0) {
+        partsSection = [
+          header,
+          'No parts on file for this model yet. Contact NWI support or verify part numbers with your dealer.',
+        ].join('\n')
+      } else {
+        partsSection = [
+          header,
+          ...parts.map(p =>
             `Part Number: ${p.part_number} — ${p.description}${p.field_critical ? ' [FIELD CRITICAL]' : ''}${p.notes ? ` — ${p.notes}` : ''}`
           ),
           'Note: Part numbers are reference only. Verify fitment before ordering. Always replace superseded part numbers with current replacement.',
         ].join('\n')
-
-        analysis = analysis + partsSection
       }
     }
+
+    analysis = analysis + partsSection
   }
 
   // Provenance refinement: only when this is NOT a verified entry and the AI
