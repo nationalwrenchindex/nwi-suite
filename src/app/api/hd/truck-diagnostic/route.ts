@@ -15,18 +15,38 @@ import {
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
 
-// Small helper so every failure path logs a consistent, inspectable line.
-function logErr(stage: string, err: unknown) {
-  const e = err as { name?: string; message?: string; status?: number; stack?: string }
-  console.error(`[hd/truck-diagnostic] ${stage} failed:`, JSON.stringify({
+// Pull the useful, inspectable bits out of an Anthropic/SDK error so the exact
+// failure (status, error type, message, request id) shows up in logs AND in the
+// _debug field of the response. Returns a short one-line summary.
+function summarizeErr(stage: string, err: unknown): string {
+  const e = err as {
+    name?: string; message?: string; status?: number
+    error?: { error?: { type?: string; message?: string } }
+    headers?: Record<string, string> | { get?: (k: string) => string | null }
+    stack?: string
+  }
+  let requestId: string | undefined
+  try {
+    const h = e?.headers as { get?: (k: string) => string | null } | undefined
+    requestId = (typeof h?.get === 'function' ? h.get('request-id') : undefined) ?? undefined
+  } catch { /* ignore */ }
+
+  const summary = {
+    stage,
     name:    e?.name,
-    message: e?.message,
     status:  e?.status,
-    stack:   e?.stack?.split('\n').slice(0, 4).join(' | '),
-  }))
+    apiType: e?.error?.error?.type,
+    apiMsg:  e?.error?.error?.message,
+    message: e?.message,
+    requestId,
+  }
+  console.error(`[hd/truck-diagnostic] ${stage} failed:`, JSON.stringify(summary))
+  if (e?.stack) console.error(`[hd/truck-diagnostic] ${stage} stack:`, e.stack.split('\n').slice(0, 4).join(' | '))
+  return `${stage}: ${e?.status ?? ''} ${e?.error?.error?.type ?? e?.name ?? ''} ${e?.error?.error?.message ?? e?.message ?? 'unknown error'}`.trim()
 }
 
 export async function POST(req: NextRequest) {
+  console.log('[hd/truck-diagnostic] POST received')
   try {
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
@@ -35,8 +55,14 @@ export async function POST(req: NextRequest) {
     const hasAccess = await checkHDAccess(user.id)
     if (!hasAccess) return NextResponse.json({ error: 'HD subscription required' }, { status: 403 })
 
+    // #2/#7 — confirm the API key is actually present in this route's runtime.
+    // (Logs presence + length only — never the key itself.)
     const apiKey = process.env.ANTHROPIC_API_KEY
-    if (!apiKey) return NextResponse.json({ error: 'AI service not configured' }, { status: 503 })
+    console.log('[hd/truck-diagnostic] ANTHROPIC_API_KEY present:', !!apiKey, 'length:', apiKey?.length ?? 0)
+    if (!apiKey) {
+      console.error('[hd/truck-diagnostic] ANTHROPIC_API_KEY missing — this is the immediate-fallback cause')
+      return NextResponse.json({ error: 'AI service not configured' }, { status: 503 })
+    }
 
     let body: {
       truckBrand?:   string
@@ -97,37 +123,53 @@ export async function POST(req: NextRequest) {
 
     const client = new Anthropic({ apiKey })
 
+    const webSearchTool = { type: 'web_search_20250305' as const, name: 'web_search' as const }
+
     // Web search first for vehicle-specific results (TSBs, recalls, part numbers).
-    // On any timeout/error, fall back to a standard call so the tech still gets
-    // an answer. 30s + 20s = 50s, under the 60s function cap.
-    let msg
+    // If it errors, fall back to a standard (no-tools) call. If BOTH error we
+    // return the placeholder — and now also surface the exact reason in _debug.
+    // 30s + 20s = 50s, under the 60s function cap.
+    let msg: Anthropic.Message | undefined
+    let debug = ''
+    let usedWebSearch = false
+
     try {
+      console.log('[hd/truck-diagnostic] calling web search — tools:', JSON.stringify([webSearchTool]))
       msg = await client.messages.create(
         {
           model:      'claude-sonnet-4-6',
           max_tokens: 1500,
           system:     `${TRUCK_WEB_SEARCH_DIRECTIVE}\n\n${TRUCK_SYSTEM_PROMPT}`,
-          tools: [
-            {
-              type: 'web_search_20250305',
-              name: 'web_search',
-            },
-          ],
+          tools:      [webSearchTool],
           messages:   [{ role: 'user', content: truckUserPrompt }],
         },
         { timeout: 30_000, maxRetries: 0 },
       )
+      usedWebSearch = true
     } catch (searchErr) {
-      logErr('web search call', searchErr)
-      msg = await client.messages.create(
-        {
-          model:      'claude-sonnet-4-6',
-          max_tokens: 1500,
-          system:     `${TRUCK_WEB_SEARCH_DIRECTIVE}\n\n${TRUCK_SYSTEM_PROMPT}`,
-          messages:   [{ role: 'user', content: truckUserPrompt }],
-        },
-        { timeout: 20_000, maxRetries: 0 },
-      )
+      debug = summarizeErr('web search call', searchErr)
+      // Fall back to a plain call so the tech still gets an answer.
+      try {
+        console.log('[hd/truck-diagnostic] web search failed — trying standard fallback call')
+        msg = await client.messages.create(
+          {
+            model:      'claude-sonnet-4-6',
+            max_tokens: 1500,
+            system:     `${TRUCK_WEB_SEARCH_DIRECTIVE}\n\n${TRUCK_SYSTEM_PROMPT}`,
+            messages:   [{ role: 'user', content: truckUserPrompt }],
+          },
+          { timeout: 20_000, maxRetries: 0 },
+        )
+      } catch (fallbackErr) {
+        debug = `${debug} || ${summarizeErr('standard fallback call', fallbackErr)}`
+        return NextResponse.json({
+          analysis: TRUCK_FALLBACK_ANALYSIS,
+          tk_sources: [],
+          alarm_pattern: null,
+          disclaimer: TRUCK_DISCLAIMER,
+          _debug: debug,
+        })
+      }
     }
 
     const analysis = msg.content
@@ -136,7 +178,9 @@ export async function POST(req: NextRequest) {
       .join('\n')
       .trim()
 
-    console.log('[hd/truck-diagnostic] stop_reason:', msg.stop_reason, 'tokens:', JSON.stringify(msg.usage), 'chars:', analysis.length)
+    // Did the model actually run a server-side web search?
+    const searchUses = msg.content.filter(b => b.type === 'server_tool_use').length
+    console.log('[hd/truck-diagnostic] done — stop_reason:', msg.stop_reason, 'usedWebSearchTool:', usedWebSearch, 'serverToolUses:', searchUses, 'tokens:', JSON.stringify(msg.usage), 'chars:', analysis.length)
     if (!analysis) console.error('[hd/truck-diagnostic] empty analysis returned — placeholder will show. stop_reason:', msg.stop_reason)
 
     return NextResponse.json({
@@ -144,14 +188,16 @@ export async function POST(req: NextRequest) {
       tk_sources: [],
       alarm_pattern: null,
       disclaimer: TRUCK_DISCLAIMER,
+      ...(analysis ? {} : { _debug: `empty analysis; stop_reason=${msg.stop_reason}; ${debug}` }),
     })
   } catch (err) {
-    logErr('truck diagnostic (both calls)', err)
+    const debug = summarizeErr('truck diagnostic (outer)', err)
     return NextResponse.json({
       analysis: TRUCK_FALLBACK_ANALYSIS,
       tk_sources: [],
       alarm_pattern: null,
       disclaimer: TRUCK_DISCLAIMER,
+      _debug: debug,
     })
   }
 }
