@@ -644,6 +644,15 @@ export default function HDQuickWrenchPage() {
   const [disclaimer,           setDisclaimer]           = useState<string | null>(null)
   const [error,                setError]                = useState<string | null>(null)
 
+  // ── Unit profile / BM lookup state (optional reefer fields) ──
+  const [bmNumber,             setBmNumber]             = useState('')   // TK build number
+  const [modelNumber,          setModelNumber]          = useState('')   // Carrier build number
+  const [engineHours,          setEngineHours]          = useState('')
+  const [profileNotes,         setProfileNotes]         = useState('')
+  const [unitLookupLoading,    setUnitLookupLoading]    = useState(false)
+  const [identifiedModel,      setIdentifiedModel]      = useState<string | null>(null)
+  const [identifiedRefrigerant, setIdentifiedRefrigerant] = useState<string | null>(null)
+
   // ── Alarm Code Lookup state ──
   const [acOpen,    setAcOpen]    = useState(false)
   const [acManuf,   setAcManuf]   = useState<'TK' | 'Carrier'>('TK')
@@ -728,6 +737,11 @@ export default function HDQuickWrenchPage() {
       ? unitType === 'truck' ? TK_TRUCK_GROUPS : TK_TRAILER_GROUPS
       : unitType === 'truck' ? CT_TRUCK_GROUPS : CT_TRAILER_GROUPS
 
+  // Whether the current model value is one of the dropdown options — when a BM
+  // lookup auto-fills a model that isn't in the canonical list, we inject it as
+  // a synthetic option so the <select> can still display it.
+  const modelInGroups = modelGroups.some(g => g.models.includes(model))
+
   const truckModelOptions = ENGINE_MODELS[truckBrand] ?? []
 
   // ── Loading message effects ──
@@ -800,6 +814,52 @@ export default function HDQuickWrenchPage() {
     }
   }
 
+  // ── Unit profile / BM lookup ──
+  // Fires when a BM (TK) / model number (Carrier) or serial is entered. Looks up
+  // the tech's own private profile AND the global BM map, then auto-fills.
+  async function lookupUnit() {
+    const manufCode = manufacturer === 'Thermo King' ? 'TK' : 'Carrier'
+    const build  = (manufCode === 'TK' ? bmNumber : modelNumber).trim()
+    const serial = serialNumber.trim()
+    if (!build && !serial) return
+
+    setUnitLookupLoading(true)
+    try {
+      const params = new URLSearchParams({ manufacturer: manufCode })
+      if (build)  params.set('bm_number', build)
+      if (serial) params.set('serial_number', serial)
+
+      const res = await fetch(`/api/hd/unit-profile?${params}`)
+      if (!res.ok) return
+      const data = await res.json() as {
+        profile: { unit_model?: string | null; refrigerant_type?: string | null; engine_hours?: number | null; notes?: string | null } | null
+        bmMap:   { unit_model?: string | null; refrigerant_type?: string | null; known_parts?: string | null } | null
+      }
+
+      if (data.bmMap) {
+        // Global match — show the green banner and auto-fill the unit model.
+        setIdentifiedModel(data.bmMap.unit_model ?? null)
+        setIdentifiedRefrigerant(data.bmMap.refrigerant_type ?? null)
+        if (data.bmMap.unit_model) setModel(data.bmMap.unit_model)
+      } else {
+        setIdentifiedModel(null)
+        setIdentifiedRefrigerant(null)
+      }
+
+      if (data.profile) {
+        // The tech's own saved unit — fill engine hours / notes (and model, if
+        // the global map didn't already provide one).
+        if (data.profile.engine_hours != null) setEngineHours(String(data.profile.engine_hours))
+        if (data.profile.notes) setProfileNotes(data.profile.notes)
+        if (!data.bmMap && data.profile.unit_model) setModel(data.profile.unit_model)
+      }
+    } catch {
+      // Lookup is a convenience — never block the tech if it fails.
+    } finally {
+      setUnitLookupLoading(false)
+    }
+  }
+
   // ── Reefer submit ──
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -867,6 +927,30 @@ export default function HDQuickWrenchPage() {
           : null
       )
       setDisclaimer(typeof json.disclaimer === 'string' ? json.disclaimer : null)
+
+      // Auto-save the unit profile (and contribute to the global BM map) — but
+      // ONLY when the tech actually entered a BM/serial. Never persist an empty
+      // profile. Fire-and-forget: a save failure must not break the diagnostic.
+      const manufCode = manufacturer === 'Thermo King' ? 'TK' : 'Carrier'
+      const build = (manufCode === 'TK' ? bmNumber : modelNumber).trim()
+      if (build || serialNumber.trim()) {
+        try {
+          await fetch('/api/hd/unit-profile', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({
+              manufacturer:     manufCode,
+              serial_number:    serialNumber.trim() || null,
+              bm_number:        manufCode === 'TK'      ? (bmNumber.trim()    || null) : null,
+              model_number:     manufCode === 'Carrier' ? (modelNumber.trim() || null) : null,
+              unit_model:       model || null,
+              refrigerant_type: identifiedRefrigerant,
+              engine_hours:     engineHours.trim() || null,
+              notes:            profileNotes.trim() || null,
+            }),
+          })
+        } catch {}
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
     } finally {
@@ -1786,7 +1870,7 @@ export default function HDQuickWrenchPage() {
                       <button
                         key={m}
                         type="button"
-                        onClick={() => { setManufacturer(m); setModel('') }}
+                        onClick={() => { setManufacturer(m); setModel(''); setIdentifiedModel(null); setIdentifiedRefrigerant(null) }}
                         className="flex-1 text-xs font-semibold transition-colors"
                         style={{
                           background: manufacturer === m ? HD_ORANGE : '#162030',
@@ -1835,6 +1919,9 @@ export default function HDQuickWrenchPage() {
                   style={{ background: '#162030', border: '1px solid #1e3040' }}
                 >
                   <option value="">— Select model —</option>
+                  {model && !modelInGroups && (
+                    <option value={model}>{model} (identified)</option>
+                  )}
                   {modelGroups.map(g => (
                     <optgroup key={g.group} label={g.group}>
                       {g.models.map(m => <option key={m} value={m}>{m}</option>)}
@@ -1851,10 +1938,88 @@ export default function HDQuickWrenchPage() {
                   type="text"
                   value={serialNumber}
                   onChange={e => setSerialNumber(e.target.value)}
+                  onBlur={lookupUnit}
                   placeholder="Unit serial number"
                   className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
                   style={{ background: '#162030', border: '1px solid #1e3040' }}
                 />
+              </div>
+
+              {/* ── Unit identification (optional) — BM (TK) / Model number (Carrier) ── */}
+              {manufacturer === 'Thermo King' ? (
+                <div>
+                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                    BM Number <span style={{ color: 'rgba(255,255,255,0.25)' }}>(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={bmNumber}
+                    onChange={e => setBmNumber(e.target.value)}
+                    onBlur={lookupUnit}
+                    placeholder="e.g. 953xxx — identifies the unit model"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+                    style={{ background: '#162030', border: '1px solid #1e3040' }}
+                  />
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                    Model Number <span style={{ color: 'rgba(255,255,255,0.25)' }}>(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={modelNumber}
+                    onChange={e => setModelNumber(e.target.value)}
+                    onBlur={lookupUnit}
+                    placeholder="Build / model number — identifies the unit model"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+                    style={{ background: '#162030', border: '1px solid #1e3040' }}
+                  />
+                </div>
+              )}
+
+              {/* Green "unit identified" banner, sourced from the global BM map */}
+              {identifiedModel && (
+                <div className="rounded-lg px-4 py-3 flex items-center gap-2" style={{ background: '#0f2f1c', border: '1px solid #1c5c34' }}>
+                  <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#34D399' }} />
+                  <p className="text-sm font-medium" style={{ color: '#34D399' }}>
+                    Unit identified — {identifiedModel}{identifiedRefrigerant ? `, ${identifiedRefrigerant}` : ''}
+                  </p>
+                </div>
+              )}
+              {unitLookupLoading && (
+                <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>Looking up unit…</p>
+              )}
+
+              {/* Engine hours + notes (optional) — saved to the tech's private profile */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                    Engine Hours <span style={{ color: 'rgba(255,255,255,0.25)' }}>(optional)</span>
+                  </label>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    value={engineHours}
+                    onChange={e => setEngineHours(e.target.value)}
+                    placeholder="e.g. 12450"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+                    style={{ background: '#162030', border: '1px solid #1e3040' }}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                    Unit Notes <span style={{ color: 'rgba(255,255,255,0.25)' }}>(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={profileNotes}
+                    onChange={e => setProfileNotes(e.target.value)}
+                    placeholder="Private notes for this unit"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+                    style={{ background: '#162030', border: '1px solid #1e3040' }}
+                  />
+                </div>
               </div>
 
               <div>
