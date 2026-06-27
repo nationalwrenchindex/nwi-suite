@@ -154,24 +154,37 @@ export async function POST(req: NextRequest) {
             }
           }
           const final = await s.finalMessage()
+          // [TRUCK-DIAG] temporary: surface the stream's stop_reason + which mode produced it
+          console.log('[TRUCK-DIAG] stream finished — webSearch:', useWebSearch, 'stop_reason:', final.stop_reason, 'usage:', JSON.stringify(final.usage))
           console.log('[hd/truck-diagnostic] stream done — webSearch:', useWebSearch, 'stop_reason:', final.stop_reason, 'tokens:', JSON.stringify(final.usage))
         }
 
         try {
           await pipe(true)              // web search
+          // [TRUCK-DIAG] temporary: if text streamed here, the web-search path won
+          if (emitted) console.log('[TRUCK-DIAG] final response produced by: WEB-SEARCH path')
         } catch (searchErr) {
-          summarizeErr('web search stream', searchErr)
+          const searchSummary = summarizeErr('web search stream', searchErr)
+          // [TRUCK-DIAG] temporary: exact failure of the web-search call
+          console.error('[TRUCK-DIAG] web-search path threw:', searchSummary, '— emittedSoFar:', emitted)
         }
         // Web search errored OR produced no text — try a plain call (only if
         // nothing has streamed yet, so we never duplicate output).
         if (!emitted) {
+          console.log('[TRUCK-DIAG] web-search path produced no text — attempting standard (no-tools) fallback')
           try {
             await pipe(false)
+            // [TRUCK-DIAG] temporary: if text streamed here, the fallback path won
+            if (emitted) console.log('[TRUCK-DIAG] final response produced by: STANDARD FALLBACK path')
           } catch (fallbackErr) {
-            summarizeErr('standard fallback stream', fallbackErr)
+            const fallbackSummary = summarizeErr('standard fallback stream', fallbackErr)
+            // [TRUCK-DIAG] temporary: exact failure of the no-tools fallback call
+            console.error('[TRUCK-DIAG] standard fallback path threw:', fallbackSummary, '— emittedSoFar:', emitted)
           }
         }
         if (!emitted) {
+          // [TRUCK-DIAG] temporary: both live calls failed — client gets the canned placeholder as a 200
+          console.error('[TRUCK-DIAG] final response produced by: PLACEHOLDER (both calls failed)')
           console.error('[hd/truck-diagnostic] all calls failed — emitting placeholder')
           emit(TRUCK_FALLBACK_ANALYSIS)
         }
@@ -187,7 +200,9 @@ export async function POST(req: NextRequest) {
       },
     })
   } catch (err) {
-    summarizeErr('truck diagnostic (outer)', err)
+    const outerSummary = summarizeErr('truck diagnostic (outer)', err)
+    // [TRUCK-DIAG] temporary: pre-stream failure (auth/parse/etc.) — placeholder returned as a 200
+    console.error('[TRUCK-DIAG] final response produced by: OUTER CATCH placeholder (pre-stream failure):', outerSummary)
     // Pre-stream failure (auth/parse/etc.) — return the placeholder as plain
     // text so the client renders it the same way as a streamed answer.
     return new Response(TRUCK_FALLBACK_ANALYSIS, {
