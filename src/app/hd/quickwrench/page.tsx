@@ -610,6 +610,105 @@ function AnalysisCard({
   )
 }
 
+// ─── Visual Reference (image-search buttons) ──────────────────────────────────
+// Tightly-scoped Google Images links. Every query is fully qualified with the
+// equipment identity the tech already entered and ends with a technical anchor
+// term (wiring diagram / location / troubleshooting / diagnostic) so results
+// skew to schematics and service content. We NEVER host images — buttons only.
+
+const VR_SKIP_LINE = /^(note:|select a unit model|no parts|parts reference|always replace|verify|inspect|see )/i
+const VR_SKIP_NAME = /^(none|n\/a|na|various|tbd|unknown|see above)$/i
+
+// Collapse an ordered list of fields into one space-separated query, skipping
+// blanks and collapsing runs of whitespace.
+function tightQuery(parts: Array<string | null | undefined>): string {
+  return parts
+    .map(p => (p ?? '').trim())
+    .filter(Boolean)
+    .join(' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+// SAFETY CRITICAL: safe=active forces Google SafeSearch ON for every link,
+// regardless of the tech's own browser setting. Never omit it on any button.
+function buildImageSearchUrl(query: string): string {
+  const q = query.replace(/\s+/g, ' ').trim()
+  return `https://www.google.com/search?tbm=isch&safe=active&q=${encodeURIComponent(q)}`
+}
+
+// Clean one parsed line into a tight component name, or null if it's junk.
+function cleanComponentName(raw: string): string | null {
+  let s = raw.trim()
+  if (VR_SKIP_LINE.test(s)) return null
+  // "Part Number: 37-33-6021 — Head Gasket Kit" → keep the text after the dash
+  if (/part\s*number/i.test(s)) s = s.split(/[—–-]/).slice(1).join('-').trim()
+  // Drop trailing detail after an em/en dash or " - " separator
+  s = s.split(/\s[—–]\s|\s-\s|—|–/)[0]
+  // Strip leading bullets / numbering
+  s = s.replace(/^[\s\-•*\d.)]+/, '')
+  // Strip dashed part-number tokens (e.g. 37-33-6021) and bracketed flags
+  s = s.replace(/\b\d{2,}(?:-\d+)+\b/g, '').replace(/\[[^\]]*\]/g, '')
+  // Drop parenthetical asides, collapse whitespace, trim stray punctuation
+  s = s.replace(/\([^)]*\)/g, '').replace(/\s+/g, ' ').replace(/^[\s,;:.\-]+|[\s,;:.\-]+$/g, '').trim()
+  if (s.length < 3 || s.length > 40) return null
+  if (!/[a-zA-Z]/.test(s)) return null
+  if (VR_SKIP_NAME.test(s)) return null
+  return s
+}
+
+// Extract up to 4 specific suspect components from a parsed diagnostic result —
+// preferring the "Parts Needed" list (cleanest names), then the causes section.
+function extractComponents(sections: Array<{ key: SectionKey; content: string }>): string[] {
+  const out: string[] = []
+  const seen = new Set<string>()
+  const push = (name: string | null) => {
+    if (!name || out.length >= 4) return
+    const k = name.toLowerCase()
+    if (seen.has(k)) return
+    seen.add(k)
+    out.push(name)
+  }
+  const fromSection = (key: SectionKey) => {
+    const sec = sections.find(s => s.key === key)
+    if (!sec) return
+    sec.content.split('\n').forEach(line => push(cleanComponentName(line)))
+  }
+  fromSection('PARTS NEEDED')
+  if (out.length === 0) fromSection('MOST LIKELY CAUSES')
+  return out.slice(0, 4)
+}
+
+interface VisualButton { label: string; query: string }
+
+function VisualReference({ buttons }: { buttons: VisualButton[] }) {
+  if (buttons.length === 0) return null
+  return (
+    <div className="rounded-xl p-5" style={{ background: '#0d1820', border: '1px solid #1e3040' }}>
+      <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+        Visual Reference
+      </p>
+      <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.3)' }}>
+        Opens Google Images (SafeSearch on) in a new tab — diagrams &amp; component locations.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {buttons.map((b, i) => (
+          <a
+            key={i}
+            href={buildImageSearchUrl(b.query)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs px-3 py-2 rounded-lg transition-colors"
+            style={{ background: '#162030', border: '1px solid #1e3040', color: 'rgba(255,255,255,0.55)' }}
+          >
+            {b.label}
+          </a>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function HDQuickWrenchPage() {
@@ -1101,6 +1200,41 @@ export default function HDQuickWrenchPage() {
   const parsedSections  = analysis ? parseAnalysis(analysis) : []
   const truckParsedSections = truckAnalysis ? parseAnalysis(truckAnalysis) : []
   const elecParsedSections  = elecAnalysis  ? parseAnalysis(elecAnalysis)  : []
+
+  // ── Visual Reference buttons (image search) ──
+  // Reefer: ${manufacturer} ${unit_model} ${component} wiring diagram location
+  //         + ${manufacturer} ${unit_model} Code ${alarm_code} troubleshooting
+  const reeferComponents = analysis ? extractComponents(parsedSections) : []
+  const reeferVisualButtons: VisualButton[] = [
+    ...reeferComponents.map(c => ({
+      label: `${c} — diagram & location`,
+      query: tightQuery([manufacturer, model, c, 'wiring diagram location']),
+    })),
+    ...(alarmCode.trim()
+      ? [{
+          label: `Code ${alarmCode.trim()} — troubleshooting`,
+          query: tightQuery([manufacturer, model, `Code ${alarmCode.trim()}`, 'troubleshooting']),
+        }]
+      : []),
+  ]
+
+  // Truck: ${year} ${make} ${model} ${engine_brand} ${engine_model} ${component} location wiring diagram
+  //        + ${engine_brand} ${engine_model} SPN ${spn} FMI ${fmi} diagnostic
+  const truckComponents = truckAnalysis ? extractComponents(truckParsedSections) : []
+  const truckCodeLabel = [spn.trim() ? `SPN ${spn.trim()}` : null, fmi.trim() ? `FMI ${fmi.trim()}` : null]
+    .filter(Boolean).join(' ')
+  const truckVisualButtons: VisualButton[] = [
+    ...truckComponents.map(c => ({
+      label: `${c} — diagram & location`,
+      query: tightQuery([vehicleYear, vehicleMake, vehicleModel, truckBrand, engineModel, c, 'location wiring diagram']),
+    })),
+    ...((spn.trim() || fmi.trim())
+      ? [{
+          label: `${truckCodeLabel} — diagnostic`,
+          query: tightQuery([truckBrand, engineModel, spn.trim() ? `SPN ${spn.trim()}` : null, fmi.trim() ? `FMI ${fmi.trim()}` : null, 'diagnostic']),
+        }]
+      : []),
+  ]
 
   return (
     <main className="flex-1 p-4 sm:p-6">
@@ -2105,6 +2239,8 @@ export default function HDQuickWrenchPage() {
                 codeStatus={codeStatus}
               />
             )}
+
+            {analysis !== null && <VisualReference buttons={reeferVisualButtons} />}
           </>
         )}
 
@@ -2360,6 +2496,8 @@ export default function HDQuickWrenchPage() {
                 tkSources={[]}
               />
             )}
+
+            {truckAnalysis !== null && <VisualReference buttons={truckVisualButtons} />}
 
             {truckAnalysis !== null && (
               <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
