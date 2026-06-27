@@ -5,13 +5,13 @@ import Anthropic from '@anthropic-ai/sdk'
 import {
   TRUCK_SYSTEM_PROMPT,
   TRUCK_WEB_SEARCH_DIRECTIVE,
-  TRUCK_DISCLAIMER,
   TRUCK_FALLBACK_ANALYSIS,
 } from '@/lib/hd/truck-diagnostic'
 
-// Dedicated truck-engine DTC route with its own duration budget, independent of
-// the main QuickWrench route (which also serves reefer codes). Vercel Pro caps
-// serverless functions at 60s — web search 30s + fallback 20s = 50s, safely under.
+// Dedicated truck-engine DTC route. Streams the answer back so the connection
+// stays alive while web search runs (a full search can take 10-30s) and the tech
+// sees text as it arrives, instead of buffering the whole response and risking
+// the Vercel function timeout. Capped at 60s (Vercel Pro).
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
 
@@ -124,80 +124,75 @@ export async function POST(req: NextRequest) {
     const client = new Anthropic({ apiKey })
 
     const webSearchTool = { type: 'web_search_20250305' as const, name: 'web_search' as const }
-
-    // Web search first for vehicle-specific results (TSBs, recalls, part numbers).
-    // If it errors, fall back to a standard (no-tools) call. If BOTH error we
-    // return the placeholder — and now also surface the exact reason in _debug.
-    // 30s + 20s = 50s, under the 60s function cap.
-    let msg: Anthropic.Message | undefined
-    let debug = ''
-    let usedWebSearch = false
-
-    try {
-      console.log('[hd/truck-diagnostic] calling web search — tools:', JSON.stringify([webSearchTool]))
-      msg = await client.messages.create(
-        {
-          model:      'claude-sonnet-4-6',
-          max_tokens: 1500,
-          system:     `${TRUCK_WEB_SEARCH_DIRECTIVE}\n\n${TRUCK_SYSTEM_PROMPT}`,
-          tools:      [webSearchTool],
-          messages:   [{ role: 'user', content: truckUserPrompt }],
-        },
-        { timeout: 30_000, maxRetries: 0 },
-      )
-      usedWebSearch = true
-    } catch (searchErr) {
-      debug = summarizeErr('web search call', searchErr)
-      // Fall back to a plain call so the tech still gets an answer.
-      try {
-        console.log('[hd/truck-diagnostic] web search failed — trying standard fallback call')
-        msg = await client.messages.create(
-          {
-            model:      'claude-sonnet-4-6',
-            max_tokens: 1500,
-            system:     `${TRUCK_WEB_SEARCH_DIRECTIVE}\n\n${TRUCK_SYSTEM_PROMPT}`,
-            messages:   [{ role: 'user', content: truckUserPrompt }],
-          },
-          { timeout: 20_000, maxRetries: 0 },
-        )
-      } catch (fallbackErr) {
-        debug = `${debug} || ${summarizeErr('standard fallback call', fallbackErr)}`
-        return NextResponse.json({
-          analysis: TRUCK_FALLBACK_ANALYSIS,
-          tk_sources: [],
-          alarm_pattern: null,
-          disclaimer: TRUCK_DISCLAIMER,
-          _debug: debug,
-        })
-      }
+    const baseParams = {
+      model:      'claude-sonnet-4-6' as const,
+      max_tokens: 1500,
+      system:     `${TRUCK_WEB_SEARCH_DIRECTIVE}\n\n${TRUCK_SYSTEM_PROMPT}`,
+      messages:   [{ role: 'user' as const, content: truckUserPrompt }],
     }
 
-    const analysis = msg.content
-      .filter(b => b.type === 'text')
-      .map(b => (b as Anthropic.TextBlock).text)
-      .join('\n')
-      .trim()
+    const encoder = new TextEncoder()
 
-    // Did the model actually run a server-side web search?
-    const searchUses = msg.content.filter(b => b.type === 'server_tool_use').length
-    console.log('[hd/truck-diagnostic] done — stop_reason:', msg.stop_reason, 'usedWebSearchTool:', usedWebSearch, 'serverToolUses:', searchUses, 'tokens:', JSON.stringify(msg.usage), 'chars:', analysis.length)
-    if (!analysis) console.error('[hd/truck-diagnostic] empty analysis returned — placeholder will show. stop_reason:', msg.stop_reason)
+    // Stream the answer as plain text. Web search first; if it errors before any
+    // text streamed, fall back to a plain (no-tools) call; only emit the
+    // placeholder if everything fails — never leave the tech with a blank box.
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        let emitted = false
+        const emit = (text: string) => {
+          if (text) { emitted = true; controller.enqueue(encoder.encode(text)) }
+        }
 
-    return NextResponse.json({
-      analysis: analysis || TRUCK_FALLBACK_ANALYSIS,
-      tk_sources: [],
-      alarm_pattern: null,
-      disclaimer: TRUCK_DISCLAIMER,
-      ...(analysis ? {} : { _debug: `empty analysis; stop_reason=${msg.stop_reason}; ${debug}` }),
+        // Run one streaming Claude call, piping text deltas to the client.
+        async function pipe(useWebSearch: boolean) {
+          const s = useWebSearch
+            ? client.messages.stream({ ...baseParams, tools: [webSearchTool] }, { maxRetries: 0, timeout: 55_000 })
+            : client.messages.stream(baseParams, { maxRetries: 0, timeout: 45_000 })
+          for await (const event of s) {
+            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+              emit(event.delta.text)
+            }
+          }
+          const final = await s.finalMessage()
+          console.log('[hd/truck-diagnostic] stream done — webSearch:', useWebSearch, 'stop_reason:', final.stop_reason, 'tokens:', JSON.stringify(final.usage))
+        }
+
+        try {
+          await pipe(true)              // web search
+        } catch (searchErr) {
+          summarizeErr('web search stream', searchErr)
+        }
+        // Web search errored OR produced no text — try a plain call (only if
+        // nothing has streamed yet, so we never duplicate output).
+        if (!emitted) {
+          try {
+            await pipe(false)
+          } catch (fallbackErr) {
+            summarizeErr('standard fallback stream', fallbackErr)
+          }
+        }
+        if (!emitted) {
+          console.error('[hd/truck-diagnostic] all calls failed — emitting placeholder')
+          emit(TRUCK_FALLBACK_ANALYSIS)
+        }
+        controller.close()
+      },
+    })
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type':      'text/plain; charset=utf-8',
+        'Cache-Control':     'no-store, no-transform',
+        'X-Accel-Buffering': 'no',
+      },
     })
   } catch (err) {
-    const debug = summarizeErr('truck diagnostic (outer)', err)
-    return NextResponse.json({
-      analysis: TRUCK_FALLBACK_ANALYSIS,
-      tk_sources: [],
-      alarm_pattern: null,
-      disclaimer: TRUCK_DISCLAIMER,
-      _debug: debug,
+    summarizeErr('truck diagnostic (outer)', err)
+    // Pre-stream failure (auth/parse/etc.) — return the placeholder as plain
+    // text so the client renders it the same way as a streamed answer.
+    return new Response(TRUCK_FALLBACK_ANALYSIS, {
+      status: 200,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8' },
     })
   }
 }

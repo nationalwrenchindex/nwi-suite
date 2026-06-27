@@ -179,6 +179,11 @@ const SECTION_DEFS = [
 
 type SectionKey = typeof SECTION_DEFS[number]['key']
 
+// Static legal disclaimer for the truck-engine tab. The diagnostic now streams
+// plain text, so the disclaimer is set client-side on completion (kept in sync
+// with TRUCK_DISCLAIMER in @/lib/hd/truck-diagnostic).
+const TRUCK_DISCLAIMER = 'Truck engine diagnostics reference SAE J1939 standard and OEM documentation. Always verify fault codes using OEM diagnostic software — Cummins Insite, Detroit Diesel DiagnosticLink, or Mercedes-Benz Xentry. Fault code definitions and repair procedures vary by engine software version.'
+
 function parseAnalysis(text: string): Array<{ key: SectionKey; content: string }> {
   const keys = SECTION_DEFS.map(s => s.key)
   const escapedKeys = keys.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
@@ -924,24 +929,35 @@ export default function HDQuickWrenchPage() {
         }),
       })
 
-      const text = await res.text()
-      let json: Record<string, unknown> = {}
-      try {
-        json = JSON.parse(text) as Record<string, unknown>
-      } catch {
-        throw new Error(`Server returned an unexpected response (status ${res.status}). Please try again.`)
+      // Auth / validation failures come back as JSON, not a stream.
+      if (!res.ok || !res.body) {
+        let msg = `Request failed (${res.status})`
+        try {
+          const j = await res.json() as { error?: unknown }
+          if (typeof j.error === 'string') msg = j.error
+        } catch {}
+        throw new Error(msg)
       }
 
-      if (!res.ok) {
-        throw new Error(typeof json.error === 'string' ? json.error : `Request failed (${res.status})`)
+      // Stream the diagnostic text in as it arrives.
+      const reader  = res.body.getReader()
+      const decoder = new TextDecoder()
+      let acc = ''
+      setTruckLoadingMsg('Searching service data…')
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        acc += decoder.decode(value, { stream: true })
+        setTruckAnalysis(acc)   // live update — card renders and grows
       }
+      acc += decoder.decode()   // flush any trailing bytes
+      setTruckAnalysis(acc)
+      setTruckDisclaimer(TRUCK_DISCLAIMER)
 
-      const truckAnalysisResult = typeof json.analysis === 'string' ? json.analysis : null
-      setTruckAnalysis(truckAnalysisResult)
-      if (truckAnalysisResult) {
+      if (acc.trim()) {
         try {
           localStorage.setItem('hd_last_quickwrench_result', JSON.stringify({
-            analysis:      truckAnalysisResult,
+            analysis:      acc,
             timestamp:     new Date().toISOString(),
             manufacturer:  truckBrand,
             model:         `${truckBrand} ${engineModel}`,
@@ -949,7 +965,6 @@ export default function HDQuickWrenchPage() {
           }))
         } catch {}
       }
-      setTruckDisclaimer(typeof json.disclaimer === 'string' ? json.disclaimer : null)
     } catch (err) {
       setTruckError(err instanceof Error ? err.message : 'Something went wrong. Please try again.')
     } finally {
