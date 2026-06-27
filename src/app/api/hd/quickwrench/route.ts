@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/service'
 import { checkHDAccess } from '@/lib/hd-access'
 import Anthropic from '@anthropic-ai/sdk'
 import { type TKSeverity, type TKAlarmEntry, TK_ALARM_CODES, TK_DSR_ALARM_CODES, TK_DISCLAIMER, CARRIER_ALARM_CODES, CARRIER_PRETRIP_CODES } from '@/lib/hd/alarm-codes'
@@ -1091,13 +1092,55 @@ export async function POST(req: NextRequest) {
   // entirely (faster, and immune to AI/web-search failure).
   const useVerifiedOnly = !!verifiedEntry && allCodes.length === 1
 
+  const disclaimer = manufacturer === 'Carrier Transicold' ? CARRIER_DISCLAIMER : TK_DISCLAIMER
+
+  // ── Response cache (alarm-code keyed) ──────────────────────────────────────
+  // Cache only when the answer is a pure function of (manufacturer, model,
+  // single alarm code): no free-text symptom, no multi-alarm query, and no
+  // verified DB entry (those are authoritative and already instant). Keeping
+  // the key faithful to the inputs means a hit can never return a mismatched
+  // answer.
+  const primaryAlarm = alarmCode?.trim() ?? ''
+  const unitModel    = model?.trim() ?? ''
+  const cacheable    = primaryAlarm.length > 0 && allCodes.length === 1 && !(symptom?.trim()) && !useVerifiedOnly
+  const cacheKey     = unitModel
+    ? `reefer-${manufacturer}-${unitModel}-${primaryAlarm}`
+    : `reefer-${manufacturer}-${primaryAlarm}`
+  const cacheSource  = unitModel ? 'ai_web_search' : 'ai_web_search_nomodel'
+
+  if (cacheable) {
+    const { data: cached } = await supabase
+      .from('hd_cached_diagnostics')
+      .select('result_html')
+      .eq('cache_key', cacheKey)
+      .maybeSingle()
+    if (cached?.result_html) {
+      // Hit — return cached result with NO API call. Increment the hit counter
+      // atomically (single UPDATE) via the service client (no user write policy).
+      try {
+        await createServiceClient().rpc('increment_hd_cache_hit', { p_cache_key: cacheKey })
+      } catch (e) {
+        console.error('[hd/quickwrench] cache hit increment failed', e)
+      }
+      const hitStatus = /could not find alarm code|could not be verified/i.test(cached.result_html)
+        ? 'unverified'
+        : alarmSources.length > 0 ? 'verified' : 'ai'
+      return NextResponse.json({
+        analysis:      cached.result_html,
+        tk_sources:    alarmSources,
+        alarm_pattern: alarmPattern,
+        disclaimer,
+        code_status:   hitStatus,
+        cached:        true,
+      })
+    }
+  }
+
   const userPrompt = buildUserPrompt({
     manufacturer, model, unitType, allCodes,
     symptom, serialNumber: body.serialNumber,
     alarmSources, alarmPattern,
   })
-
-  const disclaimer = manufacturer === 'Carrier Transicold' ? CARRIER_DISCLAIMER : TK_DISCLAIMER
 
   // Alarm → parts category lookup (only for Thermo King — we have TK code→category mapping)
   const partsCategories = manufacturer === 'Thermo King' ? categoriesToFetchForCodes(allCodes) : []
@@ -1254,6 +1297,24 @@ Before contacting your dealer please verify:
 • Some codes are model-specific — confirm your unit model and controller type
 
 If the code is confirmed correct and you cannot find information — contact your TK or Carrier dealer with your unit serial number and the exact code displayed.`
+  }
+
+  // Cache genuine AI diagnostics so repeat lookups skip the web-search call.
+  // Never cache the placeholder, an unverified "could not find" result, or a
+  // verified-DB path (cacheable already excludes the verified path).
+  if (cacheable && aiUsable && codeStatus !== 'unverified' && analysis !== FALLBACK_ANALYSIS) {
+    try {
+      await createServiceClient().from('hd_cached_diagnostics').upsert({
+        cache_key:    cacheKey,
+        manufacturer: dbManufacturer ?? manufacturer,
+        alarm_code:   primaryAlarm,
+        unit_model:   unitModel || null,
+        result_html:  analysis,
+        source:       cacheSource,
+      }, { onConflict: 'cache_key' })
+    } catch (e) {
+      console.error('[hd/quickwrench] cache write failed', e)
+    }
   }
 
   return NextResponse.json({

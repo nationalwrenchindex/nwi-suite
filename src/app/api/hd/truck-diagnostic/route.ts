@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { createServiceClient } from '@/lib/supabase/service'
 import { checkHDAccess } from '@/lib/hd-access'
 import Anthropic from '@anthropic-ai/sdk'
 import {
@@ -121,6 +122,41 @@ export async function POST(req: NextRequest) {
     if (searchQuery)  parts.push(`Run this web search first: "${searchQuery} diagnostic repair procedure"`)
     const truckUserPrompt = parts.join('\n')
 
+    // ── Response cache (engine + fault-code keyed) ──────────────────────────
+    // The key is faithful only when the answer depends solely on engine brand +
+    // model + SPN/FMI. Skip the cache for vehicle-specific or free-text-symptom
+    // queries — their answers vary beyond the key, so a hit could otherwise
+    // return a wrong-vehicle result.
+    const spnKey = spn?.trim() ?? ''
+    const fmiKey = fmi?.trim() ?? ''
+    const vehicleSpecific = !!(vehicleYear?.trim() || vehicleMake?.trim() || vehicleModel?.trim() || vehicleEngine?.trim())
+    const cacheable = (spnKey.length > 0 || fmiKey.length > 0) && !(truckSymptom?.trim()) && !vehicleSpecific
+    const cacheKey  = `truck-${truckBrand}-${engineModel}-${spnKey}-${fmiKey}`
+
+    if (cacheable) {
+      const { data: cached } = await supabase
+        .from('hd_cached_diagnostics')
+        .select('result_html')
+        .eq('cache_key', cacheKey)
+        .maybeSingle()
+      if (cached?.result_html) {
+        // Hit — return the cached result with NO API call. Atomic single-UPDATE
+        // hit counter via the service client (no user write policy).
+        try {
+          await createServiceClient().rpc('increment_hd_cache_hit', { p_cache_key: cacheKey })
+        } catch (e) {
+          console.error('[hd/truck-diagnostic] cache hit increment failed', e)
+        }
+        return new Response(cached.result_html, {
+          headers: {
+            'Content-Type':      'text/plain; charset=utf-8',
+            'Cache-Control':     'no-store, no-transform',
+            'X-Accel-Buffering': 'no',
+          },
+        })
+      }
+    }
+
     const client = new Anthropic({ apiKey })
 
     const webSearchTool = { type: 'web_search_20250305' as const, name: 'web_search' as const }
@@ -139,8 +175,9 @@ export async function POST(req: NextRequest) {
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         let emitted = false
+        let full = ''
         const emit = (text: string) => {
-          if (text) { emitted = true; controller.enqueue(encoder.encode(text)) }
+          if (text) { emitted = true; full += text; controller.enqueue(encoder.encode(text)) }
         }
 
         // Run one streaming Claude call, piping text deltas to the client.
@@ -171,10 +208,31 @@ export async function POST(req: NextRequest) {
             summarizeErr('standard fallback stream', fallbackErr)
           }
         }
+        // Capture whether genuine AI text streamed BEFORE the placeholder branch,
+        // so the canned TRUCK_FALLBACK_ANALYSIS is never written to the cache.
+        const producedReal = emitted
         if (!emitted) {
           console.error('[hd/truck-diagnostic] all calls failed — emitting placeholder')
           emit(TRUCK_FALLBACK_ANALYSIS)
         }
+
+        // Cache only genuine AI results — never the placeholder.
+        if (cacheable && producedReal && full.trim() && full !== TRUCK_FALLBACK_ANALYSIS) {
+          try {
+            await createServiceClient().from('hd_cached_diagnostics').upsert({
+              cache_key:    cacheKey,
+              engine_brand: truckBrand,
+              engine_model: engineModel,
+              spn:          spnKey || null,
+              fmi:          fmiKey || null,
+              result_html:  full,
+              source:       'ai_web_search',
+            }, { onConflict: 'cache_key' })
+          } catch (e) {
+            console.error('[hd/truck-diagnostic] cache write failed', e)
+          }
+        }
+
         controller.close()
       },
     })
