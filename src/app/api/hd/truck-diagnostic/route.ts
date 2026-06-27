@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
 
     const webSearchTool = { type: 'web_search_20250305' as const, name: 'web_search' as const }
     const baseParams = {
-      model:      'claude-sonnet-4-6' as const,
+      model:      'claude-haiku-4-5-20251001' as const,
       max_tokens: 1500,
       system:     `${TRUCK_WEB_SEARCH_DIRECTIVE}\n\n${TRUCK_SYSTEM_PROMPT}`,
       messages:   [{ role: 'user' as const, content: truckUserPrompt }],

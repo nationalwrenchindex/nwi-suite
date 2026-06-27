@@ -995,7 +995,7 @@ export async function POST(req: NextRequest) {
     try {
       const client = new Anthropic({ apiKey })
       const msg = await client.messages.create({
-        model:      'claude-sonnet-4-6',
+        model:      'claude-haiku-4-5-20251001',
         max_tokens: 1500,
         system:     ELECTRICAL_SYSTEM_PROMPT,
         messages:   [{ role: 'user', content: userPrompt }],
@@ -1119,7 +1119,7 @@ export async function POST(req: NextRequest) {
       try {
         return await client.messages.create(
           {
-            model:      'claude-sonnet-4-6',
+            model:      'claude-haiku-4-5-20251001',
             max_tokens: 1500,
             system:     `${WEB_SEARCH_DIRECTIVE}\n\n${SYSTEM_PROMPT}`,
             tools: [
@@ -1136,7 +1136,7 @@ export async function POST(req: NextRequest) {
         console.error('[hd/quickwrench] web search call failed — falling back to standard call', err)
         return await client.messages.create(
           {
-            model:      'claude-sonnet-4-6',
+            model:      'claude-haiku-4-5-20251001',
             max_tokens: 1500,
             system:     SYSTEM_PROMPT,
             messages:   [{ role: 'user', content: userPrompt }],
