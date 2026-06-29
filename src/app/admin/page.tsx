@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import AppNav from '@/components/layout/AppNav'
 import CompAccountForm from '@/components/admin/CompAccountForm'
+import CachedDiagnosticsManager, { type CachedEntry } from '@/components/admin/CachedDiagnosticsManager'
 import Link from 'next/link'
 import { PLANS, TIER_MODULES } from '@/lib/stripe-plans'
 import type { PlanTier } from '@/lib/stripe-plans'
@@ -167,6 +168,15 @@ export default async function AdminPage() {
   if (!user || user.id !== FOUNDER_ID) return notFound()
 
   const { profiles, subscriptions, foremanCount, waitlistCount } = await getAdminData()
+
+  // Cached diagnostics — fetched fresh (not cached) so corrections/deletes show
+  // immediately. Founder gate above already protects this read.
+  const { data: cachedRaw } = await createServiceClient()
+    .from('hd_cached_diagnostics')
+    .select('id, cache_key, manufacturer, alarm_code, unit_model, engine_brand, engine_model, spn, fmi, result_html, source, search_count, created_at, last_accessed')
+    .order('search_count', { ascending: false })
+    .limit(500)
+  const cachedEntries = (cachedRaw ?? []) as CachedEntry[]
 
   const subMap = new Map(subscriptions.map(s => [s.user_id, s]))
 
@@ -343,6 +353,9 @@ export default async function AdminPage() {
         <section className="mb-10">
           <CompAccountForm />
         </section>
+
+        {/* ── Cached diagnostics review/correct ──────────────────────────────── */}
+        <CachedDiagnosticsManager entries={cachedEntries} />
 
         {/* ── Abandoned carts table ─────────────────────────────────────────── */}
         <section>
