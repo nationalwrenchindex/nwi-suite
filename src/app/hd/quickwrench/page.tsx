@@ -441,6 +441,60 @@ function ManifoldGauge({
   )
 }
 
+// ─── Safety-first hazard detection ────────────────────────────────────────────
+// SAFETY-CRITICAL: hazard warnings must render at the TOP of every result —
+// fresh OR cached — before anything else. We detect the hazard categories below
+// from the diagnostic text; electrical hazards render NWI orange, all others
+// bright red. A tech's life depends on seeing this before they touch anything.
+
+const HAZARD_PATTERNS = {
+  highVoltageAC:     /\bVAC\b|\b3[\s-]?phase\b|three[\s-]?phase|\b230\s?V\b|\b460\s?V\b|high voltage|\bAC power\b/i,
+  refrigerant:       /refrigerant recovery|recover(?:ing|y)?\s+refrigerant|EPA\s?608|recovery required|open(?:ing)?\s+the\s+system|refrigerant line/i,
+  highPressure:      /high pressure|discharge pressure|refrigerant pressure|pressurized/i,
+  runningEngine:     /engine running|running engine|live engine|rotating component|engine is running|with the engine running/i,
+  generalElectrical: /shore power|contactor|energized|\b3[\s-]?phase\b|high voltage/i,
+}
+
+// Returns whether ANY hazard is present, and whether it is an electrical hazard
+// (which controls the alert color: orange for electrical, red otherwise).
+function detectHazards(text: string): { any: boolean; electrical: boolean } {
+  const electrical = HAZARD_PATTERNS.highVoltageAC.test(text) || HAZARD_PATTERNS.generalElectrical.test(text)
+  const any =
+    electrical ||
+    HAZARD_PATTERNS.refrigerant.test(text) ||
+    HAZARD_PATTERNS.highPressure.test(text) ||
+    HAZARD_PATTERNS.runningEngine.test(text)
+  return { any, electrical }
+}
+
+const GENERIC_SAFETY = 'THIS REPAIR INVOLVES HAZARDOUS CONDITIONS. Review all safety precautions before beginning work.'
+
+// High-visibility alert block — always rendered at the very top of a result.
+function SafetyAlert({ content, electrical }: { content: string; electrical: boolean }) {
+  const bg = electrical ? '#FF6600' : '#CC0000'
+  const lines = content
+    .split('\n')
+    .map(l => l.replace(/^[-•⚠!\s]+/, '').trim())
+    .filter(Boolean)
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ border: `3px solid ${bg}` }} role="alert">
+      <div className="px-5 py-4 flex items-start gap-4" style={{ background: bg }}>
+        <span aria-hidden="true" className="text-white font-bold flex-shrink-0 leading-none" style={{ fontSize: '2.5rem' }}>⚠</span>
+        <div className="flex-1">
+          <p className="font-condensed font-bold text-white tracking-widest uppercase text-lg mb-2">
+            Safety Warning — Read First
+          </p>
+          <div className="space-y-1.5">
+            {lines.map((l, i) => (
+              <p key={i} className="text-white font-bold text-base leading-snug">{l}</p>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Shared analysis card ─────────────────────────────────────────────────────
 
 function AnalysisCard({
@@ -460,8 +514,21 @@ function AnalysisCard({
   tkSources: TKSource[]
   codeStatus?: 'verified' | 'ai' | 'unverified'
 }) {
+  // SAFETY-FIRST: pull any SAFETY WARNINGS section out of the normal flow and
+  // render it at the very top; detect hazard categories from the full text to
+  // pick the alert color and to generate a generic warning when hazards are
+  // present but no explicit safety section exists. Applies to fresh AND cached
+  // results (both render through this card), so a cached result with a buried
+  // safety warning shows the same top-of-page alert as a fresh one.
+  const safetySection = parsedSections.find(s => s.key === 'SAFETY WARNINGS')
+  const bodySections  = parsedSections.filter(s => s.key !== 'SAFETY WARNINGS')
+  const hazards       = detectHazards(analysis)
+  const safetyText    = safetySection?.content ?? (hazards.any ? GENERIC_SAFETY : null)
+
   return (
     <div className="space-y-4">
+      {safetyText && <SafetyAlert content={safetyText} electrical={hazards.electrical} />}
+
       {alarmPattern && (
         <div
           className="rounded-xl overflow-hidden"
@@ -575,8 +642,8 @@ function AnalysisCard({
               AI ASSISTED · VERIFY BEFORE RELYING
             </span>
           )}
-          {parsedSections.length > 0 ? (
-            parsedSections.map(({ key, content }) => {
+          {bodySections.length > 0 ? (
+            bodySections.map(({ key, content }) => {
               const def = SECTION_DEFS.find(s => s.key === key)!
               return (
                 <div
@@ -591,11 +658,11 @@ function AnalysisCard({
                 </div>
               )
             })
-          ) : (
+          ) : parsedSections.length === 0 ? (
             <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.8)' }}>
               {analysis}
             </p>
-          )}
+          ) : null}
 
           {disclaimer && (
             <div className="rounded-lg p-3" style={{ background: '#0d1820', border: '1px solid #1e3040' }}>
