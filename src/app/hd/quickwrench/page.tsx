@@ -469,20 +469,71 @@ function detectHazards(text: string): { any: boolean; electrical: boolean } {
 
 const GENERIC_SAFETY = 'THIS REPAIR INVOLVES HAZARDOUS CONDITIONS. Review all safety precautions before beginning work.'
 
+// Procedure-aware electrical classification of a SAFETY WARNINGS section. The
+// danger this fixes: a live electrical diagnostic (motor/voltage/contactor
+// checks) needs the unit RUNNING, so a blanket "turn it off" warning is
+// contradictory. Live testing → ORANGE; unit-off repair → RED; a result that
+// contains BOTH phases renders the live (orange) block first and the repair
+// (red) block second — never a single generic shutdown warning.
+interface SafetyBlock { text: string; label: string; color: string }
+
+const ORANGE_HAZARD = '#FF6600'
+const RED_HAZARD    = '#CC0000'
+const LIVE_LABEL    = '⚠ LIVE ELECTRICAL HAZARD — READ FIRST'
+const OFF_LABEL     = '⚠ ELECTRICAL HAZARD — UNIT MUST BE OFF'
+const GENERIC_ELEC_LABEL = '⚠ ELECTRICAL HAZARD — READ FIRST'
+const GENERIC_LABEL      = '⚠ SAFETY WARNING — READ FIRST'
+
+// "unit to be running" / "live electrical" / "insulated test leads" → live
+const SAFETY_LIVE_RE = /unit to be running|live electrical|insulated test leads/i
+// "turn off" / "OFF switch" / "lockout" → unit must be off
+const SAFETY_OFF_RE  = /turn off|off switch|lockout/i
+
+function classifySafety(content: string): SafetyBlock[] {
+  // Type C — explicit two-phase content: split on the REPAIR PHASE label so the
+  // live (diagnostic) phase renders ORANGE first and the repair phase renders
+  // RED second. Splitting on the labels keeps the two from contradicting.
+  const repairIdx = content.search(/⚠?\s*REPAIR PHASE/i)
+  if (/DIAGNOSTIC PHASE/i.test(content) && repairIdx >= 0) {
+    const livePart = content.slice(0, repairIdx).trim()
+    const offPart  = content.slice(repairIdx).trim()
+    const blocks: SafetyBlock[] = []
+    if (livePart) blocks.push({ text: livePart, label: LIVE_LABEL, color: ORANGE_HAZARD })
+    if (offPart)  blocks.push({ text: offPart,  label: OFF_LABEL,  color: RED_HAZARD })
+    if (blocks.length) return blocks
+  }
+
+  const isLive = SAFETY_LIVE_RE.test(content)
+  const isOff  = SAFETY_OFF_RE.test(content)
+
+  // Both keyword families present without explicit phase labels — still lead
+  // with the live (orange) warning, then the unit-off (red) warning.
+  if (isLive && isOff) {
+    return [
+      { text: content, label: LIVE_LABEL, color: ORANGE_HAZARD },
+      { text: content, label: OFF_LABEL,  color: RED_HAZARD },
+    ]
+  }
+  if (isLive) return [{ text: content, label: LIVE_LABEL, color: ORANGE_HAZARD }]
+  if (isOff)  return [{ text: content, label: OFF_LABEL,  color: RED_HAZARD }]
+
+  // Non-electrical hazard (refrigerant / pressure / running engine) or generic.
+  return [{ text: content, label: GENERIC_LABEL, color: RED_HAZARD }]
+}
+
 // High-visibility alert block — always rendered at the very top of a result.
-function SafetyAlert({ content, electrical }: { content: string; electrical: boolean }) {
-  const bg = electrical ? '#FF6600' : '#CC0000'
+function SafetyAlert({ content, color, label }: { content: string; color: string; label: string }) {
   const lines = content
     .split('\n')
     .map(l => l.replace(/^[-•⚠!\s]+/, '').trim())
     .filter(Boolean)
   return (
-    <div className="rounded-xl overflow-hidden" style={{ border: `3px solid ${bg}` }} role="alert">
-      <div className="px-5 py-4 flex items-start gap-4" style={{ background: bg }}>
+    <div className="rounded-xl overflow-hidden" style={{ border: `3px solid ${color}` }} role="alert">
+      <div className="px-5 py-4 flex items-start gap-4" style={{ background: color }}>
         <span aria-hidden="true" className="text-white font-bold flex-shrink-0 leading-none" style={{ fontSize: '2.5rem' }}>⚠</span>
         <div className="flex-1">
           <p className="font-condensed font-bold text-white tracking-widest uppercase text-lg mb-2">
-            Safety Warning — Read First
+            {label}
           </p>
           <div className="space-y-1.5">
             {lines.map((l, i) => (
@@ -523,11 +574,24 @@ function AnalysisCard({
   const safetySection = parsedSections.find(s => s.key === 'SAFETY WARNINGS')
   const bodySections  = parsedSections.filter(s => s.key !== 'SAFETY WARNINGS')
   const hazards       = detectHazards(analysis)
-  const safetyText    = safetySection?.content ?? (hazards.any ? GENERIC_SAFETY : null)
+  // Procedure-aware safety blocks: classify the extracted SAFETY WARNINGS
+  // section (live → orange, unit-off → red, both phases → orange then red);
+  // otherwise show a generic warning when hazard keywords are detected.
+  const safetyBlocks: SafetyBlock[] = safetySection?.content
+    ? classifySafety(safetySection.content)
+    : hazards.any
+      ? [{
+          text:  GENERIC_SAFETY,
+          label: hazards.electrical ? GENERIC_ELEC_LABEL : GENERIC_LABEL,
+          color: hazards.electrical ? ORANGE_HAZARD : RED_HAZARD,
+        }]
+      : []
 
   return (
     <div className="space-y-4">
-      {safetyText && <SafetyAlert content={safetyText} electrical={hazards.electrical} />}
+      {safetyBlocks.map((b, i) => (
+        <SafetyAlert key={i} content={b.text} color={b.color} label={b.label} />
+      ))}
 
       {alarmPattern && (
         <div
