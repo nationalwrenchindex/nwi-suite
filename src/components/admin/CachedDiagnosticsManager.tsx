@@ -17,6 +17,10 @@ export interface CachedEntry {
   search_count:  number | null
   created_at:    string
   last_accessed: string | null
+  needs_review:  boolean | null
+  reviewed_at:   string | null
+  reviewed_by:   string | null
+  citations:     string[] | null
 }
 
 type SortKey = 'most_searched' | 'recent_accessed' | 'recent_cached'
@@ -121,15 +125,19 @@ export default function CachedDiagnosticsManager({ entries }: { entries: CachedE
   const [promoteEntry, setPromoteEntry] = useState<CachedEntry | null>(null)
   const [promoteForm,  setPromoteForm]  = useState<PromoteForm | null>(null)
 
+  // "Needs Review" tab — Gemini-generated entries flagged as hazardous.
+  const [reviewOnly, setReviewOnly] = useState(false)
+  const needsReviewCount = rows.filter(r => r.needs_review).length
+
   const sorted = useMemo(() => {
-    const copy = [...rows]
+    const copy = rows.filter(r => (reviewOnly ? r.needs_review : true))
     copy.sort((a, b) => {
       if (sort === 'most_searched')   return (b.search_count ?? 0) - (a.search_count ?? 0)
       if (sort === 'recent_accessed') return (b.last_accessed ?? '').localeCompare(a.last_accessed ?? '')
       return (b.created_at ?? '').localeCompare(a.created_at ?? '')
     })
     return copy
-  }, [rows, sort])
+  }, [rows, sort, reviewOnly])
 
   async function call(payload: Record<string, unknown>): Promise<boolean> {
     setError(null); setNotice(null)
@@ -158,7 +166,9 @@ export default function CachedDiagnosticsManager({ entries }: { entries: CachedE
     setBusyId(null)
     if (ok) {
       const stamp = new Date().toISOString()
-      setRows(rs => rs.map(r => r.id === editEntry.id ? { ...r, result_html: editText, last_accessed: stamp } : r))
+      setRows(rs => rs.map(r => r.id === editEntry.id
+        ? { ...r, result_html: editText, last_accessed: stamp, needs_review: false, reviewed_at: stamp }
+        : r))
       setNotice('Saved corrected result.')
       setEditEntry(null)
     }
@@ -222,6 +232,18 @@ export default function CachedDiagnosticsManager({ entries }: { entries: CachedE
         {sortBtn('most_searched',   'Most Searched')}
         {sortBtn('recent_cached',   'Recently Cached')}
         {sortBtn('recent_accessed', 'Recently Accessed')}
+        <span className="mx-1 h-5 w-px bg-dark-border" />
+        <button
+          type="button"
+          onClick={() => setReviewOnly(v => !v)}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            reviewOnly
+              ? 'bg-yellow-500/20 border border-yellow-500/50 text-yellow-300'
+              : 'bg-dark-card border border-dark-border text-white/50 hover:text-white/80'
+          }`}
+        >
+          ⚠ Needs Review ({needsReviewCount})
+        </button>
       </div>
 
       {error  && <div className="mb-3 rounded-lg px-4 py-2.5 text-sm bg-red-500/10 border border-red-500/30 text-red-400">{error}</div>}
@@ -243,7 +265,14 @@ export default function CachedDiagnosticsManager({ entries }: { entries: CachedE
           <tbody className="divide-y divide-dark-border/50">
             {sorted.map(e => (
               <tr key={e.id} className="hover:bg-dark-lighter/40 transition-colors">
-                <td className={td}>{identity(e)}</td>
+                <td className={td}>
+                  {identity(e)}
+                  {e.needs_review && (
+                    <span className="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-yellow-500/20 text-yellow-300 whitespace-nowrap">
+                      ⚠ NEEDS REVIEW
+                    </span>
+                  )}
+                </td>
                 <td className={td}>{codeLabel(e)}</td>
                 <td className={`${td} text-white/50`}>{e.source ?? '—'}</td>
                 <td className={`${td} tabular-nums`}>{e.search_count ?? 0}</td>

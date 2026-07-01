@@ -8,6 +8,9 @@ import {
   TRUCK_WEB_SEARCH_DIRECTIVE,
   TRUCK_FALLBACK_ANALYSIS,
 } from '@/lib/hd/truck-diagnostic'
+import { generateDiagnostic } from '@/lib/gemini/client'
+import { formatDiagnostic } from '@/lib/gemini/formatter'
+import { detectsHazard } from '@/lib/gemini/hazard'
 
 // Dedicated truck-engine DTC route. Streams the answer back so the connection
 // stays alive while web search runs (a full search can take 10-30s) and the tech
@@ -157,66 +160,76 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const client = new Anthropic({ apiKey })
-
-    const webSearchTool = { type: 'web_search_20250305' as const, name: 'web_search' as const }
-    const baseParams = {
-      model:      'claude-haiku-4-5-20251001' as const,
-      max_tokens: 1500,
-      system:     `${TRUCK_WEB_SEARCH_DIRECTIVE}\n\n${TRUCK_SYSTEM_PROMPT}`,
-      messages:   [{ role: 'user' as const, content: truckUserPrompt }],
-    }
-
+    const client  = new Anthropic({ apiKey })
     const encoder = new TextEncoder()
 
-    // Stream the answer as plain text. Web search first; if it errors before any
-    // text streamed, fall back to a plain (no-tools) call; only emit the
-    // placeholder if everything fails — never leave the tech with a blank box.
+    // Primary path: Gemini 2.5 Flash (grounded search) generates, Haiku formats,
+    // then the formatted result is streamed. Gemini/Haiku are not incremental,
+    // so the answer is emitted once it's ready — the response is still a stream
+    // so the connection stays alive during generation. Plain Haiku (no
+    // grounding) is the fallback; the canned placeholder is the last resort and
+    // is never cached.
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         let emitted = false
         let full = ''
+        let citations: string[] = []
+        let usedSource = 'gemini_web_search'
         const emit = (text: string) => {
           if (text) { emitted = true; full += text; controller.enqueue(encoder.encode(text)) }
         }
 
-        // Run one streaming Claude call, piping text deltas to the client.
-        async function pipe(useWebSearch: boolean) {
-          const s = useWebSearch
-            ? client.messages.stream({ ...baseParams, tools: [webSearchTool] }, { maxRetries: 0, timeout: 55_000 })
-            : client.messages.stream(baseParams, { maxRetries: 0, timeout: 45_000 })
-          for await (const event of s) {
-            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-              emit(event.delta.text)
-            }
+        // 1. Gemini grounded generation + Haiku formatting.
+        try {
+          const { text: rawText, citations: cites } = await generateDiagnostic(
+            truckUserPrompt,
+            `${TRUCK_WEB_SEARCH_DIRECTIVE}\n\n${TRUCK_SYSTEM_PROMPT}`,
+          )
+          if (rawText.trim()) {
+            const formatted = await formatDiagnostic(rawText, {
+              engineBrand: truckBrand, engineModel, spn: spnKey, fmi: fmiKey,
+            })
+            citations = cites
+            emit(formatted.trim())
           }
-          const final = await s.finalMessage()
-          console.log('[hd/truck-diagnostic] stream done — webSearch:', useWebSearch, 'stop_reason:', final.stop_reason, 'tokens:', JSON.stringify(final.usage))
+        } catch (gemErr) {
+          summarizeErr('gemini diagnostic', gemErr)
         }
 
-        try {
-          await pipe(true)              // web search
-        } catch (searchErr) {
-          summarizeErr('web search stream', searchErr)
-        }
-        // Web search errored OR produced no text — try a plain call (only if
-        // nothing has streamed yet, so we never duplicate output).
+        // 2. Fallback: plain Haiku (no grounding) if Gemini produced nothing.
         if (!emitted) {
+          usedSource = 'haiku_fallback'
           try {
-            await pipe(false)
+            const msg = await client.messages.create(
+              {
+                model:      'claude-haiku-4-5-20251001',
+                max_tokens: 1500,
+                system:     TRUCK_SYSTEM_PROMPT,
+                messages:   [{ role: 'user', content: truckUserPrompt }],
+              },
+              { maxRetries: 0, timeout: 45_000 },
+            )
+            const t = msg.content
+              .filter(b => b.type === 'text')
+              .map(b => (b as Anthropic.TextBlock).text)
+              .join('\n')
+              .trim()
+            emit(t)
           } catch (fallbackErr) {
-            summarizeErr('standard fallback stream', fallbackErr)
+            summarizeErr('haiku fallback', fallbackErr)
           }
         }
-        // Capture whether genuine AI text streamed BEFORE the placeholder branch,
-        // so the canned TRUCK_FALLBACK_ANALYSIS is never written to the cache.
+
+        // Capture whether genuine AI text was produced BEFORE the placeholder
+        // branch, so the canned TRUCK_FALLBACK_ANALYSIS is never cached.
         const producedReal = emitted
         if (!emitted) {
           console.error('[hd/truck-diagnostic] all calls failed — emitting placeholder')
           emit(TRUCK_FALLBACK_ANALYSIS)
         }
 
-        // Cache only genuine AI results — never the placeholder.
+        // Cache genuine AI results only — never the placeholder. Flag hazardous
+        // electrical content for founder review.
         if (cacheable && producedReal && full.trim() && full !== TRUCK_FALLBACK_ANALYSIS) {
           try {
             await createServiceClient().from('hd_cached_diagnostics').upsert({
@@ -226,7 +239,9 @@ export async function POST(req: NextRequest) {
               spn:          spnKey || null,
               fmi:          fmiKey || null,
               result_html:  full,
-              source:       'ai_web_search',
+              source:       usedSource,
+              citations,
+              needs_review: detectsHazard(full),
             }, { onConflict: 'cache_key' })
           } catch (e) {
             console.error('[hd/truck-diagnostic] cache write failed', e)

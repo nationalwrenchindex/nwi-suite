@@ -173,7 +173,7 @@ export default async function AdminPage() {
   // immediately. Founder gate above already protects this read.
   const { data: cachedRaw } = await createServiceClient()
     .from('hd_cached_diagnostics')
-    .select('id, cache_key, manufacturer, alarm_code, unit_model, engine_brand, engine_model, spn, fmi, result_html, source, search_count, created_at, last_accessed')
+    .select('id, cache_key, manufacturer, alarm_code, unit_model, engine_brand, engine_model, spn, fmi, result_html, source, search_count, created_at, last_accessed, needs_review, reviewed_at, reviewed_by, citations')
     .order('search_count', { ascending: false })
     .limit(500)
   const cachedEntries = (cachedRaw ?? []) as CachedEntry[]

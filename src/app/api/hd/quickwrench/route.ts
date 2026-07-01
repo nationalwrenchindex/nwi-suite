@@ -3,6 +3,9 @@ import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { checkHDAccess } from '@/lib/hd-access'
 import Anthropic from '@anthropic-ai/sdk'
+import { generateDiagnostic } from '@/lib/gemini/client'
+import { formatDiagnostic } from '@/lib/gemini/formatter'
+import { detectsHazard } from '@/lib/gemini/hazard'
 import { type TKSeverity, type TKAlarmEntry, TK_ALARM_CODES, TK_DSR_ALARM_CODES, TK_DISCLAIMER, CARRIER_ALARM_CODES, CARRIER_PRETRIP_CODES } from '@/lib/hd/alarm-codes'
 
 // ─── Alarm → Parts Category Mapping ──────────────────────────────────────────
@@ -1153,12 +1156,13 @@ export async function POST(req: NextRequest) {
   if (cacheable) {
     const { data: cached } = await supabase
       .from('hd_cached_diagnostics')
-      .select('result_html')
+      .select('result_html, citations')
       .eq('cache_key', cacheKey)
       .maybeSingle()
     if (cached?.result_html) {
-      // Hit — return cached result with NO API call. Increment the hit counter
-      // atomically (single UPDATE) via the service client (no user write policy).
+      // Hit — return cached result with NO API call (never touches Gemini).
+      // Increment the hit counter atomically (single UPDATE) via the service
+      // client (no user write policy).
       try {
         await createServiceClient().rpc('increment_hd_cache_hit', { p_cache_key: cacheKey })
       } catch (e) {
@@ -1173,6 +1177,7 @@ export async function POST(req: NextRequest) {
         alarm_pattern: alarmPattern,
         disclaimer,
         code_status:   hitStatus,
+        citations:     cached.citations ?? [],
         cached:        true,
       })
     }
@@ -1189,37 +1194,33 @@ export async function POST(req: NextRequest) {
 
   // Run AI call + parts DB query in parallel
   const [aiResult, partsResult] = await Promise.allSettled([
-    (async () => {
-      // Verified DB content will be used — no need to call the model at all.
+    (async (): Promise<{ text: string; citations: string[]; source: string } | null> => {
+      // Verified DB content will be used — no need to call any model.
       if (useVerifiedOnly) return null
 
       const client = new Anthropic({ apiKey })
 
-      // First attempt: web search enabled — best answer for obscure codes.
-      // Web search can be slow and occasionally times out at the platform
-      // edge (504). Cap it under maxDuration and, on ANY error, fall back to
-      // the standard Claude call without web search. The fallback gets a
-      // generous budget so it can actually finish generating — a too-short
-      // timeout here is what previously caused the placeholder to show.
+      // Primary: Gemini 2.5 Flash with Google Search grounding does the thinking
+      // + search, then Haiku reshapes it into our standard section structure.
       try {
-        return await client.messages.create(
-          {
-            model:      'claude-haiku-4-5-20251001',
-            max_tokens: 1500,
-            system:     `${WEB_SEARCH_DIRECTIVE}\n\n${SYSTEM_PROMPT}`,
-            tools: [
-              {
-                type: 'web_search_20250305',
-                name: 'web_search',
-              },
-            ],
-            messages: [{ role: 'user', content: userPrompt }],
-          },
-          { timeout: 25_000, maxRetries: 0 },
+        const { text: rawText, citations } = await generateDiagnostic(
+          userPrompt,
+          `${WEB_SEARCH_DIRECTIVE}\n\n${SYSTEM_PROMPT}`,
         )
-      } catch (err) {
-        console.error('[hd/quickwrench] web search call failed — falling back to standard call', err)
-        return await client.messages.create(
+        if (rawText.trim()) {
+          const formatted = await formatDiagnostic(rawText, {
+            manufacturer, model, alarmCode: primaryAlarm,
+          })
+          return { text: formatted.trim(), citations, source: 'gemini_web_search' }
+        }
+      } catch (gemErr) {
+        console.error('[hd/quickwrench] Gemini failed — falling back to Haiku', gemErr)
+      }
+
+      // Fallback: a plain Haiku call (no grounding) so a Gemini outage still
+      // returns a usable answer.
+      try {
+        const msg = await client.messages.create(
           {
             model:      'claude-haiku-4-5-20251001',
             max_tokens: 1500,
@@ -1228,6 +1229,15 @@ export async function POST(req: NextRequest) {
           },
           { timeout: 18_000, maxRetries: 0 },
         )
+        const t = msg.content
+          .filter(b => b.type === 'text')
+          .map(b => (b as Anthropic.TextBlock).text)
+          .join('\n')
+          .trim()
+        return { text: t, citations: [], source: cacheSource }
+      } catch (err) {
+        console.error('[hd/quickwrench] Haiku fallback failed', err)
+        return null
       }
     })(),
     (async () => {
@@ -1248,16 +1258,15 @@ export async function POST(req: NextRequest) {
     })(),
   ])
 
-  // Extract AI text (may be skipped/failed)
+  // Extract the normalized AI result ({ text, citations, source }) — the call
+  // may have been skipped (verified-only) or failed entirely.
   let aiText = ''
+  let aiCitations: string[] = []
+  let aiSource = cacheSource
   if (aiResult.status === 'fulfilled' && aiResult.value) {
-    const msg = aiResult.value
-    aiText = msg.content
-      .filter(b => b.type === 'text')
-      .map(b => (b as Anthropic.TextBlock).text)
-      .join('\n')
-      .trim()
-    console.log('[quickwrench] stop_reason:', msg.stop_reason, 'tokens:', JSON.stringify(msg.usage))
+    aiText      = aiResult.value.text.trim()
+    aiCitations = aiResult.value.citations
+    aiSource    = aiResult.value.source
   } else if (aiResult.status === 'rejected') {
     console.error('[hd/quickwrench] AI call failed', aiResult.reason)
   }
@@ -1352,7 +1361,9 @@ If the code is confirmed correct and you cannot find information — contact you
         alarm_code:   primaryAlarm,
         unit_model:   unitModel || null,
         result_html:  analysis,
-        source:       cacheSource,
+        source:       aiSource,
+        citations:    aiCitations,
+        needs_review: detectsHazard(analysis),
       }, { onConflict: 'cache_key' })
     } catch (e) {
       console.error('[hd/quickwrench] cache write failed', e)
@@ -1365,6 +1376,7 @@ If the code is confirmed correct and you cannot find information — contact you
     alarm_pattern: alarmPattern,
     disclaimer,
     code_status:   codeStatus,
+    citations:     aiCitations,
   })
 
   } catch (err) {

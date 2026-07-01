@@ -45,9 +45,18 @@ export async function POST(req: NextRequest) {
     if (!result_html.trim()) {
       return NextResponse.json({ error: 'result_html required' }, { status: 400 })
     }
+    // A founder edit counts as a review: clear the needs_review flag and stamp
+    // who reviewed it and when, so hazardous entries leave the review queue.
+    const now = new Date().toISOString()
     const { error } = await svc
       .from('hd_cached_diagnostics')
-      .update({ result_html, last_accessed: new Date().toISOString() })
+      .update({
+        result_html,
+        last_accessed: now,
+        needs_review:  false,
+        reviewed_at:   now,
+        reviewed_by:   user.id,
+      })
       .eq('id', id)
     if (error) {
       console.error('[admin/cached-diagnostics] update', error)
