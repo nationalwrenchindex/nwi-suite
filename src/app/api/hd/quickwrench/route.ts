@@ -1204,6 +1204,15 @@ export async function POST(req: NextRequest) {
   // entirely (faster, and immune to AI/web-search failure).
   const useVerifiedOnly = !!verifiedEntry && allCodes.length === 1
 
+  // Attach verified labor times (from hd_alarm_codes) to the primary tk_sources
+  // entry so the client Push-to-Quote can use real book/mobile hours. Fields are
+  // null when no verified DB entry matched the primary code.
+  const responseSources = alarmSources.map((s, i) => ({
+    ...s,
+    book_time:   (i === 0 && verifiedEntry) ? verifiedEntry.book_time   : null,
+    mobile_time: (i === 0 && verifiedEntry) ? verifiedEntry.mobile_time : null,
+  }))
+
   const disclaimer = manufacturer === 'Carrier Transicold' ? CARRIER_DISCLAIMER : TK_DISCLAIMER
 
   // ── Response cache (alarm-code keyed) ──────────────────────────────────────
@@ -1246,7 +1255,7 @@ export async function POST(req: NextRequest) {
         : alarmSources.length > 0 ? 'verified' : 'ai'
       return NextResponse.json({
         analysis:      cached.result_html,
-        tk_sources:    alarmSources,
+        tk_sources:    responseSources,
         alarm_pattern: alarmPattern,
         disclaimer,
         code_status:   hitStatus,
@@ -1459,7 +1468,7 @@ If the code is confirmed correct and you cannot find information — contact you
 
   return NextResponse.json({
     analysis,
-    tk_sources:    alarmSources,
+    tk_sources:    responseSources,
     alarm_pattern: alarmPattern,
     disclaimer,
     code_status:   codeStatus,
