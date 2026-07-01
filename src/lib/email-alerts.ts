@@ -21,6 +21,57 @@ export async function sendFounderAlert({ subject, html }: { subject: string; htm
   }
 }
 
+// Notifies the founders whenever a brand-new diagnostic is cached (never on a
+// cache hit, never on the fallback placeholder) so they can review/correct the
+// AI-generated content — especially electrical/voltage specs.
+export async function sendNewCacheAlert({
+  manufacturer,
+  unitModel,
+  alarmCode,
+  displayMessage,
+  cacheKey,
+  source,
+}: {
+  manufacturer:   string
+  unitModel:      string
+  alarmCode:      string
+  displayMessage: string
+  cacheKey:       string
+  source:         string
+}) {
+  const resend = await getResend()
+  if (!resend) return
+  const esc = (s: string) =>
+    s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c] ?? c))
+  try {
+    await resend.emails.send({
+      from:    FROM,
+      to:      ['brock@nationalwrenchindex.com', 'nationalwrenchindex@gmail.com'],
+      subject: `[NWI Cache] New diagnostic cached — ${manufacturer} ${alarmCode}`,
+      html: `
+        <div style="font-family:sans-serif;max-width:520px;line-height:1.6;color:#1a1a1a;">
+          <p>New diagnostic cached and ready for your review.</p>
+          <p>
+            <strong>Manufacturer:</strong> ${esc(manufacturer)}<br/>
+            <strong>Unit Model:</strong> ${esc(unitModel)}<br/>
+            <strong>Alarm Code:</strong> ${esc(alarmCode)}<br/>
+            <strong>Display Message:</strong> ${displayMessage ? esc(displayMessage) : 'Not entered'}<br/>
+            <strong>Cache Key:</strong> ${esc(cacheKey)}<br/>
+            <strong>Source:</strong> ${esc(source)}
+          </p>
+          <p>
+            <a href="https://tools.nationalwrenchindex.com/admin">Review and correct this entry</a><br/>
+            Link: https://tools.nationalwrenchindex.com/admin
+          </p>
+          <p>If this entry contains incorrect electrical specifications or voltage values, edit it before approving.</p>
+        </div>
+      `,
+    })
+  } catch (err) {
+    console.error('[email-alerts] sendNewCacheAlert failed:', err)
+  }
+}
+
 export async function sendNewSubscriberAlert({
   name,
   email,

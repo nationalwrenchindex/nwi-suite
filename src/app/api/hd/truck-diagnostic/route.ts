@@ -11,6 +11,7 @@ import {
 import { generateDiagnostic } from '@/lib/gemini/client'
 import { formatDiagnostic } from '@/lib/gemini/formatter'
 import { detectsHazard } from '@/lib/gemini/hazard'
+import { sendNewCacheAlert } from '@/lib/email-alerts'
 
 // Dedicated truck-engine DTC route. Streams the answer back so the connection
 // stays alive while web search runs (a full search can take 10-30s) and the tech
@@ -232,7 +233,7 @@ export async function POST(req: NextRequest) {
         // electrical content for founder review.
         if (cacheable && producedReal && full.trim() && full !== TRUCK_FALLBACK_ANALYSIS) {
           try {
-            await createServiceClient().from('hd_cached_diagnostics').upsert({
+            const { error: cacheErr } = await createServiceClient().from('hd_cached_diagnostics').upsert({
               cache_key:    cacheKey,
               engine_brand: truckBrand,
               engine_model: engineModel,
@@ -243,6 +244,21 @@ export async function POST(req: NextRequest) {
               citations,
               needs_review: detectsHazard(full),
             }, { onConflict: 'cache_key' })
+            if (cacheErr) {
+              console.error('[hd/truck-diagnostic] cache write failed', cacheErr)
+            } else {
+              // New cache write succeeded — notify founders. The diagnostic text
+              // is already streamed to the tech, so awaiting the email here does
+              // not block their answer.
+              await sendNewCacheAlert({
+                manufacturer:   truckBrand,
+                unitModel:      engineModel,
+                alarmCode:      [spnKey && `SPN ${spnKey}`, fmiKey && `FMI ${fmiKey}`].filter(Boolean).join(' ') || '—',
+                displayMessage: '',
+                cacheKey,
+                source:         usedSource,
+              })
+            }
           } catch (e) {
             console.error('[hd/truck-diagnostic] cache write failed', e)
           }

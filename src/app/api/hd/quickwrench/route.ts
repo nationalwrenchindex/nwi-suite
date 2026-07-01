@@ -1,4 +1,4 @@
-import { NextResponse, type NextRequest } from 'next/server'
+import { NextResponse, type NextRequest, after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { checkHDAccess } from '@/lib/hd-access'
@@ -6,6 +6,7 @@ import Anthropic from '@anthropic-ai/sdk'
 import { generateDiagnostic } from '@/lib/gemini/client'
 import { formatDiagnostic } from '@/lib/gemini/formatter'
 import { detectsHazard } from '@/lib/gemini/hazard'
+import { sendNewCacheAlert } from '@/lib/email-alerts'
 import { type TKSeverity, type TKAlarmEntry, TK_ALARM_CODES, TK_DSR_ALARM_CODES, TK_DISCLAIMER, CARRIER_ALARM_CODES, CARRIER_PRETRIP_CODES } from '@/lib/hd/alarm-codes'
 
 // ─── Alarm → Parts Category Mapping ──────────────────────────────────────────
@@ -780,22 +781,27 @@ Write your response under each header. Use numbered lists (1. 2. 3.) under MOST 
 // companion codes from the cross-reference map), capped at 5 total.
 
 interface BuildUserPromptParams {
-  manufacturer:  string
-  model:         string
-  unitType?:     string
-  allCodes:      string[]
-  symptom?:      string
-  serialNumber?: string
-  alarmSources:  Array<{ code: string; description: string; severity: string; operatorAction: string; source: string }>
-  alarmPattern:  AlarmRelationship | null
+  manufacturer:   string
+  model:          string
+  unitType?:      string
+  allCodes:       string[]
+  symptom?:       string
+  serialNumber?:  string
+  displayMessage?: string
+  alarmSources:   Array<{ code: string; description: string; severity: string; operatorAction: string; source: string }>
+  alarmPattern:   AlarmRelationship | null
 }
 
 function buildUserPrompt({
-  manufacturer, model, unitType, allCodes, symptom, serialNumber, alarmSources, alarmPattern,
+  manufacturer, model, unitType, allCodes, symptom, serialNumber, displayMessage, alarmSources, alarmPattern,
 }: BuildUserPromptParams): string {
+  // The display message is injected immediately after the alarm code line and
+  // before any other context, anchoring the model to the exact fault the
+  // microprocessor identified.
   const parts: (string | null)[] = [
     `Unit: ${manufacturer} ${model} (${unitType ?? 'unknown type'})`,
     allCodes.length > 0 ? `Alarm Code(s): ${allCodes.join(', ')}` : null,
+    displayMessage ? `The unit display shows: '${displayMessage}'` : null,
     symptom      ? `Symptom/Question: ${symptom}` : null,
     serialNumber ? `Serial Number: ${serialNumber}` : null,
   ]
@@ -1066,6 +1072,7 @@ export async function POST(req: NextRequest) {
     additionalAlarmCodes?: string[]
     symptom?: string
     serialNumber?: string
+    display_message?: string
     // truck fields
     truckBrand?: string
     engineModel?: string
@@ -1205,12 +1212,18 @@ export async function POST(req: NextRequest) {
   // verified DB entry (those are authoritative and already instant). Keeping
   // the key faithful to the inputs means a hit can never return a mismatched
   // answer.
+  const displayMessage = typeof body.display_message === 'string' ? body.display_message.trim() : ''
   const primaryAlarm = alarmCode?.trim() ?? ''
   const unitModel    = model?.trim() ?? ''
   const cacheable    = primaryAlarm.length > 0 && allCodes.length === 1 && !(symptom?.trim()) && !useVerifiedOnly
-  const cacheKey     = unitModel
+  // Different display messages for the same code get separate cache entries.
+  // Slug: lowercase, non-alphanumerics → hyphens, trimmed, max 30 chars.
+  const displaySlug  = displayMessage
+    ? '-' + displayMessage.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30).replace(/-+$/, '')
+    : ''
+  const cacheKey     = (unitModel
     ? `reefer-${manufacturer}-${unitModel}-${primaryAlarm}`
-    : `reefer-${manufacturer}-${primaryAlarm}`
+    : `reefer-${manufacturer}-${primaryAlarm}`) + displaySlug
   const cacheSource  = unitModel ? 'ai_web_search' : 'ai_web_search_nomodel'
 
   if (cacheable) {
@@ -1245,7 +1258,7 @@ export async function POST(req: NextRequest) {
 
   const userPrompt = buildUserPrompt({
     manufacturer, model, unitType, allCodes,
-    symptom, serialNumber: body.serialNumber,
+    symptom, serialNumber: body.serialNumber, displayMessage,
     alarmSources, alarmPattern,
   })
 
@@ -1415,7 +1428,7 @@ If the code is confirmed correct and you cannot find information — contact you
   // verified-DB path (cacheable already excludes the verified path).
   if (cacheable && aiUsable && codeStatus !== 'unverified' && analysis !== FALLBACK_ANALYSIS) {
     try {
-      await createServiceClient().from('hd_cached_diagnostics').upsert({
+      const { error: cacheErr } = await createServiceClient().from('hd_cached_diagnostics').upsert({
         cache_key:    cacheKey,
         manufacturer: dbManufacturer ?? manufacturer,
         alarm_code:   primaryAlarm,
@@ -1425,6 +1438,20 @@ If the code is confirmed correct and you cannot find information — contact you
         citations:    aiCitations,
         needs_review: detectsHazard(analysis),
       }, { onConflict: 'cache_key' })
+      if (cacheErr) {
+        console.error('[hd/quickwrench] cache write failed', cacheErr)
+      } else {
+        // New cache write succeeded — notify founders after the response is sent
+        // so the tech never waits on the email.
+        after(() => sendNewCacheAlert({
+          manufacturer:   dbManufacturer ?? manufacturer,
+          unitModel:      unitModel || '—',
+          alarmCode:      primaryAlarm,
+          displayMessage,
+          cacheKey,
+          source:         aiSource,
+        }))
+      }
     } catch (e) {
       console.error('[hd/quickwrench] cache write failed', e)
     }

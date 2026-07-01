@@ -507,13 +507,23 @@ function classifySafety(content: string): SafetyBlock[] {
   const isLive = SAFETY_LIVE_RE.test(content)
   const isOff  = SAFETY_OFF_RE.test(content)
 
-  // Both keyword families present without explicit phase labels — still lead
-  // with the live (orange) warning, then the unit-off (red) warning.
+  // Both live and shutdown cues but no explicit phase labels (e.g. the labels
+  // were dropped during reformatting). Split at the first shutdown cue so the
+  // live (orange) and repair (red) blocks NEVER share the same text.
   if (isLive && isOff) {
-    return [
-      { text: content, label: LIVE_LABEL, color: ORANGE_HAZARD },
-      { text: content, label: OFF_LABEL,  color: RED_HAZARD },
-    ]
+    const cueIdx    = content.search(SAFETY_OFF_RE)
+    const lineStart = cueIdx > 0 ? content.lastIndexOf('\n', cueIdx) : -1
+    const splitIdx  = lineStart >= 0 ? lineStart + 1 : cueIdx
+    if (splitIdx > 0) {
+      const livePart = content.slice(0, splitIdx).trim()
+      const offPart  = content.slice(splitIdx).trim()
+      const blocks: SafetyBlock[] = []
+      if (livePart)                        blocks.push({ text: livePart, label: LIVE_LABEL, color: ORANGE_HAZARD })
+      if (offPart && offPart !== livePart) blocks.push({ text: offPart,  label: OFF_LABEL,  color: RED_HAZARD })
+      if (blocks.length) return blocks
+    }
+    // No clean split point — one combined block, never the same text twice.
+    return [{ text: content, label: LIVE_LABEL, color: ORANGE_HAZARD }]
   }
   if (isLive) return [{ text: content, label: LIVE_LABEL, color: ORANGE_HAZARD }]
   if (isOff)  return [{ text: content, label: OFF_LABEL,  color: RED_HAZARD }]
@@ -863,6 +873,7 @@ export default function HDQuickWrenchPage() {
   const [model,                setModel]                = useState('')
   const [serialNumber,         setSerialNumber]         = useState('')
   const [alarmCode,            setAlarmCode]            = useState('')
+  const [displayMessage,       setDisplayMessage]       = useState('')
   const [additionalAlarmInput, setAdditionalAlarmInput] = useState('')
   const [symptom,              setSymptom]              = useState('')
   const [loading,              setLoading]              = useState(false)
@@ -1118,6 +1129,7 @@ export default function HDQuickWrenchPage() {
           manufacturer, model, unitType,
           alarmCode, additionalAlarmCodes,
           symptom, serialNumber,
+          display_message: displayMessage,
         }),
       })
 
@@ -2297,6 +2309,20 @@ export default function HDQuickWrenchPage() {
                   value={alarmCode}
                   onChange={e => setAlarmCode(e.target.value)}
                   placeholder="e.g. 10 or HP or P1E"
+                  className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+                  style={{ background: '#162030', border: '1px solid #1e3040' }}
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                  Unit Display Message
+                </label>
+                <input
+                  type="text"
+                  value={displayMessage}
+                  onChange={e => setDisplayMessage(e.target.value)}
+                  placeholder="Enter exactly what your unit display shows"
                   className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
                   style={{ background: '#162030', border: '1px solid #1e3040' }}
                 />
