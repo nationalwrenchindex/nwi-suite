@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { useRouter } from 'next/navigation'
 import { runGaugeDiagnostic, SEVERITY_CONFIG } from '@/lib/hd/gauge-diagnostic'
 
 const HD_ORANGE = '#E85D24'
@@ -855,6 +856,8 @@ function VisualReference({ buttons }: { buttons: VisualButton[] }) {
 
 export default function HDQuickWrenchPage() {
 
+  const router = useRouter()
+
   // ── Tab ──
   const [activeTab, setActiveTab] = useState<ActiveTab>('reefer')
 
@@ -1379,6 +1382,96 @@ export default function HDQuickWrenchPage() {
         }]
       : []),
   ]
+
+  // ── Push-to-Quote ──
+  // Writes the standard hd_guided_diagnostic_prefill object and navigates to the
+  // HD quote page, whose existing consumer hook reads the key on mount. We never
+  // touch the quote page or its API.
+  const DIAG_FEE_LINE = () => ({
+    id:                     crypto.randomUUID(),
+    type:                   'labor' as const,
+    description:            'Diagnostic Fee',
+    book_hours:             1.0, book_hours_max:   1.0,
+    mobile_hours:           1.0, mobile_hours_max: 1.0,
+    requires_refrigeration: false,
+    recharge_added:         false,
+    part_number: '', quantity: 1, unit_cost: 0,
+    amount: 0, amount_max: 0,
+  })
+
+  function pushReeferToQuote() {
+    if (analysis === null) return
+    // Verified labor times aren't present on the client-side tk_sources payload,
+    // so this falls back to standard hours; if a book_time/mobile_time ever ships
+    // on that payload it is used automatically.
+    const src0       = tkSources[0] as (TKSource & { book_time?: number; mobile_time?: number }) | undefined
+    const bookTime   = typeof src0?.book_time   === 'number' ? src0.book_time   : null
+    const mobileTime = typeof src0?.mobile_time === 'number' ? src0.mobile_time : null
+
+    const code      = alarmCode.trim()
+    const disp      = displayMessage.trim()
+    const codeLabel = code ? `Code ${code}` : 'Diagnostic'
+
+    const prefill = {
+      complaint:         `${manufacturer} ${model} — ${codeLabel}${disp ? ': ' + disp : ''}`,
+      diagnosis:         (analysis ?? '').trim().slice(0, 1000),
+      notes:             `Unit Type: ${unitType} | Serial: ${serialNumber || 'Not entered'} | BM: ${bmNumber || 'Not entered'} | Engine Hours: ${engineHours || 'Not entered'}`,
+      unit_manufacturer: manufacturer,
+      unit_model:        model,
+      unit_serial:       serialNumber || '',
+      lineItems: [
+        {
+          id:                     crypto.randomUUID(),
+          type:                   'labor' as const,
+          description:            `HD Diagnostic & Repair — ${manufacturer} ${model} ${codeLabel}${disp ? ' (' + disp + ')' : ''}`,
+          book_hours:             bookTime   ?? 1.0,
+          book_hours_max:         bookTime   ?? 1.5,
+          mobile_hours:           mobileTime ?? 1.5,
+          mobile_hours_max:       mobileTime ?? 2.0,
+          requires_refrigeration: false,
+          recharge_added:         false,
+          part_number: '', quantity: 1, unit_cost: 0,
+          amount: 0, amount_max: 0,
+        },
+        DIAG_FEE_LINE(),
+      ],
+    }
+    try { localStorage.setItem('hd_guided_diagnostic_prefill', JSON.stringify(prefill)) } catch {}
+    router.push('/hd/quotes/new')
+  }
+
+  function pushTruckToQuote() {
+    if (truckAnalysis === null) return
+    const spnV      = spn.trim()
+    const fmiV      = fmi.trim()
+    const codeLabel = [spnV && `SPN ${spnV}`, fmiV && `FMI ${fmiV}`].filter(Boolean).join(' ') || 'Diagnostic'
+    const vehicle   = [vehicleYear, vehicleMake, vehicleModel].map(v => v.trim()).filter(Boolean).join(' ')
+
+    const prefill = {
+      complaint:         `${truckBrand} ${engineModel} — ${codeLabel}`,
+      diagnosis:         (truckAnalysis ?? '').trim().slice(0, 1000),
+      notes:             `Vehicle: ${vehicle || 'Not entered'} | Engine: ${truckBrand} ${engineModel} | Symptom: ${truckSymptom || 'Not entered'}`,
+      unit_manufacturer: truckBrand,
+      unit_model:        engineModel,
+      unit_serial:       '',
+      lineItems: [
+        {
+          id:                     crypto.randomUUID(),
+          type:                   'labor' as const,
+          description:            `Truck Engine Diagnostic & Repair — ${truckBrand} ${engineModel} ${codeLabel}`,
+          book_hours:             1.0, book_hours_max:   1.5,
+          mobile_hours:           1.5, mobile_hours_max: 2.0,
+          requires_refrigeration: false,
+          recharge_added:         false,
+          part_number: '', quantity: 1, unit_cost: 0,
+          amount: 0, amount_max: 0,
+        },
+        DIAG_FEE_LINE(),
+      ],
+    }
+    try { localStorage.setItem('hd_guided_diagnostic_prefill', JSON.stringify(prefill)) } catch {}
+    router.push('/hd/quotes/new')
+  }
 
   return (
     <main className="flex-1 p-4 sm:p-6">
@@ -2399,6 +2492,17 @@ export default function HDQuickWrenchPage() {
             )}
 
             {analysis !== null && <VisualReference buttons={reeferVisualButtons} />}
+
+            {analysis !== null && (
+              <button
+                type="button"
+                onClick={pushReeferToQuote}
+                className="w-full py-3 rounded-lg text-sm font-semibold text-white transition-colors"
+                style={{ background: '#FF6600', minHeight: 48 }}
+              >
+                Create Quote
+              </button>
+            )}
           </>
         )}
 
@@ -2656,6 +2760,17 @@ export default function HDQuickWrenchPage() {
             )}
 
             {truckAnalysis !== null && <VisualReference buttons={truckVisualButtons} />}
+
+            {truckAnalysis !== null && (
+              <button
+                type="button"
+                onClick={pushTruckToQuote}
+                className="w-full py-3 rounded-lg text-sm font-semibold text-white transition-colors"
+                style={{ background: '#FF6600', minHeight: 48 }}
+              >
+                Create Quote
+              </button>
+            )}
 
             {truckAnalysis !== null && (
               <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
