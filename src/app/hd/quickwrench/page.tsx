@@ -209,7 +209,15 @@ function SectionContent({ sectionKey, content }: { sectionKey: SectionKey; conte
   const def = SECTION_DEFS.find(s => s.key === sectionKey)!
 
   if (sectionKey === 'MOST LIKELY CAUSES' || sectionKey === 'DIAGNOSTIC STEPS') {
-    const lines = content.split('\n').map(l => l.replace(/^\d+\.\s*/, '').trim()).filter(Boolean)
+    // Trim FIRST so leading indentation from the Haiku formatter doesn't defeat
+    // the ^ anchor, then strip any leading numbering the formatter already added
+    // (one or more "N. " groups). The renderer adds its own number, so this
+    // prevents double numbering like "1. 1.". Requiring a space after the period
+    // preserves decimals such as "3.5V".
+    const lines = content
+      .split('\n')
+      .map(l => l.trim().replace(/^(?:\d+\.\s+)+/, '').trim())
+      .filter(Boolean)
     return (
       <ol className="space-y-1.5">
         {lines.map((line, i) => (
