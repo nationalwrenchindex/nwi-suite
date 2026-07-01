@@ -29,7 +29,7 @@ type SortKey = 'most_searched' | 'recent_accessed' | 'recent_cached'
 // a promote can pre-fill the structured verified columns from result_html.
 const SECTION_KEYS = [
   'ALARM MEANING', 'MOST LIKELY CAUSES', 'DIAGNOSTIC STEPS',
-  'COMMON FIX', 'PARTS NEEDED', 'SAFETY WARNINGS', 'PM NOTE',
+  'COMMON FIX', 'PARTS NEEDED', 'SPECIAL TOOLS REQUIRED', 'SAFETY WARNINGS', 'PM NOTE',
 ] as const
 
 function parseSections(text: string): Record<string, string> {
