@@ -894,6 +894,7 @@ export default function HDQuickWrenchPage() {
   const [modelNumber,          setModelNumber]          = useState('')   // Carrier build number
   const [engineHours,          setEngineHours]          = useState('')
   const [profileNotes,         setProfileNotes]         = useState('')
+  const [includeDiagFee,       setIncludeDiagFee]       = useState(true)
   const [unitLookupLoading,    setUnitLookupLoading]    = useState(false)
   const [identifiedModel,      setIdentifiedModel]      = useState<string | null>(null)
   const [identifiedRefrigerant, setIdentifiedRefrigerant] = useState<string | null>(null)
@@ -1414,11 +1415,21 @@ export default function HDQuickWrenchPage() {
 
     const prefill = {
       complaint:         `${manufacturer} ${model} — ${codeLabel}${disp ? ': ' + disp : ''}`,
-      diagnosis:         (analysis ?? '').trim().slice(0, 1000),
-      notes:             `Unit Type: ${unitType} | Serial: ${serialNumber || 'Not entered'} | BM: ${bmNumber || 'Not entered'} | Engine Hours: ${engineHours || 'Not entered'}`,
+      diagnosis:         '',
+      notes: [
+        bmNumber     ? `BM Number: ${bmNumber}`       : null,
+        serialNumber ? `Serial: ${serialNumber}`      : null,
+        engineHours  ? `Engine Hours: ${engineHours}` : null,
+        profileNotes ? `Unit Notes: ${profileNotes}`  : null,
+      ].filter(Boolean).join(' | ') || '',
       unit_manufacturer: manufacturer,
       unit_model:        model,
       unit_serial:       serialNumber || '',
+      unit_year:         '',
+      truck_make:        '',
+      truck_model:       '',
+      truck_year:        '',
+      vin:               '',
       lineItems: [
         {
           id:                     crypto.randomUUID(),
@@ -1433,7 +1444,7 @@ export default function HDQuickWrenchPage() {
           part_number: '', quantity: 1, unit_cost: 0,
           amount: 0, amount_max: 0,
         },
-        DIAG_FEE_LINE(),
+        ...(includeDiagFee ? [DIAG_FEE_LINE()] : []),
       ],
     }
     try { localStorage.setItem('hd_guided_diagnostic_prefill', JSON.stringify(prefill)) } catch {}
@@ -1449,8 +1460,11 @@ export default function HDQuickWrenchPage() {
 
     const prefill = {
       complaint:         `${truckBrand} ${engineModel} — ${codeLabel}`,
-      diagnosis:         (truckAnalysis ?? '').trim().slice(0, 1000),
-      notes:             `Vehicle: ${vehicle || 'Not entered'} | Engine: ${truckBrand} ${engineModel} | Symptom: ${truckSymptom || 'Not entered'}`,
+      diagnosis:         '',
+      notes: [
+        vehicle      ? `Vehicle: ${vehicle}`      : null,
+        truckSymptom ? `Symptom: ${truckSymptom}` : null,
+      ].filter(Boolean).join(' | ') || '',
       unit_manufacturer: truckBrand,
       unit_model:        engineModel,
       unit_serial:       '',
@@ -1466,7 +1480,7 @@ export default function HDQuickWrenchPage() {
           part_number: '', quantity: 1, unit_cost: 0,
           amount: 0, amount_max: 0,
         },
-        DIAG_FEE_LINE(),
+        ...(includeDiagFee ? [DIAG_FEE_LINE()] : []),
       ],
     }
     try { localStorage.setItem('hd_guided_diagnostic_prefill', JSON.stringify(prefill)) } catch {}
@@ -2494,14 +2508,26 @@ export default function HDQuickWrenchPage() {
             {analysis !== null && <VisualReference buttons={reeferVisualButtons} />}
 
             {analysis !== null && (
-              <button
-                type="button"
-                onClick={pushReeferToQuote}
-                className="w-full py-3 rounded-lg text-sm font-semibold text-white transition-colors"
-                style={{ background: '#FF6600', minHeight: 48 }}
-              >
-                Create Quote
-              </button>
+              <div className="space-y-2.5">
+                <label className="flex items-center gap-2 text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                  <input
+                    type="checkbox"
+                    checked={includeDiagFee}
+                    onChange={e => setIncludeDiagFee(e.target.checked)}
+                    className="w-3.5 h-3.5"
+                    style={{ accentColor: '#FF6600' }}
+                  />
+                  Include Diagnostic Fee
+                </label>
+                <button
+                  type="button"
+                  onClick={pushReeferToQuote}
+                  className="w-full py-3 rounded-lg text-sm font-semibold text-white transition-colors"
+                  style={{ background: '#FF6600', minHeight: 48 }}
+                >
+                  Create Quote
+                </button>
+              </div>
             )}
           </>
         )}
@@ -2762,14 +2788,26 @@ export default function HDQuickWrenchPage() {
             {truckAnalysis !== null && <VisualReference buttons={truckVisualButtons} />}
 
             {truckAnalysis !== null && (
-              <button
-                type="button"
-                onClick={pushTruckToQuote}
-                className="w-full py-3 rounded-lg text-sm font-semibold text-white transition-colors"
-                style={{ background: '#FF6600', minHeight: 48 }}
-              >
-                Create Quote
-              </button>
+              <div className="space-y-2.5">
+                <label className="flex items-center gap-2 text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                  <input
+                    type="checkbox"
+                    checked={includeDiagFee}
+                    onChange={e => setIncludeDiagFee(e.target.checked)}
+                    className="w-3.5 h-3.5"
+                    style={{ accentColor: '#FF6600' }}
+                  />
+                  Include Diagnostic Fee
+                </label>
+                <button
+                  type="button"
+                  onClick={pushTruckToQuote}
+                  className="w-full py-3 rounded-lg text-sm font-semibold text-white transition-colors"
+                  style={{ background: '#FF6600', minHeight: 48 }}
+                >
+                  Create Quote
+                </button>
+              </div>
             )}
 
             {truckAnalysis !== null && (
