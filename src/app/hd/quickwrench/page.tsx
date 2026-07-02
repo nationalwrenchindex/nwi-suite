@@ -566,6 +566,58 @@ function SafetyAlert({ content, color, label }: { content: string; color: string
   )
 }
 
+// ─── Labor estimate ──────────────────────────────────────────────────────────
+// Labor times arrive as trailing plain-text lines in the diagnostic ("Book Time:
+// X hours" / "Mobile Field Time: Y hours"), which — having no section header —
+// otherwise bleed into the last parsed section (often SAFETY WARNINGS). We
+// extract them for a dedicated block and strip the lines from the sections.
+
+const HD_LABOR_RATE = 125
+
+// Lines that belong to the labor guide, not to a diagnostic section.
+const LABOR_LINE_RE = /^\s*(book time|mobile\s*(?:field\s*)?time|at\s*\$|diagnostic fee|refrigeration recovery(?:\s*(?:and|&)\s*recharge)?|after hours)/i
+
+function stripLaborLines(content: string): string {
+  return content
+    .split('\n')
+    .filter(l => !LABOR_LINE_RE.test(l))
+    .join('\n')
+    .trim()
+}
+
+// Pull book/mobile hours out of the diagnostic text. Returns null when neither
+// is present so the block renders nothing.
+function extractLaborTimes(text: string): { book: number; mobile: number } | null {
+  const bookM   = text.match(/book time:\s*([\d.]+)\s*hours?/i)
+  const mobileM = text.match(/mobile\s*(?:field\s*)?time:\s*([\d.]+)\s*hours?/i)
+  const book    = bookM   ? parseFloat(bookM[1])   : NaN
+  const mobile  = mobileM ? parseFloat(mobileM[1]) : NaN
+  if (!Number.isFinite(book) && !Number.isFinite(mobile)) return null
+  const b = Number.isFinite(book)   ? book   : mobile
+  const m = Number.isFinite(mobile) ? mobile : book
+  return { book: b, mobile: m }
+}
+
+function LaborEstimate({ book, mobile }: { book: number; mobile: number }) {
+  const same = Math.abs(book - mobile) < 0.01
+  const fee  = (h: number) => `$${Math.round(h * HD_LABOR_RATE)}`
+  return (
+    <div className="rounded-lg px-4 py-3" style={{ background: '#0d2137', borderLeft: '3px solid #2969B0' }}>
+      <p className="text-xs uppercase tracking-widest mb-1.5" style={{ color: '#2969B0' }}>
+        Labor Estimate
+      </p>
+      <p className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.85)' }}>
+        {same
+          ? `Labor Time: ${book.toFixed(1)} hours`
+          : `Book Time: ${book.toFixed(1)} hours  |  Mobile Field Time: ${mobile.toFixed(1)} hours`}
+      </p>
+      <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.55)' }}>
+        At ${HD_LABOR_RATE}/hr: {same ? fee(mobile) : `${fee(book)} to ${fee(mobile)}`}
+      </p>
+    </div>
+  )
+}
+
 // ─── Shared analysis card ─────────────────────────────────────────────────────
 
 function AnalysisCard({
@@ -591,14 +643,21 @@ function AnalysisCard({
   // present but no explicit safety section exists. Applies to fresh AND cached
   // results (both render through this card), so a cached result with a buried
   // safety warning shows the same top-of-page alert as a fresh one.
+  // Labor times get their own block below; strip their lines from every section
+  // so they never render inside the safety warning (or any other) section.
+  const laborTimes    = extractLaborTimes(analysis)
   const safetySection = parsedSections.find(s => s.key === 'SAFETY WARNINGS')
-  const bodySections  = parsedSections.filter(s => s.key !== 'SAFETY WARNINGS')
+  const safetyContent = safetySection ? stripLaborLines(safetySection.content) : ''
+  const bodySections  = parsedSections
+    .filter(s => s.key !== 'SAFETY WARNINGS')
+    .map(s => ({ ...s, content: stripLaborLines(s.content) }))
+    .filter(s => s.content.length > 0)
   const hazards       = detectHazards(analysis)
   // Procedure-aware safety blocks: classify the extracted SAFETY WARNINGS
   // section (live → orange, unit-off → red, both phases → orange then red);
   // otherwise show a generic warning when hazard keywords are detected.
-  const safetyBlocks: SafetyBlock[] = safetySection?.content
-    ? classifySafety(safetySection.content)
+  const safetyBlocks: SafetyBlock[] = safetyContent
+    ? classifySafety(safetyContent)
     : hazards.any
       ? [{
           text:  GENERIC_SAFETY,
@@ -612,6 +671,10 @@ function AnalysisCard({
       {safetyBlocks.map((b, i) => (
         <SafetyAlert key={i} content={b.text} color={b.color} label={b.label} />
       ))}
+
+      {/* Labor Estimate — its own block, between the safety warning and the
+          alarm meaning. Never inside the safety block. */}
+      {laborTimes && <LaborEstimate book={laborTimes.book} mobile={laborTimes.mobile} />}
 
       {alarmPattern && (
         <div
