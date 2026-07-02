@@ -210,6 +210,13 @@ function parseAnalysis(text: string): Array<{ key: SectionKey; content: string }
     .filter(s => s.content && s.content.toLowerCase() !== 'none.' && s.content.toLowerCase() !== 'none')
 }
 
+// Strip any leading list numbering a source line already carries ("1. ", "2. ",
+// or a doubled "1. 1. ") so a renderer that adds its own number never produces
+// "1. 1.". Trim first so leading whitespace can't defeat the ^ anchor; the
+// required space after the period preserves decimals like "3.5V". Used by EVERY
+// numbered-list render path in this file.
+const stripListNumber = (line: string) => line.trim().replace(/^(?:\d+\.\s+)+/, '').trim()
+
 function SectionContent({ sectionKey, content }: { sectionKey: SectionKey; content: string }) {
   const def = SECTION_DEFS.find(s => s.key === sectionKey)!
 
@@ -221,7 +228,7 @@ function SectionContent({ sectionKey, content }: { sectionKey: SectionKey; conte
     // preserves decimals such as "3.5V".
     const lines = content
       .split('\n')
-      .map(l => l.trim().replace(/^(?:\d+\.\s+)+/, '').trim())
+      .map(stripListNumber)
       .filter(Boolean)
     return (
       <ol className="space-y-1.5">
@@ -1900,9 +1907,9 @@ export default function HDQuickWrenchPage() {
                     const sev = AC_SEVERITY_CONFIG[r.severity] ?? AC_SEVERITY_CONFIG.check
                     // Strip any leading numbering the DB stored ("1. ", "2. ") so the
                     // renderer's own number is never added on top → no "1. 1." doubling.
-                    const stripNum = (s: string) => s.trim().replace(/^(?:\d+\.\s+)+/, '').trim()
-                    const steps = r.diagnostic_steps ? r.diagnostic_steps.split('\n').map(stripNum).filter(Boolean) : []
-                    const causes = r.common_causes ? r.common_causes.split(',').map(stripNum).filter(Boolean) : []
+                    // Split causes on comma OR newline so numbered newline lists split too.
+                    const steps = r.diagnostic_steps ? r.diagnostic_steps.split('\n').map(stripListNumber).filter(Boolean) : []
+                    const causes = r.common_causes ? r.common_causes.split(/[,\n]/).map(stripListNumber).filter(Boolean) : []
                     return (
                       <div key={r.id} className="rounded-xl overflow-hidden" style={{ border: `1px solid ${sev.border}` }}>
 
@@ -2303,7 +2310,7 @@ export default function HDQuickWrenchPage() {
                                     {i + 1}
                                   </span>
                                   <span style={{ color: i === 0 ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.6)' }}>
-                                    {cause}
+                                    {stripListNumber(cause)}
                                   </span>
                                 </li>
                               ))}
@@ -2334,7 +2341,7 @@ export default function HDQuickWrenchPage() {
                               {diagPattern.recommendedAction.map((step, i) => (
                                 <li key={i} className="flex gap-3 text-sm leading-snug" style={{ color: 'rgba(255,255,255,0.82)' }}>
                                   <span className="font-bold flex-shrink-0 mt-0.5" style={{ color: HD_ORANGE, minWidth: '1.1rem' }}>{i + 1}.</span>
-                                  {step}
+                                  {stripListNumber(step)}
                                 </li>
                               ))}
                             </ol>
@@ -3369,7 +3376,7 @@ function ProceduresPanel() {
                     >
                       {i + 1}
                     </span>
-                    <p className="text-sm leading-relaxed pt-0.5" style={{ color: 'rgba(255,255,255,0.85)' }}>{step}</p>
+                    <p className="text-sm leading-relaxed pt-0.5" style={{ color: 'rgba(255,255,255,0.85)' }}>{stripListNumber(step)}</p>
                   </li>
                 ))}
               </ol>
