@@ -53,6 +53,11 @@ const ENGINE_MODELS: Record<string, string[]> = {
   'Cummins':        ['ISB', 'ISC', 'ISL', 'ISX', 'X15', 'X12'],
   'Detroit Diesel': ['DD13', 'DD15', 'DD16', 'Series 60'],
   'Mercedes-Benz':  ['OM936', 'OM470', 'OM471', 'OM473'],
+  'PACCAR':         ['MX-11', 'MX-13'],
+  'Volvo':          ['D11', 'D13', 'D16'],
+  'Mack':           ['MP7', 'MP8', 'MP10'],
+  'International':   ['A26', 'N13'],
+  'Caterpillar':    ['C12', 'C13', 'C15', 'C18', '3406E'],
 }
 
 const FMI_CODES = [
@@ -76,7 +81,7 @@ const FMI_CODES = [
 
 type Manufacturer     = 'Thermo King' | 'Carrier Transicold'
 type UnitType         = 'truck' | 'trailer'
-type EngineBrand      = 'Cummins' | 'Detroit Diesel' | 'Mercedes-Benz'
+type EngineBrand      = 'Cummins' | 'Detroit Diesel' | 'Mercedes-Benz' | 'PACCAR' | 'Volvo' | 'Mack' | 'International' | 'Caterpillar'
 type ActiveTab        = 'reefer' | 'truck' | 'electrical' | 'procedures' | 'parts'
 type ElectricalTopic  = 'Component Library' | 'Schematic Reading' | 'Fault Tracing' | 'Multimeter Guide' | 'Wire Repair'
 
@@ -1893,8 +1898,11 @@ export default function HDQuickWrenchPage() {
                   {/* Results */}
                   {acResults.map(r => {
                     const sev = AC_SEVERITY_CONFIG[r.severity] ?? AC_SEVERITY_CONFIG.check
-                    const steps = r.diagnostic_steps ? r.diagnostic_steps.split('\n').filter(Boolean) : []
-                    const causes = r.common_causes ? r.common_causes.split(',').map(s => s.trim()).filter(Boolean) : []
+                    // Strip any leading numbering the DB stored ("1. ", "2. ") so the
+                    // renderer's own number is never added on top → no "1. 1." doubling.
+                    const stripNum = (s: string) => s.trim().replace(/^(?:\d+\.\s+)+/, '').trim()
+                    const steps = r.diagnostic_steps ? r.diagnostic_steps.split('\n').map(stripNum).filter(Boolean) : []
+                    const causes = r.common_causes ? r.common_causes.split(',').map(stripNum).filter(Boolean) : []
                     return (
                       <div key={r.id} className="rounded-xl overflow-hidden" style={{ border: `1px solid ${sev.border}` }}>
 
@@ -1989,7 +1997,7 @@ export default function HDQuickWrenchPage() {
                                   >
                                     {i + 1}
                                   </span>
-                                  {step.replace(/^\d+\.\s*/, '')}
+                                  {step}
                                 </li>
                               ))}
                             </ol>
@@ -2866,7 +2874,7 @@ export default function HDQuickWrenchPage() {
                   Engine Brand
                 </label>
                 <div className="grid grid-cols-3 rounded-lg overflow-hidden" style={{ border: '1px solid #1e3040' }}>
-                  {(['Cummins', 'Detroit Diesel', 'Mercedes-Benz'] as EngineBrand[]).map(b => (
+                  {(Object.keys(ENGINE_MODELS) as EngineBrand[]).map(b => (
                     <button
                       key={b}
                       type="button"
