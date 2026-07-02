@@ -29,7 +29,16 @@ Spec: [thread/pressure/voltage spec]
 Qty: [number]
 Est. Cost: $XX to $XX
 
-If part numbers are uncertain or vary by build year, state that clearly and tell the tech what to provide to their dealer for exact identification (serial number, compressor model, refrigerant type). Never guess part numbers. If uncertain, say so and provide the best available cross-reference information.`
+If part numbers are uncertain or vary by build year, state that clearly and tell the tech what to provide to their dealer for exact identification (serial number, compressor model, refrigerant type). Never guess part numbers. If uncertain, say so and provide the best available cross-reference information.
+
+CRITICAL RULES:
+1. Only return parts that are DIRECTLY related to diagnosing or repairing the specific fault code provided. Never return parts for unrelated systems (e.g. do not return pressure transducers for an electric motor fault, do not return controller boards unless the fault is specifically a controller fault).
+
+2. If you cannot find the specific OEM part number for a component, say exactly: 'Part number not available in public sources — provide unit serial number to TK/Carrier dealer for exact identification.' Do not substitute unrelated parts to fill space.
+
+3. Focus on the most likely failed components for this specific fault code. For an electric motor fault, return motor assembly, contactor, and overload relay — not sensors or controllers.
+
+4. A parts list with 2 accurate parts is better than a parts list with 8 parts where 6 are wrong or unrelated.`
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -117,7 +126,7 @@ export async function POST(req: NextRequest) {
       unit_model:   model,
       result_html:  formatted,
       source:       'parts_manager',
-      needs_review: false,
+      needs_review: true,   // parts results need founder review before being trusted
       expires_at:   expiresAt.toISOString(),
     }, { onConflict: 'cache_key' })
     if (cacheErr) {
