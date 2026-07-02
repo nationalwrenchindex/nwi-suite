@@ -618,6 +618,69 @@ function LaborEstimate({ book, mobile }: { book: number; mobile: number }) {
   )
 }
 
+// ─── Parts Manager ───────────────────────────────────────────────────────────
+// One-tap targeted parts lookup. The button replaces itself with the parts
+// result inline (no navigation); the X dismisses the result and restores the
+// button. Rendered above Create Quote on every diagnostic result.
+
+function PartsManager({
+  loading, error, result, onRun, onClear,
+}: {
+  loading: boolean
+  error:   string | null
+  result:  string | null
+  onRun:   () => void
+  onClear: () => void
+}) {
+  return (
+    <>
+      {result === null ? (
+        <button
+          type="button"
+          onClick={onRun}
+          disabled={loading}
+          className="w-full py-3 rounded-lg text-sm font-semibold text-white transition-colors disabled:opacity-60"
+          style={{ background: '#2969B0', minHeight: 48 }}
+        >
+          {loading ? 'Looking up parts…' : 'Parts Manager'}
+        </button>
+      ) : (
+        <div className="rounded-lg overflow-hidden" style={{ background: '#0d1f35', borderLeft: '3px solid #2969B0' }}>
+          <div className="flex items-start justify-between gap-3 px-4 pt-3">
+            <p className="text-xs uppercase tracking-widest" style={{ color: '#2969B0' }}>Parts Manager</p>
+            <button
+              type="button"
+              onClick={onClear}
+              aria-label="Dismiss parts"
+              className="flex-shrink-0 text-lg leading-none"
+              style={{ color: 'rgba(255,255,255,0.4)' }}
+            >
+              ×
+            </button>
+          </div>
+          <div className="px-4 pt-2 pb-3 space-y-1">
+            {result.split('\n').map((line, i) =>
+              line.trim()
+                ? <p key={i} className="text-sm leading-snug" style={{ color: 'rgba(255,255,255,0.85)' }}>{line}</p>
+                : <div key={i} className="h-1.5" />
+            )}
+          </div>
+          <div className="px-4 pb-3">
+            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
+              Parts data is AI-generated. Verify part numbers with your TK or Carrier dealer before ordering.
+            </p>
+          </div>
+        </div>
+      )}
+      {error && (
+        <div className="rounded-lg px-4 py-2.5 text-sm" style={{ background: '#2d0a0a', border: '1px solid #7f1d1d', color: '#f87171' }}>
+          {error}
+        </div>
+      )}
+    </>
+  )
+}
+
 // ─── Shared analysis card ─────────────────────────────────────────────────────
 
 function AnalysisCard({
@@ -966,6 +1029,11 @@ export default function HDQuickWrenchPage() {
   const [engineHours,          setEngineHours]          = useState('')
   const [profileNotes,         setProfileNotes]         = useState('')
   const [includeDiagFee,       setIncludeDiagFee]       = useState(true)
+
+  // ── Parts Manager (shared reefer/truck) ──
+  const [partsResult,          setPartsResult]          = useState<string | null>(null)
+  const [partsLoading,         setPartsLoading]         = useState(false)
+  const [partsError,           setPartsError]           = useState<string | null>(null)
   const [unitLookupLoading,    setUnitLookupLoading]    = useState(false)
   const [identifiedModel,      setIdentifiedModel]      = useState<string | null>(null)
   const [identifiedRefrigerant, setIdentifiedRefrigerant] = useState<string | null>(null)
@@ -1189,6 +1257,8 @@ export default function HDQuickWrenchPage() {
     setAlarmPattern(null)
     setDisclaimer(null)
     setError(null)
+    setPartsResult(null)   // never show stale parts under a new result
+    setPartsError(null)
 
     const additionalAlarmCodes = additionalAlarmInput
       .split(',')
@@ -1320,6 +1390,8 @@ export default function HDQuickWrenchPage() {
     setTruckAnalysis(null)
     setTruckDisclaimer(null)
     setTruckError(null)
+    setPartsResult(null)   // never show stale parts under a new result
+    setPartsError(null)
 
     try {
       const res = await fetch('/api/hd/truck-diagnostic', {
@@ -1558,6 +1630,54 @@ export default function HDQuickWrenchPage() {
     router.push('/hd/quotes/new')
   }
 
+  // ── Parts Manager lookups ──
+  async function runPartsManager(payload: Record<string, string>) {
+    setPartsLoading(true)
+    setPartsError(null)
+    setPartsResult(null)
+    try {
+      const res  = await fetch('/api/hd/parts-manager', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(payload),
+      })
+      const json = await res.json().catch(() => ({})) as { parts?: unknown; error?: unknown }
+      if (!res.ok) throw new Error(typeof json.error === 'string' ? json.error : `Parts lookup failed (${res.status})`)
+      setPartsResult(typeof json.parts === 'string' ? json.parts : '')
+    } catch (e) {
+      setPartsError(e instanceof Error ? e.message : 'Parts lookup failed. Please try again.')
+    } finally {
+      setPartsLoading(false)
+    }
+  }
+
+  function runReeferPartsManager() {
+    if (analysis === null) return
+    runPartsManager({
+      manufacturer,
+      model,
+      alarmCode:      alarmCode.trim(),
+      displayMessage: displayMessage.trim(),
+      unitType,
+      serialNumber:   serialNumber.trim(),
+    })
+  }
+
+  function runTruckPartsManager() {
+    if (truckAnalysis === null) return
+    const code = [spn.trim() ? `SPN ${spn.trim()}` : null, fmi.trim() ? `FMI ${fmi.trim()}` : null].filter(Boolean).join(' ')
+    runPartsManager({
+      manufacturer:   truckBrand,
+      model:          engineModel,
+      alarmCode:      code,
+      displayMessage: truckSymptom.trim(),
+      unitType:       'truck',
+      serialNumber:   '',
+    })
+  }
+
+  const clearParts = () => { setPartsResult(null); setPartsError(null) }
+
   return (
     <main className="flex-1 p-4 sm:p-6">
       <div className="max-w-3xl mx-auto space-y-6">
@@ -1584,7 +1704,7 @@ export default function HDQuickWrenchPage() {
             <button
               key={tab.key}
               type="button"
-              onClick={() => setActiveTab(tab.key)}
+              onClick={() => { setActiveTab(tab.key); setPartsResult(null); setPartsError(null) }}
               className="flex-1 sm:flex-none px-5 py-3 rounded-lg text-sm font-semibold transition-colors"
               style={activeTab === tab.key
                 ? { background: HD_ORANGE, color: '#fff', minHeight: 44 }
@@ -2579,6 +2699,16 @@ export default function HDQuickWrenchPage() {
             {analysis !== null && <VisualReference buttons={reeferVisualButtons} />}
 
             {analysis !== null && (
+              <PartsManager
+                loading={partsLoading}
+                error={partsError}
+                result={partsResult}
+                onRun={runReeferPartsManager}
+                onClear={clearParts}
+              />
+            )}
+
+            {analysis !== null && (
               <div className="space-y-2.5">
                 <label className="flex items-center gap-2 text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>
                   <input
@@ -2857,6 +2987,16 @@ export default function HDQuickWrenchPage() {
             )}
 
             {truckAnalysis !== null && <VisualReference buttons={truckVisualButtons} />}
+
+            {truckAnalysis !== null && (
+              <PartsManager
+                loading={partsLoading}
+                error={partsError}
+                result={partsResult}
+                onRun={runTruckPartsManager}
+                onClear={clearParts}
+              />
+            )}
 
             {truckAnalysis !== null && (
               <div className="space-y-2.5">

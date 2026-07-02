@@ -21,6 +21,7 @@ export interface CachedEntry {
   reviewed_at:   string | null
   reviewed_by:   string | null
   citations:     string[] | null
+  expires_at:    string | null
 }
 
 type SortKey = 'most_searched' | 'recent_accessed' | 'recent_cached'
@@ -274,7 +275,12 @@ export default function CachedDiagnosticsManager({ entries }: { entries: CachedE
                   )}
                 </td>
                 <td className={td}>{codeLabel(e)}</td>
-                <td className={`${td} text-white/50`}>{e.source ?? '—'}</td>
+                <td className={`${td} text-white/50`}>
+                  {e.source ?? '—'}
+                  {e.source === 'parts_manager' && e.expires_at && (
+                    <span className="block text-xs text-white/30">Expires: {fmtDate(e.expires_at)}</span>
+                  )}
+                </td>
                 <td className={`${td} tabular-nums`}>{e.search_count ?? 0}</td>
                 <td className={`${td} text-white/60`}>{fmtDate(e.last_accessed)}</td>
                 <td className={`${td} text-white/40 font-mono text-xs max-w-[16rem] truncate`} title={e.cache_key}>{e.cache_key}</td>
