@@ -26,7 +26,7 @@ Return a JSON object with these exact fields:
 - related_codes: array of related DTC code strings
 - diagnostic_order: array of diagnostic step strings with exact specs (voltages, resistances, sensor ranges)
 - suggested_repair: field-realistic repair recommendation
-- parts_needed: array of parts with OEM part numbers
+- parts_needed: array of parts typically needed for this repair. REQUIRED — never return an empty array. Always include at minimum the primary failed component with OEM part number, and any sensors or gaskets typically replaced during this repair. Format each entry as: 'Part Name — OEM Part# XXXXX (Aftermarket: Brand XXXXX) Est. $XX-$XX'. If exact part numbers vary by build, state the part name and note 'verify part number with VIN at dealer'
 - special_tools: string listing tools needed or 'None beyond standard hand tools and multimeter'
 - labor_estimate: string with mobile field time estimate
 - safety_warnings: string with any safety precautions

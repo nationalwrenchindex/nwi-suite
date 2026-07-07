@@ -8,6 +8,9 @@ import { hasQuickWrenchAccess } from '@/lib/subscription'
 import { callTechGuide } from '@/lib/tech-guide'
 import type { TechGuideRequest } from '@/types/quickwrench'
 
+// Two Claude attempts at up to 45s each; 60s prevents Vercel's default timeout kill.
+export const maxDuration = 60
+
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()

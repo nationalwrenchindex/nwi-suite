@@ -116,7 +116,7 @@ export async function callTechGuide(
   apiKey:    string,
   vehicle:   TechGuideVehicle,
   job:       TechGuideJobRef,
-  timeoutMs  = 15000,
+  timeoutMs  = 45000,
 ): Promise<TechGuide | null> {
   const vehicleDesc = [vehicle.year, vehicle.make, vehicle.model, vehicle.engine]
     .filter(Boolean)
