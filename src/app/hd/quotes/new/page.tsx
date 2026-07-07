@@ -60,6 +60,8 @@ interface LibraryItem {
   mobile_hours: number | string | null
   shop_hours: number | string | null
   requires_refrigeration: boolean
+  refrigeration_service: string | null
+  refrigeration_hours: number | string | null
   is_master: boolean
 }
 
@@ -166,6 +168,9 @@ export default function NewQuotePage() {
   const [saveToLibrary, setSaveToLibrary]   = useState(true)
   const [laborLibrary, setLaborLibrary]     = useState<LibraryItem[]>([])
   const [laborSelectedKey, setLaborSelectedKey] = useState('')
+  // Set only when a library item carries explicit refrigeration_hours — its
+  // recovery time becomes a SEPARATE labor line (matches buildRepairLines()).
+  const [laborRefrig, setLaborRefrig] = useState<{ hours: number; service: string | null } | null>(null)
 
   const [parts, setParts] = useState<PartsDraft>({ part_number: '', description: '', quantity: '1', unit_cost: '0.00' })
 
@@ -300,7 +305,19 @@ export default function NewQuotePage() {
     setLaborDesc(i.description)
     setLaborBookMin(String(book));  setLaborBookMax(String(book))
     setLaborMobileMin(String(mob)); setLaborMobileMax(String(mob))
-    setLaborRecharge(i.requires_refrigeration === true)
+    const refrigHrs = libNum(i.refrigeration_hours)
+    if (i.requires_refrigeration && refrigHrs && refrigHrs > 0) {
+      // Explicit refrigeration service → its own separate line; base mobile stays as-is.
+      setLaborRefrig({ hours: refrigHrs, service: i.refrigeration_service ?? null })
+      setLaborRecharge(false)
+    } else {
+      // Library items store complete mobile_hours — never auto-add fixed recovery
+      // (e.g. "Service Refrigeration A" is 2.6 hrs on its own, not 2.6 + 1.5). The
+      // recovery checkbox stays available below for manual opt-in. The fixed-recovery
+      // checkbox auto-fires only for old LABOR_GUIDE items (see selectGuideItem).
+      setLaborRefrig(null)
+      setLaborRecharge(false)
+    }
     setLaborSelectedKey(`lib:${i.id}`)
   }
 
@@ -308,6 +325,7 @@ export default function NewQuotePage() {
     setLaborDesc(item.label)
     setLaborBookMin(String(item.book_min));     setLaborBookMax(String(item.book_max))
     setLaborMobileMin(String(item.mobile_min)); setLaborMobileMax(String(item.mobile_max))
+    setLaborRefrig(null)
     setLaborRecharge(item.requires_refrigeration)
     setLaborSelectedKey(`guide:${item.label}`)
   }
@@ -318,6 +336,7 @@ export default function NewQuotePage() {
     setLaborBookMin('1.0');   setLaborBookMax('1.0')
     setLaborMobileMin('1.5'); setLaborMobileMax('1.5')
     setLaborRecharge(false)
+    setLaborRefrig(null)
     setSaveToLibrary(true)
     setLaborSelectedKey('')
   }
@@ -353,7 +372,12 @@ export default function NewQuotePage() {
     if (!description) { setToast('Enter a labor description.'); return }
     const bookMin = parseFloat(laborBookMin) || 0
     const bookMax = parseFloat(laborBookMax) || bookMin
-    const item: LineItem = {
+    const newLines: LineItem[] = []
+
+    // Base repair line. When an explicit refrigeration service applies (laborRefrig),
+    // its recovery time is a SEPARATE line below — never folded into base mobile hrs.
+    // (With laborRefrig set, laborRecharge is false so totalMobile == base mobile.)
+    newLines.push({
       id: crypto.randomUUID(),
       type: 'labor',
       description,
@@ -361,15 +385,34 @@ export default function NewQuotePage() {
       book_hours_max: bookMax,
       mobile_hours: parseFloat(totalMobileMin.toFixed(2)),
       mobile_hours_max: parseFloat(totalMobileMax.toFixed(2)),
-      requires_refrigeration: laborRecharge,
+      requires_refrigeration: laborRecharge || laborRefrig != null,
       recharge_added: laborRecharge,
       part_number: '', quantity: 0, unit_cost: 0,
       amount: parseFloat((totalMobileMin * form.labor_rate).toFixed(2)),
       amount_max: parseFloat((totalMobileMax * form.labor_rate).toFixed(2)),
+    })
+
+    // Separate refrigeration service line (matches quickwrench buildRepairLines()).
+    if (laborRefrig) {
+      const rh  = laborRefrig.hours
+      const svc = laborRefrig.service ? ` ${laborRefrig.service}` : ''
+      const amt = parseFloat((rh * form.labor_rate).toFixed(2))
+      newLines.push({
+        id: crypto.randomUUID(),
+        type: 'labor',
+        description: `Refrigeration Service${svc} — recover, evacuate & charge`.replace(/\s+/g, ' ').trim(),
+        book_hours: rh, book_hours_max: rh,
+        mobile_hours: rh, mobile_hours_max: rh,
+        requires_refrigeration: true,
+        recharge_added: true,
+        part_number: '', quantity: 0, unit_cost: 0,
+        amount: amt, amount_max: amt,
+      })
     }
-    setLineItems(l => [...l, item])
-    // Store the base labor (without the situational recharge add) in the library.
-    if (saveToLibrary) saveLaborToLibrary(description, bookMin, baseMobileMin, laborRecharge)
+
+    setLineItems(l => [...l, ...newLines])
+    // Store the base labor (without the situational recovery add) in the library.
+    if (saveToLibrary) saveLaborToLibrary(description, bookMin, baseMobileMin, laborRecharge || laborRefrig != null)
     closeLaborModal()
   }
 
@@ -895,7 +938,7 @@ export default function NewQuotePage() {
                   style={dInp}
                   placeholder="Type a description or search your library below"
                   value={laborDesc}
-                  onChange={e => { setLaborDesc(e.target.value); setLaborSelectedKey('') }}
+                  onChange={e => { setLaborDesc(e.target.value); setLaborSelectedKey(''); setLaborRefrig(null) }}
                 />
 
                 {showLaborResults && (
@@ -987,23 +1030,40 @@ export default function NewQuotePage() {
                 </div>
               </div>
 
-              {/* Refrigeration recovery checkbox */}
-              <label className="flex items-start gap-3 p-3 rounded-lg cursor-pointer" style={{ background: '#132132', border: `1px solid ${D_BORDER}` }}>
-                <input
-                  type="checkbox"
-                  checked={laborRecharge}
-                  onChange={e => setLaborRecharge(e.target.checked)}
-                  className="mt-0.5 w-4 h-4"
-                  style={{ accentColor: BLUE }}
-                />
-                <div>
-                  <p className="text-sm font-semibold" style={{ color: '#93C5FD' }}>Add refrigeration recovery &amp; recharge</p>
-                  <p className="text-xs mt-0.5" style={{ color: '#8a9bad' }}>Adds 1.5 to 2.5 hrs to mobile field time</p>
+              {/* Refrigeration: explicit service (separate line) vs fixed-recovery checkbox */}
+              {laborRefrig ? (
+                <div className="flex items-start gap-3 p-3 rounded-lg" style={{ background: '#132132', border: `1px solid ${D_BORDER}` }}>
+                  <svg className="w-4 h-4 mt-0.5 shrink-0" fill="none" stroke="#93C5FD" strokeWidth={2} viewBox="0 0 24 24">
+                    <line x1="12" y1="2" x2="12" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/>
+                    <path d="M4.9 4.9l14.2 14.2M19.1 4.9L4.9 19.1"/>
+                  </svg>
+                  <div>
+                    <p className="text-sm font-semibold" style={{ color: '#93C5FD' }}>
+                      Separate refrigeration service line will be added
+                    </p>
+                    <p className="text-xs mt-0.5" style={{ color: '#8a9bad' }}>
+                      Refrigeration Service{laborRefrig.service ? ` ${laborRefrig.service}` : ''} — {laborRefrig.hours} hrs, billed as its own line (not added to base hours)
+                    </p>
+                  </div>
                 </div>
-              </label>
+              ) : (
+                <label className="flex items-start gap-3 p-3 rounded-lg cursor-pointer" style={{ background: '#132132', border: `1px solid ${D_BORDER}` }}>
+                  <input
+                    type="checkbox"
+                    checked={laborRecharge}
+                    onChange={e => setLaborRecharge(e.target.checked)}
+                    className="mt-0.5 w-4 h-4"
+                    style={{ accentColor: BLUE }}
+                  />
+                  <div>
+                    <p className="text-sm font-semibold" style={{ color: '#93C5FD' }}>Add refrigeration recovery &amp; recharge</p>
+                    <p className="text-xs mt-0.5" style={{ color: '#8a9bad' }}>Adds 1.5 to 2.5 hrs to mobile field time</p>
+                  </div>
+                </label>
+              )}
 
               {/* Filter drier reminder */}
-              {laborRecharge && (
+              {(laborRecharge || laborRefrig) && (
                 <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: '#2a2213', border: '1px solid #6b5417' }}>
                   <svg className="w-4 h-4 shrink-0" fill="none" stroke="#F59E0B" strokeWidth={2} viewBox="0 0 24 24">
                     <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
@@ -1036,6 +1096,11 @@ export default function NewQuotePage() {
                     <p className="text-xs mt-0.5" style={{ color: '#8a9bad' }}>
                       Book: {fmtHrs(parseFloat(laborBookMin) || 0, parseFloat(laborBookMax) || (parseFloat(laborBookMin) || 0))} flat rate
                     </p>
+                    {laborRefrig && (
+                      <p className="text-xs mt-0.5" style={{ color: '#93C5FD' }}>
+                        + Refrigeration Service{laborRefrig.service ? ` ${laborRefrig.service}` : ''} — {laborRefrig.hours} hrs (separate line)
+                      </p>
+                    )}
                   </div>
                   <p className="text-lg font-bold shrink-0" style={{ color: ORANGE }}>
                     {fmtAmtRange(previewAmtMin, previewAmtMax)}
