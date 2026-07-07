@@ -135,7 +135,43 @@ function SectionCard({
   )
 }
 
-function DTCPanel({ vehicle }: { vehicle: QWVehicle | null }) {
+// Payload handed to the parent when the tech pushes a DTC diagnosis into the quote.
+export interface DTCJobPayload {
+  code:            string
+  name:            string
+  suggestedRepair: string
+  laborHours:      number
+  parts:           string[]
+  category:        string
+}
+
+// Pull the first number out of a labor estimate ("3.0 - 5.0 hours..." → 3.0).
+function parseLaborHours(laborEstimate: string): number {
+  const m = laborEstimate.match(/\d+(?:\.\d+)?/)
+  const n = m ? parseFloat(m[0]) : NaN
+  return Number.isFinite(n) && n > 0 ? n : 1.5
+}
+
+// Map Gemini's free-text category to a JOB_CATEGORIES id in QuickWrenchClient.
+// (Emissions/Fuel use the real catalog ids emissions_evap / fuel_system so the
+// parent resolves the correct category label.)
+function mapCategory(geminiCategory: string): string {
+  const c = (geminiCategory || '').toLowerCase()
+  if (c.includes('emission') || c.includes('catalyst') || c.includes('evap')) return 'emissions_evap'
+  if (c.includes('fuel'))                                                      return 'fuel_system'
+  if (c.includes('transmission'))                                             return 'transmission'
+  if (c.includes('suspension') || c.includes('steering'))                     return 'suspension'
+  if (c.includes('brake'))                                                    return 'brakes'
+  if (c.includes('a/c') || c.includes('hvac') || c.includes('air condition') || c.includes('heat')) return 'ac_heating'
+  if (c.includes('electric'))                                                 return 'electrical'
+  if (c.includes('engine'))                                                   return 'engine'
+  return 'diagnostics'
+}
+
+function DTCPanel({ vehicle, onAddDTCJob }: {
+  vehicle:      QWVehicle | null
+  onAddDTCJob?: (job: DTCJobPayload) => void
+}) {
   const [input,          setInput]          = useState('')
   const [displayMessage, setDisplayMessage] = useState('')
   const [loading,        setLoading]        = useState(false)
@@ -342,6 +378,25 @@ function DTCPanel({ vehicle }: { vehicle: QWVehicle | null }) {
             <SectionCard title="Suggested Repair" defaultOpen={true}>
               <p className="text-white/80 text-sm leading-relaxed">{result.suggested_repair}</p>
             </SectionCard>
+          )}
+
+          {onAddDTCJob && (
+            <button
+              onClick={() => onAddDTCJob({
+                code:            result.code || input,
+                name:            result.name || result.code || input,
+                suggestedRepair: result.suggested_repair || '',
+                laborHours:      parseLaborHours(result.labor_estimate || ''),
+                parts:           result.parts_needed || [],
+                category:        mapCategory(result.category || ''),
+              })}
+              className="w-full flex items-center justify-center gap-2 px-5 py-3 bg-orange hover:bg-orange-hover text-white font-condensed font-bold text-sm tracking-wide rounded-lg transition-colors min-h-[48px]"
+            >
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              Add to Quote
+            </button>
           )}
 
           {result.citations && result.citations.length > 0 && (
@@ -840,9 +895,11 @@ const DIAG_TABS = [
 export default function DiagnosticTools({
   vehicle,
   onFindTires,
+  onAddDTCJob,
 }: {
   vehicle:      QWVehicle | null
   onFindTires?: (sizes: { front: string | null; rear: string | null }) => void
+  onAddDTCJob?: (job: DTCJobPayload) => void
 }) {
   const [activeTab, setActiveTab] = useState('dtc')
 
@@ -890,7 +947,7 @@ export default function DiagnosticTools({
 
       {/* Panel content */}
       <div>
-        {activeTab === 'dtc'    && <DTCPanel vehicle={vehicle} />}
+        {activeTab === 'dtc'    && <DTCPanel vehicle={vehicle} onAddDTCJob={onAddDTCJob} />}
         {activeTab === 'recall' && <RecallPanel vehicle={vehicle} />}
         {activeTab === 'tsb'    && <ComplaintsPanel vehicle={vehicle} />}
         {activeTab === 'fluids' && <FluidSpecsPanel vehicle={vehicle} />}

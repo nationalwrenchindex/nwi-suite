@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import DiagnosticTools from './DiagnosticTools'
+import DiagnosticTools, { type DTCJobPayload } from './DiagnosticTools'
 import type {
   QWVehicle,
   SelectedJob,
@@ -1846,6 +1846,46 @@ export default function QuickWrenchClient({
     setActiveTab(3)
   }
 
+  // Push a DTC diagnosis (from DiagnosticTools) into the quote flow — mirror of
+  // handleFindTires: build a SelectedJob, seed parts + tech-guide notes, advance.
+  function handleAddDTCJob(job: DTCJobPayload) {
+    const categoryLabel = JOB_CATEGORIES.find(c => c.id === job.category)?.label ?? 'Diagnostics'
+
+    const selectedJob: SelectedJob = {
+      category:      job.category,
+      categoryLabel,
+      name:          `${job.code} — ${job.name}`,
+      hours:         job.laborHours,
+    }
+    const key = jobKey(selectedJob)
+
+    // Seed parts from the DTC result's parts_needed
+    if (job.parts.length > 0) {
+      setPartsByJob(prev => ({ ...prev, [key]: enrichParts(job.parts) }))
+    }
+
+    // Pre-fill the tech guide so the suggested repair + hours carry into the
+    // Quote tab. TechGuide has no `summary` field, so the repair text goes in
+    // `steps` and the labor time in `hours` (what the Quote tab actually reads).
+    setTechGuides(prev => ({
+      ...prev,
+      [key]: {
+        torque:  [],
+        steps:   job.suggestedRepair ? [job.suggestedRepair] : [],
+        tools:   [],
+        warning: '',
+        hours:   job.laborHours,
+        parts:   job.parts,
+      },
+    }))
+
+    setSelectedJobs(prev => prev.some(j => jobKey(j) === key) ? prev : [...prev, selectedJob])
+    setGuidesError(null)
+
+    // If parts exist advance to Parts tab, otherwise straight to Quote tab.
+    setActiveTab(job.parts.length > 0 ? 3 : 4)
+  }
+
   const isJobsComplete   = selectedJobs.length > 0
   const isGuidesComplete = selectedJobs.length > 0 && selectedJobs.every(j => !!techGuides[jobKey(j)])
   const isPartsComplete  = Object.values(partsByJob).some(p => p.length > 0)
@@ -2005,7 +2045,7 @@ export default function QuickWrenchClient({
       </div>
 
       {/* ── Diagnostic Tools ── */}
-      <DiagnosticTools vehicle={vehicle} onFindTires={handleFindTires} />
+      <DiagnosticTools vehicle={vehicle} onFindTires={handleFindTires} onAddDTCJob={handleAddDTCJob} />
     </div>
   )
 }
