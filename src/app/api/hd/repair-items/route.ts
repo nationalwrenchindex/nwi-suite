@@ -18,12 +18,16 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from('hd_repair_items')
-    .select('id, description, category, applies_to, mobile_hours, shop_hours, requires_refrigeration, refrigeration_service, refrigeration_hours, notes, is_master')
+    .select('id, description, category, applies_to, mobile_hours, shop_hours, requires_refrigeration, refrigeration_service, refrigeration_hours, notes, is_master, use_count, last_used_at, source')
     .eq('active', true)
   if (category) query = query.eq('category', category)
 
+  // User's own items first, most-used at the top (their personal library);
+  // master items follow, ordered by description.
   const { data, error } = await query
-    .order('is_master', { ascending: false })
+    .order('is_master', { ascending: true })
+    .order('use_count', { ascending: false, nullsFirst: false })
+    .order('last_used_at', { ascending: false, nullsFirst: false })
     .order('description', { ascending: true })
     .limit(300)
 
@@ -62,6 +66,34 @@ export async function POST(req: NextRequest) {
   const applies_to = ['truck', 'trailer', 'both'].includes(appliesRaw) ? appliesRaw : 'both'
   const svcRaw = typeof body.refrigeration_service === 'string' ? body.refrigeration_service : null
   const refrigeration_service = svcRaw && ['A', 'B', 'C', 'D'].includes(svcRaw) ? svcRaw : null
+  const sourceRaw = typeof body.source === 'string' ? body.source : 'manual'
+  const source = ['manual', 'quickwrench', 'seed'].includes(sourceRaw) ? sourceRaw : 'manual'
+
+  const cols = 'id, description, category, applies_to, mobile_hours, shop_hours, requires_refrigeration, refrigeration_service, refrigeration_hours, notes, is_master, use_count, last_used_at, source'
+
+  // If this tech already saved an item with the same description (case-insensitive),
+  // bump its use_count / last_used_at instead of creating a duplicate.
+  const { data: existing } = await supabase
+    .from('hd_repair_items')
+    .select('id, use_count')
+    .eq('user_id', user.id)
+    .ilike('description', description)
+    .limit(1)
+    .maybeSingle()
+
+  if (existing) {
+    const { data: bumped, error: bumpErr } = await supabase
+      .from('hd_repair_items')
+      .update({ use_count: (existing.use_count ?? 0) + 1, last_used_at: new Date().toISOString() })
+      .eq('id', existing.id)
+      .select(cols)
+      .single()
+    if (bumpErr) {
+      console.error('[hd/repair-items] use_count bump failed', bumpErr)
+      return NextResponse.json({ error: 'Database error' }, { status: 500 })
+    }
+    return NextResponse.json({ item: bumped }, { status: 200 })
+  }
 
   const { data, error } = await supabase
     .from('hd_repair_items')
@@ -78,8 +110,11 @@ export async function POST(req: NextRequest) {
       notes:                 typeof body.notes === 'string' ? body.notes : null,
       is_master:             false,
       active:                true,
+      use_count:             1,
+      last_used_at:          new Date().toISOString(),
+      source,
     })
-    .select('id, description, category, applies_to, mobile_hours, shop_hours, requires_refrigeration, refrigeration_service, refrigeration_hours, notes, is_master')
+    .select(cols)
     .single()
 
   if (error) {

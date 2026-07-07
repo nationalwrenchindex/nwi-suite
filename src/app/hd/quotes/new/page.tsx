@@ -13,6 +13,11 @@ const BORDER  = '#E5E7EB'
 const TEXT    = '#1A1A1A'
 const MUTED   = '#6B7280'
 
+// HD Suite dark theme — used by the labor modal
+const D_BG       = '#0d1820'
+const D_BORDER   = '#1e3040'
+const D_INPUT_BG = '#162030'
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface LineItem {
@@ -47,6 +52,41 @@ interface PartResult {
   description: string
   category: string
 }
+
+// A row from the personal labor library (hd_repair_items)
+interface LibraryItem {
+  id: string
+  description: string
+  mobile_hours: number | string | null
+  shop_hours: number | string | null
+  requires_refrigeration: boolean
+  is_master: boolean
+}
+
+const dInp = {
+  width: '100%',
+  border: `1px solid ${D_BORDER}`,
+  borderRadius: 8,
+  padding: '10px 12px',
+  fontSize: 14,
+  color: '#FFFFFF',
+  background: D_INPUT_BG,
+  outline: 'none',
+  minHeight: 44,
+} as React.CSSProperties
+
+// Subtle inline-edit input for existing labor line rows (light row style)
+const lineInp = {
+  width: '100%',
+  border: '1px solid transparent',
+  borderBottom: `1px solid ${BORDER}`,
+  borderRadius: 4,
+  padding: '4px 6px',
+  fontSize: 14,
+  color: TEXT,
+  background: 'transparent',
+  outline: 'none',
+} as React.CSSProperties
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -116,12 +156,16 @@ export default function NewQuotePage() {
   const [partsResults, setPartsResults]   = useState<PartResult[]>([])
   const [partsSearching, setPartsSearching] = useState(false)
 
-  // Labor modal state
-  const [laborSearch, setLaborSearch]       = useState('')
-  const [laborSelected, setLaborSelected]   = useState<LaborGuideItem | null>(null)
-  const [laborMobileMin, setLaborMobileMin] = useState('0')
-  const [laborMobileMax, setLaborMobileMax] = useState('0')
+  // Labor modal state — free-text description + editable hours + personal library
+  const [laborDesc, setLaborDesc]           = useState('')
+  const [laborBookMin, setLaborBookMin]     = useState('1.0')
+  const [laborBookMax, setLaborBookMax]     = useState('1.0')
+  const [laborMobileMin, setLaborMobileMin] = useState('1.5')
+  const [laborMobileMax, setLaborMobileMax] = useState('1.5')
   const [laborRecharge, setLaborRecharge]   = useState(false)
+  const [saveToLibrary, setSaveToLibrary]   = useState(true)
+  const [laborLibrary, setLaborLibrary]     = useState<LibraryItem[]>([])
+  const [laborSelectedKey, setLaborSelectedKey] = useState('')
 
   const [parts, setParts] = useState<PartsDraft>({ part_number: '', description: '', quantity: '1', unit_cost: '0.00' })
 
@@ -188,6 +232,16 @@ export default function NewQuotePage() {
     } catch {}
   }, [])
 
+  async function fetchLibrary() {
+    try {
+      const res  = await fetch('/api/hd/repair-items')
+      const data = await res.json()
+      setLaborLibrary((data.items ?? []) as LibraryItem[])
+    } catch {}
+  }
+
+  useEffect(() => { fetchLibrary() }, [])
+
   function pullFromQW() {
     try {
       const raw = localStorage.getItem('hd_last_quickwrench_result')
@@ -227,41 +281,84 @@ export default function NewQuotePage() {
 
   // ── Labor modal helpers ──────────────────────────────────────────────────
 
-  const filteredGuide = laborSearch.trim()
-    ? LABOR_GUIDE.filter(i => i.label.toLowerCase().includes(laborSearch.toLowerCase()))
-    : LABOR_GUIDE
+  const libNum = (v: number | string | null): number | null =>
+    v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v)
 
-  function selectLaborItem(item: LaborGuideItem) {
-    setLaborSelected(item)
-    setLaborMobileMin(String(item.mobile_min))
-    setLaborMobileMax(String(item.mobile_max))
+  const laborTerm = laborDesc.trim().toLowerCase()
+  // Personal library first (own items then master), then LABOR_GUIDE fallbacks.
+  const libMatches = laborTerm
+    ? laborLibrary.filter(i => i.description.toLowerCase().includes(laborTerm)).slice(0, 8)
+    : []
+  const guideMatches = laborTerm
+    ? LABOR_GUIDE.filter(i => i.label.toLowerCase().includes(laborTerm)).slice(0, 8)
+    : []
+  const showLaborResults = laborTerm.length > 0 && (libMatches.length > 0 || guideMatches.length > 0)
+
+  function selectLibraryItem(i: LibraryItem) {
+    const book = libNum(i.shop_hours)   ?? 1.0
+    const mob  = libNum(i.mobile_hours) ?? 1.5
+    setLaborDesc(i.description)
+    setLaborBookMin(String(book));  setLaborBookMax(String(book))
+    setLaborMobileMin(String(mob)); setLaborMobileMax(String(mob))
+    setLaborRecharge(i.requires_refrigeration === true)
+    setLaborSelectedKey(`lib:${i.id}`)
+  }
+
+  function selectGuideItem(item: LaborGuideItem) {
+    setLaborDesc(item.label)
+    setLaborBookMin(String(item.book_min));     setLaborBookMax(String(item.book_max))
+    setLaborMobileMin(String(item.mobile_min)); setLaborMobileMax(String(item.mobile_max))
     setLaborRecharge(item.requires_refrigeration)
+    setLaborSelectedKey(`guide:${item.label}`)
   }
 
   function closeLaborModal() {
     setLaborModal(false)
-    setLaborSearch('')
-    setLaborSelected(null)
-    setLaborMobileMin('0')
-    setLaborMobileMax('0')
+    setLaborDesc('')
+    setLaborBookMin('1.0');   setLaborBookMax('1.0')
+    setLaborMobileMin('1.5'); setLaborMobileMax('1.5')
     setLaborRecharge(false)
+    setSaveToLibrary(true)
+    setLaborSelectedKey('')
+  }
+
+  async function saveLaborToLibrary(description: string, book: number, mobile: number, refrig: boolean) {
+    try {
+      await fetch('/api/hd/repair-items', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          description,
+          shop_hours: book,
+          mobile_hours: mobile,
+          requires_refrigeration: refrig,
+          source: 'manual',
+        }),
+      })
+      fetchLibrary()
+    } catch {}
   }
 
   const rechargeAddMin  = laborRecharge ? 1.5 : 0
   const rechargeAddMax  = laborRecharge ? 2.5 : 0
-  const totalMobileMin  = (parseFloat(laborMobileMin) || 0) + rechargeAddMin
-  const totalMobileMax  = (parseFloat(laborMobileMax) || 0) + rechargeAddMax
+  const baseMobileMin   = parseFloat(laborMobileMin) || 0
+  const baseMobileMax   = parseFloat(laborMobileMax) || baseMobileMin
+  const totalMobileMin  = baseMobileMin + rechargeAddMin
+  const totalMobileMax  = baseMobileMax + rechargeAddMax
   const previewAmtMin   = totalMobileMin * form.labor_rate
   const previewAmtMax   = totalMobileMax * form.labor_rate
 
   function addLaborItem() {
-    if (!laborSelected) { setToast('Select a labor item from the guide.'); return }
+    const description = laborDesc.trim()
+    if (!description) { setToast('Enter a labor description.'); return }
+    const bookMin = parseFloat(laborBookMin) || 0
+    const bookMax = parseFloat(laborBookMax) || bookMin
     const item: LineItem = {
       id: crypto.randomUUID(),
       type: 'labor',
-      description: laborSelected.label,
-      book_hours: laborSelected.book_min,
-      book_hours_max: laborSelected.book_max,
+      description,
+      book_hours: bookMin,
+      book_hours_max: bookMax,
       mobile_hours: parseFloat(totalMobileMin.toFixed(2)),
       mobile_hours_max: parseFloat(totalMobileMax.toFixed(2)),
       requires_refrigeration: laborRecharge,
@@ -271,7 +368,31 @@ export default function NewQuotePage() {
       amount_max: parseFloat((totalMobileMax * form.labor_rate).toFixed(2)),
     }
     setLineItems(l => [...l, item])
+    // Store the base labor (without the situational recharge add) in the library.
+    if (saveToLibrary) saveLaborToLibrary(description, bookMin, baseMobileMin, laborRecharge)
     closeLaborModal()
+  }
+
+  // ── Inline editing of existing labor line items ──────────────────────────
+  function updateLineDescription(id: string, value: string) {
+    setLineItems(l => l.map(i => i.id === id ? { ...i, description: value } : i))
+  }
+
+  function updateLineHours(id: string, field: 'book' | 'mobile', raw: string) {
+    const n = Math.max(0, parseFloat(raw) || 0)
+    setLineItems(l => l.map(i => {
+      if (i.id !== id) return i
+      if (field === 'book') {
+        return { ...i, book_hours: n, book_hours_max: n }
+      }
+      return {
+        ...i,
+        mobile_hours: n,
+        mobile_hours_max: n,
+        amount: parseFloat((n * form.labor_rate).toFixed(2)),
+        amount_max: parseFloat((n * form.labor_rate).toFixed(2)),
+      }
+    }))
   }
 
   // ── Parts modal ──
@@ -592,41 +713,59 @@ export default function NewQuotePage() {
                   className="grid items-center px-4 py-3 gap-2"
                   style={{ gridTemplateColumns: '1fr 90px 110px 80px 90px 28px', borderBottom: `1px solid #F9FAFB` }}
                 >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span
-                        className="text-xs px-1.5 py-0.5 rounded font-semibold shrink-0"
-                        style={item.type === 'labor' ? { background: '#FFF7ED', color: ORANGE } : { background: '#EBF5FF', color: BLUE }}
-                      >
-                        {item.type === 'labor' ? 'LAB' : 'PRT'}
-                      </span>
-                      <span className="text-sm" style={{ color: TEXT }}>{item.description}</span>
-                    </div>
-                    {item.part_number && (
-                      <span className="block text-xs font-mono mt-0.5 ml-7" style={{ color: MUTED }}>{item.part_number}</span>
-                    )}
-                    {item.recharge_added && (
-                      <span className="block text-xs mt-0.5 ml-7" style={{ color: '#9A3412' }}>+ refrigeration recovery &amp; recharge</span>
-                    )}
-                  </div>
-                  <span className="text-xs text-right" style={{ color: MUTED }}>
-                    {item.type === 'labor'
-                      ? fmtHrs(item.book_hours, item.book_hours_max ?? item.book_hours)
-                      : `${item.quantity}×`}
-                  </span>
-                  <span className="text-xs text-right" style={{ color: MUTED }}>
-                    {item.type === 'labor'
-                      ? fmtHrs(item.mobile_hours, item.mobile_hours_max ?? item.mobile_hours)
-                      : fmt(item.unit_cost)}
-                  </span>
-                  <span className="text-xs text-right" style={{ color: MUTED }}>
-                    {item.type === 'labor' ? `${fmt(form.labor_rate)}/hr` : ''}
-                  </span>
-                  <span className="text-sm font-semibold text-right" style={{ color: TEXT }}>
-                    {(item.amount_max ?? item.amount) - item.amount > 0.5
-                      ? fmtAmtRange(item.amount, item.amount_max)
-                      : fmt(item.amount)}
-                  </span>
+                  {item.type === 'labor' ? (
+                    <>
+                      {/* Editable description */}
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs px-1.5 py-0.5 rounded font-semibold shrink-0" style={{ background: '#FFF7ED', color: ORANGE }}>LAB</span>
+                          <input
+                            value={item.description}
+                            onChange={e => updateLineDescription(item.id, e.target.value)}
+                            style={{ ...lineInp }}
+                            aria-label="Labor description"
+                          />
+                        </div>
+                        {item.recharge_added && (
+                          <span className="block text-xs mt-0.5 ml-7" style={{ color: '#9A3412' }}>+ refrigeration recovery &amp; recharge</span>
+                        )}
+                      </div>
+                      {/* Editable book hours */}
+                      <input
+                        type="number" min={0} step={0.25}
+                        value={item.book_hours}
+                        onChange={e => updateLineHours(item.id, 'book', e.target.value)}
+                        style={{ ...lineInp, textAlign: 'right' }}
+                        aria-label="Book hours"
+                      />
+                      {/* Editable mobile hours */}
+                      <input
+                        type="number" min={0} step={0.25}
+                        value={item.mobile_hours}
+                        onChange={e => updateLineHours(item.id, 'mobile', e.target.value)}
+                        style={{ ...lineInp, textAlign: 'right' }}
+                        aria-label="Mobile hours"
+                      />
+                      <span className="text-xs text-right" style={{ color: MUTED }}>{`${fmt(form.labor_rate)}/hr`}</span>
+                      <span className="text-sm font-semibold text-right" style={{ color: TEXT }}>{fmt(item.amount)}</span>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs px-1.5 py-0.5 rounded font-semibold shrink-0" style={{ background: '#EBF5FF', color: BLUE }}>PRT</span>
+                          <span className="text-sm" style={{ color: TEXT }}>{item.description}</span>
+                        </div>
+                        {item.part_number && (
+                          <span className="block text-xs font-mono mt-0.5 ml-7" style={{ color: MUTED }}>{item.part_number}</span>
+                        )}
+                      </div>
+                      <span className="text-xs text-right" style={{ color: MUTED }}>{`${item.quantity}×`}</span>
+                      <span className="text-xs text-right" style={{ color: MUTED }}>{fmt(item.unit_cost)}</span>
+                      <span className="text-xs text-right" style={{ color: MUTED }} />
+                      <span className="text-sm font-semibold text-right" style={{ color: TEXT }}>{fmt(item.amount)}</span>
+                    </>
+                  )}
                   <button onClick={() => removeItem(item.id)} style={{ color: '#9CA3AF', lineHeight: 1 }}>
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                       <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
@@ -716,15 +855,16 @@ export default function NewQuotePage() {
         </div>
       </div>
 
-      {/* ─ Labor Modal ─ */}
+      {/* ─ Labor Modal (HD Suite dark theme) ─ */}
       {laborModal && (
         <div
           className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4"
-          style={{ background: 'rgba(0,0,0,0.5)' }}
+          style={{ background: 'rgba(0,0,0,0.6)' }}
         >
           <div
             style={{
-              background: CARD,
+              background: D_BG,
+              border: `1px solid ${D_BORDER}`,
               borderRadius: '12px 12px 0 0',
               width: '100%',
               maxWidth: 540,
@@ -735,192 +875,187 @@ export default function NewQuotePage() {
             className="sm:rounded-xl"
           >
             {/* Modal header */}
-            <div className="flex items-center justify-between px-5 pt-5 pb-3 shrink-0" style={{ borderBottom: `1px solid ${BORDER}` }}>
-              <h3 className="font-condensed font-bold text-xl" style={{ color: TEXT }}>ADD LABOR LINE</h3>
-              <button onClick={closeLaborModal} style={{ color: MUTED }}>
+            <div className="flex items-center justify-between px-5 pt-5 pb-3 shrink-0" style={{ borderBottom: `1px solid ${D_BORDER}` }}>
+              <h3 className="font-condensed font-bold text-xl" style={{ color: '#FFFFFF' }}>ADD LABOR LINE</h3>
+              <button onClick={closeLaborModal} style={{ color: '#8a9bad' }}>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
               </button>
             </div>
 
-            {/* Search input */}
-            <div className="px-5 pt-4 pb-2 shrink-0">
-              <div className="relative">
-                <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke={MUTED} strokeWidth={2} viewBox="0 0 24 24">
-                  <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-                </svg>
+            {/* Scrollable body */}
+            <div className="px-5 py-4 flex flex-col gap-4" style={{ overflowY: 'auto' }}>
+
+              {/* Free-text description + live library/catalog results */}
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#8a9bad' }}>Labor Description</label>
                 <input
                   autoFocus
-                  style={{ ...inp, paddingLeft: 34 }}
-                  placeholder="Search 107 labor guide items..."
-                  value={laborSearch}
-                  onChange={e => setLaborSearch(e.target.value)}
+                  style={dInp}
+                  placeholder="Type a description or search your library below"
+                  value={laborDesc}
+                  onChange={e => { setLaborDesc(e.target.value); setLaborSelectedKey('') }}
                 />
-              </div>
-            </div>
 
-            {/* Scrollable item list */}
-            <div
-              style={{
-                overflowY: 'auto',
-                flex: laborSelected ? '0 0 auto' : '1 1 auto',
-                maxHeight: laborSelected ? 220 : 340,
-                borderBottom: `1px solid ${BORDER}`,
-              }}
-            >
-              {filteredGuide.length === 0 && (
-                <p className="text-sm text-center py-6" style={{ color: MUTED }}>No items match &ldquo;{laborSearch}&rdquo;</p>
-              )}
-              {filteredGuide.map(item => {
-                const isSelected = laborSelected?.label === item.label
-                return (
-                  <button
-                    key={item.label}
-                    onClick={() => selectLaborItem(item)}
-                    className="w-full text-left px-5 py-2.5 flex items-center gap-3"
-                    style={{
-                      background: isSelected ? '#FFF7ED' : 'transparent',
-                      borderLeft: isSelected ? `3px solid ${ORANGE}` : '3px solid transparent',
-                      borderBottom: `1px solid #F9FAFB`,
-                    }}
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate" style={{ color: isSelected ? ORANGE : TEXT }}>{item.label}</p>
-                      <p className="text-xs mt-0.5" style={{ color: MUTED }}>
-                        Book: {fmtHrs(item.book_min, item.book_max, item.shop_only)}
-                        &nbsp;&bull;&nbsp;
-                        Mobile: {fmtHrs(item.mobile_min, item.mobile_max, item.shop_only)}
-                        {item.requires_refrigeration && (
-                          <span className="ml-2 font-semibold" style={{ color: '#2563EB' }}>❄ Refrig.</span>
-                        )}
-                      </p>
-                    </div>
-                    {isSelected && (
-                      <svg className="w-4 h-4 shrink-0" fill="none" stroke={ORANGE} strokeWidth={2.5} viewBox="0 0 24 24">
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
-
-            {/* Selected item detail panel */}
-            {laborSelected && (
-              <div className="px-5 py-4 flex flex-col gap-3" style={{ overflowY: 'auto' }}>
-
-                {/* Time fields */}
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Book Time (flat rate)">
-                    <div
-                      className="flex items-center px-3 rounded-lg text-sm"
-                      style={{ ...inp, background: '#F9FAFB', color: MUTED, cursor: 'default' }}
-                    >
-                      {fmtHrs(laborSelected.book_min, laborSelected.book_max, laborSelected.shop_only)}
-                    </div>
-                  </Field>
-                  <div>
-                    <label className="text-xs font-semibold uppercase tracking-wide block mb-1" style={{ color: MUTED }}>
-                      Mobile Field Time (hrs)
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        min={0}
-                        step={0.25}
-                        value={laborMobileMin}
-                        onChange={e => setLaborMobileMin(e.target.value)}
-                        style={{ ...inp, textAlign: 'center' }}
-                      />
-                      {Math.abs((parseFloat(laborMobileMin) || 0) - (parseFloat(laborMobileMax) || 0)) > 0.01 && (
-                        <>
-                          <span style={{ color: MUTED, fontSize: 12, whiteSpace: 'nowrap' }}>to</span>
-                          <input
-                            type="number"
-                            min={0}
-                            step={0.25}
-                            value={laborMobileMax}
-                            onChange={e => setLaborMobileMax(e.target.value)}
-                            style={{ ...inp, textAlign: 'center' }}
-                          />
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Refrigeration recovery checkbox */}
-                {laborSelected.requires_refrigeration && (
-                  <label
-                    className="flex items-start gap-3 p-3 rounded-lg cursor-pointer"
-                    style={{ background: '#EFF6FF', border: '1px solid #BFDBFE' }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={laborRecharge}
-                      onChange={e => setLaborRecharge(e.target.checked)}
-                      className="mt-0.5 w-4 h-4"
-                      style={{ accentColor: '#2563EB' }}
-                    />
-                    <div>
-                      <p className="text-sm font-semibold" style={{ color: '#1D4ED8' }}>Add refrigeration recovery &amp; recharge</p>
-                      <p className="text-xs mt-0.5" style={{ color: '#3B82F6' }}>Adds 1.5 to 2.5 hrs to mobile field time</p>
-                    </div>
-                  </label>
-                )}
-
-                {/* Filter drier reminder */}
-                {laborRecharge && (
+                {showLaborResults && (
                   <div
-                    className="flex items-center gap-2 px-3 py-2 rounded-lg"
-                    style={{ background: '#FFFBEB', border: '1px solid #FDE68A' }}
+                    className="mt-1"
+                    style={{ border: `1px solid ${D_BORDER}`, borderRadius: 8, overflow: 'hidden', maxHeight: 240, overflowY: 'auto' }}
                   >
-                    <svg className="w-4 h-4 shrink-0" fill="none" stroke="#D97706" strokeWidth={2} viewBox="0 0 24 24">
-                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                      <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-                    </svg>
-                    <p className="text-xs font-semibold" style={{ color: '#92400E' }}>
-                      Remember to add filter drier to the parts list.
-                    </p>
+                    {/* Personal library first */}
+                    {libMatches.map(i => {
+                      const key = `lib:${i.id}`
+                      const isSel = laborSelectedKey === key
+                      const book = libNum(i.shop_hours)
+                      const mob  = libNum(i.mobile_hours)
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => selectLibraryItem(i)}
+                          className="w-full text-left px-4 py-2.5 flex items-center gap-3"
+                          style={{
+                            background: isSel ? '#1a2733' : 'transparent',
+                            borderLeft: isSel ? `3px solid ${ORANGE}` : '3px solid transparent',
+                            borderBottom: `1px solid ${D_BORDER}`,
+                          }}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate" style={{ color: isSel ? ORANGE : '#FFFFFF' }}>{i.description}</p>
+                            <p className="text-xs mt-0.5" style={{ color: '#8a9bad' }}>
+                              Book: {book != null ? `${book} hrs` : '—'} &nbsp;&bull;&nbsp; Mobile: {mob != null ? `${mob} hrs` : '—'}
+                            </p>
+                          </div>
+                          {/* Only tech's own saved items get the badge; master items look native */}
+                          {!i.is_master && (
+                            <span className="text-xs px-1.5 py-0.5 rounded font-semibold shrink-0 text-white" style={{ background: BLUE }}>saved</span>
+                          )}
+                        </button>
+                      )
+                    })}
+
+                    {/* LABOR_GUIDE fallback suggestions */}
+                    {guideMatches.map(item => {
+                      const key = `guide:${item.label}`
+                      const isSel = laborSelectedKey === key
+                      return (
+                        <button
+                          key={key}
+                          onClick={() => selectGuideItem(item)}
+                          className="w-full text-left px-4 py-2.5 flex items-center gap-3"
+                          style={{
+                            background: isSel ? '#1a2733' : 'transparent',
+                            borderLeft: isSel ? `3px solid ${ORANGE}` : '3px solid transparent',
+                            borderBottom: `1px solid ${D_BORDER}`,
+                          }}
+                        >
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate" style={{ color: isSel ? ORANGE : '#FFFFFF' }}>{item.label}</p>
+                            <p className="text-xs mt-0.5" style={{ color: '#8a9bad' }}>
+                              Book: {fmtHrs(item.book_min, item.book_max, item.shop_only)}
+                              &nbsp;&bull;&nbsp;
+                              Mobile: {fmtHrs(item.mobile_min, item.mobile_max, item.shop_only)}
+                              {item.requires_refrigeration && (
+                                <span className="ml-2 font-semibold" style={{ color: '#60A5FA' }}>❄ Refrig.</span>
+                              )}
+                            </p>
+                          </div>
+                        </button>
+                      )
+                    })}
                   </div>
                 )}
+              </div>
 
-                {/* Amount preview */}
-                <div className="p-3 rounded-lg" style={{ background: '#FFF7ED', border: `1px solid #FED7AA` }}>
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-xs font-medium" style={{ color: '#C2410C' }}>
-                        Mobile: {fmtHrs(totalMobileMin, totalMobileMax)}
-                        {laborRecharge && <span className="ml-1">(incl. recharge)</span>}
-                      </p>
-                      <p className="text-xs mt-0.5" style={{ color: MUTED }}>
-                        Book: {fmtHrs(laborSelected.book_min, laborSelected.book_max, laborSelected.shop_only)} flat rate
-                      </p>
-                    </div>
-                    <p className="text-lg font-bold shrink-0" style={{ color: ORANGE }}>
-                      {fmtAmtRange(previewAmtMin, previewAmtMax)}
-                    </p>
+              {/* Editable hours — always visible */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#8a9bad' }}>Book Hours (min / max)</label>
+                  <div className="flex items-center gap-2">
+                    <input type="number" min={0} step={0.25} value={laborBookMin} onChange={e => setLaborBookMin(e.target.value)} style={{ ...dInp, textAlign: 'center' }} />
+                    <span style={{ color: '#8a9bad', fontSize: 12 }}>to</span>
+                    <input type="number" min={0} step={0.25} value={laborBookMax} onChange={e => setLaborBookMax(e.target.value)} style={{ ...dInp, textAlign: 'center' }} />
+                  </div>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#8a9bad' }}>Mobile Hours (min / max)</label>
+                  <div className="flex items-center gap-2">
+                    <input type="number" min={0} step={0.25} value={laborMobileMin} onChange={e => setLaborMobileMin(e.target.value)} style={{ ...dInp, textAlign: 'center' }} />
+                    <span style={{ color: '#8a9bad', fontSize: 12 }}>to</span>
+                    <input type="number" min={0} step={0.25} value={laborMobileMax} onChange={e => setLaborMobileMax(e.target.value)} style={{ ...dInp, textAlign: 'center' }} />
                   </div>
                 </div>
               </div>
-            )}
+
+              {/* Refrigeration recovery checkbox */}
+              <label className="flex items-start gap-3 p-3 rounded-lg cursor-pointer" style={{ background: '#132132', border: `1px solid ${D_BORDER}` }}>
+                <input
+                  type="checkbox"
+                  checked={laborRecharge}
+                  onChange={e => setLaborRecharge(e.target.checked)}
+                  className="mt-0.5 w-4 h-4"
+                  style={{ accentColor: BLUE }}
+                />
+                <div>
+                  <p className="text-sm font-semibold" style={{ color: '#93C5FD' }}>Add refrigeration recovery &amp; recharge</p>
+                  <p className="text-xs mt-0.5" style={{ color: '#8a9bad' }}>Adds 1.5 to 2.5 hrs to mobile field time</p>
+                </div>
+              </label>
+
+              {/* Filter drier reminder */}
+              {laborRecharge && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: '#2a2213', border: '1px solid #6b5417' }}>
+                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="#F59E0B" strokeWidth={2} viewBox="0 0 24 24">
+                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                  </svg>
+                  <p className="text-xs font-semibold" style={{ color: '#FCD34D' }}>Remember to add filter drier to the parts list.</p>
+                </div>
+              )}
+
+              {/* Save to library */}
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={saveToLibrary}
+                  onChange={e => setSaveToLibrary(e.target.checked)}
+                  className="w-4 h-4 rounded"
+                  style={{ accentColor: ORANGE }}
+                />
+                <span className="text-sm" style={{ color: '#c9d5e0' }}>Save to my labor library</span>
+              </label>
+
+              {/* Amount preview */}
+              <div className="p-3 rounded-lg" style={{ background: '#132132', border: `1px solid ${D_BORDER}` }}>
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-medium" style={{ color: '#c9d5e0' }}>
+                      Mobile: {fmtHrs(totalMobileMin, totalMobileMax)}
+                      {laborRecharge && <span className="ml-1">(incl. recharge)</span>}
+                    </p>
+                    <p className="text-xs mt-0.5" style={{ color: '#8a9bad' }}>
+                      Book: {fmtHrs(parseFloat(laborBookMin) || 0, parseFloat(laborBookMax) || (parseFloat(laborBookMin) || 0))} flat rate
+                    </p>
+                  </div>
+                  <p className="text-lg font-bold shrink-0" style={{ color: ORANGE }}>
+                    {fmtAmtRange(previewAmtMin, previewAmtMax)}
+                  </p>
+                </div>
+              </div>
+            </div>
 
             {/* Footer buttons */}
-            <div
-              className="flex gap-3 px-5 pb-5 pt-3 shrink-0"
-              style={{ borderTop: laborSelected ? `1px solid ${BORDER}` : 'none' }}
-            >
+            <div className="flex gap-3 px-5 pb-5 pt-3 shrink-0" style={{ borderTop: `1px solid ${D_BORDER}` }}>
               <button
                 onClick={closeLaborModal}
                 className="flex-1 py-2.5 rounded-lg font-semibold text-sm"
-                style={{ background: '#F3F4F6', color: '#374151' }}
+                style={{ background: D_INPUT_BG, color: '#c9d5e0', border: `1px solid ${D_BORDER}` }}
               >
                 Cancel
               </button>
               <button
                 onClick={addLaborItem}
-                disabled={!laborSelected}
+                disabled={!laborDesc.trim()}
                 className="flex-1 py-2.5 rounded-lg font-semibold text-sm text-white disabled:opacity-40"
                 style={{ background: ORANGE }}
               >
