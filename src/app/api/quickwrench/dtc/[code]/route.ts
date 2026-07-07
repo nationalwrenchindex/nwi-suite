@@ -3,40 +3,36 @@ import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { hasQuickWrenchAccess } from '@/lib/subscription'
 import { generateDiagnostic } from '@/lib/gemini/client'
-import { formatDiagnostic } from '@/lib/gemini/formatter'
 
-// Gemini + Haiku formatting can take >10s; 60s prevents Vercel's default timeout kill.
+// Gemini + JSON parsing can take >10s; 60s prevents Vercel's default timeout kill.
 export const maxDuration = 60
 
 type RouteContext = { params: Promise<{ code: string }> }
 
-// Primary diagnostic AI: Gemini 2.5 Flash with Google Search grounding does the
-// thinking + search; Haiku (formatDiagnostic) reshapes it into our section
-// structure. On any Gemini failure we fall back to the Claude Sonnet call so the
-// tech is never left without an answer.
-const LD_SYSTEM_PROMPT = `You are an expert automotive diagnostic technician helping a mobile mechanic in the field. You have deep knowledge of OBD-II fault codes, vehicle-specific repair procedures, and real-world field diagnostics.
+// Primary diagnostic AI: Gemini 2.5 Flash with Google Search grounding returns
+// structured JSON (same shape the frontend renders as colored severity cards and
+// symptom pills). On any Gemini/parse failure we fall back to the Claude Sonnet
+// structured call so the tech is never left without an answer.
+const GEMINI_JSON_SYSTEM_PROMPT = `You are an expert automotive diagnostic technician. Return ONLY valid JSON — no markdown, no backticks, no preamble. First character must be {, last must be }.
 
-TECHNICAL SPECIFICITY REQUIREMENTS — MANDATORY:
-1. Always state the exact DTC code meaning for this specific vehicle (year/make/model/engine) — not generic
-2. List most likely causes in order of field frequency for this specific vehicle
-3. Diagnostic steps must include exact voltage specs, resistance values, and sensor output ranges where applicable
-4. Always include OEM part numbers where known
-5. Always specify special tools required (or state none needed)
-6. Safety warnings for any step involving live circuits, fuel systems, or pressurized components
-7. Labor time estimate for mobile field repair
+Return a JSON object with these exact fields:
+- code: the DTC code
+- name: official code name
+- category: system category (e.g. Emissions/Catalyst)
+- symptoms: array of symptom strings
+- severity: one of 'low', 'moderate', 'high', 'critical'
+- severity_description: one sentence on driveability impact
+- common_causes: array of cause strings, vehicle-specific, ordered by field frequency
+- related_codes: array of related DTC code strings
+- diagnostic_order: array of diagnostic step strings with exact specs (voltages, resistances, sensor ranges)
+- suggested_repair: field-realistic repair recommendation
+- parts_needed: array of parts with OEM part numbers
+- special_tools: string listing tools needed or 'None beyond standard hand tools and multimeter'
+- labor_estimate: string with mobile field time estimate
+- safety_warnings: string with any safety precautions
 
-FORMAT YOUR RESPONSE IN THESE EXACT SECTIONS:
-CODE MEANING:
-SYMPTOMS:
-SEVERITY:
-MOST LIKELY CAUSES:
-DIAGNOSTIC STEPS:
-COMMON FIX:
-PARTS NEEDED:
-SPECIAL TOOLS:
-SAFETY WARNINGS:
-LABOR ESTIMATE:
-RELATED CODES:`
+TECHNICAL SPECIFICITY — MANDATORY:
+All diagnostic steps must include exact voltage specs, resistance values, and sensor output ranges. Include OEM part numbers. Be vehicle-specific — not generic.`
 
 function buildLdUserPrompt(
   code: string, year: string, make: string, model: string, engine: string, displayMessage: string,
@@ -50,29 +46,71 @@ function buildLdUserPrompt(
   ].filter(Boolean).join('\n')
 }
 
-// ── Claude Sonnet fallback (structured tool call, flattened to section text) ──
+// ── Structured shape shared by both the Gemini and Claude paths + the frontend ──
+
+interface DTCStructured {
+  code?:                 string
+  name?:                 string
+  category?:             string
+  symptoms?:             string[]
+  severity?:             string
+  severity_description?: string
+  common_causes?:        string[]
+  related_codes?:        string[]
+  diagnostic_order?:     string[]
+  suggested_repair?:     string
+  parts_needed?:         string[]
+  special_tools?:        string
+  labor_estimate?:       string
+  safety_warnings?:      string
+}
+
+const asStr    = (v: unknown): string   => (typeof v === 'string' ? v : '')
+const asStrArr = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
+
+// Coerce any raw object (loose Gemini JSON or Claude tool output) into the exact
+// structured shape, so the frontend never sees a missing array or wrong type.
+function normalizeStructured(raw: unknown): DTCStructured {
+  const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
+  return {
+    code:                 asStr(o.code),
+    name:                 asStr(o.name),
+    category:             asStr(o.category),
+    symptoms:             asStrArr(o.symptoms),
+    severity:             asStr(o.severity).toLowerCase(),
+    severity_description: asStr(o.severity_description),
+    common_causes:        asStrArr(o.common_causes),
+    related_codes:        asStrArr(o.related_codes),
+    diagnostic_order:     asStrArr(o.diagnostic_order),
+    suggested_repair:     asStr(o.suggested_repair),
+    parts_needed:         asStrArr(o.parts_needed),
+    special_tools:        asStr(o.special_tools),
+    labor_estimate:       asStr(o.labor_estimate),
+    safety_warnings:      asStr(o.safety_warnings),
+  }
+}
+
+// Gemini returns text; strip any stray markdown fences and parse the {...} body.
+function parseJsonLoose(text: string): unknown | null {
+  const cleaned = text.replace(/```json/gi, '').replace(/```/g, '').trim()
+  const start = cleaned.indexOf('{')
+  const end   = cleaned.lastIndexOf('}')
+  if (start === -1 || end === -1 || end < start) return null
+  try {
+    return JSON.parse(cleaned.slice(start, end + 1))
+  } catch {
+    return null
+  }
+}
+
+// ── Claude Sonnet fallback — structured tool call (same unified shape) ──
 
 const CLAUDE_SYSTEM_PROMPT =
   'You are an experienced automotive diagnostic assistant helping a mobile mechanic in the field. ' +
   'Return ONLY valid JSON — no markdown fences, no backticks, no preamble. First character must be {, last must be }.'
 
 function claudeUserMessage(code: string, vehicleDesc: string, displayMessage: string): string {
-  return `For DTC code ${code} on a ${vehicleDesc}${displayMessage ? ` (display shows: ${displayMessage})` : ''}, return a JSON object with these exact fields:
-
-- code: the DTC code as entered
-- name: official code name
-- category: short category badge text (e.g. 'Ignition / Fuel')
-- symptoms: array of 3-5 strings describing what the customer/driver would notice
-- severity: object with three keys:
-    level: 'Low' | 'Moderate' | 'High' | 'Critical'
-    drivable: true | false
-    notes: 1-2 sentence string about drivability and safety to road test
-- common_causes: array of 4-6 strings, ordered most to least likely, specific to this engine when possible
-- related_codes: array of 2-4 strings, each a code that commonly appears alongside or as a downstream effect
-- diagnostic_order: array of 4-6 strings, steps in the order to check, cheapest/easiest first, ending in repair confirmation
-- suggested_repair: 1-2 sentence string with the most likely fix, written like one mechanic talking to another
-
-Be specific to the vehicle year/make/model when possible. Order causes most to least likely. Keep tone field-mechanic friendly, not textbook. Return ONLY valid JSON with no markdown fences or surrounding text.`
+  return `For DTC code ${code} on a ${vehicleDesc}${displayMessage ? ` (display shows: ${displayMessage})` : ''}, return the structured DTC analysis. Be specific to the vehicle year/make/model. Order causes most to least likely. Diagnostic steps must include exact voltage specs, resistance values, and sensor output ranges. Include OEM part numbers in parts_needed. Keep tone field-mechanic friendly, not textbook.`
 }
 
 const DTC_TOOL = {
@@ -81,32 +119,27 @@ const DTC_TOOL = {
   input_schema: {
     type: 'object' as const,
     properties: {
-      code:             { type: 'string' },
-      name:             { type: 'string' },
-      category:         { type: 'string' },
-      symptoms:         { type: 'array', items: { type: 'string' } },
-      severity: {
-        type: 'object',
-        properties: {
-          level:    { type: 'string', enum: ['Low', 'Moderate', 'High', 'Critical'] },
-          drivable: { type: 'boolean' },
-          notes:    { type: 'string' },
-        },
-        required: ['level', 'drivable', 'notes'],
-      },
-      common_causes:    { type: 'array', items: { type: 'string' } },
-      related_codes:    { type: 'array', items: { type: 'string' } },
-      diagnostic_order: { type: 'array', items: { type: 'string' } },
-      suggested_repair: { type: 'string' },
+      code:                 { type: 'string' },
+      name:                 { type: 'string' },
+      category:             { type: 'string' },
+      symptoms:             { type: 'array', items: { type: 'string' } },
+      severity:             { type: 'string', enum: ['low', 'moderate', 'high', 'critical'] },
+      severity_description: { type: 'string' },
+      common_causes:        { type: 'array', items: { type: 'string' } },
+      related_codes:        { type: 'array', items: { type: 'string' } },
+      diagnostic_order:     { type: 'array', items: { type: 'string' } },
+      suggested_repair:     { type: 'string' },
+      parts_needed:         { type: 'array', items: { type: 'string' } },
+      special_tools:        { type: 'string' },
+      labor_estimate:       { type: 'string' },
+      safety_warnings:      { type: 'string' },
     },
-    required: ['code', 'name', 'category', 'symptoms', 'severity', 'common_causes', 'related_codes', 'diagnostic_order', 'suggested_repair'],
+    required: [
+      'code', 'name', 'category', 'symptoms', 'severity', 'severity_description',
+      'common_causes', 'related_codes', 'diagnostic_order', 'suggested_repair',
+      'parts_needed', 'special_tools', 'labor_estimate', 'safety_warnings',
+    ],
   },
-}
-
-interface DTCStructured {
-  code?: string; name?: string; category?: string
-  symptoms?: string[]; severity?: { level?: string; drivable?: boolean; notes?: string }
-  common_causes?: string[]; related_codes?: string[]; diagnostic_order?: string[]; suggested_repair?: string
 }
 
 async function callClaude(apiKey: string, code: string, vehicleDesc: string, displayMessage: string): Promise<DTCStructured> {
@@ -119,7 +152,7 @@ async function callClaude(apiKey: string, code: string, vehicleDesc: string, dis
     },
     body: JSON.stringify({
       model:       'claude-sonnet-4-6',
-      max_tokens:  800,
+      max_tokens:  1200,
       system:      CLAUDE_SYSTEM_PROMPT,
       tools:       [DTC_TOOL],
       tool_choice: { type: 'tool', name: 'return_dtc_analysis' },
@@ -130,55 +163,7 @@ async function callClaude(apiKey: string, code: string, vehicleDesc: string, dis
   const data  = await res.json()
   const block = data.content?.find((b: { type: string }) => b.type === 'tool_use')
   if (!block) throw new Error('No tool_use block in AI response')
-  return block.input as DTCStructured
-}
-
-// Flatten the structured fallback into the same labeled-section text the Gemini
-// path produces, so the frontend renders one consistent format either way.
-function structuredToText(r: DTCStructured): string {
-  const sev = r.severity
-  const sevLine = [
-    sev?.level ?? '',
-    sev?.drivable === false ? 'Do not drive' : sev?.drivable === true ? 'Safe to drive short distance' : '',
-    sev?.notes ?? '',
-  ].filter(Boolean).join(' — ')
-  return [
-    r.name              ? `CODE MEANING:\n${r.name}` : '',
-    r.symptoms?.length  ? `SYMPTOMS:\n${r.symptoms.map(s => `- ${s}`).join('\n')}` : '',
-    sevLine             ? `SEVERITY:\n${sevLine}` : '',
-    r.common_causes?.length    ? `MOST LIKELY CAUSES:\n${r.common_causes.map((c, i) => `${i + 1}. ${c}`).join('\n')}` : '',
-    r.diagnostic_order?.length ? `DIAGNOSTIC STEPS:\n${r.diagnostic_order.map((s, i) => `${i + 1}. ${s}`).join('\n')}` : '',
-    r.suggested_repair  ? `COMMON FIX:\n${r.suggested_repair}` : '',
-    r.related_codes?.length    ? `RELATED CODES:\n${r.related_codes.join(', ')}` : '',
-  ].filter(Boolean).join('\n\n')
-}
-
-// ── Section helpers — preserve LD-specific sections after Haiku reshaping ──
-
-// formatDiagnostic reshapes into the HD reefer section set (ALARM MEANING, etc.)
-// and drops SYMPTOMS / SEVERITY / LABOR ESTIMATE / RELATED CODES. Re-attach those
-// from the raw Gemini text so the LD panel keeps its extra sections.
-const LD_KEEP = ['SYMPTOMS', 'SEVERITY', 'LABOR ESTIMATE', 'RELATED CODES']
-
-function splitSections(text: string): { header: string; body: string }[] {
-  const out: { header: string; body: string[] }[] = []
-  const headerRe = /^([A-Z][A-Z0-9 /&()'\-]{2,40}):\s*$/
-  let cur: { header: string; body: string[] } | null = null
-  for (const line of text.split('\n')) {
-    const m = line.match(headerRe)
-    if (m) { cur = { header: m[1].trim(), body: [] }; out.push(cur) }
-    else if (cur) cur.body.push(line)
-  }
-  return out.map(s => ({ header: s.header, body: s.body.join('\n').trim() }))
-}
-
-function mergeLdSections(formatted: string, raw: string): string {
-  const have = new Set(splitSections(formatted).map(s => s.header.toUpperCase()))
-  const extras = splitSections(raw).filter(
-    s => LD_KEEP.includes(s.header.toUpperCase()) && !have.has(s.header.toUpperCase()) && s.body.length > 0,
-  )
-  if (extras.length === 0) return formatted
-  return formatted.trim() + '\n\n' + extras.map(s => `${s.header}:\n${s.body}`).join('\n\n')
+  return normalizeStructured(block.input)
 }
 
 // ── Cache key — vehicle-specific, so P0420 on a Yukon XL ≠ P0420 on a Neon ──
@@ -219,58 +204,62 @@ export async function GET(req: NextRequest, { params }: RouteContext) {
     .maybeSingle()
 
   if (cached?.result_html) {
-    // Hit — atomic search_count bump via the service client, no new model call.
+    // Structured JSON cache hit — restore the object and return with no model call.
+    // Legacy text entries (from the earlier text-cache build) won't parse as JSON;
+    // fall through and regenerate so the entry self-heals to structured.
     try {
-      await createServiceClient().rpc('increment_hd_cache_hit', { p_cache_key: cacheKey })
-    } catch (e) {
-      console.error('[dtc] cache hit increment failed', e)
+      const parsed = normalizeStructured(JSON.parse(cached.result_html))
+      try {
+        await createServiceClient().rpc('increment_hd_cache_hit', { p_cache_key: cacheKey })
+      } catch (e) {
+        console.error('[dtc] cache hit increment failed', e)
+      }
+      return NextResponse.json({
+        result: { ...parsed, code: normalized, citations: cached.citations ?? [] },
+        source: 'cache',
+        cached: true,
+      })
+    } catch {
+      console.warn('[dtc] cached entry is not JSON (legacy text) — regenerating')
     }
-    return NextResponse.json({
-      result: { code: normalized, analysis: cached.result_html, citations: cached.citations ?? [] },
-      source: 'cache',
-      cached: true,
-    })
   }
 
-  // ── Miss — Gemini 2.5 Flash (grounded) → Haiku format ──
+  // ── Miss — Gemini 2.5 Flash (grounded) → structured JSON ──
   const userPrompt = buildLdUserPrompt(normalized, year, make, model, engine, display)
-  let analysis = ''
+  let structured: DTCStructured | null = null
   let citations: string[] = []
   let source = 'gemini_web_search'
 
   try {
-    const raw = await generateDiagnostic(userPrompt, LD_SYSTEM_PROMPT)
-    if (raw.text.trim()) {
-      const formatted = await formatDiagnostic(raw.text, {
-        manufacturer: make || undefined,
-        model:        model || undefined,
-        alarmCode:    normalized,
-      })
-      analysis  = mergeLdSections(formatted.trim(), raw.text)
-      citations = raw.citations
+    const raw    = await generateDiagnostic(userPrompt, GEMINI_JSON_SYSTEM_PROMPT)
+    const parsed = parseJsonLoose(raw.text)
+    if (parsed) {
+      structured = normalizeStructured(parsed)
+      citations  = raw.citations
     }
   } catch (gemErr) {
     console.error('[dtc] Gemini failed — falling back to Claude Sonnet', gemErr)
   }
 
-  // ── Fallback — existing Claude Sonnet structured call, flattened to text ──
+  // ── Fallback — existing Claude Sonnet structured call ──
   const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!analysis && apiKey) {
+  if (!structured && apiKey) {
     try {
-      const structured = await callClaude(apiKey, normalized, vehicleDesc, display)
-      analysis = structuredToText(structured)
-      source   = 'claude_fallback'
+      structured = await callClaude(apiKey, normalized, vehicleDesc, display)
+      source     = 'claude_fallback'
     } catch (err) {
       console.error('[dtc] Claude Sonnet fallback failed', err)
     }
   }
 
-  if (!analysis.trim()) {
+  if (!structured || !structured.name) {
     return NextResponse.json({ error: 'AI response could not be generated — please try again' }, { status: 502 })
   }
+  structured.code = normalized
 
   // ── Cache write — only genuine Gemini results (never a temporary-outage
-  // fallback). LD cache is automatic: no email, no founder review, no expiry. ──
+  // fallback). LD cache is automatic: no email, no founder review, no expiry.
+  // Stored as a JSON string so hits restore the exact structured object. ──
   if (source === 'gemini_web_search') {
     try {
       const { error: cacheErr } = await createServiceClient().from('hd_cached_diagnostics').upsert({
@@ -279,7 +268,7 @@ export async function GET(req: NextRequest, { params }: RouteContext) {
         manufacturer: make || null,
         alarm_code:   normalized,
         unit_model:   model || null,
-        result_html:  analysis,
+        result_html:  JSON.stringify(structured),
         source:       'gemini_web_search',
         citations,
         needs_review: false,
@@ -292,7 +281,7 @@ export async function GET(req: NextRequest, { params }: RouteContext) {
   }
 
   return NextResponse.json({
-    result: { code: normalized, analysis, citations },
+    result: { ...structured, citations },
     source,
     cached: false,
   })

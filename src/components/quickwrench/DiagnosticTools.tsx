@@ -5,12 +5,24 @@ import type { QWVehicle } from '@/types/quickwrench'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-// The DTC route now returns Gemini-grounded, Haiku-formatted section text
-// (mirrors HD QuickWrench). Rendered as collapsible sections below.
+// Gemini-grounded structured diagnostic (same shape the Claude fallback returns).
+// Rendered as colored severity cards, symptom pills, and collapsible sections.
 interface DTCResult {
-  code?:      string
-  analysis?:  string
-  citations?: string[]
+  code?:                 string
+  name?:                 string
+  category?:             string
+  symptoms?:             string[]
+  severity?:             string
+  severity_description?: string
+  common_causes?:        string[]
+  related_codes?:        string[]
+  diagnostic_order?:     string[]
+  suggested_repair?:     string
+  parts_needed?:         string[]
+  special_tools?:        string
+  labor_estimate?:       string
+  safety_warnings?:      string
+  citations?:            string[]
 }
 
 interface RecallResult {
@@ -83,44 +95,15 @@ function NoVehicleNotice() {
 
 // ─── DTC Lookup Panel ─────────────────────────────────────────────────────────
 
-// Split Haiku-formatted diagnostic text into labeled sections ("HEADER:\n body").
-function splitSections(text: string): { header: string; body: string }[] {
-  const out: { header: string; body: string[] }[] = []
-  const headerRe = /^([A-Z][A-Z0-9 /&()'\-]{2,40}):\s*$/
-  let cur: { header: string; body: string[] } | null = null
-  for (const line of text.split('\n')) {
-    const m = line.match(headerRe)
-    if (m) { cur = { header: m[1].trim(), body: [] }; out.push(cur) }
-    else if (cur) cur.body.push(line)
+// Severity color, keyed on the lowercase severity string from the model.
+function severityBadgeCls(level: string): string {
+  switch (level.toLowerCase()) {
+    case 'low':      return 'text-success'
+    case 'moderate': return 'text-orange'
+    case 'high':     return 'text-[#FF4500]'
+    case 'critical': return 'text-danger'
+    default:         return 'text-white/60'
   }
-  return out
-    .map(s => ({ header: s.header, body: s.body.join('\n').trim() }))
-    .filter(s => s.body.length > 0)
-}
-
-// Render a section body: numbered/bulleted lines become a list; prose stays prose.
-function SectionBody({ body }: { body: string }) {
-  const lines = body.split('\n').map(l => l.trim()).filter(Boolean)
-  const listy = lines.length > 1 && lines.every(l => /^(\d+[.)]|[-•*])\s+/.test(l))
-  if (listy) {
-    return (
-      <ul className="space-y-1.5">
-        {lines.map((l, i) => (
-          <li key={i} className="flex gap-2 text-white/70 text-sm">
-            <span className="text-orange flex-shrink-0 mt-0.5">•</span>
-            <span className="leading-relaxed">{l.replace(/^(\d+[.)]|[-•*])\s+/, '')}</span>
-          </li>
-        ))}
-      </ul>
-    )
-  }
-  return (
-    <div className="space-y-1.5">
-      {lines.map((l, i) => (
-        <p key={i} className="text-white/70 text-sm leading-relaxed">{l.replace(/^(\d+[.)]|[-•*])\s+/, '')}</p>
-      ))}
-    </div>
-  )
 }
 
 function SectionCard({
@@ -188,8 +171,6 @@ function DTCPanel({ vehicle }: { vehicle: QWVehicle | null }) {
     }
   }
 
-  const sections = result?.analysis ? splitSections(result.analysis) : []
-
   return (
     <div className="space-y-4">
       <div className="flex gap-2">
@@ -225,43 +206,142 @@ function DTCPanel({ vehicle }: { vehicle: QWVehicle | null }) {
 
       {result && !loading && (
         <div className="space-y-3">
+          {/* Safety warnings — always first, safety-first (like HD) */}
+          {result.safety_warnings && result.safety_warnings.trim() && !/^none\b/i.test(result.safety_warnings.trim()) && (
+            <div className="nwi-card border-orange/50 bg-orange/10">
+              <div className="flex items-start gap-3">
+                <svg className="w-5 h-5 text-orange flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                  <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+                </svg>
+                <div>
+                  <p className="text-orange font-condensed font-bold text-sm tracking-wide uppercase mb-1">Safety Warning</p>
+                  <p className="text-white/80 text-sm leading-relaxed">{result.safety_warnings}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Top card */}
           <div className="nwi-card border-orange/30 bg-orange/5">
-            <div className="flex items-center justify-between gap-3">
+            <div className="flex items-start justify-between gap-3 mb-2">
               <span className="font-condensed font-bold text-orange text-xl tracking-wide">{result.code || input || '—'}</span>
-              {cached && (
-                <span className="bg-blue/15 border border-blue/30 text-blue-light text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide whitespace-nowrap">
-                  Cached
-                </span>
-              )}
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {cached && (
+                  <span className="bg-blue/15 border border-blue/30 text-blue-light text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide whitespace-nowrap">
+                    Cached
+                  </span>
+                )}
+                {result.category && (
+                  <span className="bg-blue/15 border border-blue/30 text-blue-light text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide whitespace-nowrap">
+                    {result.category}
+                  </span>
+                )}
+              </div>
             </div>
+            {result.name && <p className="text-white font-medium text-sm leading-relaxed">{result.name}</p>}
           </div>
 
-          {sections.map(sec => (
-            <SectionCard key={sec.header} title={sec.header} defaultOpen={true}>
-              {sec.header.toUpperCase() === 'RELATED CODES' ? (
-                <div className="flex flex-wrap gap-2">
-                  {Array.from(new Set(sec.body.toUpperCase().match(/[PBCU][0-9]{4}/g) ?? [])).map(rc => (
-                    <button
-                      key={rc}
-                      onClick={() => lookup(rc)}
-                      className="px-3 py-1.5 bg-dark-lighter border border-dark-border hover:border-orange/40 hover:bg-orange/10 text-white/70 hover:text-orange font-mono text-xs rounded-lg transition-colors"
-                    >
-                      {rc}
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <SectionBody body={sec.body} />
-              )}
+          {(result.symptoms?.length ?? 0) > 0 && (
+            <SectionCard title="Symptoms" defaultOpen={true}>
+              <ul className="space-y-1.5">
+                {result.symptoms!.map((s, i) => (
+                  <li key={i} className="flex gap-2 text-white/70 text-sm">
+                    <span className="text-orange flex-shrink-0 mt-0.5">•</span>
+                    {s}
+                  </li>
+                ))}
+              </ul>
             </SectionCard>
-          ))}
+          )}
 
-          {/* Raw fallback — if the text produced no recognizable sections */}
-          {sections.length === 0 && result.analysis && (
-            <div className="nwi-card">
-              <p className="text-white/70 text-sm leading-relaxed whitespace-pre-wrap">{result.analysis}</p>
-            </div>
+          {(result.severity || result.severity_description || result.labor_estimate) && (
+            <SectionCard title="Severity" defaultOpen={true}>
+              <div className="space-y-2">
+                {result.severity && (
+                  <span className={`font-condensed font-bold text-lg uppercase ${severityBadgeCls(result.severity)}`}>
+                    {result.severity}
+                  </span>
+                )}
+                {result.severity_description && (
+                  <p className="text-white/60 text-xs italic leading-relaxed">{result.severity_description}</p>
+                )}
+                {result.labor_estimate && (
+                  <p className="text-white/60 text-xs leading-relaxed">
+                    <span className="text-white/40 uppercase tracking-widest text-[10px]">Labor estimate:</span> {result.labor_estimate}
+                  </p>
+                )}
+              </div>
+            </SectionCard>
+          )}
+
+          {(result.common_causes?.length ?? 0) > 0 && (
+            <SectionCard title="Common Causes" defaultOpen={true}>
+              <ul className="space-y-1.5">
+                {result.common_causes!.map((c, i) => (
+                  <li key={i} className="flex gap-2 text-white/70 text-sm">
+                    <span className="text-orange flex-shrink-0 mt-0.5">•</span>
+                    {c}
+                  </li>
+                ))}
+              </ul>
+            </SectionCard>
+          )}
+
+          {(result.related_codes?.length ?? 0) > 0 && (
+            <SectionCard title="Related Codes" defaultOpen={false}>
+              <div className="flex flex-wrap gap-2">
+                {result.related_codes!.map(rc => (
+                  <button
+                    key={rc}
+                    onClick={() => lookup(rc)}
+                    className="px-3 py-1.5 bg-dark-lighter border border-dark-border hover:border-orange/40 hover:bg-orange/10 text-white/70 hover:text-orange font-mono text-xs rounded-lg transition-colors"
+                  >
+                    {rc}
+                  </button>
+                ))}
+              </div>
+            </SectionCard>
+          )}
+
+          {(result.diagnostic_order?.length ?? 0) > 0 && (
+            <SectionCard title="Diagnostic Order" defaultOpen={false}>
+              <ol className="space-y-2.5">
+                {result.diagnostic_order!.map((step, i) => (
+                  <li key={i} className="flex gap-3 text-white/70 text-sm">
+                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-orange/15 border border-orange/30 flex items-center justify-center font-condensed font-bold text-orange text-xs">
+                      {i + 1}
+                    </span>
+                    <span className="pt-0.5 leading-relaxed">{step}</span>
+                  </li>
+                ))}
+              </ol>
+            </SectionCard>
+          )}
+
+          {(result.parts_needed?.length ?? 0) > 0 && (
+            <SectionCard title="Parts Needed" defaultOpen={false}>
+              <ul className="space-y-1.5">
+                {result.parts_needed!.map((p, i) => (
+                  <li key={i} className="flex gap-2 text-white/70 text-sm">
+                    <span className="text-orange flex-shrink-0 mt-0.5">•</span>
+                    {p}
+                  </li>
+                ))}
+              </ul>
+            </SectionCard>
+          )}
+
+          {result.special_tools && result.special_tools.trim() && (
+            <SectionCard title="Special Tools" defaultOpen={false}>
+              <p className="text-white/70 text-sm leading-relaxed">{result.special_tools}</p>
+            </SectionCard>
+          )}
+
+          {result.suggested_repair && (
+            <SectionCard title="Suggested Repair" defaultOpen={true}>
+              <p className="text-white/80 text-sm leading-relaxed">{result.suggested_repair}</p>
+            </SectionCard>
           )}
 
           {result.citations && result.citations.length > 0 && (
