@@ -693,6 +693,94 @@ function PartsManager({
   )
 }
 
+// ─── Suggested Repairs ───────────────────────────────────────────────────────
+// Master + custom repair labor items, matched to the diagnostic's category.
+// Tapping an item selects it; selected items become labor lines in the quote.
+
+interface RepairItem {
+  id:                     string
+  description:            string
+  category:               string | null
+  applies_to:             string
+  mobile_hours:           number | null
+  shop_hours:             number | null
+  requires_refrigeration: boolean
+  refrigeration_service:  string | null
+  refrigeration_hours:    number | null
+  notes:                  string | null
+  is_master:              boolean
+}
+
+// Best-effort map of a diagnostic result to a repair-item category. Returns null
+// (no filter → show all) when nothing matches, so relevant repairs are never hidden.
+function guessRepairCategory(text: string): string | null {
+  const t = (text || '').toLowerCase()
+  if (/refrigerant|compressor|discharge pressure|suction|evacuat|drier|\bcharge\b|r-404|r-452|epa\s?608|3-way valve|\betv\b|pump down|high pressure/.test(t)) return 'refrigeration'
+  if (/\bmotor\b|contactor|alternator|\brelay\b|\bsolenoid\b|\bvac\b|energized|electrical|voltage/.test(t)) return 'electrical'
+  if (/\bfuel\b|injector/.test(t)) return 'fuel'
+  if (/\bsensor\b|thermistor|probe/.test(t)) return 'sensors'
+  if (/\begr\b|coolant|head gasket/.test(t)) return 'engine'
+  if (/\bbelt\b|clutch|bearing/.test(t)) return 'mechanical'
+  return null
+}
+
+function SuggestedRepairs({
+  loading, items, selectedIds, onToggle,
+}: {
+  loading:     boolean
+  items:       RepairItem[]
+  selectedIds: string[]
+  onToggle:    (id: string) => void
+}) {
+  if (!loading && items.length === 0) return null
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
+      <div className="px-4 py-3" style={{ background: '#0d1820', borderBottom: '1px solid #1e3040' }}>
+        <p className="text-xs uppercase tracking-widest" style={{ color: HD_ORANGE }}>Suggested Repairs</p>
+        <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>Tap the repairs performed — they’ll be added to the quote.</p>
+      </div>
+      {loading ? (
+        <p className="px-4 py-4 text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>Loading repairs…</p>
+      ) : (
+        <div className="divide-y" style={{ borderColor: '#1e3040' }}>
+          {items.map(item => {
+            const sel = selectedIds.includes(item.id)
+            const hrs = item.mobile_hours != null ? `${item.mobile_hours} hrs mobile` : ''
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => onToggle(item.id)}
+                className="w-full text-left px-4 py-3 flex items-start gap-3 transition-colors"
+                style={{
+                  background: sel ? `${HD_ORANGE}22` : 'transparent',
+                  borderLeft: sel ? `3px solid ${HD_ORANGE}` : '3px solid transparent',
+                }}
+              >
+                <span
+                  className="mt-0.5 w-4 h-4 rounded flex-shrink-0 flex items-center justify-center text-[10px] font-bold"
+                  style={{ background: sel ? HD_ORANGE : '#162030', color: '#fff', border: sel ? 'none' : '1px solid #1e3040' }}
+                >
+                  {sel ? '✓' : ''}
+                </span>
+                <span className="flex-1 min-w-0">
+                  <span className="block text-sm" style={{ color: sel ? '#fff' : 'rgba(255,255,255,0.8)' }}>
+                    {item.description}
+                    {!item.is_master && <span className="ml-1.5 text-[10px] uppercase" style={{ color: HD_BLUE }}>custom</span>}
+                  </span>
+                  <span className="block text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                    {[hrs, item.requires_refrigeration ? `+ Refrigeration Service ${item.refrigeration_service ?? ''}`.trim() : null].filter(Boolean).join('  ·  ')}
+                  </span>
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Shared analysis card ─────────────────────────────────────────────────────
 
 function AnalysisCard({
@@ -1046,6 +1134,11 @@ export default function HDQuickWrenchPage() {
   const [partsResult,          setPartsResult]          = useState<string | null>(null)
   const [partsLoading,         setPartsLoading]         = useState(false)
   const [partsError,           setPartsError]           = useState<string | null>(null)
+
+  // ── Suggested Repairs (shared reefer/truck) ──
+  const [repairItems,          setRepairItems]          = useState<RepairItem[]>([])
+  const [repairLoading,        setRepairLoading]        = useState(false)
+  const [selectedRepairIds,    setSelectedRepairIds]    = useState<string[]>([])
   const [unitLookupLoading,    setUnitLookupLoading]    = useState(false)
   const [identifiedModel,      setIdentifiedModel]      = useState<string | null>(null)
   const [identifiedRefrigerant, setIdentifiedRefrigerant] = useState<string | null>(null)
@@ -1271,6 +1364,8 @@ export default function HDQuickWrenchPage() {
     setError(null)
     setPartsResult(null)   // never show stale parts under a new result
     setPartsError(null)
+    setRepairItems([])
+    setSelectedRepairIds([])
 
     const additionalAlarmCodes = additionalAlarmInput
       .split(',')
@@ -1304,6 +1399,7 @@ export default function HDQuickWrenchPage() {
 
       const reeferAnalysis = typeof json.analysis === 'string' ? json.analysis : null
       setAnalysis(reeferAnalysis)
+      if (reeferAnalysis) loadRepairItems(guessRepairCategory(reeferAnalysis))
       if (reeferAnalysis) {
         try {
           localStorage.setItem('hd_last_quickwrench_result', JSON.stringify({
@@ -1404,6 +1500,8 @@ export default function HDQuickWrenchPage() {
     setTruckError(null)
     setPartsResult(null)   // never show stale parts under a new result
     setPartsError(null)
+    setRepairItems([])
+    setSelectedRepairIds([])
 
     try {
       const res = await fetch('/api/hd/truck-diagnostic', {
@@ -1439,6 +1537,7 @@ export default function HDQuickWrenchPage() {
       acc += decoder.decode()   // flush any trailing bytes
       setTruckAnalysis(acc)
       setTruckDisclaimer(TRUCK_DISCLAIMER)
+      if (acc.trim()) loadRepairItems(guessRepairCategory(acc))
 
       if (acc.trim()) {
         try {
@@ -1599,6 +1698,7 @@ export default function HDQuickWrenchPage() {
           part_number: '', quantity: 1, unit_cost: 0,
           amount: 0, amount_max: 0,
         },
+        ...buildRepairLines(),
         ...(includeDiagFee ? [DIAG_FEE_LINE()] : []),
       ],
     }
@@ -1635,6 +1735,7 @@ export default function HDQuickWrenchPage() {
           part_number: '', quantity: 1, unit_cost: 0,
           amount: 0, amount_max: 0,
         },
+        ...buildRepairLines(),
         ...(includeDiagFee ? [DIAG_FEE_LINE()] : []),
       ],
     }
@@ -1690,6 +1791,60 @@ export default function HDQuickWrenchPage() {
 
   const clearParts = () => { setPartsResult(null); setPartsError(null) }
 
+  // ── Suggested Repairs ──
+  async function loadRepairItems(category: string | null) {
+    setRepairLoading(true)
+    setRepairItems([])
+    setSelectedRepairIds([])
+    try {
+      const url = category ? `/api/hd/repair-items?category=${encodeURIComponent(category)}` : '/api/hd/repair-items'
+      const res = await fetch(url)
+      const json = await res.json().catch(() => ({})) as { items?: unknown }
+      setRepairItems(Array.isArray(json.items) ? json.items as RepairItem[] : [])
+    } catch {
+      setRepairItems([])
+    } finally {
+      setRepairLoading(false)
+    }
+  }
+
+  const toggleRepair = (id: string) =>
+    setSelectedRepairIds(ids => ids.includes(id) ? ids.filter(x => x !== id) : [...ids, id])
+
+  // Build labor lines for the selected repair items. A refrigeration repair also
+  // adds its refrigeration service as a separate labor line.
+  function buildRepairLines() {
+    const lines: ReturnType<typeof DIAG_FEE_LINE>[] = []
+    for (const item of repairItems.filter(it => selectedRepairIds.includes(it.id))) {
+      const mobile = Number(item.mobile_hours ?? 0)
+      const book   = Number(item.shop_hours ?? item.mobile_hours ?? 0)
+      lines.push({
+        id:                     crypto.randomUUID(),
+        type:                   'labor' as const,
+        description:            item.description,
+        book_hours:             book, book_hours_max:   book,
+        mobile_hours:           mobile, mobile_hours_max: mobile,
+        requires_refrigeration: item.requires_refrigeration,
+        recharge_added:         false,
+        part_number: '', quantity: 1, unit_cost: 0, amount: 0, amount_max: 0,
+      })
+      if (item.requires_refrigeration && item.refrigeration_hours) {
+        const rh = Number(item.refrigeration_hours)
+        lines.push({
+          id:                     crypto.randomUUID(),
+          type:                   'labor' as const,
+          description:            `Refrigeration Service ${item.refrigeration_service ?? ''} — recover, evacuate & charge`.replace(/\s+/g, ' ').trim(),
+          book_hours:             rh, book_hours_max:   rh,
+          mobile_hours:           rh, mobile_hours_max: rh,
+          requires_refrigeration: true,
+          recharge_added:         true,
+          part_number: '', quantity: 1, unit_cost: 0, amount: 0, amount_max: 0,
+        })
+      }
+    }
+    return lines
+  }
+
   return (
     <main className="flex-1 p-4 sm:p-6">
       <div className="max-w-3xl mx-auto space-y-6">
@@ -1716,7 +1871,7 @@ export default function HDQuickWrenchPage() {
             <button
               key={tab.key}
               type="button"
-              onClick={() => { setActiveTab(tab.key); setPartsResult(null); setPartsError(null) }}
+              onClick={() => { setActiveTab(tab.key); setPartsResult(null); setPartsError(null); setRepairItems([]); setSelectedRepairIds([]) }}
               className="flex-1 sm:flex-none px-5 py-3 rounded-lg text-sm font-semibold transition-colors"
               style={activeTab === tab.key
                 ? { background: HD_ORANGE, color: '#fff', minHeight: 44 }
@@ -2724,6 +2879,15 @@ export default function HDQuickWrenchPage() {
             )}
 
             {analysis !== null && (
+              <SuggestedRepairs
+                loading={repairLoading}
+                items={repairItems}
+                selectedIds={selectedRepairIds}
+                onToggle={toggleRepair}
+              />
+            )}
+
+            {analysis !== null && (
               <div className="space-y-2.5">
                 <label className="flex items-center gap-2 text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>
                   <input
@@ -3010,6 +3174,15 @@ export default function HDQuickWrenchPage() {
                 result={partsResult}
                 onRun={runTruckPartsManager}
                 onClear={clearParts}
+              />
+            )}
+
+            {truckAnalysis !== null && (
+              <SuggestedRepairs
+                loading={repairLoading}
+                items={repairItems}
+                selectedIds={selectedRepairIds}
+                onToggle={toggleRepair}
               />
             )}
 

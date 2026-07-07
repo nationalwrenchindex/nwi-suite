@@ -107,6 +107,7 @@ export default function NewQuotePage() {
 
   const [saving, setSaving]               = useState(false)
   const [toast, setToast]                 = useState('')
+  const [customerToast, setCustomerToast] = useState(false)
   const [laborModal, setLaborModal]       = useState(false)
   const [partsModal, setPartsModal]       = useState(false)
   const [lineItems, setLineItems]         = useState<LineItem[]>([])
@@ -125,6 +126,7 @@ export default function NewQuotePage() {
   const [parts, setParts] = useState<PartsDraft>({ part_number: '', description: '', quantity: '1', unit_cost: '0.00' })
 
   const [form, setForm] = useState({
+    company_name: '',
     customer_name: '', customer_phone: '', customer_email: '',
     unit_manufacturer: '', unit_model: '', unit_serial: '', unit_year: '',
     truck_make: '', truck_model: '', truck_year: '', vin: '',
@@ -323,6 +325,7 @@ export default function NewQuotePage() {
     setSaving(true)
     try {
       const body = {
+        company_name:      form.company_name || null,
         customer_name:     form.customer_name,
         customer_phone:    form.customer_phone || null,
         customer_email:    form.customer_email || null,
@@ -351,8 +354,18 @@ export default function NewQuotePage() {
       }
       const res  = await fetch('/api/hd/quotes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const data = await res.json()
-      if (data.quote?.id) router.push(`/hd/quotes/${data.quote.id}`)
-      else setToast(data.error ?? 'Save failed')
+      if (data.quote?.id) {
+        if (data.customer_id) {
+          // Green confirmation that the customer was logged; auto-dismiss at 3s.
+          setCustomerToast(true)
+          setTimeout(() => setCustomerToast(false), 3000)
+          setTimeout(() => router.push(`/hd/quotes/${data.quote.id}`), 1200)
+        } else {
+          router.push(`/hd/quotes/${data.quote.id}`)
+        }
+      } else {
+        setToast(data.error ?? 'Save failed')
+      }
     } finally {
       setSaving(false)
     }
@@ -373,6 +386,11 @@ export default function NewQuotePage() {
         {/* ─ Section 1: Customer & Unit ─ */}
         <div style={cardStyle}>
           <SectionTitle>Customer &amp; Unit Info</SectionTitle>
+          <div className="mb-4">
+            <Field label="Business Name">
+              <input style={inp} value={form.company_name} onChange={e => setField('company_name', e.target.value)} placeholder="Fleet company or business name (optional)" />
+            </Field>
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
             <div className="sm:col-span-1">
               <Field label="Customer Name *">
@@ -986,6 +1004,13 @@ export default function NewQuotePage() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Customer-saved toast (green, auto-dismisses at 3s) */}
+      {customerToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl text-sm font-semibold text-white shadow-xl" style={{ background: '#16A34A' }}>
+          Customer saved to your contacts
         </div>
       )}
 

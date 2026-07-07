@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
+import { logHDCustomer } from '@/lib/hd/customer-logging'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,6 +43,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'customer_name required' }, { status: 400 })
   }
 
+  // company_name is a customers-table field, not an hd_quotes column — pull it
+  // out of the insert body and use it only for customer logging.
+  const { company_name, ...quoteBody } = body
+
   const { count } = await supabase
     .from('hd_quotes')
     .select('id', { count: 'exact', head: true })
@@ -53,10 +58,20 @@ export async function POST(req: NextRequest) {
 
   const { data, error } = await supabase
     .from('hd_quotes')
-    .insert({ ...body, user_id: user.id, quote_number })
+    .insert({ ...quoteBody, user_id: user.id, quote_number })
     .select()
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ quote: data }, { status: 201 })
+
+  // Auto-log the customer into the tech's contacts (best-effort, never blocks).
+  const customer_id = await logHDCustomer({
+    userId:        user.id,
+    customerName:  typeof body.customer_name  === 'string' ? body.customer_name  : null,
+    customerPhone: typeof body.customer_phone === 'string' ? body.customer_phone : null,
+    customerEmail: typeof body.customer_email === 'string' ? body.customer_email : null,
+    companyName:   typeof company_name        === 'string' ? company_name        : null,
+  })
+
+  return NextResponse.json({ quote: data, customer_id }, { status: 201 })
 }
