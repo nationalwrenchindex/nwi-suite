@@ -5,22 +5,12 @@ import type { QWVehicle } from '@/types/quickwrench'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface DTCSeverity {
-  level:    'Low' | 'Moderate' | 'High' | 'Critical'
-  drivable: boolean
-  notes:    string
-}
-
+// The DTC route now returns Gemini-grounded, Haiku-formatted section text
+// (mirrors HD QuickWrench). Rendered as collapsible sections below.
 interface DTCResult {
-  code?:             string
-  name?:             string
-  category?:         string
-  symptoms?:         string[]
-  severity?:         Partial<DTCSeverity>
-  common_causes?:    string[]
-  related_codes?:    string[]
-  diagnostic_order?: string[]
-  suggested_repair?: string
+  code?:      string
+  analysis?:  string
+  citations?: string[]
 }
 
 interface RecallResult {
@@ -93,14 +83,44 @@ function NoVehicleNotice() {
 
 // ─── DTC Lookup Panel ─────────────────────────────────────────────────────────
 
-function severityBadgeCls(level: string): string {
-  switch (level) {
-    case 'Low':      return 'text-success'
-    case 'Moderate': return 'text-orange'
-    case 'High':     return 'text-[#FF4500]'
-    case 'Critical': return 'text-danger'
-    default:         return 'text-white/60'
+// Split Haiku-formatted diagnostic text into labeled sections ("HEADER:\n body").
+function splitSections(text: string): { header: string; body: string }[] {
+  const out: { header: string; body: string[] }[] = []
+  const headerRe = /^([A-Z][A-Z0-9 /&()'\-]{2,40}):\s*$/
+  let cur: { header: string; body: string[] } | null = null
+  for (const line of text.split('\n')) {
+    const m = line.match(headerRe)
+    if (m) { cur = { header: m[1].trim(), body: [] }; out.push(cur) }
+    else if (cur) cur.body.push(line)
   }
+  return out
+    .map(s => ({ header: s.header, body: s.body.join('\n').trim() }))
+    .filter(s => s.body.length > 0)
+}
+
+// Render a section body: numbered/bulleted lines become a list; prose stays prose.
+function SectionBody({ body }: { body: string }) {
+  const lines = body.split('\n').map(l => l.trim()).filter(Boolean)
+  const listy = lines.length > 1 && lines.every(l => /^(\d+[.)]|[-•*])\s+/.test(l))
+  if (listy) {
+    return (
+      <ul className="space-y-1.5">
+        {lines.map((l, i) => (
+          <li key={i} className="flex gap-2 text-white/70 text-sm">
+            <span className="text-orange flex-shrink-0 mt-0.5">•</span>
+            <span className="leading-relaxed">{l.replace(/^(\d+[.)]|[-•*])\s+/, '')}</span>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+  return (
+    <div className="space-y-1.5">
+      {lines.map((l, i) => (
+        <p key={i} className="text-white/70 text-sm leading-relaxed">{l.replace(/^(\d+[.)]|[-•*])\s+/, '')}</p>
+      ))}
+    </div>
+  )
 }
 
 function SectionCard({
@@ -133,10 +153,12 @@ function SectionCard({
 }
 
 function DTCPanel({ vehicle }: { vehicle: QWVehicle | null }) {
-  const [input,   setInput]   = useState('')
-  const [loading, setLoading] = useState(false)
-  const [result,  setResult]  = useState<DTCResult | null>(null)
-  const [error,   setError]   = useState<string | null>(null)
+  const [input,          setInput]          = useState('')
+  const [displayMessage, setDisplayMessage] = useState('')
+  const [loading,        setLoading]        = useState(false)
+  const [result,         setResult]         = useState<DTCResult | null>(null)
+  const [cached,         setCached]         = useState(false)
+  const [error,          setError]          = useState<string | null>(null)
 
   async function lookup(overrideCode?: string) {
     const code = (overrideCode ?? input).trim().toUpperCase()
@@ -148,20 +170,25 @@ function DTCPanel({ vehicle }: { vehicle: QWVehicle | null }) {
     setLoading(true); setError(null); setResult(null)
     try {
       const qs = new URLSearchParams()
-      if (vehicle?.year)  qs.set('year',  vehicle.year)
-      if (vehicle?.make)  qs.set('make',  vehicle.make)
-      if (vehicle?.model) qs.set('model', vehicle.model)
+      if (vehicle?.year)   qs.set('year',   vehicle.year)
+      if (vehicle?.make)   qs.set('make',   vehicle.make)
+      if (vehicle?.model)  qs.set('model',  vehicle.model)
+      if (vehicle?.engine) qs.set('engine', vehicle.engine)
+      if (displayMessage.trim()) qs.set('display', displayMessage.trim())
       const qStr = qs.toString()
       const res  = await fetch(`/api/quickwrench/dtc/${code}${qStr ? `?${qStr}` : ''}`)
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Lookup failed')
       setResult(json.result as DTCResult)
+      setCached(json.cached === true)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Lookup failed')
     } finally {
       setLoading(false)
     }
   }
+
+  const sections = result?.analysis ? splitSections(result.analysis) : []
 
   return (
     <div className="space-y-4">
@@ -182,101 +209,74 @@ function DTCPanel({ vehicle }: { vehicle: QWVehicle | null }) {
           {loading ? 'Looking up…' : 'Look Up'}
         </button>
       </div>
+
+      {/* Display Message (optional) — anchors Gemini to the exact fault description */}
+      <input
+        className="nwi-input w-full"
+        placeholder="What does your scanner or display show?"
+        value={displayMessage}
+        onChange={e => setDisplayMessage(e.target.value)}
+        onKeyDown={e => e.key === 'Enter' && lookup()}
+      />
+
       {error && <p className="text-danger text-xs">{error}</p>}
 
       {loading && <LoadingSpinner />}
 
       {result && !loading && (
         <div className="space-y-3">
-          {/* Top card — preserved */}
+          {/* Top card */}
           <div className="nwi-card border-orange/30 bg-orange/5">
-            <div className="flex items-start justify-between gap-3 mb-2">
-              <span className="font-condensed font-bold text-orange text-xl tracking-wide">{result.code || '—'}</span>
-              <span className="bg-blue/15 border border-blue/30 text-blue-light text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide whitespace-nowrap">
-                {result.category || '—'}
-              </span>
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-condensed font-bold text-orange text-xl tracking-wide">{result.code || input || '—'}</span>
+              {cached && (
+                <span className="bg-blue/15 border border-blue/30 text-blue-light text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide whitespace-nowrap">
+                  Cached
+                </span>
+              )}
             </div>
-            <p className="text-white font-medium text-sm leading-relaxed">{result.name || '—'}</p>
           </div>
 
-          <SectionCard title="Symptoms" defaultOpen={true}>
-            <ul className="space-y-1.5">
-              {(result.symptoms || []).map((s, i) => (
-                <li key={i} className="flex gap-2 text-white/70 text-sm">
-                  <span className="text-orange flex-shrink-0 mt-0.5">•</span>
-                  {s}
-                </li>
-              ))}
-            </ul>
-          </SectionCard>
+          {sections.map(sec => (
+            <SectionCard key={sec.header} title={sec.header} defaultOpen={true}>
+              {sec.header.toUpperCase() === 'RELATED CODES' ? (
+                <div className="flex flex-wrap gap-2">
+                  {Array.from(new Set(sec.body.toUpperCase().match(/[PBCU][0-9]{4}/g) ?? [])).map(rc => (
+                    <button
+                      key={rc}
+                      onClick={() => lookup(rc)}
+                      className="px-3 py-1.5 bg-dark-lighter border border-dark-border hover:border-orange/40 hover:bg-orange/10 text-white/70 hover:text-orange font-mono text-xs rounded-lg transition-colors"
+                    >
+                      {rc}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <SectionBody body={sec.body} />
+              )}
+            </SectionCard>
+          ))}
 
-          <SectionCard title="Severity" defaultOpen={true}>
-            <div className="space-y-2">
-              <div className="flex items-center gap-3">
-                <span className={`font-condensed font-bold text-lg ${severityBadgeCls(result.severity?.level ?? '')}`}>
-                  {result.severity?.level || '—'}
-                </span>
-                {result.severity?.drivable ? (
-                  <span className="flex items-center gap-1 text-success text-xs font-medium">
-                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                      <polyline points="20 6 9 17 4 12" />
-                    </svg>
-                    Safe to drive short distance
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1 text-danger text-xs font-medium">
-                    <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                      <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-                    </svg>
-                    Do not drive
-                  </span>
-                )}
-              </div>
-              <p className="text-white/60 text-xs italic leading-relaxed">{result.severity?.notes || '—'}</p>
+          {/* Raw fallback — if the text produced no recognizable sections */}
+          {sections.length === 0 && result.analysis && (
+            <div className="nwi-card">
+              <p className="text-white/70 text-sm leading-relaxed whitespace-pre-wrap">{result.analysis}</p>
             </div>
-          </SectionCard>
+          )}
 
-          <SectionCard title="Common Causes" defaultOpen={true}>
-            <ul className="space-y-1.5">
-              {(result.common_causes || []).map((c, i) => (
-                <li key={i} className="flex gap-2 text-white/70 text-sm">
-                  <span className="text-orange flex-shrink-0 mt-0.5">•</span>
-                  {c}
-                </li>
-              ))}
-            </ul>
-          </SectionCard>
-
-          <SectionCard title="Related Codes" defaultOpen={false}>
-            <div className="flex flex-wrap gap-2">
-              {(result.related_codes || []).map(rc => (
-                <button
-                  key={rc}
-                  onClick={() => lookup(rc)}
-                  className="px-3 py-1.5 bg-dark-lighter border border-dark-border hover:border-orange/40 hover:bg-orange/10 text-white/70 hover:text-orange font-mono text-xs rounded-lg transition-colors"
-                >
-                  {rc}
-                </button>
-              ))}
-            </div>
-          </SectionCard>
-
-          <SectionCard title="Diagnostic Order" defaultOpen={false}>
-            <ol className="space-y-2.5">
-              {(result.diagnostic_order || []).map((step, i) => (
-                <li key={i} className="flex gap-3 text-white/70 text-sm">
-                  <span className="flex-shrink-0 w-6 h-6 rounded-full bg-orange/15 border border-orange/30 flex items-center justify-center font-condensed font-bold text-orange text-xs">
-                    {i + 1}
-                  </span>
-                  <span className="pt-0.5 leading-relaxed">{step}</span>
-                </li>
-              ))}
-            </ol>
-          </SectionCard>
-
-          <SectionCard title="Suggested Repair" defaultOpen={true}>
-            <p className="text-white/80 text-sm leading-relaxed">{result.suggested_repair || '—'}</p>
-          </SectionCard>
+          {result.citations && result.citations.length > 0 && (
+            <SectionCard title="Sources" defaultOpen={false}>
+              <ul className="space-y-1.5">
+                {result.citations.map((url, i) => (
+                  <li key={i} className="truncate">
+                    <a href={url} target="_blank" rel="noopener noreferrer" className="text-blue-light hover:text-orange text-xs underline break-all">
+                      {url}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </SectionCard>
+          )}
 
           <p className="text-white/20 text-[10px] leading-relaxed">
             AI-generated diagnostic information for reference only. Always verify with OEM service documentation. National Wrench Index assumes no liability for diagnostic accuracy.

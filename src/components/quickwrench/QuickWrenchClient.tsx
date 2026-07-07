@@ -114,6 +114,59 @@ const JOB_CATEGORIES = [
       { name: 'Pre-Purchase Inspection',        hours: 1.5  },
     ],
   },
+  {
+    id: 'ac_heating', label: 'A/C & Heating', color: 'blue',
+    jobs: [
+      { name: 'A/C Recharge',              hours: 1.5 },
+      { name: 'A/C Diagnostics',           hours: 1.5 },
+      { name: 'Blend Door Repair',         hours: 3.0 },
+      { name: 'Compressor Replacement',    hours: 4.0 },
+      { name: 'Evaporator Replacement',    hours: 4.0 },
+      { name: 'Heater Core Replacement',   hours: 4.0 },
+    ],
+  },
+  {
+    id: 'no_start_electrical', label: 'No Start / Electrical', color: 'yellow',
+    jobs: [
+      { name: 'No Start Diagnosis',        hours: 2.0 },
+      { name: 'Battery Replacement',       hours: 0.5 },
+      { name: 'Starter Replacement',       hours: 2.0 },
+      { name: 'Alternator Replacement',    hours: 2.5 },
+      { name: 'Parasitic Draw Testing',    hours: 1.5 },
+      { name: 'Wiring Repair',             hours: 3.0 },
+    ],
+  },
+  {
+    id: 'emissions_evap', label: 'Emissions / EVAP', color: 'green',
+    jobs: [
+      { name: 'Emissions Diagnostics',            hours: 1.5 },
+      { name: 'O2 Sensor Replacement',            hours: 1.0 },
+      { name: 'EVAP System Repair',               hours: 2.0 },
+      { name: 'EGR System Repair',                hours: 2.5 },
+      { name: 'Catalytic Converter Replacement',  hours: 4.0 },
+    ],
+  },
+  {
+    id: 'fuel_system', label: 'Fuel System', color: 'orange',
+    jobs: [
+      { name: 'Fuel System Diagnostics',   hours: 1.5 },
+      { name: 'Fuel Filter Replacement',   hours: 1.0 },
+      { name: 'Fuel Line Repair',          hours: 2.0 },
+      { name: 'Fuel Injector Service',     hours: 2.5 },
+      { name: 'Fuel Pump Replacement',     hours: 4.0 },
+    ],
+  },
+  {
+    id: 'steering_suspension', label: 'Steering & Suspension', color: 'blue',
+    jobs: [
+      { name: 'Alignment Check',           hours: 1.0 },
+      { name: 'Sway Bar Link Replacement', hours: 1.0 },
+      { name: 'Tie Rod Replacement',       hours: 2.0 },
+      { name: 'Control Arm Replacement',   hours: 2.5 },
+      { name: 'Ball Joint Replacement',    hours: 3.0 },
+      { name: 'Power Steering Repair',     hours: 4.0 },
+    ],
+  },
 ]
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
