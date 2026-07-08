@@ -3,6 +3,22 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { runGaugeDiagnostic, SEVERITY_CONFIG } from '@/lib/hd/gauge-diagnostic'
+import PartsOnTheWay, { type PartInput } from '@/components/parts-delivery/PartsOnTheWay'
+
+// Best-effort parse of the Parts Manager result text into structured parts for
+// delivery. Each meaningful line → { name, oem } with any part-number token pulled out.
+function extractHDParts(text: string | null): PartInput[] {
+  if (!text) return []
+  return text.split('\n').map(l => l.trim())
+    .filter(l => l.length > 3 && !/^(parts reference|note:|verify|part data|no parts)/i.test(l))
+    .slice(0, 12)
+    .map(l => {
+      const clean = l.replace(/^part number:?\s*/i, '')
+      const oemM  = clean.match(/([A-Z0-9]{2,}[-–][A-Z0-9-]{2,}|\b\d{3,}[A-Z0-9-]*)/)
+      const name  = clean.split(/—|–| - |:/)[0].trim() || clean.trim()
+      return { name: name.slice(0, 80), oem: oemM ? oemM[1].replace('–', '-') : '' }
+    })
+}
 
 const HD_ORANGE = '#E85D24'
 const HD_BLUE   = '#1A6BAF'
@@ -1132,6 +1148,7 @@ export default function HDQuickWrenchPage() {
 
   // ── Parts Manager (shared reefer/truck) ──
   const [partsResult,          setPartsResult]          = useState<string | null>(null)
+  const [showDelivery,         setShowDelivery]         = useState(false)
   const [partsLoading,         setPartsLoading]         = useState(false)
   const [partsError,           setPartsError]           = useState<string | null>(null)
 
@@ -2879,6 +2896,17 @@ export default function HDQuickWrenchPage() {
             )}
 
             {analysis !== null && (
+              <button
+                type="button"
+                onClick={() => setShowDelivery(true)}
+                className="w-full py-3 rounded-lg text-sm font-semibold text-white flex items-center justify-center gap-2"
+                style={{ background: '#2969B0', minHeight: 48 }}
+              >
+                <span>🚚</span> Get Parts Delivered
+              </button>
+            )}
+
+            {analysis !== null && (
               <SuggestedRepairs
                 loading={repairLoading}
                 items={repairItems}
@@ -3178,6 +3206,17 @@ export default function HDQuickWrenchPage() {
             )}
 
             {truckAnalysis !== null && (
+              <button
+                type="button"
+                onClick={() => setShowDelivery(true)}
+                className="w-full py-3 rounded-lg text-sm font-semibold text-white flex items-center justify-center gap-2"
+                style={{ background: '#2969B0', minHeight: 48 }}
+              >
+                <span>🚚</span> Get Parts Delivered
+              </button>
+            )}
+
+            {truckAnalysis !== null && (
               <SuggestedRepairs
                 loading={repairLoading}
                 items={repairItems}
@@ -3378,6 +3417,20 @@ export default function HDQuickWrenchPage() {
         )}
 
       </div>
+
+      {showDelivery && (
+        <PartsOnTheWay
+          suite="hd"
+          parts={extractHDParts(partsResult)}
+          vehicleInfo={{
+            unitManufacturer: manufacturer,
+            unitModel:        model,
+          }}
+          techPhone=""
+          onClose={() => setShowDelivery(false)}
+          onDeliveryDispatched={() => { /* tech sees tracking in-modal */ }}
+        />
+      )}
     </main>
   )
 }

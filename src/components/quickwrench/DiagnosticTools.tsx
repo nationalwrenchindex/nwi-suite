@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import type { QWVehicle } from '@/types/quickwrench'
+import PartsOnTheWay, { type PartInput } from '@/components/parts-delivery/PartsOnTheWay'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -168,10 +169,27 @@ function mapCategory(geminiCategory: string): string {
   return 'diagnostics'
 }
 
+// Parse an AI parts_needed string into a structured part for delivery.
+// e.g. "MAF Sensor — OEM Part# 22680-7S000 (Aftermarket: Denso 1234) Est. $80-$120"
+function parsePartString(s: string): PartInput {
+  let name = s
+  const emIdx = s.indexOf('—')
+  if (emIdx > 0) name = s.slice(0, emIdx)
+  else { const oemIdx = s.search(/OEM/i); if (oemIdx > 0) name = s.slice(0, oemIdx) }
+  const oemM = s.match(/OEM\s*Part\s*#?\s*:?\s*([A-Za-z0-9][A-Za-z0-9\-]{2,})/i)
+  const aftM = s.match(/Aftermarket:\s*([^)]+)/i)
+  return {
+    name:        name.trim() || s,
+    oem:         oemM ? oemM[1].trim() : '',
+    aftermarket: aftM ? aftM[1].trim().replace(/\)+$/, '').trim() : undefined,
+  }
+}
+
 function DTCPanel({ vehicle, onAddDTCJob }: {
   vehicle:      QWVehicle | null
   onAddDTCJob?: (job: DTCJobPayload) => void
 }) {
+  const [showDelivery, setShowDelivery] = useState(false)
   const [input,          setInput]          = useState('')
   const [displayMessage, setDisplayMessage] = useState('')
   const [loading,        setLoading]        = useState(false)
@@ -399,6 +417,15 @@ function DTCPanel({ vehicle, onAddDTCJob }: {
             </button>
           )}
 
+          {/* Parts on the Way — delivery dispatch */}
+          <button
+            onClick={() => setShowDelivery(true)}
+            className="w-full flex items-center justify-center gap-2 px-5 py-3 text-white font-condensed font-bold text-sm tracking-wide rounded-lg transition-colors min-h-[48px]"
+            style={{ background: '#2969B0' }}
+          >
+            <span>🚚</span> Get Parts Delivered
+          </button>
+
           {result.citations && result.citations.length > 0 && (
             <SectionCard title="Sources" defaultOpen={false}>
               <ul className="space-y-1.5">
@@ -417,6 +444,24 @@ function DTCPanel({ vehicle, onAddDTCJob }: {
             AI-generated diagnostic information for reference only. Always verify with OEM service documentation. National Wrench Index assumes no liability for diagnostic accuracy.
           </p>
         </div>
+      )}
+
+      {showDelivery && result && (
+        <PartsOnTheWay
+          suite="ld"
+          parts={(result.parts_needed ?? []).map(parsePartString)}
+          vehicleInfo={{
+            year:   vehicle?.year,
+            make:   vehicle?.make,
+            model:  vehicle?.model,
+            engine: vehicle?.engine,
+            trim:   vehicle?.trim,
+            vin:    vehicle?.vin,
+          }}
+          techPhone=""
+          onClose={() => setShowDelivery(false)}
+          onDeliveryDispatched={() => { /* tech sees tracking in-modal */ }}
+        />
       )}
     </div>
   )
