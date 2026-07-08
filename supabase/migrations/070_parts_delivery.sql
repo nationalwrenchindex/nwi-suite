@@ -69,6 +69,7 @@ CREATE INDEX IF NOT EXISTS idx_parts_deliveries_status
   ON public.parts_deliveries(status);
 
 ALTER TABLE public.parts_deliveries ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "own deliveries" ON public.parts_deliveries;
 CREATE POLICY "own deliveries" ON public.parts_deliveries
   FOR ALL TO authenticated
   USING (user_id = auth.uid())
@@ -111,6 +112,7 @@ CREATE TABLE IF NOT EXISTS public.confirmed_parts (
 );
 
 ALTER TABLE public.confirmed_parts ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "read confirmed parts" ON public.confirmed_parts;
 CREATE POLICY "read confirmed parts" ON public.confirmed_parts
   FOR SELECT TO authenticated USING (true);
 -- Writes via service role only
