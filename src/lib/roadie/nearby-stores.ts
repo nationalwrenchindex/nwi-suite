@@ -1,11 +1,10 @@
-// Google Places lookup for nearby auto-parts stores. Server-side only —
-// uses GOOGLE_MAPS_API_KEY. Returns the closest 3 stores (preferring the major
-// chains) with a phone number the tech can tap to call the counter.
-
-const PARTS_CHAINS = [
-  "o'reilly", 'autozone', 'napa', 'advance auto', 'carquest', 'napa auto parts',
-  "o'reilly auto parts", 'advance auto parts',
-]
+// Google Places (New) lookup for nearby auto-parts stores. Server-side only —
+// uses GOOGLE_MAPS_API_KEY. Returns the closest 3 stores (closest-first) with a
+// phone number the tech can tap to call the counter.
+//
+// Uses the Places API (New) endpoint places.googleapis.com/v1/places:searchNearby
+// (the API confirmed enabled in Google Cloud), with the phone number returned in
+// the same response via the field mask — no separate Place Details call needed.
 
 interface StoreResult {
   name:          string
@@ -28,62 +27,63 @@ function distanceMiles(lat1: number, lng1: number, lat2: number, lng2: number): 
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
 }
 
+interface PlaceNew {
+  id?:                  string
+  displayName?:         { text?: string }
+  formattedAddress?:    string
+  nationalPhoneNumber?: string
+  location?:            { latitude?: number; longitude?: number }
+}
+
 export async function getNearbyPartsStores(lat: number, lng: number): Promise<StoreResult[]> {
   const key = process.env.GOOGLE_MAPS_API_KEY
   if (!key) throw new Error('GOOGLE_MAPS_NOT_CONFIGURED')
 
-  const nearbyUrl =
-    `https://maps.googleapis.com/maps/api/place/nearbysearch/json` +
-    `?location=${lat},${lng}&rankby=distance&keyword=${encodeURIComponent('auto parts store')}&key=${key}`
+  const res = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
+    method: 'POST',
+    headers: {
+      'Content-Type':     'application/json',
+      'X-Goog-Api-Key':   key,
+      // Field mask keeps the response (and billing SKU) lean; nationalPhoneNumber
+      // means we get the counter phone in this one call.
+      'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.location',
+    },
+    body: JSON.stringify({
+      includedTypes:       ['auto_parts_store'],
+      maxResultCount:      20,
+      rankPreference:      'DISTANCE', // closest-first
+      locationRestriction: {
+        circle: {
+          center: { latitude: lat, longitude: lng },
+          radius: 50000, // meters (max); DISTANCE rank returns nearest first
+        },
+      },
+    }),
+  })
 
-  const res = await fetch(nearbyUrl)
-  if (!res.ok) throw new Error(`Google Places error: ${res.status}`)
-  const data = await res.json() as {
-    results?: Array<{
-      name?: string
-      vicinity?: string
-      place_id?: string
-      geometry?: { location?: { lat?: number; lng?: number } }
-    }>
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`Google Places error: ${res.status}${body ? ` — ${body}` : ''}`)
   }
 
-  const mapped = (data.results ?? [])
-    .map(r => {
-      const rlat = r.geometry?.location?.lat
-      const rlng = r.geometry?.location?.lng
-      if (typeof rlat !== 'number' || typeof rlng !== 'number' || !r.place_id) return null
+  const data = await res.json() as { places?: PlaceNew[] }
+
+  return (data.places ?? [])
+    .map(p => {
+      const rlat = p.location?.latitude
+      const rlng = p.location?.longitude
+      if (typeof rlat !== 'number' || typeof rlng !== 'number' || !p.id) return null
       return {
-        name:          r.name ?? 'Auto Parts Store',
-        address:       r.vicinity ?? '',
-        phone:         '',
-        placeId:       r.place_id,
+        name:          p.displayName?.text ?? 'Auto Parts Store',
+        address:       p.formattedAddress ?? '',
+        phone:         p.nationalPhoneNumber ?? '',
+        placeId:       p.id,
         lat:           rlat,
         lng:           rlng,
-        distanceMiles: distanceMiles(lat, lng, rlat, rlng),
+        distanceMiles: Math.round(distanceMiles(lat, lng, rlat, rlng) * 10) / 10,
       }
     })
     .filter((s): s is StoreResult => s !== null)
-    .sort((a, b) => a.distanceMiles - b.distanceMiles)
-
-  // Prefer the recognized parts chains, then fall back to any nearby store.
-  const isChain = (s: StoreResult) => PARTS_CHAINS.some(c => s.name.toLowerCase().includes(c))
-  const chains  = mapped.filter(isChain)
-  const others  = mapped.filter(s => !isChain(s))
-  const top     = [...chains, ...others].slice(0, 3)
-
-  // Enrich with phone + formatted address via Place Details.
-  return Promise.all(top.map(async s => {
-    let phone   = ''
-    let address = s.address
-    try {
-      const detailUrl =
-        `https://maps.googleapis.com/maps/api/place/details/json` +
-        `?place_id=${s.placeId}&fields=formatted_phone_number,formatted_address&key=${key}`
-      const dres = await fetch(detailUrl)
-      const dd   = await dres.json() as { result?: { formatted_phone_number?: string; formatted_address?: string } }
-      phone   = dd.result?.formatted_phone_number ?? ''
-      address = dd.result?.formatted_address ?? s.address
-    } catch { /* phone/address are best-effort */ }
-    return { ...s, phone, address, distanceMiles: Math.round(s.distanceMiles * 10) / 10 }
-  }))
+    .sort((a, b) => a.distanceMiles - b.distanceMiles) // closest-first
+    .slice(0, 3)
 }
