@@ -309,6 +309,7 @@ export async function POST(req: NextRequest) {
         status:               quoteStatus,
         customer_id:          customerId,
         vehicle_id:           vehicleId,
+        vehicle_engine:       vehicle.engine || null,
         job_category:         jobCategoryLabel,
         job_subtype:          jobSubtype,
         line_items:           lineItems,

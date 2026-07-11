@@ -1818,6 +1818,8 @@ export default function QuickWrenchClient({
   // Per-part pricing edits on the Quote tab (keyed by part id).
   const [partCosts, setPartCosts] = useState<Record<string, number>>({})            // store cost (COGS)
   const [partPriceOverrides, setPartPriceOverrides] = useState<Record<string, number>>({}) // manual customer-price override
+  // True after a quote was reopened via ?loadQuoteId — shows a banner on Job Type.
+  const [quoteRestored, setQuoteRestored] = useState(false)
   const [quoteDefaults, setQuoteDefaults] = useState<LoadedQuoteDefaults | null>(null)
   const loadedQuoteRef = useRef<string | null>(null)
 
@@ -1868,14 +1870,14 @@ export default function QuickWrenchClient({
         const q = json?.quote
         if (!q) return
 
-        // Step 1: Vehicle
+        // Step 1: Vehicle — restore engine from the saved quote (migration 072).
         if (q.vehicle) {
           setVehicle({
             vin:    q.vehicle.vin  ?? '',
             year:   String(q.vehicle.year ?? ''),
             make:   q.vehicle.make,
             model:  q.vehicle.model,
-            engine: 'N/A',
+            engine: q.vehicle_engine ?? 'N/A',
           })
         }
 
@@ -1883,6 +1885,9 @@ export default function QuickWrenchClient({
         if (Array.isArray(q.jobs) && q.jobs.length > 0) {
           const restoredJobs: SelectedJob[] = []
           const restoredParts: Record<string, PartWithSuppliers[]> = {}
+          const restoredCosts: Record<string, number> = {}
+          const restoredPriceOverrides: Record<string, number> = {}
+          const markup = (q.parts_markup_percent ?? 20) / 100
 
           for (const entry of q.jobs as MultiJobEntry[]) {
             const matchedCat = JOB_CATEGORIES.find(c => c.id === entry.category)
@@ -1894,24 +1899,35 @@ export default function QuickWrenchClient({
             }
             restoredJobs.push(sj)
             const key = jobKey(sj)
-            restoredParts[key] = entry.parts.map((p, idx) => ({
-              id:               `loaded-${key}-${idx}`,
-              name:             p.name,
-              part_number_hint: '',
-              qty:              p.qty,
-              price_estimate:   p.unit_cost,
-              included:         true,
-              selected_supplier: 'custom' as Supplier,
-              custom_price:      p.unit_cost,
-              price_autozone:    p.unit_cost,
-              price_orielly:     p.unit_cost,
-              price_napa:        p.unit_cost,
-              price_rockauto:    p.unit_cost,
-            }))
+            restoredParts[key] = entry.parts.map((p, idx) => {
+              const id = `loaded-${key}-${idx}`
+              // Restore the exact cost + customer price the tech entered.
+              restoredCosts[id] = p.unit_cost
+              const autoPrice = Math.round(p.unit_cost * (1 + markup) * 100) / 100
+              if (p.unit_price != null && Math.abs(p.unit_price - autoPrice) > 0.005) {
+                restoredPriceOverrides[id] = p.unit_price
+              }
+              return {
+                id,
+                name:             p.name,
+                part_number_hint: '',
+                qty:              p.qty,
+                price_estimate:   p.unit_cost,
+                included:         true,
+                selected_supplier: 'custom' as Supplier,
+                custom_price:      p.unit_cost,
+                price_autozone:    p.unit_cost,
+                price_orielly:     p.unit_cost,
+                price_napa:        p.unit_cost,
+                price_rockauto:    p.unit_cost,
+              }
+            })
           }
 
           setSelectedJobs(restoredJobs)
           setPartsByJob(restoredParts)
+          setPartCosts(restoredCosts)
+          setPartPriceOverrides(restoredPriceOverrides)
           setQuoteDefaults({
             laborRate:     q.labor_rate          ?? 125,
             markupPct:     q.parts_markup_percent ?? 20,
@@ -1921,7 +1937,9 @@ export default function QuickWrenchClient({
           })
           setTechGuides({})
           setGuidesError(null)
-          setActiveTab(4)
+          // Land on Job Type so the tech can add more services before reviewing.
+          setQuoteRestored(true)
+          setActiveTab(1)
           return
         }
 
@@ -1956,26 +1974,37 @@ export default function QuickWrenchClient({
         )
         if (partItems.length > 0 && matchedJob) {
           const markup = (q.parts_markup_percent ?? 0) / 100
+          const restoredCosts: Record<string, number> = {}
+          const restoredPriceOverrides: Record<string, number> = {}
           const loadedParts: PartWithSuppliers[] = partItems.map(
-            (li: { description: string; quantity: number; unit_price: number }, i: number) => {
-              const basePrice = markup > 0 ? li.unit_price / (1 + markup) : li.unit_price
+            (li: { description: string; quantity: number; unit_price: number; unit_cost?: number }, i: number) => {
+              const id = `loaded-${i}-${Date.now()}`
+              // Prefer the stored cost; fall back to reverse-deriving it from price.
+              const cost = li.unit_cost != null ? li.unit_cost : (markup > 0 ? li.unit_price / (1 + markup) : li.unit_price)
+              restoredCosts[id] = Math.round(cost * 100) / 100
+              const autoPrice = Math.round(cost * (1 + markup) * 100) / 100
+              if (li.unit_price != null && Math.abs(li.unit_price - autoPrice) > 0.005) {
+                restoredPriceOverrides[id] = li.unit_price
+              }
               return {
-                id:               `loaded-${i}-${Date.now()}`,
+                id,
                 name:             li.description,
                 part_number_hint: '',
                 qty:              li.quantity,
-                price_estimate:   basePrice,
+                price_estimate:   cost,
                 included:         true,
                 selected_supplier: 'custom' as Supplier,
-                custom_price:      basePrice,
-                price_autozone:    basePrice,
-                price_orielly:     basePrice,
-                price_napa:        basePrice,
-                price_rockauto:    basePrice,
+                custom_price:      cost,
+                price_autozone:    cost,
+                price_orielly:     cost,
+                price_napa:        cost,
+                price_rockauto:    cost,
               }
             }
           )
           setPartsByJob({ [jobKey(matchedJob)]: loadedParts })
+          setPartCosts(restoredCosts)
+          setPartPriceOverrides(restoredPriceOverrides)
         }
 
         setQuoteDefaults({
@@ -1987,7 +2016,8 @@ export default function QuickWrenchClient({
         })
         setTechGuides({})
         setGuidesError(null)
-        setActiveTab(4)
+        setQuoteRestored(true)
+        setActiveTab(1)
       })
       .catch(() => {})
   }, [loadQuoteId])
@@ -2207,11 +2237,23 @@ export default function QuickWrenchClient({
           />
         )}
         {activeTab === 1 && (
-          <JobTypeTab
-            selectedJobs={selectedJobs}
-            onJobToggle={handleJobToggle}
-            onNext={() => { if (isJobsComplete) setActiveTab(2) }}
-          />
+          <div className="space-y-4">
+            {quoteRestored && (
+              <div className="flex items-start gap-3 px-4 py-3 rounded-lg border border-blue/30 bg-blue/8">
+                <svg className="w-4 h-4 text-blue-light flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" /><path d="M3 3v5h5" />
+                </svg>
+                <p className="text-blue-light text-sm">
+                  Quote restored — add more jobs below, or go to the Quote tab to review and send.
+                </p>
+              </div>
+            )}
+            <JobTypeTab
+              selectedJobs={selectedJobs}
+              onJobToggle={handleJobToggle}
+              onNext={() => { if (isJobsComplete) setActiveTab(2) }}
+            />
+          </div>
         )}
         {activeTab === 2 && (
           <TechGuideTab

@@ -25,6 +25,20 @@ Return a JSON object with these exact fields:
 - common_causes: array of cause strings, vehicle-specific, ordered by field frequency
 - related_codes: array of related DTC code strings
 - diagnostic_order: array of diagnostic step strings with exact specs (voltages, resistances, sensor ranges)
+- repair_steps: array of step-by-step repair procedure strings in the order a tech would perform them. These are REPAIR actions (remove, replace, torque, install) NOT diagnostic actions. Always include:
+  * Torque specifications where applicable (e.g. 'Torque manifold bolts to 18 ft-lbs in sequence')
+  * Special tool requirements per step
+  * Safety notes per step (e.g. 'Allow exhaust to cool before handling')
+  * Part numbers for components being replaced
+  * Whether engine must be cold, warm, or off for each step
+Example steps:
+  'Allow exhaust system to cool completely — minimum 2 hours after last operation'
+  'Spray all manifold bolts with penetrating oil (PB Blaster). Wait 15 minutes.'
+  'Remove upstream O2 sensor using O2 sensor socket. Note: sensor may be seized — do not force'
+  'Remove 3 manifold-to-pipe flange bolts. Replace if corroded (Dorman 03102)'
+  'Install new catalytic converter. Torque flange bolts to 30 ft-lbs. Torque manifold bolts to 18 ft-lbs in star pattern'
+  'Install new upstream O2 sensor. Torque to 33 ft-lbs. Apply anti-seize to threads'
+  'Clear DTCs. Perform drive cycle to verify repair'
 - suggested_repair: field-realistic repair recommendation
 - parts_needed: array of parts typically needed for this repair. REQUIRED — never return an empty array. Always include at minimum the primary failed component with OEM part number, and any sensors or gaskets typically replaced during this repair. Format each entry as: 'Part Name — OEM Part# XXXXX (Aftermarket: Brand XXXXX) Est. $XX-$XX'. If exact part numbers vary by build, state the part name and note 'verify part number with VIN at dealer'
 - special_tools: string listing tools needed or 'None beyond standard hand tools and multimeter'
@@ -58,6 +72,7 @@ interface DTCStructured {
   common_causes?:        string[]
   related_codes?:        string[]
   diagnostic_order?:     string[]
+  repair_steps?:         string[]
   suggested_repair?:     string
   parts_needed?:         string[]
   special_tools?:        string
@@ -82,6 +97,7 @@ function normalizeStructured(raw: unknown): DTCStructured {
     common_causes:        asStrArr(o.common_causes),
     related_codes:        asStrArr(o.related_codes),
     diagnostic_order:     asStrArr(o.diagnostic_order),
+    repair_steps:         asStrArr(o.repair_steps),
     suggested_repair:     asStr(o.suggested_repair),
     parts_needed:         asStrArr(o.parts_needed),
     special_tools:        asStr(o.special_tools),
@@ -128,6 +144,7 @@ const DTC_TOOL = {
       common_causes:        { type: 'array', items: { type: 'string' } },
       related_codes:        { type: 'array', items: { type: 'string' } },
       diagnostic_order:     { type: 'array', items: { type: 'string' } },
+      repair_steps:         { type: 'array', items: { type: 'string' }, description: 'Step-by-step repair procedure with torque specs' },
       suggested_repair:     { type: 'string' },
       parts_needed:         { type: 'array', items: { type: 'string' } },
       special_tools:        { type: 'string' },
@@ -136,7 +153,7 @@ const DTC_TOOL = {
     },
     required: [
       'code', 'name', 'category', 'symptoms', 'severity', 'severity_description',
-      'common_causes', 'related_codes', 'diagnostic_order', 'suggested_repair',
+      'common_causes', 'related_codes', 'diagnostic_order', 'repair_steps', 'suggested_repair',
       'parts_needed', 'special_tools', 'labor_estimate', 'safety_warnings',
     ],
   },
@@ -260,6 +277,12 @@ export async function GET(req: NextRequest, { params }: RouteContext) {
   // ── Cache write — only genuine Gemini results (never a temporary-outage
   // fallback). LD cache is automatic: no email, no founder review, no expiry.
   // Stored as a JSON string so hits restore the exact structured object. ──
+  //
+  // ONE-TIME CLEANUP (Brock, run manually AFTER promoting — do NOT automate):
+  // repair_steps is a new field; existing cached LD entries lack it and won't
+  // show a Repair Procedure section. Flush them so they regenerate with the new
+  // schema:
+  //   DELETE FROM public.hd_cached_diagnostics WHERE suite = 'ld';
   if (source === 'gemini_web_search') {
     try {
       const { error: cacheErr } = await createServiceClient().from('hd_cached_diagnostics').upsert({

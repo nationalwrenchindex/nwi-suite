@@ -18,6 +18,7 @@ interface DTCResult {
   common_causes?:        string[]
   related_codes?:        string[]
   diagnostic_order?:     string[]
+  repair_steps?:         string[]
   suggested_repair?:     string
   parts_needed?:         string[]
   special_tools?:        string
@@ -363,7 +364,22 @@ function DTCPanel({ vehicle, onAddDTCJob }: {
               <ol className="space-y-2.5">
                 {result.diagnostic_order!.map((step, i) => (
                   <li key={i} className="flex gap-3 text-white/70 text-sm">
-                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-orange/15 border border-orange/30 flex items-center justify-center font-condensed font-bold text-orange text-xs">
+                    <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue/15 border border-blue/30 flex items-center justify-center font-condensed font-bold text-blue-light text-xs">
+                      {i + 1}
+                    </span>
+                    <span className="pt-0.5 leading-relaxed">{step}</span>
+                  </li>
+                ))}
+              </ol>
+            </SectionCard>
+          )}
+
+          {(result.repair_steps?.length ?? 0) > 0 && (
+            <SectionCard title="Repair Procedure" defaultOpen={false}>
+              <ol className="space-y-2.5">
+                {result.repair_steps!.map((step, i) => (
+                  <li key={i} className="flex gap-3 text-white/70 text-sm">
+                    <span className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center font-condensed font-bold text-white text-xs" style={{ background: '#FF6600' }}>
                       {i + 1}
                     </span>
                     <span className="pt-0.5 leading-relaxed">{step}</span>
