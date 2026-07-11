@@ -21,6 +21,7 @@ export interface DeliveryVehicleInfo {
 interface Store {
   name: string; address: string; phone: string; placeId: string
   distanceMiles: number; lat: number; lng: number
+  note?: string
 }
 interface PartRow { name: string; oem: string; aftermarket?: string; confirmed: boolean; verified: boolean }
 
@@ -303,6 +304,11 @@ export default function PartsOnTheWay({
                           </div>
                           <div className="text-xs mt-0.5" style={{ color: '#8a9bad' }}>{s.address}</div>
                           {s.phone && <a href={`tel:${s.phone}`} onClick={e => e.stopPropagation()} className="text-xs font-semibold" style={{ color: BLUE }}>📞 {s.phone}</a>}
+                          {s.note && (
+                            <p className="text-xs mt-1 px-1.5 py-1 rounded" style={{ background: '#2a2213', border: '1px solid #6b5417', color: '#FCD34D' }}>
+                              ⚠ {s.note}
+                            </p>
+                          )}
                         </div>
                       </label>
                     )
