@@ -5,9 +5,8 @@
 // (the API confirmed enabled in Google Cloud), with the phone number returned in
 // the same response via the field mask — no separate Place Details call needed.
 //
-// Google tags parts stores inconsistently (auto_parts_store vs generic store), and
-// searchNearby returns repair shops / restoration companies too — so we cast a wide
-// net (auto_parts_store + store), then filter to recognized parts chains by name.
+// searchNearby also surfaces repair shops / restoration companies, so we filter
+// the results down to recognized parts chains by name.
 
 interface StoreResult {
   name:          string
@@ -76,6 +75,8 @@ async function searchNearby(key: string, lat: number, lng: number, includedTypes
   })
   if (!res.ok) {
     const body = await res.text().catch(() => '')
+    // Log the exact Google error body so the specific 400 reason is visible.
+    console.error(`[nearby-stores] Google Places ${res.status} error body:`, body)
     throw new Error(`Google Places error: ${res.status}${body ? ` — ${body}` : ''}`)
   }
   const data = await res.json() as { places?: PlaceNew[] }
@@ -86,17 +87,8 @@ export async function getNearbyPartsStores(lat: number, lng: number): Promise<St
   const key = process.env.GOOGLE_MAPS_API_KEY
   if (!key) throw new Error('GOOGLE_MAPS_NOT_CONFIGURED')
 
-  // Primary search on auto_parts_store + a secondary 'store' search to catch chains
-  // Google tagged as generic stores. Tolerate one search failing.
-  const settled = await Promise.allSettled([
-    searchNearby(key, lat, lng, ['auto_parts_store']),
-    searchNearby(key, lat, lng, ['store']),
-  ])
-  if (settled.every(s => s.status === 'rejected')) {
-    throw (settled[0] as PromiseRejectedResult).reason
-  }
-  const partsResults = settled[0].status === 'fulfilled' ? settled[0].value : []
-  const storeResults = settled[1].status === 'fulfilled' ? settled[1].value : []
+  // Single search on auto_parts_store (one confirmed-valid type per request).
+  const partsResults = await searchNearby(key, lat, lng, ['auto_parts_store'])
 
   const toStore = (p: PlaceNew, note?: string): StoreResult | null => {
     const rlat = p.location?.latitude
@@ -114,15 +106,8 @@ export async function getNearbyPartsStores(lat: number, lng: number): Promise<St
     }
   }
 
-  // Merge + dedupe by place id across both searches.
-  const seen = new Set<string>()
-  const merged: PlaceNew[] = []
-  for (const p of [...partsResults, ...storeResults]) {
-    if (p.id && !seen.has(p.id)) { seen.add(p.id); merged.push(p) }
-  }
-
-  // Filter combined results to recognized parts chains, closest-first.
-  const chains = merged
+  // Filter results to recognized parts chains, closest-first.
+  const chains = partsResults
     .map(p => toStore(p))
     .filter((s): s is StoreResult => s !== null && isChain(s.name))
     .sort((a, b) => a.distanceMiles - b.distanceMiles)
