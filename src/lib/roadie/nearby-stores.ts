@@ -1,10 +1,13 @@
 // Google Places (New) lookup for nearby auto-parts stores. Server-side only —
-// uses GOOGLE_MAPS_API_KEY. Returns the closest 3 stores (closest-first) with a
-// phone number the tech can tap to call the counter.
+// uses GOOGLE_MAPS_API_KEY. Returns the closest chain parts retailers.
 //
 // Uses the Places API (New) endpoint places.googleapis.com/v1/places:searchNearby
 // (the API confirmed enabled in Google Cloud), with the phone number returned in
 // the same response via the field mask — no separate Place Details call needed.
+//
+// Google tags parts stores inconsistently (auto_parts_store vs generic store), and
+// searchNearby returns repair shops / restoration companies too — so we cast a wide
+// net (auto_parts_store + store), then filter to recognized parts chains by name.
 
 interface StoreResult {
   name:          string
@@ -14,6 +17,19 @@ interface StoreResult {
   distanceMiles: number
   lat:           number
   lng:           number
+  note?:         string
+}
+
+// Case-insensitive chain-name matches. Includes the broad 'auto parts' catch-all so
+// regional "<Town> Auto Parts" retailers also pass.
+const CHAIN_NAMES = [
+  'autozone', "o'reilly", 'napa', 'advance auto', 'advance auto parts', 'carquest',
+  "o'reilly auto parts", 'autozone auto parts', 'napa auto parts', 'pep boys',
+  'discount auto', 'auto parts',
+]
+const isChain = (name: string) => {
+  const n = name.toLowerCase()
+  return CHAIN_NAMES.some(c => n.includes(c))
 }
 
 function distanceMiles(lat1: number, lng1: number, lat2: number, lng2: number): number {
@@ -33,57 +49,90 @@ interface PlaceNew {
   formattedAddress?:    string
   nationalPhoneNumber?: string
   location?:            { latitude?: number; longitude?: number }
+  types?:               string[]
+}
+
+async function searchNearby(key: string, lat: number, lng: number, includedTypes: string[]): Promise<PlaceNew[]> {
+  const res = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
+    method: 'POST',
+    headers: {
+      'Content-Type':     'application/json',
+      'X-Goog-Api-Key':   key,
+      'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.location,places.types',
+    },
+    body: JSON.stringify({
+      includedTypes,
+      maxResultCount:      25,
+      rankPreference:      'DISTANCE', // closest-first
+      locationRestriction: {
+        circle: {
+          // Widest net Places API (New) allows (50 km); the haversine sort below
+          // still puts the closest results first regardless of radius.
+          center: { latitude: lat, longitude: lng },
+          radius: 50000,
+        },
+      },
+    }),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    throw new Error(`Google Places error: ${res.status}${body ? ` — ${body}` : ''}`)
+  }
+  const data = await res.json() as { places?: PlaceNew[] }
+  return data.places ?? []
 }
 
 export async function getNearbyPartsStores(lat: number, lng: number): Promise<StoreResult[]> {
   const key = process.env.GOOGLE_MAPS_API_KEY
   if (!key) throw new Error('GOOGLE_MAPS_NOT_CONFIGURED')
 
-  const res = await fetch('https://places.googleapis.com/v1/places:searchNearby', {
-    method: 'POST',
-    headers: {
-      'Content-Type':     'application/json',
-      'X-Goog-Api-Key':   key,
-      // Field mask keeps the response (and billing SKU) lean; nationalPhoneNumber
-      // means we get the counter phone in this one call.
-      'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.location',
-    },
-    body: JSON.stringify({
-      includedTypes:       ['auto_parts_store'],
-      maxResultCount:      20,
-      rankPreference:      'DISTANCE', // closest-first
-      locationRestriction: {
-        circle: {
-          center: { latitude: lat, longitude: lng },
-          radius: 50000, // meters (max); DISTANCE rank returns nearest first
-        },
-      },
-    }),
-  })
+  // Primary search on auto_parts_store + a secondary 'store' search to catch chains
+  // Google tagged as generic stores. Tolerate one search failing.
+  const settled = await Promise.allSettled([
+    searchNearby(key, lat, lng, ['auto_parts_store']),
+    searchNearby(key, lat, lng, ['store']),
+  ])
+  if (settled.every(s => s.status === 'rejected')) {
+    throw (settled[0] as PromiseRejectedResult).reason
+  }
+  const partsResults = settled[0].status === 'fulfilled' ? settled[0].value : []
+  const storeResults = settled[1].status === 'fulfilled' ? settled[1].value : []
 
-  if (!res.ok) {
-    const body = await res.text().catch(() => '')
-    throw new Error(`Google Places error: ${res.status}${body ? ` — ${body}` : ''}`)
+  const toStore = (p: PlaceNew, note?: string): StoreResult | null => {
+    const rlat = p.location?.latitude
+    const rlng = p.location?.longitude
+    if (typeof rlat !== 'number' || typeof rlng !== 'number' || !p.id) return null
+    return {
+      name:          p.displayName?.text ?? 'Auto Parts Store',
+      address:       p.formattedAddress ?? '',
+      phone:         p.nationalPhoneNumber ?? '',
+      placeId:       p.id,
+      lat:           rlat,
+      lng:           rlng,
+      distanceMiles: Math.round(distanceMiles(lat, lng, rlat, rlng) * 10) / 10,
+      ...(note ? { note } : {}),
+    }
   }
 
-  const data = await res.json() as { places?: PlaceNew[] }
+  // Merge + dedupe by place id across both searches.
+  const seen = new Set<string>()
+  const merged: PlaceNew[] = []
+  for (const p of [...partsResults, ...storeResults]) {
+    if (p.id && !seen.has(p.id)) { seen.add(p.id); merged.push(p) }
+  }
 
-  return (data.places ?? [])
-    .map(p => {
-      const rlat = p.location?.latitude
-      const rlng = p.location?.longitude
-      if (typeof rlat !== 'number' || typeof rlng !== 'number' || !p.id) return null
-      return {
-        name:          p.displayName?.text ?? 'Auto Parts Store',
-        address:       p.formattedAddress ?? '',
-        phone:         p.nationalPhoneNumber ?? '',
-        placeId:       p.id,
-        lat:           rlat,
-        lng:           rlng,
-        distanceMiles: Math.round(distanceMiles(lat, lng, rlat, rlng) * 10) / 10,
-      }
-    })
+  // Filter combined results to recognized parts chains, closest-first.
+  const chains = merged
+    .map(p => toStore(p))
+    .filter((s): s is StoreResult => s !== null && isChain(s.name))
+    .sort((a, b) => a.distanceMiles - b.distanceMiles)
+
+  if (chains.length >= 2) return chains.slice(0, 5)
+
+  // Fallback: too few chains matched — show ALL auto_parts_store results unfiltered
+  // so the tech always sees something, flagged to verify before dispatching.
+  return partsResults
+    .map(p => toStore(p, 'Verify this is an auto parts retailer before sending a driver'))
     .filter((s): s is StoreResult => s !== null)
-    .sort((a, b) => a.distanceMiles - b.distanceMiles) // closest-first
-    .slice(0, 3)
+    .sort((a, b) => a.distanceMiles - b.distanceMiles)
 }
