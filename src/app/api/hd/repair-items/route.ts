@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
+import { hasQuickWrenchAccess } from '@/lib/subscription'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,8 +12,8 @@ export async function GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const hasAccess = await checkHDAccess(user.id)
-  if (!hasAccess) return NextResponse.json({ error: 'HD subscription required' }, { status: 403 })
+  const [hdAccess, qwAccess] = await Promise.all([checkHDAccess(user.id), hasQuickWrenchAccess(user.id)])
+  if (!hdAccess && !qwAccess) return NextResponse.json({ error: 'HD or QuickWrench subscription required' }, { status: 403 })
 
   const category = req.nextUrl.searchParams.get('category')?.trim() || null
 
@@ -44,8 +45,8 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const hasAccess = await checkHDAccess(user.id)
-  if (!hasAccess) return NextResponse.json({ error: 'HD subscription required' }, { status: 403 })
+  const [hdAccess, qwAccess] = await Promise.all([checkHDAccess(user.id), hasQuickWrenchAccess(user.id)])
+  if (!hdAccess && !qwAccess) return NextResponse.json({ error: 'HD or QuickWrench subscription required' }, { status: 403 })
 
   let body: Record<string, unknown>
   try {

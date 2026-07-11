@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
   }
 
   const {
-    vehicle, job, jobs,
+    vehicle, job, jobs, extra_labor,
     parts, parts_total, labor_hours, labor_rate, labor_total,
     markup_percent, tax_amount, grand_total,
     customer_name, customer_phone,
@@ -271,6 +271,18 @@ export async function POST(req: NextRequest) {
         }, 0)
       jobCategoryLabel = job.categoryLabel
       jobSubtype = job.name
+    }
+
+    // Append custom labor lines from the Quote-tab "Add Labor Line" rows.
+    const extraLabor = Array.isArray(extra_labor) ? extra_labor : []
+    for (const el of extraLabor) {
+      const hrs = Number(el.hours) || 0
+      lineItems.push({
+        description: `Labor — ${el.description || 'Additional labor'}`,
+        quantity:    hrs,
+        unit_price:  labor_rate,
+        total:       Math.round(hrs * labor_rate * 100) / 100,
+      })
     }
 
     const vehicleLabel = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ')

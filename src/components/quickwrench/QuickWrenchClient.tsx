@@ -1211,11 +1211,74 @@ function PartsTab({
 
 // ─── Tab 5: Quote ─────────────────────────────────────────────────────────────
 
+// A row from the shared repair-items labor library (hd_repair_items).
+interface LibItem { id: string; description: string; mobile_hours: number | string | null; shop_hours: number | string | null }
+
+function libHours(i: LibItem): number {
+  const m = i.mobile_hours ?? i.shop_hours
+  const n = typeof m === 'number' ? m : m ? Number(m) : NaN
+  return Number.isFinite(n) && n > 0 ? n : 1
+}
+
+// Free-text labor description input with library autocomplete. Suggestions come
+// from hd_repair_items; picking one fills the description + hours.
+function LaborDescInput({
+  value, placeholder, libItems, onText, onPick, onCommit,
+}: {
+  value:       string
+  placeholder?: string
+  libItems:    LibItem[]
+  onText:      (v: string) => void
+  onPick:      (description: string, hours: number) => void
+  onCommit:    () => void
+}) {
+  const [open, setOpen] = useState(false)
+  const term = value.trim().toLowerCase()
+  const suggestions = term
+    ? libItems.filter(i => i.description.toLowerCase().includes(term) && i.description.toLowerCase() !== term).slice(0, 5)
+    : []
+  return (
+    <div className="relative">
+      <input
+        value={value}
+        placeholder={placeholder}
+        onChange={e => { onText(e.target.value); setOpen(true) }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => { setTimeout(() => setOpen(false), 150); onCommit() }}
+        className="w-full px-2 py-1.5 rounded text-sm text-white outline-none"
+        style={{ background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.15)' }}
+      />
+      {open && suggestions.length > 0 && (
+        <div className="absolute z-20 left-0 right-0 mt-1 rounded-lg overflow-hidden shadow-xl" style={{ background: '#12121f', border: '1px solid rgba(255,255,255,0.15)' }}>
+          {suggestions.map(s => (
+            <button
+              key={s.id}
+              type="button"
+              onMouseDown={e => { e.preventDefault(); onPick(s.description, libHours(s)); setOpen(false) }}
+              className="w-full text-left px-3 py-2 text-sm text-white/80 hover:bg-orange/20 hover:text-orange flex items-center justify-between gap-2"
+            >
+              <span className="truncate">{s.description}</span>
+              <span className="text-white/30 text-xs shrink-0">{libHours(s)}h</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+interface ExtraLaborLine { id: string; description: string; hours: number }
+
 function QuoteTab({
   vehicle,
   selectedJobs,
   techGuides,
   partsByJob,
+  laborHourOverrides,
+  laborDescOverrides,
+  onLaborHoursChange,
+  onLaborDescChange,
+  onRemoveJob,
   initialLaborRate   = 125,
   initialMarkupPct   = 20,
   initialTaxPct      = 8.5,
@@ -1226,6 +1289,11 @@ function QuoteTab({
   selectedJobs:          SelectedJob[]
   techGuides:            Record<string, TechGuide>
   partsByJob:            Record<string, PartWithSuppliers[]>
+  laborHourOverrides:    Record<string, number>
+  laborDescOverrides:    Record<string, string>
+  onLaborHoursChange:    (key: string, hours: number) => void
+  onLaborDescChange:     (key: string, desc: string) => void
+  onRemoveJob:           (job: SelectedJob) => void
   initialLaborRate?:     number
   initialMarkupPct?:     number
   initialTaxPct?:        number
@@ -1244,29 +1312,69 @@ function QuoteTab({
   const [sendingSms,    setSendingSms]    = useState(false)
   const [smsSent,       setSmsSent]       = useState(false)
   const [error,         setError]         = useState<string | null>(null)
+  const [extraLaborLines, setExtraLaborLines] = useState<ExtraLaborLine[]>([])
+  const [libItems,      setLibItems]      = useState<LibItem[]>([])
 
-  // Per-job breakdowns
+  // Shared labor library (hd_repair_items) for autocomplete. Tolerates 403 for
+  // techs without HD access — autocomplete just stays empty.
+  const fetchLibItems = useCallback(async () => {
+    try {
+      const r = await fetch('/api/hd/repair-items')
+      const d = await r.json()
+      setLibItems(Array.isArray(d.items) ? d.items as LibItem[] : [])
+    } catch { /* library optional */ }
+  }, [])
+  useEffect(() => { fetchLibItems() }, [fetchLibItems])
+
+  // Save a custom labor description to the shared library (fire-and-forget).
+  const saveLaborToLibrary = useCallback((description: string, hours: number) => {
+    const d = description.trim()
+    if (!d) return
+    fetch('/api/hd/repair-items', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ description: d, mobile_hours: hours, source: 'manual', applies_to: 'both', category: 'labor' }),
+    }).then(() => fetchLibItems()).catch(() => { /* library optional */ })
+  }, [fetchLibItems])
+
+  // Per-job breakdowns — hours + description honor the tech's Quote-tab edits.
   const jobBreakdowns = selectedJobs.map(j => {
     const key        = jobKey(j)
     const guide      = techGuides[key]
-    const laborHrs   = guide?.hours ?? j.hours
+    const laborHrs   = laborHourOverrides[key] ?? guide?.hours ?? j.hours
+    const desc       = laborDescOverrides[key] ?? j.name
     const jParts     = (partsByJob[key] ?? []).filter(p => p.included)
     const partsBase  = jParts.reduce((s, p) => s + partPrice(p) * p.qty, 0)
     const partsMarkup = partsBase * markupPct / 100
     const partsRev   = partsBase + partsMarkup
     const laborTotal = laborHrs * laborRate
     const subtotal   = partsRev + laborTotal
-    return { j, key, laborHrs, jParts, partsBase, partsMarkup, partsRev, laborTotal, subtotal }
+    return { j, key, desc, laborHrs, jParts, partsBase, partsMarkup, partsRev, laborTotal, subtotal }
   })
 
+  const extraLaborTotal = extraLaborLines.reduce((s, l) => s + l.hours * laborRate, 0)
+  const extraLaborHours = extraLaborLines.reduce((s, l) => s + l.hours, 0)
+
   const totalPartsRev   = jobBreakdowns.reduce((s, b) => s + b.partsRev,   0)
-  const totalLaborHours = jobBreakdowns.reduce((s, b) => s + b.laborHrs,   0)
-  const totalLaborTotal = jobBreakdowns.reduce((s, b) => s + b.laborTotal, 0)
+  const totalLaborHours = jobBreakdowns.reduce((s, b) => s + b.laborHrs,   0) + extraLaborHours
+  const totalLaborTotal = jobBreakdowns.reduce((s, b) => s + b.laborTotal, 0) + extraLaborTotal
   const preTax          = totalPartsRev + totalLaborTotal
   const taxAmount       = preTax * (taxPct / 100)
   const grandTotal      = preTax + taxAmount
 
+  function addExtraLabor() {
+    setExtraLaborLines(prev => [...prev, { id: crypto.randomUUID(), description: '', hours: 1 }])
+  }
+  function updateExtraLabor(id: string, patch: Partial<ExtraLaborLine>) {
+    setExtraLaborLines(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l))
+  }
+  function removeExtraLabor(id: string) {
+    setExtraLaborLines(prev => prev.filter(l => l.id !== id))
+  }
+
   const quoteHash = [laborRate, markupPct, taxPct,
+    JSON.stringify(laborHourOverrides), JSON.stringify(laborDescOverrides),
+    JSON.stringify(extraLaborLines),
     ...selectedJobs.map(j => {
       const key = jobKey(j)
       return (partsByJob[key] ?? []).filter(p => p.included)
@@ -1285,8 +1393,8 @@ function QuoteTab({
       const jobsPayload: MultiJobEntry[] = jobBreakdowns.map(b => ({
         id:          b.key,
         category:    b.j.category,
-        subtype:     b.j.name,
-        labor_hours: b.laborHrs,
+        subtype:     b.desc,          // tech-edited description
+        labor_hours: b.laborHrs,      // tech-edited hours
         labor_rate:  laborRate,
         parts:       b.jParts.map(p => ({
           name:       p.name,
@@ -1296,6 +1404,10 @@ function QuoteTab({
         })),
         notes: '',
       }))
+
+      const extraLaborPayload = extraLaborLines
+        .filter(l => l.description.trim() || l.hours > 0)
+        .map(l => ({ description: l.description.trim() || 'Additional labor', hours: l.hours }))
 
       const allParts = selectedJobs.flatMap(j => partsByJob[jobKey(j)] ?? [])
 
@@ -1311,6 +1423,7 @@ function QuoteTab({
             hours:         jobsPayload[0].labor_hours,
           },
           jobs:           jobsPayload,
+          extra_labor:    extraLaborPayload,
           parts:          allParts,
           parts_total:    Math.round(totalPartsRev * 100) / 100,
           labor_hours:    totalLaborHours,
@@ -1431,67 +1544,91 @@ function QuoteTab({
         <div className="nwi-card">
           <p className="text-white/40 text-xs uppercase tracking-widest mb-3">Quote Breakdown</p>
 
-          {isMultiJob ? (
-            /* Multi-job: per-job blocks */
-            <div className="space-y-3 mb-3">
-              {jobBreakdowns.map((b, bi) => (
-                <div key={b.key} className="border border-white/8 rounded-lg overflow-hidden">
-                  <div className="flex items-center justify-between px-3 py-2 bg-white/3">
-                    <p className="text-white font-semibold text-xs">{b.j.name}</p>
-                    <span className="text-orange font-bold text-xs">{fmt(b.subtotal)}</span>
+          {/* Per-job blocks — parts (read-only) + editable labor description & hours */}
+          <div className="space-y-3 mb-3">
+            {jobBreakdowns.map(b => (
+              <div key={b.key} className="border border-white/8 rounded-lg overflow-hidden">
+                <div className="flex items-center gap-2 px-3 py-2 bg-white/3">
+                  <div className="flex-1 min-w-0">
+                    <LaborDescInput
+                      value={b.desc}
+                      libItems={libItems}
+                      onText={v => onLaborDescChange(b.key, v)}
+                      onPick={(desc, hours) => { onLaborDescChange(b.key, desc); onLaborHoursChange(b.key, hours) }}
+                      onCommit={() => { if (b.desc.trim() && b.desc.trim() !== b.j.name) saveLaborToLibrary(b.desc, b.laborHrs) }}
+                    />
                   </div>
-                  <div className="px-3 py-2 space-y-1">
-                    {b.jParts.map(p => (
-                      <div key={p.id} className="flex items-center justify-between gap-2">
-                        <span className="text-white/50 text-xs truncate">{p.qty > 1 ? `${p.qty}× ` : ''}{p.name}</span>
-                        <span className="text-white/60 text-xs whitespace-nowrap">{fmt(partPrice(p) * p.qty)}</span>
-                      </div>
-                    ))}
-                    {b.partsMarkup > 0 && (
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-white/25 text-xs">Markup ({markupPct}%)</span>
-                        <span className="text-white/25 text-xs">+{fmt(b.partsMarkup)}</span>
-                      </div>
-                    )}
-                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/5">
-                      <span className="text-white/50 text-xs">Labor ({b.laborHrs}h × {fmt(laborRate)}/hr)</span>
-                      <span className="text-white/70 text-xs">{fmt(b.laborTotal)}</span>
-                    </div>
-                  </div>
+                  <span className="text-orange font-bold text-xs whitespace-nowrap">{fmt(b.subtotal)}</span>
+                  <button type="button" onClick={() => onRemoveJob(b.j)} aria-label="Remove job" className="text-white/30 hover:text-danger text-lg leading-none flex-shrink-0">×</button>
                 </div>
-              ))}
-            </div>
-          ) : (
-            /* Single-job: flat display */
-            <>
-              {jobBreakdowns[0]?.jParts.length > 0 && (
-                <div className="space-y-1.5 mb-3 pb-3 border-b border-dark-border">
-                  {jobBreakdowns[0].jParts.map(p => (
+                <div className="px-3 py-2 space-y-1">
+                  {b.jParts.map(p => (
                     <div key={p.id} className="flex items-center justify-between gap-2">
                       <span className="text-white/50 text-xs truncate">{p.qty > 1 ? `${p.qty}× ` : ''}{p.name}</span>
                       <span className="text-white/60 text-xs whitespace-nowrap">{fmt(partPrice(p) * p.qty)}</span>
                     </div>
                   ))}
-                  <div className="flex items-center justify-between gap-2 pt-1">
-                    <span className="text-white/30 text-xs">Markup ({markupPct}%)</span>
-                    <span className="text-white/30 text-xs">+{fmt(jobBreakdowns[0].partsMarkup)}</span>
+                  {b.partsMarkup > 0 && (
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-white/25 text-xs">Markup ({markupPct}%)</span>
+                      <span className="text-white/25 text-xs">+{fmt(b.partsMarkup)}</span>
+                    </div>
+                  )}
+                  {/* Editable labor hours */}
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-white/50 text-xs">Labor</span>
+                      <input
+                        type="number" min={0.25} step={0.25}
+                        value={b.laborHrs}
+                        onChange={e => onLaborHoursChange(b.key, Number(e.target.value) || 0)}
+                        className="text-right text-xs text-white rounded px-1.5 py-1 outline-none"
+                        style={{ width: 60, background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.15)' }}
+                      />
+                      <span className="text-white/30 text-xs">h × {fmt(laborRate)}/hr</span>
+                    </div>
+                    <span className="text-white/70 text-xs whitespace-nowrap">{fmt(b.laborTotal)}</span>
                   </div>
                 </div>
-              )}
-
-              <div className="flex items-center justify-between py-1.5 border-b border-dark-border">
-                <span className="text-white/50 text-sm">
-                  Labor ({jobBreakdowns[0]?.laborHrs ?? 0}h × {fmt(laborRate)}/hr)
-                </span>
-                <span className="text-white text-sm font-medium">{fmt(totalLaborTotal)}</span>
               </div>
+            ))}
+          </div>
 
-              <div className="flex items-center justify-between py-1.5 border-b border-dark-border">
-                <span className="text-white/50 text-sm">Parts Total</span>
-                <span className="text-white text-sm font-medium">{fmt(totalPartsRev)}</span>
+          {/* Extra custom labor lines */}
+          <div className="space-y-2 mb-3">
+            {extraLaborLines.map(line => (
+              <div key={line.id} className="flex items-center gap-2">
+                <div className="flex-1 min-w-0">
+                  <LaborDescInput
+                    value={line.description}
+                    placeholder="e.g. Diagnostic Fee, Shop Supplies, Road Call Fee"
+                    libItems={libItems}
+                    onText={v => updateExtraLabor(line.id, { description: v })}
+                    onPick={(desc, hours) => updateExtraLabor(line.id, { description: desc, hours })}
+                    onCommit={() => { if (line.description.trim()) saveLaborToLibrary(line.description, line.hours) }}
+                  />
+                </div>
+                <input
+                  type="number" min={0} step={0.25}
+                  value={line.hours}
+                  onChange={e => updateExtraLabor(line.id, { hours: Number(e.target.value) || 0 })}
+                  className="text-right text-xs text-white rounded px-1.5 py-1 outline-none"
+                  style={{ width: 60, background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.15)' }}
+                />
+                <span className="text-white/70 text-xs whitespace-nowrap" style={{ width: 64, textAlign: 'right' }}>{fmt(line.hours * laborRate)}</span>
+                <button type="button" onClick={() => removeExtraLabor(line.id)} aria-label="Remove labor line" className="text-white/30 hover:text-danger text-lg leading-none flex-shrink-0">×</button>
               </div>
-            </>
-          )}
+            ))}
+            <button type="button" onClick={addExtraLabor} className="text-orange/90 hover:text-orange text-xs font-semibold">
+              + Add Labor Line
+            </button>
+          </div>
+
+          {/* Parts total (aggregate) */}
+          <div className="flex items-center justify-between py-1.5 border-b border-dark-border">
+            <span className="text-white/50 text-sm">Parts Total</span>
+            <span className="text-white text-sm font-medium">{fmt(totalPartsRev)}</span>
+          </div>
 
           <div className="flex items-center justify-between py-1.5 border-b border-dark-border">
             <span className="text-white/30 text-sm">Tax ({taxPct}%)</span>
@@ -1615,6 +1752,9 @@ export default function QuickWrenchClient({
   const [guidesLoading, setGuidesLoading] = useState(false)
   const [guidesError,   setGuidesError]   = useState<string | null>(null)
   const [partsByJob,    setPartsByJob]    = useState<Record<string, PartWithSuppliers[]>>({})
+  // Per-job labor edits on the Quote tab (keyed by jobKey).
+  const [laborHourOverrides, setLaborHourOverrides] = useState<Record<string, number>>({})
+  const [laborDescOverrides, setLaborDescOverrides] = useState<Record<string, string>>({})
   const [quoteDefaults, setQuoteDefaults] = useState<LoadedQuoteDefaults | null>(null)
   const loadedQuoteRef = useRef<string | null>(null)
 
@@ -2035,6 +2175,11 @@ export default function QuickWrenchClient({
             selectedJobs={selectedJobs}
             techGuides={techGuides}
             partsByJob={partsByJob}
+            laborHourOverrides={laborHourOverrides}
+            laborDescOverrides={laborDescOverrides}
+            onLaborHoursChange={(key, hours) => setLaborHourOverrides(prev => ({ ...prev, [key]: hours }))}
+            onLaborDescChange={(key, desc) => setLaborDescOverrides(prev => ({ ...prev, [key]: desc }))}
+            onRemoveJob={handleJobToggle}
             initialLaborRate={quoteDefaults?.laborRate ?? defaultLaborRate}
             initialMarkupPct={quoteDefaults?.markupPct ?? defaultMarkupPct}
             initialTaxPct={quoteDefaults?.taxPct ?? defaultTaxPct}

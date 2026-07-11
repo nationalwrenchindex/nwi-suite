@@ -137,6 +137,7 @@ export interface QuoteSaveRequest {
   vehicle:       QWVehicle
   job:           SelectedJob           // first job (backwards compat scalar columns)
   jobs?:         MultiJobEntry[]       // all jobs (multi-job JSONB)
+  extra_labor?:  Array<{ description: string; hours: number }>  // custom labor lines
   parts:         PartWithSuppliers[]   // all included parts flat (backwards compat)
   parts_total:   number
   labor_hours:   number                // total labor hours across all jobs
