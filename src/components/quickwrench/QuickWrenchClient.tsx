@@ -1276,8 +1276,10 @@ function QuoteTab({
   partsByJob,
   laborHourOverrides,
   laborDescOverrides,
+  partPriceOverrides,
   onLaborHoursChange,
   onLaborDescChange,
+  onPartPriceChange,
   onRemoveJob,
   initialLaborRate   = 125,
   initialMarkupPct   = 20,
@@ -1291,8 +1293,10 @@ function QuoteTab({
   partsByJob:            Record<string, PartWithSuppliers[]>
   laborHourOverrides:    Record<string, number>
   laborDescOverrides:    Record<string, string>
+  partPriceOverrides:    Record<string, number>
   onLaborHoursChange:    (key: string, hours: number) => void
   onLaborDescChange:     (key: string, desc: string) => void
+  onPartPriceChange:     (id: string, price: number) => void
   onRemoveJob:           (job: SelectedJob) => void
   initialLaborRate?:     number
   initialMarkupPct?:     number
@@ -1337,20 +1341,29 @@ function QuoteTab({
     }).then(() => fetchLibItems()).catch(() => { /* library optional */ })
   }, [fetchLibItems])
 
-  // Per-job breakdowns — hours + description honor the tech's Quote-tab edits.
+  // Customer unit price for a part: the tech's Quote-tab override if set, else the
+  // supplier price marked up (the prefill). Zero = unpriced.
+  const partUnitPrice = (p: PartWithSuppliers): number => {
+    const ov = partPriceOverrides[p.id]
+    if (ov != null) return ov
+    return Math.round(partPrice(p) * (1 + markupPct / 100) * 100) / 100
+  }
+
+  // Per-job breakdowns — hours, description + part prices honor Quote-tab edits.
   const jobBreakdowns = selectedJobs.map(j => {
     const key        = jobKey(j)
     const guide      = techGuides[key]
     const laborHrs   = laborHourOverrides[key] ?? guide?.hours ?? j.hours
     const desc       = laborDescOverrides[key] ?? j.name
     const jParts     = (partsByJob[key] ?? []).filter(p => p.included)
-    const partsBase  = jParts.reduce((s, p) => s + partPrice(p) * p.qty, 0)
-    const partsMarkup = partsBase * markupPct / 100
-    const partsRev   = partsBase + partsMarkup
+    const partsRev   = jParts.reduce((s, p) => s + partUnitPrice(p) * p.qty, 0)
     const laborTotal = laborHrs * laborRate
     const subtotal   = partsRev + laborTotal
-    return { j, key, desc, laborHrs, jParts, partsBase, partsMarkup, partsRev, laborTotal, subtotal }
+    return { j, key, desc, laborHrs, jParts, partsRev, laborTotal, subtotal }
   })
+
+  const allIncludedParts = selectedJobs.flatMap(j => (partsByJob[jobKey(j)] ?? []).filter(p => p.included))
+  const hasUnpricedParts = allIncludedParts.some(p => partUnitPrice(p) <= 0)
 
   const extraLaborTotal = extraLaborLines.reduce((s, l) => s + l.hours * laborRate, 0)
   const extraLaborHours = extraLaborLines.reduce((s, l) => s + l.hours, 0)
@@ -1374,7 +1387,7 @@ function QuoteTab({
 
   const quoteHash = [laborRate, markupPct, taxPct,
     JSON.stringify(laborHourOverrides), JSON.stringify(laborDescOverrides),
-    JSON.stringify(extraLaborLines),
+    JSON.stringify(extraLaborLines), JSON.stringify(partPriceOverrides),
     ...selectedJobs.map(j => {
       const key = jobKey(j)
       return (partsByJob[key] ?? []).filter(p => p.included)
@@ -1400,7 +1413,7 @@ function QuoteTab({
           name:       p.name,
           qty:        p.qty,
           unit_cost:  Math.round(partPrice(p) * 100) / 100,
-          unit_price: Math.round(partPrice(p) * (1 + markupPct / 100) * 100) / 100,
+          unit_price: partUnitPrice(p),   // tech-edited customer price
         })),
         notes: '',
       }))
@@ -1561,19 +1574,23 @@ function QuoteTab({
                   <span className="text-orange font-bold text-xs whitespace-nowrap">{fmt(b.subtotal)}</span>
                   <button type="button" onClick={() => onRemoveJob(b.j)} aria-label="Remove job" className="text-white/30 hover:text-danger text-lg leading-none flex-shrink-0">×</button>
                 </div>
-                <div className="px-3 py-2 space-y-1">
+                <div className="px-3 py-2 space-y-1.5">
                   {b.jParts.map(p => (
-                    <div key={p.id} className="flex items-center justify-between gap-2">
-                      <span className="text-white/50 text-xs truncate">{p.qty > 1 ? `${p.qty}× ` : ''}{p.name}</span>
-                      <span className="text-white/60 text-xs whitespace-nowrap">{fmt(partPrice(p) * p.qty)}</span>
+                    <div key={p.id} className="flex items-center gap-2">
+                      <span className="text-white/50 text-xs truncate flex-1">{p.qty > 1 ? `${p.qty}× ` : ''}{p.name}</span>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <span className="text-white/30 text-xs">$</span>
+                        <input
+                          type="number" min={0} step={0.01} placeholder="0.00"
+                          value={partUnitPrice(p) > 0 ? partUnitPrice(p) : ''}
+                          onChange={e => onPartPriceChange(p.id, Number(e.target.value) || 0)}
+                          className="text-right text-xs text-white rounded px-1.5 py-1 outline-none"
+                          style={{ width: 90, background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.15)' }}
+                        />
+                      </div>
+                      <span className="text-white/60 text-xs whitespace-nowrap" style={{ width: 64, textAlign: 'right' }}>{fmt(partUnitPrice(p) * p.qty)}</span>
                     </div>
                   ))}
-                  {b.partsMarkup > 0 && (
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-white/25 text-xs">Markup ({markupPct}%)</span>
-                      <span className="text-white/25 text-xs">+{fmt(b.partsMarkup)}</span>
-                    </div>
-                  )}
                   {/* Editable labor hours */}
                   <div className="flex items-center justify-between gap-2 pt-1 border-t border-white/5">
                     <div className="flex items-center gap-1.5">
@@ -1624,9 +1641,14 @@ function QuoteTab({
             </button>
           </div>
 
-          {/* Parts total (aggregate) */}
+          {/* Totals summary */}
           <div className="flex items-center justify-between py-1.5 border-b border-dark-border">
-            <span className="text-white/50 text-sm">Parts Total</span>
+            <span className="text-white/50 text-sm">Labor</span>
+            <span className="text-white text-sm font-medium">{fmt(totalLaborTotal)}</span>
+          </div>
+
+          <div className="flex items-center justify-between py-1.5 border-b border-dark-border">
+            <span className="text-white/50 text-sm">Parts</span>
             <span className="text-white text-sm font-medium">{fmt(totalPartsRev)}</span>
           </div>
 
@@ -1636,11 +1658,18 @@ function QuoteTab({
           </div>
 
           <div className="flex items-center justify-between pt-3 mt-1">
-            <span className="font-condensed font-bold text-white text-lg tracking-wide">TOTAL</span>
+            <span className="font-condensed font-bold text-white text-lg tracking-wide">GRAND TOTAL</span>
             <span className="font-condensed font-bold text-orange text-3xl">{fmt(grandTotal)}</span>
           </div>
         </div>
       </div>
+
+      {/* Incomplete-quote warning */}
+      {hasUnpricedParts && (
+        <div className="px-4 py-3 rounded-lg text-sm" style={{ background: '#2a1f00', border: '1px solid #6b4c00', color: '#FCD34D' }}>
+          ⚠ Some parts have no price entered. Add prices before sending to customer.
+        </div>
+      )}
 
       {error && <div className="alert-error">{error}</div>}
 
@@ -1698,7 +1727,10 @@ function QuoteTab({
         </button>
 
         <button
-          onClick={() => save(true, true)}
+          onClick={() => {
+            if (hasUnpricedParts && !window.confirm('Some parts have $0.00 price. Send anyway?')) return
+            save(true, true)
+          }}
           disabled={sendingSms || smsSent || !customerPhone}
           className="flex items-center gap-2 px-5 py-2.5 bg-blue hover:bg-blue-hover disabled:opacity-50 text-white font-condensed font-bold text-sm tracking-wide rounded-lg transition-colors"
         >
@@ -1755,6 +1787,8 @@ export default function QuickWrenchClient({
   // Per-job labor edits on the Quote tab (keyed by jobKey).
   const [laborHourOverrides, setLaborHourOverrides] = useState<Record<string, number>>({})
   const [laborDescOverrides, setLaborDescOverrides] = useState<Record<string, string>>({})
+  // Per-part customer-price edits on the Quote tab (keyed by part id).
+  const [partPriceOverrides, setPartPriceOverrides] = useState<Record<string, number>>({})
   const [quoteDefaults, setQuoteDefaults] = useState<LoadedQuoteDefaults | null>(null)
   const loadedQuoteRef = useRef<string | null>(null)
 
@@ -2177,8 +2211,10 @@ export default function QuickWrenchClient({
             partsByJob={partsByJob}
             laborHourOverrides={laborHourOverrides}
             laborDescOverrides={laborDescOverrides}
+            partPriceOverrides={partPriceOverrides}
             onLaborHoursChange={(key, hours) => setLaborHourOverrides(prev => ({ ...prev, [key]: hours }))}
             onLaborDescChange={(key, desc) => setLaborDescOverrides(prev => ({ ...prev, [key]: desc }))}
+            onPartPriceChange={(id, price) => setPartPriceOverrides(prev => ({ ...prev, [id]: price }))}
             onRemoveJob={handleJobToggle}
             initialLaborRate={quoteDefaults?.laborRate ?? defaultLaborRate}
             initialMarkupPct={quoteDefaults?.markupPct ?? defaultMarkupPct}
