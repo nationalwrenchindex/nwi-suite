@@ -140,6 +140,7 @@ export interface QuoteSaveRequest {
   extra_labor?:  Array<{ description: string; hours: number }>  // custom labor lines
   parts:         PartWithSuppliers[]   // all included parts flat (backwards compat)
   parts_total:   number
+  parts_cost_total?: number            // COGS across all parts
   labor_hours:   number                // total labor hours across all jobs
   labor_rate:    number
   labor_total:   number

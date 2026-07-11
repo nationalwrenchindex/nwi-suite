@@ -150,7 +150,7 @@ export async function POST(req: NextRequest) {
 
   const {
     vehicle, job, jobs, extra_labor,
-    parts, parts_total, labor_hours, labor_rate, labor_total,
+    parts, parts_total, parts_cost_total, labor_hours, labor_rate, labor_total,
     markup_percent, tax_amount, grand_total,
     customer_name, customer_phone,
     send_sms, save_quote,
@@ -202,7 +202,7 @@ export async function POST(req: NextRequest) {
     const qtNum = await genQuoteNumber(supabase, user.id)
 
     // ── Build line items and parts subtotal ──────────────────────────────────
-    let lineItems: Array<{ description: string; quantity: number; unit_price: number; total: number }>
+    let lineItems: Array<{ description: string; quantity: number; unit_price: number; total: number; unit_cost?: number }>
     let partsSubtotal: number
     let jobCategoryLabel: string
     let jobSubtype: string
@@ -216,6 +216,7 @@ export async function POST(req: NextRequest) {
           lineItems.push({
             description: p.name,
             quantity:    p.qty,
+            unit_cost:   Math.round(p.unit_cost * 100) / 100,
             unit_price:  Math.round(p.unit_price * 100) / 100,
             total:       Math.round(p.unit_price * p.qty * 100) / 100,
           })
@@ -314,6 +315,7 @@ export async function POST(req: NextRequest) {
         labor_hours,
         labor_rate,
         parts_subtotal:       Math.round(partsSubtotal * 100) / 100,
+        parts_cost_total:     Math.round((parts_cost_total ?? 0) * 100) / 100,
         parts_markup_percent: markup_percent,
         labor_subtotal:       Math.round(labor_total * 100) / 100,
         tax_percent:          grand_total > 0
