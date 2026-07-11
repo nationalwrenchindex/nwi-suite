@@ -61,7 +61,7 @@ async function searchNearby(key: string, lat: number, lng: number, includedTypes
     },
     body: JSON.stringify({
       includedTypes,
-      maxResultCount:      25,
+      maxResultCount:      20,
       rankPreference:      'DISTANCE', // closest-first
       locationRestriction: {
         circle: {
