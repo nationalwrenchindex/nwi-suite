@@ -2336,6 +2336,9 @@ export default function QuickWrenchClient({
 
     // If parts exist advance to Parts tab, otherwise straight to Quote tab.
     setActiveTab(job.parts.length > 0 ? 3 : 4)
+    // Let React render the new tab, then scroll to the top so the tech lands on
+    // the form rather than a mid-page blank scroll.
+    setTimeout(() => { window.scrollTo({ top: 0, behavior: 'smooth' }) }, 100)
   }
 
   const isJobsComplete   = selectedJobs.length > 0
