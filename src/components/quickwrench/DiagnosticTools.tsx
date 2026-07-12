@@ -147,6 +147,12 @@ export interface DTCJobPayload {
   category:        string
 }
 
+// Gemini sometimes returns pre-numbered steps ("1. Do X"); strip the leading
+// number so the <li> badge doesn't double it up ("1. 1. Do X").
+function stripStepNumber(step: string): string {
+  return step.trim().replace(/^(?:\d+\.\s+)+/, '').trim()
+}
+
 // Pull the first number out of a labor estimate ("3.0 - 5.0 hours..." → 3.0).
 function parseLaborHours(laborEstimate: string): number {
   const m = laborEstimate.match(/\d+(?:\.\d+)?/)
@@ -367,7 +373,7 @@ function DTCPanel({ vehicle, onAddDTCJob }: {
                     <span className="flex-shrink-0 w-6 h-6 rounded-full bg-blue/15 border border-blue/30 flex items-center justify-center font-condensed font-bold text-blue-light text-xs">
                       {i + 1}
                     </span>
-                    <span className="pt-0.5 leading-relaxed">{step}</span>
+                    <span className="pt-0.5 leading-relaxed">{stripStepNumber(step)}</span>
                   </li>
                 ))}
               </ol>
@@ -382,7 +388,7 @@ function DTCPanel({ vehicle, onAddDTCJob }: {
                     <span className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center font-condensed font-bold text-white text-xs" style={{ background: '#FF6600' }}>
                       {i + 1}
                     </span>
-                    <span className="pt-0.5 leading-relaxed">{step}</span>
+                    <span className="pt-0.5 leading-relaxed">{stripStepNumber(step)}</span>
                   </li>
                 ))}
               </ol>

@@ -178,6 +178,18 @@ function jobKey(j: SelectedJob): string {
   return `${j.category}:${j.name}`
 }
 
+// Compact a verbose Gemini part string for the Quote line-item display: keep the
+// name before the first " — "/" - " separator, append an OEM part # if present,
+// cap at 80 chars. Full text stays available via the title tooltip.
+function shortPartLabel(full: string): string {
+  const sep  = full.match(/\s+[—-]\s+/)
+  let base   = (sep ? full.slice(0, sep.index) : full).trim()
+  const oem  = full.match(/(?:OEM\s*Part\s*#|Part\s*#|OEM:)\s*([A-Za-z0-9][A-Za-z0-9-]{2,})/i)
+  if (oem) base = `${base} — Part# ${oem[1]}`
+  if (base.length > 80) base = base.slice(0, 77).trimEnd() + '...'
+  return base
+}
+
 function supplierPrices(estimate: number) {
   const seed = estimate
   return {
@@ -1782,7 +1794,7 @@ function QuoteTab({
                     return (
                       <div key={p.id} className="rounded-lg p-2" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
                         <div className="flex items-center justify-between gap-2 mb-1.5">
-                          <span className="text-white/70 text-xs truncate flex-1">{p.qty > 1 ? `${p.qty}× ` : ''}{p.name}</span>
+                          <span className="text-white/70 text-xs truncate flex-1" title={p.name}>{p.qty > 1 ? `${p.qty}× ` : ''}{shortPartLabel(p.name)}</span>
                           <span className="text-white/60 text-xs whitespace-nowrap">{fmt(custPrice * p.qty)}</span>
                         </div>
                         <div className="flex items-center gap-2">
