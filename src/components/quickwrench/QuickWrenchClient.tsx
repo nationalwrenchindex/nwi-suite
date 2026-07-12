@@ -2494,7 +2494,11 @@ export default function QuickWrenchClient({
             selectedJobs={selectedJobs}
             partsByJob={partsByJob}
             onPartsChange={handlePartsChange}
-            onNext={goNext}
+            onNext={() => {
+              goNext()
+              // Let React render the Quote tab, then scroll to the top of the form.
+              setTimeout(() => { window.scrollTo({ top: 0, behavior: 'smooth' }) }, 100)
+            }}
           />
         )}
         {activeTab === 4 && (
