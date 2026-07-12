@@ -362,10 +362,10 @@ function VINScanner({
           </p>
 
           <div className="relative" style={{ width: 300, height: 108 }}>
-            <span style={{ position:'absolute', top:0,    left:0,  width:24, height:24, borderTop:'3px solid #FF6600',    borderLeft:'3px solid #FF6600'  }} />
-            <span style={{ position:'absolute', top:0,    right:0, width:24, height:24, borderTop:'3px solid #FF6600',    borderRight:'3px solid #FF6600' }} />
-            <span style={{ position:'absolute', bottom:0, left:0,  width:24, height:24, borderBottom:'3px solid #FF6600', borderLeft:'3px solid #FF6600'  }} />
-            <span style={{ position:'absolute', bottom:0, right:0, width:24, height:24, borderBottom:'3px solid #FF6600', borderRight:'3px solid #FF6600' }} />
+            <span style={{ position:'absolute', top:0,    left:0,  width:24, height:24, borderTop:'3px solid #16a34a',    borderLeft:'3px solid #16a34a'  }} />
+            <span style={{ position:'absolute', top:0,    right:0, width:24, height:24, borderTop:'3px solid #16a34a',    borderRight:'3px solid #16a34a' }} />
+            <span style={{ position:'absolute', bottom:0, left:0,  width:24, height:24, borderBottom:'3px solid #16a34a', borderLeft:'3px solid #16a34a'  }} />
+            <span style={{ position:'absolute', bottom:0, right:0, width:24, height:24, borderBottom:'3px solid #16a34a', borderRight:'3px solid #16a34a' }} />
 
             {phase === 'scanning' && (
               <div style={{
@@ -373,7 +373,7 @@ function VINScanner({
                 left:        6,
                 right:       6,
                 height:      2,
-                background: 'linear-gradient(90deg, transparent, #FF6600 30%, #FF6600 70%, transparent)',
+                background: 'linear-gradient(90deg, transparent, #16a34a 30%, #16a34a 70%, transparent)',
                 boxShadow:  '0 0 8px 2px rgba(255,102,0,0.55)',
                 animation:  'qw-scanline 1.6s ease-in-out infinite',
               }} />
@@ -441,14 +441,207 @@ function VINScanner({
 
 // ─── Tab 1: Vehicle ───────────────────────────────────────────────────────────
 
+// ─── Customer entry (Vehicle tab) with Intel Hub autocomplete + auto-save ──────
+
+interface CustSuggestion { id: string; first_name: string; last_name: string; phone: string | null; email: string | null }
+interface RecentQuote { id: string; quote_number: string | null; grand_total: number | null; created_at: string | null; job_subtype: string | null }
+
+function CustomerEntry({ onCustomerSet }: {
+  onCustomerSet: (c: { customerName: string; customerPhone: string; customerId: string | null }) => void
+}) {
+  const [name,     setName]     = useState('')
+  const [phone,    setPhone]    = useState('')
+  const [email,    setEmail]    = useState('')
+  const [address,  setAddress]  = useState('')
+  const [city,     setCity]     = useState('')
+  const [stateVal, setStateVal] = useState('')
+  const [zip,      setZip]      = useState('')
+  const [customerId,  setCustomerId]  = useState<string | null>(null)
+  const [suggestions, setSuggestions] = useState<CustSuggestion[]>([])
+  const [showSuggest, setShowSuggest] = useState(false)
+  const [recentJobs,  setRecentJobs]  = useState<RecentQuote[]>([])
+  const [savedNote,   setSavedNote]   = useState('')
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function runSearch(term: string) {
+    if (searchTimer.current) clearTimeout(searchTimer.current)
+    if (term.trim().length < 2) { setSuggestions([]); return }
+    searchTimer.current = setTimeout(async () => {
+      try {
+        const r = await fetch(`/api/customers?search=${encodeURIComponent(term.trim())}&limit=5`)
+        const d = await r.json()
+        setSuggestions(Array.isArray(d.customers) ? (d.customers as CustSuggestion[]).slice(0, 5) : [])
+        setShowSuggest(true)
+      } catch { setSuggestions([]) }
+    }, 250)
+  }
+
+  async function fetchRecentJobs(id: string) {
+    try {
+      const r = await fetch(`/api/quotes?customer_id=${id}&limit=3`)
+      const d = await r.json()
+      setRecentJobs(Array.isArray(d.quotes) ? (d.quotes as RecentQuote[]).slice(0, 3) : [])
+    } catch { setRecentJobs([]) }
+  }
+
+  async function pickCustomer(c: CustSuggestion) {
+    const full = `${c.first_name} ${c.last_name}`.trim()
+    setName(full); setPhone(c.phone ?? ''); setEmail(c.email ?? '')
+    setCustomerId(c.id); setSuggestions([]); setShowSuggest(false)
+    onCustomerSet({ customerName: full, customerPhone: c.phone ?? '', customerId: c.id })
+    try {
+      const r = await fetch(`/api/customers/${c.id}`)
+      const d = await r.json()
+      const cust = d.customer
+      if (cust) { setAddress(cust.address_line1 ?? ''); setCity(cust.city ?? ''); setStateVal(cust.state ?? ''); setZip(cust.zip ?? '') }
+    } catch {}
+    fetchRecentJobs(c.id)
+  }
+
+  // Auto-save to Intel Hub (customers table). Dedup by phone when creating.
+  async function saveCustomer() {
+    const n = name.trim()
+    if (!n) return
+    const parts = n.split(/\s+/)
+    const payload = {
+      first_name:    parts[0],
+      last_name:     parts.slice(1).join(' ') || 'Unknown',
+      phone:         phone.trim()   || null,
+      email:         email.trim()   || null,
+      address_line1: address.trim() || null,
+      city:          city.trim()    || null,
+      state:         stateVal.trim() || null,
+      zip:           zip.trim()     || null,
+    }
+    try {
+      let id = customerId
+      if (!id && phone.trim()) {
+        const r = await fetch(`/api/customers?search=${encodeURIComponent(phone.trim())}`)
+        const d = await r.json()
+        const digits = phone.trim().replace(/\D/g, '')
+        const match = ((d.customers as CustSuggestion[]) ?? []).find(c => (c.phone ?? '').replace(/\D/g, '') === digits)
+        if (match) id = match.id
+      }
+      if (id) {
+        await fetch(`/api/customers/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      } else {
+        const r = await fetch('/api/customers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+        const d = await r.json()
+        id = d.customer?.id ?? null
+      }
+      if (id) { setCustomerId(id); if (recentJobs.length === 0) fetchRecentJobs(id) }
+      setSavedNote('✓ Saved to Intel Hub')
+      setTimeout(() => setSavedNote(''), 2500)
+      onCustomerSet({ customerName: n, customerPhone: phone.trim(), customerId: id })
+    } catch {}
+  }
+
+  return (
+    <div className="nwi-card space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-white/40 text-xs uppercase tracking-widest">Customer</p>
+        {savedNote && <span className="text-success text-xs font-semibold">{savedNote}</span>}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="relative">
+          <label className="nwi-label">Name</label>
+          <input
+            className="nwi-input"
+            placeholder="John Smith"
+            value={name}
+            onChange={e => { setName(e.target.value); setCustomerId(null); onCustomerSet({ customerName: e.target.value, customerPhone: phone, customerId: null }); runSearch(e.target.value) }}
+            onFocus={() => { if (suggestions.length) setShowSuggest(true) }}
+            onBlur={() => { setTimeout(() => setShowSuggest(false), 150); saveCustomer() }}
+          />
+          {showSuggest && suggestions.length > 0 && (
+            <div className="absolute z-20 left-0 right-0 mt-1 rounded-lg overflow-hidden shadow-xl" style={{ background: '#12121f', border: '1px solid rgba(255,255,255,0.15)' }}>
+              {suggestions.map(c => (
+                <button
+                  key={c.id}
+                  type="button"
+                  onMouseDown={e => { e.preventDefault(); pickCustomer(c) }}
+                  className="w-full text-left px-3 py-2 text-sm text-white/80 hover:bg-orange/20 hover:text-orange flex items-center justify-between gap-2"
+                >
+                  <span className="truncate">{c.first_name} {c.last_name}</span>
+                  <span className="text-white/30 text-xs shrink-0">{c.phone ?? ''}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        <div>
+          <label className="nwi-label">Phone</label>
+          <input className="nwi-input" type="tel" placeholder="+1 (555) 000-0000"
+            value={phone}
+            onChange={e => { setPhone(e.target.value); onCustomerSet({ customerName: name, customerPhone: e.target.value, customerId }); runSearch(e.target.value) }}
+            onBlur={saveCustomer} />
+        </div>
+        <div>
+          <label className="nwi-label">Email <span className="normal-case text-white/20">(opt)</span></label>
+          <input className="nwi-input" type="email" placeholder="john@email.com" value={email} onChange={e => setEmail(e.target.value)} onBlur={saveCustomer} />
+        </div>
+        <div>
+          <label className="nwi-label">Address <span className="normal-case text-white/20">(opt)</span></label>
+          <input className="nwi-input" placeholder="4521 Main St" value={address} onChange={e => setAddress(e.target.value)} onBlur={saveCustomer} />
+        </div>
+        <div>
+          <label className="nwi-label">City <span className="normal-case text-white/20">(opt)</span></label>
+          <input className="nwi-input" value={city} onChange={e => setCity(e.target.value)} onBlur={saveCustomer} />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="nwi-label">State</label>
+            <input className="nwi-input" value={stateVal} onChange={e => setStateVal(e.target.value)} onBlur={saveCustomer} />
+          </div>
+          <div>
+            <label className="nwi-label">Zip</label>
+            <input className="nwi-input" value={zip} onChange={e => setZip(e.target.value)} onBlur={saveCustomer} />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={saveCustomer}
+          className="px-4 py-2 bg-orange hover:bg-orange-hover text-white font-condensed font-bold text-xs tracking-wide rounded-lg transition-colors"
+        >
+          Save to Intel Hub
+        </button>
+        <span className="text-white/25 text-[11px]">Auto-saves as you enter details.</span>
+      </div>
+
+      {recentJobs.length > 0 && (
+        <div className="pt-2 border-t border-dark-border">
+          <p className="text-white/30 text-[10px] uppercase tracking-widest mb-1.5">Recent Jobs</p>
+          <div className="space-y-1">
+            {recentJobs.map(q => (
+              <div key={q.id} className="flex items-center justify-between gap-2 text-xs">
+                <span className="text-white/60 truncate">{q.job_subtype ?? q.quote_number ?? 'Quote'}</span>
+                <span className="text-white/30 whitespace-nowrap">
+                  {q.created_at ? new Date(q.created_at).toLocaleDateString() : ''}
+                  {q.grand_total != null ? ` · $${Number(q.grand_total).toFixed(2)}` : ''}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function VehicleTab({
   vehicle,
   onVehicleSet,
   onNext,
+  onCustomerSet,
 }: {
-  vehicle:      QWVehicle | null
-  onVehicleSet: (v: QWVehicle) => void
-  onNext:       () => void
+  vehicle:       QWVehicle | null
+  onVehicleSet:  (v: QWVehicle) => void
+  onNext:        () => void
+  onCustomerSet: (c: { customerName: string; customerPhone: string; customerId: string | null }) => void
 }) {
   const [vin,          setVin]          = useState(vehicle?.vin ?? '')
   const [loading,      setLoading]      = useState(false)
@@ -605,6 +798,8 @@ function VehicleTab({
           </div>
         </div>
       )}
+
+      <CustomerEntry onCustomerSet={onCustomerSet} />
 
       {recentVehicles.length > 0 && (
         <div>
@@ -1820,6 +2015,8 @@ export default function QuickWrenchClient({
   const [partPriceOverrides, setPartPriceOverrides] = useState<Record<string, number>>({}) // manual customer-price override
   // True after a quote was reopened via ?loadQuoteId — shows a banner on Job Type.
   const [quoteRestored, setQuoteRestored] = useState(false)
+  // Customer captured on the Vehicle tab (pre-fills the Quote tab Step 5 fields).
+  const [customer, setCustomer] = useState<{ name: string; phone: string; id: string | null }>({ name: '', phone: '', id: null })
   const [quoteDefaults, setQuoteDefaults] = useState<LoadedQuoteDefaults | null>(null)
   const loadedQuoteRef = useRef<string | null>(null)
 
@@ -1937,6 +2134,11 @@ export default function QuickWrenchClient({
           })
           setTechGuides({})
           setGuidesError(null)
+          setCustomer({
+            name:  q.customer ? `${q.customer.first_name} ${q.customer.last_name}`.trim() : '',
+            phone: q.customer?.phone ?? '',
+            id:    q.customer_id ?? q.customer?.id ?? null,
+          })
           // Land on Job Type so the tech can add more services before reviewing.
           setQuoteRestored(true)
           setActiveTab(1)
@@ -2016,6 +2218,11 @@ export default function QuickWrenchClient({
         })
         setTechGuides({})
         setGuidesError(null)
+        setCustomer({
+          name:  q.customer ? `${q.customer.first_name} ${q.customer.last_name}`.trim() : '',
+          phone: q.customer?.phone ?? '',
+          id:    q.customer_id ?? q.customer?.id ?? null,
+        })
         setQuoteRestored(true)
         setActiveTab(1)
       })
@@ -2234,6 +2441,7 @@ export default function QuickWrenchClient({
             vehicle={vehicle}
             onVehicleSet={handleVehicleSet}
             onNext={() => { if (vehicle) setActiveTab(1) }}
+            onCustomerSet={c => setCustomer({ name: c.customerName, phone: c.customerPhone, id: c.customerId })}
           />
         )}
         {activeTab === 1 && (
@@ -2292,8 +2500,8 @@ export default function QuickWrenchClient({
             initialLaborRate={quoteDefaults?.laborRate ?? defaultLaborRate}
             initialMarkupPct={quoteDefaults?.markupPct ?? defaultMarkupPct}
             initialTaxPct={quoteDefaults?.taxPct ?? defaultTaxPct}
-            initialCustomerName={quoteDefaults?.customerName}
-            initialCustomerPhone={quoteDefaults?.customerPhone}
+            initialCustomerName={customer.name || quoteDefaults?.customerName}
+            initialCustomerPhone={customer.phone || quoteDefaults?.customerPhone}
           />
         )}
       </div>

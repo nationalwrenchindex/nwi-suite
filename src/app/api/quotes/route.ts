@@ -30,8 +30,10 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const { searchParams } = new URL(req.url)
-  const status    = searchParams.get('status') ?? ''
-  const dateRange = searchParams.get('date_range') ?? ''
+  const status     = searchParams.get('status') ?? ''
+  const dateRange  = searchParams.get('date_range') ?? ''
+  const customerId = searchParams.get('customer_id') ?? ''
+  const limitParam = Number(searchParams.get('limit') ?? 0)
 
   let query = supabase
     .from('quotes')
@@ -45,6 +47,14 @@ export async function GET(req: NextRequest) {
 
   if (status) {
     query = query.eq('status', status)
+  }
+
+  if (customerId) {
+    query = query.eq('customer_id', customerId)
+  }
+
+  if (limitParam > 0) {
+    query = query.limit(Math.min(limitParam, 50))
   }
 
   if (dateRange && dateRange !== 'all') {
