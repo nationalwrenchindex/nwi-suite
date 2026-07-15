@@ -205,25 +205,54 @@ function DTCPanel({ vehicle, onAddDTCJob }: {
   const [error,          setError]          = useState<string | null>(null)
 
   async function lookup(overrideCode?: string) {
-    const code = (overrideCode ?? input).trim().toUpperCase()
-    if (!/^[PBCU][0-9]{4}$/.test(code)) {
-      setError('Enter a valid DTC code like P0420 or P0301.')
+    const code    = (overrideCode ?? input).trim().toUpperCase()
+    const display = displayMessage.trim()
+    const validCode = /^[PBCU][0-9]{4}$/.test(code)
+
+    // Code optional: allow a symptom/description instead. Only block when there's
+    // nothing to go on (no code + no description).
+    if (!code && !display) {
+      setError('Enter a DTC code or describe the issue below')
       return
     }
-    setInput(code)
+    if (code && !validCode && !display) {
+      setError('Enter a valid DTC code (e.g. P0420) or describe the issue below')
+      return
+    }
+
     setLoading(true); setError(null); setResult(null)
     try {
-      const qs = new URLSearchParams()
-      if (vehicle?.year)   qs.set('year',   vehicle.year)
-      if (vehicle?.make)   qs.set('make',   vehicle.make)
-      if (vehicle?.model)  qs.set('model',  vehicle.model)
-      if (vehicle?.engine) qs.set('engine', vehicle.engine)
-      if (displayMessage.trim()) qs.set('display', displayMessage.trim())
-      const qStr = qs.toString()
-      const res  = await fetch(`/api/quickwrench/dtc/${code}${qStr ? `?${qStr}` : ''}`)
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? 'Lookup failed')
-      setResult(json.result as DTCResult)
+      let json: { error?: string; result?: DTCResult; cached?: boolean }
+      if (validCode) {
+        // Existing DTC flow — unchanged.
+        setInput(code)
+        const qs = new URLSearchParams()
+        if (vehicle?.year)   qs.set('year',   vehicle.year)
+        if (vehicle?.make)   qs.set('make',   vehicle.make)
+        if (vehicle?.model)  qs.set('model',  vehicle.model)
+        if (vehicle?.engine) qs.set('engine', vehicle.engine)
+        if (display)         qs.set('display', display)
+        const qStr = qs.toString()
+        const res  = await fetch(`/api/quickwrench/dtc/${code}${qStr ? `?${qStr}` : ''}`)
+        json = await res.json()
+        if (!res.ok) throw new Error(json.error ?? 'Lookup failed')
+      } else {
+        // Symptom-only flow — describe the issue, no code required.
+        const res = await fetch('/api/quickwrench/diagnose', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            displayMessage: display,
+            symptom:        display,
+            year:   vehicle?.year   ?? '',
+            make:   vehicle?.make   ?? '',
+            model:  vehicle?.model  ?? '',
+            engine: vehicle?.engine ?? '',
+          }),
+        })
+        json = await res.json()
+        if (!res.ok) throw new Error(json.error ?? 'Diagnosis failed')
+      }
+      setResult((json.result ?? null) as DTCResult | null)
       setCached(json.cached === true)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Lookup failed')
@@ -237,7 +266,7 @@ function DTCPanel({ vehicle, onAddDTCJob }: {
       <div className="flex gap-2">
         <input
           className="nwi-input flex-1 font-mono tracking-widest uppercase"
-          placeholder="e.g. P0420"
+          placeholder="DTC code (optional — e.g. P0420)"
           maxLength={6}
           value={input}
           onChange={e => { setInput(e.target.value.toUpperCase()); setError(null) }}
@@ -248,7 +277,7 @@ function DTCPanel({ vehicle, onAddDTCJob }: {
           disabled={loading}
           className="px-5 py-2 bg-orange hover:bg-orange-hover disabled:opacity-40 text-white font-condensed font-bold text-sm rounded-lg transition-colors whitespace-nowrap"
         >
-          {loading ? 'Looking up…' : 'Look Up'}
+          {loading ? 'Diagnosing…' : input.trim() ? 'Look Up Code' : 'Diagnose'}
         </button>
       </div>
 
@@ -283,24 +312,30 @@ function DTCPanel({ vehicle, onAddDTCJob }: {
             </div>
           )}
 
-          {/* Top card */}
+          {/* Top card — a symptom diagnosis (NO-CODE) shows the summary in place of the code chip */}
           <div className="nwi-card border-orange/30 bg-orange/5">
             <div className="flex items-start justify-between gap-3 mb-2">
-              <span className="font-condensed font-bold text-orange text-xl tracking-wide">{result.code || input || '—'}</span>
+              <span className="font-condensed font-bold text-orange text-xl tracking-wide">
+                {result.code === 'NO-CODE' ? (result.name || 'Symptom Diagnosis') : (result.code || input || '—')}
+              </span>
               <div className="flex items-center gap-2 flex-shrink-0">
                 {cached && (
                   <span className="bg-blue/15 border border-blue/30 text-blue-light text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide whitespace-nowrap">
                     Cached
                   </span>
                 )}
-                {result.category && (
+                {result.code === 'NO-CODE' ? (
+                  <span className="bg-blue/15 border border-blue/30 text-blue-light text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide whitespace-nowrap">
+                    Symptom Diagnosis
+                  </span>
+                ) : result.category && (
                   <span className="bg-blue/15 border border-blue/30 text-blue-light text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide whitespace-nowrap">
                     {result.category}
                   </span>
                 )}
               </div>
             </div>
-            {result.name && <p className="text-white font-medium text-sm leading-relaxed">{result.name}</p>}
+            {result.code !== 'NO-CODE' && result.name && <p className="text-white font-medium text-sm leading-relaxed">{result.name}</p>}
           </div>
 
           {(result.symptoms?.length ?? 0) > 0 && (
