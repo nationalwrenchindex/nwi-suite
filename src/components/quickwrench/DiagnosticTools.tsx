@@ -277,7 +277,7 @@ function DTCPanel({ vehicle, onAddDTCJob }: {
           disabled={loading}
           className="px-5 py-2 bg-orange hover:bg-orange-hover disabled:opacity-40 text-white font-condensed font-bold text-sm rounded-lg transition-colors whitespace-nowrap"
         >
-          {loading ? 'Diagnosing…' : input.trim() ? 'Look Up Code' : 'Diagnose'}
+          {loading ? (input.trim() ? 'Looking up…' : 'Diagnosing…') : input.trim() ? 'Look Up Code' : 'Diagnose'}
         </button>
       </div>
 
