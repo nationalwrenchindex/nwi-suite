@@ -8,7 +8,7 @@
 // The exact request/response field names below follow Roadie's documented shapes
 // and may need minor tweaks once live credentials + the final spec are in hand.
 
-const BASE_URL = 'https://api.roadie.com/v1'
+const BASE_URL = process.env.ROADIE_BASE_URL ?? 'https://api.roadie.com/v1'
 
 // Requires both the API credentials AND a separate go-live flag, so credentials
 // can live in Vercel for internal sandbox testing while subscribers still see
@@ -32,8 +32,9 @@ async function roadieFetch<T>(path: string, init: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     ...init,
     headers: {
-      Authorization:  `Bearer ${apiKey()}`,
-      'Content-Type': 'application/json',
+      Authorization:      `Bearer ${apiKey()}`,
+      'Content-Type':     'application/json',
+      'X-Organization-ID': process.env.ROADIE_ORGANIZATION_ID ?? '',
       ...(init.headers ?? {}),
     },
   })
