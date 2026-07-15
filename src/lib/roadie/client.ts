@@ -10,8 +10,16 @@
 
 const BASE_URL = 'https://api.roadie.com/v1'
 
+// Requires both the API credentials AND a separate go-live flag, so credentials
+// can live in Vercel for internal sandbox testing while subscribers still see
+// "Coming Soon" until ROADIE_LIVE=true is set (no code change needed to go live).
 export function isRoadieEnabled(): boolean {
-  return !!process.env.ROADIE_API_KEY
+  return !!(
+    process.env.ROADIE_API_KEY &&
+    process.env.ROADIE_BASE_URL &&
+    process.env.ROADIE_ORGANIZATION_ID &&
+    process.env.ROADIE_LIVE === 'true'
+  )
 }
 
 function apiKey(): string {
