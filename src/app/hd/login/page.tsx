@@ -82,7 +82,7 @@ export default function HDLoginPage() {
 
         <p className="text-center text-xs mt-4" style={{ color: 'rgba(255,255,255,0.25)' }}>
           No account?{' '}
-          <a href="/hd/signup" style={{ color: HD_ORANGE }}>Start free trial</a>
+          <a href="/hd/signup" style={{ color: HD_ORANGE }}>Start today</a>
         </p>
       </div>
     </div>

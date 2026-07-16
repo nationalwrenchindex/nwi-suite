@@ -78,7 +78,6 @@ function PlanCard({
 }) {
   const isLoading    = loading === plan.tier
   const pickCount    = MODULE_PICK_COUNT[plan.tier]
-  const noTrial      = plan.trialDays === 0
   const isRecommended = plan.priceId === 'price_1TPTFEBalq9wt09kKvpgwyfR'
 
   const borderClass = isCurrent
@@ -129,7 +128,7 @@ function PlanCard({
           <span className="text-white/40 text-sm">/month</span>
         </div>
         <p className="text-white/30 text-[11px] mt-1">
-          {noTrial ? 'Billed immediately · No free trial' : '14-day free trial included'}
+          Cancel anytime
         </p>
       </div>
 
@@ -401,7 +400,6 @@ function ActiveSubscriptionView({
             {currentPlan && (
               <p className="text-white/40 text-sm mt-1">
                 ${currentPlan.price / 100}/month
-                {currentPlan.trialDays > 0 && ' · 14-day free trial'}
               </p>
             )}
           </div>
@@ -641,7 +639,7 @@ export default function BillingClient({
                   <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                 </svg>
                 <div className="flex-1" suppressHydrationWarning>
-                  <p className="text-success font-medium text-sm">90-day free trial applied</p>
+                  <p className="text-success font-medium text-sm">Promo code applied</p>
                   <p className="text-success/70 text-xs mt-0.5">
                     {(() => {
                       const d = new Date()

@@ -42,7 +42,6 @@ export async function POST(req: NextRequest) {
     cancel_url:     `${baseUrl}/hd/signup`,
     subscription_data: {
       metadata:  { user_id: user.id, vertical: 'heavy_duty' },
-      ...(hasPromo ? { trial_period_days: 90 } : {}),
     },
     // allow_promotion_codes omitted when promotionCodeId is pre-validated
     ...(hasPromo ? {} : { allow_promotion_codes: false }),

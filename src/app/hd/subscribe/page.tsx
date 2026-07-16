@@ -256,7 +256,7 @@ export default function HDSubscribePage() {
           </div>
           {promoStatus === 'valid' && (
             <p style={{ fontSize: 12, color: '#22C55E', margin: '0.5rem 0 0' }}>
-              ✓ Promo applied — 90-day free trial activated
+              ✓ Promo applied
             </p>
           )}
           {promoStatus === 'invalid' && (

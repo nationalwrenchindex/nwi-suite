@@ -121,7 +121,7 @@ export default function ModuleSelectClient({
       {/* Header */}
       <div className="mb-8">
         <p className="text-white/40 text-xs uppercase tracking-widest mb-1">
-          {meta.name} · {meta.price}/month · {promotionCodeId ? '90-day free trial' : '14-day free trial'}
+          {meta.name} · {meta.price}/month · Cancel anytime
         </p>
         <h1 className="font-condensed font-bold text-3xl sm:text-4xl text-white tracking-wide mb-2">
           {meta.heading}
@@ -236,7 +236,7 @@ export default function ModuleSelectClient({
           </button>
 
           <p className="text-white/20 text-[11px] text-center mt-2.5">
-            14-day free trial · No credit card charged today · Cancel anytime
+            No setup fee · Cancel anytime
           </p>
         </div>
       </div>

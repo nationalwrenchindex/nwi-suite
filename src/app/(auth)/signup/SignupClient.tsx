@@ -190,7 +190,7 @@ export default function SignupClient({ foremanAvailable }: Props) {
         <p className="text-white/60 text-sm leading-relaxed mb-6">
           We sent a confirmation link to <span className="text-white font-medium">{email}</span>.
           Click the link to activate your account, then visit{' '}
-          <span className="text-orange">Billing</span> to start your free trial.
+          <span className="text-orange">Billing</span> to get started.
         </p>
         <Link href="/login" className="btn-ghost block">
           Back to sign in
@@ -343,10 +343,10 @@ export default function SignupClient({ foremanAvailable }: Props) {
         <form onSubmit={handleSignup}>
           {(() => {
             const planData = plan === 'foreman' ? null : PLANS.find(p => p.tier === plan)
-            if (!planData || planData.trialDays === 0) return null
+            if (!planData) return null
             return (
               <p className="text-white/50 text-xs uppercase tracking-widest mb-4">
-                14-day free trial — no charge until day 15
+                No setup fee · No contracts · Cancel anytime
               </p>
             )
           })()}
@@ -392,7 +392,7 @@ export default function SignupClient({ foremanAvailable }: Props) {
                   </div>
 
                   <p className="text-[11px] text-white/40 mb-2">
-                    {p.trialDays > 0 ? `14 days free, then $${dollars}/mo` : `Billed immediately · No free trial`}
+                    ${dollars}/mo
                   </p>
 
                   <ul className="space-y-0.5 mb-2">
@@ -562,7 +562,7 @@ export default function SignupClient({ foremanAvailable }: Props) {
                 ? 'Creating account…'
                 : plan === 'foreman' || plan === 'elite' || plan === 'quickwrench'
                 ? 'GET STARTED TODAY →'
-                : 'START FREE TRIAL →'}
+                : 'START TODAY →'}
             </button>
           </div>
 
@@ -570,8 +570,8 @@ export default function SignupClient({ foremanAvailable }: Props) {
             {plan === 'foreman'
               ? '$59/mo · No NWI tier required · Cancel anytime.'
               : plan === 'quickwrench'
-              ? '$69/mo · No NWI tier required · 14-day free trial.'
-              : 'No charge for 14 days. Cancel anytime.'}
+              ? '$69/mo · No NWI tier required · Cancel anytime.'
+              : 'No setup fee. Cancel anytime.'}
           </p>
         </form>
       )}

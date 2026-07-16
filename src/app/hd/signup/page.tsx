@@ -242,7 +242,7 @@ export default function HDSignupPage() {
                     <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
                   </svg>
                   <div className="flex-1">
-                    <p className="text-sm font-semibold text-green-400">Promo code applied — 90 day free trial activated</p>
+                    <p className="text-sm font-semibold text-green-400">Promo code applied</p>
                     <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
                       You will not be charged for 90 days. Your first payment of ${selectedPlan.price}/month will be on {promoFirstPaymentDate}.
                       Card is required but will not be charged until {promoFirstPaymentDate}.
@@ -299,8 +299,8 @@ export default function HDSignupPage() {
             </button>
             <p className="text-center text-xs mt-3" style={{ color: 'rgba(255,255,255,0.3)' }}>
               {promoStatus === 'valid'
-                ? '90-day free trial · Card required · You will not be charged for 90 days'
-                : '14-day free trial · Cancel anytime'}
+                ? 'Card required · Cancel anytime'
+                : 'Cancel anytime'}
             </p>
           </>
         )}
@@ -317,7 +317,7 @@ export default function HDSignupPage() {
                   </div>
                   {promoStatus === 'valid' && (
                     <div className="text-xs px-2 py-1 rounded-full" style={{ background: '#22C55E18', color: '#22C55E' }}>
-                      90-day trial
+                      Promo
                     </div>
                   )}
                 </div>
@@ -350,7 +350,7 @@ export default function HDSignupPage() {
                   className="rounded-lg px-3 py-2.5 text-xs"
                   style={{ background: '#22C55E10', border: '1px solid #22C55E30', color: '#22C55E' }}
                 >
-                  90-day free trial applied. Your first payment of ${selectedPlan.price}/month will be on {promoFirstPaymentDate}.
+                  Promo code applied. Billed ${selectedPlan.price}/month · Cancel anytime.
                 </div>
               )}
 
@@ -362,7 +362,7 @@ export default function HDSignupPage() {
                 className="w-full py-3 rounded-xl font-bold text-white text-sm"
                 style={{ background: HD_ORANGE, opacity: loading ? 0.6 : 1 }}
               >
-                {loading ? 'Creating Account…' : promoStatus === 'valid' ? 'Start 90-Day Free Trial' : 'Start Free Trial'}
+                {loading ? 'Creating Account…' : 'Start Today'}
               </button>
             </div>
 

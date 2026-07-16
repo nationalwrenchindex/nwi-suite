@@ -100,8 +100,9 @@ export async function POST(request: NextRequest) {
     customerId = customer.id
   }
 
-  const hasPromo  = !!body.promotionCodeId && !NO_TRIAL_TIERS.includes(tier)
-  const trialDays = hasPromo ? 90 : 14
+  // No free trials — subscribers are billed immediately at checkout. hasPromo
+  // still controls whether Stripe's promo-code field is shown.
+  const hasPromo = !!body.promotionCodeId && !NO_TRIAL_TIERS.includes(tier)
 
   let session
   try {
@@ -111,7 +112,6 @@ export async function POST(request: NextRequest) {
       payment_method_types: ['card'],
       line_items: [{ price: priceId, quantity: 1 }],
       subscription_data: {
-        ...(NO_TRIAL_TIERS.includes(tier) ? {} : { trial_period_days: trialDays }),
         metadata: {
           user_id: user.id,
           tier,
