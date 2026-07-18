@@ -106,6 +106,8 @@ export default function OnboardingPage() {
   // Step 2 — Business info
   const [businessName, setBusinessName] = useState('')
   const [phone, setPhone]               = useState('')
+  const [city, setCity]                 = useState('')
+  const [state, setState]               = useState('')
   const [slug, setSlug]                 = useState('')
   const [slugEdited, setSlugEdited]     = useState(false)
 
@@ -121,6 +123,7 @@ export default function OnboardingPage() {
 
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
+  const [listingLive, setListingLive] = useState(false)
 
   // For detailers the onboarding has 5 steps; mechanics have 4
   const totalSteps = businessType === 'detailer' ? 5 : 4
@@ -189,6 +192,8 @@ export default function OnboardingPage() {
   function validateStep(s: number) {
     if (s === 1 && !businessType) return 'Please select your business type to continue.'
     if (s === 2 && !businessName.trim()) return 'Please enter your business name.'
+    if (s === 2 && !city.trim())  return 'Please enter your city.'
+    if (s === 2 && state.trim().length !== 2) return 'Please enter your 2-letter state code.'
     // For detailers: step 4 is service area; for mechanics: step 3 is service area
     const serviceAreaStep = businessType === 'detailer' ? 4 : 3
     if (s === serviceAreaStep && !serviceArea.trim()) return 'Please describe your service area.'
@@ -241,6 +246,8 @@ export default function OnboardingPage() {
         business_type:            businessType ?? 'mechanic',
         business_name:            businessName.trim(),
         phone:                    phone.trim() || null,
+        city:                     city.trim() || null,
+        state:                    state.trim() || null,
         service_area_description: serviceArea.trim(),
         service_area_radius_miles: parseFloat(radius) || null,
         working_hours:            hours,
@@ -254,10 +261,46 @@ export default function OnboardingPage() {
       return
     }
 
+    // Publish the free directory listing. Never blocks onboarding — if it fails
+    // the mechanic still reaches the dashboard and the attempt is logged.
+    try {
+      const res  = await fetch('/api/onboarding/complete', { method: 'POST' })
+      const json = (await res.json()) as { published?: boolean }
+      if (json.published) {
+        setListingLive(true)
+        setLoading(false)
+        return
+      }
+    } catch (err) {
+      console.error('[onboarding] directory publish failed:', err)
+    }
+
     router.push('/dashboard')
   }
 
   // ── Render ──
+
+  if (listingLive) {
+    return (
+      <div className="min-h-dvh bg-dark flex items-center justify-center p-6 sm:p-10">
+        <div className="w-full max-w-lg text-center">
+          <div className="w-14 h-14 bg-success rounded-full flex items-center justify-center mx-auto mb-6">
+            <svg className="w-7 h-7 text-white" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+            </svg>
+          </div>
+          <h1 className="text-white text-2xl font-bold mb-3">You&apos;re all set</h1>
+          <p className="text-white/60 text-base mb-8">
+            Your directory listing is now live at{' '}
+            <span className="text-orange font-medium">nationalwrenchindex.com</span>
+          </p>
+          <button onClick={() => router.push('/dashboard')} className="btn-primary w-full">
+            GO TO DASHBOARD →
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-dvh bg-dark flex items-start justify-center p-6 sm:p-10">
@@ -447,6 +490,39 @@ export default function OnboardingPage() {
                   className="nwi-input"
                 />
               </div>
+
+              {/* City/state are published to your nationalwrenchindex.com listing
+                  so local customers can find you. */}
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <label htmlFor="city" className="nwi-label">City <span className="text-danger">*</span></label>
+                  <input
+                    id="city"
+                    type="text"
+                    required
+                    value={city}
+                    onChange={(e) => setCity(e.target.value)}
+                    placeholder="Dallas"
+                    className="nwi-input"
+                  />
+                </div>
+                <div className="w-28">
+                  <label htmlFor="state" className="nwi-label">State <span className="text-danger">*</span></label>
+                  <input
+                    id="state"
+                    type="text"
+                    required
+                    maxLength={2}
+                    value={state}
+                    onChange={(e) => setState(e.target.value.toUpperCase().replace(/[^A-Z]/g, ''))}
+                    placeholder="TX"
+                    className="nwi-input"
+                  />
+                </div>
+              </div>
+              <p className="text-white/30 text-xs -mt-2">
+                Used for your free listing on nationalwrenchindex.com.
+              </p>
             </div>
 
             <div className="flex gap-3 mt-8">
