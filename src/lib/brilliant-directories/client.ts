@@ -7,7 +7,10 @@ import { randomBytes } from 'crypto'
 // BD serves /api/v2/ from each customer site. Requests are form-encoded
 // (NOT JSON) and authenticated with an X-Api-Key header.
 
-const BASE_URL = process.env.BD_BASE_URL ?? 'https://nationalwrenchindex.com/api/v2'
+// MUST be the www host. The apex domain 301-redirects to www, and fetch rewrites
+// a redirected POST into a GET with no body (per the Fetch spec), which BD
+// answers with "405 Invalid Request Method" — the request never arrives.
+const BASE_URL = process.env.BD_BASE_URL ?? 'https://www.nationalwrenchindex.com/api/v2'
 
 // Gated the same way as Roadie (see src/lib/roadie/client.ts): the integration
 // stays inert until every credential is present AND it's explicitly switched on,
@@ -92,8 +95,18 @@ export async function createDirectoryListing(
       accept:         'application/json',
     },
     body: body.toString(),
+    // Never follow a redirect: it would silently downgrade this POST to a
+    // bodyless GET. Surface it as a config error instead.
+    redirect: 'manual',
     signal: AbortSignal.timeout(15_000),
   })
+
+  if (res.status >= 300 && res.status < 400) {
+    throw new Error(
+      `BD API redirected (${res.status}) to ${res.headers.get('location') ?? 'unknown'} — ` +
+      `BD_BASE_URL must point at the canonical host, no redirect.`,
+    )
+  }
 
   const rawBody = await res.text().catch(() => '')
   if (!res.ok) {
