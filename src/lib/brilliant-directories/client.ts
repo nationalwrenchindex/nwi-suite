@@ -20,27 +20,31 @@ export function isDirectoryPublishEnabled(): boolean {
   )
 }
 
-// BD member field names come from each site's CSV member-import template, which
-// is site-specific and not published in the public API reference. These are the
-// BD default import columns; if nationalwrenchindex.com uses custom field keys,
-// correct them HERE and nowhere else.
-// Verify against: Admin → Members → Import Members → download template.
+// Confirmed against nationalwrenchindex.com's member-import documentation.
 const FIELDS = {
-  companyName: 'company_name',
-  city:        'city',
-  state:       'state',
-  phone:       'phone',
-  website:     'website',
-  categories:  'categories',
+  firstName:  'first_name',
+  lastName:   'last_name',
+  company:    'company',
+  city:       'city',
+  state:      'state',
+  phone:      'phone',
+  website:    'website',
+  profession: 'profession_name',
+  listingType: 'listing_type',
 } as const
+
+// Every NWI Suite listing is a business profile in the mechanic profession.
+const PROFESSION_NAME = 'Mobile Mechanic'
+const LISTING_TYPE    = 'Company'
 
 export interface CreateListingInput {
   email:        string
+  firstName:    string | null
+  lastName:     string | null
   businessName: string
   city:         string | null
   state:        string | null
   phone:        string | null
-  services:     readonly string[]
   bookingUrl:   string
 }
 
@@ -68,18 +72,17 @@ export async function createDirectoryListing(
     email:           input.email,
     password:        generatePassword(),
     subscription_id: subscriptionId,
-    [FIELDS.companyName]: input.businessName,
+    [FIELDS.company]:     input.businessName,
     [FIELDS.website]:     input.bookingUrl,
+    [FIELDS.profession]:  PROFESSION_NAME,
+    [FIELDS.listingType]: LISTING_TYPE,
   })
 
-  if (input.city)  body.set(FIELDS.city,  input.city)
-  if (input.state) body.set(FIELDS.state, input.state)
-  if (input.phone) body.set(FIELDS.phone, input.phone)
-  if (input.services.length) {
-    // BD expects category names comma-separated; names containing commas would
-    // split incorrectly, so they're dropped rather than silently mangled.
-    body.set(FIELDS.categories, input.services.filter(s => !s.includes(',')).join(','))
-  }
+  if (input.firstName) body.set(FIELDS.firstName, input.firstName)
+  if (input.lastName)  body.set(FIELDS.lastName,  input.lastName)
+  if (input.city)      body.set(FIELDS.city,      input.city)
+  if (input.state)     body.set(FIELDS.state,     input.state)
+  if (input.phone)     body.set(FIELDS.phone,     input.phone)
 
   const res = await fetch(`${BASE_URL}/user/create`, {
     method: 'POST',

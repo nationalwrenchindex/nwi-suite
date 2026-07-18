@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
-import { getServicesByBusinessType } from '@/lib/scheduler'
 import { createDirectoryListing, isDirectoryPublishEnabled } from '@/lib/brilliant-directories/client'
 
 // Called by the onboarding form after the profile has been saved. Publishes the
@@ -21,7 +20,7 @@ export async function POST() {
 
   const { data: profile, error: profileErr } = await svc
     .from('profiles')
-    .select('id, email, business_name, business_type, phone, city, state, slug')
+    .select('id, email, full_name, business_name, business_type, phone, city, state, slug')
     .eq('id', user.id)
     .single()
 
@@ -76,14 +75,18 @@ export async function POST() {
 
   if (existing) return NextResponse.json({ published: false, reason: 'already_listed' })
 
-  const services = getServicesByBusinessType(profile.business_type ?? 'mechanic')
-  const payload  = {
+  // profiles stores a single full_name; BD wants the two halves separately.
+  // Everything after the first token is the surname, so "Ana Maria Cruz" keeps
+  // "Maria Cruz" intact rather than dropping the middle name.
+  const nameParts = ((profile.full_name as string | null) ?? '').trim().split(/\s+/).filter(Boolean)
+  const payload   = {
     email:        profile.email as string,
+    firstName:    nameParts[0] ?? null,
+    lastName:     nameParts.length > 1 ? nameParts.slice(1).join(' ') : null,
     businessName: profile.business_name as string,
     city:         (profile.city as string | null) ?? null,
     state:        (profile.state as string | null) ?? null,
     phone:        (profile.phone as string | null) ?? null,
-    services,
     bookingUrl:   profile.slug ? `${BOOKING_BASE}/${profile.slug}` : 'https://tools.nationalwrenchindex.com',
   }
 
@@ -92,7 +95,7 @@ export async function POST() {
     await log({
       status:          'created',
       bd_user_id:      result.userId,
-      request_payload: { ...payload, services: [...payload.services] },
+      request_payload: payload,
       response_body:   result.rawBody,
     })
     return NextResponse.json({ published: true })
@@ -102,7 +105,7 @@ export async function POST() {
     await log({
       status:          'failed',
       error_message:   message,
-      request_payload: { ...payload, services: [...payload.services] },
+      request_payload: payload,
     })
     return NextResponse.json({ published: false, reason: 'publish_failed' })
   }
