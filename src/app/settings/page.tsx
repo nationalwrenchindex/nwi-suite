@@ -21,10 +21,10 @@ export default async function SettingsPage() {
     redirect('/login')
   }
 
-  const [{ data: profile }, hasQW, { data: pricingRows }, { data: adjPresets }] = await Promise.all([
+  const [{ data: profile }, hasQW, { data: pricingRows }, { data: adjPresets }, { data: listing }] = await Promise.all([
     supabase
       .from('profiles')
-      .select('full_name, business_name, slug, share_sms_template, share_email_subject, share_email_body, default_payment_instructions, average_mpg, fuel_type, offer_mpi_on_booking, default_labor_rate, default_parts_markup_percent, default_tax_percent, business_type, bill_consumables_separately, phone, sms_booking_notifications_enabled, business_logo_url')
+      .select('full_name, business_name, slug, share_sms_template, share_email_subject, share_email_body, default_payment_instructions, average_mpg, fuel_type, offer_mpi_on_booking, default_labor_rate, default_parts_markup_percent, default_tax_percent, business_type, bill_consumables_separately, phone, sms_booking_notifications_enabled, business_logo_url, city, state')
       .eq('id', user.id)
       .single(),
     hasQuickWrenchAccess(user.id),
@@ -37,6 +37,14 @@ export default async function SettingsPage() {
       .select('id, user_id, name, price_cents, sort_order, created_at')
       .eq('user_id', user.id)
       .order('sort_order', { ascending: true }),
+    // Resolves to { data: null } if migration 076 hasn't been applied yet, which
+    // just renders the card as "not yet listed".
+    supabase
+      .from('directory_listings')
+      .select('id')
+      .eq('profile_id', user.id)
+      .eq('status', 'created')
+      .maybeSingle(),
   ])
 
   // Redirect to onboarding ONLY when setup is genuinely incomplete.
@@ -64,6 +72,8 @@ export default async function SettingsPage() {
     phone?:                              string | null
     sms_booking_notifications_enabled?:  boolean | null
     business_logo_url?:                  string | null
+    city?:                               string | null
+    state?:                              string | null
   }
 
   return (
@@ -139,6 +149,9 @@ export default async function SettingsPage() {
           initialPricingRows={(pricingRows ?? []) as PricingRow[]}
           initialBillConsumables={p.bill_consumables_separately ?? false}
           initialPhone={p.phone ?? null}
+          initialCity={p.city ?? ''}
+          initialState={p.state ?? ''}
+          alreadyListed={listing != null}
           initialSmsBookingNotif={p.sms_booking_notifications_enabled ?? true}
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           initialAdjustmentPresets={(adjPresets ?? []) as any[]}

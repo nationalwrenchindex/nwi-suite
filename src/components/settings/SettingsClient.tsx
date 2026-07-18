@@ -142,6 +142,9 @@ export default function SettingsClient({
   initialAdjustmentPresets = [] as AdjustmentPreset[],
   initialPhone             = null,
   initialSmsBookingNotif   = true,
+  initialCity              = '',
+  initialState             = '',
+  alreadyListed            = false,
 }: {
   slug:                        string | null
   businessName:                string
@@ -161,6 +164,9 @@ export default function SettingsClient({
   initialAdjustmentPresets?:   AdjustmentPreset[]
   initialPhone?:               string | null
   initialSmsBookingNotif?:     boolean
+  initialCity?:                string
+  initialState?:               string
+  alreadyListed?:              boolean
 }) {
   const [shareOpen, setShareOpen] = useState(false)
 
@@ -198,6 +204,12 @@ export default function SettingsClient({
   const [addingPreset,   setAddingPreset]   = useState(false)
   const [newPresetVals,  setNewPresetVals]  = useState({ name: '', price_cents: 0 })
   const [savingPresets,  setSavingPresets]  = useState(false)
+
+  const [city,          setCity]          = useState(initialCity)
+  const [stateCode,     setStateCode]     = useState(initialState)
+  const [listed,        setListed]        = useState(alreadyListed)
+  const [publishing,    setPublishing]    = useState(false)
+  const [listingError,  setListingError]  = useState<string | null>(null)
 
   const [savingSMS,   setSavingSMS]   = useState(false)
   const [savingEmail, setSavingEmail] = useState(false)
@@ -301,6 +313,46 @@ export default function SettingsClient({
     setSavingNotifPhone(false)
   }
 
+  // Saves city/state, then publishes the free directory listing. Existing
+  // mechanics onboarded before city/state existed, so this is their path onto
+  // nationalwrenchindex.com.
+  async function publishListing() {
+    setListingError(null)
+    if (!city.trim())              { setListingError('Enter your city.'); return }
+    if (stateCode.trim().length !== 2) { setListingError('Enter your 2-letter state code.'); return }
+
+    setPublishing(true)
+    try {
+      const saveRes = await fetch('/api/user/profile', {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ city: city.trim(), state: stateCode.trim() }),
+      })
+      if (!saveRes.ok) {
+        const j = (await saveRes.json().catch(() => ({}))) as { error?: string }
+        setListingError(j.error ?? 'Could not save your location.')
+        setPublishing(false)
+        return
+      }
+
+      const res  = await fetch('/api/onboarding/complete', { method: 'POST' })
+      const json = (await res.json()) as { published?: boolean; reason?: string }
+
+      if (json.published || json.reason === 'already_listed') {
+        setListed(true)
+        setSavedMsg('Your directory listing is now live at nationalwrenchindex.com')
+        setTimeout(() => setSavedMsg(null), 5000)
+      } else if (json.reason === 'publishing_disabled') {
+        setListingError('Directory publishing is not switched on yet. Your location was saved.')
+      } else {
+        setListingError('Location saved, but the listing could not be created. Try again shortly.')
+      }
+    } catch {
+      setListingError('Something went wrong. Please try again.')
+    }
+    setPublishing(false)
+  }
+
   async function savePricingRates() {
     setSavingRates(true)
     try {
@@ -391,6 +443,76 @@ export default function SettingsClient({
 
       {savedMsg && (
         <div className="alert-success" role="status" aria-live="polite">{savedMsg}</div>
+      )}
+
+      {/* ── Directory Listing ── */}
+      {businessType !== 'hd_tech' && (
+        <section>
+          <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Directory Listing</p>
+          <p className="text-white/40 text-xs mb-4">
+            Your free listing on nationalwrenchindex.com — no lead fees, no middleman.
+          </p>
+          <div className="nwi-card space-y-4">
+            {listed ? (
+              <div className="flex items-start gap-3">
+                <div className="w-5 h-5 bg-success rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-white text-sm font-semibold">Your listing is live</p>
+                  <p className="text-white/40 text-xs mt-0.5">
+                    Customers near {city || 'you'} can find you at nationalwrenchindex.com
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <>
+                <p className="text-white/60 text-sm">
+                  Add your city and state to get listed. Customers searching your area will
+                  find you and book directly.
+                </p>
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <label htmlFor="listingCity" className="nwi-label">City</label>
+                    <input
+                      id="listingCity"
+                      type="text"
+                      value={city}
+                      onChange={(e) => setCity(e.target.value)}
+                      placeholder="Dallas"
+                      className="nwi-input"
+                    />
+                  </div>
+                  <div className="w-28">
+                    <label htmlFor="listingState" className="nwi-label">State</label>
+                    <input
+                      id="listingState"
+                      type="text"
+                      maxLength={2}
+                      value={stateCode}
+                      onChange={(e) => setStateCode(e.target.value.toUpperCase().replace(/[^A-Z]/g, ''))}
+                      placeholder="TX"
+                      className="nwi-input"
+                    />
+                  </div>
+                </div>
+                {listingError && (
+                  <p className="text-danger text-xs" role="alert">{listingError}</p>
+                )}
+                <button
+                  type="button"
+                  onClick={publishListing}
+                  disabled={publishing}
+                  className="btn-primary w-full disabled:opacity-50"
+                >
+                  {publishing ? 'PUBLISHING…' : 'PUBLISH MY FREE LISTING'}
+                </button>
+              </>
+            )}
+          </div>
+        </section>
       )}
 
       {/* ── Business Info ── */}

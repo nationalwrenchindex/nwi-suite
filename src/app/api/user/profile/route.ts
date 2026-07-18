@@ -92,6 +92,20 @@ export async function PUT(request: NextRequest) {
     update.phone = (typeof raw === 'string' && raw.trim()) ? raw.trim() : null
   }
 
+  // Published to the mechanic's nationalwrenchindex.com directory listing.
+  if ('city' in body) {
+    const raw = body.city
+    update.city = (typeof raw === 'string' && raw.trim()) ? raw.trim() : null
+  }
+
+  if ('state' in body) {
+    const raw = typeof body.state === 'string' ? body.state.trim().toUpperCase() : ''
+    if (raw && !/^[A-Z]{2}$/.test(raw)) {
+      return NextResponse.json({ error: 'state must be a 2-letter code' }, { status: 400 })
+    }
+    update.state = raw || null
+  }
+
   if ('sms_booking_notifications_enabled' in body) {
     update.sms_booking_notifications_enabled = !!body.sms_booking_notifications_enabled
   }
