@@ -66,7 +66,8 @@ export async function middleware(request: NextRequest) {
     effectivePath.startsWith('/intel')      ||
     effectivePath.startsWith('/financials') ||
     effectivePath.startsWith('/billing')    ||
-    effectivePath.startsWith('/quickwrench')
+    effectivePath.startsWith('/quickwrench') ||
+    effectivePath.startsWith('/field-assist')
 
   const isProtected = isHDProtected || isLegacyProtected
   const isAuthRoute  = isHDAuthRoute || isLegacyAuthRoute

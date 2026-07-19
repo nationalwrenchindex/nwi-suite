@@ -66,6 +66,28 @@ export const DETAILER_SERVICES = [
 
 export type DetailerService = typeof DETAILER_SERVICES[number]
 
+export const LANDSCAPING_SERVICES = [
+  'Mowing',
+  'Edging & Trimming',
+  'Spring Cleanup',
+  'Fall Cleanup',
+  'Leaf Removal',
+  'Mulching',
+  'Aeration',
+  'Overseeding',
+  'Fertilizing',
+  'Weed Control',
+  'Pest & Grub Treatment',
+  'Shrub & Hedge Trimming',
+  'Tree Pruning',
+  'Sod Installation',
+  'Irrigation Check & Repair',
+  'Landscape Design & Planting',
+  'Other',
+] as const
+
+export type LandscapingService = typeof LANDSCAPING_SERVICES[number]
+
 export type DetailerServiceSlug =
   | 'basic_wash' | 'full_detail' | 'interior_detail' | 'exterior_detail'
   | 'paint_correction' | 'ceramic_coating_1yr' | 'ceramic_coating_3yr' | 'ceramic_coating_5yr'
@@ -129,7 +151,9 @@ export const VEHICLE_CATEGORY_LABELS: Record<VehicleCategory, string> = {
 }
 
 export function getServicesByBusinessType(type: string): readonly string[] {
-  return type === 'detailer' ? DETAILER_SERVICES : MECHANIC_SERVICES
+  if (type === 'detailer')   return DETAILER_SERVICES
+  if (type === 'landscaper') return LANDSCAPING_SERVICES
+  return MECHANIC_SERVICES
 }
 
 // Backwards-compatible alias used by BookJobTab, CustomersTab

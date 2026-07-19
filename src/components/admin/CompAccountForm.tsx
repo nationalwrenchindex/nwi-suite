@@ -17,6 +17,11 @@ const TIER_OPTIONS = [
     { value: 'hd_pro',     label: 'HD Pro'     },
     { value: 'hd_elite',   label: 'HD Elite'   },
   ]},
+  { group: 'Landscaping', options: [
+    { value: 'lawn_starter', label: 'Lawn Starter' },
+    { value: 'lawn_pro',     label: 'Lawn Pro'     },
+    { value: 'lawn_elite',   label: 'Lawn Elite'   },
+  ]},
 ]
 
 export default function CompAccountForm() {
@@ -60,7 +65,7 @@ export default function CompAccountForm() {
     <div className="bg-dark-card border border-orange/20 rounded-xl p-6">
       <h2 className="text-white font-semibold text-lg mb-1">Grant Comp Account</h2>
       <p className="text-white/40 text-sm mb-4">
-        No Stripe required, no expiration. Webhook-protected from accidental cancellation. HD tiers set vertical = heavy_duty automatically.
+        No Stripe required, no expiration. Webhook-protected from accidental cancellation. HD tiers set vertical = heavy_duty and Lawn tiers set vertical = landscaping automatically.
       </p>
 
       <form onSubmit={handleSubmit} className="flex gap-3 flex-wrap">

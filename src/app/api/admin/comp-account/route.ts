@@ -20,6 +20,12 @@ const TIER_CONFIG: Record<string, { modules: string[]; vertical: string }> = {
   hd_pro:     { modules: ['hd_quotes', 'hd_invoices', 'hd_parts', 'hd_fleet', 'hd_pm', 'hd_work_orders', 'hd_quickwrench', 'hd_dot', 'hd_epa', 'hd_financials'], vertical: 'heavy_duty' },
   // Elite — Pro + Reefer Module + Foreman AI (both locked during trial; active subscription required)
   hd_elite:   { modules: ['hd_quotes', 'hd_invoices', 'hd_parts', 'hd_fleet', 'hd_pm', 'hd_work_orders', 'hd_quickwrench', 'hd_dot', 'hd_epa', 'hd_financials', 'hd_reefer', 'hd_foreman'], vertical: 'heavy_duty' },
+  // Landscaping — Starter: scheduling + Field Assist AI diagnosis/estimates
+  lawn_starter: { modules: ['scheduler', 'field_assist'],                             vertical: 'landscaping' },
+  // Landscaping — Pro: Starter + invoicing/financials
+  lawn_pro:     { modules: ['scheduler', 'field_assist', 'financials'],               vertical: 'landscaping' },
+  // Landscaping — Elite: Pro + market intel
+  lawn_elite:   { modules: ['scheduler', 'field_assist', 'financials', 'intel'],      vertical: 'landscaping' },
 }
 
 export async function POST(request: NextRequest) {

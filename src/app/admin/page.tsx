@@ -156,6 +156,9 @@ function VerticalBadge({ vertical }: { vertical: string | null }) {
   if (!vertical || vertical === 'light_duty') {
     return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-white/10 text-white/40">LD</span>
   }
+  if (vertical === 'landscaping') {
+    return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-500/15 text-green-400">LAWN</span>
+  }
   return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-500/15 text-blue-400">HD</span>
 }
 
