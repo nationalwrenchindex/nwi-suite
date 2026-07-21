@@ -93,7 +93,7 @@ function PartRow({ part, expanded, onToggle }: {
       {crossRefMatches.length > 0 && (
         <div
           className="px-4 py-3 text-xs text-white"
-          style={{ background: '#2969B0', borderRadius: '8px 8px 0 0' }}
+          style={{ background: '#15803d', borderRadius: '8px 8px 0 0' }}
         >
           {crossRefMatches.map(xr => (
             <p key={xr.cross_part}>

@@ -127,7 +127,7 @@ export default function InvoiceApprovalClient({
         <span className="text-white/60 text-sm">
           {tipCents > 0 ? `Total with ${fmt(tipCents / 100)} tip` : 'Total'}
         </span>
-        <span className="text-[#FF6600] font-bold text-2xl">{fmt(grandTotal)}</span>
+        <span className="text-[#16a34a] font-bold text-2xl">{fmt(grandTotal)}</span>
       </div>
 
       {error && (
@@ -137,7 +137,7 @@ export default function InvoiceApprovalClient({
       <button
         onClick={handleConfirm}
         disabled={submitting}
-        className="w-full py-3.5 bg-[#FF6600] hover:bg-orange-600 disabled:opacity-50 text-white font-bold text-base rounded-xl transition-colors shadow-lg shadow-orange/20"
+        className="w-full py-3.5 bg-[#16a34a] hover:bg-orange-600 disabled:opacity-50 text-white font-bold text-base rounded-xl transition-colors shadow-lg shadow-orange/20"
       >
         {submitting ? 'Confirming…' : 'Approve & Confirm Payment'}
       </button>

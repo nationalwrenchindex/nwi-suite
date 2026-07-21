@@ -458,7 +458,7 @@ function FinalizeConfirmModal({
           <button
             onClick={onConfirm}
             disabled={loading}
-            className="flex-1 py-3 bg-[#FF6600] hover:bg-orange-600 disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-xl transition-colors"
+            className="flex-1 py-3 bg-[#16a34a] hover:bg-orange-600 disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-xl transition-colors"
           >
             {loading ? 'Finalizing…' : 'Yes, Finalize'}
           </button>
@@ -1292,7 +1292,7 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
         <button
           onClick={() => setShowFinalizeModal(true)}
           disabled={saving || finalizing}
-          className="flex items-center gap-2 px-6 py-3 bg-[#FF6600] hover:bg-orange-600 disabled:opacity-50 text-white font-condensed font-bold text-sm tracking-wide rounded-xl transition-colors shadow-md shadow-orange/20"
+          className="flex items-center gap-2 px-6 py-3 bg-[#16a34a] hover:bg-orange-600 disabled:opacity-50 text-white font-condensed font-bold text-sm tracking-wide rounded-xl transition-colors shadow-md shadow-orange/20"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
@@ -1324,7 +1324,7 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
           <button
             onClick={() => setShowFinalizeModal(true)}
             disabled={saving || finalizing}
-            className="flex items-center justify-center gap-1.5 px-4 py-3 bg-[#FF6600] hover:bg-orange-600 disabled:opacity-50 text-white font-condensed font-bold text-xs tracking-wide rounded-xl transition-colors"
+            className="flex items-center justify-center gap-1.5 px-4 py-3 bg-[#16a34a] hover:bg-orange-600 disabled:opacity-50 text-white font-condensed font-bold text-xs tracking-wide rounded-xl transition-colors"
           >
             Finalize
           </button>
@@ -1335,7 +1335,7 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
       {!isDetailer && (
         <button
           onClick={() => setShowDiagPanel(true)}
-          className="fixed bottom-20 sm:bottom-6 right-4 sm:right-6 z-20 flex items-center gap-2 px-4 py-3 bg-[#2969B0] hover:bg-blue-700 text-white font-semibold text-sm rounded-xl shadow-xl shadow-blue-900/30 transition-colors"
+          className="fixed bottom-20 sm:bottom-6 right-4 sm:right-6 z-20 flex items-center gap-2 px-4 py-3 bg-[#15803d] hover:bg-blue-700 text-white font-semibold text-sm rounded-xl shadow-xl shadow-blue-900/30 transition-colors"
           title="Diagnostic Tools"
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">

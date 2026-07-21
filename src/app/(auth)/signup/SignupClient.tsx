@@ -207,9 +207,8 @@ export default function SignupClient({ foremanAvailable }: Props) {
           CREATE ACCOUNT
         </h1>
         <p className="text-white/50 text-sm">
-          Join mobile pros on the{' '}
-          <span style={{ color: '#FF6600' }}>National</span>{' '}
-          <span style={{ color: '#2969B0' }}>Wrench Index</span>{' '}
+          Join lawn and landscape pros on the{' '}
+          <span style={{ color: '#16a34a' }}>LawnPlatform</span>{' '}
           platform.
         </p>
       </div>

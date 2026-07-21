@@ -10,6 +10,21 @@ type PageProps = {
 
 export const dynamic = 'force-dynamic'
 
+export async function generateMetadata({ params }: { params: Promise<{ techSlug: string }> }) {
+  const { techSlug } = await params
+  const supabase = createServiceClient()
+  const { data } = await supabase
+    .from('profiles')
+    .select('business_name')
+    .eq('slug', techSlug)
+    .single()
+  const biz = (data?.business_name as string) || 'Lawn Service'
+  return {
+    title: `Book Lawn Service — ${biz}`,
+    description: 'Schedule professional lawn care and landscaping services online.',
+  }
+}
+
 export default async function BookingPage({ params, searchParams }: PageProps) {
   const { techSlug } = await params
   const { step: stepParam } = await searchParams

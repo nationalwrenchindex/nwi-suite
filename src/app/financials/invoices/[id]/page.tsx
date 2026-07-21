@@ -5,7 +5,7 @@ import InvoiceInProgressClient from './InvoiceInProgressClient'
 import FinalizedInvoiceClient from './FinalizedInvoiceClient'
 import type { Invoice } from '@/types/financials'
 
-export const metadata = { title: 'Invoice — National Wrench Index Suite™' }
+export const metadata = { title: 'Invoice' }
 
 const INVOICE_SELECT = `
   *,

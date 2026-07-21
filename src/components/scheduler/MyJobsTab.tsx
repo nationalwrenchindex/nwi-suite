@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import type { Job, JobStatus, Inspection } from '@/types/jobs'
 import { STATUS_CONFIG, STATUS_TRANSITIONS, formatTime, formatDateShort } from '@/lib/scheduler'
 import MultiPointInspection from '@/components/quickwrench/MultiPointInspection'
+import NavigateButton from '@/components/common/NavigateButton'
 
 function formatElapsed(secs: number): string {
   const h = Math.floor(secs / 3600)
@@ -428,7 +429,10 @@ function JobCard({
       {expanded && (
         <div className="px-4 pb-4 border-t border-dark-border pt-3 space-y-3">
           {job.location_address && (
-            <p className="text-white/60 text-sm">📍 {job.location_address}</p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-white/60 text-sm">📍 {job.location_address}</p>
+              <NavigateButton address={job.location_address} compact />
+            </div>
           )}
           {job.notes && (
             <div>

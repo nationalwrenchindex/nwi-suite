@@ -70,9 +70,9 @@ function UpsellModal({ onClose }: { onClose: () => void }) {
             </div>
             <div>
               <h2 className="font-condensed font-bold text-white text-xl tracking-wide">
-                Unlock NWI QuickWrench
+                Unlock Field Assist
               </h2>
-              <p className="text-white/40 text-xs mt-0.5">Requires QuickWrench or Elite plan</p>
+              <p className="text-white/40 text-xs mt-0.5">Requires the Field Assist or Elite plan</p>
             </div>
           </div>
           <button
@@ -89,7 +89,7 @@ function UpsellModal({ onClose }: { onClose: () => void }) {
         {/* Description */}
         <div className="px-6 pt-4 pb-3">
           <p className="text-white/60 text-sm leading-relaxed">
-            Scan any VIN and generate a customer-ready quote in under 2 minutes. AI tech guide, multi-supplier parts pricing, customer-facing quotes, and per-job profit tracking — all in one place.
+            Snap a photo to identify plants, diagnose lawn problems, and spot pests &amp; weeds — plus instant quick estimates. AI built for the field, right on your phone.
           </p>
         </div>
 
@@ -184,15 +184,15 @@ export default function DashboardQuickWrenchCard({ hasAccess, autoOpen }: Props)
   if (hasAccess) {
     return (
       <Link
-        href="/quickwrench"
+        href="/field-assist"
         className={`${cardBase} hover:border-orange/40 hover:bg-orange/5`}
       >
         <div className="w-9 h-9 rounded-xl border flex items-center justify-center flex-shrink-0 bg-orange/10 border-orange/20 text-orange">
           {QW_ICON}
         </div>
         <div className="min-w-0">
-          <p className="font-condensed font-bold text-white text-sm tracking-wide">QUICKWRENCH</p>
-          <p className="text-white/30 text-[11px] mt-0.5 leading-tight truncate">Parts · Specs · Quotes</p>
+          <p className="font-condensed font-bold text-white text-sm tracking-wide">FIELD ASSIST</p>
+          <p className="text-white/30 text-[11px] mt-0.5 leading-tight truncate">Plant · Lawn · Estimates</p>
         </div>
       </Link>
     )
@@ -217,7 +217,7 @@ export default function DashboardQuickWrenchCard({ hasAccess, autoOpen }: Props)
           </div>
         </div>
         <div className="min-w-0">
-          <p className="font-condensed font-bold text-white/40 text-sm tracking-wide">QUICKWRENCH</p>
+          <p className="font-condensed font-bold text-white/40 text-sm tracking-wide">FIELD ASSIST</p>
           <p className="text-orange text-[10px] mt-0.5 font-semibold tracking-wider">UPGRADE TO UNLOCK</p>
         </div>
       </button>

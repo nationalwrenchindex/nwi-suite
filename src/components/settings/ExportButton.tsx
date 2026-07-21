@@ -79,7 +79,7 @@ export default function ExportButton() {
       <button
         onClick={handleExport}
         disabled={loading}
-        className="flex items-center gap-2 px-5 py-2.5 bg-[#2969B0] hover:bg-[#1F5090] disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-lg transition-colors"
+        className="flex items-center gap-2 px-5 py-2.5 bg-[#15803d] hover:bg-[#052e16] disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-lg transition-colors"
       >
         {loading ? (
           <>

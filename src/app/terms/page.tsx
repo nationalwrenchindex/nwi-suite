@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 
 export const metadata: Metadata = {
-  title: 'Terms of Service — National Wrench Index Suite™',
+  title: 'Terms of Service',
 }
 
 export default function TermsPage() {
@@ -21,7 +21,7 @@ export default function TermsPage() {
 
           <Section title="1. Acceptance of Terms">
             <p>
-              By accessing or using the National Wrench Index Suite&#8482; platform (the &ldquo;Service&rdquo;), you agree to
+              By accessing or using the LawnPlatform&#8482; platform (the &ldquo;Service&rdquo;), you agree to
               be bound by these Terms of Service (&ldquo;Terms&rdquo;). If you do not agree to these Terms, do not access
               or use the Service. These Terms constitute a binding legal agreement between you (&ldquo;User&rdquo; or
               &ldquo;Subscriber&rdquo;) and National Wrench Index (&ldquo;Company,&rdquo; &ldquo;we,&rdquo; &ldquo;us,&rdquo; or &ldquo;our&rdquo;).
@@ -34,7 +34,7 @@ export default function TermsPage() {
 
           <Section title="2. Description of Service">
             <p>
-              National Wrench Index Suite&#8482; is a software-as-a-service (SaaS) platform designed for
+              LawnPlatform&#8482; is a software-as-a-service (SaaS) platform designed for
               mobile automotive professionals. The Service includes tools for:
             </p>
             <ul>
@@ -109,7 +109,7 @@ export default function TermsPage() {
           <Section title="6. Intellectual Property">
             <p>
               <strong className="text-white">National Wrench Index&#8482;</strong>,{' '}
-              <strong className="text-white">National Wrench Index Suite&#8482;</strong>, and{' '}
+              <strong className="text-white">LawnPlatform&#8482;</strong>, and{' '}
               <strong className="text-white">National Wrench Index QuickWrench&#8482;</strong> are
               trademarks of National Wrench Index. All rights reserved. Unauthorized use of these marks
               is strictly prohibited.
@@ -212,11 +212,9 @@ function LegalNav() {
     <header className="border-b border-dark-border bg-dark-card">
       <div className="max-w-3xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
         <Link href="/login" className="flex items-center gap-3 group">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/nwi-logo.png" alt="National Wrench Index Suite™" className="h-10 w-auto" />
+          <span className="flex items-center justify-center h-9 w-9 rounded-lg font-condensed font-extrabold text-white" style={{ backgroundColor: "#16a34a" }}>LP</span>
           <span className="hidden sm:block font-condensed font-bold text-sm leading-tight">
-            <span style={{ color: '#FF6600' }}>National</span>{' '}
-            <span style={{ color: '#2969B0' }}>Wrench Index</span>
+            <span style={{ color: "#16a34a" }}>LawnPlatform</span>
             <span className="text-white/70">&#8482;</span>
           </span>
         </Link>

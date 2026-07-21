@@ -71,7 +71,7 @@ export default function BookJobTab({ onSuccess, businessType }: { onSuccess: () 
 
   function validate(): string | null {
     if (!form.job_date)                    return 'Job date is required.'
-    const svcType = form.service_type === 'Other' ? form.custom_service : form.service_type
+    const svcType = form.service_type === 'Custom Service' ? form.custom_service : form.service_type
     if (!svcType.trim())                   return 'Service type is required.'
     return null
   }
@@ -84,7 +84,7 @@ export default function BookJobTab({ onSuccess, businessType }: { onSuccess: () 
     setLoading(true)
     setError(null)
 
-    const svcType = form.service_type === 'Other' ? form.custom_service : form.service_type
+    const svcType = form.service_type === 'Custom Service' ? form.custom_service : form.service_type
 
     const payload: Record<string, unknown> = {
       job_date:                   form.job_date,
@@ -192,7 +192,7 @@ export default function BookJobTab({ onSuccess, businessType }: { onSuccess: () 
             </select>
           </div>
 
-          {form.service_type === 'Other' && (
+          {form.service_type === 'Custom Service' && (
             <div>
               <label className="nwi-label">Describe the service <span className="text-danger">*</span></label>
               <input

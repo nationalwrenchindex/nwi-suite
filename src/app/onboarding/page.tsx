@@ -270,7 +270,7 @@ export default function OnboardingPage() {
             </svg>
           </div>
           <div>
-            <p className="font-condensed font-bold text-white text-base tracking-widest">NATIONAL WRENCH INDEX</p>
+            <p className="font-condensed font-bold text-white text-base tracking-widest">LAWNPLATFORM</p>
             <p className="text-white/40 text-xs">Let&apos;s set up your account</p>
           </div>
         </div>
@@ -307,17 +307,19 @@ export default function OnboardingPage() {
                   </svg>
                 </div>
                 <p className={`font-condensed font-bold text-lg tracking-wide mb-1 ${businessType === 'mechanic' ? 'text-orange' : 'text-white'}`}>
-                  Mobile Mechanic
+                  Landscaper
                 </p>
                 <p className="text-white/40 text-xs leading-relaxed">
-                  Repairs, diagnostics, oil changes, and mechanical maintenance.
+                  Mowing, cleanups, fertilizing, and full-service lawn &amp; landscape care.
                 </p>
                 {businessType === 'mechanic' && (
                   <p className="text-orange text-xs font-semibold mt-2">Selected</p>
                 )}
               </button>
 
-              {/* Mobile Detailer */}
+              {/* Detailer & HD Tech — hidden for the landscaping vertical (Part 5).
+                  Kept in code behind a flag so they can be restored if needed. */}
+              {false && (
               <button
                 type="button"
                 disabled={savingType}
@@ -375,6 +377,7 @@ export default function OnboardingPage() {
                   <p className="text-white/40 text-xs font-semibold mt-2">Opening HD Suite…</p>
                 )}
               </button>
+              )}
             </div>
 
             <button

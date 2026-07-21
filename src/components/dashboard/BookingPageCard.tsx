@@ -25,7 +25,7 @@ export default function BookingPageCard({
           aria-label="Share your booking page"
           className="flex items-start gap-3 text-left w-full"
         >
-          <div className="w-9 h-9 rounded-xl border bg-[#FF6600]/10 border-[#FF6600]/20 text-[#FF6600] flex items-center justify-center flex-shrink-0">
+          <div className="w-9 h-9 rounded-xl border bg-[#16a34a]/10 border-[#16a34a]/20 text-[#16a34a] flex items-center justify-center flex-shrink-0">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
               <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
               <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
@@ -45,7 +45,7 @@ export default function BookingPageCard({
           <button
             onClick={() => setOpen(true)}
             aria-label="Share booking link"
-            className="flex-1 flex items-center justify-center gap-1.5 bg-[#FF6600] hover:bg-[#E55A00] text-white font-condensed font-bold text-xs tracking-wide rounded-lg py-1.5 transition-colors"
+            className="flex-1 flex items-center justify-center gap-1.5 bg-[#16a34a] hover:bg-[#15803d] text-white font-condensed font-bold text-xs tracking-wide rounded-lg py-1.5 transition-colors"
           >
             Share Link
           </button>

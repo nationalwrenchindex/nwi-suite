@@ -83,7 +83,7 @@ export default function InboxBell() {
           <path d="M13.73 21a2 2 0 0 1-3.46 0" />
         </svg>
         {unread > 0 && (
-          <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 flex items-center justify-center rounded-full bg-[#FF6600] text-white text-[9px] font-bold leading-none">
+          <span className="absolute -top-1 -right-1 min-w-[16px] h-4 px-0.5 flex items-center justify-center rounded-full bg-[#16a34a] text-white text-[9px] font-bold leading-none">
             {unread > 9 ? '9+' : unread}
           </span>
         )}
@@ -94,7 +94,7 @@ export default function InboxBell() {
           <div className="px-4 py-3 border-b border-dark-border flex items-center justify-between">
             <p className="text-white/40 text-xs uppercase tracking-widest">Notifications</p>
             {unread > 0 && (
-              <span className="text-[#FF6600] text-xs font-semibold">{unread} unread</span>
+              <span className="text-[#16a34a] text-xs font-semibold">{unread} unread</span>
             )}
           </div>
 
@@ -114,7 +114,7 @@ export default function InboxBell() {
                   >
                     <div className="flex items-start gap-2">
                       {!n.read_at && (
-                        <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-[#FF6600] flex-shrink-0" />
+                        <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-[#16a34a] flex-shrink-0" />
                       )}
                       <div className={!n.read_at ? '' : 'pl-3.5'}>
                         <p className="text-white text-sm font-medium leading-snug">{n.title}</p>

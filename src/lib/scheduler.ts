@@ -25,25 +25,36 @@ export const STATUS_TRANSITIONS: Partial<Record<JobStatus, JobStatus[]>> = {
 
 // ─── Service type options ──────────────────────────────────────────────────
 
-export const MECHANIC_SERVICES = [
-  'Oil Change',
-  'Brake Service',
-  'Tire Rotation',
-  'Tire Replacement',
-  'Tire Balancing',
-  'TPMS Sensor Replacement',
-  'Battery Replacement',
-  'Engine Diagnostic',
-  'A/C Service',
-  'Transmission Service',
-  'Suspension Repair',
-  'Electrical Repair',
-  'Coolant Flush',
-  'Power Steering Service',
-  'Fuel System Service',
-  'Pre-Purchase Inspection',
-  'Other',
+// ── Landscaping service catalog (single source of truth) ──
+// Platform vertical is landscaping. The 'Custom Service' entry is the
+// free-text sentinel (was 'Other' on the mechanic build — BookJobTab keys the
+// custom-service textbox off this exact string).
+export const LANDSCAPING_SERVICES = [
+  'Lawn Mowing',
+  'Lawn Edging',
+  'Trimming and Pruning',
+  'Mulching',
+  'Leaf Removal and Cleanup',
+  'Fertilizing',
+  'Weed Control',
+  'Aeration',
+  'Overseeding',
+  'Irrigation Service and Repair',
+  'Landscape Installation',
+  'Sod Installation',
+  'Tree Trimming',
+  'Shrub Shaping',
+  'Gutter Cleaning',
+  'Pressure Washing',
+  'Snow Removal',
+  'Spring Cleanup',
+  'Fall Cleanup',
+  'Custom Service',
 ] as const
+
+// Back-compat alias: the codebase historically imported MECHANIC_SERVICES.
+// The platform is now landscaping, so this points at the landscaping catalog.
+export const MECHANIC_SERVICES = LANDSCAPING_SERVICES
 
 export const DETAILER_SERVICES = [
   'Basic Wash',
@@ -129,11 +140,15 @@ export const VEHICLE_CATEGORY_LABELS: Record<VehicleCategory, string> = {
 }
 
 export function getServicesByBusinessType(type: string): readonly string[] {
-  return type === 'detailer' ? DETAILER_SERVICES : MECHANIC_SERVICES
+  // Detailer branch retained for back-compat; landscaping is the default vertical.
+  return type === 'detailer' ? DETAILER_SERVICES : LANDSCAPING_SERVICES
 }
 
 // Backwards-compatible alias used by BookJobTab, CustomersTab
-export const SERVICE_TYPES = MECHANIC_SERVICES
+export const SERVICE_TYPES = LANDSCAPING_SERVICES
+
+// The free-text sentinel service. Selecting this reveals a custom-name textbox.
+export const CUSTOM_SERVICE_LABEL = 'Custom Service'
 
 // ─── Notification template types ───────────────────────────────────────────
 

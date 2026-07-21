@@ -68,7 +68,7 @@ const FALLBACK_SMS: Record<NotificationTrigger, string> = {
   on_my_way:
     'Hi {{first_name}}, {{tech_name}} is on the way for your {{service_type}}! See you soon. — {{business_name}}',
   job_completed:
-    'Your {{service_type}} is complete! Great having you as a customer, {{first_name}}. — {{business_name}} 🔧',
+    'Your {{service_type}} is complete! Great work on that service — thanks for being a customer, {{first_name}}. — {{business_name}} 🌱',
 }
 
 const FALLBACK_SUBJECT: Record<NotificationTrigger, string> = {

@@ -5,7 +5,7 @@ import { hasForemanAccess } from '@/lib/subscription'
 import AppNav from '@/components/layout/AppNav'
 import ForemanProvisionButton from '@/components/foreman/ForemanProvisionButton'
 
-export const metadata = { title: 'Foreman — National Wrench Index Suite™' }
+export const metadata = { title: 'Foreman' }
 
 function formatDuration(seconds: number | null): string {
   if (!seconds) return '—'

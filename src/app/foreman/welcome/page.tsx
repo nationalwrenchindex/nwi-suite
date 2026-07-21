@@ -4,7 +4,7 @@ import AppNav from '@/components/layout/AppNav'
 import ForemanWelcomeClient from '@/components/foreman/ForemanWelcomeClient'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Welcome to Foreman — National Wrench Index Suite™' }
+export const metadata = { title: 'Welcome to Foreman' }
 
 export default async function ForemanWelcomePage() {
   const supabase = await createClient()

@@ -440,7 +440,7 @@ export default function ForemanSettingsClient({
             type="text"
             value={bName}
             onChange={e => setBName(e.target.value)}
-            placeholder="National Wrench Index"
+            placeholder="Green Valley Lawn Care"
           />
           <p className="text-white/30 text-xs mt-1">What Foreman says when answering: &ldquo;Thank you for calling [Business Name]…&rdquo;</p>
         </div>

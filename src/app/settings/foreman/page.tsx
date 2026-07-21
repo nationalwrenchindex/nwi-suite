@@ -5,7 +5,7 @@ import ForemanSettingsClient from '@/components/foreman/ForemanSettingsClient'
 import { isForemanAvailable } from '@/lib/foreman/cap'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Foreman Settings — National Wrench Index Suite™' }
+export const metadata = { title: 'Foreman Settings' }
 
 export default async function ForemanSettingsPage({
   searchParams,

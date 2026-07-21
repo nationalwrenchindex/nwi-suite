@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 
 export const metadata: Metadata = {
-  title: 'National Wrench Index Suite\u2122',
+  title: 'LawnPlatform',
 }
 
 const FEATURES = [
@@ -10,7 +10,7 @@ const FEATURES = [
   { icon: '🧾', text: 'Professional invoicing' },
   { icon: '📊', text: 'Expense & revenue tracking' },
   { icon: '🔔', text: 'Automated customer notifications' },
-  { icon: '🚗', text: 'Full vehicle service history' },
+  { icon: '🌱', text: 'Full property service history' },
 ]
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
@@ -27,16 +27,18 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <div className="relative z-10 flex flex-col lg:justify-between lg:h-full p-6 sm:p-8 lg:p-10">
           {/* Logo */}
           <div>
-            <div className="mb-5 lg:mb-12">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/nwi-logo.png" alt="National Wrench Index Suite™" className="h-10 lg:h-14 w-auto" />
+            <div className="mb-5 lg:mb-12 flex items-center gap-3">
+              <span className="flex items-center justify-center h-11 w-11 rounded-lg bg-white/15 font-condensed font-extrabold text-xl text-white">
+                LP
+              </span>
+              <span className="font-condensed font-bold text-white text-xl">LawnPlatform</span>
             </div>
 
             <h2 className="font-condensed font-bold text-white text-3xl sm:text-4xl xl:text-5xl leading-tight mb-3 lg:mb-4">
-              Run your mobile shop <span className="text-orange">smarter.</span>
+              Run your lawn business <span className="text-orange">smarter.</span>
             </h2>
             <p className="text-white/70 text-sm lg:text-base leading-relaxed mb-5 lg:mb-10">
-              Everything a mobile automotive professional needs — from first call to paid invoice.
+              Everything a lawn and landscape pro needs — from first call to paid invoice.
             </p>
 
             <ul className="space-y-3 lg:space-y-4">
@@ -66,7 +68,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           {/* Founder statement — desktop only */}
           <div className="hidden lg:block bg-white/10 rounded-xl p-5 border border-white/10">
             <p className="text-white/90 text-sm italic leading-relaxed mb-3">
-              &ldquo;Built by a mobile diesel tech with 17 years of experience. The software I wished I&rsquo;d had when I started.&rdquo;
+              &ldquo;Built for the crews in the field — the software I wished I&rsquo;d had when I started my business.&rdquo;
             </p>
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-full bg-orange/30 flex items-center justify-center">
@@ -74,7 +76,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               </div>
               <div>
                 <p className="text-white text-xs font-semibold">Brock Fleeman, Founder</p>
-                <p className="text-white/50 text-xs">Diesel Tech — 17 Years Industry Experience</p>
+                <p className="text-white/50 text-xs">Built for lawn and landscape pros</p>
               </div>
             </div>
           </div>
@@ -88,7 +90,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         </div>
 
         <footer className="border-t border-dark-border px-6 py-4 flex items-center justify-center gap-5 text-white/25 text-xs">
-          <span>&copy; {new Date().getFullYear()} National Wrench Index</span>
+          <span>&copy; {new Date().getFullYear()} LawnPlatform · Powered by National Wrench Index LLC</span>
           <Link href="/terms"   className="hover:text-white/50 transition-colors">Terms of Service</Link>
           <Link href="/privacy" className="hover:text-white/50 transition-colors">Privacy Policy</Link>
         </footer>

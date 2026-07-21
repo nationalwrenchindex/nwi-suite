@@ -49,7 +49,7 @@ function buildBookingSmsBody({
     `${fmtNotifDate(jobDate)} at ${fmtNotifTime(jobTime)}`,
   ]
   if (customerPhone) parts.push(customerPhone)
-  return parts.join(' · ') + ' — NWI Suite'
+  return parts.join(' · ') + ' — LawnPlatform'
 }
 
 // Configurable defaults — can be moved to a per-tech profile field later

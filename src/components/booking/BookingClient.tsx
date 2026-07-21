@@ -20,24 +20,28 @@ export interface PublicProfile {
 // ─── Service duration estimates (minutes) ─────────────────────────────────────
 
 const SERVICE_DURATIONS: Record<string, number> = {
-  // Mechanic
-  'Oil Change':                   45,
-  'Brake Service':               120,
-  'Tire Rotation':                30,
-  'Tire Replacement':             90,
-  'Tire Balancing':               45,
-  'TPMS Sensor Replacement':      60,
-  'Battery Replacement':          30,
-  'Engine Diagnostic':            60,
-  'A/C Service':                  90,
-  'Transmission Service':        120,
-  'Suspension Repair':           180,
-  'Electrical Repair':            90,
-  'Coolant Flush':                60,
-  'Power Steering Service':       60,
-  'Fuel System Service':          60,
-  'Pre-Purchase Inspection':      90,
-  // Detailer
+  // Landscaping
+  'Lawn Mowing':                  45,
+  'Lawn Edging':                  30,
+  'Trimming and Pruning':         60,
+  'Mulching':                    120,
+  'Leaf Removal and Cleanup':    120,
+  'Fertilizing':                  45,
+  'Weed Control':                 45,
+  'Aeration':                     90,
+  'Overseeding':                  60,
+  'Irrigation Service and Repair':90,
+  'Landscape Installation':      480,
+  'Sod Installation':            300,
+  'Tree Trimming':               120,
+  'Shrub Shaping':                60,
+  'Gutter Cleaning':              60,
+  'Pressure Washing':            120,
+  'Snow Removal':                 60,
+  'Spring Cleanup':              180,
+  'Fall Cleanup':                180,
+  'Custom Service':               60,
+  // Detailer (legacy)
   'Basic Wash':                   30,
   'Full Detail':                 240,
   'Interior Detail':             120,
@@ -594,16 +598,14 @@ export default function BookingClient({
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <h2 className="font-condensed font-bold text-3xl text-white tracking-wide mb-2">BOOKING CONFIRMED!</h2>
+            <h2 className="font-condensed font-bold text-3xl text-white tracking-wide mb-2">YOUR LAWN SERVICE IS BOOKED!</h2>
             <p className="text-white/60 text-sm mb-6 leading-relaxed">
-              Your{' '}
-              <strong className="text-white">
-                {selectedServices.join(' + ')}
-              </strong>{' '}
-              appointment is scheduled for{' '}
+              <strong className="text-white">{bizName}</strong> will be at your property on{' '}
               <strong className="text-white">{date && formatDateFull(date)}</strong> at{' '}
-              <strong className="text-white">{time && formatTime(time)}</strong>.
-              {(phone || email) && ' A confirmation message is on its way to you.'}
+              <strong className="text-white">{time && formatTime(time)}</strong> for your{' '}
+              <strong className="text-white">{selectedServices.join(' + ')}</strong>.
+              {' '}You will receive a text reminder the day before.
+              {' '}Thank you for choosing {bizName}.
             </p>
 
             <div className="nwi-card text-left space-y-3 mb-8">
@@ -614,7 +616,7 @@ export default function BookingClient({
               <Detail label="Date"        value={date  ? formatDateFull(date) : ''} />
               <Detail label="Time"        value={time  ? formatTime(time) : ''} />
               <Detail label="Est. Duration" value={durationLabel(totalDuration)} />
-              <Detail label="Technician"  value={bizName} />
+              <Detail label="Landscaper"  value={bizName} />
               {inspectionRequested && <Detail label="Add-On" value="25-Point Multi-Point Inspection" />}
               {jobId && <Detail label="Booking ID" value={jobId.slice(0, 8).toUpperCase()} />}
             </div>

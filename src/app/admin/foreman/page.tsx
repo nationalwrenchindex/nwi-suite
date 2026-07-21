@@ -8,7 +8,7 @@ import { getCurrentForemanSubscriberCount } from '@/lib/foreman/cap'
 const FOUNDER_ID = '4a8c046f-7db3-42bb-8422-fd47efb7678c'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'Foreman Admin — NWI Suite' }
+export const metadata = { title: 'Foreman Admin — LawnPlatform' }
 
 function fmtDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString('en-US', {

@@ -515,7 +515,7 @@ const GENERIC_SAFETY = 'THIS REPAIR INVOLVES HAZARDOUS CONDITIONS. Review all sa
 // (red) block second — never a single generic shutdown warning.
 interface SafetyBlock { text: string; label: string; color: string }
 
-const ORANGE_HAZARD = '#FF6600'
+const ORANGE_HAZARD = '#16a34a'
 const RED_HAZARD    = '#CC0000'
 const LIVE_LABEL    = '⚠ LIVE ELECTRICAL HAZARD — READ FIRST'
 const OFF_LABEL     = '⚠ ELECTRICAL HAZARD — UNIT MUST BE OFF'
@@ -630,8 +630,8 @@ function LaborEstimate({ book, mobile }: { book: number; mobile: number }) {
   const same = Math.abs(book - mobile) < 0.01
   const fee  = (h: number) => `$${Math.round(h * HD_LABOR_RATE)}`
   return (
-    <div className="rounded-lg px-4 py-3" style={{ background: '#0d2137', borderLeft: '3px solid #2969B0' }}>
-      <p className="text-xs uppercase tracking-widest mb-1.5" style={{ color: '#2969B0' }}>
+    <div className="rounded-lg px-4 py-3" style={{ background: '#0d2137', borderLeft: '3px solid #15803d' }}>
+      <p className="text-xs uppercase tracking-widest mb-1.5" style={{ color: '#15803d' }}>
         Labor Estimate
       </p>
       <p className="text-sm font-medium" style={{ color: 'rgba(255,255,255,0.85)' }}>
@@ -668,14 +668,14 @@ function PartsManager({
           onClick={onRun}
           disabled={loading}
           className="w-full py-3 rounded-lg text-sm font-semibold text-white transition-colors disabled:opacity-60"
-          style={{ background: '#2969B0', minHeight: 48 }}
+          style={{ background: '#15803d', minHeight: 48 }}
         >
           {loading ? 'Looking up parts…' : 'Parts Manager'}
         </button>
       ) : (
-        <div className="rounded-lg overflow-hidden" style={{ background: '#0d1f35', borderLeft: '3px solid #2969B0' }}>
+        <div className="rounded-lg overflow-hidden" style={{ background: '#0d1f35', borderLeft: '3px solid #15803d' }}>
           <div className="flex items-start justify-between gap-3 px-4 pt-3">
-            <p className="text-xs uppercase tracking-widest" style={{ color: '#2969B0' }}>Parts Manager</p>
+            <p className="text-xs uppercase tracking-widest" style={{ color: '#15803d' }}>Parts Manager</p>
             <button
               type="button"
               onClick={onClear}
@@ -2900,7 +2900,7 @@ export default function HDQuickWrenchPage() {
                 type="button"
                 onClick={() => setShowDelivery(true)}
                 className="w-full py-3 rounded-lg text-sm font-semibold text-white flex items-center justify-center gap-2"
-                style={{ background: '#2969B0', minHeight: 48 }}
+                style={{ background: '#15803d', minHeight: 48 }}
               >
                 <span>🚚</span> Get Parts Delivered
               </button>
@@ -2923,7 +2923,7 @@ export default function HDQuickWrenchPage() {
                     checked={includeDiagFee}
                     onChange={e => setIncludeDiagFee(e.target.checked)}
                     className="w-3.5 h-3.5"
-                    style={{ accentColor: '#FF6600' }}
+                    style={{ accentColor: '#16a34a' }}
                   />
                   Include Diagnostic Fee
                 </label>
@@ -2931,7 +2931,7 @@ export default function HDQuickWrenchPage() {
                   type="button"
                   onClick={pushReeferToQuote}
                   className="w-full py-3 rounded-lg text-sm font-semibold text-white transition-colors"
-                  style={{ background: '#FF6600', minHeight: 48 }}
+                  style={{ background: '#16a34a', minHeight: 48 }}
                 >
                   Create Quote
                 </button>
@@ -3210,7 +3210,7 @@ export default function HDQuickWrenchPage() {
                 type="button"
                 onClick={() => setShowDelivery(true)}
                 className="w-full py-3 rounded-lg text-sm font-semibold text-white flex items-center justify-center gap-2"
-                style={{ background: '#2969B0', minHeight: 48 }}
+                style={{ background: '#15803d', minHeight: 48 }}
               >
                 <span>🚚</span> Get Parts Delivered
               </button>
@@ -3233,7 +3233,7 @@ export default function HDQuickWrenchPage() {
                     checked={includeDiagFee}
                     onChange={e => setIncludeDiagFee(e.target.checked)}
                     className="w-3.5 h-3.5"
-                    style={{ accentColor: '#FF6600' }}
+                    style={{ accentColor: '#16a34a' }}
                   />
                   Include Diagnostic Fee
                 </label>
@@ -3241,7 +3241,7 @@ export default function HDQuickWrenchPage() {
                   type="button"
                   onClick={pushTruckToQuote}
                   className="w-full py-3 rounded-lg text-sm font-semibold text-white transition-colors"
-                  style={{ background: '#FF6600', minHeight: 48 }}
+                  style={{ background: '#16a34a', minHeight: 48 }}
                 >
                   Create Quote
                 </button>

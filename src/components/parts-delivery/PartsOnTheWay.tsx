@@ -4,8 +4,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
 // ─── Palette (dark, works in both LD and HD QuickWrench) ─────────────────────
-const ORANGE = '#FF6600'
-const BLUE   = '#2969B0'
+const ORANGE = '#16a34a'
+const BLUE   = '#15803d'
 const BG     = '#0d1820'
 const BORDER = '#1e3040'
 const INPUT  = '#162030'

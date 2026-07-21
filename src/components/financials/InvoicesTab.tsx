@@ -47,7 +47,7 @@ function today() {
 // New invoice_status badge (Phase 3+)
 const PROGRESS_STATUS_META: Record<InvoiceProgressStatus, { label: string; style: React.CSSProperties }> = {
   in_progress:       { label: 'In Progress',       style: { backgroundColor: '#f59e0b', color: '#fff' } },
-  finalized:         { label: 'Finalized',          style: { backgroundColor: '#2969B0', color: '#fff' } },
+  finalized:         { label: 'Finalized',          style: { backgroundColor: '#15803d', color: '#fff' } },
   awaiting_payment:  { label: 'Awaiting Payment',   style: { backgroundColor: '#8b5cf6', color: '#fff' } },
   paid:              { label: 'Paid',               style: { backgroundColor: '#10b981', color: '#fff' } },
   void:              { label: 'Void',               style: { backgroundColor: '#6b7280', color: '#fff' } },

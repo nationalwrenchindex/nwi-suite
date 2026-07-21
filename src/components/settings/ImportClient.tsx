@@ -441,7 +441,7 @@ export default function ImportClient() {
               </div>
               <div>
                 <p className="text-white font-semibold text-sm">Import complete!</p>
-                <p className="text-white/40 text-xs">Your data has been added to NWI Suite.</p>
+                <p className="text-white/40 text-xs">Your data has been added to LawnPlatform.</p>
               </div>
             </div>
 

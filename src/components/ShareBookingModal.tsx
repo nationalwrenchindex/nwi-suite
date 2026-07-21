@@ -170,7 +170,7 @@ function QRView({ url, onBack }: { url: string; onBack: () => void }) {
           onClick={handleDownload}
           disabled={!qrDataUrl}
           aria-label="Download QR code as PNG"
-          className="flex-1 flex items-center justify-center gap-2 bg-[#FF6600] hover:bg-[#E55A00] disabled:opacity-40 text-white font-condensed font-bold text-sm rounded-xl py-3 transition-colors"
+          className="flex-1 flex items-center justify-center gap-2 bg-[#16a34a] hover:bg-[#15803d] disabled:opacity-40 text-white font-condensed font-bold text-sm rounded-xl py-3 transition-colors"
         >
           <IconDownload />
           Download PNG
@@ -178,7 +178,7 @@ function QRView({ url, onBack }: { url: string; onBack: () => void }) {
         <button
           onClick={handleCopy}
           aria-label="Copy booking URL"
-          className="flex-1 flex items-center justify-center gap-2 border border-[#2969B0] text-white hover:bg-[#2969B0]/20 font-condensed font-bold text-sm rounded-xl py-3 transition-colors"
+          className="flex-1 flex items-center justify-center gap-2 border border-[#15803d] text-white hover:bg-[#15803d]/20 font-condensed font-bold text-sm rounded-xl py-3 transition-colors"
         >
           {copied ? '✓ Copied' : 'Copy URL'}
         </button>
@@ -256,7 +256,7 @@ function ActionsView({
         <button
           onClick={handleCopy}
           aria-label="Copy booking link to clipboard"
-          className="flex flex-col items-center justify-center gap-2 border border-[#2969B0] hover:bg-[#2969B0]/15 text-white rounded-2xl py-5 px-3 transition-colors min-h-[96px]"
+          className="flex flex-col items-center justify-center gap-2 border border-[#15803d] hover:bg-[#15803d]/15 text-white rounded-2xl py-5 px-3 transition-colors min-h-[96px]"
         >
           <IconClipboard />
           <span className="font-condensed font-bold text-sm tracking-wide">Copy Link</span>
@@ -266,7 +266,7 @@ function ActionsView({
         <button
           onClick={handleSMS}
           aria-label="Send booking link via SMS"
-          className="flex flex-col items-center justify-center gap-2 bg-[#FF6600] hover:bg-[#E55A00] text-white rounded-2xl py-5 px-3 transition-colors min-h-[96px]"
+          className="flex flex-col items-center justify-center gap-2 bg-[#16a34a] hover:bg-[#15803d] text-white rounded-2xl py-5 px-3 transition-colors min-h-[96px]"
         >
           <IconMessage />
           <span className="font-condensed font-bold text-sm tracking-wide">Text Customer</span>
@@ -276,7 +276,7 @@ function ActionsView({
         <button
           onClick={handleEmail}
           aria-label="Send booking link via email"
-          className="flex flex-col items-center justify-center gap-2 border border-[#2969B0] hover:bg-[#2969B0]/15 text-white rounded-2xl py-5 px-3 transition-colors min-h-[96px]"
+          className="flex flex-col items-center justify-center gap-2 border border-[#15803d] hover:bg-[#15803d]/15 text-white rounded-2xl py-5 px-3 transition-colors min-h-[96px]"
         >
           <IconEnvelope />
           <span className="font-condensed font-bold text-sm tracking-wide">Email Customer</span>
@@ -286,7 +286,7 @@ function ActionsView({
         <button
           onClick={onShowQR}
           aria-label="Show QR code for booking page"
-          className="flex flex-col items-center justify-center gap-2 border border-[#2969B0] hover:bg-[#2969B0]/15 text-white rounded-2xl py-5 px-3 transition-colors min-h-[96px]"
+          className="flex flex-col items-center justify-center gap-2 border border-[#15803d] hover:bg-[#15803d]/15 text-white rounded-2xl py-5 px-3 transition-colors min-h-[96px]"
         >
           <IconQR />
           <span className="font-condensed font-bold text-sm tracking-wide">Show QR Code</span>
@@ -429,7 +429,7 @@ export default function ShareBookingModal({
               <p className="text-white/50 text-sm mb-3">
                 You need a booking slug before sharing.
               </p>
-              <a href="/onboarding" className="text-[#FF6600] hover:text-[#FF8533] text-sm underline">
+              <a href="/onboarding" className="text-[#16a34a] hover:text-[#4ade80] text-sm underline">
                 Set your booking URL in Settings →
               </a>
             </div>

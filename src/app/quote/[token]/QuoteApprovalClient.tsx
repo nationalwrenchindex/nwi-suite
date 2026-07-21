@@ -149,7 +149,7 @@ export default function QuoteApprovalClient({
             <h2 className="text-white font-bold text-lg">Approve this quote?</h2>
             <p className="text-white/60 text-sm">
               You are approving quote{' '}
-              <span className="font-mono text-[#FF6600]">{quoteNumber}</span>{' '}
+              <span className="font-mono text-[#16a34a]">{quoteNumber}</span>{' '}
               for a total of{' '}
               <span className="text-white font-semibold">{fmt(grandTotal)}</span>.
             </p>

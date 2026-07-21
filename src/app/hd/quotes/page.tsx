@@ -4,12 +4,12 @@ import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
 import QuoteListActions from './QuoteListActions'
 
-const ORANGE = '#FF6600'
-const BLUE   = '#2969B0'
+const ORANGE = '#16a34a'
+const BLUE   = '#15803d'
 
 const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
   draft:    { bg: '#F3F4F6', color: '#6B7280' },
-  sent:     { bg: '#DBEAFE', color: '#2969B0' },
+  sent:     { bg: '#DBEAFE', color: '#15803d' },
   approved: { bg: '#DCFCE7', color: '#16a34a' },
   declined: { bg: '#FEE2E2', color: '#dc2626' },
 }

@@ -4,8 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
-const ORANGE = '#FF6600'
-const BLUE   = '#2969B0'
+const ORANGE = '#16a34a'
+const BLUE   = '#15803d'
 
 export default function InvoiceDetailActions({
   invoiceId,

@@ -33,7 +33,7 @@ export async function generateMetadata(
   const sc = createServiceClient()
   const { data } = await sc.from('invoices').select('invoice_number').eq('public_token', token).single()
   const num = data?.invoice_number ?? 'Invoice'
-  return { title: `${num} — National Wrench Index` }
+  return { title: `${num} — LawnPlatform` }
 }
 
 const fmt = (n: number | null | undefined) =>
@@ -154,7 +154,7 @@ export default async function PublicInvoicePage(
               <img src={p.business_logo_url} alt={bizName} className="h-full w-auto object-contain p-1" />
             </div>
           ) : (
-            <div className="h-16 sm:h-20 w-16 sm:w-20 rounded-md bg-[#FF6600] flex items-center justify-center flex-shrink-0">
+            <div className="h-16 sm:h-20 w-16 sm:w-20 rounded-md bg-[#16a34a] flex items-center justify-center flex-shrink-0">
               <svg className="w-8 sm:w-10 h-8 sm:h-10 text-white" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                 <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
               </svg>
@@ -188,7 +188,7 @@ export default async function PublicInvoicePage(
         {/* Invoice number + status + greeting */}
         <div className="space-y-2">
           <div className="flex items-center gap-3 flex-wrap">
-            <p className="text-[#FF6600] font-mono text-base font-semibold">{inv.invoice_number}</p>
+            <p className="text-[#16a34a] font-mono text-base font-semibold">{inv.invoice_number}</p>
             <span
               className="px-2.5 py-0.5 rounded-full text-xs font-semibold"
               style={isPaid
@@ -282,7 +282,7 @@ export default async function PublicInvoicePage(
                 <div key={ji} className="bg-white/5 rounded-xl overflow-hidden border border-white/8">
                   <div className="flex items-center justify-between px-4 py-3 border-b border-white/8 bg-white/[0.02]">
                     <p className="text-white font-semibold text-sm">{j.subtype}</p>
-                    <span className="text-[#FF6600] font-bold text-sm">{fmt(jobSubtotal)}</span>
+                    <span className="text-[#16a34a] font-bold text-sm">{fmt(jobSubtotal)}</span>
                   </div>
                   {j.parts.length > 0 && (
                     <table className="w-full text-sm">
@@ -406,7 +406,7 @@ export default async function PublicInvoicePage(
           )}
           <div className="flex justify-between items-baseline border-t border-white/15 pt-3 mt-1">
             <span className="text-white font-bold text-base uppercase tracking-wide">Total Due</span>
-            <span className="text-[#FF6600] font-bold text-3xl">{fmt(displayTotal)}</span>
+            <span className="text-[#16a34a] font-bold text-3xl">{fmt(displayTotal)}</span>
           </div>
         </div>
 

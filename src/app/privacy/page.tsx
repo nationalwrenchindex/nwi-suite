@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 
 export const metadata: Metadata = {
-  title: 'Privacy Policy — National Wrench Index Suite™',
+  title: 'Privacy Policy',
 }
 
 export default function PrivacyPage() {
@@ -255,11 +255,9 @@ function LegalNav() {
     <header className="border-b border-dark-border bg-dark-card">
       <div className="max-w-3xl mx-auto px-5 sm:px-8 h-16 flex items-center justify-between">
         <Link href="/login" className="flex items-center gap-3 group">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/nwi-logo.png" alt="National Wrench Index Suite™" className="h-10 w-auto" />
+          <span className="flex items-center justify-center h-9 w-9 rounded-lg font-condensed font-extrabold text-white" style={{ backgroundColor: "#16a34a" }}>LP</span>
           <span className="hidden sm:block font-condensed font-bold text-sm leading-tight">
-            <span style={{ color: '#FF6600' }}>National</span>{' '}
-            <span style={{ color: '#2969B0' }}>Wrench Index</span>
+            <span style={{ color: "#16a34a" }}>LawnPlatform</span>
             <span className="text-white/70">&#8482;</span>
           </span>
         </Link>

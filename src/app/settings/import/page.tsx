@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import AppNav from '@/components/layout/AppNav'
 import ImportClient from '@/components/settings/ImportClient'
 
-export const metadata = { title: 'Import Data — National Wrench Index Suite™' }
+export const metadata = { title: 'Import Data' }
 
 export default async function ImportPage() {
   const supabase = await createClient()

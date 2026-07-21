@@ -85,8 +85,8 @@ For each post generate an image_prompt — a detailed prompt the user can paste 
 
 Image style rules for ALL posts:
 - Deep charcoal/dark background (#1a1a1a)
-- Primary accent: bold orange (#FF6600) — glow, gradients, highlights
-- Secondary accent: deep blue (#2969B0) — UI screens, data displays
+- Primary accent: bold orange (#16a34a) — glow, gradients, highlights
+- Secondary accent: deep blue (#15803d) — UI screens, data displays
 - Subject matter: mobile mechanic world — light-duty passenger vehicles and pickup trucks (Ford F-150, Chevy Silverado, Honda Civic, Toyota Camry, SUVs, everyday cars and trucks), tool bags, diagnostic tablets, grease-stained hands on keyboards, shop invoices on phone screens, open hoods at dawn; never depict semi trucks, tractor-trailers, or heavy commercial vehicles
 - Photorealistic or cinematic quality, professional and clean
 - No text overlaid in the image

@@ -281,7 +281,7 @@ function FinalizeConfirmModal({
           <button
             onClick={onConfirm}
             disabled={loading}
-            className="flex-1 py-3 bg-[#FF6600] hover:bg-orange-600 disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-xl transition-colors"
+            className="flex-1 py-3 bg-[#16a34a] hover:bg-orange-600 disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-xl transition-colors"
           >
             {loading ? 'Finalizing…' : 'Yes, Finalize'}
           </button>
@@ -585,7 +585,7 @@ function SendInvoiceModal({
               <button
                 onClick={() => handleSend('sms')}
                 disabled={loading || !phone.trim()}
-                className="w-full py-3 bg-[#FF6600] hover:bg-orange-600 disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-xl transition-colors"
+                className="w-full py-3 bg-[#16a34a] hover:bg-orange-600 disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-xl transition-colors"
               >
                 {loading ? 'Sending…' : 'Send SMS'}
               </button>
@@ -614,7 +614,7 @@ function SendInvoiceModal({
               <button
                 onClick={() => handleSend('email')}
                 disabled={loading || !email.trim()}
-                className="w-full py-3 bg-[#2969B0] hover:bg-blue-700 disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-xl transition-colors"
+                className="w-full py-3 bg-[#15803d] hover:bg-blue-700 disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-xl transition-colors"
               >
                 {loading ? 'Sending…' : 'Send Email'}
               </button>
@@ -1503,7 +1503,7 @@ export default function FinalizedInvoiceClient({
         <div className="flex items-center gap-3 flex-wrap">
           <button
             onClick={() => setShowFinalizeModal(true)}
-            className="flex items-center gap-2 px-6 py-3 bg-[#FF6600] hover:bg-orange-600 text-white font-condensed font-bold text-sm tracking-wide rounded-xl transition-colors shadow-md shadow-orange/20"
+            className="flex items-center gap-2 px-6 py-3 bg-[#16a34a] hover:bg-orange-600 text-white font-condensed font-bold text-sm tracking-wide rounded-xl transition-colors shadow-md shadow-orange/20"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>

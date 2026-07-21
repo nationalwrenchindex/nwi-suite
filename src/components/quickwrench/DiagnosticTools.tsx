@@ -420,7 +420,7 @@ function DTCPanel({ vehicle, onAddDTCJob }: {
               <ol className="space-y-2.5">
                 {result.repair_steps!.map((step, i) => (
                   <li key={i} className="flex gap-3 text-white/70 text-sm">
-                    <span className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center font-condensed font-bold text-white text-xs" style={{ background: '#FF6600' }}>
+                    <span className="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center font-condensed font-bold text-white text-xs" style={{ background: '#16a34a' }}>
                       {i + 1}
                     </span>
                     <span className="pt-0.5 leading-relaxed">{stripStepNumber(step)}</span>
@@ -478,7 +478,7 @@ function DTCPanel({ vehicle, onAddDTCJob }: {
           <button
             onClick={() => setShowDelivery(true)}
             className="w-full flex items-center justify-center gap-2 px-5 py-3 text-white font-condensed font-bold text-sm tracking-wide rounded-lg transition-colors min-h-[48px]"
-            style={{ background: '#2969B0' }}
+            style={{ background: '#15803d' }}
           >
             <span>🚚</span> Get Parts Delivered
           </button>

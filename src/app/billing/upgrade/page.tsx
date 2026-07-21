@@ -5,7 +5,7 @@ import AppNav from '@/components/layout/AppNav'
 import { PLANS } from '@/lib/stripe-plans'
 import { getSubscription } from '@/lib/subscription'
 
-export const metadata = { title: 'Upgrade — National Wrench Index Suite™' }
+export const metadata = { title: 'Upgrade' }
 
 const FEATURE_TO_TIER: Record<string, string> = {
   intel:        'pro',

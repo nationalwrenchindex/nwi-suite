@@ -5,7 +5,7 @@ import AppNav from '@/components/layout/AppNav'
 import TorqueWrenchSettingsClient from '@/components/torquewrench/TorqueWrenchSettingsClient'
 
 export const dynamic = 'force-dynamic'
-export const metadata = { title: 'TorqueWrench Settings — National Wrench Index Suite™' }
+export const metadata = { title: 'TorqueWrench Settings' }
 
 export default async function TorqueWrenchSettingsPage() {
   const supabase = await createClient()

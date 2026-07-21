@@ -9,18 +9,27 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        // LawnPlatform brand palette. The historical `orange` (primary) and
+        // `blue` (secondary) token names are retained so the ~30 existing
+        // components that reference them recolor to green with zero churn.
+        // Original NWI values: orange #FF6600 / blue #2969B0.
         orange: {
-          DEFAULT: '#FF6600',
-          '500':   '#FF6600',
-          hover:   '#E55A00',
-          light:   '#FF8533',
-          muted:   '#FF660020',
+          DEFAULT: '#16a34a', // forest green — primary
+          '500':   '#16a34a',
+          hover:   '#15803d',
+          light:   '#4ade80', // light green — secondary accent
+          muted:   '#16a34a20',
         },
         blue: {
-          DEFAULT: '#2969B0',
-          hover:   '#1F5090',
-          light:   '#3A7FD5',
-          muted:   '#2969B020',
+          DEFAULT: '#15803d', // deep green — secondary CTA
+          hover:   '#052e16', // dark green — accent
+          light:   '#4ade80',
+          muted:   '#15803d20',
+        },
+        // Literal NWI parent-brand orange, retained ONLY for the legal footer
+        // ("Powered by National Wrench Index LLC"). Not used in any UI element.
+        nwiParent: {
+          DEFAULT: '#FF6600',
         },
         dark: {
           DEFAULT: 'var(--bg-primary)',
@@ -45,8 +54,8 @@ const config: Config = {
         condensed: ['var(--font-barlow-condensed)', 'sans-serif'],
       },
       backgroundImage: {
-        'blue-gradient': 'linear-gradient(135deg, #2969B0 0%, #1a3f6f 100%)',
-        'orange-gradient': 'linear-gradient(135deg, #FF6600 0%, #cc5200 100%)',
+        'blue-gradient': 'linear-gradient(135deg, #15803d 0%, #052e16 100%)',
+        'orange-gradient': 'linear-gradient(135deg, #16a34a 0%, #052e16 100%)',
       },
     },
   },

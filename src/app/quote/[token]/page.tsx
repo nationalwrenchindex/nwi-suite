@@ -32,7 +32,7 @@ export async function generateMetadata(
   const sc = createServiceClient()
   const { data } = await sc.from('quotes').select('quote_number').eq('public_token', token).single()
   const num = data?.quote_number ?? 'Quote'
-  return { title: `${num} — National Wrench Index` }
+  return { title: `${num} — LawnPlatform` }
 }
 
 export default async function PublicQuotePage(
@@ -108,7 +108,7 @@ export default async function PublicQuotePage(
               <img src={p.business_logo_url} alt={bizName} className="h-full w-auto object-contain p-1" />
             </div>
           ) : (
-            <div className="h-16 sm:h-20 w-16 sm:w-20 rounded-md bg-[#FF6600] flex items-center justify-center flex-shrink-0">
+            <div className="h-16 sm:h-20 w-16 sm:w-20 rounded-md bg-[#16a34a] flex items-center justify-center flex-shrink-0">
               <svg className="w-8 sm:w-10 h-8 sm:h-10 text-white" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                 <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
               </svg>
@@ -123,7 +123,7 @@ export default async function PublicQuotePage(
 
         {/* Quote number + greeting */}
         <div className="space-y-1">
-          <p className="text-[#FF6600] font-mono text-sm font-semibold">{q.quote_number}</p>
+          <p className="text-[#16a34a] font-mono text-sm font-semibold">{q.quote_number}</p>
           <h1 className="font-bold text-2xl text-white tracking-tight">Hello, {customerName}</h1>
           <p className="text-white/50 text-sm">{bizName} has sent you a service quote.</p>
         </div>
@@ -197,7 +197,7 @@ export default async function PublicQuotePage(
                 <div key={ji} className="bg-white/5 rounded-xl overflow-hidden border border-white/8">
                   <div className="flex items-center justify-between px-4 py-3 border-b border-white/8 bg-white/[0.02]">
                     <p className="text-white font-semibold text-sm">{j.subtype}</p>
-                    <span className="text-[#FF6600] font-bold text-sm">{fmt(jobSubtotal)}</span>
+                    <span className="text-[#16a34a] font-bold text-sm">{fmt(jobSubtotal)}</span>
                   </div>
                   {j.parts.length > 0 && (
                     <table className="w-full text-sm">
@@ -317,7 +317,7 @@ export default async function PublicQuotePage(
           )}
           <div className="flex justify-between items-baseline border-t border-white/15 pt-3 mt-1">
             <span className="text-white font-bold text-base uppercase tracking-wide">Grand Total</span>
-            <span className="text-[#FF6600] font-bold text-3xl">{fmt(q.grand_total)}</span>
+            <span className="text-[#16a34a] font-bold text-3xl">{fmt(q.grand_total)}</span>
           </div>
         </div>
 

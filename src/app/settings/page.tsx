@@ -7,7 +7,7 @@ import { hasQuickWrenchAccess } from '@/lib/subscription'
 import type { PricingRow } from '@/components/detailer/DetailerPricingEditor'
 import Link from 'next/link'
 
-export const metadata = { title: 'Settings — National Wrench Index Suite™' }
+export const metadata = { title: 'Settings' }
 
 export default async function SettingsPage() {
   const supabase = await createClient()

@@ -54,11 +54,11 @@ interface EditAdjustment extends Adjustment {
 
 const STATUS_META: Record<QuoteStatus, { label: string; bg: string; text: string }> = {
   draft:     { label: 'Draft',     bg: '#6b7280', text: '#ffffff' },
-  sent:      { label: 'Sent',      bg: '#2969B0', text: '#ffffff' },
+  sent:      { label: 'Sent',      bg: '#15803d', text: '#ffffff' },
   approved:  { label: 'Approved',  bg: '#10b981', text: '#ffffff' },
   declined:  { label: 'Declined',  bg: '#ef4444', text: '#ffffff' },
   converted: { label: 'Converted', bg: '#8b5cf6', text: '#ffffff' },
-  expired:   { label: 'Expired',   bg: '#FF6600', text: '#ffffff' },
+  expired:   { label: 'Expired',   bg: '#16a34a', text: '#ffffff' },
 }
 
 function StatusBadge({ status }: { status: QuoteStatus }) {
@@ -371,7 +371,7 @@ function SendQuoteModal({
               <button
                 onClick={handleSendSms}
                 disabled={sending || !phone.trim()}
-                className="w-full py-3 bg-[#FF6600] hover:bg-orange-600 disabled:opacity-40 text-white font-semibold rounded-xl transition-colors"
+                className="w-full py-3 bg-[#16a34a] hover:bg-orange-600 disabled:opacity-40 text-white font-semibold rounded-xl transition-colors"
               >
                 {sending ? 'Sending…' : 'Send SMS'}
               </button>
@@ -1825,7 +1825,7 @@ function QuoteDetailModal({
                       setShowSendModal(true)
                     }}
                     disabled={saving}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-[#FF6600] hover:bg-orange-600 disabled:opacity-50 text-white font-condensed font-bold text-sm tracking-wide rounded-lg transition-colors shadow-md shadow-orange/20"
+                    className="flex items-center gap-2 px-5 py-2.5 bg-[#16a34a] hover:bg-orange-600 disabled:opacity-50 text-white font-condensed font-bold text-sm tracking-wide rounded-lg transition-colors shadow-md shadow-orange/20"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                       <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
@@ -1953,7 +1953,7 @@ function QuoteDetailModal({
                   {liveQuote.converted_invoice_id ? (
                     <button
                       onClick={() => { window.location.href = `/financials/invoices/${liveQuote.converted_invoice_id}` }}
-                      className="flex items-center gap-2 px-5 py-2.5 bg-[#2969B0] hover:bg-blue-700 text-white font-condensed font-bold text-sm tracking-wide rounded-lg transition-colors"
+                      className="flex items-center gap-2 px-5 py-2.5 bg-[#15803d] hover:bg-blue-700 text-white font-condensed font-bold text-sm tracking-wide rounded-lg transition-colors"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -1965,7 +1965,7 @@ function QuoteDetailModal({
                     <button
                       onClick={() => setShowConvertModal(true)}
                       disabled={converting}
-                      className="flex items-center gap-2 px-5 py-2.5 bg-[#FF6600] hover:bg-orange-600 disabled:opacity-50 text-white font-condensed font-bold text-sm tracking-wide rounded-lg transition-colors shadow-md shadow-orange/20"
+                      className="flex items-center gap-2 px-5 py-2.5 bg-[#16a34a] hover:bg-orange-600 disabled:opacity-50 text-white font-condensed font-bold text-sm tracking-wide rounded-lg transition-colors shadow-md shadow-orange/20"
                     >
                       {converting ? (
                         <>
@@ -2006,7 +2006,7 @@ function QuoteDetailModal({
                   {liveQuote.converted_invoice_id && (
                     <button
                       onClick={() => { window.location.href = `/financials/invoices/${liveQuote.converted_invoice_id}` }}
-                      className="flex items-center gap-2 px-5 py-2.5 bg-[#2969B0] hover:bg-blue-700 text-white font-condensed font-bold text-sm tracking-wide rounded-lg transition-colors"
+                      className="flex items-center gap-2 px-5 py-2.5 bg-[#15803d] hover:bg-blue-700 text-white font-condensed font-bold text-sm tracking-wide rounded-lg transition-colors"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -2166,7 +2166,7 @@ function QuoteDetailModal({
               <button
                 onClick={handlePushToInvoice}
                 disabled={converting}
-                className="flex-1 px-4 py-2.5 bg-[#FF6600] hover:bg-orange-600 disabled:opacity-50 text-white font-semibold text-sm rounded-lg transition-colors"
+                className="flex-1 px-4 py-2.5 bg-[#16a34a] hover:bg-orange-600 disabled:opacity-50 text-white font-semibold text-sm rounded-lg transition-colors"
               >
                 {converting ? 'Converting…' : 'Yes, Convert'}
               </button>

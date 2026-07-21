@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
 import InvoiceListActions from './InvoiceListActions'
 
-const ORANGE = '#FF6600'
+const ORANGE = '#16a34a'
 
 const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
   unpaid:  { bg: '#FEE2E2', color: '#dc2626' },

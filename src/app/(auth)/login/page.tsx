@@ -58,9 +58,8 @@ function LoginForm() {
         </h1>
         <p className="text-white/50 text-sm">
           Sign in to your{' '}
-          <span style={{ color: '#FF6600' }}>National</span>{' '}
-          <span style={{ color: '#2969B0' }}>Wrench Index</span>{' '}
-          Suite&#8482; account.
+          <span style={{ color: '#16a34a' }}>LawnPlatform</span>{' '}
+          account.
         </p>
       </div>
 

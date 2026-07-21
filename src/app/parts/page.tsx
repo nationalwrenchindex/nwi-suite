@@ -2,7 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import AppNav from '@/components/layout/AppNav'
 
-export const metadata = { title: 'Parts Lookup — National Wrench Index Suite™' }
+export const metadata = { title: 'Parts Lookup' }
 
 export default async function PartsPage() {
   const supabase = await createClient()
@@ -44,7 +44,7 @@ export default async function PartsPage() {
               className="text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide"
               style={{
                 background: 'rgba(255,102,0,0.15)',
-                color: '#FF6600',
+                color: '#16a34a',
                 border: '1px solid rgba(255,102,0,0.3)',
               }}
             >
@@ -77,7 +77,7 @@ export default async function PartsPage() {
                 <li key={feature} className="flex items-start gap-2.5">
                   <span
                     className="w-1.5 h-1.5 rounded-full flex-shrink-0 mt-1.5"
-                    style={{ background: '#FF6600' }}
+                    style={{ background: '#16a34a' }}
                   />
                   <span className="text-white/55 text-sm leading-snug">{feature}</span>
                 </li>

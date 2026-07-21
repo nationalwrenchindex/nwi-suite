@@ -18,11 +18,11 @@ const barlowCondensed = Barlow_Condensed({
 
 export const metadata: Metadata = {
   title: {
-    default: 'National Wrench Index\u2122',
-    template: '%s | National Wrench Index\u2122',
+    default: 'LawnPlatform',
+    template: '%s | LawnPlatform',
   },
   description:
-    'The all-in-one platform for mobile automotive professionals — manage jobs, customers, invoices, and grow your business.',
+    'Built for lawn and landscape pros — manage jobs, customers, quotes, invoices, and grow your business.',
   icons: {
     icon: [
       { url: '/favicon.ico' },

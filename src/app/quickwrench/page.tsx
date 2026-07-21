@@ -4,7 +4,7 @@ import { hasQuickWrenchAccess } from '@/lib/subscription'
 import AppNav from '@/components/layout/AppNav'
 import QuickWrenchClient from '@/components/quickwrench/QuickWrenchClient'
 
-export const metadata = { title: 'National Wrench Index QuickWrench™ — National Wrench Index Suite™' }
+export const metadata = { title: 'National Wrench Index QuickWrench™' }
 
 export default async function QuickWrenchPage({
   searchParams,

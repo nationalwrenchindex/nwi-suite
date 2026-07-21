@@ -801,7 +801,7 @@ async function handleBookAppointment(
     const vehicleDesc = vehicleText
       ? (engineText ? `${vehicleText} (${engineText})` : vehicleText)
       : null
-    const body = `Foreman booked: ${firstName} ${lastName}${vehicleDesc ? ` · ${vehicleDesc}` : ''} · ${serviceName} · ${dateLabel} at ${timeLabel}${rawPhone.length >= 10 ? ' · ' + params.customer_phone : ''} — NWI Suite`
+    const body = `Foreman booked: ${firstName} ${lastName}${vehicleDesc ? ` · ${vehicleDesc}` : ''} · ${serviceName} · ${dateLabel} at ${timeLabel}${rawPhone.length >= 10 ? ' · ' + params.customer_phone : ''} — LawnPlatform`
     try {
       await sendSubscriberSms({ to: settings.mechanic_phone, body })
       console.log('[booking-sms] mechanic SMS sent to', settings.mechanic_phone)
@@ -813,7 +813,7 @@ async function handleBookAppointment(
   // SMS confirmation to customer (awaited)
   if (params.customer_phone && rawPhone.length >= 10) {
     const biz  = settings?.business_name ?? 'your mechanic'
-    const body = `Appointment confirmed with ${biz}: ${serviceName} on ${dateLabel} at ${timeLabel}. See you then! — National Wrench Index`
+    const body = `Appointment confirmed with ${biz}: ${serviceName} on ${dateLabel} at ${timeLabel}. See you then!`
     try {
       await sendSubscriberSms({ to: params.customer_phone, body })
       console.log('[booking-sms] customer SMS sent to', params.customer_phone)

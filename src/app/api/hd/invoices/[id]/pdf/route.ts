@@ -80,14 +80,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #1a1a1a; background: #f5f5f5; }
   .page { background: #fff; max-width: 800px; margin: 24px auto; padding: 48px; box-shadow: 0 2px 12px rgba(0,0,0,0.1); }
-  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 36px; border-bottom: 3px solid #FF6600; padding-bottom: 20px; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 36px; border-bottom: 3px solid #16a34a; padding-bottom: 20px; }
   .brand { display: flex; align-items: center; gap: 12px; }
-  .brand-icon { width: 44px; height: 44px; background: #FF6600; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+  .brand-icon { width: 44px; height: 44px; background: #16a34a; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
   .brand-icon svg { width: 28px; height: 28px; stroke: white; fill: none; stroke-width: 2; }
   .brand-name { font-size: 20px; font-weight: 800; letter-spacing: 1px; color: #1a1a1a; }
   .brand-sub { font-size: 11px; color: #888; margin-top: 2px; }
   .inv-meta { text-align: right; }
-  .inv-number { font-size: 22px; font-weight: 700; color: #FF6600; }
+  .inv-number { font-size: 22px; font-weight: 700; color: #16a34a; }
   .inv-meta p { font-size: 12px; color: #555; margin-top: 4px; }
   .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 28px; }
   .info-box h3 { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #888; margin-bottom: 8px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
@@ -105,7 +105,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   .totals-box { width: 280px; }
   .totals-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 13px; }
   .totals-row.divider { border-top: 1px solid #e5e7eb; margin-top: 4px; padding-top: 8px; }
-  .totals-row.total { font-size: 18px; font-weight: 700; color: #FF6600; border-top: 2px solid #FF6600; margin-top: 4px; padding-top: 10px; }
+  .totals-row.total { font-size: 18px; font-weight: 700; color: #16a34a; border-top: 2px solid #16a34a; margin-top: 4px; padding-top: 10px; }
   .notes-box { margin-top: 28px; padding: 12px; background: #f9f9f9; border-radius: 6px; border: 1px solid #e5e7eb; }
   .notes-box h3 { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #888; margin-bottom: 6px; }
   .footer { margin-top: 36px; text-align: center; font-size: 11px; color: #aaa; border-top: 1px solid #e5e7eb; padding-top: 16px; }
@@ -115,7 +115,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   .status-partial { background: #fef3c7; color: #d97706; }
   .status-void { background: #f3f4f6; color: #6b7280; }
   .no-print { text-align: center; margin-bottom: 24px; }
-  .print-btn { background: #FF6600; color: white; border: none; padding: 10px 28px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .print-btn { background: #16a34a; color: white; border: none; padding: 10px 28px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
   @media print {
     body { background: white; }
     .page { margin: 0; padding: 32px; box-shadow: none; max-width: 100%; }

@@ -108,7 +108,7 @@ function TemplateEditor({
       <button
         onClick={onSave}
         disabled={saving}
-        className="px-5 py-2 bg-[#FF6600] hover:bg-[#E55A00] disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-lg transition-colors"
+        className="px-5 py-2 bg-[#16a34a] hover:bg-[#15803d] disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-lg transition-colors"
       >
         {saving ? 'Saving…' : 'Save Template'}
       </button>
@@ -416,7 +416,7 @@ export default function SettingsClient({
               <p className="text-white/70 text-sm break-all">{bookingUrl}</p>
             ) : (
               <p className="text-white/30 text-sm">Not set —{' '}
-                <a href="/onboarding" className="text-[#FF6600] hover:text-[#FF8533] underline">complete onboarding</a>
+                <a href="/onboarding" className="text-[#16a34a] hover:text-[#4ade80] underline">complete onboarding</a>
               </p>
             )}
           </div>
@@ -425,7 +425,7 @@ export default function SettingsClient({
             <button
               onClick={() => setShareOpen(true)}
               aria-label="Share your booking link"
-              className="flex items-center justify-center gap-2 bg-[#FF6600] hover:bg-[#E55A00] text-white font-condensed font-bold text-base tracking-wide rounded-xl px-6 py-3 transition-colors"
+              className="flex items-center justify-center gap-2 bg-[#16a34a] hover:bg-[#15803d] text-white font-condensed font-bold text-base tracking-wide rounded-xl px-6 py-3 transition-colors"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
                 <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
@@ -508,7 +508,7 @@ export default function SettingsClient({
           <button
             onClick={savePaymentInstructions}
             disabled={savingPaymentInstr}
-            className="px-5 py-2 bg-[#FF6600] hover:bg-[#E55A00] disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-lg transition-colors"
+            className="px-5 py-2 bg-[#16a34a] hover:bg-[#15803d] disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-lg transition-colors"
           >
             {savingPaymentInstr ? 'Saving…' : 'Save Default Instructions'}
           </button>
@@ -631,7 +631,7 @@ export default function SettingsClient({
             <button
               onClick={saveAdjPresets}
               disabled={savingPresets}
-              className="mt-2 px-5 py-2 bg-[#FF6600] hover:bg-[#E55A00] disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-lg transition-colors"
+              className="mt-2 px-5 py-2 bg-[#16a34a] hover:bg-[#15803d] disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-lg transition-colors"
             >
               {savingPresets ? 'Saving…' : 'Save Adjustment Presets'}
             </button>
@@ -689,7 +689,7 @@ export default function SettingsClient({
           <button
             onClick={savePricingRates}
             disabled={savingRates}
-            className="px-5 py-2 bg-[#FF6600] hover:bg-[#E55A00] disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-lg transition-colors"
+            className="px-5 py-2 bg-[#16a34a] hover:bg-[#15803d] disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-lg transition-colors"
           >
             {savingRates ? 'Saving…' : 'Save Pricing Defaults'}
           </button>
@@ -736,7 +736,7 @@ export default function SettingsClient({
           <button
             onClick={saveFuelSettings}
             disabled={savingFuel}
-            className="px-5 py-2 bg-[#FF6600] hover:bg-[#E55A00] disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-lg transition-colors"
+            className="px-5 py-2 bg-[#16a34a] hover:bg-[#15803d] disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-lg transition-colors"
           >
             {savingFuel ? 'Saving…' : 'Save Vehicle Settings'}
           </button>
@@ -766,7 +766,7 @@ export default function SettingsClient({
                   onClick={() => saveMpiSetting(!offerMpi)}
                   aria-pressed={offerMpi}
                   className={`relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 focus:outline-none disabled:opacity-50 ${
-                    offerMpi ? 'border-[#FF6600] bg-[#FF6600]' : 'border-[#444] bg-[#333]'
+                    offerMpi ? 'border-[#16a34a] bg-[#16a34a]' : 'border-[#444] bg-[#333]'
                   }`}
                 >
                   <span
@@ -791,7 +791,7 @@ export default function SettingsClient({
               </div>
               <a
                 href="/billing"
-                className="flex-shrink-0 px-4 py-2 bg-[#FF6600] hover:bg-[#E55A00] text-white font-condensed font-bold text-xs rounded-lg transition-colors"
+                className="flex-shrink-0 px-4 py-2 bg-[#16a34a] hover:bg-[#15803d] text-white font-condensed font-bold text-xs rounded-lg transition-colors"
               >
                 Upgrade
               </a>
@@ -823,7 +823,7 @@ export default function SettingsClient({
                 onClick={() => saveBillConsumables(!billConsumables)}
                 aria-pressed={billConsumables}
                 className={`relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 focus:outline-none disabled:opacity-50 ${
-                  billConsumables ? 'border-[#FF6600] bg-[#FF6600]' : 'border-[#444] bg-[#333]'
+                  billConsumables ? 'border-[#16a34a] bg-[#16a34a]' : 'border-[#444] bg-[#333]'
                 }`}
               >
                 <span
@@ -861,7 +861,7 @@ export default function SettingsClient({
               onClick={() => saveSmsNotifSetting(!smsNotifEnabled)}
               aria-pressed={smsNotifEnabled}
               className={`relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 focus:outline-none disabled:opacity-50 ${
-                smsNotifEnabled ? 'border-[#FF6600] bg-[#FF6600]' : 'border-[#444] bg-[#333]'
+                smsNotifEnabled ? 'border-[#16a34a] bg-[#16a34a]' : 'border-[#444] bg-[#333]'
               }`}
             >
               <span
@@ -898,7 +898,7 @@ export default function SettingsClient({
             <button
               onClick={saveNotifPhone}
               disabled={savingNotifPhone}
-              className="px-5 py-2 bg-[#FF6600] hover:bg-[#E55A00] disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-lg transition-colors"
+              className="px-5 py-2 bg-[#16a34a] hover:bg-[#15803d] disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-lg transition-colors"
             >
               {savingNotifPhone ? 'Saving…' : 'Save Phone Number'}
             </button>

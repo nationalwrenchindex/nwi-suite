@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
-const ORANGE = '#FF6600'
+const ORANGE = '#16a34a'
 const GREEN  = '#16A34A'
 const BG     = '#F4F5F7'
 const CARD   = '#FFFFFF'

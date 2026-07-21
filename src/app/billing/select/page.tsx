@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import AppNav from '@/components/layout/AppNav'
 import ModuleSelectClient from '@/components/billing/ModuleSelectClient'
 
-export const metadata = { title: 'Choose Your Modules — National Wrench Index Suite™' }
+export const metadata = { title: 'Choose Your Modules' }
 
 export default async function BillingSelectPage({
   searchParams,

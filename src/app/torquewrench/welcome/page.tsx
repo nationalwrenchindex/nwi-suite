@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import AppNav from '@/components/layout/AppNav'
 
-export const metadata = { title: 'Welcome to TorqueWrench — National Wrench Index Suite™' }
+export const metadata = { title: 'Welcome to TorqueWrench' }
 
 export default async function TorqueWrenchWelcomePage() {
   const supabase = await createClient()

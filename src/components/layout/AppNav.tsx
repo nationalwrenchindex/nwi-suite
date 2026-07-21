@@ -92,9 +92,9 @@ export default function AppNav({
       ),
     },
     {
-      href: '/quickwrench',
-      label: 'QuickWrench',
-      active: pathname === '/quickwrench',
+      href: '/field-assist',
+      label: 'Field Assist',
+      active: pathname === '/field-assist',
       icon: (
         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
           <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
@@ -170,7 +170,7 @@ export default function AppNav({
 
   // Business-type filters (always hide, regardless of tier)
   const visibleNavItems = navItems.filter(item => {
-    if (item.href === '/quickwrench' && businessType === 'detailer') return false
+    if (item.href === '/field-assist' && businessType === 'detailer') return false
     if (item.href === '/inventory'   && businessType !== 'detailer') return false
     return true
   })
@@ -183,7 +183,7 @@ export default function AppNav({
     if (!modules) return false
     if (href === '/intel')      return !modules.includes('intel')
     if (href === '/financials') return !modules.includes('financials')
-    if (href === '/quickwrench') return !modules.includes('quickwrench')
+    if (href === '/field-assist') return !modules.includes('quickwrench')
     return false
   }
 
@@ -198,12 +198,18 @@ export default function AppNav({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center gap-4 h-16 sm:h-14">
         {/* Logo */}
         <Link href="/dashboard" className="flex-shrink-0 flex items-center gap-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/nwi-logo.png" alt="National Wrench Index Suite™" className="h-14 max-w-[180px] sm:h-12 sm:max-w-[200px] w-auto object-contain block" />
-          <span className="hidden md:block font-condensed font-bold text-sm leading-tight whitespace-nowrap">
-            <span style={{ color: '#FF6600' }}>National</span>{' '}
-            <span style={{ color: '#2969B0' }}>Wrench Index</span>
-            <span className="text-white/70">&#8482;</span>
+          {/* Temporary LP wordmark — replace with logo image when brand is confirmed */}
+          <span
+            className="flex items-center justify-center h-10 w-10 rounded-lg font-condensed font-extrabold text-lg text-white"
+            style={{ backgroundColor: '#16a34a' }}
+          >
+            LP
+          </span>
+          <span className="hidden md:flex flex-col leading-tight whitespace-nowrap">
+            <span className="font-condensed font-bold text-sm" style={{ color: '#16a34a' }}>
+              LawnPlatform
+            </span>
+            <span className="text-[10px] text-white/50">Built for lawn and landscape pros</span>
           </span>
         </Link>
 

@@ -6,139 +6,92 @@ interface TemplateVars {
 
 type TemplateFn = (vars: TemplateVars) => string
 
+// Landscaping review-request SMS templates. Keyed by normalized service type
+// (see SERVICE_TYPE_MAP). getSmsBody() selects the best-fit message.
 const templates: Record<string, TemplateFn> = {
-  oil_change: ({ customer_first_name, review_link }) =>
-    `Hey ${customer_first_name}! Hope your ride's running smooth after the oil change. Mind dropping a quick review? Really helps small shops like ours: ${review_link}`,
+  lawn_mowing: ({ customer_first_name, business_name, review_link }) =>
+    `Hi ${customer_first_name}, thanks for choosing ${business_name} for your lawn care today. If you're happy with how your yard looks, we'd love a quick Google review — it helps us keep serving great customers like you. ${review_link}`,
 
-  brake_service: ({ customer_first_name, review_link }) =>
-    `Hey ${customer_first_name} — brakes feeling solid? If we did right by you, a quick review would mean a lot: ${review_link}`,
+  seasonal_cleanup: ({ customer_first_name, business_name, review_link }) =>
+    `Hi ${customer_first_name}, your seasonal cleanup is done — your property is ready for the season. We'd appreciate a review if you're happy with the work. ${review_link}`,
 
-  diagnostic: ({ customer_first_name, review_link }) =>
-    `Thanks for letting us diagnose your ride, ${customer_first_name}. If we got you sorted, mind leaving a review? ${review_link}`,
+  fertilizing: ({ customer_first_name, business_name, review_link }) =>
+    `Hi ${customer_first_name}, your lawn treatment with ${business_name} is complete. If you're happy with the service, a quick Google review would mean the world to a small business. ${review_link}`,
 
-  tire_service: ({ customer_first_name, review_link }) =>
-    `Hey ${customer_first_name}, hope the tires are treating you right. Quick favor — could you drop us a Google review? ${review_link}`,
+  trimming: ({ customer_first_name, business_name, review_link }) =>
+    `Hi ${customer_first_name}, your trimming and pruning is done and looking sharp. If ${business_name} did right by you, a quick Google review goes a long way. ${review_link}`,
 
-  battery: ({ customer_first_name, review_link }) =>
-    `Hey ${customer_first_name} — battery good? If we got you back rolling, a Google review would mean the world to us: ${review_link}`,
+  tree_service: ({ customer_first_name, business_name, review_link }) =>
+    `Hi ${customer_first_name}, your tree and shrub work is complete. If you're happy with how everything looks, we'd really appreciate a Google review. ${review_link}`,
 
-  electrical: ({ customer_first_name, review_link }) =>
-    `Hey ${customer_first_name} — everything electric running right? If we tracked it down for you, a quick review goes a long way: ${review_link}`,
+  install: ({ customer_first_name, business_name, review_link }) =>
+    `Hi ${customer_first_name}, thanks for trusting ${business_name} with your landscape project. If you love the results, a Google review would help us out a ton. ${review_link}`,
 
-  cooling_system: ({ customer_first_name, review_link }) =>
-    `Hey ${customer_first_name}! Hope the cooling system's holding strong. If we kept things from overheating, a review would be awesome: ${review_link}`,
+  irrigation: ({ customer_first_name, business_name, review_link }) =>
+    `Hi ${customer_first_name}, your irrigation service is complete. If everything's running right, a quick Google review would mean a lot to us. ${review_link}`,
 
-  transmission: ({ customer_first_name, review_link }) =>
-    `Hey ${customer_first_name} — shifting smooth? Transmission work's no small thing. If we took care of you, a review means everything: ${review_link}`,
+  pressure_washing: ({ customer_first_name, business_name, review_link }) =>
+    `Hi ${customer_first_name}, hope your property is looking fresh and clean! If you're happy with the pressure washing, a Google review from you would really help ${business_name}. ${review_link}`,
 
-  suspension: ({ customer_first_name, review_link }) =>
-    `Hey ${customer_first_name}! How's the ride feeling? If we got the suspension right, mind dropping a quick review? ${review_link}`,
+  snow_removal: ({ customer_first_name, business_name, review_link }) =>
+    `Hi ${customer_first_name}, you're all cleared and safe to go. If ${business_name} took good care of you, we'd appreciate a quick Google review. ${review_link}`,
 
-  exhaust: ({ customer_first_name, review_link }) =>
-    `Hey ${customer_first_name} — running quiet now? If we took care of the exhaust, a Google review would really help us out: ${review_link}`,
-
-  tune_up: ({ customer_first_name, review_link }) =>
-    `Hey ${customer_first_name}! Feeling that fresh tune-up? If we got your engine humming again, a quick review would mean a lot: ${review_link}`,
-
-  inspection: ({ customer_first_name, review_link }) =>
-    `Thanks for trusting us with the inspection, ${customer_first_name}. If we gave you peace of mind, mind sharing a quick review? ${review_link}`,
-
-  towing: ({ customer_first_name, review_link }) =>
-    `Hey ${customer_first_name} — glad we could get you moving again. If we took good care of you, a Google review would mean a lot: ${review_link}`,
-
-  mobile_service: ({ customer_first_name, review_link }) =>
-    `Hey ${customer_first_name}! Really appreciate you letting us come out to you. If everything's running right, a quick Google review helps us a ton: ${review_link}`,
-
-  ac_service: ({ customer_first_name, review_link }) =>
-    `Hey ${customer_first_name}! Hope you're staying cool now. If we got your A/C blowing cold, a quick Google review would really help us out: ${review_link}`,
-
-  coolant_flush: ({ customer_first_name, review_link }) =>
-    `Hey ${customer_first_name} — fresh coolant in and running cool? If we took care of you, a Google review would mean a lot: ${review_link}`,
-
-  power_steering: ({ customer_first_name, review_link }) =>
-    `Hey ${customer_first_name}! Steering feeling smooth again? If we got you handling right, mind dropping a quick review? ${review_link}`,
-
-  fuel_system: ({ customer_first_name, review_link }) =>
-    `Hey ${customer_first_name} — running cleaner now? If the fuel system service did the trick, a Google review would really help: ${review_link}`,
-
-  default: ({ customer_first_name, review_link }) =>
-    `Hey ${customer_first_name} — hope everything's running right after today. A quick Google review would really help: ${review_link}`,
+  // GENERAL SERVICE — used for any landscaping service without a specific template
+  default: ({ customer_first_name, business_name, review_link }) =>
+    `Hi ${customer_first_name}, your service is complete. We hope your property looks exactly how you want it. If you have a moment, a Google review means the world to a small business. ${review_link}`,
 }
 
 const SERVICE_TYPE_MAP: Record<string, string> = {
-  oil_change:      'oil_change',
-  'oil change':    'oil_change',
-  brakes:          'brake_service',
-  brake_service:   'brake_service',
-  'brake service': 'brake_service',
-  brake_repair:    'brake_service',
-  diagnostic:      'diagnostic',
-  diagnostics:     'diagnostic',
-  tires:           'tire_service',
-  tire_service:    'tire_service',
-  'tire service':  'tire_service',
-  tire_rotation:   'tire_service',
-  battery:         'battery',
-  'battery replacement': 'battery',
-  electrical:      'electrical',
-  'electrical repair': 'electrical',
-  cooling:         'cooling_system',
-  cooling_system:  'cooling_system',
-  'cooling system': 'cooling_system',
-  radiator:        'cooling_system',
-  transmission:    'transmission',
-  'transmission service': 'transmission',
-  suspension:      'suspension',
-  'suspension repair': 'suspension',
-  exhaust:         'exhaust',
-  'exhaust repair': 'exhaust',
-  tune_up:         'tune_up',
-  'tune up':       'tune_up',
-  'tune-up':       'tune_up',
-  inspection:      'inspection',
-  'safety inspection': 'inspection',
-  towing:          'towing',
-  mobile_service:  'mobile_service',
-  'mobile service': 'mobile_service',
+  // Mowing / edging
+  'lawn mowing':        'lawn_mowing',
+  'lawn_mowing':        'lawn_mowing',
+  'mowing':             'lawn_mowing',
+  'lawn edging':        'lawn_mowing',
+  'edging':             'lawn_mowing',
 
-  // A/C Service
-  'a/c':                    'ac_service',
-  'ac':                     'ac_service',
-  'a/c service':            'ac_service',
-  'ac service':             'ac_service',
-  'air conditioning':       'ac_service',
-  'ac repair':              'ac_service',
-  'a/c repair':             'ac_service',
+  // Trimming / pruning / shaping
+  'trimming and pruning': 'trimming',
+  'trimming':           'trimming',
+  'pruning':            'trimming',
+  'shrub shaping':      'trimming',
+  'weed control':       'trimming',
 
-  // Tire Replacement
-  'tire replacement':       'tire_service',
-  'tire_replacement':       'tire_service',
+  // Tree work
+  'tree trimming':      'tree_service',
+  'tree service':       'tree_service',
 
-  // Engine Diagnostic
-  'engine diagnostic':      'diagnostic',
-  'engine_diagnostic':      'diagnostic',
+  // Fertilizing / turf treatments
+  'fertilizing':        'fertilizing',
+  'aeration':           'fertilizing',
+  'overseeding':        'fertilizing',
 
-  // Coolant Flush
-  'coolant flush':          'coolant_flush',
-  'coolant_flush':          'coolant_flush',
+  // Cleanups
+  'leaf removal and cleanup': 'seasonal_cleanup',
+  'leaf removal':       'seasonal_cleanup',
+  'spring cleanup':     'seasonal_cleanup',
+  'fall cleanup':       'seasonal_cleanup',
+  'cleanup':            'seasonal_cleanup',
+  'mulching':           'seasonal_cleanup',
 
-  // Power Steering
-  'power steering':         'power_steering',
-  'power steering service': 'power_steering',
-  'power_steering_service': 'power_steering',
+  // Installs
+  'landscape installation': 'install',
+  'sod installation':   'install',
+  'installation':       'install',
 
-  // Fuel System
-  'fuel system':            'fuel_system',
-  'fuel system service':    'fuel_system',
-  'fuel_system_service':    'fuel_system',
+  // Irrigation
+  'irrigation service and repair': 'irrigation',
+  'irrigation':         'irrigation',
 
-  // Pre-Purchase Inspection
-  'pre-purchase inspection': 'inspection',
-  'pre purchase inspection': 'inspection',
-  'prepurchase inspection':  'inspection',
+  // Pressure washing / gutters
+  'pressure washing':   'pressure_washing',
+  'gutter cleaning':    'pressure_washing',
 
-  // Other — explicit fallthrough to default
-  'other':                  'default',
+  // Snow
+  'snow removal':       'snow_removal',
+
+  // Custom — explicit fallthrough to general default
+  'custom service':     'default',
+  'other':              'default',
 }
 
 export function getSmsBody(

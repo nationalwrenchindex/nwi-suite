@@ -478,7 +478,7 @@ export default function BillingClient({
   // Handle redirect-back from Stripe
   useEffect(() => {
     if (searchParams.get('success') === 'true') {
-      setToast({ type: 'success', msg: 'Subscription activated! Welcome to National Wrench Index Suite™.' })
+      setToast({ type: 'success', msg: 'Subscription activated! Welcome to LawnPlatform.' })
     } else if (searchParams.get('canceled') === 'true') {
       setToast({ type: 'error', msg: 'Checkout was cancelled. No charge was made.' })
     }
@@ -605,7 +605,7 @@ export default function BillingClient({
         </h1>
         {!isActive && !isForemanOnly && (
           <p className="text-white/40 text-sm mt-1">
-            Subscribe to unlock National Wrench Index modules for your business.
+            Subscribe to unlock LawnPlatform modules for your business.
           </p>
         )}
       </div>
@@ -686,8 +686,8 @@ export default function BillingClient({
             )}
           </div>
 
-          {/* NWI Suite Plans */}
-          <p className="text-white/30 text-[11px] uppercase tracking-widest mb-3">NWI Suite Plans</p>
+          {/* LawnPlatform Plans */}
+          <p className="text-white/30 text-[11px] uppercase tracking-widest mb-3">LawnPlatform Plans</p>
 
           {/* Row 1: Starter, Pro, Full Suite */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-5">

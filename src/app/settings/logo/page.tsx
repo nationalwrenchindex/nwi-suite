@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import AppNav from '@/components/layout/AppNav'
 import LogoUploadClient from '@/components/settings/LogoUploadClient'
 
-export const metadata = { title: 'Business Logo — National Wrench Index Suite™' }
+export const metadata = { title: 'Business Logo' }
 
 export default async function LogoPage() {
   const supabase = await createClient()

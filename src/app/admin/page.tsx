@@ -12,7 +12,7 @@ import { FOREMAN_SUBSCRIBER_CAP } from '@/lib/foreman/config'
 
 const FOUNDER_ID = '4a8c046f-7db3-42bb-8422-fd47efb7678c'
 
-export const metadata = { title: 'Admin — NWI Suite' }
+export const metadata = { title: 'Admin — LawnPlatform' }
 
 const TIER_PRICE = Object.fromEntries(PLANS.map(p => [p.tier, p.price]))
 const TIER_LABEL: Record<string, string> = {

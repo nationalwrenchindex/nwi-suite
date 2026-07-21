@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import AppNav from '@/components/layout/AppNav'
 import InventoryClient from '@/components/inventory/InventoryClient'
 
-export const metadata = { title: 'Inventory — National Wrench Index Suite™' }
+export const metadata = { title: 'Inventory' }
 
 export default async function InventoryPage() {
   const supabase = await createClient()

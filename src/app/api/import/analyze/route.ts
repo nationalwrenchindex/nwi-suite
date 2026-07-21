@@ -45,7 +45,7 @@ export async function POST(req: Request) {
     messages: [
       {
         role: 'user',
-        content: `You help import data into NWI Suite, a platform for mobile mechanics and auto technicians.
+        content: `You help import data into LawnPlatform, a platform for mobile mechanics and auto technicians.
 
 The user uploaded a CSV with these column headers:
 ${headers.map(h => `"${h}"`).join(', ')}

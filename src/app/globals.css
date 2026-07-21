@@ -174,7 +174,7 @@ html.light {
 
   /* Dashboard KPI / stat cards — orange left accent */
   html.light .kpi-card {
-    border-left: 3px solid #FF6600;
+    border-left: 3px solid #16a34a;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   }
   html.light .kpi-card:hover {
@@ -183,7 +183,7 @@ html.light {
 
   /* Scheduler job cards — blue left accent */
   html.light .job-card {
-    border-left: 3px solid #2969B0;
+    border-left: 3px solid #15803d;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   }
   html.light .job-card:hover {

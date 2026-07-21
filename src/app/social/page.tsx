@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import AppNav from '@/components/layout/AppNav'
 import SocialClient from '@/components/social/SocialClient'
 
-export const metadata = { title: 'NWI Social — National Wrench Index Suite™' }
+export const metadata = { title: 'NWI Social' }
 
 export default async function SocialPage() {
   const supabase = await createClient()

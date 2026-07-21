@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
-const ORANGE = '#FF6600'
+const ORANGE = '#16a34a'
 
 export default function InvoiceListActions({
   invoiceId,
@@ -66,7 +66,7 @@ export default function InvoiceListActions({
         href={`/api/hd/invoices/${invoiceId}/pdf`}
         target="_blank"
         className="text-xs font-medium px-2.5 py-1.5 rounded-lg"
-        style={{ background: '#EBF5FF', color: '#2969B0', minHeight: 32, lineHeight: '1.8' }}
+        style={{ background: '#EBF5FF', color: '#15803d', minHeight: 32, lineHeight: '1.8' }}
       >
         PDF
       </Link>

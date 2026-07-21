@@ -9,8 +9,10 @@ import DashboardShareButton from '@/components/dashboard/DashboardShareButton'
 import BookingPageCard from '@/components/dashboard/BookingPageCard'
 import DashboardQuickWrenchCard from '@/components/dashboard/DashboardQuickWrenchCard'
 import InboxBell from '@/components/layout/InboxBell'
+import NavigateButton from '@/components/common/NavigateButton'
+import { getSeasonalSuggestions } from '@/lib/landscaping/seasonal'
 
-export const metadata = { title: 'Dashboard — National Wrench Index Suite\u2122' }
+export const metadata = { title: 'Dashboard' }
 
 // ─── Local types ──────────────────────────────────────────────────────────────
 
@@ -196,6 +198,11 @@ function JobRow({ job, isLast }: { job: TodayJob; isLast: boolean }) {
         {job.location_address && (
           <p className="text-white/20 text-xs mt-0.5 truncate">📍 {job.location_address}</p>
         )}
+        {job.location_address && (
+          <div className="mt-1.5">
+            <NavigateButton address={job.location_address} compact />
+          </div>
+        )}
       </div>
 
       {/* Link */}
@@ -380,18 +387,15 @@ export default async function DashboardPage({
 
   const businessType = (profile as Record<string, unknown>).business_type as string | undefined
 
-  const professionLabels: Record<string, string> = {
-    mobile_mechanic:  'Mobile Mechanic',
-    auto_electrician: 'Auto Electrician',
-    diagnostician:    'Diagnostician',
-    tire_technician:  'Tire Technician',
-    other:            'Auto Technician',
-  }
-
   // Detailers get a clean "Mobile Detailer" label instead of profession_type
   const roleLabel = businessType === 'detailer'
     ? 'Mobile Detailer'
-    : (professionLabels[profile.profession_type ?? ''] ?? 'Technician')
+    : 'Landscaper'
+
+  // Time-of-day greeting for the welcome banner (server-rendered).
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+  const firstName = (profile.full_name ?? user.email ?? '').split(' ')[0]
 
   return (
     <div className="min-h-dvh bg-dark flex flex-col">
@@ -418,9 +422,14 @@ export default async function DashboardPage({
                 {roleLabel} · {dayLabel}
               </p>
               <h1 className="font-condensed font-bold text-3xl sm:text-4xl text-white tracking-wide mb-0.5">
-                {profile.full_name ?? user.email}
+                {greeting}, {firstName}
               </h1>
-              <p className="text-white/60 text-sm">{profile.business_name}</p>
+              <p className="text-white/70 text-sm">
+                {todayJobs.length === 0
+                  ? 'No lawn services scheduled today.'
+                  : `${todayJobs.length} lawn ${todayJobs.length === 1 ? 'service' : 'services'} scheduled today.`}
+              </p>
+              <p className="text-white/50 text-xs mt-0.5">{profile.business_name}</p>
               {profile.service_area_description && (
                 <p className="text-white/40 text-xs mt-1">📍 {profile.service_area_description}</p>
               )}
@@ -453,9 +462,9 @@ export default async function DashboardPage({
         {/* ── KPI cards ── */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <KpiCard
-            label="Today's Jobs"
+            label="Today's Services"
             value={String(todayJobs.length)}
-            sub={todayJobs.length === 1 ? '1 appointment' : `${todayJobs.length} appointments`}
+            sub={todayJobs.length === 1 ? '1 property visit' : `${todayJobs.length} property visits`}
             accent="orange"
             icon={
               <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
@@ -506,6 +515,30 @@ export default async function DashboardPage({
           />
         </div>
 
+        {/* ── This Month — Consider Offering (seasonal) ── */}
+        {(() => {
+          const seasonal = getSeasonalSuggestions()
+          if (!seasonal.services.length) return null
+          return (
+            <div className="nwi-card border border-orange/20">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-lg" aria-hidden>🌤️</span>
+                <p className="font-condensed font-bold text-white text-lg tracking-wide">
+                  THIS MONTH — CONSIDER OFFERING
+                </p>
+                <span className="text-white/30 text-xs">{seasonal.season}</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {seasonal.services.map((s) => (
+                  <span key={s} className="rounded-full bg-orange/10 border border-orange/30 text-orange text-xs px-3 py-1.5">
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )
+        })()}
+
         {/* ── Main content grid ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
@@ -533,10 +566,10 @@ export default async function DashboardPage({
                       <line x1="3"  y1="10" x2="21" y2="10" />
                     </svg>
                   </div>
-                  <p className="text-white/25 text-sm font-medium">No jobs scheduled today</p>
+                  <p className="text-white/25 text-sm font-medium">No services scheduled yet. Share your booking link to get started.</p>
                   <Link href="/scheduler"
                     className="mt-3 inline-flex items-center gap-1 text-xs text-orange hover:text-orange/80 transition-colors">
-                    + Book a job
+                    + Book a service
                   </Link>
                 </div>
               ) : (

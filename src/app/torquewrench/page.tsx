@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { hasTorqueWrenchAccess } from '@/lib/subscription'
 import AppNav from '@/components/layout/AppNav'
 
-export const metadata = { title: 'TorqueWrench — National Wrench Index Suite™' }
+export const metadata = { title: 'TorqueWrench' }
 
 function statusBadge(status: string, reviewLeft: boolean) {
   if (reviewLeft)         return { label: 'Review Left',  cls: 'text-success border-success/30 bg-success/10' }
