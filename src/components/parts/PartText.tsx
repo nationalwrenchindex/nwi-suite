@@ -17,7 +17,7 @@ export default function PartText({
   vendor?:    PartVendor
   className?: string
 }) {
-  const segments = linkifyPartNumbers(text)
+  const segments = linkifyPartNumbers(text, vendor)
   return (
     <>
       {segments.map((seg, i) =>

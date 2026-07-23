@@ -19,15 +19,26 @@ const PART_PATTERNS: RegExp[] = [
   /\b(\d{7,10})\b/g,                        // standalone 7-10 digit, e.g. 84778360
 ]
 
+// TK / Carrier reefer part numbers are commonly written bare and dashed
+// (66-8560, 41-2345, 25-39135-00). Only enabled for tk/carrier vendors — in the
+// LD automotive context this would false-positive on specs like "10-15 ohms" or
+// "0.6-0.8mm". The min widths (\d{2}-\d{4,5}) keep those specs out.
+const DASHED_REEFER_PATTERN = /\b(\d{2}-\d{4,5}(?:-\d{2})?)\b/g
+
 interface Hit { start: number; end: number; value: string }
 
 // Split text into ordered text/part segments. Every character of the original
-// text is preserved across the returned segments (nothing is dropped).
-export function linkifyPartNumbers(text: string): PartSegment[] {
+// text is preserved across the returned segments (nothing is dropped). The
+// vendor decides whether the bare dashed reefer pattern is included.
+export function linkifyPartNumbers(text: string, vendor: PartVendor = 'auto'): PartSegment[] {
   if (!text) return [{ type: 'text', content: text ?? '' }]
 
+  const patterns = vendor === 'tk' || vendor === 'carrier'
+    ? [...PART_PATTERNS, DASHED_REEFER_PATTERN]
+    : PART_PATTERNS
+
   const hits: Hit[] = []
-  for (const pattern of PART_PATTERNS) {
+  for (const pattern of patterns) {
     // Fresh RegExp per pass so the global lastIndex state never leaks between calls.
     const re = new RegExp(pattern.source, pattern.flags)
     let m: RegExpExecArray | null
