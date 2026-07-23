@@ -22,6 +22,7 @@ function extractHDParts(text: string | null): PartInput[] {
 
 const HD_ORANGE = '#E85D24'
 const HD_BLUE   = '#1A6BAF'
+const NWI_BLUE  = '#2969B0'   // Repair Labor Guide accent
 
 interface ModelGroup { group: string; models: string[] }
 
@@ -791,6 +792,115 @@ function SuggestedRepairs({
               </button>
             )
           })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Repair Labor Guide ──────────────────────────────────────────────────────
+// Read-only R&R labor-time reference matched to the diagnostic's category. Unlike
+// Suggested Repairs, nothing here is selectable — the tech reads it to quote, and
+// still picks the actual repairs performed in Suggested Repairs. Collapsed by
+// default; tap the header to expand. Reuses the repairItems already fetched from
+// GET /api/hd/repair-items when the diagnostic loaded.
+
+interface LaborGuideGroup {
+  description:   string
+  truck:         number | null
+  trailer:       number | null
+  both:          number | null
+  refrigeration: { service: string | null; hours: number | null } | null
+}
+
+// Collapse rows sharing a description into one entry so a truck row and a trailer
+// row for the same repair render as one card with both lines (matching the guide
+// mockup). applies_to === 'both' wins over per-unit rows.
+function buildLaborGuideGroups(items: RepairItem[]): LaborGuideGroup[] {
+  const map = new Map<string, LaborGuideGroup>()
+  for (const it of items) {
+    const key = it.description.trim().toLowerCase()
+    let g = map.get(key)
+    if (!g) {
+      g = { description: it.description.trim(), truck: null, trailer: null, both: null, refrigeration: null }
+      map.set(key, g)
+    }
+    if (it.applies_to === 'truck')        g.truck   = it.mobile_hours
+    else if (it.applies_to === 'trailer') g.trailer = it.mobile_hours
+    else                                  g.both    = it.mobile_hours
+    if (it.requires_refrigeration) g.refrigeration = { service: it.refrigeration_service, hours: it.refrigeration_hours }
+  }
+  return [...map.values()]
+}
+
+function fmtGuideHours(n: number | null): string {
+  return n != null ? `${n} hrs mobile` : 'Not specified'
+}
+
+function RepairLaborGuide({ items, category }: { items: RepairItem[]; category?: string | null }) {
+  const [open, setOpen] = useState(false)
+
+  // Soft category filter: prefer items in the diagnostic's category, but never
+  // hide the whole guide — if nothing matches, fall back to all loaded items
+  // (which were already category-filtered when fetched).
+  const byCategory = category
+    ? items.filter(it => (it.category ?? '').toLowerCase() === category.toLowerCase())
+    : items
+  const effective = byCategory.length > 0 ? byCategory : items
+
+  const groups = buildLaborGuideGroups(effective)
+  if (groups.length === 0) return null
+
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ background: '#0d1f35', border: '1px solid #14263f', borderLeft: `3px solid ${NWI_BLUE}` }}>
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left"
+      >
+        <span className="min-w-0">
+          <span className="text-xs uppercase tracking-widest" style={{ color: NWI_BLUE }}>Repair Labor Guide</span>
+          <span className="block text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
+            R&amp;R labor times — reference only. Read it to quote; select repairs below.
+          </span>
+        </span>
+        <span className="text-sm flex-shrink-0" style={{ color: NWI_BLUE }}>{open ? '▾' : '▸'}</span>
+      </button>
+      {open && (
+        <div className="px-4 pb-4 divide-y" style={{ borderColor: '#14263f' }}>
+          {groups.map((g, i) => (
+            <div key={i} className="py-3 first:pt-1">
+              <p className="text-sm" style={{ color: 'rgba(255,255,255,0.85)' }}>{g.description}</p>
+              <div className="mt-1 space-y-0.5">
+                {g.both != null && (
+                  <div className="flex justify-between gap-3 text-xs">
+                    <span style={{ color: 'rgba(255,255,255,0.45)' }}>Both</span>
+                    <span style={{ color: '#fff' }}>{fmtGuideHours(g.both)}</span>
+                  </div>
+                )}
+                {g.both == null && g.truck != null && (
+                  <div className="flex justify-between gap-3 text-xs">
+                    <span style={{ color: 'rgba(255,255,255,0.45)' }}>Truck unit</span>
+                    <span style={{ color: '#fff' }}>{fmtGuideHours(g.truck)}</span>
+                  </div>
+                )}
+                {g.both == null && g.trailer != null && (
+                  <div className="flex justify-between gap-3 text-xs">
+                    <span style={{ color: 'rgba(255,255,255,0.45)' }}>Trailer unit</span>
+                    <span style={{ color: '#fff' }}>{fmtGuideHours(g.trailer)}</span>
+                  </div>
+                )}
+                {g.refrigeration && (
+                  <div className="flex justify-between gap-3 text-xs">
+                    <span style={{ color: 'rgba(255,255,255,0.45)' }}>
+                      + Refrigeration Service {g.refrigeration.service ?? ''}
+                    </span>
+                    <span style={{ color: '#fff' }}>{fmtGuideHours(g.refrigeration.hours)}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
@@ -2907,6 +3017,10 @@ export default function HDQuickWrenchPage() {
             )}
 
             {analysis !== null && (
+              <RepairLaborGuide items={repairItems} category={guessRepairCategory(analysis)} />
+            )}
+
+            {analysis !== null && (
               <SuggestedRepairs
                 loading={repairLoading}
                 items={repairItems}
@@ -3214,6 +3328,10 @@ export default function HDQuickWrenchPage() {
               >
                 <span>🚚</span> Get Parts Delivered
               </button>
+            )}
+
+            {truckAnalysis !== null && (
+              <RepairLaborGuide items={repairItems} category="engine" />
             )}
 
             {truckAnalysis !== null && (
