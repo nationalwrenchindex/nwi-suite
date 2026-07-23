@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { QWVehicle } from '@/types/quickwrench'
 import PartsOnTheWay, { type PartInput } from '@/components/parts-delivery/PartsOnTheWay'
+import PartText from '@/components/parts/PartText'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -436,7 +437,7 @@ function DTCPanel({ vehicle, onAddDTCJob }: {
                 {result.parts_needed!.map((p, i) => (
                   <li key={i} className="flex gap-2 text-white/70 text-sm">
                     <span className="text-orange flex-shrink-0 mt-0.5">•</span>
-                    {p}
+                    <span><PartText text={p} vendor="auto" /></span>
                   </li>
                 ))}
               </ul>

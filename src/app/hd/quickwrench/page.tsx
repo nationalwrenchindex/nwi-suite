@@ -4,6 +4,8 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { runGaugeDiagnostic, SEVERITY_CONFIG } from '@/lib/hd/gauge-diagnostic'
 import PartsOnTheWay, { type PartInput } from '@/components/parts-delivery/PartsOnTheWay'
+import PartText from '@/components/parts/PartText'
+import type { PartVendor } from '@/lib/parts/parse-part-numbers'
 
 // Best-effort parse of the Parts Manager result text into structured parts for
 // delivery. Each meaningful line → { name, oem } with any part-number token pulled out.
@@ -234,7 +236,7 @@ function parseAnalysis(text: string): Array<{ key: SectionKey; content: string }
 // numbered-list render path in this file.
 const stripListNumber = (line: string) => line.trim().replace(/^(?:\d+\.\s+)+/, '').trim()
 
-function SectionContent({ sectionKey, content }: { sectionKey: SectionKey; content: string }) {
+function SectionContent({ sectionKey, content, vendor = 'auto' }: { sectionKey: SectionKey; content: string; vendor?: PartVendor }) {
   const def = SECTION_DEFS.find(s => s.key === sectionKey)!
 
   if (sectionKey === 'MOST LIKELY CAUSES' || sectionKey === 'DIAGNOSTIC STEPS') {
@@ -274,7 +276,7 @@ function SectionContent({ sectionKey, content }: { sectionKey: SectionKey; conte
       <div className="flex flex-wrap gap-2">
         {items.map((p, i) => (
           <span key={i} className="text-xs px-2.5 py-1 rounded-full" style={{ background: '#1e3040', color: 'rgba(255,255,255,0.7)' }}>
-            {p}
+            <PartText text={p} vendor={vendor} />
           </span>
         ))}
       </div>
@@ -653,13 +655,14 @@ function LaborEstimate({ book, mobile }: { book: number; mobile: number }) {
 // button. Rendered above Create Quote on every diagnostic result.
 
 function PartsManager({
-  loading, error, result, onRun, onClear,
+  loading, error, result, onRun, onClear, vendor = 'auto',
 }: {
   loading: boolean
   error:   string | null
   result:  string | null
   onRun:   () => void
   onClear: () => void
+  vendor?: PartVendor
 }) {
   return (
     <>
@@ -690,7 +693,7 @@ function PartsManager({
           <div className="px-4 pt-2 pb-3 space-y-1">
             {result.split('\n').map((line, i) =>
               line.trim()
-                ? <p key={i} className="text-sm leading-snug" style={{ color: 'rgba(255,255,255,0.85)' }}>{line}</p>
+                ? <p key={i} className="text-sm leading-snug" style={{ color: 'rgba(255,255,255,0.85)' }}><PartText text={line} vendor={vendor} /></p>
                 : <div key={i} className="h-1.5" />
             )}
           </div>
@@ -917,6 +920,7 @@ function AnalysisCard({
   alarmPattern,
   tkSources,
   codeStatus = 'ai',
+  partVendor = 'auto',
 }: {
   parsedSections: Array<{ key: SectionKey; content: string }>
   analysis: string
@@ -925,6 +929,7 @@ function AnalysisCard({
   alarmPattern: AlarmPattern | null
   tkSources: TKSource[]
   codeStatus?: 'verified' | 'ai' | 'unverified'
+  partVendor?: PartVendor
 }) {
   // SAFETY-FIRST: pull any SAFETY WARNINGS section out of the normal flow and
   // render it at the very top; detect hazard categories from the full text to
@@ -1090,7 +1095,7 @@ function AnalysisCard({
                   <p className="text-xs uppercase tracking-widest mb-2" style={{ color: def.color }}>
                     {def.label}
                   </p>
-                  <SectionContent sectionKey={key} content={content} />
+                  <SectionContent sectionKey={key} content={content} vendor={partVendor} />
                 </div>
               )
             })
@@ -2990,6 +2995,7 @@ export default function HDQuickWrenchPage() {
                 alarmPattern={alarmPattern}
                 tkSources={tkSources}
                 codeStatus={codeStatus}
+                partVendor={manufacturer === 'Thermo King' ? 'tk' : 'carrier'}
               />
             )}
 
@@ -3002,6 +3008,7 @@ export default function HDQuickWrenchPage() {
                 result={partsResult}
                 onRun={runReeferPartsManager}
                 onClear={clearParts}
+                vendor={manufacturer === 'Thermo King' ? 'tk' : 'carrier'}
               />
             )}
 
