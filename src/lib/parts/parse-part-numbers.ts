@@ -81,13 +81,13 @@ export function linkifyPartNumbers(text: string, vendor: PartVendor = 'auto'): P
   return segments
 }
 
-// Google Shopping URL for a part number, so the tech lands on retailer prices
-// and local availability (tbm=shop). Reefer parts (TK / Carrier) filter to the
-// two reefer OEMs; every other suite filters to the major automotive chains.
+// Google search URL for a part number, so the tech lands on retailer prices and
+// local availability. Reefer parts (TK / Carrier) filter to the two reefer OEMs;
+// every other suite filters to the major automotive chains.
 export function partSearchUrl(partNumber: string, vendor: PartVendor = 'auto'): string {
   const filter =
     vendor === 'tk' || vendor === 'carrier'
       ? 'thermo+king+parts+OR+%22carrier+transicold%22+parts'
       : 'AutoZone+OR+%22O%27Reilly%22+OR+NAPA+OR+%22Advance+Auto%22'
-  return `https://www.google.com/search?q=${encodeURIComponent(partNumber)}+${filter}&tbm=shop`
+  return `https://www.google.com/search?q=${encodeURIComponent(partNumber)}+${filter}`
 }
