@@ -1794,7 +1794,7 @@ function QuoteTab({
                     return (
                       <div key={p.id} className="rounded-lg p-2" style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.06)' }}>
                         <div className="flex items-center justify-between gap-2 mb-1.5">
-                          <span className="text-white/70 text-xs truncate flex-1" title={p.name}>{p.qty > 1 ? `${p.qty}× ` : ''}{shortPartLabel(p.name)}</span>
+                          <span className="text-white/70 text-xs break-words min-w-0 flex-1" title={p.name}>{p.qty > 1 ? `${p.qty}× ` : ''}{shortPartLabel(p.name)}</span>
                           <span className="text-white/60 text-xs whitespace-nowrap">{fmt(custPrice * p.qty)}</span>
                         </div>
                         <div className="flex items-center gap-2">
