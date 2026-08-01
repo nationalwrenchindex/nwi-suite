@@ -740,11 +740,11 @@ export default function NewQuotePage() {
           {lineItems.length > 0 ? (
             <div style={{ border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden' }}>
               <div
-                className="grid text-xs font-semibold uppercase tracking-wide px-4 py-2.5"
-                style={{ gridTemplateColumns: '1fr 90px 110px 80px 90px 28px', gap: 8, background: '#F9FAFB', color: MUTED, borderBottom: `1px solid ${BORDER}` }}
+                className="grid grid-cols-[1fr_110px_80px_90px_28px] md:grid-cols-[1fr_90px_110px_80px_90px_28px] text-xs font-semibold uppercase tracking-wide px-4 py-2.5"
+                style={{ gap: 8, background: '#F9FAFB', color: MUTED, borderBottom: `1px solid ${BORDER}` }}
               >
                 <span>Description</span>
-                <span className="text-right">Book</span>
+                <span className="text-right hidden md:block">Book</span>
                 <span className="text-right">Mobile</span>
                 <span className="text-right">Rate</span>
                 <span className="text-right">Amount</span>
@@ -753,8 +753,8 @@ export default function NewQuotePage() {
               {lineItems.map(item => (
                 <div
                   key={item.id}
-                  className="grid items-center px-4 py-3 gap-2"
-                  style={{ gridTemplateColumns: '1fr 90px 110px 80px 90px 28px', borderBottom: `1px solid #F9FAFB` }}
+                  className="grid grid-cols-[1fr_110px_80px_90px_28px] md:grid-cols-[1fr_90px_110px_80px_90px_28px] items-center px-4 py-3 gap-2"
+                  style={{ borderBottom: `1px solid #F9FAFB` }}
                 >
                   {item.type === 'labor' ? (
                     <>
@@ -778,6 +778,7 @@ export default function NewQuotePage() {
                         type="number" min={0} step={0.25}
                         value={item.book_hours}
                         onChange={e => updateLineHours(item.id, 'book', e.target.value)}
+                        className="hidden md:block"
                         style={{ ...lineInp, textAlign: 'right' }}
                         aria-label="Book hours"
                       />
@@ -803,7 +804,7 @@ export default function NewQuotePage() {
                           <span className="block text-xs font-mono mt-0.5 ml-7" style={{ color: MUTED }}>{item.part_number}</span>
                         )}
                       </div>
-                      <span className="text-xs text-right" style={{ color: MUTED }}>{`${item.quantity}×`}</span>
+                      <span className="text-xs text-right hidden md:block" style={{ color: MUTED }}>{`${item.quantity}×`}</span>
                       <span className="text-xs text-right" style={{ color: MUTED }}>{fmt(item.unit_cost)}</span>
                       <span className="text-xs text-right" style={{ color: MUTED }} />
                       <span className="text-sm font-semibold text-right" style={{ color: TEXT }}>{fmt(item.amount)}</span>
