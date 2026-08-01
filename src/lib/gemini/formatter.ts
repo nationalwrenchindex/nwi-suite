@@ -61,10 +61,11 @@ const PARTS_FORMAT_INSTRUCTION = `Format this parts list cleanly. Each part in i
 export async function formatParts(rawGeminiText: string): Promise<string> {
   if (!isGeminiConfigured() || !rawGeminiText.trim()) return rawGeminiText
   try {
+    // No maxOutputTokens cap: gemini-3.6-flash is a thinking model and a small
+    // cap is consumed by reasoning tokens, leaving the visible output empty.
     const formatted = (await generateText(
       `Parts list to format:\n\n${rawGeminiText}`,
       PARTS_FORMAT_INSTRUCTION,
-      { maxOutputTokens: 1500 },
     )).trim()
     return formatted || rawGeminiText
   } catch (err) {
@@ -97,10 +98,12 @@ export async function formatDiagnostic(rawGeminiText: string, context: FormatCon
   ].filter(Boolean).join('\n')
 
   try {
+    // No maxOutputTokens cap: gemini-3.6-flash is a thinking model and a small
+    // cap is consumed by reasoning tokens, leaving the visible output empty —
+    // which would drop the whole formatted diagnostic for unverified codes.
     const formatted = (await generateText(
       `${ctxLine ? ctxLine + '\n\n' : ''}Diagnostic content to format:\n\n${rawGeminiText}`,
       FORMAT_INSTRUCTION,
-      { maxOutputTokens: 1500 },
     )).trim()
     return formatted || rawGeminiText
   } catch (err) {

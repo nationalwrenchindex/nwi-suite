@@ -1129,7 +1129,9 @@ export async function POST(req: NextRequest) {
       // Primary: Gemini. Fallback: Haiku (no grounding) so an outage still answers.
       let analysis = ''
       try {
-        analysis = (await generateText(userPrompt, ELECTRICAL_SYSTEM_PROMPT, { maxOutputTokens: 1500 })).trim()
+        // No maxOutputTokens cap: gemini-3.6-flash is a thinking model — a small
+        // cap is eaten by reasoning tokens and returns empty visible output.
+        analysis = (await generateText(userPrompt, ELECTRICAL_SYSTEM_PROMPT)).trim()
       } catch (gemErr) {
         console.error('[hd/quickwrench] Electrical Gemini failed — trying Haiku fallback', gemErr)
       }
