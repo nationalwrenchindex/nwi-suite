@@ -43,7 +43,7 @@ Include all CSV headers in your response. Use null for field_key when no field m
   let mapping: Array<{ csv_header: string; field_key: string | null; confidence: string }> = []
 
   try {
-    const text = (await generateText(prompt, 'You map CSV columns to fleet-unit import fields. Return only a valid JSON array, no prose.', { maxOutputTokens: 512 })) || '[]'
+    const text = (await generateText(prompt, 'You map CSV columns to fleet-unit import fields. Return only a valid JSON array, no prose.')) || '[]'
     const jsonMatch = text.match(/\[[\s\S]*\]/)
     if (jsonMatch) mapping = JSON.parse(jsonMatch[0])
   } catch {

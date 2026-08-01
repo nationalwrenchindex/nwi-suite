@@ -60,7 +60,7 @@ Example: {"Customer": "customer_full_name", "Phone": "customer_phone", "Invoice 
 
   let text = ''
   try {
-    text = await generateText(prompt, 'You map CSV columns to NWI import fields. Return only a valid JSON object, no prose.', { maxOutputTokens: 512 })
+    text = await generateText(prompt, 'You map CSV columns to NWI import fields. Return only a valid JSON object, no prose.')
   } catch (err) {
     console.error('[import/analyze] Gemini call failed', err)
     return NextResponse.json({ error: 'AI service error' }, { status: 502 })
