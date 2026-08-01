@@ -1,14 +1,15 @@
 // POST /api/quickwrench/tech-guide
-// Generates a vehicle-specific repair guide via Claude AI.
-// Shared Claude logic lives in src/lib/tech-guide.ts.
+// Generates a vehicle-specific repair guide via Gemini (Google Search grounded).
+// Shared guide prompt + JSON parsing live in src/lib/tech-guide.ts.
 
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { hasQuickWrenchAccess } from '@/lib/subscription'
-import { callTechGuide } from '@/lib/tech-guide'
+import { callTechGuideGemini } from '@/lib/tech-guide'
+import { isGeminiConfigured } from '@/lib/gemini/client'
 import type { TechGuideRequest } from '@/types/quickwrench'
 
-// Two Claude attempts at up to 45s each; 60s prevents Vercel's default timeout kill.
+// Gemini grounding runs up to 55s per attempt; 60s prevents Vercel's default timeout kill.
 export const maxDuration = 60
 
 export async function POST(req: NextRequest) {
@@ -19,12 +20,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'QuickWrench requires QuickWrench or Elite plan.' }, { status: 403 })
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) {
-    console.error('[tech-guide] ANTHROPIC_API_KEY is not set in environment variables')
+  if (!isGeminiConfigured()) {
+    console.error('[tech-guide] GEMINI_API_KEY is not set in environment variables')
     return NextResponse.json({ error: 'AI service not configured.' }, { status: 503 })
   }
-  console.log('[tech-guide] API key prefix:', apiKey.slice(0, 14) + '…')
 
   let body: TechGuideRequest
   try {
@@ -38,7 +37,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'vehicle and job are required.' }, { status: 400 })
   }
 
-  const guide = await callTechGuide(apiKey, vehicle, job)
+  const guide = await callTechGuideGemini(vehicle, job)
 
   if (!guide) {
     return NextResponse.json(

@@ -1,7 +1,10 @@
-// Shared Claude API call for vehicle-specific tech guides.
-// Imported by both /api/quickwrench/tech-guide and /api/inspections/[id]/generate-quote.
+// Shared vehicle-specific tech-guide generation.
+// - callTechGuide (Claude) is used by /api/inspections/[id]/generate-quote.
+// - callTechGuideGemini (Gemini) is used by /api/quickwrench/tech-guide (LD is Gemini-only).
+// Both share the same SYSTEM_PROMPT and JSON parser.
 
 import type { TechGuide } from '@/types/quickwrench'
+import { generateDiagnostic } from '@/lib/gemini/client'
 
 const SYSTEM_PROMPT = `You are an automotive technician. Respond ONLY with raw JSON — no markdown, no backticks, no preamble, no explanation after. First character must be { and last character must be }. Do not write anything before or after the JSON object.
 
@@ -141,6 +144,50 @@ Provide the complete technical guide for this specific vehicle and job.`
     } catch (retryErr) {
       console.error(
         '[callTechGuide] Both attempts failed for:',
+        job.name,
+        retryErr instanceof Error ? retryErr.message : retryErr,
+      )
+      return null
+    }
+  }
+}
+
+// Gemini variant used by the LD QuickWrench tech-guide route. Same prompt and
+// JSON parser as the Claude path; generateDiagnostic handles grounding + the 55s
+// timeout. Two attempts before giving up (mirrors callTechGuide).
+export async function callTechGuideGemini(
+  vehicle: TechGuideVehicle,
+  job:     TechGuideJobRef,
+): Promise<TechGuide | null> {
+  const vehicleDesc = [vehicle.year, vehicle.make, vehicle.model, vehicle.engine]
+    .filter(Boolean)
+    .join(' ')
+
+  const userMessage = `Vehicle: ${vehicleDesc || 'Generic vehicle'}
+Job: ${job.name}
+Category: ${job.categoryLabel ?? job.name}
+
+Provide the complete technical guide for this specific vehicle and job.`
+
+  async function attempt(): Promise<TechGuide> {
+    const { text } = await generateDiagnostic(userMessage, SYSTEM_PROMPT)
+    if (!text) throw new Error('Empty response from Gemini')
+    return parseRaw(text)
+  }
+
+  try {
+    return await attempt()
+  } catch (firstErr) {
+    console.warn(
+      '[callTechGuideGemini] First attempt failed, retrying:',
+      job.name,
+      firstErr instanceof Error ? firstErr.message : firstErr,
+    )
+    try {
+      return await attempt()
+    } catch (retryErr) {
+      console.error(
+        '[callTechGuideGemini] Both attempts failed for:',
         job.name,
         retryErr instanceof Error ? retryErr.message : retryErr,
       )

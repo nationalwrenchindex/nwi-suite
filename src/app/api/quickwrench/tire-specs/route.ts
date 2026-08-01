@@ -1,6 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { hasQuickWrenchAccess } from '@/lib/subscription'
+import { generateDiagnostic, isGeminiConfigured } from '@/lib/gemini/client'
+
+// Gemini grounding runs up to 55s; 60s prevents Vercel's default timeout kill.
+export const maxDuration = 60
 
 const SYSTEM_PROMPT = `You are an expert automotive technician with access to OEM specification databases. Respond ONLY with raw JSON — no markdown, no backticks, no preamble. First character must be {, last must be }.
 
@@ -24,8 +28,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'QuickWrench requires QuickWrench or Elite plan.' }, { status: 403 })
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) return NextResponse.json({ error: 'AI service not configured.' }, { status: 503 })
+  if (!isGeminiConfigured()) return NextResponse.json({ error: 'AI service not configured.' }, { status: 503 })
 
   let body: { year: string; make: string; model: string; trim?: string; engine?: string }
   try { body = await req.json() } catch {
@@ -41,28 +44,8 @@ export async function POST(req: NextRequest) {
 
   let raw: string
   try {
-    const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key':         apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type':      'application/json',
-      },
-      body: JSON.stringify({
-        model:      'claude-sonnet-4-6',
-        max_tokens: 400,
-        system:     SYSTEM_PROMPT,
-        messages:   [{ role: 'user', content: `Provide OEM tire specifications for a ${vehicleDesc}.` }],
-      }),
-    })
-
-    if (!claudeRes.ok) {
-      const errBody = await claudeRes.text()
-      return NextResponse.json({ error: `AI service error: ${errBody}` }, { status: 502 })
-    }
-
-    const claudeData = await claudeRes.json()
-    raw = claudeData.content?.[0]?.text ?? ''
+    const result = await generateDiagnostic(`Provide OEM tire specifications for a ${vehicleDesc}.`, SYSTEM_PROMPT)
+    raw = result.text
     if (!raw) return NextResponse.json({ error: 'Empty AI response.' }, { status: 502 })
   } catch (err) {
     return NextResponse.json({ error: `AI unreachable: ${err instanceof Error ? err.message : String(err)}` }, { status: 502 })

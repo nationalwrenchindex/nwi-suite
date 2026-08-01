@@ -1070,11 +1070,20 @@ function TechGuideTab({
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 gap-4">
-        <div className="w-12 h-12 border-2 border-orange border-t-transparent rounded-full animate-spin" />
-        <p className="text-white/50 text-sm">
-          Loading tech guide{jobs.length > 1 ? 's' : ''} for {vehicle?.year} {vehicle?.make} {vehicle?.model}…
-        </p>
+      <div className="space-y-6">
+        <div className="flex flex-col items-center justify-center py-16 gap-4">
+          <div className="w-12 h-12 border-2 border-orange border-t-transparent rounded-full animate-spin" />
+          <p className="text-white/50 text-sm">
+            Loading tech guide{jobs.length > 1 ? 's' : ''} for {vehicle?.year} {vehicle?.make} {vehicle?.model}…
+          </p>
+        </div>
+        {/* Safety net — advance to Parts without waiting for the guide to finish */}
+        <button
+          onClick={onNext}
+          className="w-full py-3 border border-white/15 text-white/70 hover:text-white hover:border-white/30 font-condensed font-bold text-sm tracking-wide rounded-xl transition-colors"
+        >
+          Skip to Parts →
+        </button>
       </div>
     )
   }
@@ -1083,12 +1092,20 @@ function TechGuideTab({
     return (
       <div className="text-center py-16">
         <p className="text-danger text-sm mb-4">{error}</p>
-        <button
-          onClick={onRetry}
-          className="px-5 py-2 bg-orange hover:bg-orange-hover text-white font-condensed font-bold text-sm rounded-lg transition-colors"
-        >
-          Try Again
-        </button>
+        <div className="flex flex-col items-center gap-3">
+          <button
+            onClick={onRetry}
+            className="px-5 py-2 bg-orange hover:bg-orange-hover text-white font-condensed font-bold text-sm rounded-lg transition-colors"
+          >
+            Try Again
+          </button>
+          <button
+            onClick={onNext}
+            className="text-white/50 hover:text-white text-sm underline transition-colors"
+          >
+            Skip to Parts →
+          </button>
+        </div>
       </div>
     )
   }

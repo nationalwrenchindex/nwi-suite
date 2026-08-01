@@ -10,7 +10,7 @@ export const maxDuration = 60
 // LD diagnostic — accepts an optional DTC code OR a symptom/display description.
 // With a code it behaves like the /dtc/[code] route; without one it runs a
 // symptom-based diagnosis (code === 'NO-CODE'). Same structured JSON shape, same
-// cache table (suite = 'ld'), same Gemini→Claude fallback.
+// cache table (suite = 'ld'). Gemini-only (Google Search grounded).
 
 const BASE_SYSTEM_PROMPT = `You are an expert automotive diagnostic technician. Return ONLY valid JSON — no markdown, no backticks, no preamble. First character must be {, last must be }.
 
@@ -60,7 +60,7 @@ function buildSymptomPrompt(symptom: string, vehicle: string, engine: string): s
   ].filter(Boolean).join('\n')
 }
 
-// ── Structured shape shared by both the Gemini and Claude paths + the frontend ──
+// ── Structured shape shared by the Gemini path + the frontend ──
 
 interface DTCStructured {
   code?:                 string
@@ -110,66 +110,6 @@ function parseJsonLoose(text: string): unknown | null {
   const end   = cleaned.lastIndexOf('}')
   if (start === -1 || end === -1 || end < start) return null
   try { return JSON.parse(cleaned.slice(start, end + 1)) } catch { return null }
-}
-
-// ── Claude Sonnet fallback — structured tool call (same unified shape) ──
-
-const CLAUDE_SYSTEM_PROMPT =
-  'You are an experienced automotive diagnostic assistant helping a mobile mechanic in the field. ' +
-  'Return ONLY valid JSON — no markdown fences, no backticks, no preamble. First character must be {, last must be }.'
-
-const DTC_TOOL = {
-  name: 'return_dtc_analysis',
-  description: 'Return the structured DTC/symptom analysis for the given vehicle.',
-  input_schema: {
-    type: 'object' as const,
-    properties: {
-      code:                 { type: 'string' },
-      name:                 { type: 'string' },
-      category:             { type: 'string' },
-      symptoms:             { type: 'array', items: { type: 'string' } },
-      severity:             { type: 'string', enum: ['low', 'moderate', 'high', 'critical'] },
-      severity_description: { type: 'string' },
-      common_causes:        { type: 'array', items: { type: 'string' } },
-      related_codes:        { type: 'array', items: { type: 'string' } },
-      diagnostic_order:     { type: 'array', items: { type: 'string' } },
-      repair_steps:         { type: 'array', items: { type: 'string' }, description: 'Step-by-step repair procedure with torque specs' },
-      suggested_repair:     { type: 'string' },
-      parts_needed:         { type: 'array', items: { type: 'string' } },
-      special_tools:        { type: 'string' },
-      labor_estimate:       { type: 'string' },
-      safety_warnings:      { type: 'string' },
-    },
-    required: [
-      'code', 'name', 'category', 'symptoms', 'severity', 'severity_description',
-      'common_causes', 'related_codes', 'diagnostic_order', 'repair_steps', 'suggested_repair',
-      'parts_needed', 'special_tools', 'labor_estimate', 'safety_warnings',
-    ],
-  },
-}
-
-async function callClaude(apiKey: string, userMessage: string): Promise<DTCStructured> {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key':         apiKey,
-      'anthropic-version': '2023-06-01',
-      'content-type':      'application/json',
-    },
-    body: JSON.stringify({
-      model:       'claude-sonnet-4-6',
-      max_tokens:  1200,
-      system:      CLAUDE_SYSTEM_PROMPT,
-      tools:       [DTC_TOOL],
-      tool_choice: { type: 'tool', name: 'return_dtc_analysis' },
-      messages:    [{ role: 'user', content: userMessage }],
-    }),
-  })
-  if (!res.ok) throw new Error(`AI service error: ${await res.text()}`)
-  const data  = await res.json()
-  const block = data.content?.find((b: { type: string }) => b.type === 'tool_use')
-  if (!block) throw new Error('No tool_use block in AI response')
-  return normalizeStructured(block.input)
 }
 
 // ── Cache key — vehicle-specific ──
@@ -253,21 +193,7 @@ export async function POST(req: NextRequest) {
       citations  = raw.citations
     }
   } catch (gemErr) {
-    console.error('[diagnose] Gemini failed — falling back to Claude Sonnet', gemErr)
-  }
-
-  // ── Fallback — Claude Sonnet structured call ──
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!structured && apiKey) {
-    try {
-      const claudeMsg = isCodeMode
-        ? `For DTC code ${rawCode} on a ${vehicle}${display ? ` (display shows: ${display})` : ''}, return the structured DTC analysis. Be specific to the vehicle year/make/model. Diagnostic steps must include exact voltage/resistance/sensor specs. Include OEM part numbers in parts_needed.`
-        : `A mobile mechanic reports this symptom on a ${vehicle} with no DTC code: "${issueText}". Return the structured analysis with code set to 'NO-CODE', name as a 5-word-or-less symptom summary, related_codes listing the most likely DTC codes for this symptom, symptom-based diagnostic_order, and an especially detailed suggested_repair. Diagnostic steps must include exact voltage/resistance/sensor specs. Include OEM part numbers in parts_needed.`
-      structured = await callClaude(apiKey, claudeMsg)
-      source     = 'claude_fallback'
-    } catch (err) {
-      console.error('[diagnose] Claude Sonnet fallback failed', err)
-    }
+    console.error('[diagnose] Gemini failed', gemErr)
   }
 
   if (!structured || !structured.name) {

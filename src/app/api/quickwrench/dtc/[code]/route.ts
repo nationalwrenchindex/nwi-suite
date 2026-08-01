@@ -9,10 +9,10 @@ export const maxDuration = 60
 
 type RouteContext = { params: Promise<{ code: string }> }
 
-// Primary diagnostic AI: Gemini 2.5 Flash with Google Search grounding returns
-// structured JSON (same shape the frontend renders as colored severity cards and
-// symptom pills). On any Gemini/parse failure we fall back to the Claude Sonnet
-// structured call so the tech is never left without an answer.
+// Diagnostic AI: Gemini with Google Search grounding returns structured JSON
+// (same shape the frontend renders as colored severity cards and symptom pills).
+// Gemini-only — on any Gemini/parse failure the route returns a 502 and the tech
+// retries.
 const GEMINI_JSON_SYSTEM_PROMPT = `You are an expert automotive diagnostic technician. Return ONLY valid JSON — no markdown, no backticks, no preamble. First character must be {, last must be }.
 
 Return a JSON object with these exact fields:
@@ -60,7 +60,7 @@ function buildLdUserPrompt(
   ].filter(Boolean).join('\n')
 }
 
-// ── Structured shape shared by both the Gemini and Claude paths + the frontend ──
+// ── Structured shape shared by the Gemini path + the frontend ──
 
 interface DTCStructured {
   code?:                 string
@@ -119,70 +119,6 @@ function parseJsonLoose(text: string): unknown | null {
   }
 }
 
-// ── Claude Sonnet fallback — structured tool call (same unified shape) ──
-
-const CLAUDE_SYSTEM_PROMPT =
-  'You are an experienced automotive diagnostic assistant helping a mobile mechanic in the field. ' +
-  'Return ONLY valid JSON — no markdown fences, no backticks, no preamble. First character must be {, last must be }.'
-
-function claudeUserMessage(code: string, vehicleDesc: string, displayMessage: string): string {
-  return `For DTC code ${code} on a ${vehicleDesc}${displayMessage ? ` (display shows: ${displayMessage})` : ''}, return the structured DTC analysis. Be specific to the vehicle year/make/model. Order causes most to least likely. Diagnostic steps must include exact voltage specs, resistance values, and sensor output ranges. Include OEM part numbers in parts_needed. Keep tone field-mechanic friendly, not textbook.`
-}
-
-const DTC_TOOL = {
-  name: 'return_dtc_analysis',
-  description: 'Return the structured DTC analysis for the given code and vehicle.',
-  input_schema: {
-    type: 'object' as const,
-    properties: {
-      code:                 { type: 'string' },
-      name:                 { type: 'string' },
-      category:             { type: 'string' },
-      symptoms:             { type: 'array', items: { type: 'string' } },
-      severity:             { type: 'string', enum: ['low', 'moderate', 'high', 'critical'] },
-      severity_description: { type: 'string' },
-      common_causes:        { type: 'array', items: { type: 'string' } },
-      related_codes:        { type: 'array', items: { type: 'string' } },
-      diagnostic_order:     { type: 'array', items: { type: 'string' } },
-      repair_steps:         { type: 'array', items: { type: 'string' }, description: 'Step-by-step repair procedure with torque specs' },
-      suggested_repair:     { type: 'string' },
-      parts_needed:         { type: 'array', items: { type: 'string' } },
-      special_tools:        { type: 'string' },
-      labor_estimate:       { type: 'string' },
-      safety_warnings:      { type: 'string' },
-    },
-    required: [
-      'code', 'name', 'category', 'symptoms', 'severity', 'severity_description',
-      'common_causes', 'related_codes', 'diagnostic_order', 'repair_steps', 'suggested_repair',
-      'parts_needed', 'special_tools', 'labor_estimate', 'safety_warnings',
-    ],
-  },
-}
-
-async function callClaude(apiKey: string, code: string, vehicleDesc: string, displayMessage: string): Promise<DTCStructured> {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key':         apiKey,
-      'anthropic-version': '2023-06-01',
-      'content-type':      'application/json',
-    },
-    body: JSON.stringify({
-      model:       'claude-sonnet-4-6',
-      max_tokens:  1200,
-      system:      CLAUDE_SYSTEM_PROMPT,
-      tools:       [DTC_TOOL],
-      tool_choice: { type: 'tool', name: 'return_dtc_analysis' },
-      messages:    [{ role: 'user', content: claudeUserMessage(code, vehicleDesc, displayMessage) }],
-    }),
-  })
-  if (!res.ok) throw new Error(`AI service error: ${await res.text()}`)
-  const data  = await res.json()
-  const block = data.content?.find((b: { type: string }) => b.type === 'tool_use')
-  if (!block) throw new Error('No tool_use block in AI response')
-  return normalizeStructured(block.input)
-}
-
 // ── Cache key — vehicle-specific, so P0420 on a Yukon XL ≠ P0420 on a Neon ──
 
 const slug = (s: string) => s.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
@@ -209,7 +145,6 @@ export async function GET(req: NextRequest, { params }: RouteContext) {
   const model   = (req.nextUrl.searchParams.get('model')   ?? '').trim()
   const engine  = (req.nextUrl.searchParams.get('engine')  ?? '').trim()
   const display = (req.nextUrl.searchParams.get('display') ?? '').trim()
-  const vehicleDesc = [year, make, model].filter(Boolean).join(' ') || 'an unspecified vehicle'
   const cacheKey    = ldCacheKey(normalized, year, make, model)
 
   // ── Cache read (RLS-scoped authenticated client; LD entries only) ──
@@ -255,18 +190,7 @@ export async function GET(req: NextRequest, { params }: RouteContext) {
       citations  = raw.citations
     }
   } catch (gemErr) {
-    console.error('[dtc] Gemini failed — falling back to Claude Sonnet', gemErr)
-  }
-
-  // ── Fallback — existing Claude Sonnet structured call ──
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!structured && apiKey) {
-    try {
-      structured = await callClaude(apiKey, normalized, vehicleDesc, display)
-      source     = 'claude_fallback'
-    } catch (err) {
-      console.error('[dtc] Claude Sonnet fallback failed', err)
-    }
+    console.error('[dtc] Gemini failed', gemErr)
   }
 
   if (!structured || !structured.name) {
