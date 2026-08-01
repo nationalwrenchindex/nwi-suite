@@ -1,9 +1,10 @@
-import Anthropic from '@anthropic-ai/sdk'
+import { generateText, isGeminiConfigured } from '@/lib/gemini/client'
 
-// Haiku reshapes raw Gemini diagnostic text into our exact section structure.
-// It must NOT add or remove content — especially safety warnings, voltage specs,
-// part numbers, and torque specs. On any failure it returns the raw Gemini text
-// unchanged: raw text is better than nothing, and we never fail silently.
+// A second (non-grounded) Gemini pass reshapes raw Gemini diagnostic text into
+// our exact section structure. It must NOT add or remove content — especially
+// safety warnings, voltage specs, part numbers, and torque specs. On any failure
+// it returns the raw text unchanged: raw text is better than nothing, and we
+// never fail silently.
 
 const FORMAT_INSTRUCTION = `You are a technical formatting assistant for a field service diagnostic platform used by mobile mechanics and transport refrigeration technicians.
 
@@ -53,32 +54,21 @@ CRITICAL FORMATTING RULES:
 
 Preserve ALL voltage specifications exactly as provided — do not simplify, round, or generalize voltage values. If the source states 400-480VAC 3-phase, format it exactly as 400-480VAC 3-phase. Never substitute a different voltage value during formatting.`
 
-// Parts Manager uses its own Haiku formatting pass — a parts list, not the
+// Parts Manager uses its own Gemini formatting pass — a parts list, not the
 // 8-section diagnostic structure.
 const PARTS_FORMAT_INSTRUCTION = `Format this parts list cleanly. Each part in its own section. OEM part number on its own line labeled OEM. Supersession chain clearly labeled. Aftermarket options clearly labeled. Specs on their own line. Do not add information not in the source.`
 
 export async function formatParts(rawGeminiText: string): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey || !rawGeminiText.trim()) return rawGeminiText
+  if (!isGeminiConfigured() || !rawGeminiText.trim()) return rawGeminiText
   try {
-    const client = new Anthropic({ apiKey })
-    const msg = await client.messages.create(
-      {
-        model:      'claude-haiku-4-5-20251001',
-        max_tokens: 1500,
-        system:     PARTS_FORMAT_INSTRUCTION,
-        messages: [{ role: 'user', content: `Parts list to format:\n\n${rawGeminiText}` }],
-      },
-      { timeout: 20_000, maxRetries: 1 },
-    )
-    const formatted = msg.content
-      .filter(b => b.type === 'text')
-      .map(b => (b as Anthropic.TextBlock).text)
-      .join('\n')
-      .trim()
+    const formatted = (await generateText(
+      `Parts list to format:\n\n${rawGeminiText}`,
+      PARTS_FORMAT_INSTRUCTION,
+      { maxOutputTokens: 1500 },
+    )).trim()
     return formatted || rawGeminiText
   } catch (err) {
-    console.error('[gemini/formatter] Haiku parts formatting failed — returning raw text', err)
+    console.error('[gemini/formatter] parts formatting failed — returning raw text', err)
     return rawGeminiText
   }
 }
@@ -94,8 +84,7 @@ export interface FormatContext {
 }
 
 export async function formatDiagnostic(rawGeminiText: string, context: FormatContext): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey || !rawGeminiText.trim()) return rawGeminiText
+  if (!isGeminiConfigured() || !rawGeminiText.trim()) return rawGeminiText
 
   const ctxLine = [
     context.manufacturer && `Manufacturer: ${context.manufacturer}`,
@@ -108,27 +97,14 @@ export async function formatDiagnostic(rawGeminiText: string, context: FormatCon
   ].filter(Boolean).join('\n')
 
   try {
-    const client = new Anthropic({ apiKey })
-    const msg = await client.messages.create(
-      {
-        model:      'claude-haiku-4-5-20251001',
-        max_tokens: 1500,
-        system:     FORMAT_INSTRUCTION,
-        messages: [{
-          role:    'user',
-          content: `${ctxLine ? ctxLine + '\n\n' : ''}Diagnostic content to format:\n\n${rawGeminiText}`,
-        }],
-      },
-      { timeout: 20_000, maxRetries: 1 },
-    )
-    const formatted = msg.content
-      .filter(b => b.type === 'text')
-      .map(b => (b as Anthropic.TextBlock).text)
-      .join('\n')
-      .trim()
+    const formatted = (await generateText(
+      `${ctxLine ? ctxLine + '\n\n' : ''}Diagnostic content to format:\n\n${rawGeminiText}`,
+      FORMAT_INSTRUCTION,
+      { maxOutputTokens: 1500 },
+    )).trim()
     return formatted || rawGeminiText
   } catch (err) {
-    console.error('[gemini/formatter] Haiku formatting failed — returning raw Gemini text', err)
+    console.error('[gemini/formatter] formatting failed — returning raw Gemini text', err)
     return rawGeminiText
   }
 }

@@ -1,7 +1,6 @@
-// Shared vehicle-specific tech-guide generation.
-// - callTechGuide (Claude) is used by /api/inspections/[id]/generate-quote.
-// - callTechGuideGemini (Gemini) is used by /api/quickwrench/tech-guide (LD is Gemini-only).
-// Both share the same SYSTEM_PROMPT and JSON parser.
+// Shared vehicle-specific tech-guide generation (Gemini only).
+// callTechGuideGemini is used by /api/quickwrench/tech-guide and
+// /api/inspections/[id]/generate-quote. Same SYSTEM_PROMPT + JSON parser.
 
 import type { TechGuide } from '@/types/quickwrench'
 import { generateDiagnostic } from '@/lib/gemini/client'
@@ -72,89 +71,9 @@ export interface TechGuideJobRef {
   categoryLabel?: string
 }
 
-async function attemptGuide(
-  apiKey:      string,
-  userMessage: string,
-  timeoutMs:   number,
-): Promise<TechGuide> {
-  const controller = new AbortController()
-  const timer      = setTimeout(() => controller.abort(), timeoutMs)
-
-  try {
-    const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key':         apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type':      'application/json',
-      },
-      body: JSON.stringify({
-        model:      'claude-sonnet-4-6',
-        max_tokens: 4000,
-        system:     SYSTEM_PROMPT,
-        messages:   [{ role: 'user', content: userMessage }],
-      }),
-      signal: controller.signal,
-    })
-
-    if (!claudeRes.ok) {
-      const errBody = await claudeRes.text()
-      let detail = errBody
-      try { detail = JSON.parse(errBody)?.error?.message ?? errBody } catch { /* ignore */ }
-      throw new Error(`Claude API HTTP ${claudeRes.status}: ${detail}`)
-    }
-
-    const claudeData = await claudeRes.json()
-    const raw        = claudeData.content?.[0]?.text ?? ''
-    if (!raw) throw new Error('Empty response from Claude')
-
-    return parseRaw(raw)
-  } finally {
-    clearTimeout(timer)
-  }
-}
-
-// Returns parsed TechGuide, or null if both attempts fail.
-export async function callTechGuide(
-  apiKey:    string,
-  vehicle:   TechGuideVehicle,
-  job:       TechGuideJobRef,
-  timeoutMs  = 45000,
-): Promise<TechGuide | null> {
-  const vehicleDesc = [vehicle.year, vehicle.make, vehicle.model, vehicle.engine]
-    .filter(Boolean)
-    .join(' ')
-
-  const userMessage = `Vehicle: ${vehicleDesc || 'Generic vehicle'}
-Job: ${job.name}
-Category: ${job.categoryLabel ?? job.name}
-
-Provide the complete technical guide for this specific vehicle and job.`
-
-  try {
-    return await attemptGuide(apiKey, userMessage, timeoutMs)
-  } catch (firstErr) {
-    console.warn(
-      '[callTechGuide] First attempt failed, retrying:',
-      job.name,
-      firstErr instanceof Error ? firstErr.message : firstErr,
-    )
-    try {
-      return await attemptGuide(apiKey, userMessage, timeoutMs)
-    } catch (retryErr) {
-      console.error(
-        '[callTechGuide] Both attempts failed for:',
-        job.name,
-        retryErr instanceof Error ? retryErr.message : retryErr,
-      )
-      return null
-    }
-  }
-}
-
-// Gemini variant used by the LD QuickWrench tech-guide route. Same prompt and
-// JSON parser as the Claude path; generateDiagnostic handles grounding + the 55s
-// timeout. Two attempts before giving up (mirrors callTechGuide).
+// Gemini tech-guide generation. generateDiagnostic handles Google Search
+// grounding + the 55s timeout. Two attempts before giving up. Returns the parsed
+// TechGuide, or null if both attempts fail.
 export async function callTechGuideGemini(
   vehicle: TechGuideVehicle,
   job:     TechGuideJobRef,

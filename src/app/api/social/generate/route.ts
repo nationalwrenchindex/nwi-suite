@@ -1,11 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { generateSocialPosts } from '@/lib/social/generate'
+import { isGeminiConfigured } from '@/lib/gemini/client'
 
 export const maxDuration = 60
 
 // POST /api/social/generate
-// Phase 1: generates text content + image_prompts via Claude only.
+// Phase 1: generates text content + image_prompts via Gemini only.
 // Phase 2 (images) is handled by /api/social/generate-images called separately by the client.
 // Body: { force?: boolean } — force=true skips cache and regenerates.
 export async function POST(request: NextRequest) {
@@ -34,18 +35,17 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) {
-    console.error('[social/generate] ANTHROPIC_API_KEY not configured')
-    return NextResponse.json({ error: 'ANTHROPIC_API_KEY not configured' }, { status: 500 })
+  if (!isGeminiConfigured()) {
+    console.error('[social/generate] GEMINI_API_KEY not configured')
+    return NextResponse.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 })
   }
 
-  console.log('[social/generate] calling Claude for content...')
-  const generated = await generateSocialPosts(apiKey)
+  console.log('[social/generate] calling Gemini for content...')
+  const generated = await generateSocialPosts()
   if (!generated) {
     return NextResponse.json({ error: 'AI generation failed' }, { status: 502 })
   }
-  console.log(`[social/generate] Claude returned ${generated.length} posts`)
+  console.log(`[social/generate] Gemini returned ${generated.length} posts`)
 
   // Delete today's existing posts before inserting fresh ones (handles force-regen)
   if (force) {

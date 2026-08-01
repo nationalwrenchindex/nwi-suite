@@ -451,7 +451,7 @@ export default function SocialClient({ initialPosts, todayTheme, dayName }: Prop
     setGenerating(true)
     setError(null)
     try {
-      // Phase 1: generate text content via Claude
+      // Phase 1: generate text content via Gemini
       const res = await fetch('/api/social/generate', {
         method:  'POST',
         headers: { 'content-type': 'application/json' },

@@ -1,14 +1,18 @@
 // POST /api/inspections/[id]/generate-quote
 // Generates a fully-priced draft quote from failed/needs-attention inspection items.
-// Calls the same Claude AI tech-guide system as QuickWrench, with parallel execution.
+// Calls the same Gemini tech-guide system as QuickWrench, with parallel execution.
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { hasQuickWrenchAccess } from '@/lib/subscription'
 import { getMappedService } from '@/lib/mpi-catalog'
-import { callTechGuide } from '@/lib/tech-guide'
+import { callTechGuideGemini } from '@/lib/tech-guide'
+import { isGeminiConfigured } from '@/lib/gemini/client'
 import type { TechGuidePart } from '@/types/quickwrench'
+
+// Parallel Gemini tech-guide calls (grounded, up to 55s each); 60s prevents Vercel's default timeout kill.
+export const maxDuration = 60
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -126,10 +130,8 @@ export async function POST(_req: Request, { params }: RouteContext) {
     })
   }
 
-  // Run AI tech-guide calls in parallel (15 s timeout each).
+  // Run Gemini tech-guide calls in parallel.
   // Unmapped services skip AI and get placeholder entries only.
-  const apiKey = process.env.ANTHROPIC_API_KEY
-
   type ServiceResult = {
     serviceName: string
     hours:       number
@@ -140,7 +142,7 @@ export async function POST(_req: Request, { params }: RouteContext) {
   let results:     ServiceResult[]
   let usedFallback = false
 
-  if (apiKey) {
+  if (isGeminiConfigured()) {
     const vehicle = vehicleRow
       ? {
           year:   vehicleRow.year != null ? String(vehicleRow.year) : undefined,
@@ -156,11 +158,9 @@ export async function POST(_req: Request, { params }: RouteContext) {
           return { serviceName: svc.serviceName, hours: 0, parts: [], aiPowered: false }
         }
 
-        const guide = await callTechGuide(
-          apiKey,
+        const guide = await callTechGuideGemini(
           vehicle,
           { name: svc.serviceName, categoryLabel: 'Automotive Service' },
-          15000,
         )
 
         if (!guide) {
@@ -181,7 +181,7 @@ export async function POST(_req: Request, { params }: RouteContext) {
       usedFallback = true
     }
   } else {
-    console.warn('[generate-quote] ANTHROPIC_API_KEY not set — using catalog fallback')
+    console.warn('[generate-quote] GEMINI_API_KEY not set — using catalog fallback')
     usedFallback = true
     results = services.map(svc => ({
       serviceName: svc.serviceName,

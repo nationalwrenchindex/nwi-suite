@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { checkHDAccess } from '@/lib/hd-access'
 import Anthropic from '@anthropic-ai/sdk'
-import { generateDiagnostic } from '@/lib/gemini/client'
+import { generateDiagnostic, generateText, isGeminiConfigured } from '@/lib/gemini/client'
 import { formatDiagnostic } from '@/lib/gemini/formatter'
 import { detectsHazard } from '@/lib/gemini/hazard'
 import { sendNewCacheAlert } from '@/lib/email-alerts'
@@ -1077,8 +1077,10 @@ export async function POST(req: NextRequest) {
   const hasAccess = await checkHDAccess(user.id)
   if (!hasAccess) return NextResponse.json({ error: 'HD subscription required' }, { status: 403 })
 
+  if (!isGeminiConfigured()) return NextResponse.json({ error: 'AI service not configured' }, { status: 503 })
+
+  // Gemini is the primary model; Haiku is the reliability fallback (skipped if unset).
   const apiKey = process.env.ANTHROPIC_API_KEY
-  if (!apiKey) return NextResponse.json({ error: 'AI service not configured' }, { status: 503 })
 
   let body: {
     mode?: 'reefer' | 'truck' | 'electrical'
@@ -1124,19 +1126,28 @@ export async function POST(req: NextRequest) {
     ].filter(Boolean).join('\n')
 
     try {
-      const client = new Anthropic({ apiKey })
-      const msg = await client.messages.create({
-        model:      'claude-haiku-4-5-20251001',
-        max_tokens: 1500,
-        system:     ELECTRICAL_SYSTEM_PROMPT,
-        messages:   [{ role: 'user', content: userPrompt }],
-      })
-      const analysis = msg.content
-        .filter(b => b.type === 'text')
-        .map(b => (b as Anthropic.TextBlock).text)
-        .join('\n')
-        .trim()
-      console.log('[quickwrench/electrical] stop_reason:', msg.stop_reason, 'tokens:', JSON.stringify(msg.usage))
+      // Primary: Gemini. Fallback: Haiku (no grounding) so an outage still answers.
+      let analysis = ''
+      try {
+        analysis = (await generateText(userPrompt, ELECTRICAL_SYSTEM_PROMPT, { maxOutputTokens: 1500 })).trim()
+      } catch (gemErr) {
+        console.error('[hd/quickwrench] Electrical Gemini failed — trying Haiku fallback', gemErr)
+      }
+      if (!analysis && apiKey) {
+        const client = new Anthropic({ apiKey })
+        const msg = await client.messages.create({
+          model:      'claude-haiku-4-5-20251001',
+          max_tokens: 1500,
+          system:     ELECTRICAL_SYSTEM_PROMPT,
+          messages:   [{ role: 'user', content: userPrompt }],
+        })
+        analysis = msg.content
+          .filter(b => b.type === 'text')
+          .map(b => (b as Anthropic.TextBlock).text)
+          .join('\n')
+          .trim()
+      }
+      if (!analysis) throw new Error('No analysis produced')
       return NextResponse.json({ analysis, tk_sources: [], alarm_pattern: null, disclaimer: null })
     } catch (err) {
       console.error('[hd/quickwrench] Electrical AI call failed', err)
@@ -1298,10 +1309,8 @@ export async function POST(req: NextRequest) {
       // Verified DB content will be used — no need to call any model.
       if (useVerifiedOnly) return null
 
-      const client = new Anthropic({ apiKey })
-
-      // Primary: Gemini 2.5 Flash with Google Search grounding does the thinking
-      // + search, then Haiku reshapes it into our standard section structure.
+      // Primary: Gemini with Google Search grounding does the thinking + search,
+      // then a non-grounded Gemini pass reshapes it into our section structure.
       try {
         const { text: rawText, citations } = await generateDiagnostic(
           userPrompt,
@@ -1314,12 +1323,14 @@ export async function POST(req: NextRequest) {
           return { text: formatted.trim(), citations, source: 'gemini_web_search' }
         }
       } catch (gemErr) {
-        console.error('[hd/quickwrench] Gemini failed — falling back to Haiku', gemErr)
+        console.error('[hd/quickwrench] Gemini grounded generation failed — trying ungrounded', gemErr)
       }
 
       // Fallback: a plain Haiku call (no grounding) so a Gemini outage still
       // returns a usable answer.
+      if (!apiKey) return null
       try {
+        const client = new Anthropic({ apiKey })
         const msg = await client.messages.create(
           {
             model:      'claude-haiku-4-5-20251001',

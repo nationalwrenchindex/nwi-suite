@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import Anthropic from '@anthropic-ai/sdk'
+import { generateText } from '@/lib/gemini/client'
 
 const NWI_FIELDS = [
   'customer_first_name',
@@ -32,20 +32,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'No headers provided' }, { status: 400 })
   }
 
-  const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-
   const sampleText = firstRows
     .slice(0, 5)
     .map((row, i) => `Row ${i + 1}: ${JSON.stringify(row)}`)
     .join('\n')
 
-  const message = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 512,
-    messages: [
-      {
-        role: 'user',
-        content: `You help import data into NWI Suite, a platform for mobile mechanics and auto technicians.
+  const prompt = `You help import data into NWI Suite, a platform for mobile mechanics and auto technicians.
 
 The user uploaded a CSV with these column headers:
 ${headers.map(h => `"${h}"`).join(', ')}
@@ -64,12 +56,16 @@ Rules:
 - skip for columns like invoice numbers, internal IDs, tax amounts, discount codes, etc.
 
 Return ONLY a valid JSON object. Keys are the exact original column headers, values are NWI field names.
-Example: {"Customer": "customer_full_name", "Phone": "customer_phone", "Invoice Date": "job_date"}`,
-      },
-    ],
-  })
+Example: {"Customer": "customer_full_name", "Phone": "customer_phone", "Invoice Date": "job_date"}`
 
-  const text = message.content[0].type === 'text' ? message.content[0].text : ''
+  let text = ''
+  try {
+    text = await generateText(prompt, 'You map CSV columns to NWI import fields. Return only a valid JSON object, no prose.', { maxOutputTokens: 512 })
+  } catch (err) {
+    console.error('[import/analyze] Gemini call failed', err)
+    return NextResponse.json({ error: 'AI service error' }, { status: 502 })
+  }
+
   const match = text.match(/\{[\s\S]*\}/)
   if (!match) return NextResponse.json({ error: 'AI returned unexpected format' }, { status: 500 })
 

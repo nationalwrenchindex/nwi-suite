@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { generateSocialPosts, generatePostImage } from '@/lib/social/generate'
 import type { SocialPlatform } from '@/lib/social/generate'
+import { isGeminiConfigured } from '@/lib/gemini/client'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,11 +20,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const apiKey    = process.env.ANTHROPIC_API_KEY
   const openAiKey = process.env.OPENAI_API_KEY
 
-  if (!apiKey) {
-    return NextResponse.json({ error: 'ANTHROPIC_API_KEY not configured' }, { status: 500 })
+  if (!isGeminiConfigured()) {
+    return NextResponse.json({ error: 'GEMINI_API_KEY not configured' }, { status: 500 })
   }
 
   const supabase = createServiceClient()
@@ -64,7 +64,7 @@ export async function GET(request: NextRequest) {
     }
 
     try {
-      const posts = await generateSocialPosts(apiKey)
+      const posts = await generateSocialPosts()
       if (!posts) { failed++; continue }
 
       const inserts = posts.map((p) => ({

@@ -112,7 +112,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No parts information found.' }, { status: 502 })
   }
 
-  // 3. Haiku formatting pass.
+  // 3. Gemini formatting pass.
   const formatted = (await formatParts(raw)).trim()
 
   // 4. Cache with a 12-month expiry; notify founders on a genuinely new write.

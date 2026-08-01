@@ -8,7 +8,7 @@ import {
   TRUCK_WEB_SEARCH_DIRECTIVE,
   TRUCK_FALLBACK_ANALYSIS,
 } from '@/lib/hd/truck-diagnostic'
-import { generateDiagnostic } from '@/lib/gemini/client'
+import { generateDiagnostic, isGeminiConfigured } from '@/lib/gemini/client'
 import { formatDiagnostic } from '@/lib/gemini/formatter'
 import { detectsHazard } from '@/lib/gemini/hazard'
 import { sendNewCacheAlert } from '@/lib/email-alerts'
@@ -20,7 +20,7 @@ import { sendNewCacheAlert } from '@/lib/email-alerts'
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
 
-// Pull the useful, inspectable bits out of an Anthropic/SDK error so the exact
+// Pull the useful, inspectable bits out of an AI/SDK error so the exact
 // failure (status, error type, message, request id) shows up in logs AND in the
 // _debug field of the response. Returns a short one-line summary.
 function summarizeErr(stage: string, err: unknown): string {
@@ -60,14 +60,13 @@ export async function POST(req: NextRequest) {
     const hasAccess = await checkHDAccess(user.id)
     if (!hasAccess) return NextResponse.json({ error: 'HD subscription required' }, { status: 403 })
 
-    // #2/#7 — confirm the API key is actually present in this route's runtime.
-    // (Logs presence + length only — never the key itself.)
-    const apiKey = process.env.ANTHROPIC_API_KEY
-    console.log('[hd/truck-diagnostic] ANTHROPIC_API_KEY present:', !!apiKey, 'length:', apiKey?.length ?? 0)
-    if (!apiKey) {
-      console.error('[hd/truck-diagnostic] ANTHROPIC_API_KEY missing — this is the immediate-fallback cause')
+    if (!isGeminiConfigured()) {
+      console.error('[hd/truck-diagnostic] GEMINI_API_KEY missing — this is the immediate-fallback cause')
       return NextResponse.json({ error: 'AI service not configured' }, { status: 503 })
     }
+
+    // Gemini is the primary model; Haiku is the reliability fallback (skipped if unset).
+    const apiKey = process.env.ANTHROPIC_API_KEY
 
     let body: {
       truckBrand?:   string
@@ -161,15 +160,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const client  = new Anthropic({ apiKey })
     const encoder = new TextEncoder()
 
-    // Primary path: Gemini 2.5 Flash (grounded search) generates, Haiku formats,
-    // then the formatted result is streamed. Gemini/Haiku are not incremental,
-    // so the answer is emitted once it's ready — the response is still a stream
-    // so the connection stays alive during generation. Plain Haiku (no
-    // grounding) is the fallback; the canned placeholder is the last resort and
-    // is never cached.
+    // Primary path: Gemini (grounded search) generates, a non-grounded Gemini
+    // pass formats, then the formatted result is streamed. Generation is not
+    // incremental, so the answer is emitted once it's ready — the response is
+    // still a stream so the connection stays alive during generation. Plain Haiku
+    // (no grounding) is the fallback; the canned placeholder is the last resort
+    // and is never cached.
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         let emitted = false
@@ -180,7 +178,7 @@ export async function POST(req: NextRequest) {
           if (text) { emitted = true; full += text; controller.enqueue(encoder.encode(text)) }
         }
 
-        // 1. Gemini grounded generation + Haiku formatting.
+        // 1. Gemini grounded generation + Gemini formatting.
         try {
           const { text: rawText, citations: cites } = await generateDiagnostic(
             truckUserPrompt,
@@ -198,9 +196,10 @@ export async function POST(req: NextRequest) {
         }
 
         // 2. Fallback: plain Haiku (no grounding) if Gemini produced nothing.
-        if (!emitted) {
+        if (!emitted && apiKey) {
           usedSource = 'haiku_fallback'
           try {
+            const client = new Anthropic({ apiKey })
             const msg = await client.messages.create(
               {
                 model:      'claude-haiku-4-5-20251001',

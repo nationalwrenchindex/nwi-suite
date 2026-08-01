@@ -240,7 +240,7 @@ function SectionContent({ sectionKey, content, vendor = 'auto' }: { sectionKey: 
   const def = SECTION_DEFS.find(s => s.key === sectionKey)!
 
   if (sectionKey === 'MOST LIKELY CAUSES' || sectionKey === 'DIAGNOSTIC STEPS') {
-    // Trim FIRST so leading indentation from the Haiku formatter doesn't defeat
+    // Trim FIRST so leading indentation from the formatter doesn't defeat
     // the ^ anchor, then strip any leading numbering the formatter already added
     // (one or more "N. " groups). The renderer adds its own number, so this
     // prevents double numbering like "1. 1.". Requiring a space after the period

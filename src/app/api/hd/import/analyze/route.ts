@@ -1,8 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
+import { generateText } from '@/lib/gemini/client'
 import { createClient } from '@/lib/supabase/server'
-
-const anthropic = new Anthropic()
 
 const UNIT_FIELDS = [
   { key: 'unit_number',   label: 'Unit Number',        required: true  },
@@ -55,12 +53,7 @@ Include all CSV headers. Use null for no match. Return only JSON.`
   let mapping: Array<{ csv_header: string; field_key: string | null; confidence: string }> = []
 
   try {
-    const msg = await anthropic.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 512,
-      messages: [{ role: 'user', content: prompt }],
-    })
-    const text = msg.content[0].type === 'text' ? msg.content[0].text : '[]'
+    const text = (await generateText(prompt, 'You map CSV columns to fleet-unit import fields. Return only a valid JSON array, no prose.', { maxOutputTokens: 512 })) || '[]'
     const jsonMatch = text.match(/\[[\s\S]*\]/)
     if (jsonMatch) mapping = JSON.parse(jsonMatch[0])
   } catch {

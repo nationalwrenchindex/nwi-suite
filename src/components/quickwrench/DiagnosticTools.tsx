@@ -7,7 +7,7 @@ import PartText from '@/components/parts/PartText'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-// Gemini-grounded structured diagnostic (same shape the Claude fallback returns).
+// Gemini-grounded structured diagnostic.
 // Rendered as colored severity cards, symptom pills, and collapsible sections.
 interface DTCResult {
   code?:                 string

@@ -1,3 +1,5 @@
+import { generateText } from '@/lib/gemini/client'
+
 export type SocialPlatform = 'tiktok' | 'instagram' | 'facebook' | 'linkedin' | 'twitter'
 
 export interface SocialPostDraft {
@@ -270,9 +272,7 @@ function extractOutermostArray(text: string): string | null {
   return null
 }
 
-export async function generateSocialPosts(
-  apiKey: string,
-): Promise<SocialPostDraft[] | null> {
+export async function generateSocialPosts(): Promise<SocialPostDraft[] | null> {
   const today      = new Date()
   const dayOfWeek  = today.getDay()
   const theme      = THEMES[dayOfWeek]
@@ -294,31 +294,9 @@ For each platform, also provide a visual_suggestion (1-2 sentences describing wh
 
   let raw = ''
   try {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key':         apiKey,
-        'anthropic-version': '2023-06-01',
-        'content-type':      'application/json',
-      },
-      body: JSON.stringify({
-        model:      'claude-sonnet-4-6',
-        max_tokens: 4500,
-        system:     SYSTEM_PROMPT,
-        messages:   [{ role: 'user', content: userMessage }],
-      }),
-    })
-
-    if (!res.ok) {
-      const errText = await res.text()
-      console.error('[generateSocialPosts] Claude API error:', errText)
-      return null
-    }
-
-    const data = await res.json()
-    raw = data.content?.[0]?.text ?? ''
+    raw = await generateText(userMessage, SYSTEM_PROMPT, { maxOutputTokens: 4500 })
   } catch (err) {
-    console.error('[generateSocialPosts] fetch error:', err)
+    console.error('[generateSocialPosts] Gemini error:', err)
     return null
   }
 

@@ -41,7 +41,7 @@ export interface TorqueSpec {
   spec: string
 }
 
-// Demo pricing returned by Claude until PartsTech integration is live.
+// Demo pricing returned by the AI until PartsTech integration is live.
 export interface TechGuidePart {
   name:       string
   qty:        number

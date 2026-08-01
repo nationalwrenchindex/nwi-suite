@@ -1,7 +1,7 @@
 import { GoogleGenAI } from '@google/genai'
 
 // Primary diagnostic AI for HD QuickWrench. Gemini 3.6 Flash with Google Search
-// grounding does the thinking + search; Haiku (see ./formatter) reshapes the raw
+// grounding does the thinking + search; a second Gemini pass (see ./formatter) reshapes the raw
 // output into our standard section structure.
 
 const MODEL_ID          = 'gemini-3.6-flash'
@@ -51,6 +51,30 @@ export async function generateDiagnostic(
   )
 
   return { text, citations }
+}
+
+// General-purpose Gemini text generation WITHOUT Google Search grounding. Used
+// for reshaping/formatting, structured-JSON extraction, and copy generation —
+// cases where grounding would be wrong because the model must not inject any
+// outside web content. Returns the raw text (caller parses/validates).
+export async function generateText(
+  prompt: string,
+  systemInstruction: string,
+  opts: { maxOutputTokens?: number } = {},
+): Promise<string> {
+  const client = getClient()
+
+  const response = await client.models.generateContent({
+    model:    MODEL_ID,
+    contents: prompt,
+    config: {
+      systemInstruction,
+      ...(opts.maxOutputTokens ? { maxOutputTokens: opts.maxOutputTokens } : {}),
+      httpOptions: { timeout: GEMINI_TIMEOUT_MS },
+    },
+  })
+
+  return response.text ?? ''
 }
 
 export function isGeminiConfigured(): boolean {

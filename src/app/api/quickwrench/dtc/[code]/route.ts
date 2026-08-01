@@ -83,7 +83,7 @@ interface DTCStructured {
 const asStr    = (v: unknown): string   => (typeof v === 'string' ? v : '')
 const asStrArr = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
 
-// Coerce any raw object (loose Gemini JSON or Claude tool output) into the exact
+// Coerce any raw object (loose Gemini JSON) into the exact
 // structured shape, so the frontend never sees a missing array or wrong type.
 function normalizeStructured(raw: unknown): DTCStructured {
   const o = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>
