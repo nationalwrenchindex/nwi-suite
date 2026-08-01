@@ -3558,8 +3558,10 @@ export default function HDQuickWrenchPage() {
           suite="hd"
           parts={extractHDParts(partsResult)}
           vehicleInfo={{
-            unitManufacturer: manufacturer,
-            unitModel:        model,
+            // Reefer/electrical tabs are TK/Carrier units → route to reefer dealers.
+            // The truck-engine tab is not a reefer unit → omit so it uses auto-parts stores.
+            unitManufacturer: activeTab === 'truck' ? undefined : manufacturer,
+            unitModel:        activeTab === 'truck' ? undefined : model,
           }}
           techPhone=""
           onClose={() => setShowDelivery(false)}
