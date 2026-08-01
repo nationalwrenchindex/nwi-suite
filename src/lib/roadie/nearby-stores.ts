@@ -83,19 +83,47 @@ async function searchNearby(key: string, lat: number, lng: number, includedTypes
   return data.places ?? []
 }
 
-export async function getNearbyPartsStores(lat: number, lng: number): Promise<StoreResult[]> {
+// Places (New) Text Search — used for reefer dealers / refrigeration suppliers,
+// which are NOT auto_parts_store and are too sparse for a typed Nearby search.
+async function searchText(key: string, lat: number, lng: number, textQuery: string, radius: number): Promise<PlaceNew[]> {
+  const res = await fetch('https://places.googleapis.com/v1/places:searchText', {
+    method: 'POST',
+    headers: {
+      'Content-Type':     'application/json',
+      'X-Goog-Api-Key':   key,
+      'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.nationalPhoneNumber,places.location,places.types',
+    },
+    body: JSON.stringify({
+      textQuery,
+      locationBias: {
+        circle: {
+          center: { latitude: lat, longitude: lng },
+          radius,
+        },
+      },
+    }),
+  })
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    console.error(`[nearby-stores] Google Places searchText ${res.status} error body:`, body)
+    throw new Error(`Google Places error: ${res.status}${body ? ` — ${body}` : ''}`)
+  }
+  const data = await res.json() as { places?: PlaceNew[] }
+  return data.places ?? []
+}
+
+// vendor: 'tk' | 'carrier' → transport-refrigeration dealers/suppliers (text search,
+// 50-mile radius). 'auto' / undefined → auto_parts_store chains (unchanged).
+export async function getNearbyPartsStores(lat: number, lng: number, vendor?: string): Promise<StoreResult[]> {
   const key = process.env.GOOGLE_MAPS_API_KEY
   if (!key) throw new Error('GOOGLE_MAPS_NOT_CONFIGURED')
 
-  // Single search on auto_parts_store (one confirmed-valid type per request).
-  const partsResults = await searchNearby(key, lat, lng, ['auto_parts_store'])
-
-  const toStore = (p: PlaceNew, note?: string): StoreResult | null => {
+  const toStore = (p: PlaceNew, fallbackName: string, note?: string): StoreResult | null => {
     const rlat = p.location?.latitude
     const rlng = p.location?.longitude
     if (typeof rlat !== 'number' || typeof rlng !== 'number' || !p.id) return null
     return {
-      name:          p.displayName?.text ?? 'Auto Parts Store',
+      name:          p.displayName?.text ?? fallbackName,
       address:       p.formattedAddress ?? '',
       phone:         p.nationalPhoneNumber ?? '',
       placeId:       p.id,
@@ -106,9 +134,29 @@ export async function getNearbyPartsStores(lat: number, lng: number): Promise<St
     }
   }
 
+  // ── Reefer (Thermo King / Carrier Transicold) ──
+  // Dealers and refrigeration suppliers aren't auto_parts_store and are sparse,
+  // so use Text Search over a wide 80 km (~50 mi) radius. Results are shown as-is
+  // (no chain filter), closest-first.
+  if (vendor === 'tk' || vendor === 'carrier') {
+    const reefer = await searchText(
+      key, lat, lng,
+      'Thermo King dealer OR Carrier Transicold dealer OR transport refrigeration parts',
+      80000,
+    )
+    return reefer
+      .map(p => toStore(p, 'Refrigeration Parts Supplier'))
+      .filter((s): s is StoreResult => s !== null)
+      .sort((a, b) => a.distanceMiles - b.distanceMiles)
+      .slice(0, 5)
+  }
+
+  // ── Auto (LD) — unchanged: single search on auto_parts_store ──
+  const partsResults = await searchNearby(key, lat, lng, ['auto_parts_store'])
+
   // Filter results to recognized parts chains, closest-first.
   const chains = partsResults
-    .map(p => toStore(p))
+    .map(p => toStore(p, 'Auto Parts Store'))
     .filter((s): s is StoreResult => s !== null && isChain(s.name))
     .sort((a, b) => a.distanceMiles - b.distanceMiles)
 
@@ -117,7 +165,7 @@ export async function getNearbyPartsStores(lat: number, lng: number): Promise<St
   // Fallback: too few chains matched — show ALL auto_parts_store results unfiltered
   // so the tech always sees something, flagged to verify before dispatching.
   return partsResults
-    .map(p => toStore(p, 'Verify this is an auto parts retailer before sending a driver'))
+    .map(p => toStore(p, 'Auto Parts Store', 'Verify this is an auto parts retailer before sending a driver'))
     .filter((s): s is StoreResult => s !== null)
     .sort((a, b) => a.distanceMiles - b.distanceMiles)
 }

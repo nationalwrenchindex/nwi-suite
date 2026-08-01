@@ -11,12 +11,13 @@ export async function GET(req: NextRequest) {
 
   const lat = Number(req.nextUrl.searchParams.get('lat'))
   const lng = Number(req.nextUrl.searchParams.get('lng'))
+  const vendor = req.nextUrl.searchParams.get('vendor') ?? undefined
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     return NextResponse.json({ error: 'lat and lng are required' }, { status: 400 })
   }
 
   try {
-    const stores = await getNearbyPartsStores(lat, lng)
+    const stores = await getNearbyPartsStores(lat, lng, vendor)
     return NextResponse.json({ stores })
   } catch (err) {
     console.error('[parts-delivery/nearby-stores] failed', err)

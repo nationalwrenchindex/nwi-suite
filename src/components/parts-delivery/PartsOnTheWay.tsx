@@ -45,6 +45,13 @@ export default function PartsOnTheWay({
   onClose:              () => void
   onDeliveryDispatched: (trackingUrl: string) => void
 }) {
+  // Reefer routing: HD units on TK/Carrier get transport-refrigeration dealers
+  // instead of auto-parts chains. LD (and non-reefer HD) stay on 'auto'.
+  const reeferVendor: 'tk' | 'carrier' | 'auto' =
+    suite === 'hd' && /thermo/i.test(vehicleInfo.unitManufacturer ?? '')   ? 'tk'
+    : suite === 'hd' && /carrier/i.test(vehicleInfo.unitManufacturer ?? '') ? 'carrier'
+    : 'auto'
+
   const [screen, setScreen]     = useState<Screen>('stores')
   const [partRows, setPartRows] = useState<PartRow[]>(
     parts.map(p => ({ name: p.name, oem: p.oem, aftermarket: p.aftermarket, confirmed: true, verified: false })),
@@ -79,12 +86,12 @@ export default function PartsOnTheWay({
   useEffect(() => {
     if (!coords) return
     setStoresLoading(true)
-    fetch(`/api/parts-delivery/nearby-stores?lat=${coords.lat}&lng=${coords.lng}`)
+    fetch(`/api/parts-delivery/nearby-stores?lat=${coords.lat}&lng=${coords.lng}&vendor=${reeferVendor}`)
       .then(r => r.json())
       .then(d => setStores(Array.isArray(d.stores) ? d.stores : []))
       .catch(() => setStores([]))
       .finally(() => setStoresLoading(false))
-  }, [coords])
+  }, [coords, reeferVendor])
 
   // ── Field-verified catalog match (green badge) ──
   useEffect(() => {
@@ -257,6 +264,11 @@ export default function PartsOnTheWay({
                   {vehicleInfo.vin && <div>VIN: <b>{vehicleInfo.vin}</b></div>}
                   {isHD && (vehicleInfo.unitManufacturer || vehicleInfo.unitModel) && (
                     <div>Unit: <b>{vehicleInfo.unitManufacturer || ''} {vehicleInfo.unitModel || ''}</b></div>
+                  )}
+                  {reeferVendor !== 'auto' && (
+                    <div className="mt-2 text-xs" style={{ color: '#8a9bad' }}>
+                      Call ahead — TK and Carrier dealers may need your unit serial number to pull the correct parts.
+                    </div>
                   )}
                 </div>
               </div>
