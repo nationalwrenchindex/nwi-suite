@@ -723,6 +723,7 @@ interface RepairItem {
   category:               string | null
   applies_to:             string
   mobile_hours:           number | null
+  mobile_hours_max?:      number | null   // not in hd_repair_items today; optional so a range shows if ever added
   shop_hours:             number | null
   requires_refrigeration: boolean
   refrigeration_service:  string | null
@@ -742,6 +743,17 @@ function guessRepairCategory(text: string): string | null {
   if (/\begr\b|coolant|head gasket/.test(t)) return 'engine'
   if (/\bbelt\b|clutch|bearing/.test(t)) return 'mechanical'
   return null
+}
+
+// Mobile-hours label for a suggested repair: "2.0 hrs mobile" (or a range when a
+// distinct max exists), with "+ refrigeration service" appended when required.
+// Returns '' when mobile_hours is 0/null so no dash or hours render at all.
+function mobileHoursLabel(item: RepairItem): string {
+  const min = item.mobile_hours
+  if (min == null || min === 0) return ''
+  const max = item.mobile_hours_max
+  const base = (max != null && max !== min) ? `${min}-${max} hrs mobile` : `${min} hrs mobile`
+  return item.requires_refrigeration ? `${base} + refrigeration service` : base
 }
 
 function SuggestedRepairs({
@@ -765,7 +777,7 @@ function SuggestedRepairs({
         <div className="divide-y" style={{ borderColor: '#1e3040' }}>
           {items.map(item => {
             const sel = selectedIds.includes(item.id)
-            const hrs = item.mobile_hours != null ? `${item.mobile_hours} hrs mobile` : ''
+            const hoursLabel = mobileHoursLabel(item)
             return (
               <button
                 key={item.id}
@@ -786,10 +798,8 @@ function SuggestedRepairs({
                 <span className="flex-1 min-w-0">
                   <span className="block text-sm" style={{ color: sel ? '#fff' : 'rgba(255,255,255,0.8)' }}>
                     {item.description}
+                    {hoursLabel && <span style={{ color: 'rgba(255,255,255,0.5)' }}> — {hoursLabel}</span>}
                     {!item.is_master && <span className="ml-1.5 text-[10px] uppercase" style={{ color: HD_BLUE }}>custom</span>}
-                  </span>
-                  <span className="block text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                    {[hrs, item.requires_refrigeration ? `+ Refrigeration Service ${item.refrigeration_service ?? ''}`.trim() : null].filter(Boolean).join('  ·  ')}
                   </span>
                 </span>
               </button>
