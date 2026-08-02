@@ -57,12 +57,30 @@ interface PartResult {
 interface LibraryItem {
   id: string
   description: string
+  category: string | null
   mobile_hours: number | string | null
   shop_hours: number | string | null
   requires_refrigeration: boolean
   refrigeration_service: string | null
   refrigeration_hours: number | string | null
   is_master: boolean
+}
+
+// Intel Hub customer search hit
+interface CustomerHit {
+  id: string
+  first_name: string
+  last_name: string
+  phone: string | null
+  email: string | null
+}
+
+// One Gemini-suggested labor line
+interface LaborSuggestion {
+  description: string
+  mobile_hours: number
+  book_hours: number
+  category: string
 }
 
 const dInp = {
@@ -177,6 +195,12 @@ export default function NewQuotePage() {
   const [form, setForm] = useState({
     company_name: '',
     customer_name: '', customer_phone: '', customer_email: '',
+    customer_id: '',
+    // Billing + optional corporate/service address (auto-filled from Intel Hub).
+    address_line1: '', address_line2: '', city: '', state: '', zip: '',
+    corp_address_line1: '', corp_address_line2: '', corp_city: '', corp_state: '', corp_zip: '',
+    has_corp_address: false,
+    payment_terms: 'net30',
     unit_manufacturer: '', unit_model: '', unit_serial: '', unit_year: '',
     truck_make: '', truck_model: '', truck_year: '', vin: '',
     complaint: '', diagnosis: '',
@@ -184,6 +208,16 @@ export default function NewQuotePage() {
     road_call_fee: 0, include_road_call: false,
     tax_rate: 0, notes: '', valid_until: '',
   })
+
+  // ── Intel Hub customer picker ──
+  const [customerSearch, setCustomerSearch]       = useState('')
+  const [customerResults, setCustomerResults]     = useState<CustomerHit[]>([])
+  const [showCustomerResults, setShowCustomerResults] = useState(false)
+
+  // ── Gemini labor suggestions ──
+  const [suggestLoading, setSuggestLoading]   = useState(false)
+  const [suggestions, setSuggestions]         = useState<LaborSuggestion[]>([])
+  const [suggestNote, setSuggestNote]         = useState('')
 
   useEffect(() => {
     try {
@@ -273,6 +307,119 @@ export default function NewQuotePage() {
     setForm(f => ({ ...f, [k]: v }))
   }
 
+  // ── Intel Hub customer picker ──────────────────────────────────────────────
+  useEffect(() => {
+    const q = customerSearch.trim()
+    if (q.length < 2) { setCustomerResults([]); return }
+    const t = setTimeout(async () => {
+      try {
+        const res  = await fetch(`/api/customers?search=${encodeURIComponent(q)}&limit=8`)
+        const data = await res.json()
+        setCustomerResults((data.customers ?? []) as CustomerHit[])
+        setShowCustomerResults(true)
+      } catch { /* ignore */ }
+    }, 300)
+    return () => clearTimeout(t)
+  }, [customerSearch])
+
+  async function pickCustomer(hit: CustomerHit) {
+    setShowCustomerResults(false)
+    setCustomerSearch(`${hit.first_name} ${hit.last_name}`.trim())
+    // Fetch the full record for address + payment terms.
+    try {
+      const res  = await fetch(`/api/customers/${hit.id}`)
+      const data = await res.json()
+      const c = data.customer ?? {}
+      setForm(f => ({
+        ...f,
+        customer_id:    c.id ?? hit.id,
+        customer_name:  `${hit.first_name} ${hit.last_name}`.trim(),
+        customer_phone: c.phone ?? hit.phone ?? '',
+        customer_email: c.email ?? hit.email ?? '',
+        address_line1:  c.address_line1 ?? '',
+        address_line2:  c.address_line2 ?? '',
+        city:           c.city ?? '',
+        state:          c.state ?? '',
+        zip:            c.zip ?? '',
+        has_corp_address:   !!c.has_corp_address,
+        corp_address_line1: c.corp_address_line1 ?? '',
+        corp_address_line2: c.corp_address_line2 ?? '',
+        corp_city:          c.corp_city ?? '',
+        corp_state:         c.corp_state ?? '',
+        corp_zip:           c.corp_zip ?? '',
+        payment_terms:      c.payment_terms ?? 'net30',
+      }))
+    } catch {
+      // Fall back to the list fields we already have.
+      setForm(f => ({
+        ...f,
+        customer_id: hit.id,
+        customer_name: `${hit.first_name} ${hit.last_name}`.trim(),
+        customer_phone: hit.phone ?? '',
+        customer_email: hit.email ?? '',
+      }))
+    }
+  }
+
+  function clearCustomerLink() {
+    setCustomerSearch('')
+    setCustomerResults([])
+    setForm(f => ({
+      ...f,
+      customer_id: '', address_line1: '', address_line2: '', city: '', state: '', zip: '',
+      has_corp_address: false, corp_address_line1: '', corp_address_line2: '', corp_city: '', corp_state: '', corp_zip: '',
+    }))
+  }
+
+  const billingAddr = [form.address_line1, form.address_line2, [form.city, form.state].filter(Boolean).join(', '), form.zip].filter(Boolean).join(', ')
+  const serviceAddr = [form.corp_address_line1, form.corp_address_line2, [form.corp_city, form.corp_state].filter(Boolean).join(', '), form.corp_zip].filter(Boolean).join(', ')
+
+  // ── Gemini labor suggestions ───────────────────────────────────────────────
+  const isTruckUnit = !!(form.truck_make.trim() || form.truck_model.trim() || form.truck_year.trim() || (form.vin.trim() && !form.unit_manufacturer.trim()))
+
+  async function getLaborSuggestions() {
+    if (!form.complaint.trim() && !form.diagnosis.trim()) { setToast('Enter a complaint or diagnosis first.'); return }
+    setSuggestLoading(true); setSuggestNote(''); setSuggestions([])
+    try {
+      const res = await fetch('/api/hd/labor-suggestions', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          complaint: form.complaint, diagnosis: form.diagnosis, vin: form.vin,
+          unit_manufacturer: form.unit_manufacturer, unit_model: form.unit_model, unit_year: form.unit_year,
+          truck_make: form.truck_make, truck_model: form.truck_model, truck_year: form.truck_year,
+          is_truck: isTruckUnit,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setToast(data.error ?? 'Suggestions failed'); return }
+      const list = (data.suggestions ?? []) as LaborSuggestion[]
+      setSuggestions(list)
+      setSuggestNote(list.length ? `${list.length} suggestion${list.length === 1 ? '' : 's'} from AI — tap to add` : 'No suggestions returned. Try adding more detail.')
+    } catch {
+      setToast('Suggestions failed — check your connection.')
+    } finally {
+      setSuggestLoading(false)
+    }
+  }
+
+  function addSuggestion(s: LaborSuggestion) {
+    const mobile = Math.max(0, s.mobile_hours || 0)
+    const book   = Math.max(0, s.book_hours || mobile)
+    setLineItems(l => [...l, {
+      id: crypto.randomUUID(),
+      type: 'labor',
+      description: s.description,
+      book_hours: book, book_hours_max: book,
+      mobile_hours: mobile, mobile_hours_max: mobile,
+      requires_refrigeration: false, recharge_added: false,
+      part_number: '', quantity: 0, unit_cost: 0,
+      amount:     parseFloat((mobile * form.labor_rate).toFixed(2)),
+      amount_max: parseFloat((mobile * form.labor_rate).toFixed(2)),
+    }])
+    // Remove the card once added so the tech sees what's left.
+    setSuggestions(prev => prev.filter(x => x !== s))
+  }
+
   // Derived totals
   const subtotalLabor = lineItems.filter(i => i.type === 'labor').reduce((s, i) => s + i.amount, 0)
   const subtotalParts = lineItems.filter(i => i.type === 'parts').reduce((s, i) => s + i.amount, 0)
@@ -290,9 +437,17 @@ export default function NewQuotePage() {
     v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v)
 
   const laborTerm = laborDesc.trim().toLowerCase()
+  // Filter the labor library by unit type. Reefer is primary when both are present.
+  // Items with no category are treated as universal so a tech's own saves never vanish.
+  const activeCategories = form.unit_manufacturer.trim()
+    ? ['refrigeration', 'electrical', 'mechanical', 'sensors']
+    : (form.truck_make.trim() || form.truck_model.trim())
+      ? ['engine', 'fuel', 'electrical', 'brakes', 'suspension', 'cooling']
+      : null
+  const catOk = (c: string | null) => !activeCategories || !c || activeCategories.includes(c.toLowerCase())
   // Personal library first (own items then master), then LABOR_GUIDE fallbacks.
   const libMatches = laborTerm
-    ? laborLibrary.filter(i => i.description.toLowerCase().includes(laborTerm)).slice(0, 8)
+    ? laborLibrary.filter(i => i.description.toLowerCase().includes(laborTerm) && catOk(i.category)).slice(0, 8)
     : []
   const guideMatches = laborTerm
     ? LABOR_GUIDE.filter(i => i.label.toLowerCase().includes(laborTerm)).slice(0, 8)
@@ -493,6 +648,19 @@ export default function NewQuotePage() {
         customer_name:     form.customer_name,
         customer_phone:    form.customer_phone || null,
         customer_email:    form.customer_email || null,
+        customer_id:       form.customer_id || null,
+        address_line1:     form.address_line1 || null,
+        address_line2:     form.address_line2 || null,
+        city:              form.city || null,
+        state:             form.state || null,
+        zip:               form.zip || null,
+        has_corp_address:  form.has_corp_address,
+        corp_address_line1: form.has_corp_address ? (form.corp_address_line1 || null) : null,
+        corp_address_line2: form.has_corp_address ? (form.corp_address_line2 || null) : null,
+        corp_city:         form.has_corp_address ? (form.corp_city || null) : null,
+        corp_state:        form.has_corp_address ? (form.corp_state || null) : null,
+        corp_zip:          form.has_corp_address ? (form.corp_zip || null) : null,
+        payment_terms:     form.payment_terms || 'net30',
         unit_manufacturer: form.unit_manufacturer || null,
         unit_model:        form.unit_model || null,
         unit_serial:       form.unit_serial || null,
@@ -550,6 +718,48 @@ export default function NewQuotePage() {
         {/* ─ Section 1: Customer & Unit ─ */}
         <div style={cardStyle}>
           <SectionTitle>Customer &amp; Unit Info</SectionTitle>
+
+          {/* Link an Intel Hub customer — auto-fills contact, address, and payment terms */}
+          <div className="mb-4" style={{ position: 'relative' }}>
+            <Field label="Link Intel Hub Customer (optional)">
+              <div style={{ position: 'relative' }}>
+                <input
+                  style={inp}
+                  value={customerSearch}
+                  onChange={e => { setCustomerSearch(e.target.value); if (form.customer_id) setField('customer_id', '') }}
+                  onFocus={() => { if (customerResults.length) setShowCustomerResults(true) }}
+                  placeholder="Search saved customers by name, phone, or email"
+                />
+                {form.customer_id && (
+                  <button
+                    type="button"
+                    onClick={clearCustomerLink}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold px-2 py-1 rounded"
+                    style={{ background: '#F3F4F6', color: MUTED }}
+                  >
+                    Unlink
+                  </button>
+                )}
+              </div>
+            </Field>
+            {showCustomerResults && customerResults.length > 0 && !form.customer_id && (
+              <div style={{ position: 'absolute', zIndex: 20, left: 0, right: 0, marginTop: 4, background: CARD, border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden', maxHeight: 240, overflowY: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,0.08)' }}>
+                {customerResults.map(hit => (
+                  <button
+                    key={hit.id}
+                    type="button"
+                    onClick={() => pickCustomer(hit)}
+                    className="w-full text-left px-4 py-2.5 hover:bg-gray-50"
+                    style={{ borderBottom: `1px solid #F9FAFB` }}
+                  >
+                    <p className="text-sm font-medium" style={{ color: TEXT }}>{hit.first_name} {hit.last_name}</p>
+                    <p className="text-xs" style={{ color: MUTED }}>{[hit.phone, hit.email].filter(Boolean).join(' · ') || '—'}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="mb-4">
             <Field label="Business Name">
               <input style={inp} value={form.company_name} onChange={e => setField('company_name', e.target.value)} placeholder="Fleet company or business name (optional)" />
@@ -568,6 +778,27 @@ export default function NewQuotePage() {
               <input style={inp} value={form.customer_email} onChange={e => setField('customer_email', e.target.value)} placeholder="customer@email.com" type="email" />
             </Field>
           </div>
+
+          {/* Auto-filled address + terms from the linked Intel Hub customer */}
+          {(billingAddr || form.customer_id) && (
+            <div className="mb-6 p-3 rounded-lg text-sm" style={{ background: '#F9FAFB', border: `1px solid ${BORDER}` }}>
+              {billingAddr && (
+                <p style={{ color: TEXT }}>
+                  {form.has_corp_address && <span style={{ color: MUTED }}>Billing: </span>}📍 {billingAddr}
+                </p>
+              )}
+              {form.has_corp_address && serviceAddr && (
+                <p className="mt-1" style={{ color: TEXT }}>
+                  <span style={{ color: MUTED }}>Service: </span>🏢 {serviceAddr}
+                </p>
+              )}
+              <p className="mt-1 text-xs" style={{ color: MUTED }}>
+                Payment Terms: <strong style={{ color: TEXT }}>{form.payment_terms.replace('net', 'Net ')}</strong>
+                {!billingAddr && ' · no address on file for this customer'}
+              </p>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
             <Field label="Manufacturer">
               <select style={inp} value={form.unit_manufacturer} onChange={e => setField('unit_manufacturer', e.target.value)}>
@@ -642,6 +873,47 @@ export default function NewQuotePage() {
               )}
             </div>
           </div>
+
+          {/* ─ Gemini labor suggestions ─ */}
+          {(form.complaint.trim() || form.diagnosis.trim()) && (
+            <div className="mt-4 pt-4" style={{ borderTop: `1px solid ${BORDER}` }}>
+              <button
+                onClick={getLaborSuggestions}
+                disabled={suggestLoading}
+                className="flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg text-white disabled:opacity-60"
+                style={{ background: BLUE, minHeight: 44 }}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8" />
+                </svg>
+                {suggestLoading ? 'Thinking…' : 'Get Labor Suggestions'}
+              </button>
+              {suggestNote && <p className="text-xs mt-2" style={{ color: MUTED }}>{suggestNote}</p>}
+
+              {suggestions.length > 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                  {suggestions.map((s, i) => (
+                    <div key={`${s.description}-${i}`} className="p-3 rounded-lg flex flex-col gap-2" style={{ background: '#F9FAFB', border: `1px solid ${BORDER}` }}>
+                      <div>
+                        <p className="text-sm font-semibold" style={{ color: TEXT }}>{s.description}</p>
+                        <p className="text-xs mt-0.5" style={{ color: MUTED }}>
+                          {s.mobile_hours} hrs mobile &nbsp;•&nbsp; {fmt(s.mobile_hours * form.labor_rate)}
+                          {s.category && <span className="ml-1" style={{ color: '#9CA3AF' }}>· {s.category}</span>}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => addSuggestion(s)}
+                        className="self-start text-xs font-semibold px-3 py-1.5 rounded-lg text-white"
+                        style={{ background: ORANGE }}
+                      >
+                        + Add to Quote
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ─ Section 3: Labor Rate Settings ─ */}
@@ -874,6 +1146,13 @@ export default function NewQuotePage() {
             </div>
             <Field label="Valid Until">
               <input style={inp} type="date" value={form.valid_until} onChange={e => setField('valid_until', e.target.value)} />
+            </Field>
+            <Field label="Payment Terms">
+              <select style={inp} value={form.payment_terms} onChange={e => setField('payment_terms', e.target.value)}>
+                <option value="net15">Net 15 (due in 15 days)</option>
+                <option value="net30">Net 30 (due in 30 days)</option>
+                <option value="net45">Net 45 (due in 45 days)</option>
+              </select>
             </Field>
           </div>
         </div>

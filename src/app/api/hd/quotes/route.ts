@@ -44,8 +44,10 @@ export async function POST(req: NextRequest) {
   }
 
   // company_name is a customers-table field, not an hd_quotes column — pull it
-  // out of the insert body and use it only for customer logging.
-  const { company_name, ...quoteBody } = body
+  // out of the insert body and use it only for customer logging. customer_id is
+  // resolved separately via logHDCustomer and is not an hd_quotes column either.
+  const { company_name, customer_id: _customerId, ...quoteBody } = body
+  void _customerId
 
   const { count } = await supabase
     .from('hd_quotes')

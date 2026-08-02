@@ -3,12 +3,15 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
 import InvoiceDetailActions from './InvoiceDetailActions'
+import { termsDisplay, formatDueDate } from '@/lib/hd/payment-terms'
 
 const ORANGE = '#FF6600'
 const BLUE   = '#2969B0'
 
 const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
   unpaid:  { bg: '#FEE2E2', color: '#dc2626' },
+  sent:    { bg: '#DBEAFE', color: '#2563eb' },
+  overdue: { bg: '#FEE2E2', color: '#b91c1c' },
   paid:    { bg: '#DCFCE7', color: '#16a34a' },
   partial: { bg: '#FEF3C7', color: '#d97706' },
   void:    { bg: '#F3F4F6', color: '#6B7280' },
@@ -97,7 +100,13 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             <div className="text-right">
               <p className="font-bold text-xl" style={{ color: ORANGE }}>{inv.invoice_number}</p>
               <p className="text-sm" style={{ color: '#6B7280' }}>Date: {fmtDate(inv.created_at)}</p>
-              <p className="text-sm" style={{ color: '#6B7280' }}>Terms: {inv.payment_terms ?? 'Due on receipt'}</p>
+              <p className="text-sm" style={{ color: '#6B7280' }}>Terms: {termsDisplay(inv.payment_terms)}</p>
+              {inv.due_date && (
+                <p className="text-sm font-semibold" style={{ color: inv.status === 'overdue' ? '#b91c1c' : '#6B7280' }}>Payment Due: {formatDueDate(inv.due_date)}</p>
+              )}
+              {inv.late_fee_applied && Number(inv.late_fee_amount) > 0 && (
+                <p className="text-sm font-semibold" style={{ color: '#b91c1c' }}>Late Fee: {fmt(inv.late_fee_amount)}</p>
+              )}
               {inv.paid_at && (
                 <p className="text-sm font-semibold" style={{ color: '#16a34a' }}>Paid: {fmtDate(inv.paid_at)}</p>
               )}
@@ -111,6 +120,18 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
               <div>
                 <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: '#9CA3AF' }}>Bill To</h3>
                 <p className="font-semibold text-base" style={{ color: '#1A1A1A' }}>{inv.customer_name}</p>
+                {inv.address_line1 && (
+                  <p className="text-sm mt-1" style={{ color: '#6B7280' }}>
+                    {inv.has_corp_address && <span style={{ color: '#9CA3AF' }}>Billing: </span>}
+                    {[inv.address_line1, inv.address_line2, [inv.city, inv.state].filter(Boolean).join(', '), inv.zip].filter(Boolean).join(', ')}
+                  </p>
+                )}
+                {inv.has_corp_address && inv.corp_address_line1 && (
+                  <p className="text-sm" style={{ color: '#6B7280' }}>
+                    <span style={{ color: '#9CA3AF' }}>Service: </span>
+                    {[inv.corp_address_line1, inv.corp_address_line2, [inv.corp_city, inv.corp_state].filter(Boolean).join(', '), inv.corp_zip].filter(Boolean).join(', ')}
+                  </p>
+                )}
                 {inv.customer_phone && <p className="text-sm mt-1" style={{ color: '#6B7280' }}>{inv.customer_phone}</p>}
                 {inv.customer_email && <p className="text-sm" style={{ color: '#6B7280' }}>{inv.customer_email}</p>}
               </div>

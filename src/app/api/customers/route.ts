@@ -72,6 +72,13 @@ export async function POST(request: NextRequest) {
       city:         body.city         ?? null,
       state:        body.state        ?? null,
       zip:          body.zip          ?? null,
+      corp_address_line1: body.corp_address_line1 ?? null,
+      corp_address_line2: body.corp_address_line2 ?? null,
+      corp_city:    body.corp_city    ?? null,
+      corp_state:   body.corp_state   ?? null,
+      corp_zip:     body.corp_zip     ?? null,
+      has_corp_address: body.has_corp_address ?? false,
+      payment_terms: body.payment_terms ?? 'net30',
       notes:        body.notes        ?? null,
     })
     .select('*')

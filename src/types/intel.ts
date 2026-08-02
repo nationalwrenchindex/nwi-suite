@@ -1,5 +1,7 @@
 // ─── Customer ─────────────────────────────────────────────────────────────────
 
+export type PaymentTerms = 'net15' | 'net30' | 'net45'
+
 export interface Customer {
   id: string
   user_id: string
@@ -12,6 +14,13 @@ export interface Customer {
   city: string | null
   state: string | null
   zip: string | null
+  corp_address_line1: string | null
+  corp_address_line2: string | null
+  corp_city: string | null
+  corp_state: string | null
+  corp_zip: string | null
+  has_corp_address: boolean | null
+  payment_terms: PaymentTerms | null
   notes: string | null
   created_at: string
   updated_at: string
@@ -157,6 +166,13 @@ export interface CreateCustomerPayload {
   city?: string | null
   state?: string | null
   zip?: string | null
+  corp_address_line1?: string | null
+  corp_address_line2?: string | null
+  corp_city?: string | null
+  corp_state?: string | null
+  corp_zip?: string | null
+  has_corp_address?: boolean | null
+  payment_terms?: PaymentTerms | null
   notes?: string | null
 }
 

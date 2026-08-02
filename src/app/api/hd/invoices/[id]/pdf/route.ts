@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
+import { termsDisplay, formatDueDate } from '@/lib/hd/payment-terms'
 
 export const dynamic = 'force-dynamic'
 
@@ -111,9 +112,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   .footer { margin-top: 36px; text-align: center; font-size: 11px; color: #aaa; border-top: 1px solid #e5e7eb; padding-top: 16px; }
   .status-badge { display: inline-block; padding: 3px 10px; border-radius: 99px; font-size: 11px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; }
   .status-unpaid { background: #fee2e2; color: #dc2626; }
+  .status-sent { background: #dbeafe; color: #2563eb; }
+  .status-overdue { background: #fee2e2; color: #b91c1c; }
   .status-paid { background: #dcfce7; color: #16a34a; }
   .status-partial { background: #fef3c7; color: #d97706; }
   .status-void { background: #f3f4f6; color: #6b7280; }
+  .due-highlight { color: #b91c1c; font-weight: 700; }
   .no-print { text-align: center; margin-bottom: 24px; }
   .print-btn { background: #FF6600; color: white; border: none; padding: 10px 28px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
   @media print {
@@ -141,8 +145,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     <div class="inv-meta">
       <div class="inv-number">${inv.invoice_number}</div>
       <p>Date: ${fmtDate(inv.created_at)}</p>
-      <p>Terms: ${inv.payment_terms ?? 'Due on receipt'}</p>
+      <p>Terms: ${termsDisplay(inv.payment_terms)}</p>
+      ${inv.due_date ? `<p${inv.status === 'overdue' ? ' class="due-highlight"' : ''}>Payment Due: ${formatDueDate(inv.due_date)}</p>` : ''}
       <p>Status: <span class="status-badge status-${inv.status}">${inv.status}</span></p>
+      ${inv.late_fee_applied && Number(inv.late_fee_amount) > 0 ? `<p class="due-highlight">Late Fee: ${fmt(inv.late_fee_amount)}</p>` : ''}
       ${inv.paid_at ? `<p>Paid: ${fmtDate(inv.paid_at)}</p>` : ''}
     </div>
   </div>
@@ -151,6 +157,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     <div class="info-box">
       <h3>Bill To</h3>
       <p><strong>${inv.customer_name}</strong></p>
+      ${inv.address_line1 ? `<p>${inv.has_corp_address ? '<span class="label">Billing:</span> ' : ''}${[inv.address_line1, inv.address_line2, [inv.city, inv.state].filter(Boolean).join(', '), inv.zip].filter(Boolean).join(', ')}</p>` : ''}
+      ${inv.has_corp_address && inv.corp_address_line1 ? `<p><span class="label">Service:</span> ${[inv.corp_address_line1, inv.corp_address_line2, [inv.corp_city, inv.corp_state].filter(Boolean).join(', '), inv.corp_zip].filter(Boolean).join(', ')}</p>` : ''}
       ${inv.customer_phone ? `<p>${inv.customer_phone}</p>` : ''}
       ${inv.customer_email ? `<p>${inv.customer_email}</p>` : ''}
     </div>

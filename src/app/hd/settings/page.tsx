@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import HDSettingsForm from '@/components/hd/HDSettingsForm'
+import LateFeeSettingsForm from '@/components/hd/LateFeeSettingsForm'
 import ExportData from '@/components/hd/ExportData'
 
 export const metadata = { title: 'Settings — NWI HD Suite' }
@@ -11,11 +12,27 @@ export default async function HDSettingsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('full_name, email, business_name, phone, hd_labor_rate, hd_tech_name, hd_epa_cert_number, hd_company_logo_url')
-    .eq('id', user.id)
-    .single()
+  const [{ data: profile }, { data: lateFee }] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('full_name, email, business_name, phone, hd_labor_rate, hd_tech_name, hd_epa_cert_number, hd_company_logo_url')
+      .eq('id', user.id)
+      .single(),
+    supabase
+      .from('late_fee_settings')
+      .select('fee_type, flat_fee_amount, percentage_rate, grace_period_days, send_sms_notification, active')
+      .eq('user_id', user.id)
+      .maybeSingle(),
+  ])
+
+  const lf = lateFee as {
+    fee_type?: 'flat' | 'percentage' | null
+    flat_fee_amount?: number | string | null
+    percentage_rate?: number | string | null
+    grace_period_days?: number | string | null
+    send_sms_notification?: boolean | null
+    active?: boolean | null
+  } | null
 
   const p = profile as {
     full_name?: string | null
@@ -61,6 +78,21 @@ export default async function HDSettingsPage() {
             initialTechName={p?.hd_tech_name ?? null}
             initialEpaCert={p?.hd_epa_cert_number ?? null}
             initialLogoUrl={p?.hd_company_logo_url ?? null}
+          />
+        </div>
+
+        <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+          <p className="font-condensed font-bold text-white text-lg tracking-wide mb-1">LATE FEE SETTINGS</p>
+          <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.5)' }}>
+            Automatically apply a late fee to overdue invoices. Runs daily at 9am and can text the customer.
+          </p>
+          <LateFeeSettingsForm
+            initialFeeType={lf?.fee_type ?? 'flat'}
+            initialFlatFee={lf?.flat_fee_amount != null ? String(lf.flat_fee_amount) : '25.00'}
+            initialPercentageRate={lf?.percentage_rate != null ? String(lf.percentage_rate) : '1.5'}
+            initialGraceDays={lf?.grace_period_days != null ? String(lf.grace_period_days) : '0'}
+            initialSendSms={lf?.send_sms_notification ?? true}
+            initialActive={lf?.active ?? true}
           />
         </div>
 

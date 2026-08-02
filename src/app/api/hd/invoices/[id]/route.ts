@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
+import { computeDueDate } from '@/lib/hd/payment-terms'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,6 +44,21 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const update: Record<string, unknown> = { ...body, updated_at: new Date().toISOString() }
   if (body.status === 'paid' && !body.paid_at) {
     update.paid_at = new Date().toISOString()
+  }
+
+  // When an invoice is marked SENT, stamp sent_at (once) and compute the due date
+  // from its payment terms. Client may pass payment_terms in the same PUT to override.
+  if (body.status === 'sent' && !body.sent_at) {
+    const { data: existing } = await supabase
+      .from('hd_invoices')
+      .select('sent_at, payment_terms')
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .single()
+    const sentAt = (existing?.sent_at as string | null) ?? new Date().toISOString()
+    const terms  = (body.payment_terms as string | undefined) ?? (existing?.payment_terms as string | null)
+    update.sent_at  = sentAt
+    update.due_date = computeDueDate(sentAt, terms)
   }
 
   const { data, error } = await supabase

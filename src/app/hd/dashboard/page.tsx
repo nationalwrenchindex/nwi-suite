@@ -62,6 +62,7 @@ export default async function HDDashboardPage() {
     { data: recentPMs },
     { data: epaLog },
     { data: invoices },
+    { data: hdInvoices },
   ] = await Promise.all([
     supabase
       .from('hd_units')
@@ -100,9 +101,23 @@ export default async function HDDashboardPage() {
       .eq('user_id', user.id)
       .eq('status', 'invoiced')
       .gte('created_at', new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
+
+    supabase
+      .from('hd_invoices')
+      .select('total, status, due_date')
+      .eq('user_id', user.id)
+      .in('status', ['sent', 'overdue', 'unpaid']),
   ])
 
   const mtdRevenue = (invoices ?? []).reduce((s, i) => s + Number(i.total_amount ?? 0), 0)
+
+  // Overdue = explicitly flagged overdue, or past its due date and not yet paid.
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const overdueInvoices = (hdInvoices ?? []).filter(i =>
+    i.status === 'overdue' || (i.due_date && String(i.due_date) < todayStr),
+  )
+  const overdueCount  = overdueInvoices.length
+  const overdueAmount = overdueInvoices.reduce((s, i) => s + Number(i.total ?? 0), 0)
   const today      = new Date()
   const dayLabel   = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
 
@@ -149,11 +164,19 @@ export default async function HDDashboardPage() {
       </div>
 
       {/* KPI grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <KpiCard label="MTD Revenue" value={`$${mtdRevenue.toLocaleString()}`} color="green" sub="Invoiced this month" />
         <KpiCard label="Active Fleet Units" value={unitCount ?? 0} color="blue" sub="Active units" />
         <KpiCard label="Open Work Orders" value={openWOCount ?? 0} color="orange" />
         <KpiCard label="Active Alarm Codes" value={alarmCount} color={alarmCount > 0 ? 'red' : 'white'} sub="From recent PMs" />
+        <Link href="/hd/invoices?filter=overdue" className="rounded-xl transition-opacity hover:opacity-80">
+          <KpiCard
+            label="Overdue Invoices"
+            value={overdueCount}
+            color={overdueCount > 0 ? 'red' : 'white'}
+            sub={overdueCount > 0 ? `$${overdueAmount.toLocaleString()} outstanding` : 'All current'}
+          />
+        </Link>
       </div>
 
       {/* Main grid */}

@@ -22,8 +22,14 @@ function fmtMoney(n: number | null) {
 // ─── Add Customer Form ────────────────────────────────────────────────────────
 
 function AddCustomerForm({ onCreated }: { onCreated: (c: CustomerListItem) => void }) {
-  const blank = { first_name: '', last_name: '', phone: '', email: '', address_line1: '', city: '', state: '', zip: '' }
+  const blank = {
+    first_name: '', last_name: '', phone: '', email: '',
+    address_line1: '', address_line2: '', city: '', state: '', zip: '',
+    corp_address_line1: '', corp_address_line2: '', corp_city: '', corp_state: '', corp_zip: '',
+    payment_terms: 'net30',
+  }
   const [form, setForm]     = useState(blank)
+  const [hasCorp, setHasCorp] = useState(false)
   const [loading, setLoad]  = useState(false)
   const [error, setError]   = useState<string | null>(null)
 
@@ -36,15 +42,22 @@ function AddCustomerForm({ onCreated }: { onCreated: (c: CustomerListItem) => vo
     const payload: CreateCustomerPayload = {
       first_name: form.first_name.trim(), last_name: form.last_name.trim(),
       phone: form.phone || null, email: form.email || null,
-      address_line1: form.address_line1 || null, city: form.city || null,
-      state: form.state || null, zip: form.zip || null,
+      address_line1: form.address_line1 || null, address_line2: form.address_line2 || null,
+      city: form.city || null, state: form.state || null, zip: form.zip || null,
+      has_corp_address: hasCorp,
+      corp_address_line1: hasCorp ? (form.corp_address_line1 || null) : null,
+      corp_address_line2: hasCorp ? (form.corp_address_line2 || null) : null,
+      corp_city: hasCorp ? (form.corp_city || null) : null,
+      corp_state: hasCorp ? (form.corp_state || null) : null,
+      corp_zip: hasCorp ? (form.corp_zip || null) : null,
+      payment_terms: (form.payment_terms as CreateCustomerPayload['payment_terms']) || 'net30',
     }
     try {
       const res = await fetch('/api/customers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Failed')
       onCreated({ ...data.customer, vehicles: [] })
-      setForm(blank)
+      setForm(blank); setHasCorp(false)
     } catch (e) { setError(e instanceof Error ? e.message : 'Unknown error') }
     finally { setLoad(false) }
   }
@@ -61,12 +74,41 @@ function AddCustomerForm({ onCreated }: { onCreated: (c: CustomerListItem) => vo
         <div><label className="nwi-label">Phone</label><input type="tel" value={form.phone} onChange={e => set('phone', e.target.value)} className="nwi-input" placeholder="(555) 867-5309" /></div>
         <div><label className="nwi-label">Email</label><input type="email" value={form.email} onChange={e => set('email', e.target.value)} className="nwi-input" placeholder="marcus@email.com" /></div>
       </div>
-      <div><label className="nwi-label">Address</label><input value={form.address_line1} onChange={e => set('address_line1', e.target.value)} className="nwi-input" placeholder="4521 Main St" /></div>
+
+      <p className="nwi-label !mb-0 pt-1">Billing Address</p>
+      <div><label className="nwi-label">Address line 1</label><input value={form.address_line1} onChange={e => set('address_line1', e.target.value)} className="nwi-input" placeholder="4521 Main St" /></div>
+      <div><label className="nwi-label">Address line 2</label><input value={form.address_line2} onChange={e => set('address_line2', e.target.value)} className="nwi-input" placeholder="Suite 200 (optional)" /></div>
       <div className="grid grid-cols-3 gap-3">
         <div><label className="nwi-label">City</label><input value={form.city} onChange={e => set('city', e.target.value)} className="nwi-input" placeholder="Dallas" /></div>
         <div><label className="nwi-label">State</label><input value={form.state} onChange={e => set('state', e.target.value)} className="nwi-input" placeholder="TX" /></div>
         <div><label className="nwi-label">ZIP</label><input value={form.zip} onChange={e => set('zip', e.target.value)} className="nwi-input" placeholder="75201" /></div>
       </div>
+
+      <div><label className="nwi-label">Payment Terms</label>
+        <select value={form.payment_terms} onChange={e => set('payment_terms', e.target.value)} className="nwi-input">
+          <option value="net15">Net 15 (due in 15 days)</option>
+          <option value="net30">Net 30 (due in 30 days)</option>
+          <option value="net45">Net 45 (due in 45 days)</option>
+        </select>
+      </div>
+
+      <label className="flex items-center gap-2 text-sm text-white/70 cursor-pointer pt-1">
+        <input type="checkbox" checked={hasCorp} onChange={e => setHasCorp(e.target.checked)} className="accent-orange" />
+        Different corporate/service address
+      </label>
+      {hasCorp && (
+        <div className="space-y-3 border-l-2 border-orange/30 pl-3">
+          <p className="nwi-label !mb-0">Corporate / Service Address</p>
+          <div><label className="nwi-label">Address line 1</label><input value={form.corp_address_line1} onChange={e => set('corp_address_line1', e.target.value)} className="nwi-input" placeholder="100 Fleet Yard Rd" /></div>
+          <div><label className="nwi-label">Address line 2</label><input value={form.corp_address_line2} onChange={e => set('corp_address_line2', e.target.value)} className="nwi-input" placeholder="Bay 4 (optional)" /></div>
+          <div className="grid grid-cols-3 gap-3">
+            <div><label className="nwi-label">City</label><input value={form.corp_city} onChange={e => set('corp_city', e.target.value)} className="nwi-input" placeholder="Fort Worth" /></div>
+            <div><label className="nwi-label">State</label><input value={form.corp_state} onChange={e => set('corp_state', e.target.value)} className="nwi-input" placeholder="TX" /></div>
+            <div><label className="nwi-label">ZIP</label><input value={form.corp_zip} onChange={e => set('corp_zip', e.target.value)} className="nwi-input" placeholder="76102" /></div>
+          </div>
+        </div>
+      )}
+
       <button type="submit" disabled={loading} className="btn-primary text-sm py-2.5">{loading ? 'Saving…' : 'SAVE CUSTOMER'}</button>
     </form>
   )
@@ -373,6 +415,7 @@ function CustomerProfile({
   const [editMode, setEditMode] = useState(false)
   const [showAddVehicle, setShowAddVehicle] = useState(false)
   const [editForm, setEditForm] = useState<Record<string, string>>({})
+  const [editHasCorp, setEditHasCorp] = useState(false)
   const [saving, setSaving]     = useState(false)
 
   const fetchCustomer = useCallback(async () => {
@@ -393,10 +436,14 @@ function CustomerProfile({
     setEditForm({
       first_name: customer.first_name, last_name: customer.last_name,
       phone: customer.phone ?? '', email: customer.email ?? '',
-      address_line1: customer.address_line1 ?? '', city: customer.city ?? '',
-      state: customer.state ?? '', zip: customer.zip ?? '',
+      address_line1: customer.address_line1 ?? '', address_line2: customer.address_line2 ?? '',
+      city: customer.city ?? '', state: customer.state ?? '', zip: customer.zip ?? '',
+      corp_address_line1: customer.corp_address_line1 ?? '', corp_address_line2: customer.corp_address_line2 ?? '',
+      corp_city: customer.corp_city ?? '', corp_state: customer.corp_state ?? '', corp_zip: customer.corp_zip ?? '',
+      payment_terms: customer.payment_terms ?? 'net30',
       notes: customer.notes ?? '',
     })
+    setEditHasCorp(!!customer.has_corp_address)
     setEditMode(true)
   }
 
@@ -409,8 +456,15 @@ function CustomerProfile({
         body: JSON.stringify({
           first_name: editForm.first_name, last_name: editForm.last_name,
           phone: editForm.phone || null, email: editForm.email || null,
-          address_line1: editForm.address_line1 || null, city: editForm.city || null,
-          state: editForm.state || null, zip: editForm.zip || null,
+          address_line1: editForm.address_line1 || null, address_line2: editForm.address_line2 || null,
+          city: editForm.city || null, state: editForm.state || null, zip: editForm.zip || null,
+          has_corp_address: editHasCorp,
+          corp_address_line1: editHasCorp ? (editForm.corp_address_line1 || null) : null,
+          corp_address_line2: editHasCorp ? (editForm.corp_address_line2 || null) : null,
+          corp_city: editHasCorp ? (editForm.corp_city || null) : null,
+          corp_state: editHasCorp ? (editForm.corp_state || null) : null,
+          corp_zip: editHasCorp ? (editForm.corp_zip || null) : null,
+          payment_terms: editForm.payment_terms || 'net30',
           notes: editForm.notes || null,
         }),
       })
@@ -485,12 +539,37 @@ function CustomerProfile({
                   <div><label className="nwi-label">Phone</label><input value={editForm.phone} onChange={e => setEditForm(p => ({ ...p, phone: e.target.value }))} className="nwi-input" /></div>
                   <div><label className="nwi-label">Email</label><input type="email" value={editForm.email} onChange={e => setEditForm(p => ({ ...p, email: e.target.value }))} className="nwi-input" /></div>
                 </div>
-                <div><label className="nwi-label">Address</label><input value={editForm.address_line1} onChange={e => setEditForm(p => ({ ...p, address_line1: e.target.value }))} className="nwi-input" /></div>
+                <p className="nwi-label !mb-0 pt-1">Billing Address</p>
+                <div><label className="nwi-label">Address line 1</label><input value={editForm.address_line1} onChange={e => setEditForm(p => ({ ...p, address_line1: e.target.value }))} className="nwi-input" /></div>
+                <div><label className="nwi-label">Address line 2</label><input value={editForm.address_line2} onChange={e => setEditForm(p => ({ ...p, address_line2: e.target.value }))} className="nwi-input" placeholder="Suite 200 (optional)" /></div>
                 <div className="grid grid-cols-3 gap-2">
                   <div><label className="nwi-label">City</label><input value={editForm.city} onChange={e => setEditForm(p => ({ ...p, city: e.target.value }))} className="nwi-input" /></div>
                   <div><label className="nwi-label">State</label><input value={editForm.state} onChange={e => setEditForm(p => ({ ...p, state: e.target.value }))} className="nwi-input" /></div>
                   <div><label className="nwi-label">ZIP</label><input value={editForm.zip} onChange={e => setEditForm(p => ({ ...p, zip: e.target.value }))} className="nwi-input" /></div>
                 </div>
+                <div><label className="nwi-label">Payment Terms</label>
+                  <select value={editForm.payment_terms} onChange={e => setEditForm(p => ({ ...p, payment_terms: e.target.value }))} className="nwi-input">
+                    <option value="net15">Net 15 (due in 15 days)</option>
+                    <option value="net30">Net 30 (due in 30 days)</option>
+                    <option value="net45">Net 45 (due in 45 days)</option>
+                  </select>
+                </div>
+                <label className="flex items-center gap-2 text-sm text-white/70 cursor-pointer pt-1">
+                  <input type="checkbox" checked={editHasCorp} onChange={e => setEditHasCorp(e.target.checked)} className="accent-orange" />
+                  Different corporate/service address
+                </label>
+                {editHasCorp && (
+                  <div className="space-y-2 border-l-2 border-orange/30 pl-3">
+                    <p className="nwi-label !mb-0">Corporate / Service Address</p>
+                    <div><label className="nwi-label">Address line 1</label><input value={editForm.corp_address_line1} onChange={e => setEditForm(p => ({ ...p, corp_address_line1: e.target.value }))} className="nwi-input" /></div>
+                    <div><label className="nwi-label">Address line 2</label><input value={editForm.corp_address_line2} onChange={e => setEditForm(p => ({ ...p, corp_address_line2: e.target.value }))} className="nwi-input" placeholder="Bay 4 (optional)" /></div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <div><label className="nwi-label">City</label><input value={editForm.corp_city} onChange={e => setEditForm(p => ({ ...p, corp_city: e.target.value }))} className="nwi-input" /></div>
+                      <div><label className="nwi-label">State</label><input value={editForm.corp_state} onChange={e => setEditForm(p => ({ ...p, corp_state: e.target.value }))} className="nwi-input" /></div>
+                      <div><label className="nwi-label">ZIP</label><input value={editForm.corp_zip} onChange={e => setEditForm(p => ({ ...p, corp_zip: e.target.value }))} className="nwi-input" /></div>
+                    </div>
+                  </div>
+                )}
                 <div><label className="nwi-label">Notes</label><textarea rows={2} value={editForm.notes} onChange={e => setEditForm(p => ({ ...p, notes: e.target.value }))} className="nwi-input resize-none" /></div>
                 <div className="flex gap-2">
                   <button type="button" onClick={() => setEditMode(false)} className="flex-1 border border-dark-border rounded-lg py-2 text-white/50 hover:text-white text-sm transition-colors">Cancel</button>
@@ -504,9 +583,15 @@ function CustomerProfile({
                 {customer.email  && <p className="text-white/70 text-sm">✉️ {customer.email}</p>}
                 {customer.address_line1 && (
                   <p className="text-white/50 text-sm">
-                    📍 {[customer.address_line1, customer.city, customer.state, customer.zip].filter(Boolean).join(', ')}
+                    {customer.has_corp_address && <span className="text-white/30">Billing: </span>}📍 {[customer.address_line1, customer.address_line2, customer.city, customer.state, customer.zip].filter(Boolean).join(', ')}
                   </p>
                 )}
+                {customer.has_corp_address && customer.corp_address_line1 && (
+                  <p className="text-white/50 text-sm">
+                    <span className="text-white/30">Service: </span>🏢 {[customer.corp_address_line1, customer.corp_address_line2, customer.corp_city, customer.corp_state, customer.corp_zip].filter(Boolean).join(', ')}
+                  </p>
+                )}
+                <p className="text-white/40 text-xs">Terms: {(customer.payment_terms ?? 'net30').replace('net', 'Net ')}</p>
                 {customer.notes  && <p className="text-white/40 text-xs mt-2 italic">{customer.notes}</p>}
               </div>
             )}

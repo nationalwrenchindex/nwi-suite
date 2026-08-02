@@ -8,6 +8,8 @@ const ORANGE = '#FF6600'
 
 const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
   unpaid:  { bg: '#FEE2E2', color: '#dc2626' },
+  sent:    { bg: '#DBEAFE', color: '#2563eb' },
+  overdue: { bg: '#FEE2E2', color: '#b91c1c' },
   paid:    { bg: '#DCFCE7', color: '#16a34a' },
   partial: { bg: '#FEF3C7', color: '#d97706' },
   void:    { bg: '#F3F4F6', color: '#6B7280' },
@@ -22,7 +24,7 @@ function fmtDate(s: string | null) {
   return new Date(s).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-export default async function InvoicesPage() {
+export default async function InvoicesPage({ searchParams }: { searchParams: Promise<{ filter?: string }> }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
@@ -30,15 +32,21 @@ export default async function InvoicesPage() {
   const hasAccess = await checkHDAccess(user.id)
   if (!hasAccess) redirect('/hd/signup')
 
+  const { filter } = await searchParams
+
   const { data: invoices } = await supabase
     .from('hd_invoices')
-    .select('id, invoice_number, customer_name, unit_manufacturer, unit_model, total, status, payment_terms, created_at, paid_at')
+    .select('id, invoice_number, customer_name, unit_manufacturer, unit_model, total, status, payment_terms, due_date, created_at, paid_at')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
     .limit(200)
 
-  const rows = invoices ?? []
-  const totalUnpaid = rows.filter(i => i.status === 'unpaid').reduce((s, i) => s + (i.total ?? 0), 0)
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const allRows = invoices ?? []
+  const rows = filter === 'overdue'
+    ? allRows.filter(i => i.status === 'overdue' || (i.due_date && String(i.due_date) < todayStr && i.status !== 'paid' && i.status !== 'void'))
+    : allRows
+  const totalUnpaid = rows.filter(i => i.status === 'unpaid' || i.status === 'sent' || i.status === 'overdue').reduce((s, i) => s + (i.total ?? 0), 0)
 
   return (
     <div style={{ background: '#F4F5F7', minHeight: '100dvh', padding: '24px 20px' }}>
@@ -51,7 +59,9 @@ export default async function InvoicesPage() {
               INVOICES
             </h1>
             <p style={{ color: '#6B7280', fontSize: 14, marginTop: 2 }}>
+              {filter === 'overdue' && <span className="font-semibold" style={{ color: '#b91c1c' }}>Overdue · </span>}
               {rows.length} invoice{rows.length !== 1 ? 's' : ''}
+              {filter === 'overdue' && <Link href="/hd/invoices" className="ml-2 underline" style={{ color: '#6B7280' }}>show all</Link>}
               {totalUnpaid > 0 && (
                 <span className="ml-3 font-semibold" style={{ color: '#dc2626' }}>
                   {fmt(totalUnpaid)} outstanding
@@ -135,7 +145,7 @@ export default async function InvoicesPage() {
         {/* Summary */}
         {rows.length > 0 && (
           <div className="flex gap-6 mt-4">
-            {(['unpaid','paid','partial','void'] as const).map(s => {
+            {(['unpaid','sent','overdue','paid','partial','void'] as const).map(s => {
               const count = rows.filter(i => i.status === s).length
               const st = STATUS_STYLE[s]
               return (
