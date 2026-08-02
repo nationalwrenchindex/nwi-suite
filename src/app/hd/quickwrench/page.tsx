@@ -3557,12 +3557,23 @@ export default function HDQuickWrenchPage() {
         <PartsOnTheWay
           suite="hd"
           parts={extractHDParts(partsResult)}
-          vehicleInfo={{
+          vehicleInfo={activeTab === 'truck'
+            // Truck-engine tab: send the truck VIN + engine brand/model (and vehicle
+            // year/make/model) so the parts counter can pull the right components.
+            // No unitManufacturer → routes to auto-parts stores, not reefer dealers.
+            ? {
+                year:   vehicleYear  || undefined,
+                make:   vehicleMake  || undefined,
+                model:  vehicleModel || undefined,
+                engine: [truckBrand, engineModel].filter(Boolean).join(' ') || undefined,
+                vin:    vin.trim()   || undefined,
+              }
             // Reefer/electrical tabs are TK/Carrier units → route to reefer dealers.
-            // The truck-engine tab is not a reefer unit → omit so it uses auto-parts stores.
-            unitManufacturer: activeTab === 'truck' ? undefined : manufacturer,
-            unitModel:        activeTab === 'truck' ? undefined : model,
-          }}
+            : {
+                unitManufacturer: manufacturer,
+                unitModel:        model,
+              }
+          }
           techPhone=""
           onClose={() => setShowDelivery(false)}
           onDeliveryDispatched={() => { /* tech sees tracking in-modal */ }}
