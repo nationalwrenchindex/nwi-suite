@@ -67,14 +67,20 @@ export default async function PMSchedulesPage() {
           <div key={brand} className="rounded-xl p-5" style={{ background: '#111920', border: `1px solid ${color}40` }}>
             <p className="font-condensed font-bold text-white text-lg tracking-wide mb-3" style={{ color }}>{brand}</p>
             {intervals.map(({ type, hours }) => (
-              <div key={type} className="flex justify-between py-2 border-b text-sm" style={{ borderColor: '#1e3040' }}>
+              <Link
+                key={type}
+                href={`/hd/invoices/new?pm_type=${encodeURIComponent(type)}&unit_manufacturer=${encodeURIComponent(brand)}`}
+                className="flex justify-between items-center py-2 border-b text-sm transition-colors hover:bg-white/5 rounded px-1 -mx-1"
+                style={{ borderColor: '#1e3040' }}
+              >
                 <span style={{ color: 'rgba(255,255,255,0.7)' }}>{type}</span>
-                <span className="font-medium" style={{ color }}>{hours}</span>
-              </div>
+                <span className="font-medium whitespace-nowrap" style={{ color }}>{hours} ›</span>
+              </Link>
             ))}
           </div>
         ))}
       </div>
+      <p className="text-xs mb-6" style={{ color: 'rgba(255,255,255,0.3)' }}>Tap any interval to start a new invoice pre-filled for that PM service.</p>
 
       {/* Truck & trailer PM intervals (chassis, mileage/time based) */}
       <h2 className="font-condensed font-bold text-white text-xl tracking-wide mb-4">TRUCK &amp; TRAILER PM INTERVALS</h2>
@@ -82,6 +88,7 @@ export default async function PMSchedulesPage() {
         {[
           {
             brand: 'Class 8 Truck',
+            mfr: 'Truck',
             color: TRUCK_BLUE,
             intervals: [
               { type: 'PM-A Dry Service',      when: '25,000 mi / 3 mo',   detail: 'Oil change, filters, visual inspection, grease chassis, check fluids, inspect brakes' },
@@ -92,6 +99,7 @@ export default async function PMSchedulesPage() {
           },
           {
             brand: 'Trailer',
+            mfr: 'Trailer',
             color: TRAILER_GREEN,
             intervals: [
               { type: '90-Day Inspection',       when: 'Every 90 days', detail: 'Brake adjustment, tire inspection, lights & electrical, glad hands, ABS system check' },
@@ -101,17 +109,22 @@ export default async function PMSchedulesPage() {
               { type: 'Kingpin Inspection',      when: 'Every 90 days', detail: 'Inspect kingpin wear and upper coupler' },
             ],
           },
-        ].map(({ brand, color, intervals }) => (
+        ].map(({ brand, mfr, color, intervals }) => (
           <div key={brand} className="rounded-xl p-5" style={{ background: '#111920', border: `1px solid ${color}40` }}>
             <p className="font-condensed font-bold text-white text-lg tracking-wide mb-3" style={{ color }}>{brand}</p>
             {intervals.map(({ type, when, detail }) => (
-              <div key={type} className="py-2 border-b" style={{ borderColor: '#1e3040' }}>
+              <Link
+                key={type}
+                href={`/hd/invoices/new?pm_type=${encodeURIComponent(type)}&unit_manufacturer=${encodeURIComponent(mfr)}`}
+                className="block py-2 border-b transition-colors hover:bg-white/5 rounded px-1 -mx-1"
+                style={{ borderColor: '#1e3040' }}
+              >
                 <div className="flex justify-between gap-3 text-sm">
                   <span style={{ color: 'rgba(255,255,255,0.7)' }}>{type}</span>
-                  <span className="font-medium whitespace-nowrap" style={{ color }}>{when}</span>
+                  <span className="font-medium whitespace-nowrap" style={{ color }}>{when} ›</span>
                 </div>
                 <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>{detail}</p>
-              </div>
+              </Link>
             ))}
           </div>
         ))}

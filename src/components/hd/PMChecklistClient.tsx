@@ -14,15 +14,6 @@ const HD_BLUE   = '#1A6BAF'
 
 type Step = 'setup' | 'safety' | 'checklist' | 'signature' | 'done'
 
-interface WorkOrderOption {
-  id: string
-  work_order_number: string | null
-  unit_id: string | null
-  fleet_account_id: string | null
-  current_setpoint: string | null
-  tech_name: string | null
-}
-
 interface UnitOption {
   id: string
   unit_number: string
@@ -112,12 +103,10 @@ function ItemButtons({
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function PMChecklistClient({
-  workOrders,
   units,
   invoices,
   userId,
 }: {
-  workOrders: WorkOrderOption[]
   units:      UnitOption[]
   invoices:   InvoiceOption[]
   userId:     string
@@ -126,7 +115,6 @@ export default function PMChecklistClient({
 
   // Setup state
   const [step,       setStep]       = useState<Step>('setup')
-  const [selectedWO, setSelectedWO] = useState<string>('')
   const [selectedInvoice, setSelectedInvoice] = useState<string>(INV_NONE)
   const [selectedUnit, setSelectedUnit] = useState<string>('')
   const [pmType,     setPmType]     = useState<PMTypeValue>('3000hr')
@@ -271,7 +259,7 @@ export default function PMChecklistClient({
 
     const body = {
       unit_id:           selectedUnit || null,
-      work_order_id:     selectedWO   || null,
+      work_order_id:     null,
       invoice_action,
       invoice_id,
       pm_type:           pmType,
@@ -391,25 +379,6 @@ export default function PMChecklistClient({
           <h2 className="font-condensed font-bold text-xl text-white tracking-wide">PM SETUP</h2>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
-                Work Order (optional)
-              </label>
-              <select
-                value={selectedWO}
-                onChange={e => setSelectedWO(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white"
-                style={{ background: '#162030', border: '1px solid #1e3040' }}
-              >
-                <option value="">— Select work order —</option>
-                {workOrders.map(wo => (
-                  <option key={wo.id} value={wo.id}>
-                    {wo.work_order_number ?? `WO-${wo.id.slice(0, 6).toUpperCase()}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-
             <div>
               <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
                 Invoice

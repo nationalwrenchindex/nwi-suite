@@ -9,15 +9,7 @@ export default async function PMChecklistPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
 
-  const [{ data: workOrders }, { data: units }, { data: invoices }] = await Promise.all([
-    supabase
-      .from('hd_work_orders')
-      .select('id, work_order_number, unit_id, fleet_account_id, current_setpoint, tech_name')
-      .eq('user_id', user.id)
-      .in('status', ['open', 'in_progress'])
-      .order('created_at', { ascending: false })
-      .limit(50),
-
+  const [{ data: units }, { data: invoices }] = await Promise.all([
     supabase
       .from('hd_units')
       .select('id, unit_number, manufacturer, model, unit_type, total_hours')
@@ -48,7 +40,6 @@ export default async function PMChecklistPage() {
       </div>
 
       <PMChecklistClient
-        workOrders={workOrders ?? []}
         units={units ?? []}
         invoices={invoices ?? []}
         userId={user.id}

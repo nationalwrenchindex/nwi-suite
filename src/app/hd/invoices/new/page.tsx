@@ -90,6 +90,31 @@ export default function NewInvoicePage() {
 
   function setField(k: string, v: string | number | boolean) { setForm(f => ({ ...f, [k]: v })) }
 
+  // Prefill from a PM Schedules interval tap (?pm_type=...&unit_manufacturer=...).
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const sp = new URLSearchParams(window.location.search)
+    const pmType = sp.get('pm_type')
+    const mfr    = sp.get('unit_manufacturer')
+    if (!pmType && !mfr) return
+    const isReeferBrand = mfr === 'Thermo King' || mfr === 'Carrier Transicold'
+    setForm(f => ({
+      ...f,
+      unit_manufacturer: isReeferBrand ? (mfr as string) : f.unit_manufacturer,
+      complaint: pmType
+        ? `Preventive Maintenance — ${pmType}${mfr && !isReeferBrand ? ` (${mfr})` : ''}`
+        : f.complaint,
+    }))
+    if (pmType) {
+      setLineItems(l => l.length ? l : [{
+        id: crypto.randomUUID(), type: 'labor',
+        description: `Preventive Maintenance — ${pmType}`,
+        mobile_hours: 0, part_number: '', quantity: 0, unit_cost: 0, amount: 0,
+      }])
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // ── Customer picker ──
   useEffect(() => {
     const q = customerSearch.trim()
