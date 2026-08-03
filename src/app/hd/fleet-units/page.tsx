@@ -97,10 +97,18 @@ export default async function FleetUnitsPage({
             </div>
             <div>
               <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Manufacturer *</label>
-              <select name="manufacturer" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white" style={{ background: '#162030', border: '1px solid #1e3040' }}>
-                <option value="Thermo King">Thermo King</option>
-                <option value="Carrier Transicold">Carrier Transicold</option>
-              </select>
+              <input
+                name="manufacturer"
+                list="manufacturer-options"
+                required
+                placeholder="Thermo King, Carrier, Freightliner…"
+                className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20"
+                style={{ background: '#162030', border: '1px solid #1e3040' }}
+              />
+              <datalist id="manufacturer-options">
+                <option value="Thermo King" />
+                <option value="Carrier Transicold" />
+              </datalist>
             </div>
             <div>
               <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Model *</label>

@@ -22,6 +22,11 @@ export async function POST(req: NextRequest) {
       location?: string
       inspection_data: Record<string, { items: Record<string, { result: string; notes: string }> }>
       signature_data?: string
+      customer_name?: string
+      unit_manufacturer?: string
+      unit_model?: string
+      unit_serial?: string
+      invoice_id?: string
     }
 
     try {
@@ -82,6 +87,11 @@ export async function POST(req: NextRequest) {
         violations:            violations.length > 0 ? violations : null,
         overall_result:        overallResult,
         signature_data:        body.signature_data ?? null,
+        customer_name:         body.customer_name ?? null,
+        unit_manufacturer:     body.unit_manufacturer ?? null,
+        unit_model:            body.unit_model ?? null,
+        unit_serial:           body.unit_serial ?? null,
+        invoice_id:            body.invoice_id ?? null,
         locked:                true,
         locked_at:             new Date().toISOString(),
         inspection_id:         inspectionId,

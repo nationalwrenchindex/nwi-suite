@@ -36,11 +36,20 @@ interface Profile {
   hd_company_logo_url: string | null
 }
 
+interface Prefill {
+  invoice_id:        string | null
+  customer_name:     string | null
+  unit_manufacturer: string | null
+  unit_model:        string | null
+  unit_serial:       string | null
+}
+
 interface Props {
   units:         Unit[]
   fleetAccounts: FleetAccount[]
   profile:       Profile
   initialUnitId: string | null
+  prefill?:      Prefill | null
 }
 
 // ─── Sub-item row ─────────────────────────────────────────────────────────────
@@ -210,7 +219,7 @@ function InfoCell({ label, value, editable, type = 'text', onChange, children }:
 
 // ─── Main form ────────────────────────────────────────────────────────────────
 
-export default function DOTInspectionForm({ units, fleetAccounts, profile, initialUnitId }: Props) {
+export default function DOTInspectionForm({ units, fleetAccounts, profile, initialUnitId, prefill }: Props) {
   const router = useRouter()
 
   // Auto-generate inspection ID on mount
@@ -231,6 +240,14 @@ export default function DOTInspectionForm({ units, fleetAccounts, profile, initi
   const [signedAt,        setSignedAt]       = useState<string | null>(null)
   const [loading,         setLoading]        = useState(false)
   const [error,           setError]          = useState<string | null>(null)
+
+  // Free-text subject fields, pre-filled from invoice/PM context when no fleet unit
+  // is linked (?customer_name, unit_manufacturer, unit_model, unit_serial, invoice_id).
+  const [customerName,    setCustomerName]    = useState(prefill?.customer_name ?? '')
+  const [unitManufacturer, setUnitManufacturer] = useState(prefill?.unit_manufacturer ?? '')
+  const [unitModel,       setUnitModel]       = useState(prefill?.unit_model ?? '')
+  const [unitSerial,      setUnitSerial]      = useState(prefill?.unit_serial ?? '')
+  const [invoiceId]       = useState(prefill?.invoice_id ?? '')
 
   const selectedUnit    = units.find(u => u.id === selectedUnitId) ?? null
   const selectedAccount = fleetAccounts.find(a => a.id === (selectedUnit?.fleet_account_id ?? '')) ?? null
@@ -283,6 +300,11 @@ export default function DOTInspectionForm({ units, fleetAccounts, profile, initi
           location:              location || undefined,
           inspection_data:       inspData,
           signature_data:        signatureData,
+          customer_name:         (selectedAccount?.fleet_name || customerName) || undefined,
+          unit_manufacturer:     (selectedUnit?.manufacturer || unitManufacturer) || undefined,
+          unit_model:            (selectedUnit?.model || unitModel) || undefined,
+          unit_serial:           (selectedUnit?.serial_number || unitSerial) || undefined,
+          invoice_id:            invoiceId || undefined,
         }),
       })
       const json = await res.json() as { id?: string; error?: string }
@@ -416,14 +438,37 @@ export default function DOTInspectionForm({ units, fleetAccounts, profile, initi
             <tbody>
               <tr>
                 <InfoCell label="Unit Number"     value={selectedUnit?.unit_number     ?? '—'} />
-                <InfoCell label="Fleet Account"   value={selectedAccount?.fleet_name   ?? '—'} />
+                <InfoCell label="Fleet Account / Customer">
+                  {selectedAccount
+                    ? <div className="text-sm text-white">{selectedAccount.fleet_name}</div>
+                    : <input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="Customer name"
+                        className="w-full bg-transparent text-sm text-white outline-none border-b border-dashed placeholder-white/25"
+                        style={{ borderColor: 'rgba(255,255,255,0.15)', paddingBottom: 2 }} />}
+                </InfoCell>
               </tr>
               <tr>
-                <InfoCell label="Manufacturer / Model" value={selectedUnit ? `${selectedUnit.manufacturer} ${selectedUnit.model}` : '—'} />
+                <InfoCell label="Manufacturer / Model">
+                  {selectedUnit
+                    ? <div className="text-sm text-white">{selectedUnit.manufacturer} {selectedUnit.model}</div>
+                    : <div className="flex gap-2">
+                        <input value={unitManufacturer} onChange={e => setUnitManufacturer(e.target.value)} placeholder="Manufacturer"
+                          className="w-1/2 bg-transparent text-sm text-white outline-none border-b border-dashed placeholder-white/25"
+                          style={{ borderColor: 'rgba(255,255,255,0.15)', paddingBottom: 2 }} />
+                        <input value={unitModel} onChange={e => setUnitModel(e.target.value)} placeholder="Model"
+                          className="w-1/2 bg-transparent text-sm text-white outline-none border-b border-dashed placeholder-white/25"
+                          style={{ borderColor: 'rgba(255,255,255,0.15)', paddingBottom: 2 }} />
+                      </div>}
+                </InfoCell>
                 <InfoCell label="Year"            value={selectedUnit?.year?.toString() ?? '—'} />
               </tr>
               <tr>
-                <InfoCell label="VIN / Serial Number" value={selectedUnit?.serial_number ?? '—'} />
+                <InfoCell label="VIN / Serial Number">
+                  {selectedUnit
+                    ? <div className="text-sm text-white">{selectedUnit.serial_number ?? '—'}</div>
+                    : <input value={unitSerial} onChange={e => setUnitSerial(e.target.value)} placeholder="VIN / Serial"
+                        className="w-full bg-transparent text-sm text-white outline-none border-b border-dashed placeholder-white/25"
+                        style={{ borderColor: 'rgba(255,255,255,0.15)', paddingBottom: 2 }} />}
+                </InfoCell>
                 <InfoCell label="Odometer / Hour Meter" value={odometerHours} editable onChange={setOdometerHours} />
               </tr>
               <tr>

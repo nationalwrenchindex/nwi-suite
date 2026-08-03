@@ -115,7 +115,9 @@ export default async function PMSchedulesPage() {
             {intervals.map(({ type, when, detail }) => (
               <Link
                 key={type}
-                href={`/hd/invoices/new?pm_type=${encodeURIComponent(type)}&unit_manufacturer=${encodeURIComponent(mfr)}`}
+                href={type === 'DOT Annual Inspection'
+                  ? `/hd/dot-inspections/new?unit_manufacturer=${encodeURIComponent(mfr)}`
+                  : `/hd/invoices/new?pm_type=${encodeURIComponent(type)}&unit_manufacturer=${encodeURIComponent(mfr)}`}
                 className="block py-2 border-b transition-colors hover:bg-white/5 rounded px-1 -mx-1"
                 style={{ borderColor: '#1e3040' }}
               >

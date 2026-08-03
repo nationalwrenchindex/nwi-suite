@@ -8,7 +8,14 @@ export const metadata = { title: 'New DOT Inspection — NWI HD Suite' }
 export default async function NewDOTInspectionPage({
   searchParams,
 }: {
-  searchParams: Promise<{ unit?: string }>
+  searchParams: Promise<{
+    unit?: string
+    invoice_id?: string
+    customer_name?: string
+    unit_manufacturer?: string
+    unit_model?: string
+    unit_serial?: string
+  }>
 }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -19,6 +26,14 @@ export default async function NewDOTInspectionPage({
 
   const params = await searchParams
   const initialUnitId = typeof params.unit === 'string' ? params.unit : null
+  const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
+  const prefill = {
+    invoice_id:        str(params.invoice_id),
+    customer_name:     str(params.customer_name),
+    unit_manufacturer: str(params.unit_manufacturer),
+    unit_model:        str(params.unit_model),
+    unit_serial:       str(params.unit_serial),
+  }
 
   const [
     { data: units },
@@ -72,6 +87,7 @@ export default async function NewDOTInspectionPage({
           hd_company_logo_url: p?.hd_company_logo_url ?? null,
         }}
         initialUnitId={initialUnitId}
+        prefill={prefill}
       />
     </main>
   )
