@@ -115,13 +115,13 @@ export default async function FleetAccountsPage({
             id: string; fleet_name: string; contact_name: string | null
             contact_phone: string | null; contact_email: string | null; address: string | null
           }[]).map(a => (
-            <div key={a.id} className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+            <Link key={a.id} href={`/hd/fleet-accounts/${a.id}`} className="rounded-xl p-5 block transition-colors hover:border-white/20" style={{ background: '#111920', border: '1px solid #1e3040' }}>
               <p className="font-condensed font-bold text-white text-lg tracking-wide">{a.fleet_name}</p>
               {a.contact_name  && <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.6)' }}>{a.contact_name}</p>}
               {a.contact_phone && <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>{a.contact_phone}</p>}
               {a.contact_email && <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>{a.contact_email}</p>}
               {a.address       && <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.3)' }}>📍 {a.address}</p>}
-            </div>
+            </Link>
           ))
         )}
       </div>
