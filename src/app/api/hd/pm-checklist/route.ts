@@ -20,6 +20,7 @@ export async function POST(req: NextRequest) {
 
   const {
     unit_id, work_order_id, pm_type,
+    invoice_action, invoice_id,
     checklist_data, safety_initials, safety_acknowledged,
     safety_acknowledged_at, alarm_codes_found, alarm_codes_cleared,
     battery_cca, flagged_items, signature_base64, tech_name,
@@ -29,6 +30,75 @@ export async function POST(req: NextRequest) {
 
   const svc = createServiceClient()
 
+  // ── Resolve the invoice link: existing / create-new / standalone ──
+  let linkedInvoiceId: string | null = null
+  if (invoice_action === 'existing' && typeof invoice_id === 'string') {
+    linkedInvoiceId = invoice_id
+  } else if (invoice_action === 'create') {
+    // Pull unit + fleet-account details to auto-populate the invoice.
+    let customerName = 'Fleet Customer'
+    let customerPhone: string | null = null
+    let customerEmail: string | null = null
+    let unitRow: { manufacturer?: string; model?: string; serial_number?: string; year?: number | null } | null = null
+    if (unit_id) {
+      const { data: unit } = await svc
+        .from('hd_units')
+        .select('manufacturer, model, serial_number, year, fleet_account_id')
+        .eq('id', unit_id)
+        .eq('user_id', user.id)
+        .single()
+      unitRow = unit ?? null
+      if (unit?.fleet_account_id) {
+        const { data: fa } = await svc
+          .from('hd_fleet_accounts')
+          .select('fleet_name, contact_phone, contact_email')
+          .eq('id', unit.fleet_account_id)
+          .single()
+        if (fa?.fleet_name) customerName = fa.fleet_name as string
+        customerPhone = (fa?.contact_phone as string | null) ?? null
+        customerEmail = (fa?.contact_email as string | null) ?? null
+      }
+    }
+
+    const { count } = await svc
+      .from('hd_invoices')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+    const invoiceNumber = `INV-${new Date().getFullYear()}-${String((count ?? 0) + 1).padStart(4, '0')}`
+
+    const laborLine = {
+      id: crypto.randomUUID(),
+      type: 'labor',
+      description: `Preventive Maintenance — ${pm_type}`,
+      mobile_hours: 0, part_number: '', quantity: 0, unit_cost: 0, amount: 0,
+    }
+
+    const { data: newInv, error: invErr } = await svc
+      .from('hd_invoices')
+      .insert({
+        user_id:           user.id,
+        invoice_number:    invoiceNumber,
+        customer_name:     customerName,
+        customer_phone:    customerPhone,
+        customer_email:    customerEmail,
+        unit_manufacturer: unitRow?.manufacturer ?? null,
+        unit_model:        unitRow?.model ?? null,
+        unit_serial:       unitRow?.serial_number ?? null,
+        unit_year:         unitRow?.year != null ? String(unitRow.year) : null,
+        line_items:        [laborLine],
+        status:            'unpaid',
+        notes:             `Auto-created from PM checklist (${pm_type}) on ${new Date().toISOString().slice(0, 10)}`,
+      })
+      .select('id')
+      .single()
+
+    if (invErr) {
+      console.error('[hd/pm-checklist] invoice create failed', invErr)
+    } else {
+      linkedInvoiceId = newInv?.id ?? null
+    }
+  }
+
   // Save checklist record
   const { data: checklist, error } = await svc
     .from('hd_pm_checklists')
@@ -36,6 +106,7 @@ export async function POST(req: NextRequest) {
       user_id:               user.id,
       unit_id:               unit_id ?? null,
       work_order_id:         work_order_id ?? null,
+      invoice_id:            linkedInvoiceId,
       pm_type,
       checklist_data:        checklist_data ?? {},
       safety_acknowledged:   safety_acknowledged ?? false,
@@ -97,5 +168,5 @@ export async function POST(req: NextRequest) {
       .eq('status', 'in_progress')
   }
 
-  return NextResponse.json({ ok: true, id: checklist.id })
+  return NextResponse.json({ ok: true, id: checklist.id, invoice_id: linkedInvoiceId })
 }

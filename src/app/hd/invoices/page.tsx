@@ -69,16 +69,28 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
               )}
             </p>
           </div>
-          <Link
-            href="/hd/quotes/new"
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold text-sm text-white"
-            style={{ background: ORANGE, minHeight: 44 }}
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            New Quote
-          </Link>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            <Link
+              href="/hd/quotes/new"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold text-sm"
+              style={{ background: '#FFFFFF', color: ORANGE, border: `1px solid ${ORANGE}`, minHeight: 44 }}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              New Quote
+            </Link>
+            <Link
+              href="/hd/invoices/new"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold text-sm text-white"
+              style={{ background: ORANGE, minHeight: 44 }}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              New Invoice
+            </Link>
+          </div>
         </div>
 
         {/* Table */}
@@ -89,14 +101,23 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
                 <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
               </svg>
               <p style={{ color: '#6B7280', fontSize: 15 }}>No invoices yet</p>
-              <p style={{ color: '#9CA3AF', fontSize: 13, marginTop: 4 }}>Create a quote and convert it to an invoice</p>
-              <Link
-                href="/hd/quotes/new"
-                className="inline-block mt-4 px-5 py-2 rounded-lg font-semibold text-sm text-white"
-                style={{ background: ORANGE }}
-              >
-                Create a quote
-              </Link>
+              <p style={{ color: '#9CA3AF', fontSize: 13, marginTop: 4 }}>Create a direct invoice, or build a quote and convert it</p>
+              <div className="flex items-center justify-center gap-3 mt-4">
+                <Link
+                  href="/hd/invoices/new"
+                  className="inline-block px-5 py-2 rounded-lg font-semibold text-sm text-white"
+                  style={{ background: ORANGE }}
+                >
+                  Create an invoice
+                </Link>
+                <Link
+                  href="/hd/quotes/new"
+                  className="inline-block px-5 py-2 rounded-lg font-semibold text-sm"
+                  style={{ background: '#FFFFFF', color: ORANGE, border: `1px solid ${ORANGE}` }}
+                >
+                  Create a quote
+                </Link>
+              </div>
             </div>
           ) : (
             <>

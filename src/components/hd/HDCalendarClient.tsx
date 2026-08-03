@@ -6,6 +6,11 @@ import Link from 'next/link'
 const HD_ORANGE = '#E85D24'
 const HD_BLUE   = '#1A6BAF'
 
+const JOB_TYPES = [
+  'Diagnostic', 'Preventive Maintenance', 'Tire Service', 'Refrigeration Service',
+  'Electrical Repair', 'Mechanical Repair', 'Road Call', 'Other',
+]
+
 type WOStatus = 'open' | 'on_the_way' | 'in_progress' | 'completed' | 'invoiced' | 'cancelled'
 
 interface CalendarWO {
@@ -15,8 +20,19 @@ interface CalendarWO {
   service_type:      string | null
   total_amount:      number | null
   scheduled_at:      string | null
+  customer_name:     string | null
+  customer_phone:    string | null
+  unit_manufacturer: string | null
+  unit_model:        string | null
   unit:              { unit_number: string; manufacturer: string; model: string } | null
   fleet_account:     { fleet_name: string } | null
+}
+
+const BLANK_BOOKING = {
+  customer_name: '', customer_phone: '',
+  unit_manufacturer: '', unit_model: '', unit_serial: '',
+  service_type: 'Diagnostic', job_description: '',
+  scheduled_time: '09:00', estimated_duration_hours: '1', notes: '',
 }
 
 const STATUS_COLOR: Record<WOStatus, string> = {
@@ -74,6 +90,44 @@ export default function HDCalendarClient() {
   const [todayS,     setTodayS]     = useState('')
   const [loading,    setLoading]    = useState(true)
 
+  // Booking modal
+  const [booking,       setBooking]       = useState(false)
+  const [bookingForm,   setBookingForm]   = useState(BLANK_BOOKING)
+  const [bookingDate,   setBookingDate]   = useState('')
+  const [bookingSaving, setBookingSaving] = useState(false)
+  const [bookingError,  setBookingError]  = useState('')
+
+  function openBooking(date: string) {
+    setBookingForm(BLANK_BOOKING)
+    setBookingDate(date || todayStr())
+    setBookingError('')
+    setBooking(true)
+  }
+
+  async function submitBooking() {
+    if (!bookingForm.customer_name.trim()) { setBookingError('Customer name is required.'); return }
+    if (!bookingDate) { setBookingError('Pick a scheduled date.'); return }
+    setBookingSaving(true); setBookingError('')
+    try {
+      const res = await fetch('/api/hd/work-orders', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...bookingForm, scheduled_date: bookingDate }),
+      })
+      const data = await res.json()
+      if (!res.ok) { setBookingError(data.error ?? 'Could not book the job.'); return }
+      setBooking(false)
+      setSelected(bookingDate)
+      // Re-fetch the month the job landed in so it shows immediately.
+      const [y, m] = bookingDate.split('-').map(Number)
+      if (y === viewYear && (m - 1) === viewMonth) fetchMonth(viewYear, viewMonth)
+      else { setViewYear(y); setViewMonth(m - 1); fetchMonth(y, m - 1) }
+    } catch {
+      setBookingError('Could not book the job — check your connection.')
+    } finally {
+      setBookingSaving(false)
+    }
+  }
+
   const fetchMonth = useCallback(async (year: number, month: number) => {
     setLoading(true)
     try {
@@ -102,6 +156,16 @@ export default function HDCalendarClient() {
     document.addEventListener('visibilitychange', onVisible)
     return () => document.removeEventListener('visibilitychange', onVisible)
   }, [mounted, viewYear, viewMonth, fetchMonth])
+
+  // Open the booking modal when arriving from a "+ New Job" link (?new=1),
+  // then strip the param so a refresh doesn't reopen it.
+  useEffect(() => {
+    if (mounted && typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('new') === '1') {
+      openBooking(todayStr())
+      window.history.replaceState(null, '', '/hd/scheduler')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mounted])
 
   function prevMonth() {
     const y = viewMonth === 0 ? viewYear - 1 : viewYear
@@ -250,7 +314,7 @@ export default function HDCalendarClient() {
                                     color: STATUS_COLOR[wo.status],
                                   }}
                                 >
-                                  {wo.unit?.unit_number ?? wo.work_order_number ?? 'WO'}
+                                  {wo.unit?.unit_number ?? wo.customer_name ?? wo.work_order_number ?? 'WO'}
                                 </div>
                               ))}
                               {wos.length > 3 && (
@@ -281,22 +345,22 @@ export default function HDCalendarClient() {
                   ? new Date(selected + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
                   : 'Select a day'}
               </p>
-              <Link
-                href="/hd/work-orders?new=1"
+              <button
+                onClick={() => openBooking(selected)}
                 className="text-xs px-3 py-1.5 rounded-lg font-semibold text-white"
                 style={{ background: HD_ORANGE }}
               >
                 + New Job
-              </Link>
+              </button>
             </div>
 
             <div className="p-3">
               {dayWOs.length === 0 ? (
                 <div className="py-10 text-center">
                   <p className="text-sm mb-3" style={{ color: 'rgba(255,255,255,0.25)' }}>No jobs scheduled</p>
-                  <Link href="/hd/work-orders?new=1" className="text-xs" style={{ color: HD_ORANGE }}>
+                  <button onClick={() => openBooking(selected)} className="text-xs" style={{ color: HD_ORANGE }}>
                     + Schedule a job
-                  </Link>
+                  </button>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -318,9 +382,13 @@ export default function HDCalendarClient() {
                           {STATUS_LABEL[wo.status]}
                         </span>
                       </div>
-                      {wo.unit && (
+                      {wo.unit ? (
                         <p className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>
                           {wo.unit.unit_number} — {wo.unit.manufacturer} {wo.unit.model}
+                        </p>
+                      ) : (wo.customer_name || wo.unit_manufacturer) && (
+                        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                          {[wo.customer_name, [wo.unit_manufacturer, wo.unit_model].filter(Boolean).join(' ')].filter(Boolean).join(' — ')}
                         </p>
                       )}
                       {wo.fleet_account && (
@@ -342,6 +410,94 @@ export default function HDCalendarClient() {
           </div>
         </div>
       </div>
+
+      {/* ── New Job booking modal ── */}
+      {booking && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div
+            className="sm:rounded-xl"
+            style={{ background: '#0d1820', border: '1px solid #1e3040', borderRadius: '12px 12px 0 0', width: '100%', maxWidth: 540, maxHeight: '92dvh', display: 'flex', flexDirection: 'column' }}
+          >
+            <div className="flex items-center justify-between px-5 pt-5 pb-3 shrink-0" style={{ borderBottom: '1px solid #1e3040' }}>
+              <h3 className="font-condensed font-bold text-xl text-white">BOOK A JOB</h3>
+              <button onClick={() => setBooking(false)} style={{ color: '#8a9bad' }}>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+              </button>
+            </div>
+
+            <div className="px-5 py-4 flex flex-col gap-3" style={{ overflowY: 'auto' }}>
+              {bookingError && (
+                <p className="text-sm px-3 py-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)' }}>{bookingError}</p>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Customer Name *</span>
+                  <input value={bookingForm.customer_name} onChange={e => setBookingForm(f => ({ ...f, customer_name: e.target.value }))} placeholder="Fleet or customer" className="px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20" style={{ background: '#162030', border: '1px solid #1e3040' }} />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Phone</span>
+                  <input value={bookingForm.customer_phone} onChange={e => setBookingForm(f => ({ ...f, customer_phone: e.target.value }))} placeholder="(555) 000-0000" className="px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20" style={{ background: '#162030', border: '1px solid #1e3040' }} />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Manufacturer</span>
+                  <input value={bookingForm.unit_manufacturer} onChange={e => setBookingForm(f => ({ ...f, unit_manufacturer: e.target.value }))} placeholder="Thermo King" className="px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20" style={{ background: '#162030', border: '1px solid #1e3040' }} />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Model</span>
+                  <input value={bookingForm.unit_model} onChange={e => setBookingForm(f => ({ ...f, unit_model: e.target.value }))} placeholder="S-600" className="px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20" style={{ background: '#162030', border: '1px solid #1e3040' }} />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Serial</span>
+                  <input value={bookingForm.unit_serial} onChange={e => setBookingForm(f => ({ ...f, unit_serial: e.target.value }))} placeholder="Serial #" className="px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20" style={{ background: '#162030', border: '1px solid #1e3040' }} />
+                </label>
+              </div>
+
+              <label className="flex flex-col gap-1">
+                <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Job Type</span>
+                <select value={bookingForm.service_type} onChange={e => setBookingForm(f => ({ ...f, service_type: e.target.value }))} className="px-3 py-2.5 rounded-lg text-sm text-white" style={{ background: '#162030', border: '1px solid #1e3040' }}>
+                  {JOB_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </label>
+
+              <label className="flex flex-col gap-1">
+                <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Job Description</span>
+                <textarea rows={2} value={bookingForm.job_description} onChange={e => setBookingForm(f => ({ ...f, job_description: e.target.value }))} placeholder="What needs to be done?" className="px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20 resize-none" style={{ background: '#162030', border: '1px solid #1e3040' }} />
+              </label>
+
+              <div className="grid grid-cols-3 gap-3">
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Date *</span>
+                  <input type="date" value={bookingDate} onChange={e => setBookingDate(e.target.value)} className="px-3 py-2.5 rounded-lg text-sm text-white" style={{ background: '#162030', border: '1px solid #1e3040' }} />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Time</span>
+                  <input type="time" value={bookingForm.scheduled_time} onChange={e => setBookingForm(f => ({ ...f, scheduled_time: e.target.value }))} className="px-3 py-2.5 rounded-lg text-sm text-white" style={{ background: '#162030', border: '1px solid #1e3040' }} />
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Est. Hours</span>
+                  <input type="number" min={0} step={0.5} value={bookingForm.estimated_duration_hours} onChange={e => setBookingForm(f => ({ ...f, estimated_duration_hours: e.target.value }))} className="px-3 py-2.5 rounded-lg text-sm text-white" style={{ background: '#162030', border: '1px solid #1e3040' }} />
+                </label>
+              </div>
+
+              <label className="flex flex-col gap-1">
+                <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Notes</span>
+                <textarea rows={2} value={bookingForm.notes} onChange={e => setBookingForm(f => ({ ...f, notes: e.target.value }))} placeholder="Location, gate code, contact on site..." className="px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20 resize-none" style={{ background: '#162030', border: '1px solid #1e3040' }} />
+              </label>
+            </div>
+
+            <div className="flex gap-3 px-5 pb-5 pt-3 shrink-0" style={{ borderTop: '1px solid #1e3040' }}>
+              <button onClick={() => setBooking(false)} className="flex-1 py-2.5 rounded-lg font-semibold text-sm" style={{ background: '#162030', color: '#c9d5e0', border: '1px solid #1e3040' }}>Cancel</button>
+              <button onClick={submitBooking} disabled={bookingSaving} className="flex-1 py-2.5 rounded-lg font-semibold text-sm text-white disabled:opacity-50" style={{ background: HD_ORANGE }}>
+                {bookingSaving ? 'Booking…' : 'Book Job'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

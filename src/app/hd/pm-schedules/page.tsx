@@ -4,8 +4,10 @@ import { createClient } from '@/lib/supabase/server'
 
 export const metadata = { title: 'PM Schedules — NWI HD Suite' }
 
-const HD_ORANGE = '#E85D24'
-const HD_BLUE   = '#1A6BAF'
+const HD_ORANGE     = '#E85D24'
+const HD_BLUE       = '#1A6BAF'
+const TRUCK_BLUE    = '#3B82F6'   // distinct from Carrier's HD_BLUE
+const TRAILER_GREEN = '#22C55E'
 
 export default async function PMSchedulesPage() {
   const supabase = await createClient()
@@ -74,6 +76,47 @@ export default async function PMSchedulesPage() {
         ))}
       </div>
 
+      {/* Truck & trailer PM intervals (chassis, mileage/time based) */}
+      <h2 className="font-condensed font-bold text-white text-xl tracking-wide mb-4">TRUCK &amp; TRAILER PM INTERVALS</h2>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        {[
+          {
+            brand: 'Class 8 Truck',
+            color: TRUCK_BLUE,
+            intervals: [
+              { type: 'PM-A Dry Service',      when: '25,000 mi / 3 mo',   detail: 'Oil change, filters, visual inspection, grease chassis, check fluids, inspect brakes' },
+              { type: 'PM-B Wet Service',      when: '50,000 mi / 6 mo',   detail: 'Everything in PM-A plus coolant check, transmission fluid, differential fluid, belt & hose inspection' },
+              { type: 'PM-C Major Service',    when: '100,000 mi / 12 mo', detail: 'Everything in PM-B plus coolant flush, fuel filter replacement, full brake inspection, DOT pre-trip items' },
+              { type: 'DOT Annual Inspection', when: 'Every 12 mo',        detail: 'Federally required — FMCSA regulations' },
+            ],
+          },
+          {
+            brand: 'Trailer',
+            color: TRAILER_GREEN,
+            intervals: [
+              { type: '90-Day Inspection',       when: 'Every 90 days', detail: 'Brake adjustment, tire inspection, lights & electrical, glad hands, ABS system check' },
+              { type: 'Annual DOT Inspection',   when: 'Every 12 mo',   detail: 'Federally required — FMCSA, full brake system, lighting, structure' },
+              { type: 'Tire Rotation/Inspection', when: '25,000 mi',    detail: 'Rotate and inspect all tires' },
+              { type: 'Landing Gear Service',    when: 'Annually',      detail: 'Lubricate and inspect landing gear' },
+              { type: 'Kingpin Inspection',      when: 'Every 90 days', detail: 'Inspect kingpin wear and upper coupler' },
+            ],
+          },
+        ].map(({ brand, color, intervals }) => (
+          <div key={brand} className="rounded-xl p-5" style={{ background: '#111920', border: `1px solid ${color}40` }}>
+            <p className="font-condensed font-bold text-white text-lg tracking-wide mb-3" style={{ color }}>{brand}</p>
+            {intervals.map(({ type, when, detail }) => (
+              <div key={type} className="py-2 border-b" style={{ borderColor: '#1e3040' }}>
+                <div className="flex justify-between gap-3 text-sm">
+                  <span style={{ color: 'rgba(255,255,255,0.7)' }}>{type}</span>
+                  <span className="font-medium whitespace-nowrap" style={{ color }}>{when}</span>
+                </div>
+                <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>{detail}</p>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+
       {/* Unit PM status */}
       <h2 className="font-condensed font-bold text-white text-xl tracking-wide mb-4">FLEET UNIT STATUS</h2>
       <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
@@ -86,7 +129,7 @@ export default async function PMSchedulesPage() {
           <table className="w-full min-w-[640px]" style={{ background: '#111920' }}>
             <thead style={{ background: '#162030' }}>
               <tr>
-                {['Unit', 'Manufacturer / Model', 'Total Hours', 'Last PM', 'Next PM Due', 'Hours Until PM', 'Status'].map(h => (
+                {['Unit', 'Type', 'Manufacturer / Model', 'Total Hours', 'Last PM', 'Next PM Due', 'Hours Until PM', 'Status'].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.4)' }}>{h}</th>
                 ))}
               </tr>
@@ -94,6 +137,7 @@ export default async function PMSchedulesPage() {
             <tbody>
               {(units as unknown as {
                 id: string; unit_number: string; manufacturer: string; model: string
+                unit_type: string | null
                 total_hours: number | null; last_pm_date: string | null; last_pm_type: string | null
                 next_pm_due_hours: number | null
               }[]).map((u, i) => {
@@ -108,6 +152,12 @@ export default async function PMSchedulesPage() {
                 return (
                   <tr key={u.id} style={{ borderTop: i > 0 ? '1px solid #1e3040' : undefined }}>
                     <td className="px-4 py-3 text-sm text-white font-medium">{u.unit_number}</td>
+                    <td className="px-4 py-3">
+                      <span className="text-xs font-medium px-2 py-0.5 rounded-full capitalize"
+                        style={{ background: `${u.unit_type === 'truck' ? TRUCK_BLUE : TRAILER_GREEN}20`, color: u.unit_type === 'truck' ? TRUCK_BLUE : TRAILER_GREEN }}>
+                        {u.unit_type ?? 'trailer'}
+                      </span>
+                    </td>
                     <td className="px-4 py-3 text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>{u.manufacturer} {u.model}</td>
                     <td className="px-4 py-3 text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>
                       {u.total_hours !== null ? `${Number(u.total_hours).toFixed(0)} hrs` : '—'}

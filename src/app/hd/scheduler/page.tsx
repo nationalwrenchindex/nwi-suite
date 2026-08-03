@@ -1,5 +1,4 @@
 import { redirect } from 'next/navigation'
-import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDStarterAccess } from '@/lib/hd-access'
 import HDSchedulerTabsClient from '@/components/hd/HDSchedulerTabsClient'
@@ -66,13 +65,15 @@ export default async function HDSchedulerPage() {
               {activeCount} active
             </span>
           )}
-          <Link
-            href="/hd/work-orders?new=1"
+          {/* Full navigation (not client Link) so the calendar remounts and opens the
+              booking modal via ?new=1 even when already on the scheduler page. */}
+          <a
+            href="/hd/scheduler?new=1"
             className="px-4 py-2.5 rounded-lg text-sm font-semibold text-white"
             style={{ background: HD_ORANGE }}
           >
             + New Job
-          </Link>
+          </a>
         </div>
       </div>
 

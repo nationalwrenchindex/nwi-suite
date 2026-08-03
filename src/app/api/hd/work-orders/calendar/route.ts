@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
     .from('hd_work_orders')
     .select(`
       id, work_order_number, status, service_type, total_amount, scheduled_at,
+      customer_name, customer_phone, unit_manufacturer, unit_model,
       unit:hd_units(unit_number, manufacturer, model),
       fleet_account:hd_fleet_accounts(fleet_name)
     `)

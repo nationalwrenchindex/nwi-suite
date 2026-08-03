@@ -32,6 +32,18 @@ interface UnitOption {
   total_hours: number | null
 }
 
+interface InvoiceOption {
+  id: string
+  invoice_number: string | null
+  customer_name: string | null
+  total: number | null
+  status: string
+}
+
+// Sentinel values for the two synthetic dropdown options (won't collide with UUIDs).
+const INV_CREATE = '__create__'
+const INV_NONE   = '__none__'
+
 interface FlaggedItem {
   id: string
   text: string
@@ -102,10 +114,12 @@ function ItemButtons({
 export default function PMChecklistClient({
   workOrders,
   units,
+  invoices,
   userId,
 }: {
   workOrders: WorkOrderOption[]
   units:      UnitOption[]
+  invoices:   InvoiceOption[]
   userId:     string
 }) {
   const router = useRouter()
@@ -113,6 +127,7 @@ export default function PMChecklistClient({
   // Setup state
   const [step,       setStep]       = useState<Step>('setup')
   const [selectedWO, setSelectedWO] = useState<string>('')
+  const [selectedInvoice, setSelectedInvoice] = useState<string>(INV_NONE)
   const [selectedUnit, setSelectedUnit] = useState<string>('')
   const [pmType,     setPmType]     = useState<PMTypeValue>('3000hr')
   const [isMultiTemp, setIsMultiTemp] = useState(false)
@@ -247,9 +262,18 @@ export default function PMChecklistClient({
       }
     }
 
+    // Invoice link: create a new one, attach an existing open one, or stay standalone.
+    const invoice_action =
+      selectedInvoice === INV_CREATE ? 'create'
+      : selectedInvoice === INV_NONE ? 'none'
+      : 'existing'
+    const invoice_id = invoice_action === 'existing' ? selectedInvoice : null
+
     const body = {
       unit_id:           selectedUnit || null,
       work_order_id:     selectedWO   || null,
+      invoice_action,
+      invoice_id,
       pm_type:           pmType,
       checklist_data:    checklistData,
       safety_initials:   safetyInitials,
@@ -381,6 +405,27 @@ export default function PMChecklistClient({
                 {workOrders.map(wo => (
                   <option key={wo.id} value={wo.id}>
                     {wo.work_order_number ?? `WO-${wo.id.slice(0, 6).toUpperCase()}`}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                Invoice
+              </label>
+              <select
+                value={selectedInvoice}
+                onChange={e => setSelectedInvoice(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white"
+                style={{ background: '#162030', border: '1px solid #1e3040' }}
+              >
+                <option value={INV_CREATE}>+ Create new invoice for this PM</option>
+                <option value={INV_NONE}>-- No invoice (standalone PM record)</option>
+                {invoices.map(inv => (
+                  <option key={inv.id} value={inv.id}>
+                    {(inv.invoice_number ?? 'Invoice')}{inv.customer_name ? ` — ${inv.customer_name}` : ''}
+                    {inv.total != null ? ` ($${Number(inv.total).toFixed(0)})` : ''}
                   </option>
                 ))}
               </select>

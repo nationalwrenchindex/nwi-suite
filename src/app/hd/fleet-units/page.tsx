@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import PartsComingSoon from '@/components/hd/PartsComingSoon'
@@ -19,6 +20,7 @@ export default async function FleetUnitsPage({
 
   const params   = await searchParams
   const showForm = params.new === '1'
+  const saveError = params.error === '1'
 
   const { data: units } = await supabase
     .from('hd_units')
@@ -33,9 +35,11 @@ export default async function FleetUnitsPage({
     if (!user) return
 
     const unitNumber = (formData.get('unit_number') as string ?? '').trim()
-    if (!unitNumber) return
+    if (!unitNumber) { redirect('/hd/fleet-units?new=1&error=1'); return }
 
-    await supabase.from('hd_units').insert({
+    // Capture the insert error — previously it was swallowed, so a failed save
+    // looked identical to success. Surface it via ?error=1 and log server-side.
+    const { error } = await supabase.from('hd_units').insert({
       user_id:          user.id,
       unit_number:      unitNumber,
       manufacturer:     formData.get('manufacturer') as string || 'Thermo King',
@@ -46,6 +50,15 @@ export default async function FleetUnitsPage({
       total_hours:      formData.get('total_hours') ? Number(formData.get('total_hours')) : 0,
       status:           'active',
     })
+
+    if (error) {
+      console.error('[fleet-units addUnit] insert failed:', error.message)
+      redirect('/hd/fleet-units?new=1&error=1')
+      return
+    }
+
+    // Invalidate the cached list so the new unit appears immediately after redirect.
+    revalidatePath('/hd/fleet-units')
     redirect('/hd/fleet-units')
   }
 
@@ -72,6 +85,11 @@ export default async function FleetUnitsPage({
       {showForm && (
         <form action={addUnit} className="rounded-xl p-6 mb-6 space-y-4" style={{ background: '#111920', border: `1px solid ${HD_ORANGE}50` }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide">ADD FLEET UNIT</p>
+          {saveError && (
+            <p className="text-sm px-3 py-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)' }}>
+              Unit could not be saved. Check the required fields and try again — if this persists, the fleet-units table may not be migrated yet.
+            </p>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Unit # *</label>
