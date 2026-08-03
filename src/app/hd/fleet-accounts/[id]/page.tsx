@@ -161,7 +161,7 @@ export default async function FleetAccountDetailPage({
           <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
             <div className="flex items-center justify-between mb-4">
               <p className="font-condensed font-bold text-white text-lg tracking-wide">FLEET UNITS</p>
-              <Link href="/hd/fleet-units" className="text-xs" style={{ color: HD_ORANGE }}>Manage units →</Link>
+              <Link href={`/hd/fleet-units?new=1&fleet_account_id=${account.id}`} className="text-xs" style={{ color: HD_ORANGE }}>Manage units →</Link>
             </div>
             {unitList.length === 0 ? (
               <p className="text-sm py-6 text-center" style={{ color: 'rgba(255,255,255,0.25)' }}>No units assigned to this account yet.</p>
