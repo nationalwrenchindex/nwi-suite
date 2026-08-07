@@ -323,17 +323,32 @@ export default function NewQuotePage() {
   }, [customerSearch])
 
   async function pickCustomer(hit: CustomerHit) {
+    // Immediately fill from the search hit so name/phone/email populate even before the
+    // full-record fetch resolves (and even if it fails).
+    const hitName = `${hit.first_name ?? ''} ${hit.last_name ?? ''}`.trim()
     setShowCustomerResults(false)
-    setCustomerSearch(`${hit.first_name} ${hit.last_name}`.trim())
-    // Fetch the full record for address + payment terms.
+    setCustomerResults([])
+    setCustomerSearch(hitName)
+    setForm(f => ({
+      ...f,
+      customer_id:    hit.id,
+      customer_name:  hitName,
+      customer_phone: hit.phone ?? '',
+      customer_email: hit.email ?? '',
+    }))
+
+    // Then fetch the full record to fill address + payment terms.
     try {
       const res  = await fetch(`/api/customers/${hit.id}`)
+      if (!res.ok) return
       const data = await res.json()
-      const c = data.customer ?? {}
+      const c = data.customer
+      if (!c) return
+      const fullName = `${c.first_name ?? hit.first_name ?? ''} ${c.last_name ?? hit.last_name ?? ''}`.trim()
       setForm(f => ({
         ...f,
         customer_id:    c.id ?? hit.id,
-        customer_name:  `${hit.first_name} ${hit.last_name}`.trim(),
+        customer_name:  fullName || f.customer_name,
         customer_phone: c.phone ?? hit.phone ?? '',
         customer_email: c.email ?? hit.email ?? '',
         address_line1:  c.address_line1 ?? '',
@@ -350,14 +365,7 @@ export default function NewQuotePage() {
         payment_terms:      c.payment_terms ?? 'net30',
       }))
     } catch {
-      // Fall back to the list fields we already have.
-      setForm(f => ({
-        ...f,
-        customer_id: hit.id,
-        customer_name: `${hit.first_name} ${hit.last_name}`.trim(),
-        customer_phone: hit.phone ?? '',
-        customer_email: hit.email ?? '',
-      }))
+      // Search-hit fields are already applied above; nothing more to do.
     }
   }
 
@@ -748,7 +756,7 @@ export default function NewQuotePage() {
                   <button
                     key={hit.id}
                     type="button"
-                    onClick={() => pickCustomer(hit)}
+                    onMouseDown={e => { e.preventDefault(); pickCustomer(hit) }}
                     className="w-full text-left px-4 py-2.5 hover:bg-gray-50"
                     style={{ borderBottom: `1px solid #F9FAFB` }}
                   >

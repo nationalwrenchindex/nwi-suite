@@ -10,12 +10,14 @@ export default async function PMChecklistPage() {
   if (!user) redirect('/hd/login')
 
   const [{ data: units }, { data: invoices }] = await Promise.all([
+    // Show the tech's units; treat active=true OR active IS NULL as active so units
+    // predating the `active` column (or with a null status) still populate the dropdown.
     supabase
       .from('hd_units')
-      .select('id, unit_number, manufacturer, model, unit_type, total_hours')
+      .select('id, unit_number, manufacturer, model, serial_number, unit_type, total_hours')
       .eq('user_id', user.id)
-      .eq('status', 'active')
-      .order('unit_number'),
+      .or('active.is.null,active.eq.true')
+      .order('unit_number', { ascending: true }),
 
     // Open invoices only — exclude paid/void/partial (closed) receivables.
     supabase

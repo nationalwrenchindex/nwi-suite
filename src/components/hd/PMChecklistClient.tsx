@@ -264,7 +264,7 @@ export default function PMChecklistClient({
       invoice_id,
       pm_type:           pmType,
       checklist_data:    checklistData,
-      safety_initials:   safetyInitials,
+      tech_initials:     safetyInitials,
       safety_acknowledged: true,
       safety_acknowledged_at: `${safetyDate}T${safetyTime}:00`,
       alarm_codes_found:  alarmFound   || null,
