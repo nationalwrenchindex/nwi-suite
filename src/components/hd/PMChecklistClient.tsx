@@ -145,6 +145,19 @@ export default function PMChecklistClient({
   // Submission
   const [submitting, setSubmitting]  = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [checklistId, setChecklistId] = useState<string | null>(null)
+  const [emailState, setEmailState]   = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+
+  async function emailReport() {
+    if (!checklistId) return
+    setEmailState('sending')
+    try {
+      const res = await fetch(`/api/hd/pm-checklist/${checklistId}/email`, { method: 'POST' })
+      setEmailState(res.ok ? 'sent' : 'error')
+    } catch {
+      setEmailState('error')
+    }
+  }
 
   // ── Derived ───────────────────────────────────────────────────────────────
   const allSafetyChecked = SAFETY_ITEMS.every(s => safetyChecked[s.id])
@@ -283,6 +296,8 @@ export default function PMChecklistClient({
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Submission failed')
+      if (json.id) setChecklistId(json.id as string)
+      if (json.emailed) setEmailState('sent')
       setStep('done')
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Submission failed')
@@ -325,14 +340,30 @@ export default function PMChecklistClient({
               ))}
             </div>
           )}
-          <div className="flex gap-3 mt-6 justify-center">
+          <div className="flex flex-wrap gap-3 mt-6 justify-center">
             <button
-              onClick={() => { setStep('setup'); setItemStates({}); setItemInputs({}); setSafetyChecked({}); setHasSig(false) }}
+              onClick={() => { setStep('setup'); setItemStates({}); setItemInputs({}); setSafetyChecked({}); setHasSig(false); setChecklistId(null); setEmailState('idle') }}
               className="px-5 py-2.5 rounded-lg text-sm font-semibold text-white"
               style={{ background: HD_ORANGE }}
             >
               Start New PM
             </button>
+            {checklistId && (
+              <button
+                onClick={emailReport}
+                disabled={emailState === 'sending'}
+                className="px-5 py-2.5 rounded-lg text-sm font-semibold border disabled:opacity-60"
+                style={{
+                  color: emailState === 'sent' ? '#22C55E' : emailState === 'error' ? '#EF4444' : '#60A5FA',
+                  borderColor: '#1e3040',
+                }}
+              >
+                {emailState === 'sending' ? 'Sending…'
+                  : emailState === 'sent' ? '✓ Report Emailed'
+                  : emailState === 'error' ? 'Retry Email'
+                  : 'Email Report'}
+              </button>
+            )}
             <button
               onClick={() => router.push('/hd/dashboard')}
               className="px-5 py-2.5 rounded-lg text-sm font-semibold border"
@@ -341,6 +372,9 @@ export default function PMChecklistClient({
               Back to Dashboard
             </button>
           </div>
+          {emailState === 'sent' && (
+            <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.4)' }}>A copy of this report was emailed to your account email.</p>
+          )}
         </div>
       </div>
     )

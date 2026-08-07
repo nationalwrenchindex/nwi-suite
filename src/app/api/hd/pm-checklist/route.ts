@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { checkHDAccess } from '@/lib/hd-access'
+import { sendPmReportEmail } from '@/lib/hd/pm-report-email'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -168,5 +169,9 @@ export async function POST(req: NextRequest) {
       .eq('status', 'in_progress')
   }
 
-  return NextResponse.json({ ok: true, id: checklist.id, invoice_id: linkedInvoiceId })
+  // Email the completion report to the tech's business email (best-effort — never blocks).
+  const emailResult = await sendPmReportEmail({ userId: user.id, checklistId: checklist.id })
+  if (!emailResult.success) console.warn('[hd/pm-checklist] report email skipped:', emailResult.error)
+
+  return NextResponse.json({ ok: true, id: checklist.id, invoice_id: linkedInvoiceId, emailed: emailResult.success })
 }

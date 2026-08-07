@@ -63,6 +63,7 @@ export default async function HDDashboardPage() {
     { data: epaLog },
     { data: invoices },
     { data: hdInvoices },
+    { data: pmUnits },
   ] = await Promise.all([
     supabase
       .from('hd_units')
@@ -107,6 +108,13 @@ export default async function HDDashboardPage() {
       .select('total, status, due_date')
       .eq('user_id', user.id)
       .in('status', ['sent', 'overdue', 'unpaid']),
+
+    // All active units' PM readings (unbounded) for the "Units Due for PM" count.
+    supabase
+      .from('hd_units')
+      .select('total_hours, next_pm_due_hours')
+      .eq('user_id', user.id)
+      .eq('status', 'active'),
   ])
 
   const mtdRevenue = (invoices ?? []).reduce((s, i) => s + Number(i.total_amount ?? 0), 0)
@@ -118,6 +126,12 @@ export default async function HDDashboardPage() {
   )
   const overdueCount  = overdueInvoices.length
   const overdueAmount = overdueInvoices.reduce((s, i) => s + Number(i.total ?? 0), 0)
+
+  // Units overdue for PM or due within 150 hours.
+  const pmDueCount = (pmUnits ?? []).filter(u => {
+    if (u.next_pm_due_hours == null || u.total_hours == null) return false
+    return Number(u.next_pm_due_hours) - Number(u.total_hours) <= 150
+  }).length
   const today      = new Date()
   const dayLabel   = today.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
 
@@ -164,11 +178,19 @@ export default async function HDDashboardPage() {
       </div>
 
       {/* KPI grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <KpiCard label="MTD Revenue" value={`$${mtdRevenue.toLocaleString()}`} color="green" sub="Invoiced this month" />
         <KpiCard label="Active Fleet Units" value={unitCount ?? 0} color="blue" sub="Active units" />
         <KpiCard label="Open Work Orders" value={openWOCount ?? 0} color="orange" />
         <KpiCard label="Active Alarm Codes" value={alarmCount} color={alarmCount > 0 ? 'red' : 'white'} sub="From recent PMs" />
+        <Link href="/hd/fleet-units" className="rounded-xl transition-opacity hover:opacity-80">
+          <KpiCard
+            label="Units Due for PM"
+            value={pmDueCount}
+            color={pmDueCount > 0 ? 'red' : 'green'}
+            sub={pmDueCount > 0 ? 'Overdue or within 150 hrs' : 'All up to date'}
+          />
+        </Link>
         <Link href="/hd/invoices?filter=overdue" className="rounded-xl transition-opacity hover:opacity-80">
           <KpiCard
             label="Overdue Invoices"
