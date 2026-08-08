@@ -308,6 +308,7 @@ export default function PMChecklistClient({
       invoice_action,
       invoice_id,
       customer_name:     selectedAccountName || null,
+      fleet_account_id:  selectedAccountId || null,
       pm_type:           pmType,
       checklist_data:    checklistData,
       tech_initials:     safetyInitials,

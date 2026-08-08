@@ -47,9 +47,11 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const hasAccess = await checkHDAccess(user.id)
   if (!hasAccess) redirect('/hd/signup')
 
-  const [{ data: inv }, { data: profile }] = await Promise.all([
+  const [{ data: inv }, { data: profile }, { data: pmChecklist }, { data: dotInspection }] = await Promise.all([
     supabase.from('hd_invoices').select('*').eq('id', id).eq('user_id', user.id).single(),
     supabase.from('profiles').select('business_name, phone').eq('id', user.id).single(),
+    supabase.from('hd_pm_checklists').select('id, pm_type').eq('invoice_id', id).eq('user_id', user.id).maybeSingle(),
+    supabase.from('hd_dot_inspections').select('id, inspection_id, overall_result').eq('invoice_id', id).eq('user_id', user.id).maybeSingle(),
   ])
 
   if (!inv) notFound()
@@ -76,6 +78,8 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             invoiceNumber={inv.invoice_number}
             currentStatus={inv.status}
             customerPhone={inv.customer_phone}
+            pmChecklistId={pmChecklist?.id ?? null}
+            dotInspectionId={dotInspection?.id ?? null}
           />
         </div>
 
@@ -178,27 +182,55 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                 <p className="text-sm" style={{ color: '#9CA3AF' }}>No line items</p>
               ) : (
                 <div style={{ border: '1px solid #E5E7EB', borderRadius: 8, overflow: 'hidden' }}>
-                  <div className="grid text-xs font-semibold uppercase tracking-wide px-4 py-2.5" style={{ gridTemplateColumns: '70px 1fr 100px 100px 100px', background: '#1A1A1A', color: '#FFFFFF', gap: 8 }}>
-                    <span>Type</span><span>Description</span><span className="text-right">Hrs/Qty</span><span className="text-right">Rate</span><span className="text-right">Amount</span>
-                  </div>
-                  {items.map(item => (
-                    <div key={item.id} className="grid px-4 py-3 items-center" style={{ gridTemplateColumns: '70px 1fr 100px 100px 100px', gap: 8, borderBottom: '1px solid #F9FAFB' }}>
-                      <span className="text-xs px-2 py-0.5 rounded-full font-semibold w-fit" style={item.type === 'labor' ? { background: '#FFF7ED', color: ORANGE } : { background: '#EBF5FF', color: BLUE }}>
-                        {item.type}
-                      </span>
-                      <div>
-                        <span className="text-sm" style={{ color: '#1A1A1A' }}>{item.description}</span>
-                        {item.part_number && <span className="block text-xs font-mono" style={{ color: '#9CA3AF' }}>{item.part_number}</span>}
-                      </div>
-                      <span className="text-sm text-right" style={{ color: '#6B7280' }}>
-                        {item.type === 'labor' ? `${item.mobile_hours}h` : `${item.quantity}×`}
-                      </span>
-                      <span className="text-sm text-right" style={{ color: '#6B7280' }}>
-                        {item.type === 'labor' ? `${fmt(inv.labor_rate)}/hr` : fmt(item.unit_cost)}
-                      </span>
-                      <span className="text-sm font-semibold text-right" style={{ color: '#1A1A1A' }}>{fmt(item.amount)}</span>
+                  {/* Desktop table (md+) */}
+                  <div className="hidden md:block">
+                    <div className="grid text-xs font-semibold uppercase tracking-wide px-4 py-2.5" style={{ gridTemplateColumns: '70px 1fr 100px 100px 100px', background: '#1A1A1A', color: '#FFFFFF', gap: 8 }}>
+                      <span>Type</span><span>Description</span><span className="text-right">Hrs/Qty</span><span className="text-right">Rate</span><span className="text-right">Amount</span>
                     </div>
-                  ))}
+                    {items.map(item => (
+                      <div key={item.id} className="grid px-4 py-3 items-center" style={{ gridTemplateColumns: '70px 1fr 100px 100px 100px', gap: 8, borderBottom: '1px solid #F9FAFB' }}>
+                        <span className="text-xs px-2 py-0.5 rounded-full font-semibold w-fit" style={item.type === 'labor' ? { background: '#FFF7ED', color: ORANGE } : { background: '#EBF5FF', color: BLUE }}>
+                          {item.type}
+                        </span>
+                        <div>
+                          <span className="text-sm" style={{ color: '#1A1A1A' }}>{item.description}</span>
+                          {item.part_number && <span className="block text-xs font-mono" style={{ color: '#9CA3AF' }}>{item.part_number}</span>}
+                        </div>
+                        <span className="text-sm text-right" style={{ color: '#6B7280' }}>
+                          {item.type === 'labor' ? `${item.mobile_hours}h` : `${item.quantity}×`}
+                        </span>
+                        <span className="text-sm text-right" style={{ color: '#6B7280' }}>
+                          {item.type === 'labor' ? `${fmt(inv.labor_rate)}/hr` : fmt(item.unit_cost)}
+                        </span>
+                        <span className="text-sm font-semibold text-right" style={{ color: '#1A1A1A' }}>{fmt(item.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Mobile cards (below md) */}
+                  <div className="block md:hidden">
+                    {items.map(item => (
+                      <div key={item.id} className="px-4 py-3" style={{ borderBottom: '1px solid #F3F4F6' }}>
+                        <div className="flex items-start gap-2">
+                          <span className="text-xs px-2 py-0.5 rounded-full font-semibold flex-shrink-0" style={item.type === 'labor' ? { background: '#FFF7ED', color: ORANGE } : { background: '#EBF5FF', color: BLUE }}>
+                            {item.type}
+                          </span>
+                          <div className="min-w-0">
+                            <span className="text-sm" style={{ color: '#1A1A1A' }}>{item.description}</span>
+                            {item.part_number && <span className="block text-xs font-mono" style={{ color: '#9CA3AF' }}>{item.part_number}</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between mt-2 text-xs" style={{ color: '#6B7280' }}>
+                          <span>
+                            {item.type === 'labor'
+                              ? `${item.mobile_hours}h · ${fmt(inv.labor_rate)}/hr`
+                              : `${item.quantity} × ${fmt(item.unit_cost)}`}
+                          </span>
+                          <span className="text-sm font-semibold" style={{ color: '#1A1A1A' }}>{fmt(item.amount)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
@@ -223,6 +255,33 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                 </div>
               </div>
             </div>
+
+            {/* Attached reports (PM checklist / DOT inspection) */}
+            {(pmChecklist || dotInspection) && (
+              <div className="mb-8">
+                <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: '#9CA3AF' }}>Attached Reports</h3>
+                <div className="space-y-2">
+                  {pmChecklist && (
+                    <Link href={`/hd/pm-checklist/${pmChecklist.id}`} className="flex items-center justify-between p-4 rounded-lg" style={{ background: '#F9FAFB', border: '1px solid #E5E7EB' }}>
+                      <div>
+                        <p className="text-sm font-semibold" style={{ color: '#1A1A1A' }}>📋 PM Checklist</p>
+                        <p className="text-xs" style={{ color: '#6B7280' }}>Preventive Maintenance report attached{pmChecklist.pm_type ? ` — ${pmChecklist.pm_type}` : ''}</p>
+                      </div>
+                      <span className="text-sm font-semibold" style={{ color: BLUE }}>View PM Report →</span>
+                    </Link>
+                  )}
+                  {dotInspection && (
+                    <Link href={`/hd/dot-inspections/${dotInspection.id}`} className="flex items-center justify-between p-4 rounded-lg" style={{ background: '#F9FAFB', border: '1px solid #E5E7EB' }}>
+                      <div>
+                        <p className="text-sm font-semibold" style={{ color: '#1A1A1A' }}>🔍 DOT Inspection</p>
+                        <p className="text-xs" style={{ color: '#6B7280' }}>Annual CVSA inspection attached{dotInspection.overall_result ? ` — ${String(dotInspection.overall_result).toUpperCase()}` : ''}</p>
+                      </div>
+                      <span className="text-sm font-semibold" style={{ color: BLUE }}>View DOT Inspection →</span>
+                    </Link>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Notes */}
             {inv.notes && (

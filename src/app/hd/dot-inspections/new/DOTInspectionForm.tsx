@@ -44,9 +44,22 @@ interface Prefill {
   unit_serial:       string | null
 }
 
+interface InvoiceOption {
+  id: string
+  invoice_number: string | null
+  customer_name: string | null
+  total: number | null
+  status: string
+}
+
+// Sentinels for the invoice-options dropdown (won't collide with real UUIDs).
+const INV_CREATE = '__create__'
+const INV_NONE   = '__none__'
+
 interface Props {
   units:         Unit[]
   fleetAccounts: FleetAccount[]
+  invoices:      InvoiceOption[]
   profile:       Profile
   initialUnitId: string | null
   prefill?:      Prefill | null
@@ -219,7 +232,7 @@ function InfoCell({ label, value, editable, type = 'text', onChange, children }:
 
 // ─── Main form ────────────────────────────────────────────────────────────────
 
-export default function DOTInspectionForm({ units, fleetAccounts, profile, initialUnitId, prefill }: Props) {
+export default function DOTInspectionForm({ units, fleetAccounts, invoices, profile, initialUnitId, prefill }: Props) {
   const router = useRouter()
 
   // Auto-generate inspection ID on mount
@@ -247,10 +260,33 @@ export default function DOTInspectionForm({ units, fleetAccounts, profile, initi
   const [unitManufacturer, setUnitManufacturer] = useState(prefill?.unit_manufacturer ?? '')
   const [unitModel,       setUnitModel]       = useState(prefill?.unit_model ?? '')
   const [unitSerial,      setUnitSerial]      = useState(prefill?.unit_serial ?? '')
-  const [invoiceId]       = useState(prefill?.invoice_id ?? '')
 
-  const selectedUnit    = units.find(u => u.id === selectedUnitId) ?? null
-  const selectedAccount = fleetAccounts.find(a => a.id === (selectedUnit?.fleet_account_id ?? '')) ?? null
+  // Customer (fleet account) search + invoice options
+  const [selectedAccountId, setSelectedAccountId] = useState('')
+  const [showAccts,         setShowAccts]         = useState(false)
+  const [selectedInvoice,   setSelectedInvoice]   = useState(prefill?.invoice_id || INV_NONE)
+
+  // Explicitly-chosen account wins; otherwise fall back to the selected unit's account.
+  const selectedUnit = units.find(u => u.id === selectedUnitId) ?? null
+  const selectedAccount = fleetAccounts.find(a =>
+    a.id === (selectedAccountId || selectedUnit?.fleet_account_id || '')) ?? null
+
+  const acctMatches = customerName.trim()
+    ? fleetAccounts.filter(a => a.fleet_name.toLowerCase().includes(customerName.trim().toLowerCase())).slice(0, 8)
+    : fleetAccounts.slice(0, 8)
+  const visibleUnits = selectedAccountId ? units.filter(u => u.fleet_account_id === selectedAccountId) : units
+
+  function pickAccount(a: FleetAccount) {
+    setSelectedAccountId(a.id)
+    setCustomerName(a.fleet_name)
+    setShowAccts(false)
+    if (selectedUnitId && !units.some(u => u.id === selectedUnitId && u.fleet_account_id === a.id)) setSelectedUnitId('')
+  }
+  function clearAccount() {
+    setSelectedAccountId('')
+    setCustomerName('')
+    setShowAccts(false)
+  }
 
   function updateItem(catId: string, itemId: string, field: 'result' | 'notes', value: string) {
     setInspData(prev => ({
@@ -285,6 +321,13 @@ export default function DOTInspectionForm({ units, fleetAccounts, profile, initi
 
     const canvas = document.getElementById('sig-canvas') as HTMLCanvasElement | null
     const signatureData = canvas?.toDataURL('image/png') ?? null
+
+    const invoiceAction =
+      selectedInvoice === INV_CREATE ? 'create'
+      : selectedInvoice === INV_NONE ? 'none'
+      : 'existing'
+    const invoiceIdToSend = invoiceAction === 'existing' ? selectedInvoice : undefined
+
     setLoading(true)
     try {
       const res = await fetch('/api/hd/dot-inspections', {
@@ -292,7 +335,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, profile, initi
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           unit_id:               selectedUnitId || undefined,
-          fleet_account_id:      selectedUnit?.fleet_account_id || undefined,
+          fleet_account_id:      (selectedAccountId || selectedUnit?.fleet_account_id) || undefined,
           inspection_date:       inspDate,
           inspector_name:        inspectorName || undefined,
           inspector_cert_number: inspectorCert || undefined,
@@ -304,7 +347,8 @@ export default function DOTInspectionForm({ units, fleetAccounts, profile, initi
           unit_manufacturer:     (selectedUnit?.manufacturer || unitManufacturer) || undefined,
           unit_model:            (selectedUnit?.model || unitModel) || undefined,
           unit_serial:           (selectedUnit?.serial_number || unitSerial) || undefined,
-          invoice_id:            invoiceId || undefined,
+          invoice_action:        invoiceAction,
+          invoice_id:            invoiceIdToSend,
         }),
       })
       const json = await res.json() as { id?: string; error?: string }
@@ -408,25 +452,70 @@ export default function DOTInspectionForm({ units, fleetAccounts, profile, initi
           </div>
         </div>
 
-        {/* ── Unit selector (screen only) ── */}
-        <div className="px-6 py-3 border-b no-print" style={{ background: '#111920', borderColor: '#1e3040' }}>
-          <div className="flex items-center gap-3">
-            <label className="text-xs uppercase tracking-widest flex-shrink-0" style={{ color: 'rgba(255,255,255,0.4)' }}>
-              Select Unit
-            </label>
-            <select value={selectedUnitId} onChange={e => setSelectedUnitId(e.target.value)}
-              className="flex-1 px-3 py-2 rounded-lg text-base sm:text-sm text-white"
-              style={{ background: '#162030', border: '1px solid #1e3040' }}>
-              <option value="">— No unit selected —</option>
-              {units.map(u => (
-                <option key={u.id} value={u.id}>{u.unit_number} — {u.manufacturer} {u.model}</option>
-              ))}
-            </select>
-            <Link href="/hd/dot-inspections"
-              className="text-xs px-3 py-2 rounded-lg flex-shrink-0 no-print"
-              style={{ color: 'rgba(255,255,255,0.4)', border: '1px solid #1e3040' }}>
-              ← Back
-            </Link>
+        {/* ── Customer / unit / invoice selectors (screen only) ── */}
+        <div className="px-6 py-3 border-b no-print space-y-3" style={{ background: '#111920', borderColor: '#1e3040' }}>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Inspection Setup</p>
+            <Link href="/hd/dot-inspections" className="text-xs px-3 py-1.5 rounded-lg flex-shrink-0" style={{ color: 'rgba(255,255,255,0.4)', border: '1px solid #1e3040' }}>← Back</Link>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Customer search */}
+            <div style={{ position: 'relative' }}>
+              <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>Customer</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  value={customerName}
+                  onChange={e => { setCustomerName(e.target.value); if (selectedAccountId) setSelectedAccountId(''); setShowAccts(true) }}
+                  onFocus={() => setShowAccts(true)}
+                  placeholder="Search fleet accounts"
+                  className="w-full px-3 py-2 rounded-lg text-base sm:text-sm text-white placeholder-white/25"
+                  style={{ background: '#162030', border: '1px solid #1e3040' }}
+                />
+                {selectedAccountId && (
+                  <button type="button" onClick={clearAccount} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold px-2 py-0.5 rounded" style={{ background: '#1e3040', color: 'rgba(255,255,255,0.6)' }}>Clear</button>
+                )}
+              </div>
+              {showAccts && acctMatches.length > 0 && !selectedAccountId && (
+                <div style={{ position: 'absolute', zIndex: 20, left: 0, right: 0, marginTop: 4, background: '#111920', border: '1px solid #1e3040', borderRadius: 8, overflow: 'hidden', maxHeight: 200, overflowY: 'auto' }}>
+                  {acctMatches.map(a => (
+                    <button key={a.id} type="button" onMouseDown={ev => { ev.preventDefault(); pickAccount(a) }}
+                      className="w-full text-left px-3 py-2 text-sm text-white hover:bg-white/5" style={{ borderBottom: '1px solid #1e3040' }}>
+                      {a.fleet_name}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Unit (filtered by customer) */}
+            <div>
+              <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>Unit</label>
+              <select value={selectedUnitId} onChange={e => setSelectedUnitId(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg text-base sm:text-sm text-white"
+                style={{ background: '#162030', border: '1px solid #1e3040' }}>
+                <option value="">— No unit selected —</option>
+                {visibleUnits.map(u => (
+                  <option key={u.id} value={u.id}>{u.unit_number} — {u.manufacturer} {u.model}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Invoice options */}
+            <div>
+              <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>Invoice</label>
+              <select value={selectedInvoice} onChange={e => setSelectedInvoice(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg text-base sm:text-sm text-white"
+                style={{ background: '#162030', border: '1px solid #1e3040' }}>
+                <option value={INV_CREATE}>+ Create new invoice for this inspection</option>
+                <option value={INV_NONE}>-- No invoice (standalone)</option>
+                {invoices.map(inv => (
+                  <option key={inv.id} value={inv.id}>
+                    {(inv.invoice_number ?? 'Invoice')}{inv.customer_name ? ` — ${inv.customer_name}` : ''}
+                    {inv.total != null ? ` ($${Number(inv.total).toFixed(0)})` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 

@@ -27,6 +27,7 @@ export async function POST(req: NextRequest) {
       unit_model?: string
       unit_serial?: string
       invoice_id?: string
+      invoice_action?: string
     }
 
     try {
@@ -68,6 +69,54 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // ── Resolve the invoice link: existing / create-new / standalone ──
+    let linkedInvoiceId: string | null = null
+    if (body.invoice_action === 'existing' && typeof body.invoice_id === 'string') {
+      linkedInvoiceId = body.invoice_id
+    } else if (body.invoice_action === 'create') {
+      let customerPhone: string | null = null
+      let customerEmail: string | null = null
+      if (body.fleet_account_id) {
+        const { data: fa } = await supabase
+          .from('hd_fleet_accounts')
+          .select('contact_phone, contact_email')
+          .eq('id', body.fleet_account_id)
+          .eq('user_id', user.id)
+          .maybeSingle()
+        customerPhone = (fa?.contact_phone as string | null) ?? null
+        customerEmail = (fa?.contact_email as string | null) ?? null
+      }
+      const { count } = await supabase
+        .from('hd_invoices')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+      const invoiceNumber = `INV-${new Date().getFullYear()}-${String((count ?? 0) + 1).padStart(4, '0')}`
+      const laborLine = {
+        id: crypto.randomUUID(), type: 'labor',
+        description: 'DOT Annual Inspection',
+        mobile_hours: 0, part_number: '', quantity: 0, unit_cost: 0, amount: 0,
+      }
+      const { data: newInv, error: invErr } = await supabase
+        .from('hd_invoices')
+        .insert({
+          user_id:           user.id,
+          invoice_number:    invoiceNumber,
+          customer_name:     body.customer_name || 'Fleet Customer',
+          customer_phone:    customerPhone,
+          customer_email:    customerEmail,
+          unit_manufacturer: body.unit_manufacturer ?? null,
+          unit_model:        body.unit_model ?? null,
+          unit_serial:       body.unit_serial ?? null,
+          line_items:        [laborLine],
+          status:            'unpaid',
+          notes:             `Auto-created from DOT inspection on ${new Date().toISOString().slice(0, 10)}`,
+        })
+        .select('id')
+        .single()
+      if (invErr) console.error('[dot-inspections] invoice create failed', invErr)
+      else linkedInvoiceId = newInv?.id ?? null
+    }
+
     const dateStr     = body.inspection_date.replace(/-/g, '')
     const suffix      = Math.random().toString(36).substring(2, 8).toUpperCase()
     const inspectionId = `DOT-${dateStr}-${suffix}`
@@ -91,7 +140,7 @@ export async function POST(req: NextRequest) {
         unit_manufacturer:     body.unit_manufacturer ?? null,
         unit_model:            body.unit_model ?? null,
         unit_serial:           body.unit_serial ?? null,
-        invoice_id:            body.invoice_id ?? null,
+        invoice_id:            linkedInvoiceId ?? body.invoice_id ?? null,
         locked:                true,
         locked_at:             new Date().toISOString(),
         inspection_id:         inspectionId,
@@ -104,7 +153,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to save inspection' }, { status: 500 })
     }
 
-    return NextResponse.json({ id: data.id, inspection_id: data.inspection_id })
+    return NextResponse.json({ id: data.id, inspection_id: data.inspection_id, invoice_id: linkedInvoiceId })
   } catch (err) {
     console.error('[dot-inspections] Unhandled error', err)
     return NextResponse.json({ error: 'An unexpected error occurred' }, { status: 500 })

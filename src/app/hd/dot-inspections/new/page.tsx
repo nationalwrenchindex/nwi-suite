@@ -38,6 +38,7 @@ export default async function NewDOTInspectionPage({
   const [
     { data: units },
     { data: fleetAccounts },
+    { data: invoices },
     { data: profile },
   ] = await Promise.all([
     supabase
@@ -50,6 +51,13 @@ export default async function NewDOTInspectionPage({
       .select('id, fleet_name')
       .eq('user_id', user.id)
       .order('fleet_name'),
+    supabase
+      .from('hd_invoices')
+      .select('id, invoice_number, customer_name, total, status')
+      .eq('user_id', user.id)
+      .in('status', ['unpaid', 'sent', 'overdue'])
+      .order('created_at', { ascending: false })
+      .limit(200),
     supabase
       .from('profiles')
       .select('hd_tech_name, hd_epa_cert_number, business_name, full_name, hd_company_logo_url')
@@ -79,6 +87,7 @@ export default async function NewDOTInspectionPage({
           total_hours: number | null
         }>}
         fleetAccounts={(fleetAccounts ?? []) as Array<{ id: string; fleet_name: string }>}
+        invoices={(invoices ?? []) as Array<{ id: string; invoice_number: string | null; customer_name: string | null; total: number | null; status: string }>}
         profile={{
           hd_tech_name:        p?.hd_tech_name        ?? null,
           hd_epa_cert_number:  p?.hd_epa_cert_number  ?? null,

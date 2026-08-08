@@ -12,11 +12,15 @@ export default function InvoiceDetailActions({
   invoiceNumber,
   currentStatus,
   customerPhone,
+  pmChecklistId = null,
+  dotInspectionId = null,
 }: {
   invoiceId: string
   invoiceNumber: string
   currentStatus: string
   customerPhone: string | null
+  pmChecklistId?: string | null
+  dotInspectionId?: string | null
 }) {
   const router = useRouter()
   const [busy, setBusy]   = useState(false)
@@ -59,12 +63,20 @@ export default function InvoiceDetailActions({
       showToast('No customer phone number on this invoice.')
       return
     }
-    // Copy invoice link to clipboard for manual SMS
-    const link = `${window.location.origin}/hd/invoices/${invoiceId}`
-    navigator.clipboard.writeText(link).then(() => {
-      showToast(`Invoice link copied. Text to: ${customerPhone}`)
+    // Build the message: invoice link + any attached report links, for manual SMS.
+    const origin = window.location.origin
+    const lines = [`Invoice ${invoiceNumber}: ${origin}/hd/invoices/${invoiceId}`]
+    if (pmChecklistId) {
+      lines.push(`Your invoice includes a PM checklist report. View it here: ${origin}/hd/pm-checklist/${pmChecklistId}`)
+    }
+    if (dotInspectionId) {
+      lines.push(`Your invoice includes a DOT inspection report. View it here: ${origin}/hd/dot-inspections/${dotInspectionId}`)
+    }
+    const message = lines.join('\n\n')
+    navigator.clipboard.writeText(message).then(() => {
+      showToast(`Message${lines.length > 1 ? ' (with report links)' : ''} copied. Text to: ${customerPhone}`)
     }).catch(() => {
-      showToast(`Invoice link: ${link}`)
+      showToast(message)
     })
   }
 

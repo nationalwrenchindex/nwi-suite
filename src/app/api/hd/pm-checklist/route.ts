@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
 
   const {
     unit_id, work_order_id, pm_type,
-    invoice_action, invoice_id, customer_name,
+    invoice_action, invoice_id, customer_name, fleet_account_id,
     checklist_data, tech_initials, safety_acknowledged,
     safety_acknowledged_at, alarm_codes_found, alarm_codes_cleared,
     battery_cca, flagged_items, signature_base64, tech_name,
@@ -33,14 +33,31 @@ export async function POST(req: NextRequest) {
 
   // ── Resolve the invoice link: existing / create-new / standalone ──
   let linkedInvoiceId: string | null = null
+  let invoiceError: string | null = null
   if (invoice_action === 'existing' && typeof invoice_id === 'string') {
     linkedInvoiceId = invoice_id
   } else if (invoice_action === 'create') {
-    // Pull unit + fleet-account details to auto-populate the invoice.
-    let customerName = 'Fleet Customer'
+    // Customer comes from the PM customer selection first, then the unit's fleet account.
+    let customerName = typeof customer_name === 'string' && customer_name.trim() ? customer_name.trim() : ''
     let customerPhone: string | null = null
     let customerEmail: string | null = null
     let unitRow: { manufacturer?: string; model?: string; serial_number?: string; year?: number | null } | null = null
+
+    // Explicitly-selected fleet account → authoritative for contact info + name.
+    if (typeof fleet_account_id === 'string' && fleet_account_id) {
+      const { data: fa } = await svc
+        .from('hd_fleet_accounts')
+        .select('fleet_name, contact_phone, contact_email')
+        .eq('id', fleet_account_id)
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (fa) {
+        if (!customerName && fa.fleet_name) customerName = fa.fleet_name as string
+        customerPhone = (fa.contact_phone as string | null) ?? null
+        customerEmail = (fa.contact_email as string | null) ?? null
+      }
+    }
+
     if (unit_id) {
       const { data: unit } = await svc
         .from('hd_units')
@@ -49,17 +66,21 @@ export async function POST(req: NextRequest) {
         .eq('user_id', user.id)
         .single()
       unitRow = unit ?? null
-      if (unit?.fleet_account_id) {
+      // Fall back to the unit's fleet account only when no explicit customer was chosen.
+      if (unit?.fleet_account_id && (!customerName || !customerPhone)) {
         const { data: fa } = await svc
           .from('hd_fleet_accounts')
           .select('fleet_name, contact_phone, contact_email')
           .eq('id', unit.fleet_account_id)
-          .single()
-        if (fa?.fleet_name) customerName = fa.fleet_name as string
-        customerPhone = (fa?.contact_phone as string | null) ?? null
-        customerEmail = (fa?.contact_email as string | null) ?? null
+          .maybeSingle()
+        if (fa) {
+          if (!customerName && fa.fleet_name) customerName = fa.fleet_name as string
+          if (!customerPhone) customerPhone = (fa.contact_phone as string | null) ?? null
+          if (!customerEmail) customerEmail = (fa.contact_email as string | null) ?? null
+        }
       }
     }
+    if (!customerName) customerName = 'Fleet Customer'
 
     const { count } = await svc
       .from('hd_invoices')
@@ -95,6 +116,7 @@ export async function POST(req: NextRequest) {
 
     if (invErr) {
       console.error('[hd/pm-checklist] invoice create failed', invErr)
+      invoiceError = invErr.message
     } else {
       linkedInvoiceId = newInv?.id ?? null
     }
@@ -174,5 +196,5 @@ export async function POST(req: NextRequest) {
   const emailResult = await sendPmReportEmail({ userId: user.id, checklistId: checklist.id })
   if (!emailResult.success) console.warn('[hd/pm-checklist] report email skipped:', emailResult.error)
 
-  return NextResponse.json({ ok: true, id: checklist.id, invoice_id: linkedInvoiceId, emailed: emailResult.success })
+  return NextResponse.json({ ok: true, id: checklist.id, invoice_id: linkedInvoiceId, invoice_error: invoiceError, emailed: emailResult.success })
 }
