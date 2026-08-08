@@ -1,4 +1,5 @@
 import { redirect, notFound } from 'next/navigation'
+import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDStarterAccess } from '@/lib/hd-access'
@@ -54,16 +55,50 @@ interface WorkOrder {
 
 export default async function FleetAccountDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>
+  searchParams: Promise<{ edit?: string; saved?: string; error?: string }>
 }) {
   const { id } = await params
+  const sp = await searchParams
+  const editMode = sp.edit === '1'
+  const savedMsg = sp.saved === '1'
+  const saveError = sp.error === '1'
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
 
   const hasStarterAccess = await checkHDStarterAccess(user.id)
   if (!hasStarterAccess) redirect('/hd/upgrade')
+
+  // Update the fleet account (edit form submit).
+  async function updateAccount(formData: FormData) {
+    'use server'
+    const supabase = await createClient()
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+
+    const fleetName = (formData.get('fleet_name') as string ?? '').trim()
+    if (!fleetName) { redirect(`/hd/fleet-accounts/${id}?edit=1&error=1`); return }
+
+    const { error } = await supabase.from('hd_fleet_accounts').update({
+      fleet_name:    fleetName,
+      contact_name:  (formData.get('contact_name') as string ?? '').trim() || null,
+      contact_phone: (formData.get('contact_phone') as string ?? '').trim() || null,
+      contact_email: (formData.get('contact_email') as string ?? '').trim() || null,
+      address:       (formData.get('address') as string ?? '').trim() || null,
+      notes:         (formData.get('notes') as string ?? '').trim() || null,
+    }).eq('id', id).eq('user_id', user.id)
+
+    if (error) {
+      console.error('[fleet-accounts updateAccount] failed:', error.message)
+      redirect(`/hd/fleet-accounts/${id}?edit=1&error=1`)
+      return
+    }
+    revalidatePath(`/hd/fleet-accounts/${id}`)
+    redirect(`/hd/fleet-accounts/${id}?saved=1`)
+  }
 
   const [{ data: account }, { data: units }, { data: workOrders }] = await Promise.all([
     supabase
@@ -89,6 +124,58 @@ export default async function FleetAccountDetailPage({
 
   if (!account) notFound()
 
+  // ── Edit mode ──
+  if (editMode) {
+    const inputStyle = { background: '#162030', border: '1px solid #1e3040' }
+    const lbl = 'block text-xs uppercase tracking-widest mb-1.5'
+    const cls = 'w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20'
+    return (
+      <main className="flex-1 p-4 sm:p-6">
+        <div className="mb-6">
+          <Link href={`/hd/fleet-accounts/${account.id}`} className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>← {account.fleet_name}</Link>
+          <h1 className="font-condensed font-bold text-3xl text-white tracking-wide mt-2">EDIT FLEET ACCOUNT</h1>
+        </div>
+        <form action={updateAccount} className="max-w-2xl rounded-xl p-6 space-y-4" style={{ background: '#111920', border: `1px solid ${HD_ORANGE}50` }}>
+          {saveError && (
+            <p className="text-sm px-3 py-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)' }}>
+              Account could not be saved. Business name is required.
+            </p>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="sm:col-span-2">
+              <label className={lbl} style={{ color: 'rgba(255,255,255,0.4)' }}>Business / Fleet Name *</label>
+              <input name="fleet_name" required defaultValue={account.fleet_name ?? ''} className={cls} style={inputStyle} />
+            </div>
+            <div>
+              <label className={lbl} style={{ color: 'rgba(255,255,255,0.4)' }}>Contact Name</label>
+              <input name="contact_name" defaultValue={account.contact_name ?? ''} className={cls} style={inputStyle} />
+            </div>
+            <div>
+              <label className={lbl} style={{ color: 'rgba(255,255,255,0.4)' }}>Phone</label>
+              <input name="contact_phone" type="tel" defaultValue={account.contact_phone ?? ''} className={cls} style={inputStyle} />
+            </div>
+            <div>
+              <label className={lbl} style={{ color: 'rgba(255,255,255,0.4)' }}>Email</label>
+              <input name="contact_email" type="email" defaultValue={account.contact_email ?? ''} className={cls} style={inputStyle} />
+            </div>
+            <div>
+              <label className={lbl} style={{ color: 'rgba(255,255,255,0.4)' }}>Address</label>
+              <input name="address" defaultValue={account.address ?? ''} className={cls} style={inputStyle} />
+            </div>
+            <div className="sm:col-span-2">
+              <label className={lbl} style={{ color: 'rgba(255,255,255,0.4)' }}>Notes</label>
+              <textarea name="notes" rows={3} defaultValue={account.notes ?? ''} className={`${cls} resize-none`} style={inputStyle} />
+            </div>
+          </div>
+          <div className="flex gap-3 pt-2">
+            <button type="submit" className="px-6 py-2.5 rounded-lg text-sm font-semibold text-white" style={{ background: HD_ORANGE }}>Save Account</button>
+            <Link href={`/hd/fleet-accounts/${account.id}`} className="px-4 py-2.5 rounded-lg text-sm border" style={{ color: 'rgba(255,255,255,0.5)', borderColor: '#1e3040' }}>Cancel</Link>
+          </div>
+        </form>
+      </main>
+    )
+  }
+
   const unitList = (units ?? []) as Unit[]
   const woList   = (workOrders ?? []) as WorkOrder[]
 
@@ -107,14 +194,28 @@ export default async function FleetAccountDetailPage({
             <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>HD Suite · Fleet Account</p>
             <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">{account.fleet_name}</h1>
           </div>
-          <Link
-            href={`/hd/work-orders?fleet_account_id=${account.id}`}
-            className="px-4 py-2.5 rounded-lg text-sm font-semibold text-white"
-            style={{ background: HD_ORANGE }}
-          >
-            + New Work Order
-          </Link>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Link
+              href={`/hd/fleet-accounts/${account.id}?edit=1`}
+              className="px-4 py-2.5 rounded-lg text-sm font-semibold"
+              style={{ color: '#60A5FA', border: '1px solid #1e3040' }}
+            >
+              Edit
+            </Link>
+            <Link
+              href={`/hd/work-orders?fleet_account_id=${account.id}`}
+              className="px-4 py-2.5 rounded-lg text-sm font-semibold text-white"
+              style={{ background: HD_ORANGE }}
+            >
+              + New Work Order
+            </Link>
+          </div>
         </div>
+        {savedMsg && (
+          <p className="text-sm px-4 py-3 mt-3 rounded-lg" style={{ background: 'rgba(34,197,94,0.12)', color: '#22C55E', border: '1px solid rgba(34,197,94,0.3)' }}>
+            ✓ Account updated
+          </p>
+        )}
       </div>
 
       {/* KPI row */}

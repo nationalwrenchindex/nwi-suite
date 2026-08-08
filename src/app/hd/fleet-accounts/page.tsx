@@ -115,13 +115,25 @@ export default async function FleetAccountsPage({
             id: string; fleet_name: string; contact_name: string | null
             contact_phone: string | null; contact_email: string | null; address: string | null
           }[]).map(a => (
-            <Link key={a.id} href={`/hd/fleet-accounts/${a.id}`} className="rounded-xl p-5 block transition-colors hover:border-white/20" style={{ background: '#111920', border: '1px solid #1e3040' }}>
-              <p className="font-condensed font-bold text-white text-lg tracking-wide">{a.fleet_name}</p>
-              {a.contact_name  && <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.6)' }}>{a.contact_name}</p>}
-              {a.contact_phone && <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>{a.contact_phone}</p>}
-              {a.contact_email && <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>{a.contact_email}</p>}
-              {a.address       && <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.3)' }}>📍 {a.address}</p>}
-            </Link>
+            <div key={a.id} className="relative rounded-xl p-5 transition-colors hover:border-white/20" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+              {/* Full-card link to the detail page */}
+              <Link href={`/hd/fleet-accounts/${a.id}`} className="absolute inset-0 rounded-xl" aria-label={`View ${a.fleet_name}`} />
+              {/* Edit link sits above the overlay */}
+              <Link
+                href={`/hd/fleet-accounts/${a.id}?edit=1`}
+                className="absolute top-3 right-3 z-10 text-xs font-semibold px-2.5 py-1 rounded-lg"
+                style={{ color: '#60A5FA', border: '1px solid #1e3040', background: '#111920' }}
+              >
+                Edit
+              </Link>
+              <div className="relative pointer-events-none pr-12">
+                <p className="font-condensed font-bold text-white text-lg tracking-wide">{a.fleet_name}</p>
+                {a.contact_name  && <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.6)' }}>{a.contact_name}</p>}
+                {a.contact_phone && <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>{a.contact_phone}</p>}
+                {a.contact_email && <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>{a.contact_email}</p>}
+                {a.address       && <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.3)' }}>📍 {a.address}</p>}
+              </div>
+            </div>
           ))
         )}
       </div>

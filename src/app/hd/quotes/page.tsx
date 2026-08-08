@@ -84,56 +84,82 @@ export default async function QuotesPage() {
             </div>
           ) : (
             <>
-              {/* Table header */}
-              <div
-                className="grid gap-3 px-4 py-3 text-xs font-semibold uppercase tracking-wide"
-                style={{
-                  gridTemplateColumns: '140px 1fr 1fr 90px 90px 120px auto',
-                  background: '#F9FAFB',
-                  borderBottom: '1px solid #E5E7EB',
-                  color: '#6B7280',
-                }}
-              >
-                <span>Quote #</span>
-                <span>Customer</span>
-                <span>Unit</span>
-                <span>Total</span>
-                <span>Status</span>
-                <span>Date</span>
-                <span>Actions</span>
+              {/* Desktop table (md+) */}
+              <div className="hidden md:block">
+                <div
+                  className="grid gap-3 px-4 py-3 text-xs font-semibold uppercase tracking-wide"
+                  style={{
+                    gridTemplateColumns: '140px 1fr 1fr 90px 90px 120px auto',
+                    background: '#F9FAFB',
+                    borderBottom: '1px solid #E5E7EB',
+                    color: '#6B7280',
+                  }}
+                >
+                  <span>Quote #</span>
+                  <span>Customer</span>
+                  <span>Unit</span>
+                  <span>Total</span>
+                  <span>Status</span>
+                  <span>Date</span>
+                  <span>Actions</span>
+                </div>
+
+                {rows.map(q => {
+                  const st = STATUS_STYLE[q.status] ?? STATUS_STYLE.draft
+                  return (
+                    <div
+                      key={q.id}
+                      className="grid gap-3 px-4 py-3 items-center"
+                      style={{
+                        gridTemplateColumns: '140px 1fr 1fr 90px 90px 120px auto',
+                        borderBottom: '1px solid #F3F4F6',
+                      }}
+                    >
+                      <span className="font-mono text-xs font-semibold" style={{ color: ORANGE }}>{q.quote_number}</span>
+                      <span className="text-sm font-medium truncate" style={{ color: '#1A1A1A' }}>{q.customer_name}</span>
+                      <span className="text-sm truncate" style={{ color: '#6B7280' }}>
+                        {[q.unit_manufacturer, q.unit_model].filter(Boolean).join(' ') || '—'}
+                      </span>
+                      <span className="text-sm font-semibold" style={{ color: '#1A1A1A' }}>{fmt(q.total)}</span>
+                      <span>
+                        <span
+                          className="text-xs font-semibold px-2 py-1 rounded-full capitalize"
+                          style={{ background: st.bg, color: st.color }}
+                        >
+                          {q.status}
+                        </span>
+                      </span>
+                      <span className="text-xs" style={{ color: '#9CA3AF' }}>{fmtDate(q.created_at)}</span>
+                      <QuoteListActions quoteId={q.id} quoteNumber={q.quote_number} />
+                    </div>
+                  )
+                })}
               </div>
 
-              {/* Rows */}
-              {rows.map(q => {
-                const st = STATUS_STYLE[q.status] ?? STATUS_STYLE.draft
-                return (
-                  <div
-                    key={q.id}
-                    className="grid gap-3 px-4 py-3 items-center"
-                    style={{
-                      gridTemplateColumns: '140px 1fr 1fr 90px 90px 120px auto',
-                      borderBottom: '1px solid #F3F4F6',
-                    }}
-                  >
-                    <span className="font-mono text-xs font-semibold" style={{ color: ORANGE }}>{q.quote_number}</span>
-                    <span className="text-sm font-medium truncate" style={{ color: '#1A1A1A' }}>{q.customer_name}</span>
-                    <span className="text-sm truncate" style={{ color: '#6B7280' }}>
-                      {[q.unit_manufacturer, q.unit_model].filter(Boolean).join(' ') || '—'}
-                    </span>
-                    <span className="text-sm font-semibold" style={{ color: '#1A1A1A' }}>{fmt(q.total)}</span>
-                    <span>
-                      <span
-                        className="text-xs font-semibold px-2 py-1 rounded-full capitalize"
-                        style={{ background: st.bg, color: st.color }}
-                      >
-                        {q.status}
-                      </span>
-                    </span>
-                    <span className="text-xs" style={{ color: '#9CA3AF' }}>{fmtDate(q.created_at)}</span>
-                    <QuoteListActions quoteId={q.id} quoteNumber={q.quote_number} />
-                  </div>
-                )
-              })}
+              {/* Mobile cards (below md) */}
+              <div className="block md:hidden">
+                {rows.map(q => {
+                  const st = STATUS_STYLE[q.status] ?? STATUS_STYLE.draft
+                  const unit = [q.unit_manufacturer, q.unit_model].filter(Boolean).join(' ')
+                  return (
+                    <div key={q.id} className="p-4" style={{ borderBottom: '1px solid #F3F4F6' }}>
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="font-mono text-xs font-semibold" style={{ color: ORANGE }}>{q.quote_number}</span>
+                        <span className="text-xs font-semibold px-2 py-1 rounded-full capitalize" style={{ background: st.bg, color: st.color }}>{q.status}</span>
+                      </div>
+                      <p className="text-sm font-medium" style={{ color: '#1A1A1A' }}>{q.customer_name}</p>
+                      {unit && <p className="text-xs" style={{ color: '#6B7280' }}>{unit}</p>}
+                      <p className="text-sm mt-1" style={{ color: '#1A1A1A' }}>
+                        <span className="font-semibold">{fmt(q.total)}</span>
+                        <span style={{ color: '#9CA3AF' }}> • {fmtDate(q.created_at)}</span>
+                      </p>
+                      <div className="mt-3">
+                        <QuoteListActions quoteId={q.id} quoteNumber={q.quote_number} />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             </>
           )}
         </div>

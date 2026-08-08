@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
 
   const {
     unit_id, work_order_id, pm_type,
-    invoice_action, invoice_id,
+    invoice_action, invoice_id, customer_name,
     checklist_data, tech_initials, safety_acknowledged,
     safety_acknowledged_at, alarm_codes_found, alarm_codes_cleared,
     battery_cca, flagged_items, signature_base64, tech_name,
@@ -108,6 +108,7 @@ export async function POST(req: NextRequest) {
       unit_id:               unit_id ?? null,
       work_order_id:         work_order_id ?? null,
       invoice_id:            linkedInvoiceId,
+      customer_name:         customer_name ?? null,
       pm_type,
       checklist_data:        checklist_data ?? {},
       safety_acknowledged:   safety_acknowledged ?? false,

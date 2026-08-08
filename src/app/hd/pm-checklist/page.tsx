@@ -9,12 +9,12 @@ export default async function PMChecklistPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
 
-  const [{ data: units }, { data: invoices }] = await Promise.all([
+  const [{ data: units }, { data: invoices }, { data: fleetAccounts }] = await Promise.all([
     // Show the tech's units; treat active=true OR active IS NULL as active so units
     // predating the `active` column (or with a null status) still populate the dropdown.
     supabase
       .from('hd_units')
-      .select('id, unit_number, manufacturer, model, serial_number, unit_type, total_hours')
+      .select('id, unit_number, manufacturer, model, serial_number, unit_type, total_hours, fleet_account_id')
       .eq('user_id', user.id)
       .or('active.is.null,active.eq.true')
       .order('unit_number', { ascending: true }),
@@ -27,6 +27,13 @@ export default async function PMChecklistPage() {
       .in('status', ['unpaid', 'sent', 'overdue'])
       .order('created_at', { ascending: false })
       .limit(200),
+
+    // Fleet accounts for the customer filter.
+    supabase
+      .from('hd_fleet_accounts')
+      .select('id, fleet_name')
+      .eq('user_id', user.id)
+      .order('fleet_name'),
   ])
 
   return (
@@ -44,6 +51,7 @@ export default async function PMChecklistPage() {
       <PMChecklistClient
         units={units ?? []}
         invoices={invoices ?? []}
+        fleetAccounts={fleetAccounts ?? []}
         userId={user.id}
       />
     </main>

@@ -50,6 +50,9 @@ export async function POST(req: NextRequest) {
       work_order_number,
       status:                   'open',
       scheduled_at,
+      // Optional links to existing fleet records (so the list joins show them).
+      unit_id:                  str(body.unit_id),
+      fleet_account_id:         str(body.fleet_account_id),
       customer_name:            customerName,
       customer_phone:           str(body.customer_phone),
       unit_manufacturer:        str(body.unit_manufacturer),

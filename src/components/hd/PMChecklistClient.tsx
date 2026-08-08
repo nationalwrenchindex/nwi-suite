@@ -21,6 +21,12 @@ interface UnitOption {
   model: string
   unit_type: string | null
   total_hours: number | null
+  fleet_account_id: string | null
+}
+
+interface FleetAccountOption {
+  id: string
+  fleet_name: string
 }
 
 interface InvoiceOption {
@@ -105,17 +111,22 @@ function ItemButtons({
 export default function PMChecklistClient({
   units,
   invoices,
+  fleetAccounts,
   userId,
 }: {
-  units:      UnitOption[]
-  invoices:   InvoiceOption[]
-  userId:     string
+  units:         UnitOption[]
+  invoices:      InvoiceOption[]
+  fleetAccounts: FleetAccountOption[]
+  userId:        string
 }) {
   const router = useRouter()
 
   // Setup state
   const [step,       setStep]       = useState<Step>('setup')
   const [selectedInvoice, setSelectedInvoice] = useState<string>(INV_NONE)
+  const [selectedAccountId, setSelectedAccountId] = useState<string>('')
+  const [customerSearch,    setCustomerSearch]    = useState<string>('')
+  const [showAccts,         setShowAccts]         = useState(false)
   const [selectedUnit, setSelectedUnit] = useState<string>('')
   const [pmType,     setPmType]     = useState<PMTypeValue>('3000hr')
   const [isMultiTemp, setIsMultiTemp] = useState(false)
@@ -165,6 +176,27 @@ export default function PMChecklistClient({
 
   const selectedUnitData = units.find(u => u.id === selectedUnit)
   const unitType         = selectedUnitData?.unit_type ?? 'trailer'
+
+  // ── Customer (fleet account) filter for the unit dropdown ──
+  const selectedAccountName = fleetAccounts.find(a => a.id === selectedAccountId)?.fleet_name ?? ''
+  const acctMatches = customerSearch.trim()
+    ? fleetAccounts.filter(a => a.fleet_name.toLowerCase().includes(customerSearch.trim().toLowerCase())).slice(0, 8)
+    : fleetAccounts.slice(0, 8)
+  // When a customer is selected, only that account's units are shown; otherwise all units.
+  const visibleUnits = selectedAccountId ? units.filter(u => u.fleet_account_id === selectedAccountId) : units
+
+  function pickAccount(a: FleetAccountOption) {
+    setSelectedAccountId(a.id)
+    setCustomerSearch(a.fleet_name)
+    setShowAccts(false)
+    // Reset the unit if it no longer belongs to the chosen customer.
+    if (selectedUnit && !units.some(u => u.id === selectedUnit && u.fleet_account_id === a.id)) setSelectedUnit('')
+  }
+  function clearAccount() {
+    setSelectedAccountId('')
+    setCustomerSearch('')
+    setShowAccts(false)
+  }
 
   const visibleSections = CHECKLIST_SECTIONS.filter(s => {
     if (!s.showWhen) return true
@@ -275,6 +307,7 @@ export default function PMChecklistClient({
       work_order_id:     null,
       invoice_action,
       invoice_id,
+      customer_name:     selectedAccountName || null,
       pm_type:           pmType,
       checklist_data:    checklistData,
       tech_initials:     safetyInitials,
@@ -412,6 +445,46 @@ export default function PMChecklistClient({
         <div className="rounded-xl p-6 space-y-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
           <h2 className="font-condensed font-bold text-xl text-white tracking-wide">PM SETUP</h2>
 
+          {/* Customer (fleet account) search — filters the unit dropdown below */}
+          <div style={{ position: 'relative' }}>
+            <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+              Select Customer (optional)
+            </label>
+            <div style={{ position: 'relative' }}>
+              <input
+                value={customerSearch}
+                onChange={e => { setCustomerSearch(e.target.value); if (selectedAccountId) setSelectedAccountId(''); setShowAccts(true) }}
+                onFocus={() => setShowAccts(true)}
+                placeholder="Search fleet accounts by name"
+                className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/25"
+                style={{ background: '#162030', border: '1px solid #1e3040' }}
+              />
+              {selectedAccountId && (
+                <button type="button" onClick={clearAccount} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold px-2 py-1 rounded" style={{ background: '#1e3040', color: 'rgba(255,255,255,0.6)' }}>Clear</button>
+              )}
+            </div>
+            {showAccts && acctMatches.length > 0 && !selectedAccountId && (
+              <div style={{ position: 'absolute', zIndex: 20, left: 0, right: 0, marginTop: 4, background: '#111920', border: '1px solid #1e3040', borderRadius: 8, overflow: 'hidden', maxHeight: 220, overflowY: 'auto' }}>
+                {acctMatches.map(a => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onMouseDown={e => { e.preventDefault(); pickAccount(a) }}
+                    className="w-full text-left px-3 py-2.5 text-sm text-white hover:bg-white/5"
+                    style={{ borderBottom: '1px solid #1e3040' }}
+                  >
+                    {a.fleet_name}
+                  </button>
+                ))}
+              </div>
+            )}
+            {selectedAccountId && (
+              <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                Showing units for <span style={{ color: '#60A5FA' }}>{selectedAccountName}</span> · {visibleUnits.length} unit{visibleUnits.length !== 1 ? 's' : ''}
+              </p>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
@@ -445,7 +518,7 @@ export default function PMChecklistClient({
                 style={{ background: '#162030', border: '1px solid #1e3040' }}
               >
                 <option value="">— Select unit —</option>
-                {units.map(u => (
+                {visibleUnits.map(u => (
                   <option key={u.id} value={u.id}>
                     {u.unit_number} — {u.manufacturer} {u.model}
                     {u.total_hours ? ` (${Number(u.total_hours).toFixed(0)} hrs)` : ''}

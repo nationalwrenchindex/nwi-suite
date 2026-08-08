@@ -74,12 +74,14 @@ export default async function FleetUnitsPage({
   }
   const scopedAccountId = fleetAccountName ? fleetAccountId : null
 
-  // Always scoped to this user; additionally narrowed to one fleet account when managing it.
+  // Always scoped to this user; additionally narrowed to one fleet account whenever the
+  // param is present (filter on the raw id so it holds even if the name lookup fails —
+  // combined with user_id scoping, a foreign id simply returns nothing).
   let unitsQuery = supabase
     .from('hd_units')
     .select('*, fleet_account:hd_fleet_accounts(fleet_name)')
     .eq('user_id', user.id)
-  if (scopedAccountId) unitsQuery = unitsQuery.eq('fleet_account_id', scopedAccountId)
+  if (fleetAccountId) unitsQuery = unitsQuery.eq('fleet_account_id', fleetAccountId)
   const { data: units } = await unitsQuery.order('unit_number')
 
   // ── Save (insert OR update) ────────────────────────────────────────────────

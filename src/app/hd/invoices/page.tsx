@@ -121,44 +121,72 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
             </div>
           ) : (
             <>
-              <div
-                className="grid gap-3 px-4 py-3 text-xs font-semibold uppercase tracking-wide"
-                style={{ gridTemplateColumns: '160px 1fr 1fr 90px 90px 120px auto', background: '#F9FAFB', borderBottom: '1px solid #E5E7EB', color: '#6B7280' }}
-              >
-                <span>Invoice #</span>
-                <span>Customer</span>
-                <span>Unit</span>
-                <span>Total</span>
-                <span>Status</span>
-                <span>Date</span>
-                <span>Actions</span>
-              </div>
-              {rows.map(inv => {
-                const st = STATUS_STYLE[inv.status] ?? STATUS_STYLE.unpaid
-                return (
-                  <div
-                    key={inv.id}
-                    className="grid gap-3 px-4 py-3 items-center"
-                    style={{ gridTemplateColumns: '160px 1fr 1fr 90px 90px 120px auto', borderBottom: '1px solid #F3F4F6' }}
-                  >
-                    <span className="font-mono text-xs font-semibold" style={{ color: ORANGE }}>{inv.invoice_number}</span>
-                    <span className="text-sm font-medium truncate" style={{ color: '#1A1A1A' }}>{inv.customer_name}</span>
-                    <span className="text-sm truncate" style={{ color: '#6B7280' }}>
-                      {[inv.unit_manufacturer, inv.unit_model].filter(Boolean).join(' ') || '—'}
-                    </span>
-                    <span className="text-sm font-semibold" style={{ color: '#1A1A1A' }}>{fmt(inv.total)}</span>
-                    <span>
-                      <span className="text-xs font-semibold px-2 py-1 rounded-full capitalize" style={{ background: st.bg, color: st.color }}>
-                        {inv.status}
+              {/* Desktop table (md+) */}
+              <div className="hidden md:block">
+                <div
+                  className="grid gap-3 px-4 py-3 text-xs font-semibold uppercase tracking-wide"
+                  style={{ gridTemplateColumns: '160px 1fr 1fr 90px 90px 120px auto', background: '#F9FAFB', borderBottom: '1px solid #E5E7EB', color: '#6B7280' }}
+                >
+                  <span>Invoice #</span>
+                  <span>Customer</span>
+                  <span>Unit</span>
+                  <span>Total</span>
+                  <span>Status</span>
+                  <span>Date</span>
+                  <span>Actions</span>
+                </div>
+                {rows.map(inv => {
+                  const st = STATUS_STYLE[inv.status] ?? STATUS_STYLE.unpaid
+                  return (
+                    <div
+                      key={inv.id}
+                      className="grid gap-3 px-4 py-3 items-center"
+                      style={{ gridTemplateColumns: '160px 1fr 1fr 90px 90px 120px auto', borderBottom: '1px solid #F3F4F6' }}
+                    >
+                      <span className="font-mono text-xs font-semibold" style={{ color: ORANGE }}>{inv.invoice_number}</span>
+                      <span className="text-sm font-medium truncate" style={{ color: '#1A1A1A' }}>{inv.customer_name}</span>
+                      <span className="text-sm truncate" style={{ color: '#6B7280' }}>
+                        {[inv.unit_manufacturer, inv.unit_model].filter(Boolean).join(' ') || '—'}
                       </span>
-                    </span>
-                    <span className="text-xs" style={{ color: '#9CA3AF' }}>
-                      {inv.status === 'paid' && inv.paid_at ? fmtDate(inv.paid_at) : fmtDate(inv.created_at)}
-                    </span>
-                    <InvoiceListActions invoiceId={inv.id} invoiceNumber={inv.invoice_number} currentStatus={inv.status} />
-                  </div>
-                )
-              })}
+                      <span className="text-sm font-semibold" style={{ color: '#1A1A1A' }}>{fmt(inv.total)}</span>
+                      <span>
+                        <span className="text-xs font-semibold px-2 py-1 rounded-full capitalize" style={{ background: st.bg, color: st.color }}>
+                          {inv.status}
+                        </span>
+                      </span>
+                      <span className="text-xs" style={{ color: '#9CA3AF' }}>
+                        {inv.status === 'paid' && inv.paid_at ? fmtDate(inv.paid_at) : fmtDate(inv.created_at)}
+                      </span>
+                      <InvoiceListActions invoiceId={inv.id} invoiceNumber={inv.invoice_number} currentStatus={inv.status} />
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Mobile cards (below md) */}
+              <div className="block md:hidden">
+                {rows.map(inv => {
+                  const st = STATUS_STYLE[inv.status] ?? STATUS_STYLE.unpaid
+                  const unit = [inv.unit_manufacturer, inv.unit_model].filter(Boolean).join(' ')
+                  return (
+                    <div key={inv.id} className="p-4" style={{ borderBottom: '1px solid #F3F4F6' }}>
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="font-mono text-xs font-semibold" style={{ color: ORANGE }}>{inv.invoice_number}</span>
+                        <span className="text-xs font-semibold px-2 py-1 rounded-full capitalize" style={{ background: st.bg, color: st.color }}>{inv.status}</span>
+                      </div>
+                      <p className="text-sm font-medium" style={{ color: '#1A1A1A' }}>{inv.customer_name}</p>
+                      {unit && <p className="text-xs" style={{ color: '#6B7280' }}>{unit}</p>}
+                      <p className="text-sm mt-1" style={{ color: '#1A1A1A' }}>
+                        <span className="font-semibold">{fmt(inv.total)}</span>
+                        <span style={{ color: '#9CA3AF' }}> • {inv.status === 'paid' && inv.paid_at ? fmtDate(inv.paid_at) : fmtDate(inv.created_at)}</span>
+                      </p>
+                      <div className="mt-3">
+                        <InvoiceListActions invoiceId={inv.id} invoiceNumber={inv.invoice_number} currentStatus={inv.status} />
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
             </>
           )}
         </div>

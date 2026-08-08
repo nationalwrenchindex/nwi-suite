@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDStarterAccess } from '@/lib/hd-access'
 import PartsComingSoon from '@/components/hd/PartsComingSoon'
+import NewWorkOrderForm from './NewWorkOrderForm'
 
 export const metadata = { title: 'Work Orders — NWI HD Suite' }
 
@@ -28,19 +29,32 @@ export default async function WorkOrdersPage({
   if (!hasStarterAccess) redirect('/hd/upgrade')
 
   const params   = await searchParams
-  const showForm = params.new === '1'
+  const presetAccountId = typeof params.fleet_account_id === 'string' ? params.fleet_account_id : null
+  const showForm = params.new === '1' || !!presetAccountId
 
-  const { data: workOrders } = await supabase
-    .from('hd_work_orders')
-    .select(`
-      id, work_order_number, status, service_type, created_at,
-      tech_name, total_amount, started_at,
-      unit:hd_units(unit_number, manufacturer, model),
-      fleet:hd_fleet_accounts(fleet_name)
-    `)
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
-    .limit(100)
+  const [{ data: workOrders }, { data: formUnits }, { data: fleetAccounts }] = await Promise.all([
+    supabase
+      .from('hd_work_orders')
+      .select(`
+        id, work_order_number, status, service_type, created_at,
+        tech_name, total_amount, started_at,
+        unit:hd_units(unit_number, manufacturer, model),
+        fleet:hd_fleet_accounts(fleet_name)
+      `)
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(100),
+    supabase
+      .from('hd_units')
+      .select('id, unit_number, manufacturer, model, serial_number, fleet_account_id')
+      .eq('user_id', user.id)
+      .order('unit_number'),
+    supabase
+      .from('hd_fleet_accounts')
+      .select('id, fleet_name')
+      .eq('user_id', user.id)
+      .order('fleet_name'),
+  ])
 
   return (
     <main className="flex-1 p-4 sm:p-6">
@@ -59,23 +73,11 @@ export default async function WorkOrdersPage({
       </div>
 
       {showForm && (
-        <div className="rounded-xl p-5 mb-6" style={{ background: '#111920', border: `1px solid ${HD_ORANGE}50` }}>
-          <p className="font-condensed font-bold text-white text-lg tracking-wide mb-1">NEW WORK ORDER</p>
-          <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.4)' }}>
-            Full work order creation form coming in the next update. Add a fleet unit and fleet account first, then work orders will be available here.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Link href="/hd/fleet-units?new=1" className="text-xs px-4 py-2 rounded-lg font-semibold" style={{ background: `${HD_ORANGE}20`, color: HD_ORANGE, border: `1px solid ${HD_ORANGE}40` }}>
-              Add Fleet Unit →
-            </Link>
-            <Link href="/hd/fleet-accounts?new=1" className="text-xs px-4 py-2 rounded-lg font-semibold" style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.5)', border: '1px solid #1e3040' }}>
-              Add Fleet Account →
-            </Link>
-            <Link href="/hd/work-orders" className="text-xs px-4 py-2 rounded-lg" style={{ color: 'rgba(255,255,255,0.3)', border: '1px solid #1e3040' }}>
-              Cancel
-            </Link>
-          </div>
-        </div>
+        <NewWorkOrderForm
+          units={(formUnits ?? []) as Array<{ id: string; unit_number: string; manufacturer: string; model: string; serial_number: string | null; fleet_account_id: string | null }>}
+          fleetAccounts={(fleetAccounts ?? []) as Array<{ id: string; fleet_name: string }>}
+          presetAccountId={presetAccountId}
+        />
       )}
 
       <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
