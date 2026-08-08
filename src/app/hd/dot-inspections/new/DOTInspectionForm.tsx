@@ -252,6 +252,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
   const [hasSignature,    setHasSignature]   = useState(false)
   const [signedAt,        setSignedAt]       = useState<string | null>(null)
   const [loading,         setLoading]        = useState(false)
+  const [notice,          setNotice]         = useState<string | null>(null)
   const [error,           setError]          = useState<string | null>(null)
 
   // Free-text subject fields, pre-filled from invoice/PM context when no fleet unit
@@ -301,6 +302,8 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
   const passCount  = allItems.filter(i => i.result === 'pass').length
   const failCount  = allItems.filter(i => i.result === 'fail').length
   const naCount    = allItems.filter(i => i.result === 'na').length
+  const answeredCount = passCount + failCount + naCount
+  const unansweredCount = allItems.length - answeredCount
   const overallPass = failCount === 0
 
   const hasSafetyCriticalFail = INSPECTION_CATEGORIES.some(cat =>
@@ -317,6 +320,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
     setError(null)
     if (!inspDate)              { setError('Inspection date is required'); return }
     if (!inspectorName.trim())  { setError('Inspector name is required');  return }
+    if (unansweredCount > 0)    { setError(`${unansweredCount} item${unansweredCount !== 1 ? 's' : ''} not yet marked — select Pass, Fail, or N/A for every item before signing.`); return }
     if (!hasSignature)          { setError('Inspector signature is required — sign in the box below'); return }
 
     const canvas = document.getElementById('sig-canvas') as HTMLCanvasElement | null
@@ -351,9 +355,15 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
           invoice_id:            invoiceIdToSend,
         }),
       })
-      const json = await res.json() as { id?: string; error?: string }
+      const json = await res.json() as { id?: string; error?: string; invoice_id?: string | null }
       if (!res.ok) throw new Error(json.error ?? 'Failed to save inspection')
-      router.push(`/hd/dot-inspections/${json.id}`)
+      if (invoiceAction === 'create' && json.invoice_id) {
+        // Confirm invoice creation, then open the inspection.
+        setNotice('✓ Inspection saved · Invoice created')
+        setTimeout(() => router.push(`/hd/dot-inspections/${json.id}`), 1200)
+      } else {
+        router.push(`/hd/dot-inspections/${json.id}`)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to save inspection')
       setLoading(false)
@@ -413,6 +423,11 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
       {error && (
         <div className="no-print mx-6 mt-4 rounded-xl p-4" style={{ background: '#2d0a0a', border: '1px solid #7f1d1d' }}>
           <p className="text-sm text-red-400">{error}</p>
+        </div>
+      )}
+      {notice && (
+        <div className="no-print mx-6 mt-4 rounded-xl p-4" style={{ background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.4)' }}>
+          <p className="text-sm" style={{ color: '#22C55E' }}>{notice}</p>
         </div>
       )}
 
@@ -694,9 +709,13 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
 
         {/* ── Submit ── */}
         <div className="px-6 pb-6 no-print">
-          <button type="submit" disabled={loading || !inspDate || !inspectorName.trim() || !hasSignature}
+          <p className="text-xs mb-2 text-center" style={{ color: unansweredCount > 0 ? '#F59E0B' : '#22C55E' }}>
+            {answeredCount} of {allItems.length} items marked
+            {unansweredCount > 0 ? ` · ${unansweredCount} still blank` : ' · complete'}
+          </p>
+          <button type="submit" disabled={loading || !inspDate || !inspectorName.trim() || !hasSignature || unansweredCount > 0}
             className="w-full py-4 rounded-xl font-bold text-white text-sm tracking-wide transition-opacity"
-            style={{ background: HD_ORANGE, opacity: loading || !inspDate || !inspectorName.trim() || !hasSignature ? 0.45 : 1 }}>
+            style={{ background: HD_ORANGE, opacity: loading || !inspDate || !inspectorName.trim() || !hasSignature || unansweredCount > 0 ? 0.45 : 1 }}>
             {loading ? (
               <span className="flex items-center justify-center gap-2">
                 <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">

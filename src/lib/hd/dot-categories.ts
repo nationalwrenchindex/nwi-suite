@@ -21,6 +21,8 @@ export const INSPECTION_CATEGORIES = [
 
 export type CategoryId = typeof INSPECTION_CATEGORIES[number]['id']
 export type InspectionResult = 'pass' | 'fail' | 'na'
+// '' = unanswered — items start blank so the tech must actively choose Pass/Fail/N/A.
+export type ItemResult = InspectionResult | ''
 
 export interface SubItemDef {
   id: string
@@ -29,7 +31,7 @@ export interface SubItemDef {
 }
 
 export interface SubItemData {
-  result: InspectionResult
+  result: ItemResult
   notes: string
 }
 
@@ -197,7 +199,7 @@ export function initialInspectionData(): InspectionData {
   for (const cat of INSPECTION_CATEGORIES) {
     const items: Record<string, SubItemData> = {}
     for (const item of CATEGORY_ITEMS[cat.id] ?? []) {
-      items[item.id] = { result: 'pass', notes: '' }
+      items[item.id] = { result: '', notes: '' }
     }
     data[cat.id] = { items }
   }

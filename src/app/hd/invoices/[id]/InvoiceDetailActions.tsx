@@ -88,6 +88,18 @@ export default function InvoiceDetailActions({
         </span>
       )}
 
+      <Link
+        href={`/hd/invoices/${invoiceId}/edit`}
+        className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold text-sm"
+        style={{ background: '#FFF7ED', color: ORANGE, border: `1px solid ${ORANGE}40`, minHeight: 44 }}
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
+          <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
+        </svg>
+        Edit
+      </Link>
+
       {currentStatus !== 'paid' && currentStatus !== 'void' && (
         <button
           onClick={markPaid}

@@ -4,6 +4,21 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { checkHDAccess } from '@/lib/hd-access'
 import { sendPmReportEmail } from '@/lib/hd/pm-report-email'
 
+// Labor hours for an auto-created PM invoice, by PM type. Handles both the checklist
+// codes (dry/3000hr/full_belts_*) and the human labels used elsewhere. Order matters:
+// "No Belts" must be checked before the generic "belt" case.
+function pmLaborHours(pmType: string): number {
+  const t = (pmType || '').toLowerCase()
+  if (t.includes('aftermarket')) return 2.0
+  if (t.includes('no belt') || t.includes('no_belt')) return 2.5
+  if (t.includes('belt')) return 3.25
+  if (t.includes('coolant') || t.includes('flush')) return 1.5
+  if (t.includes('dry') || t.includes('visual')) return 1.0
+  if (t.includes('wet') || t.includes('full') || t.includes('3000')) return 2.5
+  if (t.includes('12month') || t.includes('24month')) return 2.5
+  return 2.0
+}
+
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -88,11 +103,22 @@ export async function POST(req: NextRequest) {
       .eq('user_id', user.id)
     const invoiceNumber = `INV-${new Date().getFullYear()}-${String((count ?? 0) + 1).padStart(4, '0')}`
 
+    // Labor rate from the tech's profile; hours from the PM type.
+    const { data: rateRow } = await svc
+      .from('profiles')
+      .select('hd_labor_rate')
+      .eq('id', user.id)
+      .maybeSingle()
+    const laborRate = Number(rateRow?.hd_labor_rate ?? 125)
+    const hours     = pmLaborHours(String(pm_type))
+    const amount    = Math.round(hours * laborRate * 100) / 100
+
     const laborLine = {
       id: crypto.randomUUID(),
       type: 'labor',
       description: `Preventive Maintenance — ${pm_type}`,
-      mobile_hours: 0, part_number: '', quantity: 0, unit_cost: 0, amount: 0,
+      book_hours: hours, mobile_hours: hours,
+      part_number: '', quantity: 0, unit_cost: 0, amount,
     }
 
     const { data: newInv, error: invErr } = await svc
@@ -108,6 +134,10 @@ export async function POST(req: NextRequest) {
         unit_serial:       unitRow?.serial_number ?? null,
         unit_year:         unitRow?.year != null ? String(unitRow.year) : null,
         line_items:        [laborLine],
+        labor_rate:        laborRate,
+        subtotal_labor:    amount,
+        subtotal_parts:    0,
+        total:             amount,
         status:            'unpaid',
         notes:             `Auto-created from PM checklist (${pm_type}) on ${new Date().toISOString().slice(0, 10)}`,
       })

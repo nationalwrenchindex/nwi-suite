@@ -71,6 +71,7 @@ export async function POST(req: NextRequest) {
 
     // ── Resolve the invoice link: existing / create-new / standalone ──
     let linkedInvoiceId: string | null = null
+    let invoiceError: string | null = null
     if (body.invoice_action === 'existing' && typeof body.invoice_id === 'string') {
       linkedInvoiceId = body.invoice_id
     } else if (body.invoice_action === 'create') {
@@ -91,10 +92,22 @@ export async function POST(req: NextRequest) {
         .select('id', { count: 'exact', head: true })
         .eq('user_id', user.id)
       const invoiceNumber = `INV-${new Date().getFullYear()}-${String((count ?? 0) + 1).padStart(4, '0')}`
+
+      // Labor rate from the tech's profile; DOT Annual Inspection = 2.0 hrs.
+      const { data: rateRow } = await supabase
+        .from('profiles')
+        .select('hd_labor_rate')
+        .eq('id', user.id)
+        .maybeSingle()
+      const laborRate = Number(rateRow?.hd_labor_rate ?? 125)
+      const hours     = 2.0
+      const amount    = Math.round(hours * laborRate * 100) / 100
+
       const laborLine = {
         id: crypto.randomUUID(), type: 'labor',
         description: 'DOT Annual Inspection',
-        mobile_hours: 0, part_number: '', quantity: 0, unit_cost: 0, amount: 0,
+        book_hours: hours, mobile_hours: hours,
+        part_number: '', quantity: 0, unit_cost: 0, amount,
       }
       const { data: newInv, error: invErr } = await supabase
         .from('hd_invoices')
@@ -108,12 +121,16 @@ export async function POST(req: NextRequest) {
           unit_model:        body.unit_model ?? null,
           unit_serial:       body.unit_serial ?? null,
           line_items:        [laborLine],
+          labor_rate:        laborRate,
+          subtotal_labor:    amount,
+          subtotal_parts:    0,
+          total:             amount,
           status:            'unpaid',
           notes:             `Auto-created from DOT inspection on ${new Date().toISOString().slice(0, 10)}`,
         })
         .select('id')
         .single()
-      if (invErr) console.error('[dot-inspections] invoice create failed', invErr)
+      if (invErr) { console.error('[dot-inspections] invoice create failed', invErr); invoiceError = invErr.message }
       else linkedInvoiceId = newInv?.id ?? null
     }
 
@@ -153,7 +170,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Failed to save inspection' }, { status: 500 })
     }
 
-    return NextResponse.json({ id: data.id, inspection_id: data.inspection_id, invoice_id: linkedInvoiceId })
+    return NextResponse.json({ id: data.id, inspection_id: data.inspection_id, invoice_id: linkedInvoiceId, invoice_error: invoiceError })
   } catch (err) {
     console.error('[dot-inspections] Unhandled error', err)
     return NextResponse.json({ error: 'An unexpected error occurred' }, { status: 500 })
