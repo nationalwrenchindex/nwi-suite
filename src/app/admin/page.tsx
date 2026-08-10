@@ -242,7 +242,7 @@ export default async function AdminPage() {
         </div>
 
         {/* ── Foreman add-on stats ────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-10">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10">
           <div className="bg-dark-card border border-orange/20 rounded-xl px-4 py-5">
             <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Foreman Slots</p>
             <p className="text-2xl font-bold tabular-nums text-orange">
@@ -269,6 +269,14 @@ export default async function AdminPage() {
               ${((foremanCount * 5900) / 100).toFixed(0)}
             </p>
             <Link href="/admin/foreman" className="text-orange text-xs hover:underline mt-1 block">
+              View details →
+            </Link>
+          </div>
+          <div className="bg-dark-card border border-dark-border rounded-xl px-4 py-5">
+            <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Directory Agent</p>
+            <p className="text-2xl font-bold tabular-nums text-white">Auto</p>
+            <p className="text-white/25 text-xs mt-1">Places → SMS → BD listing</p>
+            <Link href="/admin/directory-agent" className="text-orange text-xs hover:underline mt-1 block">
               View details →
             </Link>
           </div>

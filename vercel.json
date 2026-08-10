@@ -26,6 +26,18 @@
     {
       "path": "/api/cron/late-fees",
       "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/directory-agent/search",
+      "schedule": "0 8 * * 1"
+    },
+    {
+      "path": "/api/directory-agent/invite",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/directory-agent/follow-up",
+      "schedule": "0 9 * * 3"
     }
   ]
 }
