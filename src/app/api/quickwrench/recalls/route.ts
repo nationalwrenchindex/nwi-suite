@@ -2,6 +2,17 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { hasQuickWrenchAccess } from '@/lib/subscription'
 
+// Raw NHTSA recallsByVehicle payload. Every field is optional — the API omits
+// keys rather than nulling them, which is why each read below has a fallback.
+interface NhtsaRecall {
+  NHTSACampaignNumber?: string
+  Component?:           string
+  Summary?:             string
+  Consequence?:         string
+  Remedy?:              string
+  ReportReceivedDate?:  string
+}
+
 export interface RecallResult {
   campaignNumber: string
   component:      string
@@ -36,8 +47,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: `NHTSA API error: ${res.status}` }, { status: 502 })
     }
 
-    const data = await res.json()
-    const raw  = (data.results ?? []) as any[]
+    const data = await res.json() as { results?: NhtsaRecall[] }
+    const raw  = data.results ?? []
 
     const recalls: RecallResult[] = raw.map(r => ({
       campaignNumber: r.NHTSACampaignNumber ?? '',

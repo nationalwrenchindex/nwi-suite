@@ -183,7 +183,7 @@ export async function POST(req: NextRequest) {
 
   let structured: DTCStructured | null = null
   let citations: string[] = []
-  let source = 'gemini_web_search'
+  const source = 'gemini_web_search'
 
   try {
     const raw    = await generateDiagnostic(userPrompt, systemPrompt)

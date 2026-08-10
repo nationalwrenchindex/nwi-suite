@@ -251,6 +251,19 @@ function CategoryIcon({ id, className }: { id: string; className?: string }) {
 
 const VIN_RE = /^[A-HJ-NPR-Z0-9]{17}$/
 
+// Minimal shape of the Barcode Detection API, which TypeScript's DOM lib does
+// not declare. Only the members the scanner below touches are modeled; the
+// `'BarcodeDetector' in window` guard is what keeps this honest at runtime.
+interface DetectedBarcode {
+  rawValue: string
+}
+
+interface BarcodeDetectorInstance {
+  detect(source: CanvasImageSource): Promise<DetectedBarcode[]>
+}
+
+type BarcodeDetectorConstructor = new (options?: { formats?: string[] }) => BarcodeDetectorInstance
+
 function VINScanner({
   onScan,
   onCancel,
@@ -291,7 +304,7 @@ function VINScanner({
       setPhase('scanning')
       setMsg('Point the camera at the VIN barcode on the door jamb sticker')
 
-      const detector = new (window as any).BarcodeDetector({
+      const detector = new (window as unknown as { BarcodeDetector: BarcodeDetectorConstructor }).BarcodeDetector({
         formats: ['code_39', 'code_128'],
       })
 
@@ -320,7 +333,7 @@ function VINScanner({
 
     init().catch(err => {
       if (!alive) return
-      const name = (err as any)?.name ?? ''
+      const name = (err as { name?: string } | null)?.name ?? ''
       if (name === 'NotAllowedError') {
         setPhase('error')
         setMsg('denied')
@@ -332,7 +345,7 @@ function VINScanner({
         setMsg('Camera is in use by another app. Close it and try again.')
       } else {
         setPhase('error')
-        setMsg((err as any)?.message ?? 'Scanner failed to start.')
+        setMsg((err as { message?: string } | null)?.message ?? 'Scanner failed to start.')
       }
     })
 

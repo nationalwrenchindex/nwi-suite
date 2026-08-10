@@ -180,7 +180,7 @@ export async function GET(req: NextRequest, { params }: RouteContext) {
   const userPrompt = buildLdUserPrompt(normalized, year, make, model, engine, display)
   let structured: DTCStructured | null = null
   let citations: string[] = []
-  let source = 'gemini_web_search'
+  const source = 'gemini_web_search'
 
   try {
     const raw    = await generateDiagnostic(userPrompt, GEMINI_JSON_SYSTEM_PROMPT)

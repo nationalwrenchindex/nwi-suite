@@ -355,7 +355,7 @@ function LogPanel() {
   if (logs.length === 0) {
     return (
       <div className="text-center py-10">
-        <p className="text-white/20 text-sm">No notifications sent yet. They'll appear here after the first send.</p>
+        <p className="text-white/20 text-sm">No notifications sent yet. They&apos;ll appear here after the first send.</p>
       </div>
     )
   }

@@ -2,6 +2,29 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { hasQuickWrenchAccess } from '@/lib/subscription'
 
+// Raw NHTSA complaintsByVehicle payload. Keys are optional and appear in both
+// camelCase and PascalCase depending on the endpoint's mood, which is why the
+// reads below check each spelling.
+interface NhtsaComplaint {
+  components?:     string
+  component?:      string
+  dateOfIncident?: string
+  incidentDate?:   string
+  summary?:        string
+  description?:    string
+  crash?:          boolean
+  fire?:           boolean
+}
+
+interface NhtsaComplaintsResponse {
+  count?:   number
+  Count?:   number
+  message?: string
+  Message?: string
+  results?: NhtsaComplaint[]
+  Results?: NhtsaComplaint[]
+}
+
 export interface ComplaintGroup {
   component:  string
   count:      number
@@ -45,13 +68,13 @@ export async function GET(req: NextRequest) {
       console.log('[complaints] status:', res.status, 'model:', modelVariant)
 
       const bodyText = await res.text()
-      let parsed: any = null
+      let parsed: NhtsaComplaintsResponse | null = null
       try { parsed = JSON.parse(bodyText) } catch { /* non-JSON response */ }
 
       return { res, parsed }
     }
 
-    function isEmptyResult(parsed: any): boolean {
+    function isEmptyResult(parsed: NhtsaComplaintsResponse | null): boolean {
       if (!parsed) return false
       if (parsed.count === 0) return true
       if (parsed.Count === 0) return true
@@ -83,7 +106,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Process complaints into groups
-    const raw = (parsed?.results ?? parsed?.Results ?? []) as any[]
+    const raw: NhtsaComplaint[] = parsed?.results ?? parsed?.Results ?? []
     const map = new Map<string, { count: number; complaints: ComplaintDetail[] }>()
 
     for (const r of raw) {
