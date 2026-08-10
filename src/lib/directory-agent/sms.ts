@@ -1,20 +1,22 @@
-// Outbound SMS for the directory agent.
+// Outbound SMS for the directory agents (LD and HD).
 //
 // Deliberately NOT src/lib/twilio.ts: that sender routes every message through
-// the subscriber 10DLC Messaging Service. Directory outreach is a separate
-// campaign on its own number (+1 743-901-6244), so it sends with an explicit
-// From. Everything else — Basic auth, form encoding, error surfacing — mirrors
-// sendSmsResult().
+// the subscriber 10DLC Messaging Service. Directory outreach runs as separate
+// campaigns on their own numbers, so this sends with an explicit From — the
+// caller supplies which one. Everything else — Basic auth, form encoding, error
+// surfacing — mirrors sendSmsResult().
 
-// Override in Vercel if the outreach number ever changes.
-const FROM_NUMBER = process.env.DIRECTORY_AGENT_FROM_NUMBER ?? '+17439016244'
+import { LD_FROM_NUMBER } from './config'
 
 export async function sendAgentSms({
   to,
   body,
+  from,
 }: {
-  to:   string
-  body: string
+  to:    string
+  body:  string
+  /** Defaults to the LD outreach number. HD callers pass their own. */
+  from?: string
 }): Promise<{ success: boolean; error?: string }> {
   const sid   = process.env.TWILIO_ACCOUNT_SID
   const token = process.env.TWILIO_AUTH_TOKEN
@@ -36,7 +38,11 @@ export async function sendAgentSms({
           Authorization:  `Basic ${basicAuth}`,
           'Content-Type': 'application/x-www-form-urlencoded',
         },
-        body: new URLSearchParams({ From: FROM_NUMBER, To: e164, Body: body }).toString(),
+        body: new URLSearchParams({
+          From: from ?? LD_FROM_NUMBER(),
+          To:   e164,
+          Body: body,
+        }).toString(),
       },
     )
 

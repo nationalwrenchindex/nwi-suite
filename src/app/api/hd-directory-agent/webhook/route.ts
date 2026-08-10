@@ -1,6 +1,6 @@
 import crypto from 'crypto'
 import { NextResponse, type NextRequest } from 'next/server'
-import { FALLBACK_MESSAGE, LD_FROM_NUMBER, normalizeUsPhone } from '@/lib/directory-agent/config'
+import { normalizeUsPhone } from '@/lib/directory-agent/config'
 import { sendAgentSms } from '@/lib/directory-agent/sms'
 import {
   findProspectByPhone,
@@ -9,23 +9,24 @@ import {
   OPT_OUT_KEYWORDS,
   recordOptOut,
 } from '@/lib/directory-agent/reply'
-import { LD_VARIANT } from '@/lib/directory-agent/variant'
+import { HD_VARIANT } from '@/lib/hd-directory-agent/variant'
+import { HD_FALLBACK_MESSAGE, HD_FROM_NUMBER } from '@/lib/hd-directory-agent/config'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
-// ─── POST /api/directory-agent/webhook ───────────────────────────────────────
-// Inbound SMS replies from invited mechanics. Public endpoint — authenticity
+// ─── POST /api/hd-directory-agent/webhook ────────────────────────────────────
+// Inbound SMS replies from invited HD providers. Public endpoint — authenticity
 // comes from the Twilio HMAC-SHA1 signature, not from a session.
 //
-// Reply routing itself lives in src/lib/directory-agent/reply.ts, shared with
-// /api/torquewrench/sms-response, which fronts the shared inbound number.
+// Reply routing lives in src/lib/directory-agent/reply.ts, shared with the LD
+// agent and with /api/torquewrench/sms-response; HD_VARIANT points it at the HD
+// tables, number, copy and the nwihd.com directory.
 //
 // ⚠️  DEPLOYMENT STEP — after deploying, set the Twilio inbound SMS webhook for
-//     the LD outreach number (+1 336-729-4181 unless DIRECTORY_AGENT_FROM_NUMBER
-//     says otherwise; Console → Phone Numbers → Messaging → "A message comes
-//     in") to:
-//         https://tools.nationalwrenchindex.com/api/directory-agent/webhook
+//     the HD outreach number (+1 336-276-1896 unless
+//     HD_DIRECTORY_AGENT_FROM_NUMBER says otherwise) to:
+//         https://tools.nationalwrenchindex.com/api/hd-directory-agent/webhook
 //     Method: HTTP POST. The signature check below hashes exactly that URL, so
 //     it must match character for character (no trailing slash).
 //
@@ -34,12 +35,12 @@ export const maxDuration = 60
 
 const WEBHOOK_URL =
   `${(process.env.NEXT_PUBLIC_APP_URL ?? 'https://tools.nationalwrenchindex.com').replace(/\/$/, '')}` +
-  '/api/directory-agent/webhook'
+  '/api/hd-directory-agent/webhook'
 
 export async function POST(request: NextRequest) {
   const authToken = process.env.TWILIO_AUTH_TOKEN
   if (!authToken) {
-    console.error('[directory-agent/webhook] TWILIO_AUTH_TOKEN not set')
+    console.error('[hd-directory-agent/webhook] TWILIO_AUTH_TOKEN not set')
     return twiml()
   }
 
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest) {
 
   const signature = request.headers.get('x-twilio-signature') ?? ''
   if (!verifyTwilioSignature(authToken, signature, WEBHOOK_URL, params)) {
-    console.warn('[directory-agent/webhook] invalid Twilio signature — ignoring request')
+    console.warn('[hd-directory-agent/webhook] invalid Twilio signature — ignoring request')
     return twiml()
   }
 
@@ -57,25 +58,25 @@ export async function POST(request: NextRequest) {
   const phone   = normalizeUsPhone(fromRaw)
 
   if (!phone) {
-    console.warn('[directory-agent/webhook] unparseable From:', fromRaw)
+    console.warn('[hd-directory-agent/webhook] unparseable From:', fromRaw)
     return twiml()
   }
 
-  // Any status matches here — this number only ever receives directory traffic,
-  // so a reply from an already-responded prospect is still ours to handle.
-  const prospect = await findProspectByPhone(LD_VARIANT, phone)
+  // Any status matches here — this number only ever receives HD directory
+  // traffic, so a reply from an already-responded prospect is still ours.
+  const prospect = await findProspectByPhone(HD_VARIANT, phone)
 
   if (!prospect) {
     // A STOP from a number we have no prospect row for is still binding.
     if (matchesKeyword(message, OPT_OUT_KEYWORDS)) {
-      await recordOptOut(LD_VARIANT, phone, null)
+      await recordOptOut(HD_VARIANT, phone, null)
     } else {
-      await sendAgentSms({ to: phone, body: FALLBACK_MESSAGE, from: LD_FROM_NUMBER() })
+      await sendAgentSms({ to: phone, body: HD_FALLBACK_MESSAGE, from: HD_FROM_NUMBER() })
     }
     return twiml()
   }
 
-  await handleProspectReply(LD_VARIANT, phone, message, prospect)
+  await handleProspectReply(HD_VARIANT, phone, message, prospect)
   return twiml()
 }
 

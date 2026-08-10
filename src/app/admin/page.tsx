@@ -274,9 +274,17 @@ export default async function AdminPage() {
           </div>
           <div className="bg-dark-card border border-dark-border rounded-xl px-4 py-5">
             <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Directory Agent</p>
-            <p className="text-2xl font-bold tabular-nums text-white">Auto</p>
+            <p className="text-2xl font-bold tabular-nums text-white">LD</p>
             <p className="text-white/25 text-xs mt-1">Places → SMS → BD listing</p>
             <Link href="/admin/directory-agent" className="text-orange text-xs hover:underline mt-1 block">
+              View details →
+            </Link>
+          </div>
+          <div className="bg-dark-card border border-dark-border rounded-xl px-4 py-5">
+            <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Directory Agent</p>
+            <p className="text-2xl font-bold tabular-nums text-white">HD</p>
+            <p className="text-white/25 text-xs mt-1">15 corridors → nwihd.com</p>
+            <Link href="/admin/hd-directory-agent" className="text-orange text-xs hover:underline mt-1 block">
               View details →
             </Link>
           </div>

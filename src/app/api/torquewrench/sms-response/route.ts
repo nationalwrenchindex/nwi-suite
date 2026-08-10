@@ -5,6 +5,8 @@ import { sendSmsResult } from '@/lib/twilio'
 import { buildGoogleReviewUrl } from '@/lib/torquewrench/review-url'
 import { LISTED_MESSAGE_SHORT, normalizeUsPhone } from '@/lib/directory-agent/config'
 import { findProspectByPhone, handleProspectReply } from '@/lib/directory-agent/reply'
+import { LD_VARIANT } from '@/lib/directory-agent/variant'
+import { HD_VARIANT } from '@/lib/hd-directory-agent/variant'
 
 // ─── POST /api/torquewrench/sms-response ─────────────────────────────────────
 // Receives inbound SMS from Twilio (customers replying with ratings).
@@ -43,21 +45,30 @@ export async function POST(request: NextRequest) {
     return new NextResponse('', { status: 200 })
   }
 
-  // ── Directory agent check ──────────────────────────────────────────────────
-  // Runs before all review logic, but deliberately AFTER signature verification:
-  // a YES here creates a live Brilliant Directories listing, so it must never be
-  // reachable by an unsigned request. Only pending/contacted prospects claim the
-  // message — once a prospect has replied, later texts fall through to
-  // TorqueWrench so they can still be a subscriber's reviewing customer.
+  // ── Directory agent checks ─────────────────────────────────────────────────
+  // Both directory agents share this inbound number, so we claim the message for
+  // whichever agent owns the sender before any review logic runs: LD first, then
+  // HD, then fall through to TorqueWrench unchanged.
+  //
+  // Deliberately AFTER signature verification: a YES here creates a live
+  // Brilliant Directories listing, so it must never be reachable by an unsigned
+  // request. Only pending/contacted prospects claim the message — once a
+  // prospect has replied, later texts fall through to TorqueWrench so they can
+  // still be a subscriber's reviewing customer.
   const prospectPhone = normalizeUsPhone(fromRaw)
   if (prospectPhone) {
-    const prospect = await findProspectByPhone(prospectPhone, ['pending', 'contacted'])
-    if (prospect) {
-      await handleProspectReply(prospectPhone, messageBody, prospect, LISTED_MESSAGE_SHORT)
-      return new NextResponse(
-        '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
-        { status: 200, headers: { 'Content-Type': 'text/xml' } },
-      )
+    const OPEN = ['pending', 'contacted']
+
+    const ldProspect = await findProspectByPhone(LD_VARIANT, prospectPhone, OPEN)
+    if (ldProspect) {
+      await handleProspectReply(LD_VARIANT, prospectPhone, messageBody, ldProspect, LISTED_MESSAGE_SHORT)
+      return directoryTwiml()
+    }
+
+    const hdProspect = await findProspectByPhone(HD_VARIANT, prospectPhone, OPEN)
+    if (hdProspect) {
+      await handleProspectReply(HD_VARIANT, prospectPhone, messageBody, hdProspect)
+      return directoryTwiml()
     }
   }
 
@@ -171,6 +182,15 @@ export async function POST(request: NextRequest) {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+// Empty TwiML — the directory agents reply over the REST API, not via <Message>,
+// so Twilio just needs a well-formed acknowledgement here.
+function directoryTwiml() {
+  return new NextResponse(
+    '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
+    { status: 200, headers: { 'Content-Type': 'text/xml' } },
+  )
+}
 
 function verifyTwilioSignature(
   authToken: string,

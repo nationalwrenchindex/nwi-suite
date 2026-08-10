@@ -38,6 +38,18 @@
     {
       "path": "/api/directory-agent/follow-up",
       "schedule": "0 9 * * 3"
+    },
+    {
+      "path": "/api/hd-directory-agent/search",
+      "schedule": "0 8 * * 2"
+    },
+    {
+      "path": "/api/hd-directory-agent/invite",
+      "schedule": "0 10 * * *"
+    },
+    {
+      "path": "/api/hd-directory-agent/follow-up",
+      "schedule": "0 9 * * 4"
     }
   ]
 }

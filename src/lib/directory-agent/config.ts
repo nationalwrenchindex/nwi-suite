@@ -22,6 +22,10 @@ export const DEFAULT_SEARCH_CITIES: ReadonlyArray<{ city: string; state: string 
 
 export const DEFAULT_RADIUS_METERS = 50000
 
+// LD outreach 10DLC number. Every LD directory SMS — invite, follow-up, reply
+// confirmation — sends From this number. Override per environment in Vercel.
+export const LD_FROM_NUMBER = () => process.env.DIRECTORY_AGENT_FROM_NUMBER ?? '+13367294181'
+
 // Minimum Google rating to invite. Unrated businesses are excluded — we can't
 // vouch for them, and the directory's value is that every listing is credible.
 export const MIN_RATING = 4.0
