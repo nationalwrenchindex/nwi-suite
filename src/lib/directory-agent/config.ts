@@ -56,6 +56,12 @@ export const LISTED_MESSAGE =
   'Search your business name to find it. Log in anytime to add photos, services, and updates. ' +
   'Welcome to the directory. — Brock'
 
+// Condensed variant sent when the YES arrives on the shared TorqueWrench inbound
+// number. Same event, shorter copy — one SMS segment instead of two.
+export const LISTED_MESSAGE_SHORT =
+  'You are listed on National Wrench Index. Search your business name at nationalwrenchindex.com ' +
+  'to find your profile. Welcome to the directory. — Brock'
+
 export const OPTOUT_MESSAGE =
   'You have been removed from our list and will not be contacted again. — National Wrench Index'
 

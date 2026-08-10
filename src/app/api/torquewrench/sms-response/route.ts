@@ -3,12 +3,19 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { sendSmsResult } from '@/lib/twilio'
 import { buildGoogleReviewUrl } from '@/lib/torquewrench/review-url'
+import { LISTED_MESSAGE_SHORT, normalizeUsPhone } from '@/lib/directory-agent/config'
+import { findProspectByPhone, handleProspectReply } from '@/lib/directory-agent/reply'
 
 // ─── POST /api/torquewrench/sms-response ─────────────────────────────────────
 // Receives inbound SMS from Twilio (customers replying with ratings).
 // Verifies Twilio HMAC-SHA1 signature, finds the matching review, extracts a
 // rating 1-5, then either sends a Google review link (4-5) or triggers service
 // recovery (1-3).
+//
+// This number is shared with the directory agent's outreach campaign, so before
+// any review handling runs we check whether the sender is an open directory
+// prospect (pending or contacted). If so the message is theirs, not a review
+// reply, and we return early. Everything below that check is unchanged.
 export async function POST(request: NextRequest) {
   const authToken = process.env.TWILIO_AUTH_TOKEN
   if (!authToken) {
@@ -34,6 +41,24 @@ export async function POST(request: NextRequest) {
 
   if (!fromRaw) {
     return new NextResponse('', { status: 200 })
+  }
+
+  // ── Directory agent check ──────────────────────────────────────────────────
+  // Runs before all review logic, but deliberately AFTER signature verification:
+  // a YES here creates a live Brilliant Directories listing, so it must never be
+  // reachable by an unsigned request. Only pending/contacted prospects claim the
+  // message — once a prospect has replied, later texts fall through to
+  // TorqueWrench so they can still be a subscriber's reviewing customer.
+  const prospectPhone = normalizeUsPhone(fromRaw)
+  if (prospectPhone) {
+    const prospect = await findProspectByPhone(prospectPhone, ['pending', 'contacted'])
+    if (prospect) {
+      await handleProspectReply(prospectPhone, messageBody, prospect, LISTED_MESSAGE_SHORT)
+      return new NextResponse(
+        '<?xml version="1.0" encoding="UTF-8"?><Response></Response>',
+        { status: 200, headers: { 'Content-Type': 'text/xml' } },
+      )
+    }
   }
 
   const fromDigits = fromRaw.replace(/\D/g, '')
