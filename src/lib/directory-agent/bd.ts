@@ -48,6 +48,16 @@ function generatePassword(): string {
   return randomBytes(18).toString('base64url')
 }
 
+/**
+ * BD renders phone as a display string, so post the US national format rather
+ * than E.164 — a visitor should not see a +1 prefix on the directory. Matches
+ * toBdPhone in src/lib/hd-directory-agent/bd.ts.
+ */
+function toBdPhone(e164: string): string {
+  const ten = e164.replace(/\D/g, '').slice(-10)
+  return ten.length === 10 ? `${ten.slice(0, 3)}-${ten.slice(3, 6)}-${ten.slice(6)}` : e164
+}
+
 export function isAgentPublishConfigured(): boolean {
   return !!(process.env.BD_DIRECTORY_AGENT_KEY && process.env.BD_SUBSCRIPTION_ID)
 }
@@ -70,13 +80,18 @@ export async function createAgentListing(
     listing_type:    'Company',
     first_name:      'Business',
     last_name:       'Owner',
-    phone:           input.phone,
+    // `phone_number`, NOT `phone`. Confirmed by reading BD's echo of a created
+    // user: posting `phone` is silently ignored and the record comes back with
+    // phone_number:null, which is why agent-created listings had no phone.
+    phone_number:    toBdPhone(input.phone),
     listing_live:    process.env.BD_LISTING_LIVE ?? 'false',
     bdapi_model:     'user',
   })
 
-  if (input.city)  body.set('city',  input.city)
-  if (input.state) body.set('state', input.state)
+  if (input.city)  body.set('city', input.city)
+  // `state_code`, NOT `state` — same finding as phone_number above. Posting
+  // `state` comes back as state_code:"" on the created record.
+  if (input.state) body.set('state_code', input.state)
 
   const res = await fetch(`${BASE_URL}/user/create`, {
     method: 'POST',
