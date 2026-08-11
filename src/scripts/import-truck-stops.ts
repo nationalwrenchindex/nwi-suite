@@ -227,6 +227,8 @@ interface TruckStop {
   businessName: string
   phone:        string
   address:      string
+  street:       string | null
+  zip:          string | null
   city:         string
   state:        string
 }
@@ -286,6 +288,21 @@ async function mapWithConcurrency<T, R>(
 
 function generatePassword(): string {
   return randomBytes(18).toString('base64url')
+}
+
+/**
+ * BD stores phone as a display string and validates it as a US number. E.164
+ * (+19195631814) fails that validation and is saved blank — which is why the
+ * first import batch produced listings with an empty phone field even though
+ * the field NAME was correct. Send the national format instead.
+ *
+ * Duplicated rather than imported for the same reason as everything else here:
+ * this script must not pull in src/lib. src/lib/hd-directory-agent/bd.ts has
+ * the matching helper for the agent path.
+ */
+function toBdPhone(e164: string): string {
+  const ten = e164.replace(/\D/g, '').slice(-10)
+  return ten.length === 10 ? `${ten.slice(0, 3)}-${ten.slice(3, 6)}-${ten.slice(6)}` : e164
 }
 
 /** placeid@nwi-hd-listing.com, sanitized to a legal local part. */
@@ -403,6 +420,13 @@ async function searchCity(
         businessName: name || 'Truck Stop',
         phone,
         address,
+        // Street and zip pulled from components rather than split out of
+        // formattedAddress, which varies in shape by country and result type.
+        street: [
+          componentOf(p.addressComponents, 'street_number'),
+          componentOf(p.addressComponents, 'route'),
+        ].filter(Boolean).join(' ') || null,
+        zip:   componentOf(p.addressComponents, 'postal_code'),
         city:  componentOf(p.addressComponents, 'locality') ?? target.city,
         state: componentOf(p.addressComponents, 'administrative_area_level_1', true) ?? target.state,
       })
@@ -444,6 +468,7 @@ async function createBdListing(
   stop: TruckStop,
   apiKey: string,
   subscriptionId: string,
+  verbose = false,
 ): Promise<string> {
   const body = new URLSearchParams({
     email:           listingEmail(stop.placeId),
@@ -456,10 +481,25 @@ async function createBdListing(
     last_name:       'Owner',
     city:            stop.city,
     state:           stop.state,
-    phone:           stop.phone,
+    // National format, NOT E.164 — see toBdPhone.
+    phone:           toBdPhone(stop.phone),
     listing_live:    '1',
     bdapi_model:     'user',
   })
+
+  // Street address and zip. Unlike the fields above, these names are NOT in the
+  // documented member-import field list that src/lib/brilliant-directories/client.ts
+  // was built from — no NWI code has ever sent an address. BD ignores unknown
+  // POST fields, so an unrecognized name costs nothing; verify against a created
+  // listing and drop whichever variant does not populate.
+  if (stop.street) {
+    body.set('address', stop.street)
+    body.set('address_1', stop.street)
+  }
+  if (stop.zip) {
+    body.set('zip_code', stop.zip)
+    body.set('zip', stop.zip)
+  }
 
   const res = await fetch(BD_URL, {
     method: 'POST',
@@ -480,6 +520,16 @@ async function createBdListing(
   }
 
   const raw = await res.text().catch(() => '')
+
+  if (verbose) {
+    // The only way to tell whether BD accepted a field is to read what it sends
+    // back. Password is redacted; nothing else here is sensitive.
+    const sent = new URLSearchParams(body)
+    sent.set('password', '[redacted]')
+    console.log(`         → sent: ${sent.toString()}`)
+    console.log(`         ← ${res.status}: ${raw.slice(0, 600)}`)
+  }
+
   if (!res.ok) throw new Error(`BD ${res.status}: ${(raw || res.statusText).slice(0, 300)}`)
 
   return extractListingUrl(raw, stop.businessName)
@@ -528,7 +578,8 @@ async function filterKnown(supabase: SupabaseClient, stops: TruckStop[]): Promis
 
 async function main() {
   const args   = process.argv.slice(2)
-  const dryRun = args.includes('--dry-run')
+  const dryRun  = args.includes('--dry-run')
+  const verbose = args.includes('--verbose')
   const limitArg = args.find(a => a.startsWith('--limit='))
   const limit  = limitArg ? Number.parseInt(limitArg.split('=')[1] ?? '', 10) : Number.POSITIVE_INFINITY
 
@@ -730,7 +781,7 @@ async function main() {
     console.log(`${position} ${stop.businessName} — ${stop.city}, ${stop.state}`)
 
     try {
-      const listingUrl = await createBdListing(stop, bdKey!, subscriptionId!)
+      const listingUrl = await createBdListing(stop, bdKey!, subscriptionId!, verbose)
 
       // Recorded only after BD confirms, so a failed listing never shows as
       // created. status 'yes' because these are direct imports, not invitees —

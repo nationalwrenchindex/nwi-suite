@@ -48,6 +48,20 @@ function generatePassword(): string {
   return randomBytes(18).toString('base64url')
 }
 
+/**
+ * BD stores phone as a display string and validates it as a US number. E.164
+ * (+19195631814) fails that validation and is saved blank — the field name is
+ * correct, the value is what BD rejects. Send the national format instead.
+ *
+ * Found via the truck-stop bulk import, whose listings all had an empty phone;
+ * this path had the same defect, so every listing created from a YES reply was
+ * missing its phone too.
+ */
+function toBdPhone(e164: string): string {
+  const ten = e164.replace(/\D/g, '').slice(-10)
+  return ten.length === 10 ? `${ten.slice(0, 3)}-${ten.slice(3, 6)}-${ten.slice(6)}` : e164
+}
+
 export function isHdPublishConfigured(): boolean {
   return !!(process.env.BD_HD_DIRECTORY_AGENT_KEY && process.env.BD_HD_SUBSCRIPTION_ID)
 }
@@ -75,7 +89,8 @@ export async function createHdListing(input: HdListingInput): Promise<HdListingR
     listing_type:    'Company',
     first_name:      'Business',
     last_name:       'Owner',
-    phone:           input.phone,
+    // National format, NOT E.164 — see toBdPhone.
+    phone:           toBdPhone(input.phone),
     // Falls back to the LD flag so one switch can gate both directories until
     // HD gets its own.
     listing_live:    process.env.BD_HD_LISTING_LIVE ?? process.env.BD_LISTING_LIVE ?? 'false',
