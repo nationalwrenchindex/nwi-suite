@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { sendSmsResult } from '@/lib/twilio'
 import { buildGoogleReviewUrl } from '@/lib/torquewrench/review-url'
-import { LISTED_MESSAGE_SHORT, normalizeUsPhone } from '@/lib/directory-agent/config'
+import { normalizeUsPhone } from '@/lib/directory-agent/config'
 import { findProspectByPhone, handleProspectReply } from '@/lib/directory-agent/reply'
 import { LD_VARIANT } from '@/lib/directory-agent/variant'
 import { HD_VARIANT } from '@/lib/hd-directory-agent/variant'
@@ -57,11 +57,14 @@ export async function POST(request: NextRequest) {
   // still be a subscriber's reviewing customer.
   const prospectPhone = normalizeUsPhone(fromRaw)
   if (prospectPhone) {
-    const OPEN = ['pending', 'contacted']
+    // 'awaiting_email' is included because that reply is a bare email address —
+    // it matches no keyword, so without claiming it here it would fall through
+    // to review handling and the mechanic would never get listed.
+    const OPEN = ['pending', 'contacted', 'awaiting_email']
 
     const ldProspect = await findProspectByPhone(LD_VARIANT, prospectPhone, OPEN)
     if (ldProspect) {
-      await handleProspectReply(LD_VARIANT, prospectPhone, messageBody, ldProspect, LISTED_MESSAGE_SHORT)
+      await handleProspectReply(LD_VARIANT, prospectPhone, messageBody, ldProspect)
       return directoryTwiml()
     }
 

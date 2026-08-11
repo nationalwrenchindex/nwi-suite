@@ -20,6 +20,10 @@ export const HD_VARIANT: DirectoryVariant = {
   listedMessage:   HD_LISTED_MESSAGE,
   optOutMessage:   HD_OPTOUT_MESSAGE,
   fallbackMessage: HD_FALLBACK_MESSAGE,
+  // HD lists immediately on YES. Turning this on requires adding
+  // 'awaiting_email' to the hd_directory_prospects status CHECK first —
+  // migration 092 adds it to the LD table only.
+  collectEmail:    false,
   createListing:   prospect => createHdListing({
     businessName:    prospect.business_name || 'Heavy Duty Service',
     city:            prospect.city,

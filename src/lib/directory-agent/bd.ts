@@ -23,6 +23,13 @@ export interface AgentListingInput {
   city:         string | null
   state:        string | null
   phone:        string
+  /**
+   * The mechanic's real address, collected over SMS before listing. BD mails
+   * login details here, so a generated placeholder leaves them with a profile
+   * they can never edit. Falls back to a generated address only for callers
+   * that have no email to offer (e.g. a manual retry of an older prospect).
+   */
+  email?:       string
 }
 
 export interface AgentListingResult {
@@ -69,7 +76,7 @@ export async function createAgentListing(
   const subscriptionId = process.env.BD_SUBSCRIPTION_ID
   if (!apiKey || !subscriptionId) throw new Error('BD_AGENT_NOT_CONFIGURED')
 
-  const email = generateListingEmail(input.businessName)
+  const email = input.email ?? generateListingEmail(input.businessName)
 
   const body = new URLSearchParams({
     email,

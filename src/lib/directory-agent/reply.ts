@@ -24,6 +24,8 @@ export interface DirectoryProspect {
   state:              string | null
   status:             string
   bd_listing_created: boolean | null
+  responded_at?:      string | null
+  email?:             string | null
   // HD only — absent on LD prospects.
   service_category?:  string | null
 }
@@ -40,14 +42,53 @@ export interface DirectoryVariant {
   listedMessage:   string
   optOutMessage:   string
   fallbackMessage: string
-  /** Creates the Brilliant Directories listing for this directory. */
-  createListing:   (prospect: DirectoryProspect) => Promise<{ listingUrl: string }>
+  /**
+   * When true, a YES parks the prospect in 'awaiting_email' and asks for their
+   * address before creating anything; the listing is created on the reply that
+   * carries an email. When false, a YES creates the listing immediately.
+   *
+   * LD only today. Enabling it for HD requires adding 'awaiting_email' to the
+   * hd_directory_prospects status CHECK first — see migration 092, which adds
+   * it to the LD table only.
+   */
+  collectEmail:    boolean
+  /** Required when collectEmail is true. */
+  emailRequestMessage?: string
+  /**
+   * Creates the Brilliant Directories listing. `email` is the mechanic's real
+   * address when one was collected; the client generates a placeholder if not.
+   */
+  createListing:   (prospect: DirectoryProspect, email?: string) => Promise<{ listingUrl: string }>
+}
+
+const EMAIL_RE = /[^\s@,;<>()[\]]+@[^\s@,;<>()[\]]+\.[a-z]{2,}/i
+
+/** First email address in the message, lowercased, or null. */
+export function extractEmail(message: string): string | null {
+  const match = message.match(EMAIL_RE)
+  if (!match) return null
+  // Trim trailing sentence punctuation Google/keyboards tack on.
+  return match[0].replace(/[.,;:]+$/, '').toLowerCase()
+}
+
+/**
+ * Keyword matching runs against the message with any email address removed.
+ *
+ * Without this, an address like "john.no@shop.com" trips the `\bno\b` opt-out
+ * pattern — '.' and '@' are both non-word characters, so the boundaries match —
+ * and a mechanic answering the email request would be silently opted out
+ * instead of listed. Stripping the address first also keeps a genuine
+ * "stop, my email is x@y.com" reading as an opt-out, which is the safer
+ * resolution of that ambiguity.
+ */
+function withoutEmails(message: string): string {
+  return message.replace(new RegExp(EMAIL_RE, 'gi'), ' ')
 }
 
 // Word-boundary match so "NOPE" doesn't hit on "no" via substring, while
 // "no thanks" and "STOP." still do. Case-insensitive.
 export function matchesKeyword(message: string, keywords: string[]): boolean {
-  const text = message.toLowerCase()
+  const text = withoutEmails(message).toLowerCase()
   return keywords.some(k => new RegExp(`\\b${k}\\b`).test(text))
 }
 
@@ -109,11 +150,38 @@ export async function recordOptOut(
 // SMS. On a BD failure the prospect stays 'yes' with bd_listing_created false
 // so the admin page surfaces it as a manual retry — and no SMS goes out,
 // because we never promise a listing that doesn't exist yet.
+/**
+ * Parks a consenting prospect in 'awaiting_email' and asks for their address.
+ * No listing is created yet — see EMAIL_REQUEST_MESSAGE for why.
+ */
+export async function requestEmail(
+  variant: DirectoryVariant,
+  phone: string,
+  prospect: DirectoryProspect,
+): Promise<void> {
+  const supabase = createServiceClient()
+
+  // responded_at is stamped here, not on the later email reply: this is the
+  // moment they consented, which is what conversion is measured against.
+  await supabase
+    .from(variant.prospectsTable)
+    .update({ status: 'awaiting_email', responded_at: new Date().toISOString() })
+    .eq('id', prospect.id)
+
+  await sendAgentSms({
+    to:   phone,
+    body: variant.emailRequestMessage ?? variant.fallbackMessage,
+    from: variant.fromNumber(),
+  })
+  console.log(`[${variant.label}/reply] awaiting email from`, phone)
+}
+
 export async function acceptProspect(
   variant: DirectoryVariant,
   phone: string,
   prospect: DirectoryProspect,
   listedMessage: string,
+  email?: string,
 ): Promise<void> {
   const supabase = createServiceClient()
 
@@ -125,13 +193,17 @@ export async function acceptProspect(
 
   await supabase
     .from(variant.prospectsTable)
-    .update({ status: 'yes', responded_at: new Date().toISOString() })
+    .update({
+      status:       'yes',
+      responded_at: prospect.responded_at ?? new Date().toISOString(),
+      ...(email ? { email } : {}),
+    })
     .eq('id', prospect.id)
 
   const businessName = prospect.business_name || 'Mobile Mechanic'
 
   try {
-    const listing = await variant.createListing(prospect)
+    const listing = await variant.createListing(prospect, email)
 
     await supabase
       .from(variant.prospectsTable)
@@ -148,8 +220,17 @@ export async function acceptProspect(
   }
 }
 
-// Full reply routing for a known prospect. Opt-out keywords are checked before
-// YES so "no thanks" can never be read as consent.
+/**
+ * Full reply routing for a known prospect.
+ *
+ * Order matters and is deliberate:
+ *  1. Opt-out always wins, in every state — a STOP mid-conversation must work.
+ *     Matching ignores any email in the message (see withoutEmails).
+ *  2. An awaiting_email prospect whose reply carries an email gets listed.
+ *  3. An awaiting_email prospect who replies with anything else is re-asked,
+ *     rather than being told to "reply YES" again — they already did.
+ *  4. YES starts the email request (collectEmail) or lists immediately (HD).
+ */
 export async function handleProspectReply(
   variant: DirectoryVariant,
   phone: string,
@@ -162,8 +243,24 @@ export async function handleProspectReply(
     return
   }
 
+  if (prospect.status === 'awaiting_email') {
+    const email = extractEmail(message)
+    if (email) {
+      await acceptProspect(variant, phone, prospect, listedMessage, email)
+      return
+    }
+    // Still waiting — repeat the ask instead of the generic fallback.
+    await sendAgentSms({
+      to:   phone,
+      body: variant.emailRequestMessage ?? variant.fallbackMessage,
+      from: variant.fromNumber(),
+    })
+    return
+  }
+
   if (matchesKeyword(message, ['yes'])) {
-    await acceptProspect(variant, phone, prospect, listedMessage)
+    if (variant.collectEmail) await requestEmail(variant, phone, prospect)
+    else                      await acceptProspect(variant, phone, prospect, listedMessage)
     return
   }
 

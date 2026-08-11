@@ -55,16 +55,19 @@ export function followUpMessage(businessName: string): string {
   )
 }
 
-export const LISTED_MESSAGE =
-  'You are listed on National Wrench Index. Find your profile here: nationalwrenchindex.com — ' +
-  'Search your business name to find it. Log in anytime to add photos, services, and updates. ' +
-  'Welcome to the directory. — Brock'
+// Sent on YES. The listing is NOT created yet — BD mails login details to the
+// address on the account, so a generated @nwi-listing.com mailbox would strand
+// the mechanic with a profile they can never edit. Ask first, list second.
+export const EMAIL_REQUEST_MESSAGE =
+  'Thanks for your interest in a free National Wrench Index listing. ' +
+  'We just need your email address to set up your profile so you can log in and make updates anytime. ' +
+  'Reply with your email and we will get you listed right away. — Brock'
 
-// Condensed variant sent when the YES arrives on the shared TorqueWrench inbound
-// number. Same event, shorter copy — one SMS segment instead of two.
-export const LISTED_MESSAGE_SHORT =
+// Sent once the listing exists, which now always means it was created against
+// the mechanic's real email — hence the pointer to their inbox.
+export const LISTED_MESSAGE =
   'You are listed on National Wrench Index. Search your business name at nationalwrenchindex.com ' +
-  'to find your profile. Welcome to the directory. — Brock'
+  'to find your profile. Check your email for login details so you can add photos and services. — Brock'
 
 export const OPTOUT_MESSAGE =
   'You have been removed from our list and will not be contacted again. — National Wrench Index'

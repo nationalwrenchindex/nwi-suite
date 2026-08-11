@@ -49,9 +49,10 @@ function StatCard({
 
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    pending:   'bg-white/10 text-white/50',
-    contacted: 'bg-blue-500/15 text-blue-400',
-    yes:       'bg-green-500/15 text-green-400',
+    pending:        'bg-white/10 text-white/50',
+    contacted:      'bg-blue-500/15 text-blue-400',
+    awaiting_email: 'bg-orange/20 text-orange-light',
+    yes:            'bg-green-500/15 text-green-400',
     no:        'bg-yellow-500/15 text-yellow-400',
     optout:    'bg-red-500/15 text-red-400',
   }
