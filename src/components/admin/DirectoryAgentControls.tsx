@@ -56,8 +56,8 @@ export default function DirectoryAgentControls() {
     <div className="bg-dark-card border border-orange/20 rounded-xl p-6">
       <h2 className="text-white font-semibold text-lg mb-1">Manual Controls</h2>
       <p className="text-white/40 text-sm mb-4">
-        These run the same jobs as the crons (search Mondays 8am UTC · invites daily 9am UTC ·
-        follow-ups Wednesdays 9am UTC). Invites go to the 25 highest-rated pending prospects.
+        These run the same jobs as the crons (search Mondays 8am ET · invites daily 9am ET ·
+        follow-ups Wednesdays 10am ET). Invites go to the 25 highest-rated pending prospects.
       </p>
 
       <form

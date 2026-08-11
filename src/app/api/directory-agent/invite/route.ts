@@ -12,7 +12,7 @@ export const maxDuration = 60
 
 // ─── POST /api/directory-agent/invite ────────────────────────────────────────
 // Sends the permission SMS to the highest-rated pending prospects, capped at
-// INVITE_BATCH_SIZE per run (the daily 9am cron). Best-rated first so the
+// INVITE_BATCH_SIZE per run (the daily 9am ET cron). Best-rated first so the
 // directory fills with credible shops before the long tail.
 //
 // A prospect is only marked contacted when Twilio accepted the message — a

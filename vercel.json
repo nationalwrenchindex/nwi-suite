@@ -29,27 +29,27 @@
     },
     {
       "path": "/api/directory-agent/search",
-      "schedule": "0 8 * * 1"
+      "schedule": "0 12 * * 1"
     },
     {
       "path": "/api/directory-agent/invite",
-      "schedule": "0 9 * * *"
+      "schedule": "0 13 * * *"
     },
     {
       "path": "/api/directory-agent/follow-up",
-      "schedule": "0 9 * * 3"
+      "schedule": "0 14 * * 3"
     },
     {
       "path": "/api/hd-directory-agent/search",
-      "schedule": "0 8 * * 2"
+      "schedule": "0 12 * * 2"
     },
     {
       "path": "/api/hd-directory-agent/invite",
-      "schedule": "0 10 * * *"
+      "schedule": "0 13 * * *"
     },
     {
       "path": "/api/hd-directory-agent/follow-up",
-      "schedule": "0 9 * * 4"
+      "schedule": "0 14 * * 4"
     }
   ]
 }
