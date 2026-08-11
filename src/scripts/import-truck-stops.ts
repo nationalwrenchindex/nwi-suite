@@ -6,6 +6,14 @@
  *   npm run import-truck-stops                 # live — creates real listings
  *   npm run import-truck-stops -- --dry-run    # find + report, write nothing
  *   npm run import-truck-stops -- --limit=10   # cap listings created
+ *   npm run import-truck-stops -- --cities=Charlotte,Winston-Salem
+ *                                              # sweep only these cities
+ *
+ * --cities takes comma-separated names matched against the corridor list. A
+ * bare name matches every state it appears under (Charleston hits both SC and
+ * WV); append :ST to pin one, or to sweep a city that is not on a corridor at
+ * all — e.g. --cities=Charleston:SC,Dallas:TX. Useful as a cheap smoke test:
+ * each city costs 8 Places queries, a full sweep costs ~496.
  *
  * This is NOT an API route. It is deliberately self-contained — it does not
  * import from src/lib, because those modules pull in next/server and the
@@ -356,6 +364,65 @@ async function main() {
     process.exit(1)
   }
 
+  // Argument validation runs BEFORE the env check so a typo in --cities is
+  // caught immediately, without needing any credentials configured.
+
+  // Dedupe cities across corridors — Charlotte, Atlanta, Knoxville and others
+  // appear on two corridors each.
+  const byKey = new Map<string, City & { corridors: string[] }>()
+  for (const [corridor, list] of Object.entries(CORRIDORS)) {
+    for (const c of list) {
+      const key = `${c.city}|${c.state}`.toLowerCase()
+      const hit = byKey.get(key)
+      if (hit) hit.corridors.push(corridor)
+      else byKey.set(key, { ...c, corridors: [corridor] })
+    }
+  }
+  const allCities = [...byKey.values()]
+
+  const citiesArg = args.find(a => a.startsWith('--cities='))
+  let cities = allCities
+
+  if (citiesArg) {
+    const names = citiesArg.slice('--cities='.length)
+      .split(',')
+      .map(s => s.trim())
+      .filter(Boolean)
+
+    if (names.length === 0) {
+      console.error('--cities was empty. Example: --cities=Charlotte,Winston-Salem')
+      process.exit(1)
+    }
+
+    const selected: Array<City & { corridors: string[] }> = []
+    const unmatched: string[] = []
+
+    for (const name of names) {
+      // "City:ST" pins a state and may name a city that is not on a corridor.
+      const [rawCity, rawState] = name.split(':').map(s => s?.trim())
+      if (rawState) {
+        const key   = `${rawCity}|${rawState}`.toLowerCase()
+        const known = byKey.get(key)
+        selected.push(known ?? { city: rawCity, state: rawState.toUpperCase(), corridors: ['ad-hoc'] })
+        continue
+      }
+      const hits = allCities.filter(c => c.city.toLowerCase() === rawCity.toLowerCase())
+      if (hits.length === 0) unmatched.push(rawCity)
+      else selected.push(...hits)
+    }
+
+    if (unmatched.length > 0) {
+      console.error(`Not on any corridor: ${unmatched.join(', ')}`)
+      console.error('Append a state to sweep it anyway, e.g. --cities=Dallas:TX')
+      process.exit(1)
+    }
+
+    // A name matching two states (Charleston) yields both; drop repeats.
+    const dedup = new Map(selected.map(c => [`${c.city}|${c.state}`.toLowerCase(), c]))
+    cities = [...dedup.values()]
+    console.log(`Selected ${cities.length} city/cities: ${cities.map(c => `${c.city}, ${c.state}`).join(' · ')}`)
+  }
+
   const placesKey      = process.env.GOOGLE_PLACES_API_KEY
   const bdKey          = process.env.BD_HD_DIRECTORY_AGENT_KEY
   const subscriptionId = process.env.BD_HD_SUBSCRIPTION_ID
@@ -376,22 +443,14 @@ async function main() {
     process.exit(1)
   }
 
-  // Dedupe cities across corridors — Charlotte, Atlanta, Knoxville and others
-  // appear on two corridors each.
-  const byKey = new Map<string, City & { corridors: string[] }>()
-  for (const [corridor, list] of Object.entries(CORRIDORS)) {
-    for (const c of list) {
-      const key = `${c.city}|${c.state}`
-      const hit = byKey.get(key)
-      if (hit) hit.corridors.push(corridor)
-      else byKey.set(key, { ...c, corridors: [corridor] })
-    }
-  }
-  const cities = [...byKey.values()]
-
   console.log('─'.repeat(72))
   console.log(`NWI HD truck-stop import${dryRun ? '  [DRY RUN — nothing will be written]' : ''}`)
-  console.log(`${cities.length} unique cities across ${Object.keys(CORRIDORS).length} corridors · ${CHAIN_QUERIES.length} queries each`)
+  console.log(
+    citiesArg
+      ? `${cities.length} selected city/cities (${cities.map(c => `${c.city}, ${c.state}`).join(' · ')}) · ${CHAIN_QUERIES.length} queries each`
+      : `${cities.length} unique cities across ${Object.keys(CORRIDORS).length} corridors · ${CHAIN_QUERIES.length} queries each`,
+  )
+  console.log(`~${cities.length * CHAIN_QUERIES.length} Google Places queries`)
   if (Number.isFinite(limit)) console.log(`Limit: ${limit} listing(s)`)
   console.log('─'.repeat(72))
 
