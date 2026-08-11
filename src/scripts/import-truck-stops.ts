@@ -55,6 +55,11 @@ const CHAIN_QUERIES = [
   'TA Petro',
   'Sapp Bros',
   'Petro Stopping Centers',
+  // Kept because a genuine hit is usually named "Iron Skillet — Petro Stopping
+  // Center", which passes the allowlist on its petro token. The brand alone is
+  // NOT on the allowlist: as a bare pattern it matched every skillet, waffle and
+  // grill in the metro. The truck stop is what we want listed anyway, not its
+  // in-house diner.
   'Iron Skillet',
   'SpeedCo',
   'truck stop',
@@ -77,7 +82,7 @@ const TRUCK_STOP_NAME_PATTERNS = [
   "love's", 'loves travel', 'truck care',
   'ta travel', 'travelcenters', 'ta petro', 'petro stopping', 'petro travel',
   'travel center', 'travel centre', 'travel plaza', 'travel stop',
-  'sapp bros', 'speedco', 'iron skillet',
+  'sapp bros', 'speedco',
   'truck stop', 'truckstop', 'truck plaza', 'trucker',
 ]
 
@@ -89,6 +94,16 @@ const TRUCK_STOP_NAME_PATTERNS = [
 const EXCLUDED_NAME_PATTERNS = [
   'corporate office', 'corporate hq', 'headquarters', 'home office',
   'distribution center', 'support center',
+
+  // Unrelated businesses that happen to share a chain token. "SpeedCo Roofing &
+  // Metalwork" in Cincinnati matched on 'speedco'; these trades never overlap
+  // with a travel center, so excluding them costs nothing.
+  'roofing', 'metalwork', 'sheet metal', 'plumbing', 'landscaping',
+  'salon', 'dental', 'realty', 'insurance',
+
+  // Crowd-sourced parking entries from the Trucker Path app are not businesses
+  // and have no service desk to list.
+  'trucker path',
 ]
 
 function isTruckStopName(name: string): boolean {
