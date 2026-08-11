@@ -49,13 +49,8 @@ function generatePassword(): string {
 }
 
 /**
- * BD stores phone as a display string and validates it as a US number. E.164
- * (+19195631814) fails that validation and is saved blank — the field name is
- * correct, the value is what BD rejects. Send the national format instead.
- *
- * Found via the truck-stop bulk import, whose listings all had an empty phone;
- * this path had the same defect, so every listing created from a YES reply was
- * missing its phone too.
+ * BD renders phone as a display string, so send the national format rather than
+ * E.164 — a driver should not see a +1 prefix on the directory.
  */
 function toBdPhone(e164: string): string {
   const ten = e164.replace(/\D/g, '').slice(-10)
@@ -89,16 +84,20 @@ export async function createHdListing(input: HdListingInput): Promise<HdListingR
     listing_type:    'Company',
     first_name:      'Business',
     last_name:       'Owner',
-    // National format, NOT E.164 — see toBdPhone.
-    phone:           toBdPhone(input.phone),
+    // `phone_number`, NOT `phone`. Confirmed by reading BD's echo of a created
+    // user: posting `phone` is silently ignored and the record comes back with
+    // phone_number:null, which is why early HD listings had no phone at all.
+    phone_number:    toBdPhone(input.phone),
     // Falls back to the LD flag so one switch can gate both directories until
     // HD gets its own.
     listing_live:    process.env.BD_HD_LISTING_LIVE ?? process.env.BD_LISTING_LIVE ?? 'false',
     bdapi_model:     'user',
   })
 
-  if (input.city)  body.set('city',  input.city)
-  if (input.state) body.set('state', input.state)
+  if (input.city)  body.set('city', input.city)
+  // `state_code`, NOT `state` — same finding as phone_number above. Posting
+  // `state` comes back as state_code:"" on the created record.
+  if (input.state) body.set('state_code', input.state)
 
   const res = await fetch(`${BASE_URL}/user/create`, {
     method: 'POST',
@@ -136,14 +135,14 @@ export async function createHdListing(input: HdListingInput): Promise<HdListingR
 // for the business name — which is what the confirmation SMS tells them to do.
 function extractListingUrl(rawBody: string, businessName: string): string {
   try {
-    const json = JSON.parse(rawBody) as Record<string, unknown>
-    const data = json.data as Record<string, unknown> | undefined
-    const url  = json.profile_url ?? json.url ?? data?.profile_url ?? data?.url
-    if (typeof url === 'string' && url.startsWith('http')) return url
+    const json    = JSON.parse(rawBody) as Record<string, unknown>
+    // BD nests the created record under `message`, and `filename` is the profile
+    // slug ("kenly/flying-j-travel-center") — the only permalink it returns.
+    const message = json.message as Record<string, unknown> | undefined
 
-    const userId = json.user_id ?? json.id ?? data?.user_id
-    if (typeof userId === 'string' || typeof userId === 'number') {
-      return `${DIRECTORY_URL}/profile/${userId}`
+    const filename = message?.filename
+    if (typeof filename === 'string' && filename.length > 0) {
+      return `${DIRECTORY_URL}/${filename.replace(/^\//, '')}`
     }
   } catch { /* non-JSON success body — fall through to search URL */ }
 

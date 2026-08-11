@@ -291,10 +291,10 @@ function generatePassword(): string {
 }
 
 /**
- * BD stores phone as a display string and validates it as a US number. E.164
- * (+19195631814) fails that validation and is saved blank — which is why the
- * first import batch produced listings with an empty phone field even though
- * the field NAME was correct. Send the national format instead.
+ * BD stores phone as a display string, so send the national format rather than
+ * E.164. (The empty-phone bug was the field NAME — `phone` vs `phone_number` —
+ * not the format; this is belt-and-braces, since a +1 prefix is not what the
+ * directory should render to a driver either way.)
  *
  * Duplicated rather than imported for the same reason as everything else here:
  * this script must not pull in src/lib. src/lib/hd-directory-agent/bd.ts has
@@ -450,14 +450,15 @@ const DIRECTORY_URL = 'https://www.nwihd.com'
  */
 function extractListingUrl(rawBody: string, businessName: string): string {
   try {
-    const json = JSON.parse(rawBody) as Record<string, unknown>
-    const data = json.data as Record<string, unknown> | undefined
-    const url  = json.profile_url ?? json.url ?? data?.profile_url ?? data?.url
-    if (typeof url === 'string' && url.startsWith('http')) return url
+    const json    = JSON.parse(rawBody) as Record<string, unknown>
+    // BD nests the created record under `message`, not `data`.
+    const message = json.message as Record<string, unknown> | undefined
 
-    const userId = json.user_id ?? json.id ?? data?.user_id
-    if (typeof userId === 'string' || typeof userId === 'number') {
-      return `${DIRECTORY_URL}/profile/${userId}`
+    // `filename` is the profile slug — "kenly/flying-j-travel-center" — and is
+    // the only permalink BD returns. Confirmed on user_id 32.
+    const filename = message?.filename
+    if (typeof filename === 'string' && filename.length > 0) {
+      return `${DIRECTORY_URL}/${filename.replace(/^\//, '')}`
     }
   } catch { /* non-JSON success body — fall through to search URL */ }
 
@@ -480,26 +481,18 @@ async function createBdListing(
     first_name:      'Business',
     last_name:       'Owner',
     city:            stop.city,
-    state:           stop.state,
-    // National format, NOT E.164 — see toBdPhone.
-    phone:           toBdPhone(stop.phone),
+    // NOT `state` / `phone` / `address`. Confirmed by reading BD's own echo of a
+    // created user (--verbose on user_id 31): the API ignores those names and
+    // returns phone_number:null, address1:null, state_code:"". The names below
+    // are the ones BD actually populates.
+    state_code:      stop.state,
+    phone_number:    toBdPhone(stop.phone),
     listing_live:    '1',
     bdapi_model:     'user',
   })
 
-  // Street address and zip. Unlike the fields above, these names are NOT in the
-  // documented member-import field list that src/lib/brilliant-directories/client.ts
-  // was built from — no NWI code has ever sent an address. BD ignores unknown
-  // POST fields, so an unrecognized name costs nothing; verify against a created
-  // listing and drop whichever variant does not populate.
-  if (stop.street) {
-    body.set('address', stop.street)
-    body.set('address_1', stop.street)
-  }
-  if (stop.zip) {
-    body.set('zip_code', stop.zip)
-    body.set('zip', stop.zip)
-  }
+  if (stop.street) body.set('address1', stop.street)
+  if (stop.zip)    body.set('zip_code', stop.zip)
 
   const res = await fetch(BD_URL, {
     method: 'POST',
@@ -527,7 +520,7 @@ async function createBdListing(
     const sent = new URLSearchParams(body)
     sent.set('password', '[redacted]')
     console.log(`         → sent: ${sent.toString()}`)
-    console.log(`         ← ${res.status}: ${raw.slice(0, 600)}`)
+    console.log(`         ← ${res.status}: ${raw.slice(0, 2000)}`)
   }
 
   if (!res.ok) throw new Error(`BD ${res.status}: ${(raw || res.statusText).slice(0, 300)}`)
