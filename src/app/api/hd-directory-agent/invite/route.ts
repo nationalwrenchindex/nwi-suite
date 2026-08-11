@@ -13,7 +13,7 @@ export const maxDuration = 60
 
 // ─── POST /api/hd-directory-agent/invite ─────────────────────────────────────
 // Sends the permission SMS to the highest-rated pending HD prospects, capped at
-// HD_INVITE_BATCH_SIZE per run (the daily 9am ET cron). Copy is selected per
+// HD_INVITE_BATCH_SIZE per run (the daily 10am ET cron). Copy is selected per
 // service category — a reefer tech and a towing operator get different pitches.
 //
 // A prospect is only marked contacted when Twilio accepted the message, so a

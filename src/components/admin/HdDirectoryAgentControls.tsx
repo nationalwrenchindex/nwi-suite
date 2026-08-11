@@ -70,7 +70,7 @@ export default function HdDirectoryAgentControls({ category }: { category: strin
     <div className="bg-dark-card border border-orange/20 rounded-xl p-6">
       <h2 className="text-white font-semibold text-lg mb-1">Manual Controls</h2>
       <p className="text-white/40 text-sm mb-4">
-        Same jobs as the crons (search Tuesdays 8am ET · invites daily 9am ET ·
+        Same jobs as the crons (search Tuesdays 8am ET · invites daily 10am ET ·
         follow-ups Thursdays 10am ET). A full sweep covers 15 corridor cities; searching one
         city here is faster and never hits the time budget.
       </p>
