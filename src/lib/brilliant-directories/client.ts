@@ -23,14 +23,23 @@ export function isDirectoryPublishEnabled(): boolean {
   )
 }
 
-// Confirmed against nationalwrenchindex.com's member-import documentation.
+// The /api/v2 field names, which are NOT the member-import (CSV) names this map
+// was originally built from. BD silently ignores an unrecognized field, so the
+// three corrected below were posting successfully and saving nothing.
+//
+// Confirmed by reading BD's echo of a created user during HD agent testing:
+// posting phone/state returned phone_number:null and state_code:"", while
+// phone_number/state_code populate. See src/lib/hd-directory-agent/bd.ts.
 const FIELDS = {
   firstName:  'first_name',
   lastName:   'last_name',
   company:    'company',
   city:       'city',
-  state:      'state',
-  phone:      'phone',
+  state:      'state_code',
+  phone:      'phone_number',
+  // No LD caller sends a street address today; recorded here so the correct
+  // name is on hand if one ever does.
+  address:    'address1',
   website:    'website',
   profession: 'profession_name',
   listingType: 'listing_type',
@@ -63,6 +72,16 @@ function generatePassword(): string {
   return randomBytes(18).toString('base64url')
 }
 
+/**
+ * BD renders phone as a display string, so post the US national format rather
+ * than E.164 — a visitor should not see a +1 prefix on the directory. Matches
+ * toBdPhone in src/lib/hd-directory-agent/bd.ts.
+ */
+function toBdPhone(e164: string): string {
+  const ten = e164.replace(/\D/g, '').slice(-10)
+  return ten.length === 10 ? `${ten.slice(0, 3)}-${ten.slice(3, 6)}-${ten.slice(6)}` : e164
+}
+
 export async function createDirectoryListing(
   input: CreateListingInput,
 ): Promise<CreateListingResult> {
@@ -85,7 +104,7 @@ export async function createDirectoryListing(
   if (input.lastName)  body.set(FIELDS.lastName,  input.lastName)
   if (input.city)      body.set(FIELDS.city,      input.city)
   if (input.state)     body.set(FIELDS.state,     input.state)
-  if (input.phone)     body.set(FIELDS.phone,     input.phone)
+  if (input.phone)     body.set(FIELDS.phone,     toBdPhone(input.phone))
 
   const res = await fetch(`${BASE_URL}/user/create`, {
     method: 'POST',
