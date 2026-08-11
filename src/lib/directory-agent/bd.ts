@@ -125,14 +125,15 @@ export async function createAgentListing(
 // for the business name — which is what the confirmation SMS tells them to do.
 function extractListingUrl(rawBody: string, businessName: string): string {
   try {
-    const json = JSON.parse(rawBody) as Record<string, unknown>
-    const data = json.data as Record<string, unknown> | undefined
-    const url  = json.profile_url ?? json.url ?? data?.profile_url ?? data?.url
-    if (typeof url === 'string' && url.startsWith('http')) return url
+    const json    = JSON.parse(rawBody) as Record<string, unknown>
+    // BD nests the created record under `message`, not `data`, and `filename`
+    // is the profile slug ("lexington/minuteman-mobile-mechanics") — the only
+    // permalink it returns. There is no /profile/<id> route.
+    const message = json.message as Record<string, unknown> | undefined
 
-    const userId = json.user_id ?? json.id ?? data?.user_id
-    if (typeof userId === 'string' || typeof userId === 'number') {
-      return `${DIRECTORY_URL}/profile/${userId}`
+    const filename = message?.filename
+    if (typeof filename === 'string' && filename.length > 0) {
+      return `${DIRECTORY_URL}/${filename.replace(/^\//, '')}`
     }
   } catch { /* non-JSON success body — fall through to search URL */ }
 
