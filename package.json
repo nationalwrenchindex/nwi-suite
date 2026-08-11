@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "import-truck-stops": "npx tsx src/scripts/import-truck-stops.ts"
+    "import-truck-stops": "npx tsx src/scripts/import-truck-stops.ts",
+    "retry-listings": "npx tsx src/scripts/retry-listings.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.98.0",
