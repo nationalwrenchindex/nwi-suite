@@ -414,7 +414,37 @@ async function searchCity(
 
 // ─── Brilliant Directories ───────────────────────────────────────────────────
 
-async function createBdListing(stop: TruckStop, apiKey: string, subscriptionId: string): Promise<void> {
+/** Public directory host — where a listing is actually viewed, not the API host. */
+const DIRECTORY_URL = 'https://www.nwihd.com'
+
+/**
+ * BD's create response shape is not contractually documented. Prefer a profile
+ * permalink when one comes back; otherwise fall back to the directory search URL
+ * for the business name. Mirrors extractListingUrl in
+ * src/lib/hd-directory-agent/bd.ts so agent-created and imported rows carry the
+ * same kind of value.
+ */
+function extractListingUrl(rawBody: string, businessName: string): string {
+  try {
+    const json = JSON.parse(rawBody) as Record<string, unknown>
+    const data = json.data as Record<string, unknown> | undefined
+    const url  = json.profile_url ?? json.url ?? data?.profile_url ?? data?.url
+    if (typeof url === 'string' && url.startsWith('http')) return url
+
+    const userId = json.user_id ?? json.id ?? data?.user_id
+    if (typeof userId === 'string' || typeof userId === 'number') {
+      return `${DIRECTORY_URL}/profile/${userId}`
+    }
+  } catch { /* non-JSON success body — fall through to search URL */ }
+
+  return `${DIRECTORY_URL}/search?q=${encodeURIComponent(businessName)}`
+}
+
+async function createBdListing(
+  stop: TruckStop,
+  apiKey: string,
+  subscriptionId: string,
+): Promise<string> {
   const body = new URLSearchParams({
     email:           listingEmail(stop.placeId),
     password:        generatePassword(),
@@ -451,6 +481,8 @@ async function createBdListing(stop: TruckStop, apiKey: string, subscriptionId: 
 
   const raw = await res.text().catch(() => '')
   if (!res.ok) throw new Error(`BD ${res.status}: ${(raw || res.statusText).slice(0, 300)}`)
+
+  return extractListingUrl(raw, stop.businessName)
 }
 
 // ─── Exclusions ──────────────────────────────────────────────────────────────
@@ -698,7 +730,7 @@ async function main() {
     console.log(`${position} ${stop.businessName} — ${stop.city}, ${stop.state}`)
 
     try {
-      await createBdListing(stop, bdKey!, subscriptionId!)
+      const listingUrl = await createBdListing(stop, bdKey!, subscriptionId!)
 
       // Recorded only after BD confirms, so a failed listing never shows as
       // created. status 'yes' because these are direct imports, not invitees —
@@ -713,6 +745,7 @@ async function main() {
         service_category:   SERVICE_CATEGORY,
         status:             'yes',
         bd_listing_created: true,
+        bd_listing_url:     listingUrl,
         responded_at:       new Date().toISOString(),
       })
 
