@@ -31,6 +31,11 @@ export async function POST(request: NextRequest) {
     .from('hd_directory_prospects')
     .select('id, phone, business_name')
     .eq('status', 'contacted')
+    // Same guard as the invite route: truck stops are bulk-imported straight to
+    // the directory and must never be texted. Written as an explicit or-null
+    // rather than .neq() because NULL != 'truck_stop' is NULL, not true, so a
+    // bare .neq() would silently drop every prospect with no category set.
+    .or('service_category.is.null,service_category.neq.truck_stop')
     .is('follow_up_sent_at', null)
     .lt('contacted_at', cutoff)
     .order('rating', { ascending: false, nullsFirst: false })
