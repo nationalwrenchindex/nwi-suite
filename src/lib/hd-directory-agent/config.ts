@@ -6,14 +6,14 @@
 
 export type HdServiceCategory =
   | 'truck' | 'trailer' | 'reefer' | 'tire' | 'fuel'
-  | 'towing' | 'washout' | 'glass' | 'locksmith' | 'shop'
+  | 'towing' | 'washout' | 'glass' | 'locksmith' | 'shop' | 'truck_stop'
 
 // Every value the hd_directory_prospects CHECK constraint allows, in the order
 // the admin breakdown renders them. trailer/glass/locksmith have no automated
 // search terms yet — they exist for manual recategorization.
 export const HD_SERVICE_CATEGORIES: readonly HdServiceCategory[] = [
   'truck', 'trailer', 'reefer', 'tire', 'fuel',
-  'towing', 'washout', 'glass', 'locksmith', 'shop',
+  'towing', 'washout', 'glass', 'locksmith', 'shop', 'truck_stop',
 ]
 
 export const HD_CATEGORY_LABEL: Record<HdServiceCategory, string> = {
@@ -27,6 +27,7 @@ export const HD_CATEGORY_LABEL: Record<HdServiceCategory, string> = {
   glass:     'Glass',
   locksmith: 'Locksmith',
   shop:      'Shop',
+  truck_stop: 'Truck Stop',
 }
 
 // What BD's profession_name gets set to when the listing is created.
@@ -41,6 +42,7 @@ export const HD_PROFESSION_NAME: Record<HdServiceCategory, string> = {
   glass:     'Truck Glass',
   locksmith: 'Truck Locksmith',
   shop:      'Heavy Duty Repair Shop',
+  truck_stop: 'Truck Stop',
 }
 
 // ─── Rating floors ───────────────────────────────────────────────────────────
