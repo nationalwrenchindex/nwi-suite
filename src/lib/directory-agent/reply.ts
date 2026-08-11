@@ -163,10 +163,21 @@ export async function requestEmail(
 
   // responded_at is stamped here, not on the later email reply: this is the
   // moment they consented, which is what conversion is measured against.
-  await supabase
+  const { error } = await supabase
     .from(variant.prospectsTable)
     .update({ status: 'awaiting_email', responded_at: new Date().toISOString() })
     .eq('id', prospect.id)
+
+  if (error) {
+    // Almost always migration 092 not applied, so the status CHECK rejects
+    // 'awaiting_email'. We still send the request — handleProspectReply accepts
+    // an email from a 'contacted' prospect too, so the mechanic is not stranded
+    // by our own misconfiguration — but this must be loud in the logs.
+    console.error(
+      `[${variant.label}/reply] could not set awaiting_email for ${phone} ` +
+      `(is migration 092 applied?): ${error.message}`,
+    )
+  }
 
   await sendAgentSms({
     to:   phone,
@@ -243,19 +254,26 @@ export async function handleProspectReply(
     return
   }
 
-  if (prospect.status === 'awaiting_email') {
+  // 'contacted' is accepted alongside 'awaiting_email' so that a failed status
+  // write (see requestEmail) cannot strand a mechanic who is holding up their
+  // end. Only reachable when collectEmail is on, and only for someone we
+  // already invited — so an emailed reply here is an answer to our request.
+  if (variant.collectEmail && (prospect.status === 'awaiting_email' || prospect.status === 'contacted')) {
     const email = extractEmail(message)
     if (email) {
       await acceptProspect(variant, phone, prospect, listedMessage, email)
       return
     }
-    // Still waiting — repeat the ask instead of the generic fallback.
-    await sendAgentSms({
-      to:   phone,
-      body: variant.emailRequestMessage ?? variant.fallbackMessage,
-      from: variant.fromNumber(),
-    })
-    return
+    if (prospect.status === 'awaiting_email') {
+      // Still waiting — repeat the ask instead of the generic fallback.
+      await sendAgentSms({
+        to:   phone,
+        body: variant.emailRequestMessage ?? variant.fallbackMessage,
+        from: variant.fromNumber(),
+      })
+      return
+    }
+    // 'contacted' with no email — fall through to the YES / fallback handling.
   }
 
   if (matchesKeyword(message, ['yes'])) {
