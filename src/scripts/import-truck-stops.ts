@@ -60,6 +60,44 @@ const CHAIN_QUERIES = [
   'truck stop',
 ] as const
 
+/**
+ * Name allowlist, same approach as CHAIN_NAMES in src/lib/roadie/nearby-stores.ts.
+ *
+ * Text search returns anything textually adjacent to the query, and two of our
+ * chain names are traps: "Iron Skillet" is the restaurant brand inside Petro/TA
+ * stops, so it pulls in every skillet/waffle/grill in the metro, and a generic
+ * "truck stop" sweep drags in convenience stores and gas stations. Without this
+ * filter a Waffle House gets published with profession_name "Truck Stop".
+ *
+ * Genuine Iron Skillet locations still pass — they carry a Petro/TA token, or
+ * the brand name itself, which is on the list.
+ */
+const TRUCK_STOP_NAME_PATTERNS = [
+  'pilot travel', 'pilot flying', 'flying j', 'pilot #',
+  "love's", 'loves travel', 'truck care',
+  'ta travel', 'travelcenters', 'ta petro', 'petro stopping', 'petro travel',
+  'travel center', 'travel centre', 'travel plaza', 'travel stop',
+  'sapp bros', 'speedco', 'iron skillet',
+  'truck stop', 'truckstop', 'truck plaza', 'trucker',
+]
+
+function isTruckStopName(name: string): boolean {
+  const n = name.toLowerCase()
+  return TRUCK_STOP_NAME_PATTERNS.some(p => n.includes(p))
+}
+
+/** Great-circle miles — used to enforce the search radius client-side. */
+function distanceMiles(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const R = 3958.8
+  const dLat = toRad(lat2 - lat1)
+  const dLng = toRad(lng2 - lng1)
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+}
+
 interface City {
   city:  string
   state: string
@@ -133,6 +171,14 @@ interface PlaceNew {
   nationalPhoneNumber?:      string
   internationalPhoneNumber?: string
   addressComponents?:        AddressComponent[]
+  location?:                 { latitude?: number; longitude?: number }
+}
+
+/** Why a candidate was dropped — reported in the summary so nothing is silent. */
+interface RejectTally {
+  outOfRange: number
+  notATruckStop: number
+  noPhoneOrAddress: number
 }
 
 interface TruckStop {
@@ -216,17 +262,30 @@ const FIELD_MASK = [
   'places.nationalPhoneNumber',
   'places.internationalPhoneNumber',
   'places.addressComponents',
+  'places.location',
 ].join(',')
 
-async function searchText(key: string, textQuery: string): Promise<PlaceNew[]> {
+async function searchText(
+  key: string,
+  textQuery: string,
+  bias: { lat: number; lng: number; radius: number } | null,
+  fieldMask: string = FIELD_MASK,
+): Promise<PlaceNew[]> {
+  const body: Record<string, unknown> = { textQuery, maxResultCount: 20 }
+  if (bias) {
+    body.locationBias = {
+      circle: { center: { latitude: bias.lat, longitude: bias.lng }, radius: bias.radius },
+    }
+  }
+
   const res = await fetch(PLACES_URL, {
     method: 'POST',
     headers: {
       'Content-Type':     'application/json',
       'X-Goog-Api-Key':   key,
-      'X-Goog-FieldMask': FIELD_MASK,
+      'X-Goog-FieldMask': fieldMask,
     },
-    body:   JSON.stringify({ textQuery, maxResultCount: 20 }),
+    body:   JSON.stringify(body),
     signal: AbortSignal.timeout(20_000),
   })
 
@@ -239,10 +298,39 @@ async function searchText(key: string, textQuery: string): Promise<PlaceNew[]> {
   return data.places ?? []
 }
 
+/**
+ * Resolves "Charlotte, NC" to a lat/lng so the chain queries can be radius-
+ * biased and then hard-filtered by distance. Without this, a chain with no
+ * presence in the target state (Sapp Bros in NC) returns its nationwide
+ * locations — Salt Lake City, Omaha, Sidney NE — and they all look valid.
+ */
+async function geocodeCity(key: string, target: City) {
+  const places = await searchText(key, `${target.city}, ${target.state}`, null, 'places.location')
+  const loc = places[0]?.location
+  if (typeof loc?.latitude === 'number' && typeof loc?.longitude === 'number') {
+    return { lat: loc.latitude, lng: loc.longitude }
+  }
+  return null
+}
+
 /** Sweeps every chain query for one city. Deduped by place id within the city. */
-async function searchCity(key: string, target: City): Promise<TruckStop[]> {
-  const queries = CHAIN_QUERIES.map(q => `${q} ${target.city}, ${target.state}`)
-  const batches = await mapWithConcurrency(queries, PLACES_CONCURRENCY, q => searchText(key, q))
+async function searchCity(
+  key: string,
+  target: City,
+  radiusMeters: number,
+  tally: RejectTally,
+): Promise<TruckStop[]> {
+  const center = await geocodeCity(key, target)
+  if (!center) {
+    // No center means no way to enforce the radius, and an unbounded sweep is
+    // exactly the failure this guards against. Skip rather than import junk.
+    throw new Error(`could not geocode ${target.city}, ${target.state}`)
+  }
+
+  const bias       = { ...center, radius: radiusMeters }
+  const radiusMi   = radiusMeters / 1609.344
+  const queries    = CHAIN_QUERIES.map(q => `${q} ${target.city}, ${target.state}`)
+  const batches    = await mapWithConcurrency(queries, PLACES_CONCURRENCY, q => searchText(key, q, bias))
 
   const found = new Map<string, TruckStop>()
 
@@ -251,15 +339,26 @@ async function searchCity(key: string, target: City): Promise<TruckStop[]> {
     for (const p of places) {
       if (!p.id || found.has(p.id)) continue
 
-      // Both filters are hard requirements: no phone means the listing has no
-      // way to be contacted, no address means it cannot be placed on a corridor.
+      const name = p.displayName?.text ?? ''
+
+      // locationBias only *steers* Places — it does not constrain. Enforce the
+      // radius here, against the coordinates Google returned.
+      const lat = p.location?.latitude
+      const lng = p.location?.longitude
+      if (typeof lat !== 'number' || typeof lng !== 'number') { tally.outOfRange++; continue }
+      if (distanceMiles(center.lat, center.lng, lat, lng) > radiusMi) { tally.outOfRange++; continue }
+
+      if (!isTruckStopName(name)) { tally.notATruckStop++; continue }
+
+      // Both are hard requirements: no phone means the listing cannot be
+      // contacted, no address means it cannot be placed on a corridor.
       const phone   = normalizeUsPhone(p.nationalPhoneNumber ?? p.internationalPhoneNumber)
       const address = p.formattedAddress?.trim()
-      if (!phone || !address) continue
+      if (!phone || !address) { tally.noPhoneOrAddress++; continue }
 
       found.set(p.id, {
         placeId:      p.id,
-        businessName: p.displayName?.text ?? 'Truck Stop',
+        businessName: name || 'Truck Stop',
         phone,
         address,
         city:  componentOf(p.addressComponents, 'locality') ?? target.city,
@@ -364,6 +463,15 @@ async function main() {
     process.exit(1)
   }
 
+  // Matches DEFAULT_RADIUS_METERS in the LD/HD agents. Raise it to reach stops
+  // further out on a corridor; lower it to keep a metro tight.
+  const radiusArg = args.find(a => a.startsWith('--radius='))
+  const radiusMeters = radiusArg ? Number.parseInt(radiusArg.split('=')[1] ?? '', 10) : 50000
+  if (Number.isNaN(radiusMeters) || radiusMeters <= 0) {
+    console.error('--radius must be a positive integer (meters)')
+    process.exit(1)
+  }
+
   // Argument validation runs BEFORE the env check so a typo in --cities is
   // caught immediately, without needing any credentials configured.
 
@@ -450,7 +558,10 @@ async function main() {
       ? `${cities.length} selected city/cities (${cities.map(c => `${c.city}, ${c.state}`).join(' · ')}) · ${CHAIN_QUERIES.length} queries each`
       : `${cities.length} unique cities across ${Object.keys(CORRIDORS).length} corridors · ${CHAIN_QUERIES.length} queries each`,
   )
-  console.log(`~${cities.length * CHAIN_QUERIES.length} Google Places queries`)
+  console.log(
+    `~${cities.length * (CHAIN_QUERIES.length + 1)} Google Places queries · ` +
+    `${Math.round(radiusMeters / 1609.344)}mi radius`,
+  )
   if (Number.isFinite(limit)) console.log(`Limit: ${limit} listing(s)`)
   console.log('─'.repeat(72))
 
@@ -460,12 +571,13 @@ async function main() {
 
   // ── Phase 1: discovery ──
   const byPlaceId = new Map<string, TruckStop>()
+  const tally: RejectTally = { outOfRange: 0, notATruckStop: 0, noPhoneOrAddress: 0 }
   let citiesWithNoResults = 0
 
   for (const target of cities) {
     const label = `${target.city}, ${target.state} [${target.corridors.join('/')}]`
     try {
-      const stops = await searchCity(placesKey!, target)
+      const stops = await searchCity(placesKey!, target, radiusMeters, tally)
       if (stops.length === 0) {
         console.log(`· ${label} — no results`)
         citiesWithNoResults++
@@ -484,9 +596,29 @@ async function main() {
     }
   }
 
-  const allFound = [...byPlaceId.values()]
+  // Distinct place ids can share a phone: chains list a single corporate number
+  // across sites ("Circle K | Truck Stop"), and co-located facilities share one
+  // ("Love's Travel Stop" and "Love's Truck Care" at the same exit).
+  // hd_directory_prospects.phone is UNIQUE, so without collapsing these here the
+  // second of each pair creates a BD listing and then fails to record it —
+  // leaving an orphan listing on the directory with no way to detect it.
+  const byPhone = new Map<string, TruckStop>()
+  for (const stop of byPlaceId.values()) {
+    if (!byPhone.has(stop.phone)) byPhone.set(stop.phone, stop)
+  }
+  const duplicatePhones = byPlaceId.size - byPhone.size
+
+  const allFound = [...byPhone.values()]
   console.log('─'.repeat(72))
   console.log(`Discovery complete: ${allFound.length} unique locations`)
+  if (duplicatePhones > 0) {
+    console.log(`Collapsed ${duplicatePhones} location(s) sharing a phone with another`)
+  }
+  console.log(
+    `Rejected: ${tally.outOfRange} outside ${Math.round(radiusMeters / 1609.344)}mi · ` +
+    `${tally.notATruckStop} not a truck stop by name · ` +
+    `${tally.noPhoneOrAddress} missing phone/address`,
+  )
 
   if (allFound.length === 0) {
     console.log('Nothing to import.')
