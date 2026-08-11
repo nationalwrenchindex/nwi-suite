@@ -81,9 +81,34 @@ const TRUCK_STOP_NAME_PATTERNS = [
   'truck stop', 'truckstop', 'truck plaza', 'trucker',
 ]
 
+/**
+ * Administrative locations that carry a chain name but are not a place a driver
+ * can pull into. Knoxville is Pilot Flying J's corporate home, so a Knoxville
+ * sweep surfaces "Pilot Flying J Corporate Office" alongside its travel centers.
+ */
+const EXCLUDED_NAME_PATTERNS = [
+  'corporate office', 'corporate hq', 'headquarters', 'home office',
+  'distribution center', 'support center',
+]
+
 function isTruckStopName(name: string): boolean {
   const n = name.toLowerCase()
+  if (EXCLUDED_NAME_PATTERNS.some(p => n.includes(p))) return false
   return TRUCK_STOP_NAME_PATTERNS.some(p => n.includes(p))
+}
+
+/**
+ * Toll-free numbers are national call centres or corporate switchboards, never
+ * a specific site. They fail the directory twice over: a driver calling one
+ * cannot reach the location, and because chains reuse a single toll-free line
+ * across every site, the UNIQUE phone constraint makes the first one imported
+ * evict all its siblings. Dropping them keeps the real, locally-numbered
+ * locations that would otherwise be collapsed away.
+ */
+const TOLL_FREE_PREFIXES = ['800', '833', '844', '855', '866', '877', '888']
+
+function isTollFree(e164: string): boolean {
+  return TOLL_FREE_PREFIXES.includes(e164.slice(2, 5))
 }
 
 /** Great-circle miles — used to enforce the search radius client-side. */
@@ -179,6 +204,7 @@ interface RejectTally {
   outOfRange: number
   notATruckStop: number
   noPhoneOrAddress: number
+  tollFree: number
 }
 
 interface TruckStop {
@@ -355,6 +381,7 @@ async function searchCity(
       const phone   = normalizeUsPhone(p.nationalPhoneNumber ?? p.internationalPhoneNumber)
       const address = p.formattedAddress?.trim()
       if (!phone || !address) { tally.noPhoneOrAddress++; continue }
+      if (isTollFree(phone)) { tally.tollFree++; continue }
 
       found.set(p.id, {
         placeId:      p.id,
@@ -571,7 +598,7 @@ async function main() {
 
   // ── Phase 1: discovery ──
   const byPlaceId = new Map<string, TruckStop>()
-  const tally: RejectTally = { outOfRange: 0, notATruckStop: 0, noPhoneOrAddress: 0 }
+  const tally: RejectTally = { outOfRange: 0, notATruckStop: 0, noPhoneOrAddress: 0, tollFree: 0 }
   let citiesWithNoResults = 0
 
   for (const target of cities) {
@@ -617,6 +644,7 @@ async function main() {
   console.log(
     `Rejected: ${tally.outOfRange} outside ${Math.round(radiusMeters / 1609.344)}mi · ` +
     `${tally.notATruckStop} not a truck stop by name · ` +
+    `${tally.tollFree} toll-free/corporate number · ` +
     `${tally.noPhoneOrAddress} missing phone/address`,
   )
 
