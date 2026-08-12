@@ -29,6 +29,12 @@ export interface HdListingResult {
   listingUrl: string
   email:      string
   rawBody:    string
+  /**
+   * BD's id for the created member. Store it: BD's update API keys on user_id
+   * and offers no way to look one up beyond the first 100 members, so a listing
+   * whose id was never captured becomes permanently un-editable.
+   */
+  userId:     string | null
 }
 
 // BD requires an email + password per member. The provider never signs in
@@ -127,7 +133,18 @@ export async function createHdListing(input: HdListingInput): Promise<HdListingR
     listingUrl: extractListingUrl(rawBody, input.businessName),
     email,
     rawBody:    rawBody.slice(0, 2000),
+    userId:     extractUserId(rawBody),
   }
+}
+
+function extractUserId(rawBody: string): string | null {
+  try {
+    const json    = JSON.parse(rawBody) as Record<string, unknown>
+    const message = json.message as Record<string, unknown> | undefined
+    const id      = message?.user_id
+    if (typeof id === 'string' || typeof id === 'number') return String(id)
+  } catch { /* non-JSON success body */ }
+  return null
 }
 
 // BD's create response shape isn't contractually documented. Use a profile

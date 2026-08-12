@@ -41,9 +41,56 @@ const PLACES_BASE = 'https://places.googleapis.com/v1/places'
 const BD_DELAY_MS       = 500
 const PLACES_CONCURRENCY = 5
 
-// Tried in order by --probe. BD documents /user/create; these are the plausible
-// siblings. Whichever answers with something other than a 404/405 is the one.
-const UPDATE_PATH_CANDIDATES = ['user/update', 'user/edit', 'user/save', 'member/update']
+// Probe matrix.
+//
+// The first pass established that POST /user/update returns 405 "Invalid
+// Request Method" — the route exists but rejects POST — while user/edit,
+// user/save and member/update all return 200 with an EMPTY body, which is BD's
+// catch-all for an unknown route (a real endpoint answers with a JSON
+// status/message envelope, as /user/create does). So the endpoint is
+// user/update and the open question is the verb.
+//
+// _method is the PHP convention for tunnelling a verb through POST, worth a
+// shot if PUT/PATCH are blocked upstream.
+// CONFIRMED: PUT /api/v2/user/update, keyed on user_id, is the update API.
+// POST and PATCH both answer 405 "Invalid Request Method"; keying on email
+// alone answers 400 "user record cannot be updated".
+const UPDATE_CANDIDATES: Array<{ path: string; method: string; methodOverride?: string }> = [
+  { path: 'user/update', method: 'PUT'   },
+  { path: 'user/update', method: 'PATCH' },
+  { path: 'user/update', method: 'POST', methodOverride: 'PUT' },
+  { path: 'user/create', method: 'POST' }, // upsert-on-create? create is known-good
+]
+
+/**
+ * Read-endpoint candidates, probed to recover BD user ids.
+ *
+ * PUT /user/update is confirmed as the update route but answers "user record
+ * cannot be updated" when keyed on email alone, so it almost certainly wants
+ * user_id — and those were discarded on create. All read-only.
+ *
+ * user_id 31 is known to exist (captured from a --verbose create run), so it
+ * doubles as a positive control: if a route can find 31, the route works and
+ * any failure on email is about the key, not the endpoint.
+ */
+const READ_CANDIDATES: Array<{ path: string; method: string }> = [
+  { path: 'user/read',   method: 'GET'  },
+  { path: 'user/read',   method: 'POST' },
+  { path: 'user/get',    method: 'GET'  },
+  { path: 'user/search', method: 'GET'  },
+  { path: 'user/list',   method: 'GET'  },
+]
+
+/** A real BD endpoint answers with a JSON envelope; unknown routes return empty. */
+function describeBdResponse(status: number, raw: string): string {
+  if (raw.trim() === '') return 'EMPTY BODY — almost certainly not a real route'
+  try {
+    const j = JSON.parse(raw) as { status?: string; message?: unknown }
+    if (j.status === 'success') return 'SUCCESS — this is the endpoint'
+    if (j.status === 'error')   return `error envelope (route exists): ${JSON.stringify(j.message).slice(0, 200)}`
+  } catch { /* fall through */ }
+  return `non-JSON body: ${raw.slice(0, 200)}`
+}
 
 const FIELD_MASK = [
   'id', 'displayName', 'formattedAddress', 'nationalPhoneNumber',
@@ -133,12 +180,41 @@ async function mapWithConcurrency<T, R>(
   return out
 }
 
-/** Fields BD is missing. Names confirmed from BD's echo of a created user. */
-function bdPayload(row: Row, place: PlaceDetails | null): URLSearchParams {
-  const body = new URLSearchParams({ bdapi_model: 'user' })
+/**
+ * Recovers BD user ids by listing members and keying on the deterministic
+ * import email.
+ *
+ * Hard limit, established by probing: GET /user/get returns the first 100
+ * members by id and nothing shifts that window. limit caps at 100; page 400s;
+ * offset/skip/start/from, sort/order, and every filter param tried
+ * (email, user_id, company, q, search, keyword, subscription_id) are silently
+ * ignored. So only listings inside that window are addressable.
+ */
+async function fetchBdUserMap(apiKey: string): Promise<Map<string, string>> {
+  const res = await fetch(`${BD_BASE}/user/get?bdapi_model=user&limit=100`, {
+    headers: { 'X-Api-Key': apiKey, accept: 'application/json' },
+    redirect: 'manual',
+    signal:   AbortSignal.timeout(20_000),
+  })
+  const raw = await res.text().catch(() => '')
+  const map = new Map<string, string>()
+  try {
+    const j = JSON.parse(raw) as { message?: Array<Record<string, unknown>> }
+    for (const r of j.message ?? []) {
+      const email = typeof r.email === 'string' ? r.email.toLowerCase() : null
+      if (email && r.user_id != null) map.set(email, String(r.user_id))
+    }
+  } catch {
+    console.error(`BD user/get returned unparseable body: ${raw.slice(0, 200)}`)
+  }
+  return map
+}
 
-  if (row.bd_user_id) body.set('user_id', row.bd_user_id)
-  if (row.google_place_id) body.set('email', listingEmail(row.google_place_id))
+/** Fields BD is missing. Names confirmed from BD's echo of a created user. */
+function bdPayload(row: Row, place: PlaceDetails | null, userId: string): URLSearchParams {
+  // user_id is the only key BD accepts. Keying on email alone returns
+  // "user record cannot be updated".
+  const body = new URLSearchParams({ bdapi_model: 'user', user_id: userId })
 
   const lat = place?.location?.latitude  ?? row.lat
   const lon = place?.location?.longitude ?? row.lon
@@ -166,9 +242,9 @@ function bdPayload(row: Row, place: PlaceDetails | null): URLSearchParams {
   return body
 }
 
-async function callBd(path: string, body: URLSearchParams, apiKey: string) {
+async function callBd(path: string, body: URLSearchParams, apiKey: string, method = 'POST') {
   const res = await fetch(`${BD_BASE}/${path}`, {
-    method:  'POST',
+    method,
     headers: {
       'X-Api-Key':    apiKey,
       'Content-Type': 'application/x-www-form-urlencoded',
@@ -242,24 +318,82 @@ async function main() {
   if (probe) {
     const row = rows[0]
     const place = row.google_place_id ? await fetchPlace(placesKey!, row.google_place_id) : null
-    const body = bdPayload(row, place)
+    // The probe runs before any id map is built, so key on whatever we have —
+    // the point is to learn how BD responds, not to succeed.
+    const body = bdPayload(row, place, row.bd_user_id ?? '')
     console.log(`Probing with: ${row.business_name} (${row.google_place_id})`)
     console.log(`Payload: ${body.toString()}\n`)
-    for (const path of UPDATE_PATH_CANDIDATES) {
+    for (const c of UPDATE_CANDIDATES) {
+      const attempt = new URLSearchParams(body)
+      if (c.methodOverride) attempt.set('_method', c.methodOverride)
       try {
-        const { status, raw } = await callBd(path, body, bdKey!)
-        console.log(`POST ${BD_BASE}/${path}\n  → ${status}: ${raw.slice(0, 700)}\n`)
+        const { status, raw } = await callBd(c.path, attempt, bdKey!, c.method)
+        console.log(
+          `${c.method}${c.methodOverride ? ` (_method=${c.methodOverride})` : ''} ${BD_BASE}/${c.path}\n` +
+          `  → ${status} · ${describeBdResponse(status, raw)}\n` +
+          `  raw: ${raw.slice(0, 400) || '(empty)'}\n`,
+        )
       } catch (err) {
-        console.log(`POST ${BD_BASE}/${path}\n  → threw: ${err instanceof Error ? err.message : String(err)}\n`)
+        console.log(`${c.method} ${BD_BASE}/${c.path}\n  → threw: ${err instanceof Error ? err.message : String(err)}\n`)
       }
       await sleep(BD_DELAY_MS)
     }
-    console.log('Probe complete. Set BD_HD_UPDATE_PATH to whichever endpoint answered, then re-run.')
+    // ── Read endpoints: recover the user ids update needs ──
+    const email = row.google_place_id ? listingEmail(row.google_place_id) : ''
+    console.log('─'.repeat(72))
+    console.log('Read-endpoint probe (recovering bd_user_id). user_id=31 is a known-good control.\n')
+
+    for (const c of READ_CANDIDATES) {
+      for (const query of [`email=${encodeURIComponent(email)}`, 'user_id=31']) {
+        const url = `${BD_BASE}/${c.path}?${query}&bdapi_model=user`
+        try {
+          const res = await fetch(url, {
+            method:  c.method,
+            headers: { 'X-Api-Key': bdKey!, accept: 'application/json' },
+            redirect: 'manual',
+            signal:  AbortSignal.timeout(15_000),
+          })
+          const raw = await res.text().catch(() => '')
+          console.log(
+            `${c.method} ${c.path}?${query.split('=')[0]}=…\n` +
+            `  → ${res.status} · ${describeBdResponse(res.status, raw)}\n` +
+            `  raw: ${raw.slice(0, 300) || '(empty)'}\n`,
+          )
+        } catch (err) {
+          console.log(`${c.method} ${c.path}?${query.split('=')[0]}\n  → threw: ${err instanceof Error ? err.message : String(err)}\n`)
+        }
+        await sleep(BD_DELAY_MS)
+      }
+    }
+
+    console.log('Probe complete. Set BD_HD_UPDATE_PATH / BD_HD_UPDATE_METHOD to whichever combination succeeded.')
     return
   }
 
-  const queue = Number.isFinite(limit) ? rows.slice(0, limit) : rows
-  const updatePath = process.env.BD_HD_UPDATE_PATH ?? UPDATE_PATH_CANDIDATES[0]
+  const updatePath   = process.env.BD_HD_UPDATE_PATH   ?? UPDATE_CANDIDATES[0].path
+  const updateMethod = process.env.BD_HD_UPDATE_METHOD ?? UPDATE_CANDIDATES[0].method
+
+  // Resolve BD user ids. Only listings BD will surface can be updated, and it
+  // surfaces exactly the first 100 members — see fetchBdUserMap.
+  const bdMap = placesOnly || dryRun ? new Map<string, string>() : await fetchBdUserMap(bdKey!)
+  const idFor = (r: Row): string | null =>
+    r.bd_user_id ?? (r.google_place_id ? bdMap.get(listingEmail(r.google_place_id)) ?? null : null)
+
+  if (!placesOnly && !dryRun) {
+    const addressable = rows.filter(r => idFor(r) !== null).length
+    console.log(`BD user map: ${bdMap.size} member(s) visible · ${addressable}/${rows.length} listings addressable`)
+    if (addressable < rows.length) {
+      console.log(
+        `${rows.length - addressable} listing(s) sit beyond BD's 100-member read window and cannot be\n` +
+        `updated via the API. They are skipped rather than guessed at — writing to an inferred\n` +
+        `user_id would overwrite another business's record, and BD offers no way to read one back.`,
+      )
+    }
+    console.log('─'.repeat(72))
+  }
+
+  const eligible = placesOnly || dryRun ? rows : rows.filter(r => idFor(r) !== null)
+  const queue = Number.isFinite(limit) ? eligible.slice(0, limit) : eligible
 
   // ── Phase A: Places Details ──
   console.log(`Fetching Places details for ${queue.length}…`)
@@ -289,10 +423,10 @@ async function main() {
     if (dryRun) continue
 
     // ── Phase B: push to BD ──
-    let bdUserId = row.bd_user_id
-    if (!placesOnly) {
+    let bdUserId = idFor(row)
+    if (!placesOnly && bdUserId) {
       try {
-        const { status, raw } = await callBd(updatePath, bdPayload(row, place), bdKey!)
+        const { status, raw } = await callBd(updatePath, bdPayload(row, place, bdUserId), bdKey!, updateMethod)
         if (verbose) console.log(`      ← ${status}: ${raw.slice(0, 400)}`)
         if (status >= 200 && status < 300 && !/"status"\s*:\s*"error"/.test(raw)) {
           bdOk++

@@ -179,7 +179,13 @@ export async function POST(request: NextRequest) {
 
       const { error: updErr } = await supabase
         .from('hd_directory_prospects')
-        .update({ bd_listing_created: true, bd_listing_url: listing.listingUrl })
+        .update({
+          bd_listing_created: true,
+          bd_listing_url:     listing.listingUrl,
+          // Without this the listing is permanently un-editable — BD's update
+          // API keys on user_id and only exposes the first 100 members.
+          bd_user_id:         listing.userId,
+        })
         .eq('id', row.id)
 
       if (updErr) {
