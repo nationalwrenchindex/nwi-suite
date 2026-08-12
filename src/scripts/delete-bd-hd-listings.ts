@@ -55,7 +55,14 @@ async function listMembers(key: string): Promise<Member[]> {
     signal:   AbortSignal.timeout(20_000),
   })
   const raw = await res.text().catch(() => '')
-  if (!res.ok) throw new Error(`user/get ${res.status}: ${raw.slice(0, 200)}`)
+
+  // An empty directory is reported as 400 "user not found" with total:0, not as
+  // an empty list. Treating that as an error made a fully successful teardown
+  // end with "Teardown aborted" and skip its own summary.
+  if (!res.ok) {
+    if (/"total"\s*:\s*0/.test(raw) || /user not found/i.test(raw)) return []
+    throw new Error(`user/get ${res.status}: ${raw.slice(0, 200)}`)
+  }
 
   try {
     const j = JSON.parse(raw) as { message?: Array<Record<string, unknown>> }
