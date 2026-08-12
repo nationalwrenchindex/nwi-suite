@@ -343,9 +343,9 @@ async function main() {
       if (typeof lat === 'number') updateBody.set('lat', String(lat))
       if (typeof lon === 'number') updateBody.set('lon', String(lon))
       if (website) updateBody.set('website', website)
-      // BD's created-user echo exposes `search_description` and `about_me` but
-      // not `short_description`; unknown fields are ignored silently, so a
-      // --verbose run is what confirms which of these actually sticks.
+      // CONFIRMED on user_id 385: `short_description` is the field that stores.
+      // BD also exposes search_description and about_me, which stay empty —
+      // do not switch to those.
       updateBody.set('short_description', description)
 
       try {
