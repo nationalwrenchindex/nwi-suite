@@ -424,12 +424,14 @@ async function main() {
 
     // ── Phase B: push to BD ──
     let bdUserId = idFor(row)
+    let bdAccepted = false
     if (!placesOnly && bdUserId) {
       try {
         const { status, raw } = await callBd(updatePath, bdPayload(row, place, bdUserId), bdKey!, updateMethod)
         if (verbose) console.log(`      ← ${status}: ${raw.slice(0, 400)}`)
         if (status >= 200 && status < 300 && !/"status"\s*:\s*"error"/.test(raw)) {
           bdOk++
+          bdAccepted = true
           try {
             const msg = (JSON.parse(raw) as { message?: { user_id?: string | number } }).message
             if (msg?.user_id != null) bdUserId = String(msg.user_id)
@@ -445,15 +447,17 @@ async function main() {
       await sleep(BD_DELAY_MS)
     }
 
-    // enriched_at is only stamped when BD actually accepted the update, so a
-    // failed push stays in the queue rather than being marked done.
+    // enriched_at means "BD has the data", so it is stamped only when BD
+    // accepted this row. --places-only must never stamp it: the Supabase side
+    // being current says nothing about the listing, and marking these done
+    // would empty the queue and silently skip the BD pass entirely.
     const { error: updErr } = await supabase
       .from('hd_directory_prospects')
       .update({
         ...(hasGeo ? { lat, lon } : {}),
         ...(website ? { website } : {}),
         ...(bdUserId ? { bd_user_id: bdUserId } : {}),
-        ...(placesOnly || bdFail === 0 ? { enriched_at: new Date().toISOString() } : {}),
+        ...(bdAccepted ? { enriched_at: new Date().toISOString() } : {}),
       })
       .eq('id', row.id)
     if (updErr) console.error(`      ! DB update failed: ${updErr.message}`)
