@@ -6,14 +6,43 @@
 
 export type HdServiceCategory =
   | 'truck' | 'trailer' | 'reefer' | 'tire' | 'fuel'
-  | 'towing' | 'washout' | 'glass' | 'locksmith' | 'shop' | 'truck_stop'
+  | 'towing' | 'washout' | 'glass' | 'locksmith' | 'shop'
+  | 'truck_stop' | 'fuel_station' | 'rest_area'
+
+/**
+ * Venue categories: fixed highway locations, auto-listed on discovery with no
+ * SMS. A truck stop has no owner to text and nothing to opt into — it is a
+ * place, and the directory's value is that drivers can find it.
+ *
+ * Everything NOT in this set is a service business — a person or crew who gets
+ * an invite and chooses. Keep that line sharp: 'fuel' is mobile fuel DELIVERY,
+ * not a fuel station, and 'shop' is a repair shop, not a truck stop.
+ */
+export const HD_AUTO_LIST_CATEGORIES: readonly HdServiceCategory[] = [
+  'truck_stop', 'fuel_station', 'rest_area',
+]
+
+export function isAutoListCategory(category: string | null | undefined): boolean {
+  return !!category && (HD_AUTO_LIST_CATEGORIES as readonly string[]).includes(category)
+}
+
+/**
+ * PostgREST filter keeping venues out of the SMS batches.
+ *
+ * The or-null half is load-bearing: in SQL a NOT IN test against NULL yields
+ * NULL rather than true, so without it every prospect whose category was never
+ * set would be silently dropped from invites and follow-ups.
+ */
+export const HD_NO_VENUES_FILTER =
+  `service_category.is.null,service_category.not.in.(${HD_AUTO_LIST_CATEGORIES.join(',')})`
 
 // Every value the hd_directory_prospects CHECK constraint allows, in the order
 // the admin breakdown renders them. trailer/glass/locksmith have no automated
 // search terms yet — they exist for manual recategorization.
 export const HD_SERVICE_CATEGORIES: readonly HdServiceCategory[] = [
   'truck', 'trailer', 'reefer', 'tire', 'fuel',
-  'towing', 'washout', 'glass', 'locksmith', 'shop', 'truck_stop',
+  'towing', 'washout', 'glass', 'locksmith', 'shop',
+  'truck_stop', 'fuel_station', 'rest_area',
 ]
 
 export const HD_CATEGORY_LABEL: Record<HdServiceCategory, string> = {
@@ -27,7 +56,9 @@ export const HD_CATEGORY_LABEL: Record<HdServiceCategory, string> = {
   glass:     'Glass',
   locksmith: 'Locksmith',
   shop:      'Shop',
-  truck_stop: 'Truck Stop',
+  truck_stop:   'Truck Stop',
+  fuel_station: 'Fuel Station',
+  rest_area:    'Rest Area',
 }
 
 // What BD's profession_name gets set to when the listing is created.
@@ -42,7 +73,9 @@ export const HD_PROFESSION_NAME: Record<HdServiceCategory, string> = {
   glass:     'Truck Glass',
   locksmith: 'Truck Locksmith',
   shop:      'Heavy Duty Repair Shop',
-  truck_stop: 'Truck Stop',
+  truck_stop:   'Truck Stop',
+  fuel_station: 'Fuel Station',
+  rest_area:    'Rest Area',
 }
 
 // ─── Rating floors ───────────────────────────────────────────────────────────
@@ -116,8 +149,20 @@ export const HD_SEARCH_TERMS: readonly HdSearchTerm[] = [
   { query: 'reefer trailer cleaning',      category: 'washout', mobile: false },
   { query: 'trailer cleaning service',     category: 'washout', mobile: false },
 
-  // Shops and truck stops — last so more specific categories claim first
-  { query: 'truck stop',                   category: 'shop',    mobile: false },
+  // ── Venues — auto-listed, never invited (HD_AUTO_LIST_CATEGORIES) ──
+  // Ordered ahead of the shop group so a truck stop is not swept up as a
+  // repair shop: dedupe keeps the first category a place matches under.
+  { query: 'truck stop',                   category: 'truck_stop',   mobile: false },
+  { query: 'travel center',                category: 'truck_stop',   mobile: false },
+  { query: 'truck plaza',                  category: 'truck_stop',   mobile: false },
+  { query: 'truck diesel fuel station',    category: 'fuel_station', mobile: false },
+  { query: 'diesel fuel station',          category: 'fuel_station', mobile: false },
+  // Most rest areas have no phone, so the phone requirement filters nearly all
+  // of them out. Kept because the ones that do list a number are genuinely
+  // useful to a driver.
+  { query: 'interstate rest area',         category: 'rest_area',    mobile: false },
+
+  // Service shops — last so the venue and specialist categories claim first
   { query: 'heavy duty repair shop',       category: 'shop',    mobile: false },
   { query: 'commercial truck repair',      category: 'shop',    mobile: false },
   { query: 'fleet maintenance shop',       category: 'shop',    mobile: false },

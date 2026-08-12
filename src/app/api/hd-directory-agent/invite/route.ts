@@ -5,6 +5,7 @@ import { sendAgentSms } from '@/lib/directory-agent/sms'
 import {
   HD_FROM_NUMBER,
   HD_INVITE_BATCH_SIZE,
+  HD_NO_VENUES_FILTER,
   hdInviteMessage,
 } from '@/lib/hd-directory-agent/config'
 
@@ -29,14 +30,10 @@ export async function POST(request: NextRequest) {
     .from('hd_directory_prospects')
     .select('id, phone, business_name, service_category')
     .eq('status', 'pending')
-    // Truck stops are bulk-imported straight to the directory by
-    // src/scripts/import-truck-stops.ts and must never be texted an invite —
-    // they never opted into anything and are already listed.
-    //
-    // Written as an explicit or-null rather than .neq(): in SQL,
-    // NULL != 'truck_stop' evaluates to NULL, not true, so a bare .neq() would
-    // silently drop every prospect whose category was never set.
-    .or('service_category.is.null,service_category.neq.truck_stop')
+    // Venues — truck stops, fuel stations, rest areas — are listed directly by
+    // the search route and the bulk import. They are places, not people: there
+    // is nobody to text and nothing to opt into.
+    .or(HD_NO_VENUES_FILTER)
     .order('rating', { ascending: false, nullsFirst: false })
     .limit(HD_INVITE_BATCH_SIZE)
 

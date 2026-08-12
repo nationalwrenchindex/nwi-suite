@@ -6,7 +6,9 @@ import {
   HD_DEFAULT_RADIUS_METERS,
   HD_SEARCH_CITIES,
   HD_SEARCH_TERMS,
+  isAutoListCategory,
 } from '@/lib/hd-directory-agent/config'
+import { createHdListing } from '@/lib/hd-directory-agent/bd'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -16,7 +18,26 @@ export const maxDuration = 60
 // fit inside maxDuration, so we stop starting new cities once this much of the
 // budget is gone and report which cities were skipped. The Tuesday cron then
 // picks them up on its next pass, and the admin page can run any city by hand.
-const TIME_BUDGET_MS = 45_000
+const TIME_BUDGET_MS = 40_000
+
+// Venues (truck stops, fuel stations, rest areas) are listed on the spot rather
+// than invited, so the sweep also has to make BD calls. Those are rate-limited
+// and bounded: whatever does not fit is left at bd_listing_created=false, which
+// is the queue `npm run retry-listings -- --no-sms` drains.
+const LISTING_DEADLINE_MS   = 55_000
+const AUTO_LIST_MAX_PER_RUN = 40
+const BD_DELAY_MS           = 500
+
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
+
+interface AutoListRow {
+  id:               string
+  business_name:    string | null
+  phone:            string
+  city:             string | null
+  state:            string | null
+  service_category: string | null
+}
 
 // Supabase filters go in the query string; chunk the exclusion lookups so a
 // large sweep can't produce an over-long URL.
@@ -59,6 +80,7 @@ export async function POST(request: NextRequest) {
   const businessNames: string[] = []
   const perCity: Array<{ city: string; state: string; found: number; error?: string }> = []
   const skipped: Array<{ city: string; state: string }> = []
+  const pendingAutoList: AutoListRow[] = []
   let newProspects = 0
 
   for (const target of targets) {
@@ -80,6 +102,10 @@ export async function POST(request: NextRequest) {
         continue
       }
 
+      // Venues go straight to 'yes' with no SMS — there is no owner to ask and
+      // nothing to opt into. Service businesses stay 'pending' for the invite
+      // queue. bd_listing_created starts false either way and is flipped only
+      // once BD confirms, so a failure here is retryable rather than a lie.
       // ignoreDuplicates so a concurrent run — or the same business surfacing in
       // two cities' radii — can't fail the batch on the unique phone index.
       const { data: inserted, error: insertErr } = await supabase
@@ -95,16 +121,23 @@ export async function POST(request: NextRequest) {
             address:          c.address,
             website:          c.website,
             service_category: c.serviceCategory,
-            status:           'pending',
+            status:            isAutoListCategory(c.serviceCategory) ? 'yes' : 'pending',
+            bd_listing_created: false,
           })),
           { onConflict: 'phone', ignoreDuplicates: true },
         )
-        .select('business_name')
+        .select('id, business_name, phone, city, state, service_category')
 
       if (insertErr) {
         console.error(`[hd-directory-agent/search] insert failed for ${target.city}:`, insertErr.message)
         perCity.push({ ...target, found: 0, error: insertErr.message })
         continue
+      }
+
+      for (const row of inserted ?? []) {
+        if (isAutoListCategory(row.service_category as string | null)) {
+          pendingAutoList.push(row as AutoListRow)
+        }
       }
 
       const names = (inserted ?? []).map(r => (r.business_name as string) ?? 'Unknown')
@@ -116,6 +149,63 @@ export async function POST(request: NextRequest) {
       console.error(`[hd-directory-agent/search] ${target.city}, ${target.state} failed:`, msg)
       perCity.push({ ...target, found: 0, error: msg })
     }
+  }
+
+  // ── Auto-list venues ──────────────────────────────────────────────────────
+  // No SMS is sent on this path, by design.
+  let listingsCreated = 0
+  let listingsFailed  = 0
+  const queue = pendingAutoList.slice(0, AUTO_LIST_MAX_PER_RUN)
+  const deferred = pendingAutoList.length - queue.length
+
+  for (const [i, row] of queue.entries()) {
+    if (Date.now() - startedAt > LISTING_DEADLINE_MS) {
+      console.warn(
+        `[hd-directory-agent/search] listing deadline reached — ` +
+        `${queue.length - i} venue(s) left at bd_listing_created=false`,
+      )
+      break
+    }
+
+    const businessName = row.business_name || 'Heavy Duty Service'
+    try {
+      const listing = await createHdListing({
+        businessName,
+        city:            row.city,
+        state:           row.state,
+        phone:           row.phone,
+        serviceCategory: row.service_category,
+      })
+
+      const { error: updErr } = await supabase
+        .from('hd_directory_prospects')
+        .update({ bd_listing_created: true, bd_listing_url: listing.listingUrl })
+        .eq('id', row.id)
+
+      if (updErr) {
+        listingsFailed++
+        console.error(`[hd-directory-agent/search] LISTING CREATED but update failed for ${row.id}:`, updErr.message)
+      } else {
+        listingsCreated++
+      }
+    } catch (err) {
+      // Row stays status='yes' with bd_listing_created=false — the
+      // retry-listings queue. Never fail the sweep over one venue.
+      listingsFailed++
+      console.error(
+        `[hd-directory-agent/search] listing failed for ${businessName}:`,
+        err instanceof Error ? err.message : String(err),
+      )
+    }
+
+    if (i < queue.length - 1) await sleep(BD_DELAY_MS)
+  }
+
+  if (deferred > 0) {
+    console.warn(
+      `[hd-directory-agent/search] ${deferred} venue(s) over the ${AUTO_LIST_MAX_PER_RUN}/run cap — ` +
+      `left at bd_listing_created=false for retry-listings`,
+    )
   }
 
   if (skipped.length > 0) {
@@ -131,7 +221,18 @@ export async function POST(request: NextRequest) {
     `elapsed=${Date.now() - startedAt}ms`,
   )
 
-  return NextResponse.json({ newProspects, businessNames, cities: perCity, skipped })
+  return NextResponse.json({
+    newProspects,
+    businessNames,
+    cities: perCity,
+    skipped,
+    autoListed: {
+      found:    pendingAutoList.length,
+      created:  listingsCreated,
+      failed:   listingsFailed,
+      deferred: deferred + Math.max(0, queue.length - listingsCreated - listingsFailed),
+    },
+  })
 }
 
 // Two exclusion lists, both checked before we write anything: opted-out numbers

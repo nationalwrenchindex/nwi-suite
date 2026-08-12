@@ -24,6 +24,7 @@ import { loadEnvConfig } from '@next/env'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { createAgentListing } from '../lib/directory-agent/bd'
 import { createHdListing } from '../lib/hd-directory-agent/bd'
+import { isAutoListCategory } from '../lib/hd-directory-agent/config'
 
 loadEnvConfig(process.cwd())
 
@@ -191,7 +192,13 @@ async function main() {
         created++
         console.log(`           ✓ listed → ${listing.listingUrl}`)
 
-        if (!noSms) {
+        // Venues are auto-listed places, not businesses that asked to be here.
+        // Texting one a "you are listed" confirmation would be the first
+        // message they ever received from us. Suppressed regardless of --no-sms.
+        const isVenue = isAutoListCategory(p.service_category)
+        if (isVenue) {
+          console.log('           · venue — no SMS')
+        } else if (!noSms) {
           const sms = await sendSms(p.phone, variant.listedMessage, variant.from())
           if (sms.ok) { smsSent++; console.log('           ✓ confirmation SMS sent') }
           else        { smsFailed++; console.error(`           ! SMS failed: ${sms.error}`) }
