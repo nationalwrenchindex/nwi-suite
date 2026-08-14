@@ -200,10 +200,32 @@ export default async function DirectoryAgentAdminPage({
     'follow_up_sent_at, bd_listing_created, bd_listing_url' +
     (tab === 'hd' ? ', service_category' : '')
 
-  let listQuery = svc.from(table).select(columns).order('created_at', { ascending: false }).limit(100)
-  // The HD controls' category filter writes ?category=, and it only applies to
-  // the HD table — LD has no such column.
-  if (tab === 'hd' && params.category) listQuery = listQuery.eq('service_category', params.category)
+  // HD sorts by most-recently-acted-on — last_activity_at is a generated
+  // COALESCE(follow_up_sent_at, contacted_at, created_at) from migration 095.
+  // Without it the tab opens on 2,000+ untouched prospects from the search
+  // cron, burying every row anyone has actually worked.
+  //
+  // Falls back to created_at if the column is absent, so the tab still renders
+  // between deploying this and running the migration.
+  async function fetchProspects() {
+    const build = (orderCol: string) => {
+      let q = svc.from(table).select(columns)
+      // The HD controls' category filter writes ?category=, and it only applies
+      // to the HD table — LD has no such column.
+      if (tab === 'hd' && params.category) q = q.eq('service_category', params.category)
+      return q.order(orderCol, { ascending: false }).limit(100)
+    }
+
+    if (tab !== 'hd') return build('created_at')
+
+    const result = await build('last_activity_at')
+    if (!result.error) return result
+    console.warn(
+      '[admin/directory-agent] last_activity_at unavailable, falling back to created_at ' +
+      `(is migration 095 applied?): ${result.error.message}`,
+    )
+    return build('created_at')
+  }
 
   const [
     { count: totalProspects },
@@ -226,7 +248,7 @@ export default async function DirectoryAgentAdminPage({
     svc.from(table).select('*', { count: 'exact', head: true }).eq('bd_listing_created', true),
     svc.from(table).select('*', { count: 'exact', head: true }).eq('status', 'optout'),
     svc.from(table).select('*', { count: 'exact', head: true }).not('follow_up_sent_at', 'is', null),
-    listQuery,
+    fetchProspects(),
     svc.from(TABLES.ld).select('*', { count: 'exact', head: true }),
     svc.from(TABLES.hd).select('*', { count: 'exact', head: true }),
   ])
