@@ -36,7 +36,9 @@ export async function POST(request: NextRequest) {
     .or(HD_NO_VENUES_FILTER)
     .is('follow_up_sent_at', null)
     .lt('contacted_at', cutoff)
-    .order('rating', { ascending: false, nullsFirst: false })
+    // Oldest first — see the LD follow-up route for the reasoning. Age is the
+    // urgent signal for a nudge; rating leads on the invite route instead.
+    .order('contacted_at', { ascending: true })
     .limit(HD_INVITE_BATCH_SIZE)
 
   if (error) {

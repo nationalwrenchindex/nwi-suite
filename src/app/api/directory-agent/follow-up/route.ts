@@ -31,7 +31,12 @@ export async function POST(request: NextRequest) {
     .eq('status', 'contacted')
     .is('follow_up_sent_at', null)
     .lt('contacted_at', cutoff)
-    .order('rating', { ascending: false, nullsFirst: false })
+    // Oldest first: the longer a prospect has sat without a nudge, the colder
+    // they get, so age is the more urgent signal here. Deliberately different
+    // from the invite route, which leads with rating — an invite is a first
+    // impression and best spent on the strongest prospects, whereas a follow-up
+    // is a rescue and best spent on the ones going stale.
+    .order('contacted_at', { ascending: true })
     .limit(INVITE_BATCH_SIZE)
 
   if (error) {
