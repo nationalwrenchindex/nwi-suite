@@ -10,8 +10,7 @@
 -- a first text from June. A stored generated column gives the real expression
 -- and can be indexed.
 --
--- HD only. The LD tab keeps created_at ordering, which is what it has always
--- had and what its much smaller table reads well with.
+-- Migration 096 applies the same column to directory_prospects for the LD tab.
 
 ALTER TABLE public.hd_directory_prospects
   ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ
