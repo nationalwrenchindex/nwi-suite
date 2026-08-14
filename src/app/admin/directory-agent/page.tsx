@@ -200,13 +200,14 @@ export default async function DirectoryAgentAdminPage({
     'follow_up_sent_at, bd_listing_created, bd_listing_url' +
     (tab === 'hd' ? ', service_category' : '')
 
-  // HD sorts by most-recently-acted-on — last_activity_at is a generated
-  // COALESCE(follow_up_sent_at, contacted_at, created_at) from migration 095.
-  // Without it the tab opens on 2,000+ untouched prospects from the search
-  // cron, burying every row anyone has actually worked.
+  // Both tabs sort by most-recently-acted-on. last_activity_at is a generated
+  // COALESCE(follow_up_sent_at, contacted_at, created_at) — migration 095 for
+  // the HD table, 096 for LD. Without it a tab opens on whatever the search
+  // cron banked most recently, burying every row anyone has actually worked;
+  // that is acute on HD, where 2,000+ untouched prospects are queued.
   //
-  // Falls back to created_at if the column is absent, so the tab still renders
-  // between deploying this and running the migration.
+  // Falls back to created_at if the column is absent, so a tab still renders
+  // between deploying this and running its migration.
   async function fetchProspects() {
     const build = (orderCol: string) => {
       let q = svc.from(table).select(columns)
@@ -216,13 +217,11 @@ export default async function DirectoryAgentAdminPage({
       return q.order(orderCol, { ascending: false }).limit(100)
     }
 
-    if (tab !== 'hd') return build('created_at')
-
     const result = await build('last_activity_at')
     if (!result.error) return result
     console.warn(
-      '[admin/directory-agent] last_activity_at unavailable, falling back to created_at ' +
-      `(is migration 095 applied?): ${result.error.message}`,
+      `[admin/directory-agent] last_activity_at unavailable on ${table}, falling back to ` +
+      `created_at (is migration ${tab === 'hd' ? '095' : '096'} applied?): ${result.error.message}`,
     )
     return build('created_at')
   }
