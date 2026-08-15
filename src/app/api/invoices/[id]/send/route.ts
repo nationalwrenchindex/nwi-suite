@@ -4,11 +4,13 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { syncInvoiceToGarage, type GarageSyncResult } from '@/lib/garage/link'
+import { garageEmailSection, invoiceHtmlEmail } from '@/lib/garage/email'
 
 const INVOICE_SELECT = `
   *,
   customer:customers(id, first_name, last_name, phone, email),
-  vehicle:vehicles(id, year, make, model, vin),
+  vehicle:vehicles(id, year, make, model, vin, mileage),
   source_quote:quotes!invoices_source_quote_id_fkey(id, quote_number, line_items, labor_hours, labor_rate, parts_subtotal, parts_markup_percent, labor_subtotal, tax_percent, tax_amount, grand_total)
 `
 
@@ -16,6 +18,39 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tools.nationalwrench
 
 function genToken(): string {
   return crypto.randomUUID().replace(/-/g, '')
+}
+
+/**
+ * One-line service summary for the garage record. Built from the invoice's line
+ * descriptions rather than the invoice number, so the customer sees "Brakes,
+ * Oil change" in their history instead of an opaque reference.
+ */
+function summariseService(inv: Record<string, unknown>): string {
+  const lines = [
+    ...(Array.isArray(inv.service_lines) ? inv.service_lines : []),
+    ...(Array.isArray(inv.line_items)    ? inv.line_items    : []),
+  ] as Array<Record<string, unknown>>
+
+  const labels = lines
+    .map(l => (l.description ?? l.name ?? l.service ?? l.title))
+    .filter((v): v is string => typeof v === 'string' && v.trim().length > 0)
+    .map(v => v.trim())
+
+  const unique = [...new Set(labels)]
+  if (unique.length === 0) return 'Service'
+  const summary = unique.slice(0, 3).join(', ')
+  return unique.length > 3 ? `${summary} +${unique.length - 3} more` : summary
+}
+
+/** The date the work happened, falling back through the columns that exist. */
+function invoiceServiceDate(inv: Record<string, unknown>): string {
+  const candidate =
+    (inv.service_date as string | null) ??
+    (inv.invoice_date as string | null) ??
+    (inv.issued_at    as string | null) ??
+    (inv.created_at   as string | null)
+  const d = candidate ? new Date(candidate) : new Date()
+  return (Number.isNaN(d.getTime()) ? new Date() : d).toISOString().slice(0, 10)
 }
 
 function fmtCurrency(n: number | null | undefined): string {
@@ -47,7 +82,7 @@ async function sendSms(to: string, body: string): Promise<{ success: boolean; er
   }
 }
 
-async function sendEmail(to: string, subject: string, text: string): Promise<{ success: boolean; error?: string }> {
+async function sendEmail(to: string, subject: string, text: string, html?: string): Promise<{ success: boolean; error?: string }> {
   const host = process.env.SMTP_HOST
   const port = Number(process.env.SMTP_PORT ?? 587)
   const user = process.env.SMTP_USER
@@ -58,7 +93,7 @@ async function sendEmail(to: string, subject: string, text: string): Promise<{ s
   try {
     const nodemailer = await import('nodemailer')
     const t = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } })
-    await t.sendMail({ from, to, subject, text })
+    await t.sendMail({ from, to, subject, text, ...(html ? { html } : {}) })
     return { success: true }
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) }
@@ -148,6 +183,43 @@ export async function POST(
   let emailError: string | undefined
 
   const grandTotal = fmtCurrency(inv.total as number)
+  const invTotal   = typeof inv.total === 'number' ? inv.total : null
+
+  // ── NWI Garage ────────────────────────────────────────────────────────────
+  // Runs before the email is composed, because the outcome decides what the
+  // email says: an existing customer gets told their garage was updated, a new
+  // one gets a signup button with their vehicle pre-filled. Deliberately
+  // non-fatal — a garage outage must never stop an invoice reaching a customer.
+  const fullVehicle = inv.vehicle as {
+    year?: number; make?: string; model?: string; vin?: string; mileage?: number
+  } | null
+  const customerEmail =
+    (email as string | undefined) ??
+    ((inv.customer as { email?: string } | null)?.email ?? null)
+
+  let garage: GarageSyncResult = { linked: false, joinUrl: '' }
+  try {
+    garage = await syncInvoiceToGarage({
+      invoiceId:     id,
+      customerEmail,
+      vehicle: fullVehicle
+        ? {
+            vin:     fullVehicle.vin     ?? null,
+            year:    fullVehicle.year    ?? null,
+            make:    fullVehicle.make    ?? null,
+            model:   fullVehicle.model   ?? null,
+            mileage: fullVehicle.mileage ?? null,
+          }
+        : null,
+      mechanicName: bizName,
+      serviceType:  summariseService(inv),
+      notes:        (inv.notes as string | null) ?? null,
+      cost:         invTotal,
+      serviceDate:  invoiceServiceDate(inv),
+    })
+  } catch (err) {
+    console.error('[send invoice] garage sync failed:', err instanceof Error ? err.message : String(err))
+  }
   const paymentInstructions = (inv.payment_instructions as string | null) ?? ''
   const invoiceNumber       = inv.invoice_number as string
 
@@ -163,7 +235,18 @@ export async function POST(
 
   if (method === 'email' && email) {
     const subject = `Invoice from ${bizName} — Total Due: ${grandTotal}`
-    const text    = [
+    const bodyLines = [
+      `Hi ${customerName},`,
+      `Your invoice for service on your ${vehicleLabel} is ready.`,
+      `Invoice: ${invoiceNumber}`,
+      `Total Due: ${grandTotal}`,
+      `View and download your invoice: ${invoiceUrl}`,
+      ...(paymentInstructions ? [`Payment Instructions: ${paymentInstructions}`] : []),
+      `Please contact ${bizName} directly with any questions.`,
+    ]
+    const section = garageEmailSection(garage)
+
+    const text = [
       `Hi ${customerName},`,
       '',
       `Your invoice for service on your ${vehicleLabel} is ready.`,
@@ -175,12 +258,20 @@ export async function POST(
       '',
       ...(paymentInstructions ? ['Payment Instructions:', paymentInstructions, ''] : []),
       `Please contact ${bizName} directly with any questions.`,
+      section.text,
       '',
       `Thanks,`,
       `${techName}`,
       `${bizName}`,
     ].join('\n')
-    const r     = await sendEmail(email, subject, text)
+
+    const html = invoiceHtmlEmail({
+      heading:    `Invoice from ${bizName}`,
+      bodyLines:  [...bodyLines, `Thanks, ${techName} — ${bizName}`],
+      garageHtml: section.html,
+    })
+
+    const r     = await sendEmail(email, subject, text, html)
     emailSent   = r.success
     emailError  = r.error
   }
@@ -190,6 +281,9 @@ export async function POST(
     invoice_url: invoiceUrl,
     sms_sent:    smsSent,
     email_sent:  emailSent,
+    garage:      garage.linked
+      ? { linked: true, posted: garage.posted, ...(garage.reason && { reason: garage.reason }) }
+      : { linked: false },
     ...(smsError   && { sms_error:   smsError }),
     ...(emailError && { email_error: emailError }),
   })
