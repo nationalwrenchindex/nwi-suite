@@ -191,37 +191,37 @@ export const HD_SEARCH_CITIES: ReadonlyArray<{ city: string; state: string }> = 
 
 const INVITE_BY_CATEGORY: Partial<Record<HdServiceCategory, (name: string) => string>> = {
   truck: name =>
-    `Hey ${name} — this is Brock with National Wrench Index HD. ` +
+    `Hey ${name} - this is Brock with National Wrench Index HD. ` +
     `I found your heavy duty repair business on Google and wanted to invite you to a free listing on our HD directory at nwihd.com. ` +
     `Fleet managers and drivers search our directory when trucks break down on the road. ` +
     `No commissions. Direct contact only. Reply YES to get listed free or STOP to opt out.`,
 
   reefer: name =>
-    `Hey ${name} — this is Brock with National Wrench Index HD. ` +
+    `Hey ${name} - this is Brock with National Wrench Index HD. ` +
     `I found your reefer repair business on Google and wanted to invite you to a free listing at nwihd.com. ` +
     `We connect reefer techs directly with drivers and fleet managers who need emergency cold chain service. ` +
     `Reply YES to get listed free or STOP to opt out.`,
 
   tire: name =>
-    `Hey ${name} — this is Brock with National Wrench Index HD. ` +
+    `Hey ${name} - this is Brock with National Wrench Index HD. ` +
     `I found your commercial tire business on Google and wanted to invite you to a free listing at nwihd.com. ` +
     `Drivers search our directory when they need emergency tire service on the road. ` +
     `Reply YES to get listed free or STOP to opt out.`,
 
   fuel: name =>
-    `Hey ${name} — this is Brock with National Wrench Index HD. ` +
+    `Hey ${name} - this is Brock with National Wrench Index HD. ` +
     `I found your fuel delivery business on Google and wanted to invite you to a free listing at nwihd.com. ` +
     `Stranded drivers search our directory when they run out of fuel on the road. ` +
     `Reply YES to get listed free or STOP to opt out.`,
 
   towing: name =>
-    `Hey ${name} — this is Brock with National Wrench Index HD. ` +
+    `Hey ${name} - this is Brock with National Wrench Index HD. ` +
     `I found your heavy duty towing business on Google and wanted to invite you to a free listing at nwihd.com. ` +
     `Drivers and fleet managers search our directory when they need emergency towing. ` +
     `Reply YES to get listed free or STOP to opt out.`,
 
   shop: name =>
-    `Hey ${name} — this is Brock with National Wrench Index HD. ` +
+    `Hey ${name} - this is Brock with National Wrench Index HD. ` +
     `I found your business on Google and wanted to invite you to a free listing on our HD commercial service directory at nwihd.com. ` +
     `Fleet managers and drivers actively search our directory for service locations on major corridors. ` +
     `Reply YES to get listed free or STOP to opt out.`,
@@ -230,7 +230,7 @@ const INVITE_BY_CATEGORY: Partial<Record<HdServiceCategory, (name: string) => st
 // trailer, washout, glass, locksmith and anything uncategorized land here.
 function genericInvite(name: string): string {
   return (
-    `Hey ${name} — this is Brock with National Wrench Index HD. ` +
+    `Hey ${name} - this is Brock with National Wrench Index HD. ` +
     `I found your business on Google and wanted to invite you to a free listing on our HD service directory at nwihd.com. ` +
     `No commissions. No middlemen. Direct contact from fleet managers and drivers who need help on the road. ` +
     `Reply YES to get listed free or STOP to opt out.`
@@ -247,7 +247,7 @@ export function hdInviteMessage(businessName: string, category: string | null): 
 
 export function hdFollowUpMessage(businessName: string): string {
   return (
-    `Hey ${businessName} — Brock again from National Wrench Index HD. ` +
+    `Hey ${businessName} - Brock again from National Wrench Index HD. ` +
     `Just following up on the free directory listing at nwihd.com. ` +
     `Fleet managers and drivers search our directory when trucks break down on the road. ` +
     `Reply YES to get listed or STOP if not interested.`
@@ -256,10 +256,10 @@ export function hdFollowUpMessage(businessName: string): string {
 
 export const HD_LISTED_MESSAGE =
   'You are listed on NWI HD. Search your business name at nwihd.com to find your profile. ' +
-  'Fleet managers and drivers will find you when they need help on the road. Welcome. — Brock'
+  'Fleet managers and drivers will find you when they need help on the road. Welcome. - Brock'
 
 export const HD_OPTOUT_MESSAGE =
-  'You have been removed from our list and will not be contacted again. — National Wrench Index HD'
+  'You have been removed from our list and will not be contacted again. - National Wrench Index HD'
 
 export const HD_FALLBACK_MESSAGE =
   'Reply YES to get your free NWI HD listing or STOP to opt out.'

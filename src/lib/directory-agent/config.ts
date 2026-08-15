@@ -40,7 +40,7 @@ export const FOLLOW_UP_AFTER_DAYS = 3
 
 export function inviteMessage(businessName: string): string {
   return (
-    `Hey ${businessName} — this is Brock with National Wrench Index. ` +
+    `Hey ${businessName} - this is Brock with National Wrench Index. ` +
     `I found your mobile mechanic business on Google and wanted to invite you to a free directory listing at nationalwrenchindex.com. ` +
     `No commissions. No middlemen. Customers contact you directly. ` +
     `Reply YES to get listed free or STOP to opt out.`
@@ -49,7 +49,7 @@ export function inviteMessage(businessName: string): string {
 
 export function followUpMessage(businessName: string): string {
   return (
-    `Hey ${businessName} — Brock again from National Wrench Index. ` +
+    `Hey ${businessName} - Brock again from National Wrench Index. ` +
     `Just wanted to follow up on the free directory listing offer. ` +
     `Reply YES to get listed or STOP if not interested. No pressure either way.`
   )
@@ -61,16 +61,16 @@ export function followUpMessage(businessName: string): string {
 export const EMAIL_REQUEST_MESSAGE =
   'Thanks for your interest in a free National Wrench Index listing. ' +
   'We just need your email address to set up your profile so you can log in and make updates anytime. ' +
-  'Reply with your email and we will get you listed right away. — Brock'
+  'Reply with your email and we will get you listed right away. - Brock'
 
 // Sent once the listing exists, which now always means it was created against
 // the mechanic's real email — hence the pointer to their inbox.
 export const LISTED_MESSAGE =
   'You are listed on National Wrench Index. Search your business name at nationalwrenchindex.com ' +
-  'to find your profile. Check your email for login details so you can add photos and services. — Brock'
+  'to find your profile. Check your email for login details so you can add photos and services. - Brock'
 
 export const OPTOUT_MESSAGE =
-  'You have been removed from our list and will not be contacted again. — National Wrench Index'
+  'You have been removed from our list and will not be contacted again. - National Wrench Index'
 
 export const FALLBACK_MESSAGE =
   'Reply YES to get your free National Wrench Index listing or STOP to opt out.'

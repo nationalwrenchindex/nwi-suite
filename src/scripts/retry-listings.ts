@@ -33,14 +33,17 @@ const BD_DELAY_MS = 500
 // Inlined rather than imported from the agent configs: those modules pull in
 // next/server and the request-scoped Supabase client, which do not exist in a
 // standalone script. Same reasoning as src/scripts/import-truck-stops.ts.
+// Keep these byte-identical to LISTED_MESSAGE in src/lib/directory-agent/config.ts
+// and HD_LISTED_MESSAGE in src/lib/hd-directory-agent/config.ts. The LD copy had
+// already drifted — it still described the pre-email-collection flow, telling
+// mechanics to log in without saying where their credentials went.
 const LD_LISTED_MESSAGE =
-  'You are listed on National Wrench Index. Find your profile here: nationalwrenchindex.com — ' +
-  'Search your business name to find it. Log in anytime to add photos, services, and updates. ' +
-  'Welcome to the directory. — Brock'
+  'You are listed on National Wrench Index. Search your business name at nationalwrenchindex.com ' +
+  'to find your profile. Check your email for login details so you can add photos and services. - Brock'
 
 const HD_LISTED_MESSAGE =
   'You are listed on NWI HD. Search your business name at nwihd.com to find your profile. ' +
-  'Fleet managers and drivers will find you when they need help on the road. Welcome. — Brock'
+  'Fleet managers and drivers will find you when they need help on the road. Welcome. - Brock'
 
 const LD_FROM = () => process.env.DIRECTORY_AGENT_FROM_NUMBER ?? '+13367294181'
 const HD_FROM = () =>
