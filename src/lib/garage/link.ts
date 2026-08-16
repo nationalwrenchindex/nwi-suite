@@ -173,7 +173,15 @@ export async function syncInvoiceToGarage(input: GarageSyncInput): Promise<Garag
     return { linked: true, posted: false, nwiGarageId: account.nwiGarageId, reason: 'guard column missing' }
   }
 
-  if (invoice?.garage_posted_at) {
+  if (!invoice) {
+    // No such invoice. The send route always loads one first, but this is now
+    // callable with any id, and posting here would put an unattributable record
+    // in a real customer's garage with no guard row to stop it repeating.
+    console.error(`[garage/link] invoice ${input.invoiceId} not found, refusing to post`)
+    return { linked: true, posted: false, nwiGarageId: account.nwiGarageId, reason: 'invoice not found' }
+  }
+
+  if (invoice.garage_posted_at) {
     return { linked: true, posted: false, nwiGarageId: account.nwiGarageId, reason: 'already posted' }
   }
 
