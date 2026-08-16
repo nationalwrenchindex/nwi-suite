@@ -82,18 +82,28 @@ async function sendSms(to: string, body: string): Promise<{ success: boolean; er
   }
 }
 
+// Invoice delivery runs on Resend rather than SMTP: nationalwrenchindex.com is
+// a verified sending domain there, which SPF/DKIM-signs the mail and keeps
+// invoices out of spam. Matches src/lib/email-alerts.ts.
+//
+// Never throws. A bounced or misconfigured email must not stop an invoice being
+// saved and marked sent — the caller surfaces the error in the response instead.
+const INVOICE_FROM = process.env.INVOICE_FROM_EMAIL ?? 'invoices@nationalwrenchindex.com'
+
 async function sendEmail(to: string, subject: string, text: string, html?: string): Promise<{ success: boolean; error?: string }> {
-  const host = process.env.SMTP_HOST
-  const port = Number(process.env.SMTP_PORT ?? 587)
-  const user = process.env.SMTP_USER
-  const pass = process.env.SMTP_PASS
-  const from = process.env.SMTP_FROM ?? user ?? 'notifications@nationalwrenchindex.com'
-  if (!host || !user || !pass) return { success: false, error: 'SMTP not configured' }
+  const apiKey = process.env.RESEND_API_KEY
+  if (!apiKey) return { success: false, error: 'RESEND_API_KEY not set' }
 
   try {
-    const nodemailer = await import('nodemailer')
-    const t = nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } })
-    await t.sendMail({ from, to, subject, text, ...(html ? { html } : {}) })
+    const { Resend } = await import('resend')
+    const { error } = await new Resend(apiKey).emails.send({
+      from:    INVOICE_FROM,
+      to,
+      subject,
+      text,
+      ...(html ? { html } : {}),
+    })
+    if (error) return { success: false, error: error.message }
     return { success: true }
   } catch (err) {
     return { success: false, error: err instanceof Error ? err.message : String(err) }
