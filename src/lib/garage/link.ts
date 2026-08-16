@@ -82,6 +82,18 @@ async function findGarageUser(email: string): Promise<{ userId: string; nwiGarag
   return { userId, nwiGarageId: (data.nwi_garage_id as string | null) ?? null }
 }
 
+/**
+ * Compact signup link for SMS: VIN only, protocol stripped.
+ *
+ * The full email link carries five params and runs ~110 characters, which would
+ * add a segment to every invoice text. VIN alone is enough for the join page to
+ * identify the vehicle, and handsets linkify a bare domain fine.
+ */
+export function buildGarageJoinSmsLink(vin: string): string {
+  const host = GARAGE_JOIN_URL.replace(/^https?:\/\//, '')
+  return `${host}?vin=${encodeURIComponent(vin)}`
+}
+
 /** Pre-populated signup link for customers who have no Garage account yet. */
 export function buildGarageJoinUrl(vehicle: InvoiceVehicle | null): string {
   const params = new URLSearchParams()

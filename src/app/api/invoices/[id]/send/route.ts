@@ -4,7 +4,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { syncInvoiceToGarage, type GarageSyncResult } from '@/lib/garage/link'
+import { syncInvoiceToGarage, buildGarageJoinSmsLink, type GarageSyncResult } from '@/lib/garage/link'
 import { garageEmailSection, invoiceHtmlEmail } from '@/lib/garage/email'
 
 const INVOICE_SELECT = `
@@ -224,10 +224,17 @@ export async function POST(
   const invoiceNumber       = inv.invoice_number as string
 
   if (method === 'sms' && phone) {
+    // Offered only to customers without a Garage account, and only when the
+    // vehicle has a VIN for the join page to key on. Someone who already has a
+    // garage should not be pitched a signup — their update notice lives in the
+    // email path.
+    const joinVin  = !garage.linked ? (fullVehicle?.vin ?? null) : null
+    const joinLine = joinVin ? ` Free service records for this vehicle: ${buildGarageJoinSmsLink(joinVin)}.` : ''
+
     const smsBody =
       `Hi ${customerName}, your invoice from ${bizName} is ready. ` +
       `Total due: ${grandTotal}. ` +
-      `View and download here: ${invoiceUrl}. Reply STOP to opt out.`
+      `View and download here: ${invoiceUrl}.${joinLine} Reply STOP to opt out.`
     const r  = await sendSms(phone, smsBody)
     smsSent  = r.success
     smsError = r.error
