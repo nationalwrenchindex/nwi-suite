@@ -49,13 +49,23 @@ const getAdminData = unstable_cache(
     subscriptions:     Subscription[]
     foremanCount:      number
     waitlistCount:     number
+    garageTotal:       number
+    garage7d:          number
+    garage30d:         number
   }> => {
     const svc = createServiceClient()
+    // NWI Garage is a separate product sharing this Supabase project; one row
+    // per registered garage user.
+    const since = (days: number) =>
+      new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
     const [
       { data: profiles },
       { data: subscriptions },
       { count: foremanCount },
       { count: waitlistCount },
+      { count: garageTotal },
+      { count: garage7d },
+      { count: garage30d },
     ] = await Promise.all([
       svc
         .from('profiles')
@@ -71,12 +81,26 @@ const getAdminData = unstable_cache(
       svc
         .from('foreman_waitlist')
         .select('*', { count: 'exact', head: true }),
+      svc
+        .from('garage_profiles')
+        .select('*', { count: 'exact', head: true }),
+      svc
+        .from('garage_profiles')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', since(7)),
+      svc
+        .from('garage_profiles')
+        .select('*', { count: 'exact', head: true })
+        .gte('created_at', since(30)),
     ])
     return {
       profiles:      (profiles ?? []) as Profile[],
       subscriptions: (subscriptions ?? []) as Subscription[],
       foremanCount:  foremanCount ?? 0,
       waitlistCount: waitlistCount ?? 0,
+      garageTotal:   garageTotal ?? 0,
+      garage7d:      garage7d ?? 0,
+      garage30d:     garage30d ?? 0,
     }
   },
   ['admin-dashboard'],
@@ -167,7 +191,10 @@ export default async function AdminPage() {
 
   if (!user || user.id !== FOUNDER_ID) return notFound()
 
-  const { profiles, subscriptions, foremanCount, waitlistCount } = await getAdminData()
+  const {
+    profiles, subscriptions, foremanCount, waitlistCount,
+    garageTotal, garage7d, garage30d,
+  } = await getAdminData()
 
   // Cached diagnostics — fetched fresh (not cached) so corrections/deletes show
   // immediately. Founder gate above already protects this read.
@@ -242,7 +269,7 @@ export default async function AdminPage() {
         </div>
 
         {/* ── Foreman add-on stats ────────────────────────────────────────── */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-10">
           <div className="bg-dark-card border border-orange/20 rounded-xl px-4 py-5">
             <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Foreman Slots</p>
             <p className="text-2xl font-bold tabular-nums text-orange">
@@ -271,6 +298,18 @@ export default async function AdminPage() {
             <Link href="/admin/foreman" className="text-orange text-xs hover:underline mt-1 block">
               View details →
             </Link>
+          </div>
+          <div className="bg-dark-card border border-dark-border rounded-xl px-4 py-5">
+            <p className="text-white/40 text-xs uppercase tracking-widest mb-1">NWI Garage Users</p>
+            <p className={`text-2xl font-bold tabular-nums ${garageTotal > 0 ? 'text-green-400' : 'text-white'}`}>
+              {garageTotal}
+            </p>
+            <p className="text-white/25 text-xs mt-1">
+              <span className={garage7d > 0 ? 'text-white/50' : ''}>{garage7d} new</span> · 7 days
+            </p>
+            <p className="text-white/25 text-xs">
+              <span className={garage30d > 0 ? 'text-white/50' : ''}>{garage30d} new</span> · 30 days
+            </p>
           </div>
           <div className="bg-dark-card border border-dark-border rounded-xl px-4 py-5">
             <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Directory Agent</p>
