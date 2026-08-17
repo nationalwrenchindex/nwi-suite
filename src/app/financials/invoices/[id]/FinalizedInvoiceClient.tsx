@@ -448,6 +448,7 @@ function SendInvoiceModal({
   onSent: (updated: Invoice) => void
   onClose: () => void
 }) {
+  const router = useRouter()
   const [tab,         setTab]         = useState<SendTab>('sms')
   const [phone,       setPhone]       = useState(invoice.customer?.phone ?? invoice.sent_to_phone ?? '')
   const [email,       setEmail]       = useState(invoice.customer?.email ?? invoice.sent_to_email ?? '')
@@ -496,22 +497,31 @@ function SendInvoiceModal({
 
       onSent(json.invoice)
 
+      const delivered =
+        (method === 'sms'   && json.sms_sent) ||
+        (method === 'email' && json.email_sent)
+
+      if (delivered) {
+        // Nothing left to do on this screen, and leaving the modal open made
+        // Back read as "edit this invoice" rather than "I'm finished". Close
+        // and hand the mechanic the updated list.
+        //
+        // refresh() before push() so the list renders the just-sent status
+        // instead of a cached copy of the page.
+        onClose()
+        router.refresh()
+        router.push('/financials/invoices')
+        return
+      }
+
+      // Delivery failed but the invoice and its link were saved — stay put so
+      // the mechanic can read why and copy the link manually.
       if (method === 'sms') {
-        if (json.sms_sent) {
-          setResult('SMS sent successfully.')
-          setResultType('success')
-        } else {
-          setResult(`Invoice link saved. SMS delivery failed: ${json.sms_error ?? 'Twilio not configured'}. Share the link manually.`)
-          setResultType('warning')
-        }
+        setResult(`Invoice link saved. SMS delivery failed: ${json.sms_error ?? 'Twilio not configured'}. Share the link manually.`)
+        setResultType('warning')
       } else if (method === 'email') {
-        if (json.email_sent) {
-          setResult('Email sent successfully.')
-          setResultType('success')
-        } else {
-          setResult(`Invoice link saved. Email delivery failed: ${json.email_error ?? 'SMTP not configured'}. Share the link manually.`)
-          setResultType('warning')
-        }
+        setResult(`Invoice link saved. Email delivery failed: ${json.email_error ?? 'SMTP not configured'}. Share the link manually.`)
+        setResultType('warning')
       }
     } catch (e) {
       setResult(e instanceof Error ? e.message : 'Failed to send')
