@@ -200,7 +200,10 @@ function supplierPrices(estimate: number) {
   }
 }
 
-function enrichParts(raw: Array<TechGuidePart | string>): PartWithSuppliers[] {
+// `scope` is the job key. Without it two jobs both produce `part-0-…`, and
+// since partCosts and partPriceOverrides are keyed by part id, editing a price
+// on one job silently rewrote the same-index part on the other.
+function enrichParts(raw: Array<TechGuidePart | string>, scope = ''): PartWithSuppliers[] {
   return raw.map((part, i) => {
     const name = typeof part === 'string' ? part : part.name
     const qty  = typeof part === 'string' ? 1    : (part.qty       ?? 1)
@@ -210,7 +213,7 @@ function enrichParts(raw: Array<TechGuidePart | string>): PartWithSuppliers[] {
       part_number_hint:  '',
       qty,
       price_estimate:    cost,
-      id:                `part-${i}-${name.slice(0, 8).replace(/\s/g, '')}`,
+      id:                `part-${scope}-${i}-${name.slice(0, 8).replace(/\s/g, '')}`,
       included:          true,
       selected_supplier: 'orielly' as Supplier,
       custom_price:      cost,
@@ -2075,7 +2078,8 @@ export default function QuickWrenchClient({
           })
           const json = await res.json()
           if (!res.ok) throw new Error(json.error ?? 'Failed to load tech guide')
-          return { key: jobKey(j), guide: json.guide as TechGuide, parts: enrichParts(json.guide.parts ?? []) }
+          const k = jobKey(j)
+          return { key: k, guide: json.guide as TechGuide, parts: enrichParts(json.guide.parts ?? [], k) }
         })
       )
       setTechGuides(prev => {
@@ -2279,6 +2283,32 @@ export default function QuickWrenchClient({
     loadAllTechGuides(vehicle, missing)
   }, [activeTab, vehicle, selectedJobs, techGuides, guidesLoading, guidesError, loadAllTechGuides])
 
+  // Reseed parts from a loaded guide when the Parts tab has none.
+  //
+  // partsByJob is only written when a guide finishes loading, so any route that
+  // reaches Parts without that happening — Skip to Parts during load or after an
+  // error, or a guide that arrived without parts — leaves the step empty with no
+  // way back into a loading path: the effect above only runs on tab 2, and it
+  // short-circuits because the guide itself is present. The step then tells the
+  // tech to "go back and load the tech guide first" for a guide they already
+  // loaded. This closes that trap by deriving parts from the guide we hold.
+  useEffect(() => {
+    if (activeTab !== 3 || selectedJobs.length === 0) return
+    const seedable = selectedJobs.filter(j => {
+      const key = jobKey(j)
+      return (partsByJob[key]?.length ?? 0) === 0 && (techGuides[key]?.parts?.length ?? 0) > 0
+    })
+    if (seedable.length === 0) return
+    setPartsByJob(prev => {
+      const next = { ...prev }
+      for (const j of seedable) {
+        const key = jobKey(j)
+        next[key] = enrichParts(techGuides[key].parts, key)
+      }
+      return next
+    })
+  }, [activeTab, selectedJobs, partsByJob, techGuides])
+
   function handleVehicleSet(v: QWVehicle) {
     setVehicle(v)
     setSelectedJobs([])
@@ -2323,7 +2353,7 @@ export default function QuickWrenchClient({
     if (items.length === 0) items.push('Tires (check door jamb sticker for size)')
 
     setSelectedJobs(prev => prev.some(j => jobKey(j) === key) ? prev : [...prev, tireJob])
-    setPartsByJob(prev => ({ ...prev, [key]: enrichParts(items) }))
+    setPartsByJob(prev => ({ ...prev, [key]: enrichParts(items, key) }))
     setGuidesError(null)
     setActiveTab(3)
   }
@@ -2343,7 +2373,7 @@ export default function QuickWrenchClient({
 
     // Seed parts from the DTC result's parts_needed
     if (job.parts.length > 0) {
-      setPartsByJob(prev => ({ ...prev, [key]: enrichParts(job.parts) }))
+      setPartsByJob(prev => ({ ...prev, [key]: enrichParts(job.parts, key) }))
     }
 
     // Pre-fill the tech guide so the suggested repair + hours carry into the

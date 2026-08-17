@@ -51,12 +51,59 @@ function extractOutermostJSON(text: string): string | null {
   return null
 }
 
+/**
+ * Coerces a parsed model response into a TechGuide with every field present.
+ *
+ * The parse used to cast straight to TechGuide, which made a missing key
+ * indistinguishable from an empty one. When Gemini omitted `parts` — it is the
+ * last field in the schema and the easiest to drop — the guide still rendered
+ * (steps, torque and tools were there) while the Parts step received undefined
+ * and reported "No parts data — go back and load the tech guide first". The
+ * guide had in fact loaded; only the parts were silently missing.
+ *
+ * Field names are matched loosely for the same reason: a response keyed
+ * `parts_needed` was a total loss before, and is now recovered.
+ */
+export function normaliseGuide(raw: unknown): TechGuide {
+  const o = (raw ?? {}) as Record<string, unknown>
+  const arr = (...keys: string[]): unknown[] => {
+    for (const k of keys) if (Array.isArray(o[k])) return o[k] as unknown[]
+    return []
+  }
+
+  const parts = arr('parts', 'parts_needed', 'partsNeeded', 'required_parts')
+    .map(p => {
+      if (typeof p === 'string') return p
+      const q = p as Record<string, unknown>
+      const name = typeof q?.name === 'string' ? q.name
+                 : typeof q?.part === 'string' ? q.part
+                 : null
+      if (!name) return null
+      return {
+        name,
+        qty:        Number(q.qty ?? q.quantity ?? 1) || 1,
+        unit_cost:  Number(q.unit_cost  ?? q.cost  ?? 0) || 0,
+        unit_price: Number(q.unit_price ?? q.price ?? 0) || 0,
+      }
+    })
+    .filter((p): p is NonNullable<typeof p> => p !== null)
+
+  return {
+    torque:  arr('torque', 'torque_specs') as TechGuide['torque'],
+    steps:   arr('steps', 'repair_steps').filter((s): s is string => typeof s === 'string'),
+    tools:   arr('tools').filter((s): s is string => typeof s === 'string'),
+    warning: typeof o.warning === 'string' ? o.warning : '',
+    hours:   Number(o.hours ?? o.labor_hours ?? 0) || 0,
+    parts,
+  }
+}
+
 function parseRaw(rawText: string): TechGuide {
   let text = rawText.trim()
   text = text.replace(/```(?:json|JSON)?\s*/g, '').replace(/```/g, '').trim()
   const extracted = extractOutermostJSON(text)
   if (!extracted) throw new Error('No JSON object found in response')
-  return JSON.parse(extracted)
+  return normaliseGuide(JSON.parse(extracted))
 }
 
 export interface TechGuideVehicle {
