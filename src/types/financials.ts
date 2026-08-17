@@ -184,6 +184,8 @@ export interface Invoice {
   sent_to_phone: string | null
   sent_to_email: string | null
   times_sent: number
+  /** Odometer at service, entered on send. Feeds the NWI Garage service record. */
+  mileage_at_service: number | null
   // Joined relations
   // Phase 8: multi-job support
   jobs?: MultiJobEntry[]

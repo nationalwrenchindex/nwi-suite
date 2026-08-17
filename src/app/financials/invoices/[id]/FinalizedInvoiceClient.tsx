@@ -455,6 +455,11 @@ function SendInvoiceModal({
   const [copied,      setCopied]      = useState(false)
   const [result,      setResult]      = useState<string | null>(null)
   const [resultType,  setResultType]  = useState<'success' | 'warning'>('success')
+  // Odometer at service. Seeded from whatever is already recorded so a resend
+  // does not blank it, but the mechanic is expected to correct it.
+  const [mileage,     setMileage]     = useState(
+    invoice.mileage_at_service != null ? String(invoice.mileage_at_service) : '',
+  )
 
   const customerName = invoice.customer
     ? `${invoice.customer.first_name} ${invoice.customer.last_name}`.trim()
@@ -476,6 +481,10 @@ function SendInvoiceModal({
       const body: Record<string, unknown> = { method }
       if (method === 'sms')   body.phone = phone
       if (method === 'email') body.email = email
+      // Sent on every method: the odometer belongs to the service record, not to
+      // how the invoice was delivered.
+      const miles = Number.parseInt(mileage, 10)
+      if (Number.isFinite(miles) && miles >= 0) body.mileage_at_service = miles
 
       const res  = await fetch(`/api/invoices/${invoice.id}/send`, {
         method:  'POST',
@@ -553,6 +562,26 @@ function SendInvoiceModal({
         </div>
 
         <div className="p-5 space-y-4">
+
+          {/* Odometer — applies to every send method, so it sits above the tabs'
+              own fields rather than being duplicated in each. */}
+          <div>
+            <label className="text-white/40 text-xs uppercase tracking-widest block mb-1.5">
+              Mileage at Service
+            </label>
+            <input
+              className="w-full bg-white/5 border border-white/15 rounded-xl px-4 py-2.5 text-white text-sm placeholder:text-white/25 focus:outline-none focus:border-white/30"
+              type="number"
+              min={0}
+              inputMode="numeric"
+              value={mileage}
+              onChange={e => setMileage(e.target.value)}
+              placeholder="Current odometer reading"
+            />
+            <p className="text-white/25 text-xs mt-1.5">
+              Recorded on the invoice and posted to the customer&rsquo;s NWI Garage service history.
+            </p>
+          </div>
 
           {/* Result banner */}
           {result && (

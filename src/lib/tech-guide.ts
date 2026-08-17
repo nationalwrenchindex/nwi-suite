@@ -135,29 +135,44 @@ Category: ${job.categoryLabel ?? job.name}
 
 Provide the complete technical guide for this specific vehicle and job.`
 
-  async function attempt(): Promise<TechGuide> {
-    const { text } = await generateDiagnostic(userMessage, SYSTEM_PROMPT)
-    if (!text) throw new Error('Empty response from Gemini')
-    return parseRaw(text)
-  }
-
-  try {
-    return await attempt()
-  } catch (firstErr) {
-    console.warn(
-      '[callTechGuideGemini] First attempt failed, retrying:',
-      job.name,
-      firstErr instanceof Error ? firstErr.message : firstErr,
-    )
+  async function attempt(): Promise<TechGuide | null> {
     try {
-      return await attempt()
-    } catch (retryErr) {
-      console.error(
-        '[callTechGuideGemini] Both attempts failed for:',
+      const { text } = await generateDiagnostic(userMessage, SYSTEM_PROMPT)
+      if (!text) throw new Error('Empty response from Gemini')
+      return parseRaw(text)
+    } catch (err) {
+      console.warn(
+        '[callTechGuideGemini] attempt failed:',
         job.name,
-        retryErr instanceof Error ? retryErr.message : retryErr,
+        err instanceof Error ? err.message : err,
       )
       return null
     }
   }
+
+  // Retry on a *partless* guide, not just a parse failure.
+  //
+  // The schema marks parts required, so an empty array is a malformed answer,
+  // not a real one — and it is the single most common way this call degrades:
+  // the guide renders with steps, torque and tools while the Parts step has
+  // nothing. That inconsistency between runs is what reads as "parts load
+  // sometimes" to a tech.
+  //
+  // The second result is accepted whatever it contains, because some jobs
+  // genuinely need no parts (inspections, diagnostics) and failing them outright
+  // would be worse than an empty parts list.
+  const first = await attempt()
+  if (first && first.parts.length > 0) return first
+
+  if (first) {
+    console.warn('[callTechGuideGemini] guide had no parts, retrying once:', job.name)
+  }
+  const second = await attempt()
+
+  if (second && second.parts.length > 0) return second
+  if (!second && !first) {
+    console.error('[callTechGuideGemini] both attempts failed for:', job.name)
+    return null
+  }
+  return second ?? first
 }

@@ -137,12 +137,16 @@ export async function POST(
     )
   }
 
-  let body: { method: 'sms' | 'email' | 'link'; phone?: string; email?: string }
+  let body: { method: 'sms' | 'email' | 'link'; phone?: string; email?: string; mileage_at_service?: number }
   try { body = await req.json() } catch {
     return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 })
   }
 
   const { method, phone, email } = body
+  const mileageAtService =
+    typeof body.mileage_at_service === 'number' && Number.isFinite(body.mileage_at_service) && body.mileage_at_service >= 0
+      ? Math.round(body.mileage_at_service)
+      : null
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -173,6 +177,7 @@ export async function POST(
   }
   if (method === 'sms'   && phone) updatePayload.sent_to_phone = phone
   if (method === 'email' && email) updatePayload.sent_to_email = email
+  if (mileageAtService != null) updatePayload.mileage_at_service = mileageAtService
 
   const { data: updated, error: updateErr } = await supabase
     .from('invoices')
@@ -218,7 +223,9 @@ export async function POST(
             year:    fullVehicle.year    ?? null,
             make:    fullVehicle.make    ?? null,
             model:   fullVehicle.model   ?? null,
-            mileage: fullVehicle.mileage ?? null,
+            // Mechanic-entered odometer wins: vehicles.mileage is whatever was
+            // recorded when the vehicle was added and drifts every visit.
+            mileage: mileageAtService ?? (inv.mileage_at_service as number | null) ?? fullVehicle.mileage ?? null,
           }
         : null,
       mechanicName:  bizName,
