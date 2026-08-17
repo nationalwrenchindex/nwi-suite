@@ -221,7 +221,8 @@ export async function POST(
             mileage: fullVehicle.mileage ?? null,
           }
         : null,
-      mechanicName: bizName,
+      mechanicName:  bizName,
+      mechanicPhone: p?.phone ?? null,
       serviceType:  summariseService(inv),
       notes:        (inv.notes as string | null) ?? null,
       cost:         invTotal,

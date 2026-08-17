@@ -30,14 +30,42 @@ export interface InvoiceVehicle {
 }
 
 export interface GarageSyncInput {
-  invoiceId:    string
+  invoiceId:     string
   customerEmail: string | null
-  vehicle:      InvoiceVehicle | null
-  mechanicName: string
-  serviceType:  string
-  notes:        string | null
-  cost:         number | null
-  serviceDate:  string          // YYYY-MM-DD
+  vehicle:       InvoiceVehicle | null
+  mechanicName:  string
+  mechanicPhone: string | null
+  /** Free text from the invoice lines; categorised before it reaches BD. */
+  serviceType:   string
+  notes:         string | null
+  cost:          number | null
+  serviceDate:   string          // YYYY-MM-DD
+}
+
+/**
+ * garage_service_history.service_type is not free text — a CHECK constraint
+ * (garage_service_history_type) restricts it to a fixed vocabulary, and an
+ * invoice line description like "Labor — Tire Rotation" fails it with 23514.
+ *
+ * Established empirically against the live table; the Garage product owns this
+ * list and does not publish it. 'electrical' is accepted too but nothing in an
+ * invoice maps to it reliably, so it is not inferred.
+ */
+const GARAGE_SERVICE_TYPES = ['oil_change', 'tires', 'brakes', 'transmission', 'diagnostics', 'other'] as const
+type GarageServiceType = typeof GARAGE_SERVICE_TYPES[number]
+
+/** First category whose keywords appear in the invoice text; 'other' otherwise. */
+export function categoriseService(freeText: string): GarageServiceType {
+  const t = freeText.toLowerCase()
+  const rules: Array<[GarageServiceType, RegExp]> = [
+    ['oil_change',   /\boil\b|lube|oil change|filter change/],
+    ['brakes',       /\bbrake|rotor|caliper|brake pad/],
+    ['tires',        /\btire|wheel|rotation|balance|tpms|alignment/],
+    ['transmission', /transmission|clutch|differential|drivetrain/],
+    ['diagnostics',  /diagnos|scan|check engine|fault code|inspection/],
+  ]
+  for (const [type, re] of rules) if (re.test(t)) return type
+  return 'other'
 }
 
 export type GarageSyncResult =
@@ -117,16 +145,16 @@ export function buildGarageJoinUrl(vehicle: InvoiceVehicle | null): string {
 async function findOrCreateGarageVehicle(
   userId: string,
   vehicle: InvoiceVehicle,
-): Promise<{ id: string; created: boolean } | null> {
+): Promise<{ id: string; created: boolean; mileage: number | null } | null> {
   const svc = createServiceClient()
 
-  let query = svc.from('garage_vehicles').select('id').eq('user_id', userId)
+  let query = svc.from('garage_vehicles').select('id, mileage').eq('user_id', userId)
   query = vehicle.vin
     ? query.eq('vin', vehicle.vin)
     : query.eq('year', vehicle.year).eq('make', vehicle.make).eq('model', vehicle.model)
 
   const { data: existing } = await query.limit(1).maybeSingle()
-  if (existing) return { id: existing.id as string, created: false }
+  if (existing) return { id: existing.id as string, created: false, mileage: (existing.mileage as number | null) ?? null }
 
   const { data: inserted, error } = await svc
     .from('garage_vehicles')
@@ -146,7 +174,7 @@ async function findOrCreateGarageVehicle(
     console.error('[garage/link] could not create garage vehicle:', error.message)
     return null
   }
-  return { id: inserted.id as string, created: true }
+  return { id: inserted.id as string, created: true, mileage: vehicle.mileage }
 }
 
 /**
@@ -206,17 +234,31 @@ export async function syncInvoiceToGarage(input: GarageSyncInput): Promise<Garag
     return { linked: true, posted: false, nwiGarageId: account.nwiGarageId, reason: 'vehicle lookup failed' }
   }
 
+  // mileage_at_service is NOT NULL. An invoice whose vehicle has no odometer
+  // reading falls back to whatever the garage already knows; posting a 0 would
+  // corrupt the customer's mileage history and their service reminders, which
+  // are driven off due_mileage.
+  const mileage = input.vehicle.mileage ?? garageVehicle.mileage
+  if (mileage == null) {
+    return { linked: true, posted: false, nwiGarageId: account.nwiGarageId, reason: 'no mileage available' }
+  }
+
   const { data: record, error } = await svc
     .from('garage_service_history')
     .insert({
       vehicle_id:         garageVehicle.id,
       user_id:            account.userId,
       service_date:       input.serviceDate,
-      mileage_at_service: input.vehicle.mileage,
-      service_type:       input.serviceType,
-      notes:              input.notes,
-      mechanic_name:      input.mechanicName,
-      cost:               input.cost,
+      mileage_at_service: mileage,
+      // Constrained vocabulary — see categoriseService.
+      service_type:        categoriseService(input.serviceType),
+      // The real line detail, which service_type cannot carry.
+      service_description: input.serviceType,
+      notes:               input.notes,
+      mechanic_name:       input.mechanicName,
+      mechanic_phone:      input.mechanicPhone,
+      logged_by_mechanic:  true,
+      cost:                input.cost,
     })
     .select('id')
     .single()
