@@ -14,6 +14,7 @@ export async function POST(req: NextRequest) {
 
     let body: {
       unit_id?: string
+      work_order_id?: string
       fleet_account_id?: string
       inspection_date: string
       inspector_name?: string
@@ -145,6 +146,7 @@ export async function POST(req: NextRequest) {
       .insert({
         user_id:               user.id,
         unit_id:               body.unit_id ?? null,
+        work_order_id:         body.work_order_id ?? null,
         fleet_account_id:      body.fleet_account_id ?? null,
         inspection_date:       body.inspection_date,
         inspector_name:        body.inspector_name ?? null,

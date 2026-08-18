@@ -10,6 +10,7 @@ export default async function NewDOTInspectionPage({
 }: {
   searchParams: Promise<{
     unit?: string
+    work_order?: string
     invoice_id?: string
     customer_name?: string
     unit_manufacturer?: string
@@ -97,6 +98,7 @@ export default async function NewDOTInspectionPage({
         }}
         initialUnitId={initialUnitId}
         prefill={prefill}
+        workOrderId={typeof params.work_order === 'string' ? params.work_order : null}
       />
     </main>
   )

@@ -194,6 +194,42 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
           </span>
         </div>
 
+        {/* Start an inspection against this job.
+            unit and work_order are carried in the URL so the form pre-fills and
+            the finished record links back here — the work_order_id columns on
+            both inspection tables had no writer before this. The DOT form also
+            takes the free-text unit fields, since it can run against a machine
+            that is not a registered unit and would otherwise lose that context. */}
+        <div className="px-5 py-3 flex flex-wrap gap-2" style={{ background: '#0f1820', borderBottom: '1px solid #1e3040' }}>
+          <Link
+            href={`/hd/aerial-inspections/new?work_order=${workOrderId}${wo.unit ? `&unit=${wo.unit.id}` : ''}`}
+            className="px-4 py-2 rounded-lg text-xs font-condensed font-bold tracking-wide transition-colors"
+            style={{ background: `${HD_ORANGE}18`, color: HD_ORANGE, border: `1px solid ${HD_ORANGE}55` }}
+          >
+            + Start Aerial Inspection
+          </Link>
+          <Link
+            href={
+              `/hd/dot-inspections/new?work_order=${workOrderId}` +
+              (wo.unit
+                ? `&unit=${wo.unit.id}` +
+                  `&unit_manufacturer=${encodeURIComponent(wo.unit.manufacturer ?? '')}` +
+                  `&unit_model=${encodeURIComponent(wo.unit.model ?? '')}` +
+                  `&unit_serial=${encodeURIComponent(wo.unit.serial_number ?? '')}`
+                : '')
+            }
+            className="px-4 py-2 rounded-lg text-xs font-condensed font-bold tracking-wide transition-colors"
+            style={{ background: '#162030', color: 'rgba(255,255,255,0.7)', border: '1px solid #1e3040' }}
+          >
+            + Start DOT Inspection
+          </Link>
+          {!wo.unit && (
+            <p className="text-xs self-center" style={{ color: 'rgba(255,255,255,0.3)' }}>
+              No unit on this work order — you will select one on the form.
+            </p>
+          )}
+        </div>
+
         <div style={{ background: '#111920' }}>
           {inspections.length === 0 ? (
             <div className="p-5">

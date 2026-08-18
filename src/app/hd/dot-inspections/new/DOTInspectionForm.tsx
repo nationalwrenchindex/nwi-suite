@@ -63,6 +63,8 @@ interface Props {
   profile:       Profile
   initialUnitId: string | null
   prefill?:      Prefill | null
+  /** Set when started from a work order, so the record links back to the job. */
+  workOrderId?:  string | null
 }
 
 // ─── Sub-item row ─────────────────────────────────────────────────────────────
@@ -232,7 +234,7 @@ function InfoCell({ label, value, editable, type = 'text', onChange, children }:
 
 // ─── Main form ────────────────────────────────────────────────────────────────
 
-export default function DOTInspectionForm({ units, fleetAccounts, invoices, profile, initialUnitId, prefill }: Props) {
+export default function DOTInspectionForm({ units, fleetAccounts, invoices, profile, initialUnitId, prefill, workOrderId }: Props) {
   const router = useRouter()
 
   // Auto-generate inspection ID on mount
@@ -358,6 +360,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
           unit_serial:           (selectedUnit?.serial_number || unitSerial) || undefined,
           invoice_action:        invoiceAction,
           invoice_id:            invoiceIdToSend,
+          work_order_id:         workOrderId ?? null,
         }),
       })
       const json = await res.json() as { id?: string; error?: string; invoice_id?: string | null }
