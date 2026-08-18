@@ -342,13 +342,22 @@ export default async function FleetUnitsPage({
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <Link
-                        href={scopedAccountId ? `?edit=${u.id}&fleet_account_id=${scopedAccountId}` : `?edit=${u.id}`}
-                        className="text-xs font-semibold px-3 py-1 rounded-lg"
-                        style={{ color: '#60A5FA', border: '1px solid #1e3040' }}
-                      >
-                        Edit
-                      </Link>
+                      <div className="flex gap-2 justify-end">
+                        <Link
+                          href={`/hd/fleet-units/${u.id}/inspections`}
+                          className="text-xs font-semibold px-3 py-1 rounded-lg whitespace-nowrap"
+                          style={{ color: 'rgba(255,255,255,0.6)', border: '1px solid #1e3040' }}
+                        >
+                          Inspections
+                        </Link>
+                        <Link
+                          href={scopedAccountId ? `?edit=${u.id}&fleet_account_id=${scopedAccountId}` : `?edit=${u.id}`}
+                          className="text-xs font-semibold px-3 py-1 rounded-lg"
+                          style={{ color: '#60A5FA', border: '1px solid #1e3040' }}
+                        >
+                          Edit
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 )

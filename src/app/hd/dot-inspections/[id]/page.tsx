@@ -23,7 +23,8 @@ export default async function DOTInspectionPage({
     .from('hd_dot_inspections')
     .select(`
       id, inspection_id, inspection_date, inspector_name, inspector_cert_number,
-      odometer_hours, location, inspection_data, violations, overall_result,
+      odometer_hours, location, carrier_address, license_plate,
+      inspection_data, violations, overall_result,
       signature_data, locked, locked_at, created_at,
       unit:hd_units(unit_number, manufacturer, model, serial_number),
       fleet_account:hd_fleet_accounts(fleet_name)

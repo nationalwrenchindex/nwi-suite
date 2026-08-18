@@ -17,6 +17,7 @@ export const INSPECTION_CATEGORIES = [
   { id: 'speedometer',         label: 'Speedometer',                    num: 16 },
   { id: 'seat_belts',          label: 'Seat Belts',                     num: 17 },
   { id: 'cargo_securing',      label: 'Cargo Securing Devices',         num: 18 },
+  { id: 'emergency_equipment', label: 'Emergency Equipment',            num: 19 },
 ] as const
 
 export type CategoryId = typeof INSPECTION_CATEGORIES[number]['id']
@@ -52,6 +53,9 @@ export interface ViolationRecord {
 export const CATEGORY_ITEMS: Record<string, SubItemDef[]> = {
   brake_systems: [
     { id: 'lining_thickness',     label: 'Brake lining thickness — steer axle min 1/4”, others min 1/8”', safetyCritical: true },
+    { id: 'service_brakes',       label: 'Service brakes operate on all wheels required to be equipped', safetyCritical: true },
+    { id: 'parking_brake',        label: 'Parking brake system holds vehicle and operates as required', safetyCritical: true },
+    { id: 'tractor_protection',   label: 'Tractor protection valve and emergency (breakaway) system functional' },
     { id: 'drum_rotor',           label: 'Brake drum or rotor condition — no cracks or holes' },
     { id: 'hose_condition',       label: 'Brake hose condition — no chafing, cracks, cuts or abrasions' },
     { id: 'tubing_condition',     label: 'Brake tubing condition — no leaks, proper support' },
@@ -67,6 +71,7 @@ export const CATEGORY_ITEMS: Record<string, SubItemDef[]> = {
     { id: 'pintle_hook',       label: 'Pintle hook — no cracks, properly mounted, latch engaged' },
     { id: 'drawbar',           label: 'Drawbar — no cracks, properly attached' },
     { id: 'safety_chains',     label: 'Safety chains or cables — proper condition and attachment' },
+    { id: 'saddle_mounts',     label: 'Saddle-mounts — properly secured, no missing or damaged fasteners' },
     { id: 'king_pin',          label: 'King pin — no excessive wear' },
     { id: 'upper_coupler',     label: 'Upper coupler plate — no cracks or damage' },
     { id: 'locking_mechanism', label: 'Locking mechanism fully engaged — no visible gap between upper and lower coupler' },
@@ -146,6 +151,7 @@ export const CATEGORY_ITEMS: Record<string, SubItemDef[]> = {
     { id: 'lug_nuts',        label: 'All lug nuts present and properly torqued' },
     { id: 'studs',           label: 'No missing or damaged studs' },
     { id: 'loose_wheels',    label: 'No loose wheels — check for rust trails' },
+    { id: 'lock_side_ring',  label: 'Lock or side ring properly seated — not bent, broken, cracked, sprung or mismatched', safetyCritical: true },
     { id: 'valve_seated',    label: 'Tubeless tire valves properly seated' },
     { id: 'no_welded_steer', label: 'No welded or brazed wheels on steering axle' },
   ],
@@ -191,6 +197,11 @@ export const CATEGORY_ITEMS: Record<string, SubItemDef[]> = {
     { id: 'front_end_structure', label: 'Front end structure present where required' },
     { id: 'dunnage_bags',        label: 'Dunnage bags in good condition if used' },
     { id: 'blocking_bracing',    label: 'Blocking and bracing adequate for cargo type' },
+  ],
+  emergency_equipment: [
+    { id: 'fire_extinguisher',  label: 'Fire extinguisher present, properly rated, charged and securely mounted', safetyCritical: true },
+    { id: 'warning_devices',    label: 'Warning devices — 3 bidirectional reflective triangles present and serviceable' },
+    { id: 'spare_fuses',        label: 'Spare fuses — one spare per type/size required, unless non-fuse protected' },
   ],
 }
 

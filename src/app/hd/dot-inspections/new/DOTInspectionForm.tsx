@@ -248,6 +248,9 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
   const [inspectorCert,   setInspectorCert]  = useState(profile.hd_epa_cert_number ?? '')
   const [odometerHours,   setOdometerHours]  = useState('')
   const [location,        setLocation]       = useState('')
+  // 49 CFR 396.21(a) report identification fields.
+  const [carrierAddress,  setCarrierAddress] = useState('')
+  const [licensePlate,    setLicensePlate]   = useState('')
   const [inspData,        setInspData]       = useState<InspectionData>(initialInspectionData)
   const [hasSignature,    setHasSignature]   = useState(false)
   const [signedAt,        setSignedAt]       = useState<string | null>(null)
@@ -345,6 +348,8 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
           inspector_cert_number: inspectorCert || undefined,
           odometer_hours:        odometerHours || undefined,
           location:              location || undefined,
+          carrier_address:       carrierAddress || undefined,
+          license_plate:         licensePlate || undefined,
           inspection_data:       inspData,
           signature_data:        signatureData,
           customer_name:         (selectedAccount?.fleet_name || customerName) || undefined,
@@ -549,6 +554,10 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
                         className="w-full bg-transparent text-sm text-white outline-none border-b border-dashed placeholder-white/25"
                         style={{ borderColor: 'rgba(255,255,255,0.15)', paddingBottom: 2 }} />}
                 </InfoCell>
+              </tr>
+              <tr>
+                <InfoCell label="Motor Carrier Address" value={carrierAddress} editable onChange={setCarrierAddress} />
+                <InfoCell label="License Plate No. / State" value={licensePlate} editable onChange={setLicensePlate} />
               </tr>
               <tr>
                 <InfoCell label="Manufacturer / Model">

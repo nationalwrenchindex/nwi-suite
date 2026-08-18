@@ -1,6 +1,7 @@
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDStarterAccess } from '@/lib/hd-access'
+import { fetchWorkOrderInspections } from '@/lib/hd/inspections'
 import WorkOrderDetail from './WorkOrderDetail'
 
 export const metadata = { title: 'Work Order — NWI HD Suite' }
@@ -18,7 +19,7 @@ export default async function WorkOrderDetailPage({
   const hasAccess = await checkHDStarterAccess(user.id)
   if (!hasAccess) redirect('/hd/upgrade')
 
-  const [{ data: wo }, { data: photos }] = await Promise.all([
+  const [{ data: wo }, { data: photos }, inspections] = await Promise.all([
     supabase
       .from('hd_work_orders')
       .select(`
@@ -36,6 +37,7 @@ export default async function WorkOrderDetailPage({
       .select('id, category, file_url, file_name, caption, taken_at')
       .eq('work_order_id', id)
       .order('taken_at', { ascending: true }),
+    fetchWorkOrderInspections(supabase, user.id, id),
   ])
 
   if (!wo) notFound()
@@ -55,6 +57,7 @@ export default async function WorkOrderDetailPage({
       <WorkOrderDetail
         workOrder={wo as unknown as Parameters<typeof WorkOrderDetail>[0]['workOrder']}
         photos={photosWithUrls}
+        inspections={inspections}
         workOrderId={id}
       />
     </main>

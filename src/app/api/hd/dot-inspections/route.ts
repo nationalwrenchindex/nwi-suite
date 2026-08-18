@@ -20,6 +20,8 @@ export async function POST(req: NextRequest) {
       inspector_cert_number?: string
       odometer_hours?: string
       location?: string
+      carrier_address?: string
+      license_plate?: string
       inspection_data: Record<string, { items: Record<string, { result: string; notes: string }> }>
       signature_data?: string
       customer_name?: string
@@ -149,6 +151,8 @@ export async function POST(req: NextRequest) {
         inspector_cert_number: body.inspector_cert_number ?? null,
         odometer_hours:        body.odometer_hours ?? null,
         location:              body.location ?? null,
+        carrier_address:       body.carrier_address ?? null,
+        license_plate:         body.license_plate ?? null,
         inspection_data:       body.inspection_data,
         violations:            violations.length > 0 ? violations : null,
         overall_result:        overallResult,

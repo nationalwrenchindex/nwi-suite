@@ -29,6 +29,8 @@ interface DOTInspection {
   inspector_cert_number: string | null
   odometer_hours: string | null
   location: string | null
+  carrier_address: string | null
+  license_plate: string | null
   inspection_data: Record<string, { items: Record<string, { result: string; notes: string }> }>
   violations: ViolationRecord[] | null
   overall_result: string
@@ -179,6 +181,8 @@ export default function DOTInspectionDetail({ inspection }: { inspection: DOTIns
               { label: 'Make / Model',   value: inspection.unit ? `${inspection.unit.manufacturer} ${inspection.unit.model}` : '—' },
               { label: 'Serial / VIN',   value: inspection.unit?.serial_number   ?? '—' },
               { label: 'Fleet Account',  value: inspection.fleet_account?.fleet_name ?? '—' },
+              { label: 'Carrier Address',value: inspection.carrier_address       ?? '—' },
+              { label: 'License Plate',  value: inspection.license_plate         ?? '—' },
               { label: 'Odometer / Hrs', value: inspection.odometer_hours        ?? '—' },
               { label: 'Location',       value: inspection.location              ?? '—' },
             ].map(({ label, value }) => (
@@ -364,13 +368,15 @@ export default function DOTInspectionDetail({ inspection }: { inspection: DOTIns
               { label: 'Make / Model',   value: inspection.unit ? `${inspection.unit.manufacturer} ${inspection.unit.model}` : '—' },
               { label: 'Serial / VIN',   value: inspection.unit?.serial_number   ?? '—' },
               { label: 'Fleet Account',  value: inspection.fleet_account?.fleet_name ?? '—' },
+              { label: 'Carrier Address',value: inspection.carrier_address       ?? '—' },
+              { label: 'License Plate',  value: inspection.license_plate         ?? '—' },
               { label: 'Odometer / Hrs', value: inspection.odometer_hours        ?? '—' },
               { label: 'Location',       value: inspection.location              ?? '—' },
               { label: 'Inspection Date',value: new Date(inspection.inspection_date + 'T12:00:00').toLocaleDateString() },
               { label: 'Inspector',      value: inspection.inspector_name        ?? '—' },
               { label: 'Cert #',         value: inspection.inspector_cert_number ?? '—' },
             ].map(({ label, value }, i) => (
-              <div key={i} style={{ padding: '5px 10px', borderBottom: i < 6 ? '1px solid #eee' : undefined, borderRight: i % 3 < 2 ? '1px solid #eee' : undefined }}>
+              <div key={i} style={{ padding: '5px 10px', borderBottom: i < 9 ? '1px solid #eee' : undefined, borderRight: i % 3 < 2 ? '1px solid #eee' : undefined }}>
                 <div style={{ fontSize: 7, fontWeight: 700, color: '#888', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</div>
                 <div style={{ fontSize: 10, fontWeight: 600, marginTop: 1 }}>{value}</div>
               </div>
@@ -381,7 +387,7 @@ export default function DOTInspectionDetail({ inspection }: { inspection: DOTIns
         {/* Categories — compact pass/fail grid, expand failures with item detail */}
         <div style={{ border: '1px solid #ccc', borderRadius: 4, marginBottom: 12 }}>
           <div style={{ background: '#f5f5f5', padding: '5px 10px', fontSize: 9, fontWeight: 700, letterSpacing: 1, textTransform: 'uppercase', borderBottom: '1px solid #ccc' }}>
-            CVSA Inspection Results — 18 Categories
+            CVSA Inspection Results — {INSPECTION_CATEGORIES.length} Categories
           </div>
           {INSPECTION_CATEGORIES.map((cat, i) => {
             const catData  = inspection.inspection_data[cat.id]
@@ -392,7 +398,7 @@ export default function DOTInspectionDetail({ inspection }: { inspection: DOTIns
             const failedItems = items.filter(item => catData?.items?.[item.id]?.result === 'fail')
 
             return (
-              <div key={cat.id} style={{ borderBottom: i < 17 ? '1px solid #eee' : undefined, background: isFail ? '#fff8f8' : undefined }}>
+              <div key={cat.id} style={{ borderBottom: i < INSPECTION_CATEGORIES.length - 1 ? '1px solid #eee' : undefined, background: isFail ? '#fff8f8' : undefined }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 10px' }}>
                   <span style={{ fontSize: 8, color: '#999', width: 16, textAlign: 'right', flexShrink: 0 }}>{cat.num}</span>
                   <span style={{ flex: 1, fontSize: 10 }}>{cat.label}</span>

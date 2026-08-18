@@ -3,6 +3,9 @@
 import { useState, useRef } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+// Safe from a client component: the module's only server dependency is a type-only
+// import of the Supabase server client, which is erased at build time.
+import { inspectionDateLabel, type InspectionSummary } from '@/lib/hd/inspections'
 
 const HD_ORANGE = '#E85D24'
 
@@ -39,6 +42,7 @@ type Photo = {
 interface Props {
   workOrder: WO
   photos: Photo[]
+  inspections: InspectionSummary[]
   workOrderId: string
 }
 
@@ -72,7 +76,7 @@ async function compressImage(file: File, maxPx = 1400, quality = 0.82): Promise<
   })
 }
 
-export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, workOrderId }: Props) {
+export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, inspections, workOrderId }: Props) {
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos)
   const [uploading, setUploading] = useState<Record<string, boolean>>({})
   const [lightbox, setLightbox] = useState<string | null>(null)
@@ -179,6 +183,63 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
             <p className="text-sm whitespace-pre-wrap" style={{ color: 'rgba(255,255,255,0.75)' }}>{wo.comments}</p>
           </div>
         )}
+      </div>
+
+      {/* Inspections — aerial and DOT records attached to this work order */}
+      <div className="rounded-xl overflow-hidden mb-6" style={{ border: '1px solid #1e3040' }}>
+        <div className="px-5 py-3 flex items-center justify-between" style={{ background: '#0d1820', borderBottom: '1px solid #1e3040' }}>
+          <p className="font-condensed font-bold text-white text-sm tracking-widest">INSPECTIONS</p>
+          <span className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
+            {inspections.length} record{inspections.length !== 1 ? 's' : ''}
+          </span>
+        </div>
+
+        <div style={{ background: '#111920' }}>
+          {inspections.length === 0 ? (
+            <div className="p-5">
+              <p className="text-xs py-4 text-center" style={{ color: 'rgba(255,255,255,0.25)', border: '1px dashed #1e3040', borderRadius: 8 }}>
+                No inspections attached to this work order
+              </p>
+            </div>
+          ) : (
+            inspections.map((ins, i) => {
+              const isPassed = ins.result === 'pass'
+              return (
+                <div
+                  key={`${ins.family}-${ins.id}`}
+                  className="flex items-center justify-between gap-3 px-5 py-4"
+                  style={{ borderTop: i > 0 ? '1px solid #1e3040' : undefined }}
+                >
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-white">{ins.typeLabel}</p>
+                    <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                      {inspectionDateLabel(ins.date)} · {ins.inspectorName ?? 'Unsigned'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <span
+                      className="text-xs font-bold px-2.5 py-1 rounded-full"
+                      style={{
+                        background: isPassed ? '#22C55E20' : '#EF444420',
+                        color:      isPassed ? '#22C55E'   : '#EF4444',
+                        border:     `1px solid ${isPassed ? '#22C55E50' : '#EF444450'}`,
+                      }}
+                    >
+                      {isPassed ? 'PASS' : 'FAIL'}
+                    </span>
+                    <Link
+                      href={ins.href}
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold"
+                      style={{ background: `${HD_ORANGE}20`, color: HD_ORANGE, border: `1px solid ${HD_ORANGE}40` }}
+                    >
+                      View
+                    </Link>
+                  </div>
+                </div>
+              )
+            })
+          )}
+        </div>
       </div>
 
       {/* Photo Documentation */}
