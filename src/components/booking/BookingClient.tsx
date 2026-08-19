@@ -421,6 +421,7 @@ export default function BookingClient({
   const [firstName, setFirstName] = useState('')
   const [lastName,  setLastName]  = useState('')
   const [phone,     setPhone]     = useState('')
+  const [serviceAddress, setServiceAddress] = useState('')
   const [email,     setEmail]     = useState('')
   const [vYear,     setVYear]     = useState('')
   const [vMake,     setVMake]     = useState('')
@@ -483,7 +484,12 @@ export default function BookingClient({
     if (step === infoStep) return (
       firstName.trim() !== '' &&
       lastName.trim()  !== '' &&
-      (!smsConsent || phone.trim() !== '')
+      // Phone and address are required for every booking. Phone used to be
+      // conditional on the SMS-consent checkbox, so a customer who left it
+      // unticked could book with neither a number nor an address — leaving the
+      // technician a job with no way to reach them and no idea where to go.
+      phone.replace(/\D/g, '').length >= 10 &&
+      serviceAddress.trim() !== ''
     )
     return true
   }
@@ -524,10 +530,11 @@ export default function BookingClient({
         sms_consent:                smsConsent,
         vehicle_category:           vehicleCategory || null,
         photos:                     uploadedPhotoUrls,
+        location_address:           serviceAddress.trim(),
         customer: {
           first_name: firstName.trim(),
           last_name:  lastName.trim(),
-          phone:      phone.trim() || null,
+          phone:      phone.trim(),
           email:      email.trim() || null,
         },
       }
@@ -841,11 +848,26 @@ export default function BookingClient({
 
                 <div>
                   <label className="nwi-label">
-                    Phone number{smsConsent ? <span className="text-danger"> *</span> : null}
+                    Phone number<span className="text-danger"> *</span>
                   </label>
                   <input className="nwi-input" type="tel" placeholder="(555) 867-5309"
                     value={phone} onChange={e => setPhone(e.target.value)} />
-                  <p className="text-white/25 text-xs mt-1">Required if you want SMS notifications. Optional otherwise.</p>
+                  <p className="text-white/25 text-xs mt-1">
+                    So your technician can confirm the appointment or reach you on the day.
+                  </p>
+                </div>
+
+                {/* Service address — where the mobile technician is going. */}
+                <div>
+                  <label className="nwi-label">
+                    Service address<span className="text-danger"> *</span>
+                  </label>
+                  <input className="nwi-input" type="text"
+                    placeholder="123 Main St, Winston-Salem, NC 27101"
+                    value={serviceAddress} onChange={e => setServiceAddress(e.target.value)} />
+                  <p className="text-white/25 text-xs mt-1">
+                    Street, city and ZIP where the vehicle will be.
+                  </p>
                 </div>
 
                 {/* SMS consent — TCR/A2P 10DLC compliance */}
@@ -1021,6 +1043,11 @@ export default function BookingClient({
                   <p className="text-white/30 text-[10px] uppercase tracking-widest mb-1">Customer</p>
                   <p className="text-white text-sm">{firstName} {lastName}</p>
                   <p className="text-white/50 text-xs">{phone}{email ? ` · ${email}` : ''}</p>
+                  {/* Shown on review so a wrong address is caught before the
+                      technician drives to it. */}
+                  {serviceAddress && (
+                    <p className="text-white/50 text-xs mt-0.5">{serviceAddress}</p>
+                  )}
                 </div>
                 {(vMake || vModel) && (
                   <div className="pb-3 border-b border-dark-border">

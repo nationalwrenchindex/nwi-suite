@@ -1,9 +1,9 @@
-import { NextResponse, type NextRequest } from 'next/server'
+import { NextResponse, after, type NextRequest } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { dispatchNotification, notifyMechanic } from '@/lib/notifications'
 import { getServicesByBusinessType } from '@/lib/scheduler'
 import { INSPECTION_POINTS, getMappedService } from '@/lib/mpi-catalog'
-import { sendSubscriberSms } from '@/lib/twilio'
+import { sendSmsResult } from '@/lib/twilio'
 
 type RouteContext = { params: Promise<{ slug: string }> }
 
@@ -248,9 +248,20 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     return NextResponse.json({ error: 'customer first_name and last_name are required' }, { status: 400 })
 
   const smsConsent = body.sms_consent === true
-  // Phone is required only when customer opted into SMS
-  if (smsConsent && !customer?.phone)
-    return NextResponse.json({ error: 'phone is required when SMS consent is given' }, { status: 400 })
+
+  // Phone and service address are required for every booking, not just when SMS
+  // consent is given. A mobile mechanic cannot run the job without knowing where
+  // to go, and cannot confirm or reschedule without a number — bookings were
+  // arriving with neither.
+  const phoneDigits = String(customer?.phone ?? '').replace(/\D/g, '')
+  if (!phoneDigits)
+    return NextResponse.json({ error: 'phone is required' }, { status: 400 })
+  if (phoneDigits.length < 10)
+    return NextResponse.json({ error: 'phone must be a valid 10-digit number' }, { status: 400 })
+
+  const locationAddress = typeof body.location_address === 'string' ? body.location_address.trim() : ''
+  if (!locationAddress)
+    return NextResponse.json({ error: 'service address is required' }, { status: 400 })
 
   // Server-side time validation — reject past slots and same-day slots inside the buffer
   const { dateStr: todayStr, nowMin } = getTechNow(DEFAULT_TIMEZONE)
@@ -386,6 +397,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       service_type:               primaryService,
       services:                   servicesRaw,
       status:                     'scheduled',
+      location_address:           locationAddress,
       estimated_duration_minutes: estimated_duration_minutes ? Number(estimated_duration_minutes) : null,
       notes:                      notes ? String(notes) : null,
       inspection_requested:       wantsInspection,
@@ -440,12 +452,20 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       const p = profile as Record<string, unknown>
       const customerObj = customer as Record<string, unknown>
       const customerName = `${customerObj.first_name} ${customerObj.last_name}`
-      notifyMechanic({
-        supabase,
-        mechanicId: techId,
-        message:    `New booking with 25-Point Inspection requested: ${customerName} — ${service_type} on ${job_date}. Check your scheduler for details.`,
-        subject:    `25-Point Inspection Requested — ${customerName}`,
-      }).catch((e) => console.error('[POST /api/book] mechanic notify error:', e))
+      // after() for the same reason as the notifications below: this was a
+      // floating promise the runtime could discard the moment we responded.
+      after(async () => {
+        try {
+          await notifyMechanic({
+            supabase,
+            mechanicId: techId,
+            message:    `New booking with 25-Point Inspection requested: ${customerName} — ${service_type} on ${job_date}. Check your scheduler for details.`,
+            subject:    `25-Point Inspection Requested — ${customerName}`,
+          })
+        } catch (e) {
+          console.error('[POST /api/book] mechanic notify error:', e)
+        }
+      })
 
       void p // suppress unused warning
     } catch (e) {
@@ -453,34 +473,62 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     }
   }
 
-  // ── Fire booking confirmation (to customer) ──
-  dispatchNotification({
-    trigger:  'booking_confirmation',
-    jobId,
-    supabase,
-  }).catch((err) => console.error('[POST /api/book] notification error:', err))
+  // ── Notifications ─────────────────────────────────────────────────────────
+  // Scheduled with after() rather than left as floating promises.
+  //
+  // These were `dispatchNotification(...).catch()` and `void (async () => …)()`
+  // — started, then abandoned as the handler returned. On Vercel the function
+  // can be frozen or torn down the moment the response is sent, so whether the
+  // SMS and email actually went out depended on whether the runtime happened to
+  // still be alive. That is why notifications "stopped": nothing changed in the
+  // sending code, the platform simply stopped winning the race.
+  //
+  // after() is the supported way to run work post-response: the customer still
+  // gets an immediate confirmation, but the runtime is kept alive until this
+  // finishes.
+  after(async () => {
+    // Customer confirmation.
+    try {
+      const result = await dispatchNotification({ trigger: 'booking_confirmation', jobId, supabase })
+      if (!result.success) {
+        console.error('[POST /api/book] customer notification failed:', result.error)
+      }
+    } catch (err) {
+      console.error('[POST /api/book] customer notification error:', err)
+    }
 
-  // ── Subscriber booking SMS (to the tech) — fire-and-forget ──
-  void (async () => {
+    // Mechanic SMS.
     try {
       const subPhone   = profile.phone as string | null
       const subEnabled = (profile as Record<string, unknown>).sms_booking_notifications_enabled as boolean ?? true
-      if (!subEnabled || !subPhone) return
-      if (subPhone.replace(/\D/g, '').length < 10) return
-
-      const smsBody = buildBookingSmsBody({
-        customerFirstName: String(customer.first_name),
-        services:          servicesRaw,
-        primaryService,
-        jobDate:           String(job_date),
-        jobTime:           String(job_time),
-        customerPhone:     rawPhone || undefined,
-      })
-      await sendSubscriberSms({ to: subPhone, body: smsBody })
+      if (!subEnabled) {
+        console.log('[POST /api/book] mechanic SMS skipped: disabled in settings')
+      } else if (!subPhone || subPhone.replace(/\D/g, '').length < 10) {
+        // Silent before this: a tech with no phone on their profile got no
+        // notification and no indication why.
+        console.warn('[POST /api/book] mechanic SMS skipped: no usable phone on profile')
+      } else {
+        const smsBody = buildBookingSmsBody({
+          customerFirstName: String(customer.first_name),
+          services:          servicesRaw,
+          primaryService,
+          jobDate:           String(job_date),
+          jobTime:           String(job_time),
+          customerPhone:     rawPhone || undefined,
+        })
+        // sendSmsResult rather than sendSubscriberSms: same send path, but it
+        // returns the outcome. The void-returning variant swallowed Twilio
+        // failures, so a mechanic whose number was unreachable looked identical
+        // in the logs to one who was messaged successfully.
+        const sms = await sendSmsResult({ to: subPhone, body: smsBody })
+        if (!sms.success) {
+          console.error('[POST /api/book] mechanic SMS failed:', sms.error)
+        }
+      }
     } catch (err) {
-      console.error('[POST /api/book] subscriber SMS error:', err)
+      console.error('[POST /api/book] mechanic SMS error:', err)
     }
-  })()
+  })
 
   return NextResponse.json({
     job: {
