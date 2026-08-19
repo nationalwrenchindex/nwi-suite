@@ -14,6 +14,7 @@ export default function InvoiceDetailActions({
   customerPhone,
   pmChecklistId = null,
   dotInspectionId = null,
+  aerialInspectionId = null,
 }: {
   invoiceId: string
   invoiceNumber: string
@@ -21,6 +22,7 @@ export default function InvoiceDetailActions({
   customerPhone: string | null
   pmChecklistId?: string | null
   dotInspectionId?: string | null
+  aerialInspectionId?: string | null
 }) {
   const router = useRouter()
   const [busy, setBusy]   = useState(false)
@@ -71,6 +73,9 @@ export default function InvoiceDetailActions({
     }
     if (dotInspectionId) {
       lines.push(`Your invoice includes a DOT inspection report. View it here: ${origin}/hd/dot-inspections/${dotInspectionId}`)
+    }
+    if (aerialInspectionId) {
+      lines.push(`Your invoice includes an aerial inspection report. View it here: ${origin}/hd/aerial-inspections/${aerialInspectionId}`)
     }
     const message = lines.join('\n\n')
     navigator.clipboard.writeText(message).then(() => {

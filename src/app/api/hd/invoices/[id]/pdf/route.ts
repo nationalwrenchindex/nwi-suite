@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
 import { termsDisplay, formatDueDate } from '@/lib/hd/payment-terms'
+import { AERIAL_TYPE_LABEL } from '@/lib/hd/aerial/forms'
+import type { AerialInspectionType } from '@/types/aerial'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,7 +49,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   // Reports attached to this invoice. The customer should end up holding one
   // document that references everything performed, so the printed invoice carries
   // the report summary and an absolute link rather than leaving them to hunt.
-  const [{ data: profile }, { data: pmChecklist }, { data: dotInspection }] = await Promise.all([
+  const [{ data: profile }, { data: pmChecklist }, { data: dotInspection }, { data: aerialInspection }] = await Promise.all([
     supabase
       .from('profiles')
       .select('business_name, phone')
@@ -62,6 +64,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     supabase
       .from('hd_dot_inspections')
       .select('id, inspection_id, overall_result, created_at')
+      .eq('invoice_id', id)
+      .eq('user_id', user.id)
+      .maybeSingle(),
+    supabase
+      .from('hd_aerial_inspections')
+      .select('id, inspection_id, inspection_type, overall_result, removed_from_service, inspection_date')
       .eq('invoice_id', id)
       .eq('user_id', user.id)
       .maybeSingle(),
@@ -82,6 +90,18 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         fmtDate(dotInspection.created_at),
       ].filter(Boolean).join(' · '),
       url:    `${origin}/hd/dot-inspections/${dotInspection.id}`,
+    },
+    aerialInspection && {
+      title:  `ANSI A92 Aerial Inspection${AERIAL_TYPE_LABEL[aerialInspection.inspection_type as AerialInspectionType] ? ` — ${AERIAL_TYPE_LABEL[aerialInspection.inspection_type as AerialInspectionType]}` : ''}`,
+      detail: [
+        aerialInspection.inspection_id,
+        aerialInspection.overall_result ? String(aerialInspection.overall_result).toUpperCase() : null,
+        // OSHA takes a critically deficient machine out of service — the customer's
+        // copy has to say so plainly, not leave it inside the linked report.
+        aerialInspection.removed_from_service ? 'MACHINE REMOVED FROM SERVICE' : null,
+        fmtDate(aerialInspection.inspection_date),
+      ].filter(Boolean).join(' · '),
+      url:    `${origin}/hd/aerial-inspections/${aerialInspection.id}`,
     },
   ].filter(Boolean) as { title: string; detail: string; url: string }[]
 

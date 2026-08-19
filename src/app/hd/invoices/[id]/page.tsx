@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
 import InvoiceDetailActions from './InvoiceDetailActions'
 import { termsDisplay, formatDueDate } from '@/lib/hd/payment-terms'
+import { AERIAL_TYPE_LABEL } from '@/lib/hd/aerial/forms'
+import type { AerialInspectionType } from '@/types/aerial'
 
 const ORANGE = '#FF6600'
 const BLUE   = '#2969B0'
@@ -47,11 +49,12 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const hasAccess = await checkHDAccess(user.id)
   if (!hasAccess) redirect('/hd/signup')
 
-  const [{ data: inv }, { data: profile }, { data: pmChecklist }, { data: dotInspection }] = await Promise.all([
+  const [{ data: inv }, { data: profile }, { data: pmChecklist }, { data: dotInspection }, { data: aerialInspection }] = await Promise.all([
     supabase.from('hd_invoices').select('*').eq('id', id).eq('user_id', user.id).single(),
     supabase.from('profiles').select('business_name, phone').eq('id', user.id).single(),
     supabase.from('hd_pm_checklists').select('id, pm_type').eq('invoice_id', id).eq('user_id', user.id).maybeSingle(),
     supabase.from('hd_dot_inspections').select('id, inspection_id, overall_result').eq('invoice_id', id).eq('user_id', user.id).maybeSingle(),
+    supabase.from('hd_aerial_inspections').select('id, inspection_type, overall_result, removed_from_service').eq('invoice_id', id).eq('user_id', user.id).maybeSingle(),
   ])
 
   if (!inv) notFound()
@@ -93,6 +96,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             customerPhone={inv.customer_phone}
             pmChecklistId={pmChecklist?.id ?? null}
             dotInspectionId={dotInspection?.id ?? null}
+            aerialInspectionId={aerialInspection?.id ?? null}
           />
         </div>
 
@@ -273,7 +277,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             </div>
 
             {/* Attached reports (PM checklist / DOT inspection) */}
-            {(pmChecklist || dotInspection) && (
+            {(pmChecklist || dotInspection || aerialInspection) && (
               <div className="mb-8">
                 <div className="flex items-baseline justify-between mb-3 gap-3 flex-wrap">
                   <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#9CA3AF' }}>Attached Reports</h3>
@@ -306,6 +310,23 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                         <p className="text-xs" style={{ color: '#6B7280' }}>Annual CVSA inspection attached{dotInspection.overall_result ? ` — ${String(dotInspection.overall_result).toUpperCase()}` : ''}</p>
                       </div>
                       <span className="text-sm font-semibold" style={{ color: BLUE }}>View DOT Inspection →</span>
+                    </Link>
+                  )}
+                  {aerialInspection && (
+                    <Link href={`/hd/aerial-inspections/${aerialInspection.id}`} className="flex items-center justify-between p-4 rounded-lg" style={{ background: '#F9FAFB', border: '1px solid #E5E7EB' }}>
+                      <div>
+                        <p className="text-sm font-semibold" style={{ color: '#1A1A1A' }}>🏗 Aerial Inspection</p>
+                        <p className="text-xs" style={{ color: '#6B7280' }}>
+                          ANSI A92 {AERIAL_TYPE_LABEL[aerialInspection.inspection_type as AerialInspectionType] ?? ''} inspection attached
+                          {aerialInspection.overall_result ? ` — ${String(aerialInspection.overall_result).toUpperCase()}` : ''}
+                        </p>
+                        {/* OSHA requires a machine with a critical deficiency be taken out of
+                            service — that belongs on the customer's copy, not buried in the report. */}
+                        {aerialInspection.removed_from_service && (
+                          <p className="text-xs font-semibold mt-0.5" style={{ color: '#dc2626' }}>Machine removed from service</p>
+                        )}
+                      </div>
+                      <span className="text-sm font-semibold" style={{ color: BLUE }}>View Aerial Inspection →</span>
                     </Link>
                   )}
                 </div>

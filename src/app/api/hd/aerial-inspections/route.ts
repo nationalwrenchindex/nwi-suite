@@ -19,6 +19,9 @@ interface Body {
   inspection_type:  AerialInspectionType
   unit_id:          string | null
   work_order_id:    string | null
+  /** Invoice this inspection was billed on (migration 103), so it can appear in
+   *  that invoice's Attached Reports the way a DOT inspection does. */
+  invoice_id:       string | null
   inspection_date:  string
   shift:            string | null
   operator_name:    string | null
@@ -98,6 +101,7 @@ export async function POST(request: NextRequest) {
       user_id:               user.id,
       unit_id:               body.unit_id,
       work_order_id:         body.work_order_id,
+      invoice_id:            body.invoice_id ?? null,
       inspection_type:       body.inspection_type,
       inspection_date:       body.inspection_date,
       shift:                 body.shift,
