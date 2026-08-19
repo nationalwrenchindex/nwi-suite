@@ -26,7 +26,7 @@ function fmtDate(s: string | null | undefined) {
   return new Date(s).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
 }
 
-export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -44,11 +44,56 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   if (error || !inv) return new NextResponse('Not found', { status: 404 })
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('business_name, phone')
-    .eq('id', user.id)
-    .single()
+  // Reports attached to this invoice. The customer should end up holding one
+  // document that references everything performed, so the printed invoice carries
+  // the report summary and an absolute link rather than leaving them to hunt.
+  const [{ data: profile }, { data: pmChecklist }, { data: dotInspection }] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('business_name, phone')
+      .eq('id', user.id)
+      .single(),
+    supabase
+      .from('hd_pm_checklists')
+      .select('id, pm_type, created_at')
+      .eq('invoice_id', id)
+      .eq('user_id', user.id)
+      .maybeSingle(),
+    supabase
+      .from('hd_dot_inspections')
+      .select('id, inspection_id, overall_result, created_at')
+      .eq('invoice_id', id)
+      .eq('user_id', user.id)
+      .maybeSingle(),
+  ])
+
+  const origin = req.nextUrl.origin
+  const attachedReports = [
+    pmChecklist && {
+      title:  'PM Checklist',
+      detail: [pmChecklist.pm_type, fmtDate(pmChecklist.created_at)].filter(Boolean).join(' · '),
+      url:    `${origin}/hd/pm-checklist/${pmChecklist.id}`,
+    },
+    dotInspection && {
+      title:  'DOT Annual Inspection',
+      detail: [
+        dotInspection.inspection_id,
+        dotInspection.overall_result ? String(dotInspection.overall_result).toUpperCase() : null,
+        fmtDate(dotInspection.created_at),
+      ].filter(Boolean).join(' · '),
+      url:    `${origin}/hd/dot-inspections/${dotInspection.id}`,
+    },
+  ].filter(Boolean) as { title: string; detail: string; url: string }[]
+
+  const reportsBlock = attachedReports.length ? `
+  <div class="notes-box">
+    <h3>Attached Reports</h3>
+    ${attachedReports.map(r => `
+      <p style="color:#444;line-height:1.5;font-size:13px;margin-bottom:6px">
+        <strong>${r.title}</strong>${r.detail ? ` — ${r.detail}` : ''}<br>
+        <a href="${r.url}" style="color:#2969B0;font-size:12px;word-break:break-all">${r.url}</a>
+      </p>`).join('')}
+  </div>` : ''
 
   const items: LineItem[] = Array.isArray(inv.line_items) ? inv.line_items : []
 
@@ -209,6 +254,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       <div class="totals-row total"><span>TOTAL</span><span>${fmt(inv.total)}</span></div>
     </div>
   </div>
+
+  ${reportsBlock}
 
   ${inv.notes ? `
   <div class="notes-box">

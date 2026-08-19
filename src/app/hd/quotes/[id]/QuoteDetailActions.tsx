@@ -8,9 +8,22 @@ const BLUE   = '#2969B0'
 
 interface QuoteData {
   id: string
+  status: string
   customer_name: string
   customer_phone: string | null
   customer_email: string | null
+  address_line1: string | null
+  address_line2: string | null
+  city: string | null
+  state: string | null
+  zip: string | null
+  has_corp_address: boolean | null
+  corp_address_line1: string | null
+  corp_address_line2: string | null
+  corp_city: string | null
+  corp_state: string | null
+  corp_zip: string | null
+  payment_terms: string | null
   unit_manufacturer: string | null
   unit_model: string | null
   unit_serial: string | null
@@ -47,6 +60,12 @@ export default function QuoteDetailActions({
   const [toast, setToast] = useState('')
 
   async function convertToInvoice() {
+    // Converting is meant for an approved quote. Anything else is still an estimate
+    // the customer has not agreed to, so make billing it a deliberate choice.
+    if (quoteData.status !== 'approved' && !confirm(
+      `This quote is ${quoteData.status}, not approved.\n\nBill it anyway?`
+    )) return
+
     setBusy(true)
     try {
       const body = {
@@ -54,6 +73,20 @@ export default function QuoteDetailActions({
         customer_name:     quoteData.customer_name,
         customer_phone:    quoteData.customer_phone,
         customer_email:    quoteData.customer_email,
+        // Billing identity travels with the quote — without these the invoice loses
+        // the address and terms the tech already captured and bills to a bare name.
+        address_line1:      quoteData.address_line1,
+        address_line2:      quoteData.address_line2,
+        city:               quoteData.city,
+        state:              quoteData.state,
+        zip:                quoteData.zip,
+        has_corp_address:   !!quoteData.has_corp_address,
+        corp_address_line1: quoteData.has_corp_address ? quoteData.corp_address_line1 : null,
+        corp_address_line2: quoteData.has_corp_address ? quoteData.corp_address_line2 : null,
+        corp_city:          quoteData.has_corp_address ? quoteData.corp_city  : null,
+        corp_state:         quoteData.has_corp_address ? quoteData.corp_state : null,
+        corp_zip:           quoteData.has_corp_address ? quoteData.corp_zip   : null,
+        payment_terms:      quoteData.payment_terms ?? 'net30',
         unit_manufacturer: quoteData.unit_manufacturer,
         unit_model:        quoteData.unit_model,
         unit_serial:       quoteData.unit_serial,

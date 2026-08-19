@@ -275,7 +275,20 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             {/* Attached reports (PM checklist / DOT inspection) */}
             {(pmChecklist || dotInspection) && (
               <div className="mb-8">
-                <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: '#9CA3AF' }}>Attached Reports</h3>
+                <div className="flex items-baseline justify-between mb-3 gap-3 flex-wrap">
+                  <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#9CA3AF' }}>Attached Reports</h3>
+                  {/* The printed invoice carries these too, so the customer ends up
+                      with one document that links out to every report. */}
+                  <a
+                    href={`/api/hd/invoices/${inv.id}/pdf`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs font-semibold"
+                    style={{ color: BLUE }}
+                  >
+                    Print invoice with reports →
+                  </a>
+                </div>
                 <div className="space-y-2">
                   {pmChecklist && (
                     <Link href={`/hd/pm-checklist/${pmChecklist.id}`} className="flex items-center justify-between p-4 rounded-lg" style={{ background: '#F9FAFB', border: '1px solid #E5E7EB' }}>

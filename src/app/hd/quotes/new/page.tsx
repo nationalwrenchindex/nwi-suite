@@ -239,20 +239,35 @@ export default function NewQuotePage() {
         complaint?: string
         diagnosis?: string
         notes?: string
+        labor_rate?: number
+        unit_manufacturer?: string; unit_model?: string; unit_serial?: string; unit_year?: string
+        truck_make?: string; truck_model?: string; truck_year?: string; vin?: string
         lineItems?: Array<{
           description: string
           book_hours: number; book_hours_max: number
           mobile_hours: number; mobile_hours_max: number
         }>
       }
+      // QuickWrench sends the tech's configured rate; fall back to the form default.
+      const rate = Number.isFinite(prefill.labor_rate) && (prefill.labor_rate as number) > 0
+        ? prefill.labor_rate as number
+        : 125
       setForm(f => ({
         ...f,
         ...(prefill.complaint ? { complaint:  prefill.complaint  } : {}),
         ...(prefill.diagnosis ? { diagnosis:  prefill.diagnosis  } : {}),
         ...(prefill.notes     ? { notes:      prefill.notes      } : {}),
+        ...(prefill.unit_manufacturer ? { unit_manufacturer: prefill.unit_manufacturer } : {}),
+        ...(prefill.unit_model  ? { unit_model:  prefill.unit_model  } : {}),
+        ...(prefill.unit_serial ? { unit_serial: prefill.unit_serial } : {}),
+        ...(prefill.unit_year   ? { unit_year:   prefill.unit_year   } : {}),
+        ...(prefill.truck_make  ? { truck_make:  prefill.truck_make  } : {}),
+        ...(prefill.truck_model ? { truck_model: prefill.truck_model } : {}),
+        ...(prefill.truck_year  ? { truck_year:  prefill.truck_year  } : {}),
+        ...(prefill.vin         ? { vin:         prefill.vin         } : {}),
+        labor_rate: rate,
       }))
       if (prefill.lineItems?.length) {
-        const rate = 125
         setLineItems(prefill.lineItems.map(li => ({
           id:                     crypto.randomUUID(),
           type:                   'labor' as const,

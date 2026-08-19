@@ -158,6 +158,54 @@ export default function NewInvoicePage() {
     }
   }, [])
 
+  // Prefill from a QuickWrench diagnostic push. Same payload the quote form reads;
+  // the key is cleared on read so only the destination the tech chose consumes it.
+  // The diagnostic fee arrives as a dedicated field here rather than a labor line,
+  // which is what the invoice form actually bills it with.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('hd_guided_diagnostic_prefill')
+      if (!raw) return
+      localStorage.removeItem('hd_guided_diagnostic_prefill')
+      const p = JSON.parse(raw) as {
+        complaint?: string; diagnosis?: string; notes?: string
+        unit_manufacturer?: string; unit_model?: string; unit_serial?: string; unit_year?: string
+        truck_make?: string; truck_model?: string; truck_year?: string; vin?: string
+        labor_rate?: number; include_diagnostic?: boolean; diagnostic_fee?: number
+        lineItems?: Array<{ description: string; mobile_hours: number }>
+      }
+      const rate = Number.isFinite(p.labor_rate) && (p.labor_rate as number) > 0 ? p.labor_rate as number : 125
+
+      setForm(f => ({
+        ...f,
+        ...(p.complaint ? { complaint: p.complaint } : {}),
+        ...(p.diagnosis ? { diagnosis: p.diagnosis } : {}),
+        ...(p.notes     ? { notes:     p.notes     } : {}),
+        ...(p.unit_manufacturer ? { unit_manufacturer: p.unit_manufacturer } : {}),
+        ...(p.unit_model  ? { unit_model:  p.unit_model  } : {}),
+        ...(p.unit_serial ? { unit_serial: p.unit_serial } : {}),
+        ...(p.unit_year   ? { unit_year:   p.unit_year   } : {}),
+        ...(p.truck_make  ? { truck_make:  p.truck_make  } : {}),
+        ...(p.truck_model ? { truck_model: p.truck_model } : {}),
+        ...(p.truck_year  ? { truck_year:  p.truck_year  } : {}),
+        ...(p.vin         ? { vin:         p.vin         } : {}),
+        labor_rate:         rate,
+        include_diagnostic: !!p.include_diagnostic,
+        diagnostic_fee:     Number.isFinite(p.diagnostic_fee) ? p.diagnostic_fee as number : f.diagnostic_fee,
+      }))
+
+      if (p.lineItems?.length) {
+        setLineItems(p.lineItems.map(li => ({
+          id: crypto.randomUUID(), type: 'labor' as const,
+          description:  li.description,
+          mobile_hours: li.mobile_hours,
+          part_number: '', quantity: 0, unit_cost: 0,
+          amount: parseFloat((li.mobile_hours * rate).toFixed(2)),
+        })))
+      }
+    } catch { /* ignore */ }
+  }, [])
+
   // ── Customer picker ──
   useEffect(() => {
     const q = customerSearch.trim()

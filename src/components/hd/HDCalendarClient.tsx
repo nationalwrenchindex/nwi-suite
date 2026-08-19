@@ -158,13 +158,38 @@ export default function HDCalendarClient() {
   }, [mounted, viewYear, viewMonth, fetchMonth])
 
   // Open the booking modal when arriving from a "+ New Job" link (?new=1),
-  // then strip the param so a refresh doesn't reopen it.
+  // then strip the param so a refresh doesn't reopen it. A QuickWrench "Create Work
+  // Order" push arrives the same way but leaves a diagnostic prefill behind, so the
+  // unit and complaint carry into the booking instead of being retyped.
   useEffect(() => {
-    if (mounted && typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('new') === '1') {
-      openBooking(todayStr())
-      window.history.replaceState(null, '', '/hd/scheduler')
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (!mounted || typeof window === 'undefined') return
+    if (new URLSearchParams(window.location.search).get('new') !== '1') return
+
+    openBooking(todayStr())
+    window.history.replaceState(null, '', '/hd/scheduler')
+
+    try {
+      const raw = localStorage.getItem('hd_guided_diagnostic_prefill')
+      if (!raw) return
+      localStorage.removeItem('hd_guided_diagnostic_prefill')
+      const p = JSON.parse(raw) as {
+        complaint?: string; notes?: string; service_type?: string
+        unit_manufacturer?: string; unit_model?: string; unit_serial?: string
+        lineItems?: Array<{ mobile_hours: number }>
+      }
+      // Seed the duration from the diagnostic's own labor estimate.
+      const hours = (p.lineItems ?? []).reduce((s, li) => s + (Number(li.mobile_hours) || 0), 0)
+      setBookingForm(f => ({
+        ...f,
+        unit_manufacturer: p.unit_manufacturer ?? f.unit_manufacturer,
+        unit_model:        p.unit_model        ?? f.unit_model,
+        unit_serial:       p.unit_serial       ?? f.unit_serial,
+        service_type:      p.service_type      ?? f.service_type,
+        job_description:   p.complaint         ?? f.job_description,
+        notes:             p.notes             ?? f.notes,
+        estimated_duration_hours: hours > 0 ? String(hours) : f.estimated_duration_hours,
+      }))
+    } catch { /* ignore */ }
   }, [mounted])
 
   function prevMonth() {

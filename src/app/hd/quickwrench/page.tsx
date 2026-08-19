@@ -26,6 +26,42 @@ const HD_ORANGE = '#E85D24'
 const HD_BLUE   = '#1A6BAF'
 const NWI_BLUE  = '#2969B0'   // Repair Labor Guide accent
 
+// ─── Push-to-workflow destinations ───────────────────────────────────────────
+// A diagnostic result can become any of the three billing documents. Each page
+// consumes the same hd_guided_diagnostic_prefill payload on mount; the work order
+// lands in the scheduler's booking modal, which is where jobs get created.
+const WORKFLOW_DESTS = {
+  quote:      '/hd/quotes/new',
+  work_order: '/hd/scheduler?new=1',
+  invoice:    '/hd/invoices/new',
+} as const
+type WorkflowDest = keyof typeof WORKFLOW_DESTS
+
+function WorkflowActions({ onPush }: { onPush: (dest: WorkflowDest) => void }) {
+  const buttons: { dest: WorkflowDest; label: string; primary?: boolean }[] = [
+    { dest: 'quote',      label: 'Create Quote', primary: true },
+    { dest: 'work_order', label: 'Create Work Order' },
+    { dest: 'invoice',    label: 'Create Invoice' },
+  ]
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+      {buttons.map(b => (
+        <button
+          key={b.dest}
+          type="button"
+          onClick={() => onPush(b.dest)}
+          className="py-3 rounded-lg text-sm font-semibold transition-colors"
+          style={b.primary
+            ? { background: '#FF6600', color: '#fff', minHeight: 48 }
+            : { background: '#162030', color: 'rgba(255,255,255,0.75)', border: '1px solid #1e3040', minHeight: 48 }}
+        >
+          {b.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 interface ModelGroup { group: string; models: string[] }
 
 const TK_TRUCK_GROUPS: ModelGroup[] = [
@@ -1271,6 +1307,19 @@ export default function HDQuickWrenchPage() {
   const [profileNotes,         setProfileNotes]         = useState('')
   const [includeDiagFee,       setIncludeDiagFee]       = useState(true)
 
+  // The tech's configured labor rate, so a pushed quote/work order/invoice carries
+  // their real rate. Falls back to the same 125 default the destination forms use.
+  const [laborRate,            setLaborRate]            = useState(125)
+  useEffect(() => {
+    fetch('/api/hd/settings')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => {
+        const rate = Number(d?.settings?.hd_labor_rate)
+        if (Number.isFinite(rate) && rate > 0) setLaborRate(rate)
+      })
+      .catch(() => {})
+  }, [])
+
   // ── Parts Manager (shared reefer/truck) ──
   const [partsResult,          setPartsResult]          = useState<string | null>(null)
   const [showDelivery,         setShowDelivery]         = useState(false)
@@ -1780,10 +1829,24 @@ export default function HDQuickWrenchPage() {
       : []),
   ]
 
-  // ── Push-to-Quote ──
+  // ── Push-to-workflow ──
   // Writes the standard hd_guided_diagnostic_prefill object and navigates to the
-  // HD quote page, whose existing consumer hook reads the key on mount. We never
-  // touch the quote page or its API.
+  // chosen destination, whose consumer hook reads the key on mount and clears it.
+  // Every destination gets the same payload; each reads the parts it can use.
+  function pushPrefill(prefill: Record<string, unknown>, dest: WorkflowDest) {
+    try { localStorage.setItem('hd_guided_diagnostic_prefill', JSON.stringify(prefill)) } catch {}
+    router.push(WORKFLOW_DESTS[dest])
+  }
+
+  // The quote form bills the diagnostic as a one-hour labor line; the invoice form
+  // has a dedicated diagnostic-fee field instead. Feed whichever the destination
+  // uses — priced the same either way — so the fee never lands twice or not at all.
+  function diagFeeFields(dest: WorkflowDest) {
+    return dest === 'invoice'
+      ? { labor_rate: laborRate, include_diagnostic: includeDiagFee, diagnostic_fee: laborRate }
+      : { labor_rate: laborRate }
+  }
+
   const DIAG_FEE_LINE = () => ({
     id:                     crypto.randomUUID(),
     type:                   'labor' as const,
@@ -1796,7 +1859,7 @@ export default function HDQuickWrenchPage() {
     amount: 0, amount_max: 0,
   })
 
-  function pushReeferToQuote() {
+  function pushReeferTo(dest: WorkflowDest) {
     if (analysis === null) return
     // Verified labor times aren't present on the client-side tk_sources payload,
     // so this falls back to standard hours; if a book_time/mobile_time ever ships
@@ -1826,6 +1889,8 @@ export default function HDQuickWrenchPage() {
       truck_model:       '',
       truck_year:        '',
       vin:               '',
+      service_type:      'Reefer Diagnostic',
+      ...diagFeeFields(dest),
       lineItems: [
         {
           id:                     crypto.randomUUID(),
@@ -1841,14 +1906,13 @@ export default function HDQuickWrenchPage() {
           amount: 0, amount_max: 0,
         },
         ...buildRepairLines(),
-        ...(includeDiagFee ? [DIAG_FEE_LINE()] : []),
+        ...(includeDiagFee && dest !== 'invoice' ? [DIAG_FEE_LINE()] : []),
       ],
     }
-    try { localStorage.setItem('hd_guided_diagnostic_prefill', JSON.stringify(prefill)) } catch {}
-    router.push('/hd/quotes/new')
+    pushPrefill(prefill, dest)
   }
 
-  function pushTruckToQuote() {
+  function pushTruckTo(dest: WorkflowDest) {
     if (truckAnalysis === null) return
     const spnV      = spn.trim()
     const fmiV      = fmi.trim()
@@ -1865,6 +1929,11 @@ export default function HDQuickWrenchPage() {
       unit_manufacturer: truckBrand,
       unit_model:        engineModel,
       unit_serial:       '',
+      truck_make:        vehicleMake.trim(),
+      truck_model:       vehicleModel.trim(),
+      truck_year:        vehicleYear.trim(),
+      service_type:      'Truck Engine Diagnostic',
+      ...diagFeeFields(dest),
       lineItems: [
         {
           id:                     crypto.randomUUID(),
@@ -1878,11 +1947,10 @@ export default function HDQuickWrenchPage() {
           amount: 0, amount_max: 0,
         },
         ...buildRepairLines(),
-        ...(includeDiagFee ? [DIAG_FEE_LINE()] : []),
+        ...(includeDiagFee && dest !== 'invoice' ? [DIAG_FEE_LINE()] : []),
       ],
     }
-    try { localStorage.setItem('hd_guided_diagnostic_prefill', JSON.stringify(prefill)) } catch {}
-    router.push('/hd/quotes/new')
+    pushPrefill(prefill, dest)
   }
 
   // ── Parts Manager lookups ──
@@ -3058,14 +3126,7 @@ export default function HDQuickWrenchPage() {
                   />
                   Include Diagnostic Fee
                 </label>
-                <button
-                  type="button"
-                  onClick={pushReeferToQuote}
-                  className="w-full py-3 rounded-lg text-sm font-semibold text-white transition-colors"
-                  style={{ background: '#FF6600', minHeight: 48 }}
-                >
-                  Create Quote
-                </button>
+                <WorkflowActions onPush={pushReeferTo} />
               </div>
             )}
           </>
@@ -3372,14 +3433,7 @@ export default function HDQuickWrenchPage() {
                   />
                   Include Diagnostic Fee
                 </label>
-                <button
-                  type="button"
-                  onClick={pushTruckToQuote}
-                  className="w-full py-3 rounded-lg text-sm font-semibold text-white transition-colors"
-                  style={{ background: '#FF6600', minHeight: 48 }}
-                >
-                  Create Quote
-                </button>
+                <WorkflowActions onPush={pushTruckTo} />
               </div>
             )}
 
