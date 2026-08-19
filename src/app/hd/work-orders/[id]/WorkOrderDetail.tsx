@@ -92,9 +92,40 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos)
   const [uploading, setUploading] = useState<Record<string, boolean>>({})
   const [lightbox, setLightbox] = useState<string | null>(null)
+  const [status, setStatus] = useState(wo.status)
+  const [reopening, setReopening] = useState(false)
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
   const supabase = createClient()
+
+  // Escape hatch out of the invoiced state. Invoicing a job used to be terminal, so
+  // voiding an invoice left the work order stranded with no way to re-bill it. The
+  // scheduler never lists invoiced jobs, so this is the only place it can be undone.
+  async function handleReopen() {
+    if (!confirm(
+      'Reopen this work order?\n\nIt moves back to Completed so it can be invoiced again. ' +
+      'Any invoice already created from it is left alone — void that separately.'
+    )) return
+
+    setReopening(true)
+    try {
+      const res = await fetch(`/api/hd/work-orders/${workOrderId}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'completed' }),
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error ?? 'Reopen failed')
+      }
+      setStatus('completed')
+    } catch (err) {
+      console.error(err)
+      alert(err instanceof Error ? err.message : 'Reopen failed. Please try again.')
+    } finally {
+      setReopening(false)
+    }
+  }
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>, category: string) {
     const file = e.target.files?.[0]
@@ -195,17 +226,30 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
           </Link>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">{woLabel}</h1>
           <div className="flex flex-wrap items-center gap-3 mt-1">
-            <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: `${statusColor(wo.status)}20`, color: statusColor(wo.status) }}>
-              {statusLabel(wo.status)}
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: `${statusColor(status)}20`, color: statusColor(status) }}>
+              {statusLabel(status)}
             </span>
             {wo.service_type && <span className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>{wo.service_type}</span>}
-            <Link
-              href={invoiceHref}
-              className="px-3 py-1.5 rounded-lg text-xs font-condensed font-bold tracking-wide"
-              style={{ background: `${HD_ORANGE}18`, color: HD_ORANGE, border: `1px solid ${HD_ORANGE}55` }}
-            >
-              + Create Invoice
-            </Link>
+            {/* An invoiced job is already billed, so offer the way back out instead of
+                a second Create Invoice that would quietly double-bill it. */}
+            {status === 'invoiced' ? (
+              <button
+                onClick={handleReopen}
+                disabled={reopening}
+                className="px-3 py-1.5 rounded-lg text-xs font-condensed font-bold tracking-wide disabled:opacity-50"
+                style={{ background: '#162030', color: 'rgba(255,255,255,0.7)', border: '1px solid #1e3040' }}
+              >
+                {reopening ? 'Reopening…' : '↩ Reopen Work Order'}
+              </button>
+            ) : (
+              <Link
+                href={invoiceHref}
+                className="px-3 py-1.5 rounded-lg text-xs font-condensed font-bold tracking-wide"
+                style={{ background: `${HD_ORANGE}18`, color: HD_ORANGE, border: `1px solid ${HD_ORANGE}55` }}
+              >
+                + Create Invoice
+              </Link>
+            )}
           </div>
         </div>
         <p className="text-xs mt-1 flex-shrink-0" style={{ color: 'rgba(255,255,255,0.4)' }}>

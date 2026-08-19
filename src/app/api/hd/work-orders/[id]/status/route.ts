@@ -8,7 +8,10 @@ const VALID_TRANSITIONS: Record<string, string[]> = {
   on_the_way:  ['in_progress', 'open', 'cancelled'],
   in_progress: ['completed', 'open', 'cancelled'],
   completed:   ['invoiced'],
-  invoiced:    [],
+  // Invoiced is no longer terminal: voiding an invoice has to be able to release the
+  // job so it can be re-billed. It reverts to completed rather than open, because the
+  // work itself was still finished — only the billing was undone.
+  invoiced:    ['completed'],
   cancelled:   ['open'],
 }
 
@@ -37,7 +40,7 @@ export async function PATCH(
 
   const { data: wo } = await svc
     .from('hd_work_orders')
-    .select('id, status')
+    .select('id, status, completed_at')
     .eq('id', id)
     .eq('user_id', user.id)
     .single()
@@ -53,7 +56,9 @@ export async function PATCH(
   if (newStatus === 'on_the_way')  updates.on_the_way_at  = new Date().toISOString()
   if (newStatus === 'in_progress') updates.arrived_at     = new Date().toISOString()
   if (newStatus === 'completed') {
-    updates.completed_at = new Date().toISOString()
+    // Reverting invoiced → completed must not restamp the original completion time,
+    // so only fill this when the job has never been completed before.
+    if (!wo.completed_at) updates.completed_at = new Date().toISOString()
     if (labor_minutes !== undefined) updates.labor_minutes = labor_minutes
   }
 
