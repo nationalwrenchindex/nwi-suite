@@ -29,12 +29,20 @@ export default async function NewAerialInspectionPage({
     : null
   if (params.type && !type) return notFound()
 
-  const [{ data: units }, { data: profile }] = await Promise.all([
+  const [{ data: units }, { data: invoices }, { data: profile }] = await Promise.all([
     supabase
       .from('hd_units')
       .select('id, unit_number, manufacturer, model, serial_number')
       .eq('user_id', user.id)
       .order('unit_number', { ascending: true }),
+    // Open invoices only — the picker exists to bill this inspection onto a job
+    // still being worked, not to reopen something already paid or voided.
+    supabase
+      .from('hd_invoices')
+      .select('id, invoice_number, customer_name, total, status')
+      .eq('user_id', user.id)
+      .in('status', ['unpaid', 'sent', 'overdue'])
+      .order('created_at', { ascending: false }),
     supabase.from('profiles').select('full_name, hd_tech_name').eq('id', user.id).single(),
   ])
 
@@ -78,6 +86,7 @@ export default async function NewAerialInspectionPage({
       <AerialChecklist
         def={AERIAL_FORMS[type]}
         units={units ?? []}
+        invoices={invoices ?? []}
         defaultInspector={inspectorName}
         workOrderId={typeof params.work_order === 'string' ? params.work_order : null}
         initialUnitId={typeof params.unit === 'string' ? params.unit : null}

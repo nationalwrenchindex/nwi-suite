@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { AERIAL_FORMS } from '@/lib/hd/aerial/forms'
+import { AERIAL_FORMS, AERIAL_TYPE_LABEL } from '@/lib/hd/aerial/forms'
 import {
   collectDeficiencies, hasCriticalDeficiency, overallResult, unansweredCount,
   type AerialInspectionData, type AerialInspectionType,
@@ -22,6 +22,9 @@ interface Body {
   /** Invoice this inspection was billed on (migration 103), so it can appear in
    *  that invoice's Attached Reports the way a DOT inspection does. */
   invoice_id:       string | null
+  /** 'existing' uses invoice_id, 'create' bills a new invoice for this inspection,
+   *  'none' (or absent) leaves the record standalone. Mirrors the DOT flow. */
+  invoice_action:   'existing' | 'create' | 'none' | null
   inspection_date:  string
   shift:            string | null
   operator_name:    string | null
@@ -94,14 +97,102 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  // ── Resolve the invoice link: existing / create-new / standalone ──
+  // Mirrors the DOT flow (083). Unlike DOT, the aerial form carries no customer
+  // fields, so a new invoice takes its billing identity from the selected unit's
+  // fleet account — the only customer context an aerial inspection actually has.
+  let linkedInvoiceId: string | null = null
+  let invoiceError:    string | null = null
+  let fleetAccountId:  string | null = null
+
+  if (body.unit_id) {
+    const { data: unitRow } = await supabase
+      .from('hd_units')
+      .select('fleet_account_id')
+      .eq('id', body.unit_id)
+      .eq('user_id', user.id)
+      .maybeSingle()
+    fleetAccountId = (unitRow?.fleet_account_id as string | null) ?? null
+  }
+
+  if (body.invoice_action === 'existing' && typeof body.invoice_id === 'string') {
+    linkedInvoiceId = body.invoice_id
+  } else if (body.invoice_action === 'create') {
+    let customerName:  string | null = null
+    let customerPhone: string | null = null
+    let customerEmail: string | null = null
+    if (fleetAccountId) {
+      const { data: fa } = await supabase
+        .from('hd_fleet_accounts')
+        .select('fleet_name, contact_phone, contact_email')
+        .eq('id', fleetAccountId)
+        .eq('user_id', user.id)
+        .maybeSingle()
+      customerName  = (fa?.fleet_name    as string | null) ?? null
+      customerPhone = (fa?.contact_phone as string | null) ?? null
+      customerEmail = (fa?.contact_email as string | null) ?? null
+    }
+
+    const { count } = await supabase
+      .from('hd_invoices')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id)
+    const invoiceNumber = `INV-${new Date().getFullYear()}-${String((count ?? 0) + 1).padStart(4, '0')}`
+
+    const { data: rateRow } = await supabase
+      .from('profiles')
+      .select('hd_labor_rate')
+      .eq('id', user.id)
+      .maybeSingle()
+    const laborRate = Number(rateRow?.hd_labor_rate ?? 125)
+    // The three cadences are very different jobs: a pre-use walkaround is minutes,
+    // the annual is a teardown-level inspection. Billing them all at the DOT annual's
+    // 2.0 hours would overcharge two of the three.
+    const hours  = body.inspection_type === 'pre_use' ? 0.5 : body.inspection_type === 'frequent' ? 1.0 : 2.0
+    const amount = Math.round(hours * laborRate * 100) / 100
+
+    const laborLine = {
+      id: crypto.randomUUID(), type: 'labor',
+      description: `ANSI A92 Aerial Inspection — ${AERIAL_TYPE_LABEL[body.inspection_type] ?? ''}`.trim(),
+      book_hours: hours, mobile_hours: hours,
+      part_number: '', quantity: 0, unit_cost: 0, amount,
+    }
+
+    const { data: newInv, error: invErr } = await supabase
+      .from('hd_invoices')
+      .insert({
+        user_id:           user.id,
+        invoice_number:    invoiceNumber,
+        customer_name:     customerName || 'Fleet Customer',
+        customer_phone:    customerPhone,
+        customer_email:    customerEmail,
+        unit_manufacturer: body.unit_make   ?? null,
+        unit_model:        body.unit_model  ?? null,
+        unit_serial:       body.unit_serial ?? null,
+        line_items:        [laborLine],
+        labor_rate:        laborRate,
+        subtotal_labor:    amount,
+        subtotal_parts:    0,
+        total:             amount,
+        status:            'unpaid',
+        notes:             `Auto-created from aerial inspection on ${new Date().toISOString().slice(0, 10)}`,
+      })
+      .select('id')
+      .single()
+
+    if (invErr) { console.error('[aerial-inspections] invoice create failed', invErr); invoiceError = invErr.message }
+    else linkedInvoiceId = newInv?.id ?? null
+  }
+
   const now = new Date().toISOString()
   const { data: inserted, error } = await supabase
     .from('hd_aerial_inspections')
     .insert({
       user_id:               user.id,
+      fleet_account_id:      fleetAccountId,
       unit_id:               body.unit_id,
       work_order_id:         body.work_order_id,
-      invoice_id:            body.invoice_id ?? null,
+      invoice_id:            linkedInvoiceId ?? body.invoice_id ?? null,
       inspection_type:       body.inspection_type,
       inspection_date:       body.inspection_date,
       shift:                 body.shift,
@@ -134,5 +225,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ id: inserted.id, inspection_id: inserted.inspection_id })
+  // invoice_error is surfaced rather than thrown: the inspection is a signed
+  // compliance record and must survive a billing failure.
+  return NextResponse.json({
+    id:             inserted.id,
+    inspection_id:  inserted.inspection_id,
+    invoice_id:     linkedInvoiceId,
+    invoice_error:  invoiceError,
+  })
 }

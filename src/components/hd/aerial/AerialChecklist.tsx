@@ -71,17 +71,31 @@ function ItemRow({
 
 // ─── Form ─────────────────────────────────────────────────────────────────────
 
+// Sentinel values for the invoice picker, matching the DOT inspection form.
+const INV_CREATE = '__create__'
+const INV_NONE   = '__none__'
+
+interface InvoiceOption {
+  id: string
+  invoice_number: string | null
+  customer_name: string | null
+  total: number | null
+  status: string
+}
+
 export default function AerialChecklist({
-  def, units, defaultInspector, workOrderId, initialUnitId,
+  def, units, invoices = [], defaultInspector, workOrderId, initialUnitId,
 }: {
   def: AerialFormDef
   units: UnitOption[]
+  invoices?: InvoiceOption[]
   defaultInspector: string
   workOrderId?: string | null
   initialUnitId?: string | null
 }) {
   const router = useRouter()
 
+  const [selectedInvoice, setSelectedInvoice] = useState(INV_NONE)
   const [unitId,      setUnitId]      = useState(initialUnitId ?? '')
   const [unitIdent,   setUnitIdent]   = useState('')
   const [unitMake,    setUnitMake]    = useState('')
@@ -149,6 +163,11 @@ export default function AerialChecklist({
           inspection_type: def.type,
           unit_id:         unitId || null,
           work_order_id:   workOrderId ?? null,
+          invoice_action:
+            selectedInvoice === INV_CREATE ? 'create'
+            : selectedInvoice === INV_NONE ? 'none'
+            : 'existing',
+          invoice_id: (selectedInvoice === INV_CREATE || selectedInvoice === INV_NONE) ? null : selectedInvoice,
           inspection_date: date,
           shift:           shift || null,
           operator_name:   operator || null,
@@ -171,6 +190,11 @@ export default function AerialChecklist({
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Failed to save inspection')
+      // The inspection saved even if billing did not; say so rather than letting
+      // the tech assume an invoice exists.
+      if (json.invoice_error) {
+        alert(`Inspection saved, but the invoice could not be created:\n${json.invoice_error}`)
+      }
       router.push(`/hd/aerial-inspections/${json.id}`)
       router.refresh()
     } catch (e) {
@@ -202,6 +226,22 @@ export default function AerialChecklist({
             {units.map(u => (
               <option key={u.id} value={u.id}>
                 {[u.unit_number, u.manufacturer, u.model].filter(Boolean).join(' · ')}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* Billing. A new invoice takes its customer from the selected unit's fleet
+            account, so it is worth picking the unit above first. */}
+        <div>
+          <label className={lbl}>Invoice</label>
+          <select value={selectedInvoice} onChange={e => setSelectedInvoice(e.target.value)} className={inp} style={inpStyle}>
+            <option value={INV_CREATE}>+ Create new invoice for this inspection</option>
+            <option value={INV_NONE}>— No invoice (standalone) —</option>
+            {invoices.map(inv => (
+              <option key={inv.id} value={inv.id}>
+                {(inv.invoice_number ?? 'Invoice')}{inv.customer_name ? ` — ${inv.customer_name}` : ''}
+                {inv.total != null ? ` ($${Number(inv.total).toFixed(0)})` : ''}
               </option>
             ))}
           </select>
