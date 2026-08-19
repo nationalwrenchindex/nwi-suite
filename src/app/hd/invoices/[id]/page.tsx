@@ -69,6 +69,19 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             <Link href="/hd/invoices" style={{ color: '#6B7280', fontSize: 13 }}>← Invoices</Link>
             <span style={{ color: '#E5E7EB' }}>/</span>
             <span className="font-condensed font-bold text-2xl" style={{ color: '#1A1A1A' }}>{inv.invoice_number}</span>
+            {/* Work order this invoice was converted from. The number is denormalized,
+                so it survives the work order being deleted — only then is it not a link. */}
+            {inv.work_order_number && (
+              inv.work_order_id ? (
+                <Link href={`/hd/work-orders/${inv.work_order_id}`} className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: '#FFF7ED', color: ORANGE }}>
+                  {inv.work_order_number}
+                </Link>
+              ) : (
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: '#FFF7ED', color: ORANGE }}>
+                  {inv.work_order_number}
+                </span>
+              )
+            )}
             <span className="text-xs font-semibold px-2.5 py-1 rounded-full capitalize" style={{ background: st.bg, color: st.color }}>
               {inv.status}
             </span>
@@ -103,6 +116,9 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             </div>
             <div className="text-right">
               <p className="font-bold text-xl" style={{ color: ORANGE }}>{inv.invoice_number}</p>
+              {inv.work_order_number && (
+                <p className="text-sm" style={{ color: '#6B7280' }}>Work Order: {inv.work_order_number}</p>
+              )}
               <p className="text-sm" style={{ color: '#6B7280' }}>Date: {fmtDate(inv.created_at)}</p>
               <p className="text-sm" style={{ color: '#6B7280' }}>Terms: {termsDisplay(inv.payment_terms)}</p>
               {inv.due_date && (

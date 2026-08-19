@@ -27,6 +27,7 @@ export default async function WorkOrderDetailPage({
         id, work_order_number, status, service_type, location, service_requests, comments,
         tech_name, labor_hours, labor_rate, total_amount, flagged_items, current_setpoint,
         started_at, completed_at, created_at,
+        customer_name, customer_phone, unit_manufacturer, unit_model, unit_serial,
         unit:hd_units(id, unit_number, manufacturer, model, year, serial_number),
         fleet:hd_fleet_accounts(id, fleet_name)
       `)

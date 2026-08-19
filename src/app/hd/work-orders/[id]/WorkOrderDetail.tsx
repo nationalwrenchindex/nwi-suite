@@ -29,6 +29,13 @@ type WO = {
   started_at: string | null
   completed_at: string | null
   created_at: string
+  // Denormalized fields an ad-hoc scheduler booking leaves on the work order when
+  // the job was free-typed instead of linked to an hd_unit / hd_fleet_account.
+  customer_name: string | null
+  customer_phone: string | null
+  unit_manufacturer: string | null
+  unit_model: string | null
+  unit_serial: string | null
   unit: { id: string; unit_number: string; manufacturer: string; model: string; year: number | null; serial_number: string | null } | null
   fleet: { id: string; fleet_name: string } | null
 }
@@ -135,6 +142,40 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
 
   const woLabel = wo.work_order_number ?? `WO-${wo.id.slice(0, 6).toUpperCase()}`
 
+  // Convert this work order into a new invoice. Everything the invoice form needs
+  // rides in the query string — the same approach the inspection buttons below and
+  // the PM-schedule links already use, since there is no GET route for a single
+  // work order. Work orders carry no line items of their own, so the form
+  // synthesizes one labor line from labor_hours × labor_rate.
+  const invoiceHref = (() => {
+    const p = new URLSearchParams()
+    p.set('work_order_id', workOrderId)
+    p.set('work_order_number', woLabel)
+
+    // A fleet job bills to the fleet; an ad-hoc booking bills to the typed customer.
+    const customer = wo.fleet?.fleet_name ?? wo.customer_name
+    if (customer)             p.set('customer_name', customer)
+    if (wo.fleet?.fleet_name) p.set('company_name', wo.fleet.fleet_name)
+    if (wo.customer_phone)    p.set('customer_phone', wo.customer_phone)
+
+    // Prefer the linked unit record, falling back to the free-typed unit fields.
+    const mfr    = wo.unit?.manufacturer   ?? wo.unit_manufacturer
+    const model  = wo.unit?.model          ?? wo.unit_model
+    const serial = wo.unit?.serial_number  ?? wo.unit_serial
+    if (mfr)           p.set('unit_manufacturer', mfr)
+    if (model)         p.set('unit_model', model)
+    if (serial)        p.set('unit_serial', serial)
+    if (wo.unit?.year) p.set('unit_year', String(wo.unit.year))
+
+    if (wo.labor_rate  != null) p.set('labor_rate',  String(wo.labor_rate))
+    if (wo.labor_hours != null) p.set('labor_hours', String(wo.labor_hours))
+    if (wo.service_type)        p.set('service_type', wo.service_type)
+    if (wo.service_requests)    p.set('complaint', wo.service_requests)
+    if (wo.comments)            p.set('diagnosis', wo.comments)
+
+    return `/hd/invoices/new?${p.toString()}`
+  })()
+
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto">
       {/* Subscriber branding — logo when one is uploaded, business name in text
@@ -153,11 +194,18 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
             ← Work Orders
           </Link>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">{woLabel}</h1>
-          <div className="flex items-center gap-3 mt-1">
+          <div className="flex flex-wrap items-center gap-3 mt-1">
             <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: `${statusColor(wo.status)}20`, color: statusColor(wo.status) }}>
               {statusLabel(wo.status)}
             </span>
             {wo.service_type && <span className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>{wo.service_type}</span>}
+            <Link
+              href={invoiceHref}
+              className="px-3 py-1.5 rounded-lg text-xs font-condensed font-bold tracking-wide"
+              style={{ background: `${HD_ORANGE}18`, color: HD_ORANGE, border: `1px solid ${HD_ORANGE}55` }}
+            >
+              + Create Invoice
+            </Link>
           </div>
         </div>
         <p className="text-xs mt-1 flex-shrink-0" style={{ color: 'rgba(255,255,255,0.4)' }}>
@@ -401,10 +449,6 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
           </button>
         </div>
       )}
-
-      <p className="text-xs text-center mt-2" style={{ color: 'rgba(255,255,255,0.2)' }}>
-        Storage bucket: hd-work-order-photos — must be created in Supabase dashboard (private) with owner-path RLS
-      </p>
     </div>
   )
 }

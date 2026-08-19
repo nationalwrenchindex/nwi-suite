@@ -16,6 +16,11 @@ const BORDER = '#E5E7EB'
 const TEXT   = '#1A1A1A'
 const MUTED  = '#6B7280'
 
+// The manufacturer picker only ships the two reefer brands. A work order can bill
+// any machine (tractor, box truck, aerial lift), so a prefilled value outside this
+// list is surfaced as an extra option rather than silently dropped.
+const REEFER_BRANDS = ['Thermo King', 'Carrier Transicold']
+
 interface LineItem {
   id: string
   type: 'labor' | 'parts'
@@ -74,6 +79,7 @@ export default function NewInvoicePage() {
   const [showResults, setShowResults]         = useState(false)
 
   const [form, setForm] = useState({
+    work_order_id: '', work_order_number: '',
     company_name: '',
     customer_name: '', customer_phone: '', customer_email: '',
     address_line1: '', address_line2: '', city: '', state: '', zip: '',
@@ -90,29 +96,66 @@ export default function NewInvoicePage() {
 
   function setField(k: string, v: string | number | boolean) { setForm(f => ({ ...f, [k]: v })) }
 
-  // Prefill from a PM Schedules interval tap (?pm_type=...&unit_manufacturer=...).
+  // Prefill from a PM Schedules interval tap (?pm_type=...&unit_manufacturer=...) or
+  // from the "Create Invoice" button on a work order, which carries the whole job in
+  // the query string (?work_order_id=...&labor_hours=...).
   useEffect(() => {
     if (typeof window === 'undefined') return
     const sp = new URLSearchParams(window.location.search)
     const pmType = sp.get('pm_type')
     const mfr    = sp.get('unit_manufacturer')
-    if (!pmType && !mfr) return
-    const isReeferBrand = mfr === 'Thermo King' || mfr === 'Carrier Transicold'
+    const woId   = sp.get('work_order_id')
+    if (!pmType && !mfr && !woId) return
+
+    const text = (k: string) => sp.get(k) ?? ''
+    const num  = (k: string) => {
+      const v = parseFloat(sp.get(k) ?? '')
+      return Number.isFinite(v) ? v : null
+    }
+
+    const isReeferBrand = !!mfr && REEFER_BRANDS.includes(mfr)
+    const serviceType   = text('service_type')
+    const laborRate     = num('labor_rate')
+    const laborHours    = num('labor_hours')
+
     setForm(f => ({
       ...f,
-      unit_manufacturer: isReeferBrand ? (mfr as string) : f.unit_manufacturer,
-      complaint: pmType
+      work_order_id:     woId ?? '',
+      work_order_number: text('work_order_number') || f.work_order_number,
+      customer_name:     text('customer_name')  || f.customer_name,
+      company_name:      text('company_name')   || f.company_name,
+      customer_phone:    text('customer_phone') || f.customer_phone,
+      // A work order's manufacturer always lands in the field now that the select
+      // carries prefilled values. The PM path keeps its original behavior of naming
+      // a non-reefer brand in the complaint line instead.
+      unit_manufacturer: (woId || isReeferBrand) ? (mfr || f.unit_manufacturer) : f.unit_manufacturer,
+      unit_model:        text('unit_model')  || f.unit_model,
+      unit_serial:       text('unit_serial') || f.unit_serial,
+      unit_year:         text('unit_year')   || f.unit_year,
+      labor_rate:        laborRate ?? f.labor_rate,
+      complaint: text('complaint') || (pmType
         ? `Preventive Maintenance — ${pmType}${mfr && !isReeferBrand ? ` (${mfr})` : ''}`
-        : f.complaint,
+        : f.complaint),
+      diagnosis: text('diagnosis') || f.diagnosis,
     }))
-    if (pmType) {
+
+    // Work orders have no line items of their own — the billable record is
+    // labor_hours × labor_rate, so seed the invoice with that single labor line.
+    if (woId && laborHours && laborHours > 0) {
+      const rate = laborRate ?? 125
+      setLineItems(l => l.length ? l : [{
+        id: crypto.randomUUID(), type: 'labor',
+        description: serviceType || 'Service labor',
+        mobile_hours: laborHours, part_number: '', quantity: 0, unit_cost: 0,
+        amount: parseFloat((laborHours * rate).toFixed(2)),
+      }])
+    } else if (pmType) {
       setLineItems(l => l.length ? l : [{
         id: crypto.randomUUID(), type: 'labor',
         description: `Preventive Maintenance — ${pmType}`,
         mobile_hours: 0, part_number: '', quantity: 0, unit_cost: 0, amount: 0,
       }])
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // ── Customer picker ──
@@ -202,6 +245,12 @@ export default function NewInvoicePage() {
     try {
       const sentAt = status === 'sent' ? new Date().toISOString() : null
       const body = {
+        // Only sent when this invoice was converted from a work order. The POST route
+        // spreads the body straight into the insert, so omitting these keys entirely
+        // keeps direct invoices working on databases where 102 has not been run yet.
+        ...(form.work_order_id
+          ? { work_order_id: form.work_order_id, work_order_number: form.work_order_number || null }
+          : {}),
         company_name:      form.company_name || null,
         customer_name:     form.customer_name,
         customer_phone:    form.customer_phone || null,
@@ -266,7 +315,13 @@ export default function NewInvoicePage() {
           <Link href="/hd/invoices" style={{ color: MUTED, fontSize: 13 }}>← Invoices</Link>
           <span style={{ color: BORDER }}>/</span>
           <span className="font-condensed font-bold text-2xl" style={{ color: TEXT }}>NEW INVOICE</span>
-          <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: '#EBF5FF', color: BLUE }}>Direct — no quote</span>
+          {form.work_order_number ? (
+            <Link href={`/hd/work-orders/${form.work_order_id}`} className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: '#FFF7ED', color: ORANGE }}>
+              From {form.work_order_number}
+            </Link>
+          ) : (
+            <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: '#EBF5FF', color: BLUE }}>Direct — no quote</span>
+          )}
         </div>
 
         {/* Customer & Unit */}
@@ -319,8 +374,10 @@ export default function NewInvoicePage() {
             <Field label="Manufacturer">
               <select style={inp} value={form.unit_manufacturer} onChange={e => setField('unit_manufacturer', e.target.value)}>
                 <option value="">Select...</option>
-                <option>Thermo King</option>
-                <option>Carrier Transicold</option>
+                {REEFER_BRANDS.map(b => <option key={b}>{b}</option>)}
+                {form.unit_manufacturer && !REEFER_BRANDS.includes(form.unit_manufacturer) && (
+                  <option>{form.unit_manufacturer}</option>
+                )}
               </select>
             </Field>
             <Field label="Unit Model"><input style={inp} value={form.unit_model} onChange={e => setField('unit_model', e.target.value)} placeholder="e.g. S-600" /></Field>

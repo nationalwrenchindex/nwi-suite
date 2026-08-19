@@ -63,6 +63,21 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  // Billing a work order closes it out. Done here rather than via the status route
+  // because that route only allows completed → invoiced, and a tech can invoice a
+  // job that is still open or in progress. Best-effort after the insert so a failed
+  // status write can never cost us the invoice itself; scoped to the caller's own
+  // rows, and cancelled work orders are left alone.
+  if (typeof body.work_order_id === 'string' && body.work_order_id) {
+    const { error: woError } = await supabase
+      .from('hd_work_orders')
+      .update({ status: 'invoiced' })
+      .eq('id', body.work_order_id)
+      .eq('user_id', user.id)
+      .neq('status', 'cancelled')
+    if (woError) console.error('[hd/invoices] work order status flip failed', woError)
+  }
+
   // Auto-log the customer into the tech's contacts (best-effort, never blocks).
   const customer_id = await logHDCustomer({
     userId:        user.id,
