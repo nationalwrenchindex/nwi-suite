@@ -50,12 +50,12 @@ export const FORKLIFT_SECTIONS: EquipmentSection[] = [
   {
     id: 'mast_chains', num: 4, label: 'Mast, Chains and Cylinders',
     items: [
-      { id: 'chains_no_damage',   label: 'Lift chains free of cracked, worn, rusted or seized links', safetyCritical: true },
-      { id: 'chain_tension_even', label: 'Lift chains evenly tensioned with no slack side', safetyCritical: true },
-      { id: 'chain_stretch',      label: 'Lift chain stretch within 3% of original pitch', safetyCritical: true },
-      { id: 'chain_anchors',      label: 'Chain anchor pins and sheaves secure and turning freely', safetyCritical: true },
-      { id: 'mast_rollers',       label: 'Mast rollers and channels free of excessive wear or binding' },
-      { id: 'mast_welds',         label: 'Mast rails, welds and crossmembers free of cracks or distortion', safetyCritical: true },
+      { id: 'chains_no_damage',    label: 'Lift chains free of cracked, worn, rusted or seized links', safetyCritical: true },
+      { id: 'chain_tension_even',  label: 'Lift chains evenly tensioned with no slack side', safetyCritical: true },
+      { id: 'chain_stretch',       label: 'Lift chain stretch within 3% of original pitch', safetyCritical: true },
+      { id: 'chain_anchors',       label: 'Chain anchor pins and sheaves secure and turning freely', safetyCritical: true },
+      { id: 'mast_rollers',        label: 'Mast rollers and channels free of excessive wear or binding' },
+      { id: 'mast_welds',          label: 'Mast rails, welds and crossmembers free of cracks or distortion', safetyCritical: true },
       { id: 'lift_tilt_cylinders', label: 'Lift and tilt cylinders free of leaks, scoring or bent rods', safetyCritical: true },
     ],
   },
