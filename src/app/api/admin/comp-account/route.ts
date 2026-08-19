@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { upsertSubscription } from '@/lib/subscription'
+import { HD_TIER_MODULES } from '@/lib/hd-plans'
 import { revalidatePath } from 'next/cache'
 
 const FOUNDER_ID = '4a8c046f-7db3-42bb-8422-fd47efb7678c'
@@ -12,14 +13,12 @@ const TIER_CONFIG: Record<string, { modules: string[]; vertical: string }> = {
   full_suite:      { modules: ['scheduler', 'intel', 'financials', 'quickwrench'],       vertical: 'light_duty' },
   full_suite_plus: { modules: ['scheduler', 'intel', 'financials', 'quickwrench'],       vertical: 'light_duty' },
   elite:           { modules: ['scheduler', 'intel', 'financials', 'quickwrench'],       vertical: 'light_duty' },
-  // Reefer Standalone — reefer diagnostics only, no suite features
-  hd_reefer:  { modules: ['hd_quickwrench', 'hd_reefer', 'hd_epa'],                                                                                               vertical: 'heavy_duty' },
-  // Starter — full suite: quoting, invoicing, parts, fleet, work orders, scheduler, truck diagnostics
-  hd_starter: { modules: ['hd_quotes', 'hd_invoices', 'hd_parts', 'hd_fleet', 'hd_pm', 'hd_work_orders', 'hd_quickwrench'],                                      vertical: 'heavy_duty' },
-  // Pro — Starter + DOT inspections, EPA 608, financials
-  hd_pro:     { modules: ['hd_quotes', 'hd_invoices', 'hd_parts', 'hd_fleet', 'hd_pm', 'hd_work_orders', 'hd_quickwrench', 'hd_dot', 'hd_epa', 'hd_financials'], vertical: 'heavy_duty' },
-  // Elite — Pro + Reefer Module + Foreman AI (both locked during trial; active subscription required)
-  hd_elite:   { modules: ['hd_quotes', 'hd_invoices', 'hd_parts', 'hd_fleet', 'hd_pm', 'hd_work_orders', 'hd_quickwrench', 'hd_dot', 'hd_epa', 'hd_financials', 'hd_reefer', 'hd_foreman'], vertical: 'heavy_duty' },
+  // HD entitlements come from the shared plan map the Stripe webhook also uses, so
+  // a comped HD account and a paying one always grant exactly the same modules.
+  hd_reefer:  { modules: HD_TIER_MODULES.hd_reefer,  vertical: 'heavy_duty' },
+  hd_starter: { modules: HD_TIER_MODULES.hd_starter, vertical: 'heavy_duty' },
+  hd_pro:     { modules: HD_TIER_MODULES.hd_pro,     vertical: 'heavy_duty' },
+  hd_elite:   { modules: HD_TIER_MODULES.hd_elite,   vertical: 'heavy_duty' },
 }
 
 export async function POST(request: NextRequest) {

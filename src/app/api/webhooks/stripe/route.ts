@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import type Stripe from 'stripe'
 import { stripe, TIER_MODULES, getTierFromPriceId, type PlanTier } from '@/lib/stripe'
+import { getHdTierFromPriceId, HD_TIER_MODULES } from '@/lib/hd-plans'
 import { upsertSubscription, getUserIdByStripeSubscription, getUserIdByForemanSubscription } from '@/lib/subscription'
 import { sendFounderAlert, sendNewSubscriberAlert } from '@/lib/email-alerts'
 import { PLANS } from '@/lib/stripe-plans'
@@ -165,7 +166,51 @@ export async function POST(request: NextRequest) {
 
         const stripeSub = await stripe.subscriptions.retrieve(subId)
         const priceId   = stripeSub.items.data[0]?.price?.id ?? null
-        const tier      = priceId ? getTierFromPriceId(priceId) : null
+
+        // ── Heavy-duty checkout ──
+        // HD is sold through /api/hd/checkout on its own STRIPE_PRICE_HD_* prices,
+        // which are absent from PLANS — so getTierFromPriceId returns null for them
+        // and every paying HD customer used to fall through unactivated.
+        const hdTier = priceId ? getHdTierFromPriceId(priceId) : null
+        if (hdTier) {
+          console.log(`[webhook] checkout.session.completed: price_id=${priceId} → hd tier=${hdTier}`)
+          await upsertSubscription({
+            user_id:                userId,
+            stripe_customer_id:     typeof session.customer === 'string' ? session.customer : session.customer?.id ?? null,
+            stripe_subscription_id: subId,
+            status:                 'active',
+            tier:                   hdTier,
+            modules:                HD_TIER_MODULES[hdTier],
+            current_period_end:     null,
+            cancel_at_period_end:   false,
+            vertical:               'heavy_duty',
+          })
+
+          void (async () => {
+            try {
+              const svc = createServiceClient()
+              const { data: profile } = await svc
+                .from('profiles')
+                .select('full_name, email')
+                .eq('id', userId)
+                .single()
+              const name  = profile?.full_name ?? userId
+              const email = profile?.email ?? '—'
+              await sendNewSubscriberAlert({ name, email, planName: hdTier, tier: hdTier, amountDollars: null })
+              const brockPhone = process.env.BROCK_PHONE_NUMBER
+              if (brockPhone) {
+                const ts = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })
+                await sendSubscriberSms({
+                  to:   brockPhone,
+                  body: `New NWI HD Subscriber! Name: ${name} Email: ${email} Plan: ${hdTier} Time: ${ts}`,
+                })
+              }
+            } catch { /* non-critical */ }
+          })()
+          break
+        }
+
+        const tier = priceId ? getTierFromPriceId(priceId) : null
 
         console.log(`[webhook] checkout.session.completed: price_id=${priceId ?? 'none'} → tier=${tier ?? 'unknown'}`)
 
@@ -313,7 +358,31 @@ export async function POST(request: NextRequest) {
 
         // Determine tier from the price ID only — never trust metadata
         const priceId = sub.items.data[0]?.price?.id ?? null
-        const tier    = priceId ? getTierFromPriceId(priceId) : null
+
+        // HD subscriptions resolve through their own price map. Without this an HD
+        // renewal or status change would resolve to tier null and silently strip the
+        // subscriber's access on the next update event.
+        const hdTierUpd = priceId ? getHdTierFromPriceId(priceId) : null
+        if (hdTierUpd) {
+          console.log(`[webhook] customer.subscription.updated: price_id=${priceId} → hd tier=${hdTierUpd}`)
+          await upsertSubscription({
+            user_id:                userId,
+            stripe_customer_id:     typeof sub.customer === 'string' ? sub.customer : sub.customer.id,
+            stripe_subscription_id: sub.id,
+            status:                 sub.status === 'active' || sub.status === 'trialing' ? sub.status
+                                    : sub.status === 'past_due' ? 'past_due'
+                                    : sub.status as string,
+            tier:                   hdTierUpd,
+            modules:                HD_TIER_MODULES[hdTierUpd],
+            current_period_end:     sub.current_period_end
+              ? new Date(sub.current_period_end * 1000).toISOString() : null,
+            cancel_at_period_end:   sub.cancel_at_period_end,
+            vertical:               'heavy_duty',
+          })
+          break
+        }
+
+        const tier = priceId ? getTierFromPriceId(priceId) : null
 
         console.log(`[webhook] customer.subscription.updated: price_id=${priceId ?? 'none'} → tier=${tier ?? 'unknown'}`)
 
