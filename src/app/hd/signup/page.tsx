@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
@@ -40,6 +40,15 @@ const PLANS: {
     badge:    'RECOMMENDED',
     features: ['Everything in HD Pro', 'Reefer Module (alarm codes)', 'Foreman AI Receptionist'],
   },
+  {
+    // One subscription covering both verticals. Price is loaded from Stripe at
+    // runtime rather than hardcoded, so the card always matches what is charged.
+    key:      'elite_bundle',
+    name:     'HD Elite + LD Bundle',
+    price:    0,
+    badge:    'BEST VALUE',
+    features: ['Everything in HD Elite', 'Full Light-Duty Suite', 'Scheduler, Intel Hub & Financials', 'QuickWrench & TorqueWrench', 'One subscription, both verticals'],
+  },
 ]
 
 function Spinner() {
@@ -70,7 +79,21 @@ export default function HDSignupPage() {
   const [promoError,       setPromoError]       = useState<string | null>(null)
   const [promotionCodeId,  setPromotionCodeId]  = useState<string | null>(null)
 
+  // The bundle's price lives in Stripe, not in PLANS — fetch it so the card and
+  // the amount actually charged can never disagree.
+  const [bundlePrice, setBundlePrice] = useState<number | null>(null)
+  useEffect(() => {
+    fetch('/api/hd/bundle-price')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (typeof d?.amount === 'number') setBundlePrice(d.amount) })
+      .catch(() => {})
+  }, [])
+
+  const priceOf = (p: { key: string; price: number }) =>
+    p.key === 'elite_bundle' ? bundlePrice : p.price
+
   const selectedPlan = PLANS.find(p => p.key === plan)!
+  const selectedPrice = priceOf(selectedPlan)
 
   async function handleApplyPromo() {
     if (!promoInput.trim()) return
@@ -216,7 +239,7 @@ export default function HDSignupPage() {
                     )}
                     <p className="font-condensed font-bold text-white text-lg tracking-wide">{p.name}</p>
                     <p className="font-condensed font-bold text-3xl mt-1 mb-3" style={{ color: HD_ORANGE }}>
-                      ${p.price}<span className="text-base font-normal" style={{ color: 'rgba(255,255,255,0.4)' }}>/mo</span>
+                      {priceOf(p) === null ? '—' : `$${priceOf(p)}`}<span className="text-base font-normal" style={{ color: 'rgba(255,255,255,0.4)' }}>/mo</span>
                     </p>
                     <ul className="space-y-1.5">
                       {p.features.map(f => (
@@ -244,7 +267,7 @@ export default function HDSignupPage() {
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-green-400">Promo code applied</p>
                     <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                      You will not be charged for 90 days. Your first payment of ${selectedPlan.price}/month will be on {promoFirstPaymentDate}.
+                      You will not be charged for 90 days. Your first payment of {selectedPrice === null ? 'your plan amount' : `$${selectedPrice}`}/month will be on {promoFirstPaymentDate}.
                       Card is required but will not be charged until {promoFirstPaymentDate}.
                     </p>
                     <button
@@ -350,7 +373,7 @@ export default function HDSignupPage() {
                   className="rounded-lg px-3 py-2.5 text-xs"
                   style={{ background: '#22C55E10', border: '1px solid #22C55E30', color: '#22C55E' }}
                 >
-                  Promo code applied. Billed ${selectedPlan.price}/month · Cancel anytime.
+                  Promo code applied. Billed {selectedPrice === null ? 'monthly' : `$${selectedPrice}/month`} · Cancel anytime.
                 </div>
               )}
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 const HD_ORANGE = '#E85D24'
 const HD_BLUE   = '#1A6BAF'
@@ -32,6 +32,14 @@ const PLANS: {
     badge:    'RECOMMENDED',
     features: ['Everything in HD Pro', 'Reefer Module (alarm codes)', 'Foreman AI Receptionist'],
   },
+  {
+    // Price is loaded from Stripe at runtime — see /api/hd/bundle-price.
+    key:      'elite_bundle',
+    name:     'HD Elite + LD Bundle',
+    price:    0,
+    badge:    'BEST VALUE',
+    features: ['Everything in HD Elite', 'Full Light-Duty Suite', 'Scheduler, Intel Hub & Financials', 'QuickWrench & TorqueWrench', 'One subscription, both verticals'],
+  },
 ]
 
 function Spinner() {
@@ -54,7 +62,20 @@ export default function HDSubscribePage() {
   const [promoError,      setPromoError]      = useState<string | null>(null)
   const [promotionCodeId, setPromotionCodeId] = useState<string | null>(null)
 
-  const selectedPlan = PLANS.find(p => p.key === plan)!
+  // Bundle price comes from Stripe so the card matches what is charged.
+  const [bundlePrice, setBundlePrice] = useState<number | null>(null)
+  useEffect(() => {
+    fetch('/api/hd/bundle-price')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (typeof d?.amount === 'number') setBundlePrice(d.amount) })
+      .catch(() => {})
+  }, [])
+
+  const priceOf = (p: { key: string; price: number }) =>
+    p.key === 'elite_bundle' ? bundlePrice : p.price
+
+  const selectedPlan  = PLANS.find(p => p.key === plan)!
+  const selectedPrice = priceOf(selectedPlan)
 
   async function handleApplyPromo() {
     if (!promoInput.trim()) return
@@ -190,7 +211,9 @@ export default function HDSubscribePage() {
 
                 <p style={{ fontWeight: 800, fontSize: 15, color: '#fff', margin: '0 0 0.25rem' }}>{name}</p>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 3, margin: '0 0 1rem' }}>
-                  <span style={{ fontSize: 30, fontWeight: 900, color: isSelected ? HD_ORANGE : '#fff', lineHeight: 1 }}>${price}</span>
+                  <span style={{ fontSize: 30, fontWeight: 900, color: isSelected ? HD_ORANGE : '#fff', lineHeight: 1 }}>
+                    {priceOf({ key, price }) === null ? '—' : `$${priceOf({ key, price })}`}
+                  </span>
                   <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>/month</span>
                 </div>
                 <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
@@ -295,7 +318,7 @@ export default function HDSubscribePage() {
             gap:         '0.5rem',
           }}
         >
-          {loading ? <><Spinner /> Processing…</> : `Continue to Checkout — ${selectedPlan.name} $${selectedPlan.price}/mo`}
+          {loading ? <><Spinner /> Processing…</> : `Continue to Checkout — ${selectedPlan.name}${selectedPrice === null ? '' : ` $${selectedPrice}/mo`}`}
         </button>
 
         <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.25)', textAlign: 'center', marginTop: '1rem' }}>

@@ -1,12 +1,16 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { stripe } from '@/lib/stripe'
+import { HD_ELITE_BUNDLE_PRICE_ID, getHdTierFromPriceId } from '@/lib/hd-plans'
 
 const HD_PRICE_MAP: Record<string, string | undefined> = {
   hd_reefer: process.env.STRIPE_PRICE_HD_REEFER,
   starter:   process.env.STRIPE_PRICE_HD_STARTER,
   pro:       process.env.STRIPE_PRICE_HD_PRO,
   elite:     process.env.STRIPE_PRICE_HD_ELITE,
+  // HD Elite + light-duty suite on a single subscription. Its price is a literal
+  // default rather than an env var so the bundle sells without any env setup.
+  elite_bundle: HD_ELITE_BUNDLE_PRICE_ID,
 }
 
 export async function POST(req: NextRequest) {
@@ -33,15 +37,22 @@ export async function POST(req: NextRequest) {
   const hasPromo = !!body.promotionCodeId
   const baseUrl  = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://nationalwrenchindex.com'
 
+  // Resolved from the price so the recorded tier can never disagree with what was
+  // actually charged. Carried in metadata purely for logging and support lookups —
+  // both the webhook and the dashboard re-derive it from the price themselves.
+  const tier = getHdTierFromPriceId(priceId)
+
   const session = await stripe.checkout.sessions.create({
     mode:           'subscription',
     line_items:     [{ price: priceId, quantity: 1 }],
     customer_email: profile?.email ?? user.email ?? undefined,
-    metadata:       { user_id: user.id, vertical: 'heavy_duty', product: 'hd_suite', plan },
-    success_url:    `${baseUrl}/hd/dashboard?upgraded=1`,
+    metadata:       { user_id: user.id, vertical: 'heavy_duty', product: 'hd_suite', plan, ...(tier ? { tier } : {}) },
+    // session_id lets the dashboard provision access on arrival instead of waiting
+    // on the webhook, which can land after the user is already looking at the page.
+    success_url:    `${baseUrl}/hd/dashboard?upgraded=1&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url:     `${baseUrl}/hd/signup`,
     subscription_data: {
-      metadata:  { user_id: user.id, vertical: 'heavy_duty' },
+      metadata:  { user_id: user.id, vertical: 'heavy_duty', ...(tier ? { tier } : {}) },
     },
     // allow_promotion_codes omitted when promotionCodeId is pre-validated
     ...(hasPromo ? {} : { allow_promotion_codes: false }),

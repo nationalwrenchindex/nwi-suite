@@ -22,6 +22,17 @@ const HD_PRICE_KEYS: Record<HdTier, string> = {
   hd_reefer:  'HD_REEFER',
 }
 
+/**
+ * The HD Elite + LD bundle is one Stripe price that entitles both verticals. It
+ * resolves to hd_elite, whose module list already carries the light-duty suite.
+ *
+ * The literal is the default so the bundle works with no environment setup;
+ * STRIPE_PRICE_HD_ELITE_BUNDLE overrides it, which is what test mode needs since
+ * a live price ID will not resolve against a test-mode Stripe key.
+ */
+export const HD_ELITE_BUNDLE_PRICE_ID =
+  process.env.STRIPE_PRICE_HD_ELITE_BUNDLE ?? 'price_1U69hvBalq9wtO9kRcc8PpUv'
+
 // Reefer Standalone — reefer diagnostics only, no suite features.
 const HD_REEFER_MODULES  = ['hd_quickwrench', 'hd_reefer', 'hd_epa']
 // Starter — quoting, invoicing, parts, fleet, work orders, PM, truck diagnostics.
@@ -45,9 +56,15 @@ export const HD_TIER_MODULES: Record<HdTier, string[]> = {
  * ours. Mirrors getTierFromPriceId() for the light-duty side.
  */
 export function getHdTierFromPriceId(priceId: string): HdTier | null {
+  if (priceId === HD_ELITE_BUNDLE_PRICE_ID) return 'hd_elite'
   for (const [tier, key] of Object.entries(HD_PRICE_KEYS) as [HdTier, string][]) {
     const configured = process.env[`STRIPE_PRICE_${key}`]
     if (configured && configured === priceId) return tier
   }
   return null
+}
+
+/** True when the tier grants the light-duty suite alongside HD. */
+export function hdTierIncludesLd(tier: HdTier): boolean {
+  return tier === 'hd_elite'
 }

@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import HDTrialBanner from '@/components/hd/HDTrialBanner'
+import { provisionHdFromCheckoutSession } from '@/lib/hd-provision'
 
 export const metadata = { title: 'Dashboard — NWI HD Suite' }
 
@@ -33,10 +34,26 @@ function KpiCard({
   )
 }
 
-export default async function HDDashboardPage() {
+export default async function HDDashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ session_id?: string }>
+}) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
+
+  // Arriving straight from Stripe checkout. Grant access from the session now
+  // rather than waiting on the webhook, which can land after this page renders
+  // and would otherwise show a paying subscriber an empty, locked dashboard.
+  const { session_id: checkoutSessionId } = await searchParams
+  if (checkoutSessionId) {
+    const provisioned = await provisionHdFromCheckoutSession(user.id, checkoutSessionId)
+    if (!provisioned.ok) {
+      // Non-fatal: the webhook is still the source of truth and will catch up.
+      console.error('[hd/dashboard] checkout provisioning skipped:', provisioned.reason)
+    }
+  }
 
   const [{ data: profile }, { data: hdSub }] = await Promise.all([
     supabase
