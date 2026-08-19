@@ -11,6 +11,8 @@
 import Image from 'next/image'
 import type { AerialFormDef, AerialInspectionRecord, ItemResult } from '@/types/aerial'
 import { AERIAL_TYPE_LABEL } from '@/lib/hd/aerial/forms'
+import { BrandHeader, BrandFooter } from '@/components/BrandHeader'
+import type { Branding } from '@/lib/branding'
 
 function fmtDate(d: string | null): string {
   if (!d) return '—'
@@ -34,12 +36,11 @@ function resultPill(r: ItemResult | '') {
 }
 
 export default function AerialInspectionDetail({
-  record, def, businessName, businessPhone,
+  record, def, branding,
 }: {
   record: AerialInspectionRecord
   def: AerialFormDef
-  businessName: string
-  businessPhone: string
+  branding: Branding
 }) {
   const failed = record.overall_result === 'fail'
   const unitLabel = [record.unit_identifier, record.unit_make, record.unit_model]
@@ -53,6 +54,9 @@ export default function AerialInspectionDetail({
           body { background: #fff !important; }
           .print-doc { color: #000 !important; background: #fff !important; }
           .print-doc * { color: #000 !important; border-color: #ddd !important; background: transparent !important; }
+          /* The blanket rule above must not neutralise the brand logo or the
+             signature: images keep their own colours on the printed page. */
+          .print-doc img { display: inline-block !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .print-pass { background: #22C55E !important; color: #fff !important; }
           .print-fail { background: #EF4444 !important; color: #fff !important; }
           .print-na   { background: #9CA3AF !important; color: #fff !important; }
@@ -81,15 +85,13 @@ export default function AerialInspectionDetail({
 
       <div className="print-doc rounded-xl p-6" style={{ background: '#111920', border: '1px solid #1e3040' }}>
 
-        {/* Document header */}
+        {/* Document header — subscriber branding, logo when uploaded and the
+            business name in text when not. Never .no-print: the brand is part
+            of the document, not the app chrome. */}
         <div className="pb-4 mb-4" style={{ borderBottom: '2px solid #1e3040' }}>
+          <BrandHeader branding={branding} className="text-white mb-3" />
           <p className="font-condensed font-bold text-xl text-white tracking-wide">{def.title}</p>
           <p className="text-white/50 text-xs mt-0.5">{def.citation}</p>
-          {businessName && (
-            <p className="text-white/70 text-sm mt-2">
-              {businessName}{businessPhone ? ` · ${businessPhone}` : ''}
-            </p>
-          )}
         </div>
 
         {/* Overall determination */}
@@ -198,6 +200,9 @@ export default function AerialInspectionDetail({
             Record locked {fmtStamp(record.locked_at)} · ID {record.inspection_id ?? record.id}
           </p>
         </div>
+
+        {/* Trademark attribution — inside .print-doc so it lands on the PDF. */}
+        <BrandFooter className="mt-4 text-white" />
       </div>
     </div>
   )

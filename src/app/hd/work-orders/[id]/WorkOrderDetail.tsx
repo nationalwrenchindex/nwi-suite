@@ -6,6 +6,10 @@ import { createClient } from '@/lib/supabase/client'
 // Safe from a client component: the module's only server dependency is a type-only
 // import of the Supabase server client, which is erased at build time.
 import { inspectionDateLabel, type InspectionSummary } from '@/lib/hd/inspections'
+// BrandHeader has no hooks and no server-only imports, so it renders fine inside
+// this client component.
+import { BrandHeader } from '@/components/BrandHeader'
+import type { Branding } from '@/lib/branding'
 
 const HD_ORANGE = '#E85D24'
 
@@ -44,6 +48,7 @@ interface Props {
   photos: Photo[]
   inspections: InspectionSummary[]
   workOrderId: string
+  branding: Branding
 }
 
 const CATEGORIES = [
@@ -76,7 +81,7 @@ async function compressImage(file: File, maxPx = 1400, quality = 0.82): Promise<
   })
 }
 
-export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, inspections, workOrderId }: Props) {
+export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, inspections, workOrderId, branding }: Props) {
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos)
   const [uploading, setUploading] = useState<Record<string, boolean>>({})
   const [lightbox, setLightbox] = useState<string | null>(null)
@@ -132,6 +137,15 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
 
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto">
+      {/* Subscriber branding — logo when one is uploaded, business name in text
+          when not. This is the subscriber's document, so their mark leads it. */}
+      <div
+        className="rounded-xl px-5 py-4 mb-5 text-white"
+        style={{ background: '#111920', border: '1px solid #1e3040' }}
+      >
+        <BrandHeader branding={branding} subtitle={`Work Order ${woLabel}`} />
+      </div>
+
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div>

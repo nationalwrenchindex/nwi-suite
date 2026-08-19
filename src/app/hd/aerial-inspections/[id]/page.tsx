@@ -2,6 +2,7 @@ import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import AerialInspectionDetail from './AerialInspectionDetail'
 import { AERIAL_FORMS } from '@/lib/hd/aerial/forms'
+import { BRANDING_SELECT, resolveBranding, type BrandingSource } from '@/lib/branding'
 import type { AerialInspectionRecord, AerialInspectionType } from '@/types/aerial'
 
 export const metadata = { title: 'Aerial Inspection — NWI HD Suite' }
@@ -31,20 +32,22 @@ export default async function AerialInspectionPage({
   const def    = AERIAL_FORMS[record.inspection_type as AerialInspectionType]
   if (!def) return notFound()
 
+  // Branding is resolved server-side so the print stylesheet sees the logo in
+  // the initial HTML — a client-side fetch would leave it out of the first paint
+  // the browser hands to the PDF renderer.
   const { data: profile } = await supabase
     .from('profiles')
-    .select('business_name, phone')
+    .select(BRANDING_SELECT)
     .eq('id', user.id)
     .single()
 
-  const p = profile as { business_name?: string; phone?: string } | null
+  const branding = resolveBranding(profile as BrandingSource | null)
 
   return (
     <AerialInspectionDetail
       record={record}
       def={def}
-      businessName={p?.business_name ?? ''}
-      businessPhone={p?.phone ?? ''}
+      branding={branding}
     />
   )
 }

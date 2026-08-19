@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { createServiceClient } from '@/lib/supabase/service'
 import BookingClient from '@/components/booking/BookingClient'
 import { getServicesByBusinessType } from '@/lib/scheduler'
+import { BRANDING_SELECT, resolveBranding, type BrandingSource } from '@/lib/branding'
 
 type PageProps = {
   params:       Promise<{ techSlug: string }>
@@ -18,7 +19,9 @@ export default async function BookingPage({ params, searchParams }: PageProps) {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('id, business_name, full_name, profession_type, service_area_description, working_hours, offer_mpi_on_booking, business_type, business_logo_url')
+    // BRANDING_SELECT carries business_name, full_name, phone and both logo
+    // columns, so the header can resolve through the shared branding helper.
+    .select(`id, profession_type, service_area_description, working_hours, offer_mpi_on_booking, business_type, ${BRANDING_SELECT}`)
     .eq('slug', techSlug)
     .single()
 
@@ -27,6 +30,12 @@ export default async function BookingPage({ params, searchParams }: PageProps) {
   const p            = profile as Record<string, unknown>
   const businessType = (p.business_type as string) ?? 'mechanic'
   const isDetailer   = businessType === 'detailer'
+
+  // Logo when the subscriber uploaded one, business name in text when not.
+  // phone is dropped deliberately: profiles.phone is the technician's
+  // notification number, and this page is public — the header showed no phone
+  // before and should not start now.
+  const branding = { ...resolveBranding(profile as BrandingSource), phone: null }
 
   // For detailers, try to fetch their custom offered services; fall back to defaults
   let services: string[]
@@ -66,6 +75,7 @@ export default async function BookingPage({ params, searchParams }: PageProps) {
           working_hours:            (profile.working_hours  as Record<string, { enabled: boolean; open: string; close: string }> | null) ?? null,
           business_logo_url:        (p.business_logo_url   as string | null) ?? null,
         }}
+        branding={branding}
         services={services}
         offerMpi={!!(p.offer_mpi_on_booking)}
         initialStep={initialStep}

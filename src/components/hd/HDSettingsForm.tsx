@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 const HD_ORANGE = '#E85D24'
 
@@ -20,6 +20,47 @@ export default function HDSettingsForm({ initialLaborRate, initialTechName, init
   const [saved,  setSaved]  = useState(false)
   const [error,  setError]  = useState<string | null>(null)
 
+  const fileRef = useRef<HTMLInputElement | null>(null)
+  const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [logoError,     setLogoError]     = useState<string | null>(null)
+
+  async function uploadLogo(file: File) {
+    setUploadingLogo(true)
+    setLogoError(null)
+    try {
+      const form = new FormData()
+      form.append('file', file)
+      const res  = await fetch('/api/settings/logo', { method: 'POST', body: form })
+      const json = await res.json() as { url?: string; error?: string }
+      if (!res.ok || !json.url) throw new Error(json.error ?? 'Upload failed')
+      // Cache-bust: the storage path is stable across replacements, so without
+      // this the browser keeps showing the previous logo.
+      setLogoUrl(`${json.url}?v=${Date.now()}`)
+    } catch (e) {
+      setLogoError(e instanceof Error ? e.message : 'Upload failed')
+    } finally {
+      setUploadingLogo(false)
+      if (fileRef.current) fileRef.current.value = ''
+    }
+  }
+
+  async function removeLogo() {
+    setUploadingLogo(true)
+    setLogoError(null)
+    try {
+      const res = await fetch('/api/settings/logo', { method: 'DELETE' })
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({})) as { error?: string }
+        throw new Error(json.error ?? 'Remove failed')
+      }
+      setLogoUrl('')
+    } catch (e) {
+      setLogoError(e instanceof Error ? e.message : 'Remove failed')
+    } finally {
+      setUploadingLogo(false)
+    }
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault()
     setSaving(true)
@@ -33,7 +74,10 @@ export default function HDSettingsForm({ initialLaborRate, initialTechName, init
           hd_labor_rate:        laborRate ? Number(laborRate) : null,
           hd_tech_name:         techName  || null,
           hd_epa_cert_number:   epaCert   || null,
-          hd_company_logo_url:  logoUrl   || null,
+          // Logo intentionally omitted: it is uploaded and deleted through
+          // /api/settings/logo, which owns the storage object as well as the
+          // column. Writing it here too would let a stale form value clobber a
+          // freshly uploaded logo.
         }),
       })
       if (!res.ok) {
@@ -98,27 +142,61 @@ export default function HDSettingsForm({ initialLaborRate, initialTechName, init
         </p>
       </div>
 
+      {/* Company logo — a real upload, not a URL field.
+          Asking a mobile mechanic to host an image somewhere and paste a link is
+          why nobody had one set. This posts to the same /api/settings/logo
+          endpoint the LD suite already uses, so there is one bucket, one column
+          and one delete path rather than two half-features. */}
       <div>
         <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
-          Company Logo URL
+          Company Logo
         </label>
-        <input
-          type="url"
-          value={logoUrl}
-          onChange={e => setLogoUrl(e.target.value)}
-          placeholder="https://example.com/logo.png"
-          className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20"
-          style={{ background: '#162030', border: '1px solid #1e3040' }}
-        />
-        <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
-          Appears on DOT inspection reports and printed documents
-        </p>
-        {logoUrl && (
-          <div className="mt-2 p-2 rounded-lg inline-block" style={{ background: '#162030', border: '1px solid #1e3040' }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={logoUrl} alt="Company logo preview" className="h-10 w-auto object-contain" onError={e => (e.currentTarget.style.display = 'none')} />
+
+        <div className="flex items-center gap-3">
+          <div
+            className="rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ width: 96, height: 64, background: '#162030', border: '1px solid #1e3040' }}
+          >
+            {logoUrl ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img src={logoUrl} alt="Company logo" className="max-h-full max-w-full object-contain p-1"
+                onError={e => (e.currentTarget.style.display = 'none')} />
+            ) : (
+              <span className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>No logo</span>
+            )}
           </div>
-        )}
+
+          <div className="flex flex-col gap-2">
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              className="hidden"
+              onChange={e => { const f = e.target.files?.[0]; if (f) void uploadLogo(f) }}
+            />
+            <button
+              type="button"
+              disabled={uploadingLogo}
+              onClick={() => fileRef.current?.click()}
+              className="px-4 py-2 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+              style={{ background: `${HD_ORANGE}18`, color: HD_ORANGE, border: `1px solid ${HD_ORANGE}55` }}
+            >
+              {uploadingLogo ? 'Uploading…' : logoUrl ? 'Replace logo' : 'Upload logo'}
+            </button>
+            {logoUrl && !uploadingLogo && (
+              <button type="button" onClick={() => void removeLogo()}
+                className="text-xs underline" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                Remove logo
+              </button>
+            )}
+          </div>
+        </div>
+
+        <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.3)' }}>
+          Replaces NWI branding on work orders, invoices, inspection reports and your booking page.
+          PNG, JPG, WEBP or SVG. If no logo is set, your business name is shown instead.
+        </p>
+        {logoError && <p className="text-xs mt-1 text-red-400">{logoError}</p>}
       </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}

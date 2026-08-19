@@ -3,6 +3,8 @@
 
 import { notFound } from 'next/navigation'
 import { createServiceClient } from '@/lib/supabase/service'
+import { BrandFooter } from '@/components/BrandHeader'
+import { BRANDING_SELECT, resolveBranding, type BrandingSource } from '@/lib/branding'
 import InvoiceViewClient from './InvoiceViewClient'
 import InvoiceApprovalClient from './InvoiceApprovalClient'
 import type { Metadata } from 'next'
@@ -59,12 +61,15 @@ export default async function PublicInvoicePage(
 
   const { data: profile } = await sc
     .from('profiles')
-    .select('full_name, business_name, phone, email, business_type, bill_consumables_separately, default_payment_instructions, business_logo_url')
+    .select(`full_name, business_name, phone, email, business_type, bill_consumables_separately, default_payment_instructions, ${BRANDING_SELECT}`)
     .eq('id', invoice.user_id)
     .single()
 
   const p = profile as { full_name?: string; business_name?: string; phone?: string; business_type?: string; bill_consumables_separately?: boolean; default_payment_instructions?: string | null; business_logo_url?: string | null } | null
-  const bizName             = p?.business_name             ?? 'Your Technician'
+  // Routed through resolveBranding so an HD subscriber who only ever set
+  // hd_company_logo_url sees their mark here too, not just on DOT reports.
+  const branding            = resolveBranding(p as BrandingSource)
+  const bizName             = branding.name
   const techPhone           = p?.phone                     ?? null
   const billConsumables     = p?.bill_consumables_separately ?? false
 
@@ -149,9 +154,9 @@ export default async function PublicInvoicePage(
       {/* Header */}
       <div className="bg-[#1a1a1a] border-b border-white/10">
         <div className="max-w-2xl mx-auto px-4 py-4 flex items-center gap-3">
-          {p?.business_logo_url ? (
+          {branding.logoUrl ? (
             <div className="h-16 sm:h-20 max-w-[240px] rounded-md overflow-hidden border border-white/10 bg-white/5 flex-shrink-0 inline-flex">
-              <img src={p.business_logo_url} alt={bizName} className="h-full w-auto object-contain p-1" />
+              <img src={branding.logoUrl} alt={bizName} className="h-full w-auto object-contain p-1" />
             </div>
           ) : (
             <div className="h-16 sm:h-20 w-16 sm:w-20 rounded-md bg-[#FF6600] flex items-center justify-center flex-shrink-0">
@@ -440,6 +445,11 @@ export default async function PublicInvoicePage(
             </a>
           </p>
         )}
+
+        {/* Trademark attribution — stays even when the header is fully
+            white-labelled. The subscriber's brand leads the document; the
+            platform credit remains at the foot of it. */}
+        <BrandFooter className="text-center pt-1" />
 
 
       </div>

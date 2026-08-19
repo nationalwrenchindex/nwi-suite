@@ -2,6 +2,10 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { buildCalendarGrid, monthLabel, toDateStr, formatTime, VEHICLE_CATEGORIES, VEHICLE_CATEGORY_LABELS, type VehicleCategory } from '@/lib/scheduler'
+// BrandHeader/BrandFooter are plain components — no hooks, no server-only
+// imports — so a client component can render them directly.
+import { BrandHeader, BrandFooter } from '@/components/BrandHeader'
+import { resolveBranding, type Branding } from '@/lib/branding'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -15,6 +19,7 @@ export interface PublicProfile {
   service_area_description: string | null
   working_hours:            WorkingHours | null
   business_logo_url?:       string | null
+  hd_company_logo_url?:     string | null
 }
 
 // ─── Service duration estimates (minutes) ─────────────────────────────────────
@@ -382,6 +387,7 @@ export default function BookingClient({
   services,
   offerMpi = false,
   initialStep = 1,
+  branding: brandingProp,
 }: {
   techSlug:      string
   businessType?: string
@@ -389,8 +395,12 @@ export default function BookingClient({
   services:      string[]
   offerMpi?:     boolean
   initialStep?:  number
+  /** Resolved white-label branding. Optional so existing callers keep working —
+   *  when it is absent the profile fields are resolved here instead. */
+  branding?:     Branding
 }) {
   const isDetailer = businessType === 'detailer'
+  const branding   = brandingProp ?? resolveBranding(profile)
   const [step, setStep] = useState(initialStep)
 
   // Keep the URL ?step= in sync with the current step so deep-links stay accurate
@@ -586,14 +596,15 @@ export default function BookingClient({
     setTime(null)
   }
 
-  const bizName = profile.business_name ?? profile.full_name ?? 'Your Technician'
+  // Same fallback chain as before, now via the shared branding resolver.
+  const bizName = branding.name
   const totalDuration = selectedServices.reduce((sum, s) => sum + (SERVICE_DURATIONS[s] ?? 60), 0)
 
   // ── Success screen ──
   if (submitted) {
     return (
       <div className="min-h-dvh bg-dark flex flex-col">
-        <BookingHeader bizName={bizName} profile={profile} isDetailer={isDetailer} />
+        <BookingHeader branding={branding} profile={profile} isDetailer={isDetailer} />
         <div className="flex-1 flex items-center justify-center p-6">
           <div className="w-full max-w-md text-center">
             <div className="w-20 h-20 bg-success/20 border border-success/30 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -629,6 +640,9 @@ export default function BookingClient({
             <p className="text-white/30 text-xs">
               Need to reschedule? Contact {bizName} directly.
             </p>
+
+            {/* Trademark attribution stays even when the header is white-labelled. */}
+            <BrandFooter className="mt-6 text-white text-center" />
           </div>
         </div>
       </div>
@@ -637,7 +651,7 @@ export default function BookingClient({
 
   return (
     <div className="min-h-dvh bg-dark flex flex-col">
-      <BookingHeader bizName={bizName} profile={profile} isDetailer={isDetailer} />
+      <BookingHeader branding={branding} profile={profile} isDetailer={isDetailer} />
 
       <div className="flex-1 flex justify-center px-4 pt-4 pb-24 sm:px-8 sm:pt-8">
         <div className="w-full max-w-xl">
@@ -1144,6 +1158,9 @@ export default function BookingClient({
             </div>
           )}
 
+          {/* Trademark attribution — stays regardless of subscriber branding. */}
+          <BrandFooter className="mt-8 text-white text-center" />
+
           {/* ── Navigation ── */}
           <div className={`fixed bottom-0 left-0 right-0 bg-dark border-t border-dark-border p-4 flex gap-3 ${step === 1 ? 'justify-end' : 'justify-between'}`}>
             {step > 1 && (
@@ -1183,7 +1200,7 @@ export default function BookingClient({
 
 // ─── Header ───────────────────────────────────────────────────────────────────
 
-function BookingHeader({ bizName, profile, isDetailer }: { bizName: string; profile: PublicProfile; isDetailer?: boolean }) {
+function BookingHeader({ branding, profile, isDetailer }: { branding: Branding; profile: PublicProfile; isDetailer?: boolean }) {
   const professionLabels: Record<string, string> = {
     mobile_mechanic:  'Mobile Mechanic',
     auto_electrician: 'Auto Electrician',
@@ -1195,26 +1212,21 @@ function BookingHeader({ bizName, profile, isDetailer }: { bizName: string; prof
     ? 'Mobile Detailer'
     : (profile.profession_type ? professionLabels[profile.profession_type] ?? 'Auto Technician' : 'Auto Technician')
 
+  const subtitle = `${profLabel}${profile.service_area_description ? ` · ${profile.service_area_description}` : ''}`
+
   return (
     <header className="border-b border-dark-border bg-dark-card px-4 sm:px-8 py-4">
       <div className="max-w-xl mx-auto flex items-center gap-4">
-        {profile.business_logo_url ? (
-          <div className="h-16 sm:h-20 max-w-[240px] rounded-xl overflow-hidden border border-dark-border bg-dark-card flex-shrink-0 inline-flex">
-            <img src={profile.business_logo_url} alt={bizName} className="h-full w-auto object-contain p-1" />
-          </div>
-        ) : (
+        {/* No uploaded logo — the wrench mark stands in for one, and BrandHeader
+            renders the business name as text beside it. */}
+        {!branding.logoUrl && (
           <div className="h-16 sm:h-20 w-16 sm:w-20 bg-orange rounded-xl flex items-center justify-center flex-shrink-0">
             <svg className="w-8 sm:w-10 h-8 sm:h-10 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
               <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
             </svg>
           </div>
         )}
-        <div className="flex-1 min-w-0">
-          <p className="font-condensed font-bold text-white text-lg leading-none truncate">{bizName}</p>
-          <p className="text-white/40 text-xs mt-0.5">
-            {profLabel}{profile.service_area_description ? ` · ${profile.service_area_description}` : ''}
-          </p>
-        </div>
+        <BrandHeader branding={branding} subtitle={subtitle} className="flex-1 min-w-0 text-white" />
       </div>
     </header>
   )

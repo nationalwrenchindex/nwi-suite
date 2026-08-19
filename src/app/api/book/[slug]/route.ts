@@ -102,7 +102,9 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 
   const { data: profile, error } = await supabase
     .from('profiles')
-    .select('id, business_name, full_name, profession_type, service_area_description, working_hours, offer_mpi_on_booking, business_type')
+    // Logo columns included so any client reading the public profile from here
+    // can render the subscriber's mark, not just the name.
+    .select('id, business_name, full_name, profession_type, service_area_description, working_hours, offer_mpi_on_booking, business_type, business_logo_url, hd_company_logo_url')
     .eq('slug', slug)
     .single()
 
@@ -194,6 +196,8 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       profession_type:          profile.profession_type,
       service_area_description: profile.service_area_description,
       working_hours:            profile.working_hours,
+      business_logo_url:        (profile as Record<string, unknown>).business_logo_url ?? null,
+      hd_company_logo_url:      (profile as Record<string, unknown>).hd_company_logo_url ?? null,
     },
     services:         [...getServicesByBusinessType((profile as Record<string, unknown>).business_type as string ?? 'mechanic')],
     offerMpi:         !!(profile as Record<string, unknown>).offer_mpi_on_booking,

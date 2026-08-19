@@ -2,6 +2,7 @@ import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDStarterAccess } from '@/lib/hd-access'
 import { fetchWorkOrderInspections } from '@/lib/hd/inspections'
+import { BRANDING_SELECT, resolveBranding, type BrandingSource } from '@/lib/branding'
 import WorkOrderDetail from './WorkOrderDetail'
 
 export const metadata = { title: 'Work Order — NWI HD Suite' }
@@ -19,7 +20,7 @@ export default async function WorkOrderDetailPage({
   const hasAccess = await checkHDStarterAccess(user.id)
   if (!hasAccess) redirect('/hd/upgrade')
 
-  const [{ data: wo }, { data: photos }, inspections] = await Promise.all([
+  const [{ data: wo }, { data: photos }, inspections, { data: brandingRow }] = await Promise.all([
     supabase
       .from('hd_work_orders')
       .select(`
@@ -38,9 +39,18 @@ export default async function WorkOrderDetailPage({
       .eq('work_order_id', id)
       .order('taken_at', { ascending: true }),
     fetchWorkOrderInspections(supabase, user.id, id),
+    // Subscriber white-label branding for the document header. Scoped to the
+    // signed-in user, since a work order belongs to whoever is looking at it.
+    supabase
+      .from('profiles')
+      .select(BRANDING_SELECT)
+      .eq('id', user.id)
+      .single(),
   ])
 
   if (!wo) notFound()
+
+  const branding = resolveBranding(brandingRow as BrandingSource | null)
 
   // Generate signed URLs for each photo (1-hour expiry)
   const photosWithUrls = await Promise.all(
@@ -59,6 +69,7 @@ export default async function WorkOrderDetailPage({
         photos={photosWithUrls}
         inspections={inspections}
         workOrderId={id}
+        branding={branding}
       />
     </main>
   )

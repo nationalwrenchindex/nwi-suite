@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { resolveBranding } from '@/lib/branding'
 import HDSettingsForm from '@/components/hd/HDSettingsForm'
 import LateFeeSettingsForm from '@/components/hd/LateFeeSettingsForm'
 import ExportData from '@/components/hd/ExportData'
@@ -15,7 +16,7 @@ export default async function HDSettingsPage() {
   const [{ data: profile }, { data: lateFee }] = await Promise.all([
     supabase
       .from('profiles')
-      .select('full_name, email, business_name, phone, hd_labor_rate, hd_tech_name, hd_epa_cert_number, hd_company_logo_url')
+      .select('full_name, email, business_name, phone, hd_labor_rate, hd_tech_name, hd_epa_cert_number, hd_company_logo_url, business_logo_url')
       .eq('id', user.id)
       .single(),
     supabase
@@ -43,6 +44,7 @@ export default async function HDSettingsPage() {
     hd_tech_name?: string | null
     hd_epa_cert_number?: string | null
     hd_company_logo_url?: string | null
+    business_logo_url?:   string | null
   } | null
 
   return (
@@ -77,7 +79,7 @@ export default async function HDSettingsPage() {
             initialLaborRate={p?.hd_labor_rate?.toString() ?? null}
             initialTechName={p?.hd_tech_name ?? null}
             initialEpaCert={p?.hd_epa_cert_number ?? null}
-            initialLogoUrl={p?.hd_company_logo_url ?? null}
+            initialLogoUrl={resolveBranding(p).logoUrl}
           />
         </div>
 
