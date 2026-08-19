@@ -171,6 +171,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/hd/quotes',          label: 'Quotes'        },
   { href: '/hd/invoices',        label: 'Invoices'      },
   { href: '/hd/dot-inspections', label: 'DOT Inspections'},
+  { href: '/hd/equipment-inspections', label: 'Equipment Inspections'},
   { href: '/hd/units/inspections', label: 'Inspection Status'},
   { href: '/hd/pm-schedules',    label: 'PM Schedules'  },
   { href: '/hd/epa-log',         label: 'EPA 608 Log'   },
