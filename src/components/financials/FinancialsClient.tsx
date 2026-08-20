@@ -7,8 +7,9 @@ import OverviewTab    from './OverviewTab'
 import InvoicesTab    from './InvoicesTab'
 import ExpensesTab    from './ExpensesTab'
 import LaborWatchTab  from './LaborWatchTab'
+import TaxSummaryTab  from './TaxSummaryTab'
 
-type Tab = 'quotes' | 'overview' | 'invoices' | 'expenses' | 'labor'
+type Tab = 'quotes' | 'overview' | 'invoices' | 'expenses' | 'labor' | 'tax'
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   {
@@ -61,6 +62,16 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
       </svg>
     ),
   },
+  {
+    id: 'tax',
+    label: 'Tax Summary',
+    icon: (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+        <line x1="19" y1="5" x2="5" y2="19" />
+        <circle cx="6.5" cy="6.5" r="2.5" /><circle cx="17.5" cy="17.5" r="2.5" />
+      </svg>
+    ),
+  },
 ]
 
 export default function FinancialsClient({ businessType }: { businessType?: string }) {
@@ -107,6 +118,7 @@ export default function FinancialsClient({ businessType }: { businessType?: stri
       {activeTab === 'invoices' && <InvoicesTab />}
       {activeTab === 'expenses' && <ExpensesTab businessType={businessType} />}
       {activeTab === 'labor'    && <LaborWatchTab />}
+      {activeTab === 'tax'      && <TaxSummaryTab />}
     </div>
   )
 }

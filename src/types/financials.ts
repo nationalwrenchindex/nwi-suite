@@ -412,3 +412,27 @@ export interface QuoteResponse {
 export interface ApiError {
   error: string
 }
+
+// ─── Tax summary ──────────────────────────────────────────────────────────────
+
+export interface TaxMonthRow {
+  month:           string   // YYYY-MM
+  invoice_count:   number
+  taxable_amount:  number
+  tax_collected:   number
+}
+
+export interface TaxSummary {
+  from_date:       string
+  to_date:         string
+  rows:            TaxMonthRow[]
+  invoice_count:   number
+  taxable_amount:  number
+  tax_collected:   number
+  ld_tax:          number
+  hd_tax:          number
+}
+
+export interface TaxSummaryResponse {
+  tax_summary: TaxSummary
+}
