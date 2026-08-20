@@ -24,6 +24,8 @@ export async function GET(request: NextRequest) {
 
   const sp = request.nextUrl.searchParams
 
+  const todayStr = new Date().toISOString().slice(0, 10)
+
   let fromDate: string
   let toDate: string
 
@@ -44,7 +46,7 @@ export async function GET(request: NextRequest) {
   const [invResult, expResult, jobsResult, timeJobsResult] = await Promise.all([
     supabase
       .from('invoices')
-      .select('id, total, status, net_profit, cogs_total, invoice_date')
+      .select('id, total, status, invoice_status, due_date, net_profit, cogs_total, invoice_date')
       .eq('user_id', user.id)
       .gte('invoice_date', fromDate)
       .lte('invoice_date', toDate),
@@ -84,8 +86,20 @@ export async function GET(request: NextRequest) {
   const jobs      = jobsResult.data ?? []
   const timeJobs  = timeJobsResult.data ?? []
 
-  const paidInvoices    = invoices.filter(i => i.status === 'paid')
-  const overdueInvoices = invoices.filter(i => i.status === 'overdue')
+  // The legacy `status` enum is not kept in sync by the finalize path — a finalized
+  // or paid invoice can still read 'draft' there — so `invoice_status` (migration 012)
+  // is authoritative for the payment lifecycle. Filtering on `status` undercounted
+  // revenue by dropping invoices paid outside the mark-paid endpoint.
+  const paidInvoices = invoices.filter(i => i.invoice_status === 'paid')
+
+  // `invoice_status` has no overdue state, so overdue is derived the way the dashboard
+  // does it: an issued, still-unpaid invoice past its due date, plus anything a tech
+  // manually flagged overdue on the legacy column.
+  const OUTSTANDING = new Set(['finalized', 'awaiting_payment'])
+  const overdueInvoices = invoices.filter(i =>
+    OUTSTANDING.has(i.invoice_status as string) &&
+    (i.status === 'overdue' || (i.due_date != null && (i.due_date as string) < todayStr))
+  )
 
   const revenue_total = paidInvoices.reduce((s, i) => s + Number(i.total), 0)
 
