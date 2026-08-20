@@ -9,6 +9,7 @@ export type PlanTier =
   | 'elite'
   | 'foreman_standalone'
   | 'quickwrench'
+  | 'detailer'
 
 export const PLANS: {
   tier:      PlanTier
@@ -127,6 +128,24 @@ export const PLANS: {
       'No full Suite required',
     ],
   },
+  {
+    // Detailer track. Only surfaced to accounts with business_type = 'detailer';
+    // the mechanic tier lineup is hidden from them and vice versa.
+    tier:      'detailer',
+    name:      'NWI Detailer',
+    price:     4900,
+    priceKey:  'DETAILER',
+    modules:   ['scheduler', 'intel', 'financials'],
+    trialDays: 0,
+    badge:     'FOR DETAILERS',
+    features: [
+      'Scheduler — booking page, calendar, SMS reminders',
+      'Intel Hub — customer profiles, vehicle history, service alerts',
+      'Financials — service pricing catalog, quotes, invoicing, P&L',
+      'Detail-specific pricing and adjustment presets',
+      'Cancel anytime',
+    ],
+  },
 ]
 
 export const TIER_MODULES: Record<PlanTier, string[]> = {
@@ -137,6 +156,7 @@ export const TIER_MODULES: Record<PlanTier, string[]> = {
   elite:              ['scheduler', 'intel', 'financials', 'quickwrench', 'torquewrench', 'foreman'],
   foreman_standalone: ['scheduler', 'foreman'],
   quickwrench:        ['quickwrench'],
+  detailer:           ['scheduler', 'intel', 'financials'],
 }
 
 export const MODULE_LABELS: Record<string, string> = {

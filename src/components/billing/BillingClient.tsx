@@ -42,6 +42,7 @@ const TIER_DISPLAY: Record<string, string> = {
   elite:              'NWI Elite',
   foreman_standalone: 'NWI Foreman Standalone',
   quickwrench:        'NWI QuickWrench',
+  detailer:           'NWI Detailer',
 }
 
 // NWI tiers in price order (excludes foreman_standalone — different product track)
@@ -458,11 +459,17 @@ export default function BillingClient({
   subscription,
   plans,
   foremanAddonActive,
+  businessType,
 }: {
   subscription:       Subscription | null
   plans:              Plan[]
   foremanAddonActive: boolean
+  businessType?:      string
 }) {
+  // Detailers are sold a single $49 plan; the mechanic tier lineup and the
+  // standalone tools are not offered to them (and the Detailer plan is hidden
+  // from mechanics).
+  const isDetailer = businessType === 'detailer'
   const searchParams  = useSearchParams()
   const [loadingPlan,      setLoadingPlan]      = useState<PlanTier | null>(null)
   const [loadingPortal,    setLoadingPortal]    = useState(false)
@@ -686,53 +693,73 @@ export default function BillingClient({
             )}
           </div>
 
-          {/* NWI Suite Plans */}
-          <p className="text-white/30 text-[11px] uppercase tracking-widest mb-3">NWI Suite Plans</p>
+          {isDetailer ? (
+            <>
+              {/* Detailer track — single plan, no module picker */}
+              <p className="text-white/30 text-[11px] uppercase tracking-widest mb-3">Detailer Plan</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-10">
+                {plans.filter(p => p.tier === 'detailer').map(plan => (
+                  <PlanCard
+                    key={plan.tier}
+                    plan={plan}
+                    isCurrent={false}
+                    onSelect={handleSelectPlan}
+                    loading={loadingPlan}
+                  />
+                ))}
+              </div>
+            </>
+          ) : (
+            <>
+              {/* NWI Suite Plans */}
+              <p className="text-white/30 text-[11px] uppercase tracking-widest mb-3">NWI Suite Plans</p>
 
-          {/* Row 1: Starter, Pro, Full Suite */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-5">
-            {plans.filter(p => ['starter', 'pro', 'full_suite'].includes(p.tier)).map(plan => (
-              <PlanCard
-                key={plan.tier}
-                plan={plan}
-                isCurrent={false}
-                onSelect={handleSelectPlan}
-                loading={loadingPlan}
-              />
-            ))}
-          </div>
+              {/* Row 1: Starter, Pro, Full Suite */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-5">
+                {plans.filter(p => ['starter', 'pro', 'full_suite'].includes(p.tier)).map(plan => (
+                  <PlanCard
+                    key={plan.tier}
+                    plan={plan}
+                    isCurrent={false}
+                    onSelect={handleSelectPlan}
+                    loading={loadingPlan}
+                  />
+                ))}
+              </div>
 
-          {/* Row 2: Full Suite Plus, Elite */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-10">
-            {plans.filter(p => ['full_suite_plus', 'elite'].includes(p.tier)).map(plan => (
-              <PlanCard
-                key={plan.tier}
-                plan={plan}
-                isCurrent={false}
-                onSelect={handleSelectPlan}
-                loading={loadingPlan}
-              />
-            ))}
-          </div>
+              {/* Row 2: Full Suite Plus, Elite */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 mb-10">
+                {plans.filter(p => ['full_suite_plus', 'elite'].includes(p.tier)).map(plan => (
+                  <PlanCard
+                    key={plan.tier}
+                    plan={plan}
+                    isCurrent={false}
+                    onSelect={handleSelectPlan}
+                    loading={loadingPlan}
+                  />
+                ))}
+              </div>
 
-          {/* Standalone Tools */}
-          <div className="border-t border-dark-border pt-8 mb-8">
-            <p className="font-condensed font-bold text-white/60 text-base tracking-wide mb-1">
-              Already have a shop management system?
-            </p>
-            <p className="text-white/30 text-sm mb-5">Add just the tool you need.</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {plans.filter(p => ['foreman_standalone', 'quickwrench'].includes(p.tier)).map(plan => (
-                <PlanCard
-                  key={plan.tier}
-                  plan={plan}
-                  isCurrent={false}
-                  onSelect={handleSelectPlan}
-                  loading={loadingPlan}
-                />
-              ))}
-            </div>
-          </div>
+              {/* Standalone Tools */}
+              <div className="border-t border-dark-border pt-8 mb-8">
+                <p className="font-condensed font-bold text-white/60 text-base tracking-wide mb-1">
+                  Already have a shop management system?
+                </p>
+                <p className="text-white/30 text-sm mb-5">Add just the tool you need.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {plans.filter(p => ['foreman_standalone', 'quickwrench'].includes(p.tier)).map(plan => (
+                    <PlanCard
+                      key={plan.tier}
+                      plan={plan}
+                      isCurrent={false}
+                      onSelect={handleSelectPlan}
+                      loading={loadingPlan}
+                    />
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
 
           <div className="nwi-card text-center py-5">
             <p className="text-white/30 text-xs mb-1">All plans include</p>

@@ -31,6 +31,7 @@ export default async function BillingPage() {
           subscription={subscription}
           plans={PLANS}
           foremanAddonActive={(profile as Record<string, unknown>).foreman_addon_active as boolean ?? false}
+          businessType={(profile as Record<string, unknown>).business_type as string | undefined}
         />
       </Suspense>
     </div>
