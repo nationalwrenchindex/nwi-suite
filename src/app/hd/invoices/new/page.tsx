@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { computeDueDate } from '@/lib/hd/payment-terms'
+import { useDefaultTaxPercent } from '@/lib/hd/use-default-tax-rate'
 
 // Direct-invoice fast path: skip the quote/approval step and bill a trusted
 // customer directly. Mirrors the quote form but posts straight to /api/hd/invoices.
@@ -95,6 +96,14 @@ export default function NewInvoicePage() {
   })
 
   function setField(k: string, v: string | number | boolean) { setForm(f => ({ ...f, [k]: v })) }
+
+  // Seed the tax rate from the tech's saved default. Only fills while the field is
+  // still untouched at 0, so a rate typed while the fetch was in flight survives.
+  const defaultTaxPct = useDefaultTaxPercent()
+  useEffect(() => {
+    if (defaultTaxPct == null) return
+    setForm(f => (f.tax_rate === 0 ? { ...f, tax_rate: defaultTaxPct } : f))
+  }, [defaultTaxPct])
 
   // Prefill from a PM Schedules interval tap (?pm_type=...&unit_manufacturer=...) or
   // from the "Create Invoice" button on a work order, which carries the whole job in

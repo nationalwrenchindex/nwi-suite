@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { LABOR_GUIDE, type LaborGuideItem } from '@/lib/hd/labor-guide'
+import { useDefaultTaxPercent } from '@/lib/hd/use-default-tax-rate'
 
 const ORANGE  = '#FF6600'
 const BLUE    = '#2969B0'
@@ -208,6 +209,14 @@ export default function NewQuotePage() {
     road_call_fee: 0, include_road_call: false,
     tax_rate: 0, notes: '', valid_until: '',
   })
+
+  // Seed the tax rate from the tech's saved default. A converted quote carries its
+  // tax_rate onto the invoice, so this is what keeps quote-sourced invoices taxed.
+  const defaultTaxPct = useDefaultTaxPercent()
+  useEffect(() => {
+    if (defaultTaxPct == null) return
+    setForm(f => (f.tax_rate === 0 ? { ...f, tax_rate: defaultTaxPct } : f))
+  }, [defaultTaxPct])
 
   // ── Intel Hub customer picker ──
   const [customerSearch, setCustomerSearch]       = useState('')
