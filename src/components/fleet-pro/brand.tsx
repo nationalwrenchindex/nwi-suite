@@ -4,7 +4,10 @@
 // the dark navy ground rather than as an NWI accent. These are the house colors
 // from tailwind.config.ts — the portal uses inline styles like the rest of the HD
 // surface, so they are restated here rather than pulled through Tailwind classes.
-export const NWI_BLUE   = '#2969b0'
+// blue.light rather than blue.DEFAULT (#2969b0): on the portal's dark navy ground
+// the default blue only reaches 3.2:1, short of the 4.5:1 WCAG AA wants for the
+// small uppercase wordmark. This is the same brand family, one step brighter.
+export const NWI_BLUE   = '#3A7FD5'
 export const NWI_ORANGE = '#ff6600'
 
 // Only brand colors live here. Status colors (overdue red, scheduled green, failed
