@@ -117,6 +117,10 @@ export async function POST(req: NextRequest) {
         .insert({
           user_id:           user.id,
           invoice_number:    invoiceNumber,
+          // Fleet Pro linkage — without these the invoice never reaches the
+          // customer's portal, even though the inspection itself does.
+          unit_id:           body.unit_id ?? null,
+          fleet_account_id:  body.fleet_account_id ?? null,
           customer_name:     body.customer_name || 'Fleet Customer',
           customer_phone:    customerPhone,
           customer_email:    customerEmail,

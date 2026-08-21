@@ -68,7 +68,14 @@ export async function middleware(request: NextRequest) {
     effectivePath.startsWith('/billing')    ||
     effectivePath.startsWith('/quickwrench')
 
-  const isProtected = isHDProtected || isLegacyProtected
+  // Fleet Pro is a customer-facing portal, not part of the mechanic's app, but it
+  // is still session-authed. /fleet-pro/accept-invite is excluded: an invited user
+  // lands there from an email link before they have a session.
+  const isFleetProProtected =
+    effectivePath.startsWith('/fleet-pro') &&
+    !effectivePath.startsWith('/fleet-pro/accept-invite')
+
+  const isProtected = isHDProtected || isLegacyProtected || isFleetProProtected
   const isAuthRoute  = isHDAuthRoute || isLegacyAuthRoute
 
   if (!user && isProtected) {

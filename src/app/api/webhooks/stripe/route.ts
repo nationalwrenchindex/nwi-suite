@@ -10,6 +10,7 @@ import { provisionForemanNumber } from '@/lib/foreman/provision'
 import { isForemanAvailable } from '@/lib/foreman/cap'
 import { FOREMAN_GRACE_PERIOD_DAYS, FOREMAN_WORKING_HOURS_DEFAULT } from '@/lib/foreman/config'
 import { sendSubscriberSms } from '@/lib/twilio'
+import { isFleetProPriceId } from '@/lib/fleet-pro/billing'
 
 // Returns true when a subscription row is flagged as a founder comp account.
 // Webhook mutations must never overwrite comped accounts.
@@ -21,6 +22,80 @@ async function isComped(userId: string): Promise<boolean> {
     .eq('user_id', userId)
     .maybeSingle()
   return data?.is_comped === true
+}
+
+// ── Fleet Pro billing helpers ────────────────────────────────────────────────
+// Fleet Pro is sold per fleet account, so its subscription state lives on
+// hd_fleet_accounts.fleet_pro_*, never on `subscriptions` (UNIQUE on user_id — the
+// mechanic already owns that row for his own plan). These columns ARE the gate:
+// fleet_pro_account_ids() requires fleet_pro_enabled = true and a live status, so
+// writing them here is what opens and closes the department's portal.
+
+async function activateFleetPro(args: {
+  fleetAccountId:   string
+  customerId:       string | null
+  subscriptionId:   string | null
+  currentPeriodEnd: string | null
+}) {
+  const svc = createServiceClient()
+  const { error } = await svc
+    .from('hd_fleet_accounts')
+    .update({
+      fleet_pro_enabled:                true,
+      fleet_pro_status:                 'active',
+      fleet_pro_stripe_customer_id:     args.customerId,
+      fleet_pro_stripe_subscription_id: args.subscriptionId,
+      fleet_pro_activated_at:           new Date().toISOString(),
+      fleet_pro_current_period_end:     args.currentPeriodEnd,
+    })
+    .eq('id', args.fleetAccountId)
+
+  if (error) console.error('[webhook] fleet_pro: activation failed for', args.fleetAccountId, error)
+  else       console.log('[webhook] fleet_pro: activated fleet account', args.fleetAccountId)
+}
+
+// The subscription id is the only handle a lifecycle event carries back to a fleet
+// account. Null when the event belongs to an ordinary per-user subscription.
+async function findFleetProAccountId(subscriptionId: string): Promise<string | null> {
+  const svc = createServiceClient()
+  const { data } = await svc
+    .from('hd_fleet_accounts')
+    .select('id')
+    .eq('fleet_pro_stripe_subscription_id', subscriptionId)
+    .maybeSingle()
+  return (data?.id as string | undefined) ?? null
+}
+
+// A lifecycle event can beat checkout.session.completed to the row, in which case
+// no fleet account carries this subscription id yet — fall back to the metadata the
+// checkout route stamped on the subscription itself.
+async function resolveFleetProAccountId(sub: Stripe.Subscription): Promise<string | null> {
+  const byId = await findFleetProAccountId(sub.id)
+  if (byId) return byId
+  if (sub.metadata?.product !== 'fleet_pro') return null
+  return sub.metadata?.fleet_account_id ?? null
+}
+
+// Returns false when nothing matched, so the caller can fall through to the normal
+// per-user handling instead of swallowing the event.
+async function updateFleetProAccount(
+  accountId: string | null,
+  patch: Record<string, unknown>,
+): Promise<boolean> {
+  if (!accountId) return false
+
+  const svc = createServiceClient()
+  const { error } = await svc.from('hd_fleet_accounts').update(patch).eq('id', accountId)
+  if (error) console.error('[webhook] fleet_pro: update failed for', accountId, error)
+  else       console.log('[webhook] fleet_pro: fleet account', accountId, '→', patch.fleet_pro_status)
+  return true
+}
+
+// Stripe has more statuses than the migration 105 CHECK constraint allows; anything
+// that is not live collapses to 'inactive'.
+function toFleetProStatus(status: string): string {
+  if (status === 'active' || status === 'trialing' || status === 'past_due' || status === 'canceled') return status
+  return 'inactive'
 }
 
 // Raw body required for Stripe signature verification — do NOT parse JSON
@@ -58,6 +133,37 @@ export async function POST(request: NextRequest) {
 
         const userId  = session.metadata?.user_id
         const product = session.metadata?.product
+
+        // ── Fleet Pro checkout ──
+        // Runs before the user_id guard on purpose: this session has no user_id
+        // because a department, not a user, is the customer. Nothing here may reach
+        // upsertSubscription() or a user's tier/modules.
+        if (product === 'fleet_pro') {
+          const fleetAccountId = session.metadata?.fleet_account_id
+          if (!fleetAccountId) {
+            console.error('[webhook] fleet_pro checkout: missing fleet_account_id', session.metadata)
+            break
+          }
+
+          const fpSubId = typeof session.subscription === 'string'
+            ? session.subscription
+            : session.subscription?.id
+
+          let fpPeriodEnd: string | null = null
+          if (fpSubId) {
+            const fpSub = await stripe.subscriptions.retrieve(fpSubId)
+            fpPeriodEnd = fpSub.current_period_end
+              ? new Date(fpSub.current_period_end * 1000).toISOString() : null
+          }
+
+          await activateFleetPro({
+            fleetAccountId,
+            customerId:       typeof session.customer === 'string' ? session.customer : session.customer?.id ?? null,
+            subscriptionId:   fpSubId ?? null,
+            currentPeriodEnd: fpPeriodEnd,
+          })
+          break
+        }
 
         if (!userId) {
           console.error('[webhook] checkout.session.completed: missing user_id', session.metadata)
@@ -166,6 +272,27 @@ export async function POST(request: NextRequest) {
 
         const stripeSub = await stripe.subscriptions.retrieve(subId)
         const priceId   = stripeSub.items.data[0]?.price?.id ?? null
+
+        // ── Fleet Pro fallback ──
+        // A Fleet Pro subscription started outside /api/fleet-pro/checkout (created
+        // by hand in the Stripe dashboard, say) carries no product metadata. Without
+        // this it would fall past both tier maps into the "unrecognised price_id"
+        // path and the department would pay without ever getting the portal.
+        if (priceId && isFleetProPriceId(priceId)) {
+          const fleetAccountId = session.metadata?.fleet_account_id ?? stripeSub.metadata?.fleet_account_id
+          if (!fleetAccountId) {
+            console.error('[webhook] fleet_pro price on subscription', subId, 'with no fleet_account_id metadata — not activated')
+            break
+          }
+          await activateFleetPro({
+            fleetAccountId,
+            customerId:       typeof session.customer === 'string' ? session.customer : session.customer?.id ?? null,
+            subscriptionId:   subId,
+            currentPeriodEnd: stripeSub.current_period_end
+              ? new Date(stripeSub.current_period_end * 1000).toISOString() : null,
+          })
+          break
+        }
 
         // ── Heavy-duty checkout ──
         // HD is sold through /api/hd/checkout on its own STRIPE_PRICE_HD_* prices,
@@ -351,6 +478,21 @@ export async function POST(request: NextRequest) {
       case 'customer.subscription.updated': {
         const sub = event.data.object as Stripe.Subscription
 
+        // ── Fleet Pro ──
+        // Checked first: this subscription id is not in `subscriptions`, so the
+        // lookup below would log a spurious "no user_id" and drop the event.
+        const fpUpdStatus = toFleetProStatus(sub.status)
+        const fpUpdated = await updateFleetProAccount(await resolveFleetProAccountId(sub), {
+          fleet_pro_status:                 fpUpdStatus,
+          fleet_pro_stripe_subscription_id: sub.id,
+          // past_due keeps the portal open — the gating functions allow it, matching
+          // how the rest of the app treats a missed payment.
+          fleet_pro_enabled: ['active', 'trialing', 'past_due'].includes(fpUpdStatus),
+          fleet_pro_current_period_end: sub.current_period_end
+            ? new Date(sub.current_period_end * 1000).toISOString() : null,
+        })
+        if (fpUpdated) break
+
         const userId = sub.metadata?.user_id
           ?? await getUserIdByStripeSubscription(sub.id)
         if (!userId) { console.error('[webhook] subscription.updated: no user_id for', sub.id); break }
@@ -434,6 +576,18 @@ export async function POST(request: NextRequest) {
             } catch { /* non-critical */ }
           })()
         }
+
+        // ── Fleet Pro ──
+        // Placed after the admin SMS (a $299 cancellation is worth the alert) but
+        // before every per-user path below. This is what revokes the whole
+        // department's portal access.
+        const fpDeleted = await updateFleetProAccount(await resolveFleetProAccountId(sub), {
+          fleet_pro_status:  'canceled',
+          fleet_pro_enabled: false,
+          fleet_pro_current_period_end: sub.current_period_end
+            ? new Date(sub.current_period_end * 1000).toISOString() : null,
+        })
+        if (fpDeleted) break
 
         // Check if this is a Foreman add-on subscription first.
         // Elite and Foreman Standalone tiers have tier metadata, so skip the
@@ -525,6 +679,21 @@ export async function POST(request: NextRequest) {
           ? invoice.subscription : invoice.subscription?.id
         if (!subId) break
 
+        // ── Fleet Pro ── renewal paid: re-open the portal and refresh the period.
+        // The account lookup comes first so an ordinary renewal does not pay for an
+        // extra Stripe round-trip.
+        const fpPaidAccountId = await findFleetProAccountId(subId)
+        if (fpPaidAccountId) {
+          const fpPaidSub = await stripe.subscriptions.retrieve(subId)
+          await updateFleetProAccount(fpPaidAccountId, {
+            fleet_pro_status:  'active',
+            fleet_pro_enabled: true,
+            fleet_pro_current_period_end: fpPaidSub.current_period_end
+              ? new Date(fpPaidSub.current_period_end * 1000).toISOString() : null,
+          })
+          break
+        }
+
         const userId = await getUserIdByStripeSubscription(subId)
         if (!userId) break
         if (await isComped(userId)) { console.log('[webhook] invoice.payment_succeeded: skipping comped account', userId); break }
@@ -546,6 +715,11 @@ export async function POST(request: NextRequest) {
         const subId   = typeof invoice.subscription === 'string'
           ? invoice.subscription : invoice.subscription?.id
         if (!subId) break
+
+        // ── Fleet Pro ── stays enabled: the gating functions treat past_due as live,
+        // so the department keeps the portal through Stripe's retry window.
+        const fpFailed = await updateFleetProAccount(await findFleetProAccountId(subId), { fleet_pro_status: 'past_due' })
+        if (fpFailed) break
 
         const userId = await getUserIdByStripeSubscription(subId)
         if (!userId) break

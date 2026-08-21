@@ -57,6 +57,11 @@ export async function POST(req: NextRequest) {
     let customerPhone: string | null = null
     let customerEmail: string | null = null
     let unitRow: { manufacturer?: string; model?: string; serial_number?: string; year?: number | null } | null = null
+    // Fleet Pro: the auto-created invoice needs a structural fleet link or it never
+    // reaches the customer's portal. Resolved here because the unit lookup below is
+    // the only place the unit's fleet is known.
+    let resolvedFleetAccountId: string | null =
+      typeof fleet_account_id === 'string' && fleet_account_id ? fleet_account_id : null
 
     // Explicitly-selected fleet account → authoritative for contact info + name.
     if (typeof fleet_account_id === 'string' && fleet_account_id) {
@@ -81,6 +86,9 @@ export async function POST(req: NextRequest) {
         .eq('user_id', user.id)
         .single()
       unitRow = unit ?? null
+      if (!resolvedFleetAccountId && unit?.fleet_account_id) {
+        resolvedFleetAccountId = unit.fleet_account_id as string
+      }
       // Fall back to the unit's fleet account only when no explicit customer was chosen.
       if (unit?.fleet_account_id && (!customerName || !customerPhone)) {
         const { data: fa } = await svc
@@ -126,6 +134,9 @@ export async function POST(req: NextRequest) {
       .insert({
         user_id:           user.id,
         invoice_number:    invoiceNumber,
+        // Fleet Pro linkage — see resolvedFleetAccountId above.
+        unit_id:           (unit_id as string | undefined) ?? null,
+        fleet_account_id:  resolvedFleetAccountId,
         customer_name:     customerName,
         customer_phone:    customerPhone,
         customer_email:    customerEmail,

@@ -16,12 +16,17 @@ export async function GET(request: Request) {
         return NextResponse.redirect(`${origin}/update-password`)
       }
 
+      // Fleet Pro members are the customer's staff, not mechanics. They have no
+      // business_name and must never be sent through the mechanic onboarding
+      // wizard, so the onboarding check is skipped for portal destinations.
+      const isFleetProNext = next.startsWith('/fleet-pro')
+
       // Check if onboarding has been completed
       const {
         data: { user },
       } = await supabase.auth.getUser()
 
-      if (user) {
+      if (user && !isFleetProNext) {
         const { data: profile } = await supabase
           .from('profiles')
           .select('business_name')

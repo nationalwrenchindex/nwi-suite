@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
 import { logHDCustomer } from '@/lib/hd/customer-logging'
+import { resolveInvoiceFleetLinks } from '@/lib/fleet-pro/invoice-link'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,9 +56,19 @@ export async function POST(req: NextRequest) {
   const seq = String((count ?? 0) + 1).padStart(4, '0')
   const invoice_number = `INV-${year}-${seq}`
 
+  // Fleet Pro reads invoices by unit_id / fleet_account_id, so they have to be on the
+  // row from the start — an invoice saved without them never surfaces on the customer's
+  // dashboard and nothing reports the omission. Resolved values override anything the
+  // client sent, because the resolver is the only thing that verifies ownership.
+  const fleetLinks = await resolveInvoiceFleetLinks(supabase, user.id, {
+    work_order_id: typeof body.work_order_id === 'string' ? body.work_order_id : null,
+    unit_id:       typeof body.unit_id       === 'string' ? body.unit_id       : null,
+    unit_serial:   typeof body.unit_serial   === 'string' ? body.unit_serial   : null,
+  })
+
   const { data, error } = await supabase
     .from('hd_invoices')
-    .insert({ ...invoiceBody, user_id: user.id, invoice_number })
+    .insert({ ...invoiceBody, user_id: user.id, invoice_number, ...fleetLinks })
     .select()
     .single()
 

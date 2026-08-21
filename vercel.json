@@ -50,6 +50,10 @@
     {
       "path": "/api/hd-directory-agent/follow-up",
       "schedule": "0 14 * * 4"
+    },
+    {
+      "path": "/api/cron/fleet-pro-pm-alerts",
+      "schedule": "0 13 * * *"
     }
   ]
 }

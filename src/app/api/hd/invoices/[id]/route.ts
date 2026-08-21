@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
 import { computeDueDate } from '@/lib/hd/payment-terms'
+import { resolveInvoiceFleetLinks } from '@/lib/fleet-pro/invoice-link'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,6 +60,32 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const terms  = (body.payment_terms as string | undefined) ?? (existing?.payment_terms as string | null)
     update.sent_at  = sentAt
     update.due_date = computeDueDate(sentAt, terms)
+  }
+
+  // An invoice corrected after the fact has to land on the right Fleet Pro dashboard,
+  // so re-resolve the links whenever the edit touches something they derive from.
+  // Fields the PUT left out are read back off the row, so a serial-only edit cannot
+  // throw away a link that came from a work order or a hand-set unit_id.
+  if ('work_order_id' in body || 'unit_id' in body || 'unit_serial' in body) {
+    const { data: current } = await supabase
+      .from('hd_invoices')
+      .select('work_order_id, unit_id, unit_serial')
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    const pick = (key: 'work_order_id' | 'unit_id' | 'unit_serial'): string | null => {
+      const value = key in body ? body[key] : (current as Record<string, unknown> | null)?.[key]
+      return typeof value === 'string' ? value : null
+    }
+
+    const fleetLinks = await resolveInvoiceFleetLinks(supabase, user.id, {
+      work_order_id: pick('work_order_id'),
+      unit_id:       pick('unit_id'),
+      unit_serial:   pick('unit_serial'),
+    })
+    update.unit_id          = fleetLinks.unit_id
+    update.fleet_account_id = fleetLinks.fleet_account_id
   }
 
   const { data, error } = await supabase

@@ -171,6 +171,9 @@ export async function POST(request: NextRequest) {
       .insert({
         user_id:           user.id,
         invoice_number:    invoiceNumber,
+        // Fleet Pro linkage — fleetAccountId is already resolved from the unit above.
+        unit_id:           body.unit_id,
+        fleet_account_id:  fleetAccountId,
         customer_name:     customerName || 'Fleet Customer',
         customer_phone:    customerPhone,
         customer_email:    customerEmail,
