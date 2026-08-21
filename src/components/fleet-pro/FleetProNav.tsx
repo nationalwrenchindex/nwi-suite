@@ -4,10 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import type { FleetProRole } from '@/types/fleet-pro'
 import { ROLE_LABELS, canManageMembers } from '@/types/fleet-pro'
-
-// Fleet Pro rides the HD palette — the fleet customer and the mechanic are looking
-// at the same service records, so they should look like the same product.
-const FP_ORANGE = '#E85D24'
+import { FleetProWordmark, NWI_ORANGE } from './brand'
 
 interface NavItem { href: string; label: string }
 
@@ -39,9 +36,7 @@ export default function FleetProNav({
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center gap-4 h-14">
           <div className="min-w-0">
-            <p className="text-[10px] uppercase tracking-widest leading-none" style={{ color: FP_ORANGE }}>
-              NWI Fleet Pro
-            </p>
+            <FleetProWordmark className="block text-[10px] uppercase tracking-widest leading-none font-semibold" />
             <p className="font-condensed font-bold text-white text-lg leading-tight truncate">
               {fleetName}
             </p>
@@ -57,7 +52,7 @@ export default function FleetProNav({
                   className="px-3 min-h-[44px] flex items-center rounded-lg text-sm font-medium whitespace-nowrap transition-colors"
                   style={
                     active
-                      ? { background: `${FP_ORANGE}20`, color: FP_ORANGE }
+                      ? { background: `${NWI_ORANGE}20`, color: NWI_ORANGE }
                       : { color: 'rgba(255,255,255,0.5)' }
                   }
                 >

@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import { FLEET_PRO_ROLES, ROLE_DESCRIPTIONS, ROLE_LABELS } from '@/types/fleet-pro'
 import type { FleetProMemberRow, FleetProRole, FleetProStatus } from '@/types/fleet-pro'
+import { FleetProWordmark, NWI_ORANGE } from './brand'
 
-const FP_ORANGE = '#E85D24'
+const FP_ORANGE = NWI_ORANGE
 
 const STATUS_COLOR: Record<FleetProStatus, string> = {
   active:  '#22C55E',
@@ -246,9 +247,7 @@ export default function TeamClient({ fleetName }: { fleetName: string }) {
     <main className="flex-1 p-4 sm:p-6">
       <div className="max-w-5xl mx-auto">
         <header className="mb-6">
-          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
-            NWI Fleet Pro
-          </p>
+          <FleetProWordmark className="block text-xs uppercase tracking-widest mb-1 font-semibold" />
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">TEAM</h1>
           <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.5)' }}>
             Who at {fleetName} can see this portal, and what each of them can do.

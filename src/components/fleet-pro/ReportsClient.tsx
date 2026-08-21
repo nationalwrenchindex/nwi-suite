@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FleetProReport } from '@/types/fleet-pro'
+import { FleetProWordmark, NWI_ORANGE } from './brand'
 
-const FP_ORANGE = '#E85D24'
+const FP_ORANGE = NWI_ORANGE
 const CARD      = '#111920'
 const THEAD     = '#162030'
 const BORDER    = '#1e3040'
@@ -181,7 +182,7 @@ export default function ReportsClient() {
     <div className="max-w-7xl mx-auto space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>NWI Fleet Pro</p>
+          <FleetProWordmark className="block text-xs uppercase tracking-widest mb-1 font-semibold" />
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">REPORTS</h1>
           <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
             Maintenance spend by unit and month, for budget submission.

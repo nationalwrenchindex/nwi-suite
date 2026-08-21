@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { FleetProRole, PmScheduleRow, PmState } from '@/types/fleet-pro'
 import { canManagePmSchedules } from '@/types/fleet-pro'
+import { FleetProWordmark, NWI_ORANGE } from './brand'
 
-const FP_ORANGE = '#E85D24'
+const FP_ORANGE = NWI_ORANGE
 const RED       = '#ef4444'
 const GREEN     = '#22C55E'
 const MUTED     = 'rgba(255,255,255,0.4)'
@@ -148,7 +149,7 @@ export default function PmScheduleClient({ role }: { role: FleetProRole }) {
   return (
     <div className="max-w-7xl mx-auto w-full">
       <div className="mb-5">
-        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>NWI Fleet Pro</p>
+        <FleetProWordmark className="block text-xs uppercase tracking-widest mb-1 font-semibold" />
         <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">PM SCHEDULE</h1>
         <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.45)' }}>
           Calendar-based preventive maintenance. Managers and supervisors are emailed

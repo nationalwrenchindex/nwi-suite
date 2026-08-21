@@ -13,11 +13,12 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { getFleetProMembership } from '@/lib/fleet-pro/access'
 import { ROLE_DESCRIPTIONS, ROLE_LABELS } from '@/types/fleet-pro'
 import type { FleetProRole } from '@/types/fleet-pro'
+import { FleetProWordmark, NWI_ORANGE } from '@/components/fleet-pro/brand'
 
 export const dynamic = 'force-dynamic'
 export const metadata = { title: 'Accept Invitation — NWI Fleet Pro' }
 
-const FP_ORANGE = '#E85D24'
+const FP_ORANGE = NWI_ORANGE
 
 // ─── presentation ────────────────────────────────────────────────────────────
 
@@ -28,9 +29,7 @@ function Shell({ children }: { children: React.ReactNode }) {
         className="max-w-md w-full rounded-xl p-8"
         style={{ background: '#111920', border: '1px solid #1e3040' }}
       >
-        <p className="text-xs uppercase tracking-widest mb-2" style={{ color: FP_ORANGE }}>
-          NWI Fleet Pro
-        </p>
+        <FleetProWordmark className="block text-xs uppercase tracking-widest mb-2 font-semibold" />
         {children}
       </div>
     </main>

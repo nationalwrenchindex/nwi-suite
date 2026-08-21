@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { FleetProDashboard, FleetProUnitRow, PmState } from '@/types/fleet-pro'
+import { FleetProWordmark, NWI_ORANGE } from './brand'
 
-const FP_ORANGE = '#E85D24'
+const FP_ORANGE = NWI_ORANGE
 const RED       = '#ef4444'
 const GREEN     = '#22C55E'
 const MUTED     = 'rgba(255,255,255,0.4)'
@@ -148,7 +149,7 @@ export default function DashboardClient() {
 
   const header = (
     <div className="mb-6">
-      <p className="text-xs uppercase tracking-widest mb-1" style={{ color: MUTED }}>NWI Fleet Pro</p>
+      <FleetProWordmark className="block text-xs uppercase tracking-widest mb-1 font-semibold" />
       <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">FLEET</h1>
     </div>
   )

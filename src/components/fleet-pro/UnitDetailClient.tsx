@@ -3,8 +3,9 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { FleetProUnitDetail, ServiceEvent, ServiceEventKind, PmState } from '@/types/fleet-pro'
+import { NWI_BLUE, NWI_ORANGE } from './brand'
 
-const ACCENT = '#E85D24'
+const ACCENT = NWI_ORANGE
 const CARD   = '#111920'
 const STRIP  = '#162030'
 const BORDER = '#1e3040'
@@ -17,7 +18,7 @@ const DIM2 = 'rgba(255,255,255,0.55)'
 // invoices without reading the Type column.
 const KIND_COLOR: Record<ServiceEventKind, string> = {
   work_order:           ACCENT,
-  invoice:              '#3B82F6',
+  invoice:              NWI_BLUE,
   pm_checklist:         '#22C55E',
   dot_inspection:       '#A78BFA',
   aerial_inspection:    '#A78BFA',
@@ -35,7 +36,7 @@ const KIND_LABEL: Record<ServiceEventKind, string> = {
 
 const PM_STYLE: Record<PmState, { label: string; color: string }> = {
   overdue:     { label: 'Overdue',     color: RED       },
-  due_soon:    { label: 'Due Soon',    color: '#F59E0B' },
+  due_soon:    { label: 'Due Soon',    color: NWI_ORANGE },
   scheduled:   { label: 'Scheduled',   color: '#22C55E' },
   unscheduled: { label: 'Unscheduled', color: 'rgba(255,255,255,0.35)' },
 }

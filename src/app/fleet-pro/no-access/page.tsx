@@ -1,3 +1,5 @@
+import { FleetProWordmark } from '@/components/fleet-pro/brand'
+
 export const metadata = { title: 'Fleet Pro — No Access' }
 
 export default function FleetProNoAccessPage() {
@@ -7,9 +9,7 @@ export default function FleetProNoAccessPage() {
         className="max-w-md w-full rounded-xl p-8 text-center"
         style={{ background: '#111920', border: '1px solid #1e3040' }}
       >
-        <p className="text-xs uppercase tracking-widest mb-2" style={{ color: '#E85D24' }}>
-          NWI Fleet Pro
-        </p>
+        <FleetProWordmark className="block text-xs uppercase tracking-widest mb-2 font-semibold" />
         <h1 className="font-condensed font-bold text-2xl text-white tracking-wide mb-3">
           NO ACTIVE FLEET ACCESS
         </h1>
