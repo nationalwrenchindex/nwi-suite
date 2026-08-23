@@ -97,6 +97,9 @@ export type ServiceEventKind =
   | 'dot_inspection'
   | 'aerial_inspection'
   | 'equipment_inspection'
+  // The driver's daily walkaround. Not a service the mechanic performed, but it is
+  // a dated record produced against the unit and belongs on the same timeline.
+  | 'pretrip'
 
 export interface ServiceEvent {
   id:          string

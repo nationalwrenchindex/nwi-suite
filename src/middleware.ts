@@ -15,11 +15,22 @@ export async function middleware(request: NextRequest) {
 
   const effectivePath = targetUrl?.pathname ?? path
 
+  // x-pathname has to travel on the REQUEST, not the response. Setting it on the
+  // response (as this did) sends it to the browser, where nothing reads it, while
+  // `headers()` inside a server layout sees nothing — so every layout branching on
+  // it silently took the wrong path. That is why hd/layout.tsx never actually
+  // exempted /hd/signup and /hd/login from its subscription gate.
+  const requestHeaders = new Headers(request.headers)
+  requestHeaders.set('x-pathname', effectivePath)
+
+  const buildResponse = () =>
+    targetUrl
+      ? NextResponse.rewrite(targetUrl, { request: { headers: requestHeaders } })
+      : NextResponse.next({ request: { headers: requestHeaders } })
+
   // ── Supabase auth session refresh ─────────────────────────────────────────
   // Must run on every request to keep the session alive.
-  let supabaseResponse = targetUrl
-    ? NextResponse.rewrite(targetUrl)
-    : NextResponse.next({ request })
+  let supabaseResponse = buildResponse()
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -31,9 +42,7 @@ export async function middleware(request: NextRequest) {
         },
         setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-          supabaseResponse = targetUrl
-            ? NextResponse.rewrite(targetUrl)
-            : NextResponse.next({ request })
+          supabaseResponse = buildResponse()
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options),
           )
@@ -97,6 +106,11 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|auth/callback|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    // sw.js and the manifest are excluded deliberately: a service worker must be
+    // served from the root scope untouched, and running auth middleware on it costs
+    // a Supabase round-trip on every page load for a file that is always public.
+    // /inspect is NOT excluded — it needs no session, but it is not a static asset
+    // and is simply absent from the protected prefixes above.
+    '/((?!_next/static|_next/image|favicon.ico|auth/callback|sw\\.js|manifest\\.webmanifest|site\\.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)',
   ],
 }
