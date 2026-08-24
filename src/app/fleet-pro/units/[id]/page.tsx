@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { requireFleetProMember } from '@/lib/fleet-pro/access'
+import { getPartner } from '@/lib/fleet-pro/partner-access'
 import UnitDetailClient from '@/components/fleet-pro/UnitDetailClient'
 
 export const metadata = { title: 'Unit — NWI Fleet Pro' }
@@ -17,8 +18,14 @@ export default async function FleetProUnitPage({ params }: { params: Promise<{ i
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect(`/login?redirect=/fleet-pro/units/${id}`)
 
+  // Members and partners both legitimately reach this page. The API already admits
+  // both; without the partner arm here a partner was bounced to no-access before the
+  // route he is authorised for ever ran.
   const gate = await requireFleetProMember(user.id)
-  if (!gate.ok) redirect('/fleet-pro/no-access')
+  if (!gate.ok) {
+    const partner = await getPartner(user.id)
+    if (!partner) redirect('/fleet-pro/no-access')
+  }
 
   return (
     <main className="flex-1 p-4 sm:p-6">

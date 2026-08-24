@@ -238,6 +238,16 @@ export default function UnitDetailClient({ unitId }: { unitId: string }) {
         </h1>
         {unit.status && <Pill text={unit.status} color={ACCENT} />}
         {unit.open_inspection_issue && <Pill text="Failed inspection" color={RED} />}
+        {/* Opens in a new tab so the print dialog does not lose the unit page behind it. */}
+        <Link
+          href={`/fleet-pro/units/${unitId}/qr-sticker`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="ml-auto px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap"
+          style={{ border: `1px solid ${ACCENT}`, color: ACCENT }}
+        >
+          Print QR Sticker
+        </Link>
       </div>
       {identity && <p className="text-sm mb-4" style={{ color: DIM2 }}>{identity}</p>}
 
