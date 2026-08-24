@@ -401,21 +401,34 @@ export default async function IntelHubPage({
                       )}
                     </div>
 
-                    <div className="flex items-center justify-between mt-4 pt-3" style={{ borderTop: '1px solid #1e3040' }}>
+                    <div className="flex items-center justify-between gap-2 mt-4 pt-3" style={{ borderTop: '1px solid #1e3040' }}>
+                      {/* Both links carry the account id: /hd/fleet-units scopes its
+                          list to it and locks the create form to it. "View units" used
+                          to point at /hd/intel?view=units&q= — an empty query, so it
+                          listed every unit the tech owns regardless of customer. */}
                       <Link
-                        href={`/hd/intel?view=units&q=`}
+                        href={`/hd/fleet-units?fleet_account_id=${acct.id}`}
                         className="text-xs font-medium"
                         style={{ color: HD_ORANGE }}
                       >
                         View units →
                       </Link>
-                      <Link
-                        href={`/hd/fleet-accounts/${acct.id}`}
-                        className="text-xs"
-                        style={{ color: 'rgba(255,255,255,0.3)' }}
-                      >
-                        Edit
-                      </Link>
+                      <div className="flex items-center gap-3 flex-shrink-0">
+                        <Link
+                          href={`/hd/fleet-units?new=1&fleet_account_id=${acct.id}`}
+                          className="text-xs font-medium"
+                          style={{ color: HD_ORANGE }}
+                        >
+                          + Unit
+                        </Link>
+                        <Link
+                          href={`/hd/fleet-accounts/${acct.id}`}
+                          className="text-xs"
+                          style={{ color: 'rgba(255,255,255,0.3)' }}
+                        >
+                          Edit
+                        </Link>
+                      </div>
                     </div>
                   </div>
                 )
