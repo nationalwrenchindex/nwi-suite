@@ -37,7 +37,16 @@ type WO = {
   unit_model: string | null
   unit_serial: string | null
   unit: { id: string; unit_number: string; manufacturer: string; model: string; year: number | null; serial_number: string | null } | null
-  fleet: { id: string; fleet_name: string } | null
+  // hd_work_orders has no customer_email column, so the billing email can only come
+  // from the linked fleet account. Same for the address — hd_fleet_accounts stores it
+  // as one free-text line, not the line1/city/state/zip the invoice form uses.
+  fleet: {
+    id: string
+    fleet_name: string
+    contact_email: string | null
+    contact_phone: string | null
+    address: string | null
+  } | null
 }
 
 type Photo = {
@@ -187,7 +196,15 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
     const customer = wo.fleet?.fleet_name ?? wo.customer_name
     if (customer)             p.set('customer_name', customer)
     if (wo.fleet?.fleet_name) p.set('company_name', wo.fleet.fleet_name)
-    if (wo.customer_phone)    p.set('customer_phone', wo.customer_phone)
+
+    // Contact details prefer whatever the fleet account holds, since that is the
+    // billing record; the work order's own phone is only the free-typed booking one.
+    const phone = wo.fleet?.contact_phone ?? wo.customer_phone
+    if (phone)                    p.set('customer_phone', phone)
+    if (wo.fleet?.contact_email)  p.set('customer_email', wo.fleet.contact_email)
+    if (wo.fleet?.address)        p.set('address_line1', wo.fleet.address)
+    // Carries the Intel Hub link through to the invoice.
+    if (wo.fleet?.id)             p.set('fleet_account_id', wo.fleet.id)
 
     // Prefer the linked unit record, falling back to the free-typed unit fields.
     const mfr    = wo.unit?.manufacturer   ?? wo.unit_manufacturer

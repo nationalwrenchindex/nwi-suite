@@ -81,6 +81,7 @@ export default function NewInvoicePage() {
 
   const [form, setForm] = useState({
     work_order_id: '', work_order_number: '',
+    fleet_account_id: '',
     company_name: '',
     customer_name: '', customer_phone: '', customer_email: '',
     address_line1: '', address_line2: '', city: '', state: '', zip: '',
@@ -134,6 +135,12 @@ export default function NewInvoicePage() {
       customer_name:     text('customer_name')  || f.customer_name,
       company_name:      text('company_name')   || f.company_name,
       customer_phone:    text('customer_phone') || f.customer_phone,
+      customer_email:    text('customer_email') || f.customer_email,
+      fleet_account_id:  text('fleet_account_id') || f.fleet_account_id,
+      address_line1:     text('address_line1') || f.address_line1,
+      city:              text('city')  || f.city,
+      state:             text('state') || f.state,
+      zip:               text('zip')   || f.zip,
       // A work order's manufacturer always lands in the field now that the select
       // carries prefilled values. The PM path keeps its original behavior of naming
       // a non-reefer brand in the complaint line instead.
@@ -308,6 +315,10 @@ export default function NewInvoicePage() {
         ...(form.work_order_id
           ? { work_order_id: form.work_order_id, work_order_number: form.work_order_number || null }
           : {}),
+        // Same omit-when-empty rule: the column arrives with migration 105. The server
+        // re-resolves and overrides this from the work order, so it is a hint, not a
+        // trusted value — it only matters for a direct invoice with no work order.
+        ...(form.fleet_account_id ? { fleet_account_id: form.fleet_account_id } : {}),
         company_name:      form.company_name || null,
         customer_name:     form.customer_name,
         customer_phone:    form.customer_phone || null,
@@ -417,6 +428,31 @@ export default function NewInvoicePage() {
             </Field>
             <Field label="Email">
               <input style={inp} value={form.customer_email} onChange={e => setField('customer_email', e.target.value)} placeholder="customer@email.com" type="email" />
+            </Field>
+          </div>
+
+          {/* Billing address. Prefilled from the Intel Hub customer record or the work
+              order's fleet account, but always editable — a fleet's registered address
+              is often not where the invoice needs to go. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <Field label="Address Line 1">
+              <input style={inp} value={form.address_line1} onChange={e => setField('address_line1', e.target.value)} placeholder="123 Main St" />
+            </Field>
+            <Field label="Address Line 2">
+              <input style={inp} value={form.address_line2} onChange={e => setField('address_line2', e.target.value)} placeholder="Suite / Unit (optional)" />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+            <div className="col-span-2">
+              <Field label="City">
+                <input style={inp} value={form.city} onChange={e => setField('city', e.target.value)} placeholder="Wauchula" />
+              </Field>
+            </div>
+            <Field label="State">
+              <input style={inp} value={form.state} onChange={e => setField('state', e.target.value)} placeholder="FL" maxLength={2} />
+            </Field>
+            <Field label="Zip">
+              <input style={inp} value={form.zip} onChange={e => setField('zip', e.target.value)} placeholder="33873" inputMode="numeric" />
             </Field>
           </div>
 

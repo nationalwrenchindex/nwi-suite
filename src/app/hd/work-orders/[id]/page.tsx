@@ -29,7 +29,7 @@ export default async function WorkOrderDetailPage({
         started_at, completed_at, created_at,
         customer_name, customer_phone, unit_manufacturer, unit_model, unit_serial,
         unit:hd_units(id, unit_number, manufacturer, model, year, serial_number),
-        fleet:hd_fleet_accounts(id, fleet_name)
+        fleet:hd_fleet_accounts(id, fleet_name, contact_email, contact_phone, address)
       `)
       .eq('id', id)
       .eq('user_id', user.id)
