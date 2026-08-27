@@ -5,6 +5,11 @@
 // checklist is in the way. The root layout renders nothing but <body>, so this page
 // is the whole screen.
 //
+// ONE STICKER, TWO JOBS. The same code is scanned by the driver doing a walkaround and
+// by the technician who has just finished a repair and is holding the invoice for it.
+// EntryChooser asks which, then hands off: the pre-trip branch renders PretripClient
+// exactly as before, so that flow is unchanged by the addition of the second one.
+//
 // The unit header is fetched server-side so the FIRST (online) scan is useful
 // immediately. After that the service worker serves this page from cache and the
 // client falls back to its own localStorage copy — which is why the fetch below can
@@ -13,12 +18,12 @@
 import { notFound } from 'next/navigation'
 import { createServiceClient } from '@/lib/supabase/service'
 import { getFleetBranding } from '@/lib/fleet-pro/partner-access'
-import PretripClient from '@/components/inspect/PretripClient'
+import EntryChooser from '@/components/inspect/EntryChooser'
 import type { PretripUnitInfo } from '@/types/fleet-pro-partner'
 
 export const dynamic = 'force-dynamic'
 
-export const metadata = { title: 'Pre-Trip Inspection' }
+export const metadata = { title: 'Unit Inspection & Service' }
 
 // Full-bleed on a phone, and the browser chrome matches the page rather than flashing
 // white over a dark form.
@@ -114,7 +119,7 @@ export default async function InspectPage({ params }: { params: Promise<{ unitId
   if (result.status === 'not_found') notFound()
 
   return (
-    <PretripClient
+    <EntryChooser
       unitId={unitId}
       initialUnit={result.status === 'ok' ? result.info : null}
     />

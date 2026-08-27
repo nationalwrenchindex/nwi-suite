@@ -71,6 +71,7 @@ const KIND_COLOR: Record<PartnerEventKind, string> = {
   aerial_inspection:    '#A78BFA',
   equipment_inspection: '#A78BFA',
   pretrip:              '#38BDF8',
+  tech_service_entry: '#F59E0B',
 }
 
 const KIND_LABEL: Record<PartnerEventKind, string> = {
@@ -81,6 +82,7 @@ const KIND_LABEL: Record<PartnerEventKind, string> = {
   aerial_inspection:    'Aerial',
   equipment_inspection: 'Equipment',
   pretrip:              'Pre-Trip',
+  tech_service_entry: 'Service Entry',
 }
 
 const PM_STYLE: Record<PmState, { label: string; color: string }> = {

@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDStarterAccess } from '@/lib/hd-access'
 import HDFinancialsClient from '@/components/hd/HDFinancialsClient'
+import QuickBooksExport from '@/components/hd/QuickBooksExport'
 
 export const metadata = { title: 'Financials — NWI HD Suite' }
 
@@ -126,6 +127,10 @@ export default async function HDFinancialsPage({
         periodLabel,
         periodParam,
       }} />
+
+      {/* Accountant hand-off. Sits outside the tabbed client because it owns its own
+          date range — the page period toggle above does not apply to it. */}
+      <QuickBooksExport />
     </main>
   )
 }

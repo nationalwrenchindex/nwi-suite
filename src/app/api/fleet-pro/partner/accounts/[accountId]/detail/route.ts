@@ -9,7 +9,8 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { requirePartner, partnerOwnsAccount, getFleetBranding } from '@/lib/fleet-pro/partner-access'
-import { pmStateFor } from '@/types/fleet-pro'
+import { computePmStatus, PM_UNIT_COLUMNS } from '@/lib/fleet-pro/pm-status'
+import type { PmSource } from '@/lib/fleet-pro/pm-status'
 import type {
   PartnerAccountDetail,
   PartnerAccountEvent,
@@ -17,6 +18,21 @@ import type {
 } from '@/components/fleet-pro/partner/AccountDetailClient'
 
 export const dynamic = 'force-dynamic'
+
+// Fields the PM fix adds to the wire. Kept local because AccountDetailClient owns
+// PartnerAccountUnitRow; see the report for what should be promoted into it.
+interface AccountUnitRow extends PartnerAccountUnitRow {
+  pm_source:       PmSource
+  pm_label:        string
+  next_due_hours:  number | null
+  hours_remaining: number | null
+  last_pm_date:    string | null
+  last_pm_type:    string | null
+}
+
+interface AccountDetailPayload extends Omit<PartnerAccountDetail, 'units'> {
+  units: AccountUnitRow[]
+}
 
 // Enough to fill the activity table without shipping a decade of history.
 const EVENT_LIMIT = 50
@@ -95,7 +111,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ acc
       .eq('id', accountId).maybeSingle(),
 
     svc.from('hd_units')
-      .select('id, unit_number, truck_trailer_number, manufacturer, model, serial_number, bm_number, year, unit_type, status, total_hours')
+      .select(`id, unit_number, truck_trailer_number, manufacturer, model, serial_number, bm_number, year, unit_type, status, ${PM_UNIT_COLUMNS}`)
       .eq('fleet_account_id', accountId),
 
     svc.from('hd_work_orders')
@@ -362,11 +378,33 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ acc
     failedByUnit.set(uid, true)
   }
 
-  const unitRowsOut: PartnerAccountUnitRow[] = units.map(u => {
+  // Newest completed PM per unit, from hd_pm_checklists. Used only where hd_units
+  // never got its last_pm_date stamp — the checklist is proof the PM happened.
+  const lastChecklistByUnit = new Map<string, { date: string; type: string | null }>()
+  for (const r of pmRows) {
+    const uid  = r.unit_id == null ? null : String(r.unit_id)
+    const when = dayOf(r.completed_at)
+    if (!uid || !when) continue
+    const held = lastChecklistByUnit.get(uid)
+    if (!held || when > held.date) lastChecklistByUnit.set(uid, { date: when, type: (r.pm_type as string | null) ?? null })
+  }
+
+  const unitRowsOut: AccountUnitRow[] = units.map(u => {
     const id    = String(u.id)
     const sched = schedByUnit.get(id) ?? null
-    const nextDueDate = sched ? dayOf(sched.next_due_date) : null
-    const { state, daysUntilDue } = pmStateFor(nextDueDate, today)
+    // Same calculator as both dashboards and the unit page: manager-set date first,
+    // hd_units meter hours next, unscheduled only when there is genuinely neither.
+    const pm = computePmStatus(
+      {
+        total_hours:       u.total_hours as number | string | null,
+        next_pm_due_hours: u.next_pm_due_hours as number | string | null,
+        last_pm_date:      u.last_pm_date as string | null,
+        last_pm_type:      u.last_pm_type as string | null,
+      },
+      sched ? { next_due_date: dayOf(sched.next_due_date), last_service_date: dayOf(sched.last_service_date) } : null,
+      today,
+    )
+    const fallbackPm = lastChecklistByUnit.get(id) ?? null
     const spend = spendByUnit.get(id) ?? { mtd: 0, ytd: 0, life: 0 }
 
     return {
@@ -383,10 +421,17 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ acc
       total_hours:          u.total_hours == null ? null : num(u.total_hours),
 
       last_service_date:    maxDate(serviceDatesByUnit.get(id) ?? []),
-      next_due_date:        nextDueDate,
+      next_due_date:        pm.next_due_date,
       interval_days:        sched?.interval_days == null ? null : num(sched.interval_days),
-      pm_state:             state,
-      days_until_due:       daysUntilDue,
+      pm_state:             pm.state,
+      days_until_due:       pm.days_until_due,
+
+      pm_source:            pm.source,
+      pm_label:             pm.label,
+      next_due_hours:       pm.next_due_hours,
+      hours_remaining:      pm.hours_remaining,
+      last_pm_date:         pm.last_pm_date ?? fallbackPm?.date ?? null,
+      last_pm_type:         pm.last_pm_type ?? (pm.last_pm_date ? null : fallbackPm?.type ?? null),
 
       open_inspection_issue: failedByUnit.get(id) ?? false,
       last_inspection_date:  maxDate(inspectionDatesByUnit.get(id) ?? []),
@@ -409,7 +454,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ acc
 
   const account = (accountRow ?? {}) as Row
 
-  const detail: PartnerAccountDetail = {
+  const detail: AccountDetailPayload = {
     account: {
       fleet_account_id:  accountId,
       fleet_name:        (account.fleet_name as string | null) ?? branding.brand_name,

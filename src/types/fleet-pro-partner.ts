@@ -56,9 +56,15 @@ export interface PartnerPmAlert {
   fleet_name:       string
   unit_id:          string
   unit_number:      string
-  next_due_date:    string
+  // Nullable: an hours-based PM has no due DATE, only a due meter reading. Rendering
+  // a fabricated date for one would be worse than showing none.
+  next_due_date:    string | null
   days_until_due:   number
   overdue:          boolean
+  pm_source?:       'hours' | 'date' | 'none'
+  pm_label?:        string
+  next_due_hours?:  number | null
+  hours_remaining?: number | null
 }
 
 export interface PartnerDashboard {

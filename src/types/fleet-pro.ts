@@ -66,6 +66,17 @@ export interface FleetProUnitRow {
   pm_state:           PmState
   days_until_due:     number | null   // negative when overdue
 
+  // PM is hours-based on hd_units for most fleets and only date-based when a manager
+  // sets a schedule by hand. src/lib/fleet-pro/pm-status.ts resolves which source
+  // applies and supplies a ready-made label, so no surface has to re-derive it.
+  // Optional because the partner drill-down builds its own row shape.
+  pm_source?:         'hours' | 'date' | 'none'
+  pm_label?:          string
+  next_due_hours?:    number | null
+  hours_remaining?:   number | null   // negative when overdue
+  last_pm_date?:      string | null
+  last_pm_type?:      string | null
+
   open_inspection_issue: boolean      // any inspection with overall_result = 'fail'
   last_inspection_date:  string | null
 
@@ -83,6 +94,9 @@ export interface FleetProDashboard {
   overdue_count:    number
   due_soon_count:   number
   failed_inspection_count: number
+  // Expired, missing or expiring within 60 days. Optional so the partner drill-down,
+  // which builds its own dashboard shape, is unaffected.
+  registration_alert_count?: number
   spend_mtd:        number | null
   spend_ytd:        number | null
   units:            FleetProUnitRow[]
@@ -100,6 +114,10 @@ export type ServiceEventKind =
   // The driver's daily walkaround. Not a service the mechanic performed, but it is
   // a dated record produced against the unit and belongs on the same timeline.
   | 'pretrip'
+  // Third-party or field work transcribed off a paper invoice at the QR page. Kept
+  // distinct from 'invoice' (an NWI-issued hd_invoices row) because its provenance is
+  // weaker — a machine read it off a photo — and the timeline should say so.
+  | 'tech_service_entry'
 
 export interface ServiceEvent {
   id:          string
@@ -194,3 +212,4 @@ export function pmStateFor(nextDueDate: string | null, today: string): { state: 
   if (days <= 30) return { state: 'due_soon', daysUntilDue: days }
   return { state: 'scheduled', daysUntilDue: days }
 }
+

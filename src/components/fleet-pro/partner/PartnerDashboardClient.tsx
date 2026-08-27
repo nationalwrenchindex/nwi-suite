@@ -209,16 +209,27 @@ function ActivityItem({ row, index }: { row: PartnerActivityRow; index: number }
 
 function PmAlertItem({ alert, index }: { alert: PartnerPmAlert; index: number }) {
   const color = alert.overdue ? RED : NWI_ORANGE
-  const when  = alert.overdue
+
+  // Prefer the label the PM calculator already produced. Most fleets run hours-based
+  // PM, where a day count is meaningless — deriving "0 d late" from days_until_due
+  // would read as due-today on a unit that is 1,233 hours overdue.
+  const when = alert.pm_label ?? (alert.overdue
     ? `${Math.abs(alert.days_until_due)} d late`
-    : alert.days_until_due === 0 ? 'due today' : `in ${alert.days_until_due} d`
+    : alert.days_until_due === 0 ? 'due today' : `in ${alert.days_until_due} d`)
+
+  // An hours PM has no due date; show the meter target instead of an em dash.
+  const detail = alert.next_due_date
+    ? shortDate(alert.next_due_date)
+    : alert.next_due_hours != null
+      ? `${alert.next_due_hours.toLocaleString('en-US')} hrs`
+      : '—'
 
   return (
     <li className="px-4 py-3 flex items-center gap-3" style={{ borderTop: index > 0 ? '1px solid #1e3040' : undefined }}>
       <div className="min-w-0 flex-1">
         <p className="text-sm text-white truncate">Unit {alert.unit_number}</p>
         <p className="text-xs truncate" style={{ color: FAINT }}>
-          {alert.fleet_name} · {shortDate(alert.next_due_date)}
+          {alert.fleet_name} · {detail}
         </p>
       </div>
       <Pill label={when} color={color} />

@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import type { FleetProUnitDetail, ServiceEvent, ServiceEventKind, PmState } from '@/types/fleet-pro'
+import type { FleetProUnitDetail, FleetProUnitRow, ServiceEvent, ServiceEventKind, PmState } from '@/types/fleet-pro'
 import type { MeterReading, UnitMonthCost } from '@/types/fleet-pro-partner'
 import { NWI_BLUE, NWI_ORANGE } from './brand'
+import RegistrationSection from './RegistrationSection'
 
 
 interface UnitServiceEvent extends Omit<ServiceEvent, 'kind'> {
@@ -12,7 +13,23 @@ interface UnitServiceEvent extends Omit<ServiceEvent, 'kind'> {
   pdf_url?: string | null
 }
 
-interface UnitDetail extends Omit<FleetProUnitDetail, 'events'> {
+// PM is hours-based on hd_units for most fleets and date-based only when a manager
+// sets fleet_pro_pm_schedules by hand. The route resolves which and sends both the
+// figure and a ready-made label; src/types/fleet-pro.ts still only knows about the
+// date half, so the extra fields are declared here.
+type PmSource = 'hours' | 'date' | 'none'
+
+interface DetailUnit extends FleetProUnitRow {
+  pm_source?:       PmSource
+  pm_label?:        string
+  next_due_hours?:  number | null
+  hours_remaining?: number | null
+  last_pm_date?:    string | null
+  last_pm_type?:    string | null
+}
+
+interface UnitDetail extends Omit<FleetProUnitDetail, 'events' | 'unit'> {
+  unit:            DetailUnit
   events:          UnitServiceEvent[]
   meter_readings?: MeterReading[]
   cost_by_month?:  UnitMonthCost[] | null
@@ -37,6 +54,7 @@ const KIND_COLOR: Record<ServiceEventKind, string> = {
   aerial_inspection:    '#A78BFA',
   equipment_inspection: '#A78BFA',
   pretrip:              '#38BDF8',
+  tech_service_entry: '#F59E0B',
 }
 
 const KIND_LABEL: Record<ServiceEventKind, string> = {
@@ -47,6 +65,7 @@ const KIND_LABEL: Record<ServiceEventKind, string> = {
   aerial_inspection:    'Aerial',
   equipment_inspection: 'Equipment',
   pretrip:              'Pre-Trip',
+  tech_service_entry: 'Service Entry',
 }
 
 const PM_STYLE: Record<PmState, { label: string; color: string }> = {
@@ -128,13 +147,14 @@ function Pill({ text, color }: { text: string; color: string }) {
   )
 }
 
-function Stat({ label, value, color }: { label: string; value: string; color?: string }) {
+function Stat({ label, value, sub, color }: { label: string; value: string; sub?: string | null; color?: string }) {
   return (
     <div className="rounded-xl px-4 py-3 min-w-0" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
       <p className="text-[10px] uppercase tracking-widest mb-1" style={{ color: DIM }}>{label}</p>
       <p className="font-condensed font-bold text-xl tracking-wide truncate" style={{ color: color ?? '#ffffff' }}>
         {value}
       </p>
+      {sub && <p className="text-xs mt-0.5 truncate" style={{ color: DIM }}>{sub}</p>}
     </div>
   )
 }
@@ -219,6 +239,19 @@ export default function UnitDetailClient({ unitId }: { unitId: string }) {
     .filter(Boolean)
     .join(' ')
 
+  // Whichever unit this unit's PM is actually measured in. Most fleets run on the
+  // meter, so a date-only "Next Due" was showing an em dash on every single page.
+  const nextPmDue = unit.pm_source === 'hours' && unit.next_due_hours != null
+    ? `${Math.round(unit.next_due_hours).toLocaleString('en-US')} hrs`
+    : fmtDate(unit.next_due_date)
+
+  // pm_label already reads "1,233 hrs overdue" / "445 hrs remaining" / "Due in 12 days".
+  const pmSub = unit.pm_state === 'unscheduled' ? null : unit.pm_label ?? null
+
+  const lastPm = unit.last_pm_date
+    ? [fmtDate(unit.last_pm_date), unit.last_pm_type].filter(Boolean).join(' · ')
+    : '—'
+
   const facts: { label: string; value: string }[] = [
     { label: 'Type',          value: unit.unit_type ?? '—' },
     { label: 'Serial',        value: unit.serial_number ?? '—' },
@@ -226,6 +259,7 @@ export default function UnitDetailClient({ unitId }: { unitId: string }) {
     { label: 'BM Number',     value: unit.bm_number ?? '—' },
     { label: 'Truck/Trailer', value: unit.truck_trailer_number ?? '—' },
     { label: 'Hours',         value: unit.total_hours == null ? '—' : unit.total_hours.toLocaleString('en-US') },
+    { label: 'Last PM',       value: lastPm },
   ]
 
   return (
@@ -264,12 +298,16 @@ export default function UnitDetailClient({ unitId }: { unitId: string }) {
       </div>
 
       {/* ── Stat strip. Total spend is absent, not blanked, for viewers. ─────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+      <div className={`grid grid-cols-2 gap-3 mb-6 ${can_view_costs ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}>
         {can_view_costs && <Stat label="Total Spend" value={fmtMoney(total_spend)} color={ACCENT} />}
         <Stat label="Service Records" value={String(event_count)} />
-        <Stat label="PM Status"       value={pm.label} color={pm.color} />
+        <Stat label="PM Status"       value={pm.label} sub={pmSub} color={pm.color} />
+        <Stat label="Next PM Due"     value={nextPmDue} />
         <Stat label="Last Service"    value={fmtDate(unit.last_service_date)} />
       </div>
+
+      {/* ── Registration ────────────────────────────────────────────────────── */}
+      <RegistrationSection unitId={unitId} canEdit={detail.can_edit} />
 
       {/* ── Meter history ───────────────────────────────────────────────────── */}
       {meterReadings.length > 0 && (

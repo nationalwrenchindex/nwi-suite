@@ -11,7 +11,9 @@ import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { requireFleetProMember } from '@/lib/fleet-pro/access'
 import { getPartner, partnerOwnsAccount } from '@/lib/fleet-pro/partner-access'
-import { canViewCosts, canEditUnits, pmStateFor } from '@/types/fleet-pro'
+import { canViewCosts, canEditUnits } from '@/types/fleet-pro'
+import { computePmStatus, PM_UNIT_COLUMNS } from '@/lib/fleet-pro/pm-status'
+import type { PmSource } from '@/lib/fleet-pro/pm-status'
 import type { FleetProUnitDetail, FleetProUnitRow, ServiceEvent, ServiceEventKind } from '@/types/fleet-pro'
 import { canSeeCostBasis } from '@/types/fleet-pro-partner'
 import type { MeterReading, UnitMonthCost, FleetProViewerKind } from '@/types/fleet-pro-partner'
@@ -25,7 +27,19 @@ interface UnitServiceEvent extends Omit<ServiceEvent, 'kind'> {
   pdf_url: string | null
 }
 
-interface UnitDetailPayload extends Omit<FleetProUnitDetail, 'events'> {
+// Fields the PM fix adds to the wire. Kept local because src/types/fleet-pro.ts is
+// owned elsewhere; see the report for what should be promoted into it.
+interface DetailUnitRow extends FleetProUnitRow {
+  pm_source:       PmSource
+  pm_label:        string
+  next_due_hours:  number | null
+  hours_remaining: number | null
+  last_pm_date:    string | null
+  last_pm_type:    string | null
+}
+
+interface UnitDetailPayload extends Omit<FleetProUnitDetail, 'events' | 'unit'> {
+  unit:           DetailUnitRow
   events:         UnitServiceEvent[]
   meter_readings: MeterReading[]
   /** Null — not zeroed — for viewers, same rule as every other cost figure. */
@@ -41,10 +55,11 @@ interface UnitAccess {
   canEdit:   boolean
 }
 
-// Only the columns FleetProUnitRow carries. hd_units.notes exists but has no home
-// in the shared type, so it is deliberately not fetched.
+// Only the columns FleetProUnitRow carries, plus the hours-based PM figures the
+// shared calculator reads. hd_units.notes exists but has no home in the shared
+// type, so it is deliberately not fetched.
 const UNIT_COLUMNS =
-  'id, unit_number, truck_trailer_number, manufacturer, model, serial_number, year, unit_type, status, total_hours, bm_number'
+  `id, unit_number, truck_trailer_number, manufacturer, model, serial_number, year, unit_type, status, bm_number, ${PM_UNIT_COLUMNS}`
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -171,6 +186,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     { data: pmSchedule },
     { data: pretrips },
     { data: meterRows },
+    { data: serviceEntries },
   ] = await Promise.all([
     svc.from('hd_work_orders')
       .select('id, work_order_number, service_type, status, total_amount, tech_name, labor_hours, completed_at, created_at')
@@ -212,6 +228,12 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       .select('id, driver_name, inspection_date, odometer, reefer_hours, overall_result, defects, submitted_at')
       .eq('unit_id', unitId)
       .order('inspection_date', { ascending: false })
+      .limit(200),
+
+    svc.from('fleet_pro_service_entries')
+      .select('id, service_date, vendor_name, invoice_number, labor_description, technician_name, labor_cost, parts_cost, tax, total')
+      .eq('unit_id', unitId)
+      .order('service_date', { ascending: false })
       .limit(200),
 
     svc.from('fleet_pro_unit_meter_readings')
@@ -339,6 +361,28 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   // ── driver pre-trips ────────────────────────────────────────────────────────
   // The defect count is what a fleet manager scans for, so it rides in the detail
   // line next to the driver who signed the record.
+  // Transcribed off a paper invoice at the QR page by a tech with no account, so it
+  // is kept distinct from an NWI-issued invoice: same timeline, weaker provenance.
+  // Cost obeys the same withholding rule as every other figure here.
+  const serviceEntryEvents: UnitServiceEvent[] = ((serviceEntries ?? []) as Row[]).map(r => {
+    const total = r.total != null
+      ? num(r.total)
+      : num(r.labor_cost) + num(r.parts_cost) + num(r.tax)
+    return {
+      id:         String(r.id),
+      kind:       'tech_service_entry' as const,
+      date:       dayOf(r.service_date) ?? '',
+      title:      (r.vendor_name as string | null) || 'Service entry',
+      detail:     (r.labor_description as string | null) ?? null,
+      status:     (r.technician_name as string | null) ?? null,
+      result:     null,
+      cost:       access.showCosts ? total : null,
+      reference:  (r.invoice_number as string | null) ?? null,
+      invoice_id: null,
+      pdf_url:    null,
+    }
+  })
+
   const pretripEvents: UnitServiceEvent[] = ((pretrips ?? []) as Row[]).map(r => {
     const d = countOf(r.defects)
     return {
@@ -361,6 +405,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const events: UnitServiceEvent[] = [
     ...woEvents, ...invEvents, ...pmEvents, ...dotEvents, ...aerialEvents, ...equipEvents,
+    ...serviceEntryEvents,
     ...pretripEvents,
   ].sort(byDateDesc)
 
@@ -422,12 +467,30 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const openInspectionIssue = inspectionEvents.some(e => isFail(e.result))
 
   const sched = (pmSchedule ?? null) as Row | null
-  const nextDueDate = sched ? dayOf(sched.next_due_date) : null
-  const { state: pmState, daysUntilDue } = pmStateFor(nextDueDate, today)
+
+  // Same calculator the two dashboards use, so a unit cannot read "Overdue" in the
+  // list and "Unscheduled" on its own page.
+  const pm = computePmStatus(
+    {
+      total_hours:       unitRow.total_hours as number | string | null,
+      next_pm_due_hours: unitRow.next_pm_due_hours as number | string | null,
+      last_pm_date:      unitRow.last_pm_date as string | null,
+      last_pm_type:      unitRow.last_pm_type as string | null,
+    },
+    sched ? { next_due_date: dayOf(sched.next_due_date), last_service_date: dayOf(sched.last_service_date) } : null,
+    today,
+  )
+
+  // hd_units.last_pm_date is stamped by the PM checklist route, but a unit whose PM
+  // was recorded before that stamp existed still has the checklist itself. Fall back
+  // to the newest one rather than showing a dash next to a PM that plainly happened.
+  const newestPm = pmEvents.filter(e => e.date).sort(byDateDesc)[0] ?? null
+  const lastPmDate = pm.last_pm_date ?? newestPm?.date ?? null
+  const lastPmType = pm.last_pm_type ?? (pm.last_pm_date ? null : newestPm?.title ?? null)
 
   const showCosts = access.showCosts
 
-  const unit: FleetProUnitRow = {
+  const unit: DetailUnitRow = {
     id:                   String(unitRow.id),
     unit_number:          (unitRow.unit_number as string | null) ?? '',
     truck_trailer_number: (unitRow.truck_trailer_number as string | null) ?? null,
@@ -441,10 +504,17 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     total_hours:          unitRow.total_hours == null ? null : num(unitRow.total_hours),
 
     last_service_date:    lastServiceDate,
-    next_due_date:        nextDueDate,
+    next_due_date:        pm.next_due_date,
     interval_days:        sched?.interval_days == null ? null : num(sched.interval_days),
-    pm_state:             pmState,
-    days_until_due:       daysUntilDue,
+    pm_state:             pm.state,
+    days_until_due:       pm.days_until_due,
+
+    pm_source:            pm.source,
+    pm_label:             pm.label,
+    next_due_hours:       pm.next_due_hours,
+    hours_remaining:      pm.hours_remaining,
+    last_pm_date:         lastPmDate,
+    last_pm_type:         lastPmType,
 
     open_inspection_issue: openInspectionIssue,
     last_inspection_date:  lastInspectionDate,

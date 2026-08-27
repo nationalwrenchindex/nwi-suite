@@ -2,6 +2,13 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { requirePartner, getPartnerFleetIds } from '@/lib/fleet-pro/partner-access'
+import {
+  computePmStatus,
+  PM_UNIT_COLUMNS,
+  PM_DUE_SOON_DAYS,
+  PM_DUE_SOON_HOURS,
+} from '@/lib/fleet-pro/pm-status'
+import type { PmSource } from '@/lib/fleet-pro/pm-status'
 import { FLEET_PRO_MONTHLY_CENTS } from '@/types/fleet-pro-partner'
 import type {
   PartnerDashboard,
@@ -23,9 +30,42 @@ interface AccountRecord {
 }
 
 interface ResellerRecord { fleet_account_id: string; brand_name: string | null; brand_logo_url: string | null }
-interface UnitRecord     { id: string; fleet_account_id: string | null; unit_number: string | null; active: boolean | null }
 interface MemberRecord   { fleet_account_id: string | null }
 interface PmRecord       { fleet_account_id: string | null; unit_id: string | null; next_due_date: string | null }
+
+interface UnitRecord {
+  id:                string
+  fleet_account_id:  string | null
+  unit_number:       string | null
+  active:            boolean | null
+  // Hours-based PM lives on hd_units. fleet_pro_pm_schedules is a manager-set
+  // date override that most fleets never populate, so reading it alone made every
+  // unit look unscheduled and every partner PM alert vanish.
+  total_hours:       number | string | null
+  next_pm_due_hours: number | string | null
+  last_pm_date:      string | null
+  last_pm_type:      string | null
+}
+
+// PartnerPmAlert only carries a calendar date, and an hours-based PM has none — so
+// next_due_date goes nullable (the client's shortDate already renders null as an
+// em dash) and the real figure rides in pm_label / hours_remaining.
+//
+// days_until_due stays a plain number rather than going null: PartnerDashboardClient
+// formats it itself as "N d late", and a null there would render literally. Until
+// that component is updated to print pm_label, an hours-based alert reports 0 days,
+// which keeps the pill honest about red-vs-orange without inventing a date.
+interface PmAlertRow extends Omit<PartnerPmAlert, 'next_due_date'> {
+  pm_source:       PmSource
+  pm_label:        string
+  next_due_date:   string | null
+  next_due_hours:  number | null
+  hours_remaining: number | null
+}
+
+interface PartnerDashboardPayload extends Omit<PartnerDashboard, 'pm_alerts'> {
+  pm_alerts: PmAlertRow[]
+}
 
 interface WorkOrderRecord {
   fleet_account_id:  string | null
@@ -68,20 +108,16 @@ interface InspectionRecord {
 const ROW_CEILING   = 20_000
 const ACTIVITY_CAP  = 25
 const PM_ALERT_CAP  = 25
-const DUE_SOON_DAYS = 30
+
+// Date and hours PMs have to be triaged in one list, so both are projected onto a
+// single "how close is it" axis using the ratio of their own due-soon thresholds
+// (30 days ≈ 200 hours). Used ONLY for ordering — no fabricated figure is shipped.
+const HOURS_PER_DAY_EQUIV = PM_DUE_SOON_HOURS / PM_DUE_SOON_DAYS
 
 function dateKey(d: Date): string {
   const m   = String(d.getMonth() + 1).padStart(2, '0')
   const day = String(d.getDate()).padStart(2, '0')
   return `${d.getFullYear()}-${m}-${day}`
-}
-
-/** Whole days from `today` to `due`, both YYYY-MM-DD. Midday pins it clear of DST. */
-function daysUntil(due: string, today: string): number {
-  const a = Date.parse(`${due.slice(0, 10)}T12:00:00Z`)
-  const b = Date.parse(`${today}T12:00:00Z`)
-  if (Number.isNaN(a) || Number.isNaN(b)) return 0
-  return Math.round((a - b) / 86_400_000)
 }
 
 /** Keep whichever ISO date/timestamp is later; both arrive as sortable strings. */
@@ -110,7 +146,7 @@ export async function GET() {
   // list is what stands between one partner and another partner's customers.
   const fleetIds = await getPartnerFleetIds(partner.id)
 
-  const empty: PartnerDashboard = {
+  const empty: PartnerDashboardPayload = {
     partner_name:      partner.partner_name,
     fleet_count:       0,
     total_units:       0,
@@ -146,7 +182,7 @@ export async function GET() {
         .eq('partner_id', partner.id),
 
       svc.from('hd_units')
-        .select('id, fleet_account_id, unit_number, active')
+        .select(`id, fleet_account_id, unit_number, active, ${PM_UNIT_COLUMNS}`)
         .in('fleet_account_id', fleetIds)
         .limit(ROW_CEILING),
 
@@ -235,32 +271,56 @@ export async function GET() {
   }
 
   // ─── PM standing ────────────────────────────────────────────────────────────
-  const overdueCounts  = new Map<string, number>()
-  const dueSoonCounts  = new Map<string, number>()
-  const pmAlerts: PartnerPmAlert[] = []
-
+  // Driven off the UNITS, not off fleet_pro_pm_schedules. That table is a
+  // manager-set date override that almost no fleet fills in, so iterating it was
+  // producing zero alerts for partners whose customers all run hours-based PM.
+  const schedByUnit = new Map<string, PmRecord>()
   for (const pm of (pmRes.data ?? []) as PmRecord[]) {
-    if (!pm.fleet_account_id || !pm.unit_id || !pm.next_due_date) continue
-    const days = daysUntil(pm.next_due_date, today)
-    if (days > DUE_SOON_DAYS) continue
+    if (pm.unit_id) schedByUnit.set(pm.unit_id, pm)
+  }
 
-    const overdue = days < 0
+  const overdueCounts = new Map<string, number>()
+  const dueSoonCounts = new Map<string, number>()
+  const pmAlerts: { rank: number; row: PmAlertRow }[] = []
+
+  for (const u of units) {
+    // A retired unit is not a PM the partner has to chase, same rule the billed
+    // unit count uses above.
+    if (u.active === false || !u.fleet_account_id) continue
+
+    const status = computePmStatus(u, schedByUnit.get(u.id) ?? null, today)
+    if (status.state !== 'overdue' && status.state !== 'due_soon') continue
+
+    const overdue = status.state === 'overdue'
     const bucket  = overdue ? overdueCounts : dueSoonCounts
-    bucket.set(pm.fleet_account_id, (bucket.get(pm.fleet_account_id) ?? 0) + 1)
+    bucket.set(u.fleet_account_id, (bucket.get(u.fleet_account_id) ?? 0) + 1)
+
+    const rank = status.hours_remaining !== null
+      ? status.hours_remaining / HOURS_PER_DAY_EQUIV
+      : status.days_until_due ?? 0
 
     pmAlerts.push({
-      fleet_account_id: pm.fleet_account_id,
-      fleet_name:       nameByFleet.get(pm.fleet_account_id) ?? 'Fleet account',
-      unit_id:          pm.unit_id,
-      unit_number:      unitNumbers.get(pm.unit_id) ?? 'Unit',
-      next_due_date:    pm.next_due_date.slice(0, 10),
-      days_until_due:   days,
-      overdue,
+      rank,
+      row: {
+        fleet_account_id: u.fleet_account_id,
+        fleet_name:       nameByFleet.get(u.fleet_account_id) ?? 'Fleet account',
+        unit_id:          u.id,
+        unit_number:      unitNumbers.get(u.id) ?? 'Unit',
+        overdue,
+        pm_source:        status.source,
+        pm_label:         status.label,
+        next_due_date:    status.next_due_date,
+        next_due_hours:   status.next_due_hours,
+        hours_remaining:  status.hours_remaining,
+        // See PmAlertRow: 0 until PartnerDashboardClient renders pm_label instead
+        // of formatting a day count of its own.
+        days_until_due:   status.days_until_due ?? 0,
+      },
     })
   }
 
   // Most overdue first: the whole point of the panel is triage.
-  pmAlerts.sort((a, b) => a.days_until_due - b.days_until_due)
+  pmAlerts.sort((a, b) => a.rank - b.rank)
 
   // ─── Revenue and last service ───────────────────────────────────────────────
   const mtdByFleet         = new Map<string, number>()
@@ -414,7 +474,7 @@ export async function GET() {
   // ─── Totals ─────────────────────────────────────────────────────────────────
   const billedFleets = fleets.filter(f => f.fleet_pro_enabled).length
 
-  const dashboard: PartnerDashboard = {
+  const dashboard: PartnerDashboardPayload = {
     partner_name:      partner.partner_name,
     fleet_count:       fleets.length,
     total_units:       fleets.reduce((n, f) => n + f.unit_count, 0),
@@ -425,7 +485,7 @@ export async function GET() {
     monthly_cost:      money((billedFleets * FLEET_PRO_MONTHLY_CENTS) / 100),
     fleets,
     recent_activity:   activity.slice(0, ACTIVITY_CAP).map(a => a.row),
-    pm_alerts:         pmAlerts.slice(0, PM_ALERT_CAP),
+    pm_alerts:         pmAlerts.slice(0, PM_ALERT_CAP).map(a => a.row),
   }
 
   return NextResponse.json({ dashboard })

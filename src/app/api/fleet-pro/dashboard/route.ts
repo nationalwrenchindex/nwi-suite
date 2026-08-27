@@ -2,7 +2,11 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { requireFleetProMember } from '@/lib/fleet-pro/access'
-import { canViewCosts, pmStateFor } from '@/types/fleet-pro'
+import { computePmStatus, PM_UNIT_COLUMNS } from '@/lib/fleet-pro/pm-status'
+import type { PmSource } from '@/lib/fleet-pro/pm-status'
+import { computeRegistrationState, daysUntilExpiration, registrationNeedsAttention } from '@/lib/fleet-pro/registration'
+import type { RegistrationState } from '@/types/fleet-pro-registration'
+import { canViewCosts } from '@/types/fleet-pro'
 import type { FleetProDashboard, FleetProUnitRow, PmState } from '@/types/fleet-pro'
 
 export const dynamic = 'force-dynamic'
@@ -20,8 +24,30 @@ interface UnitRecord {
   unit_type:            string | null
   status:               string | null
   total_hours:          number | null
+  // The hours-based PM figures the shop actually maintains. Without these the
+  // dashboard was reading an empty date table and calling every unit unscheduled.
+  next_pm_due_hours:    number | string | null
+  last_pm_date:         string | null
+  last_pm_type:         string | null
 }
 
+// Fields the PM fix adds to the wire. Kept local because src/types/fleet-pro.ts is
+// owned elsewhere; see the report for what should be promoted into it.
+interface DashboardUnitRow extends FleetProUnitRow {
+  registration_state:        RegistrationState
+  registration_expires_on:   string | null
+  registration_days_until:   number | null
+  license_plate:             string | null
+  jurisdiction:              string | null
+  pm_source:       PmSource
+  pm_label:        string
+  next_due_hours:  number | null
+  hours_remaining: number | null
+  last_pm_date:    string | null
+  last_pm_type:    string | null
+}
+
+interface RegistrationRecord { unit_id: string; license_plate: string | null; jurisdiction: string | null; expires_on: string | null }
 interface PmRecord         { unit_id: string; interval_days: number | null; next_due_date: string | null }
 interface WorkOrderRecord  { unit_id: string | null; completed_at: string | null; created_at: string | null }
 interface InspectionRecord { unit_id: string | null; inspection_date: string | null; overall_result: string | null }
@@ -73,7 +99,7 @@ export async function GET() {
 
   const { data: unitData, error: unitError } = await svc
     .from('hd_units')
-    .select('id, unit_number, truck_trailer_number, manufacturer, model, serial_number, year, unit_type, status, total_hours')
+    .select(`id, unit_number, truck_trailer_number, manufacturer, model, serial_number, year, unit_type, status, ${PM_UNIT_COLUMNS}`)
     .eq('fleet_account_id', fleetId)
     .eq('active', true)
     .order('unit_number', { ascending: true })
@@ -96,6 +122,7 @@ export async function GET() {
     overdue_count:    0,
     due_soon_count:   0,
     failed_inspection_count: 0,
+    registration_alert_count: 0,
     spend_mtd:        showCost ? 0 : null,
     spend_ytd:        showCost ? 0 : null,
     units:            [],
@@ -103,7 +130,7 @@ export async function GET() {
 
   if (unitIds.length === 0) return NextResponse.json({ dashboard: empty })
 
-  const [pmRes, woRes, dotRes, aerialRes, equipRes, invRes] = await Promise.all([
+  const [pmRes, woRes, dotRes, aerialRes, equipRes, invRes, regRes] = await Promise.all([
     svc.from('fleet_pro_pm_schedules')
       .select('unit_id, interval_days, next_due_date')
       .eq('fleet_account_id', fleetId)
@@ -140,13 +167,23 @@ export async function GET() {
       .in('unit_id', unitIds)
       .gte('created_at', yearStart)
       .limit(ROW_CEILING),
+
+    svc.from('fleet_pro_unit_registration')
+      .select('unit_id, license_plate, jurisdiction, expires_on')
+      .eq('fleet_account_id', fleetId)
+      .in('unit_id', unitIds),
   ])
 
-  const failed = [pmRes, woRes, dotRes, aerialRes, equipRes, invRes].find(r => r.error)
+  const failed = [pmRes, woRes, dotRes, aerialRes, equipRes, invRes, regRes].find(r => r.error)
   if (failed?.error) {
     console.error('[fleet-pro/dashboard]', failed.error)
     return NextResponse.json({ error: failed.error.message }, { status: 500 })
   }
+
+  // Units with no registration row still classify — as 'missing', which is red, the
+  // same as expired. A truck with no plate on file is not a truck that is compliant.
+  const regByUnit = new Map<string, RegistrationRecord>()
+  for (const row of (regRes.data ?? []) as RegistrationRecord[]) regByUnit.set(row.unit_id, row)
 
   const pmByUnit = new Map<string, PmRecord>()
   for (const row of (pmRes.data ?? []) as PmRecord[]) pmByUnit.set(row.unit_id, row)
@@ -190,19 +227,28 @@ export async function GET() {
 
   let overdueCount = 0
   let dueSoonCount = 0
+  // Expired, missing and expiring-within-60-days all count: a plate a manager cannot
+  // produce is as much of a roadside problem as one that lapsed last week.
+  let registrationAlertCount = 0
   let fleetMtd = 0
   let fleetYtd = 0
 
-  const rows: FleetProUnitRow[] = units.map(u => {
+  const rows: DashboardUnitRow[] = units.map(u => {
     const pm = pmByUnit.get(u.id) ?? null
-    const { state, daysUntilDue } = pmStateFor(pm?.next_due_date ?? null, today)
-    if (state === 'overdue')  overdueCount++
-    if (state === 'due_soon') dueSoonCount++
+    // One calculator for every Fleet Pro surface: a manager-set date wins, hd_units
+    // meter hours come next, and only a unit with neither reads "unscheduled".
+    const status = computePmStatus(u, pm, today)
+    if (status.state === 'overdue')  overdueCount++
+    if (status.state === 'due_soon') dueSoonCount++
 
     const mtd = mtdByUnit.get(u.id) ?? 0
     const ytd = ytdByUnit.get(u.id) ?? 0
     fleetMtd += mtd
     fleetYtd += ytd
+
+    const reg      = regByUnit.get(u.id) ?? null
+    const regState = computeRegistrationState(reg?.expires_on ?? null, today)
+    if (registrationNeedsAttention(regState)) registrationAlertCount++
 
     const lastService = lastServiceByUnit.get(u.id) ?? null
 
@@ -219,10 +265,23 @@ export async function GET() {
       total_hours:          u.total_hours === null ? null : Number(u.total_hours),
 
       last_service_date: lastService ? lastService.slice(0, 10) : null,
-      next_due_date:     pm?.next_due_date ?? null,
+      next_due_date:     status.next_due_date,
       interval_days:     pm?.interval_days ?? null,
-      pm_state:          state,
-      days_until_due:    daysUntilDue,
+      pm_state:          status.state,
+      days_until_due:    status.days_until_due,
+
+      pm_source:         status.source,
+      pm_label:          status.label,
+      next_due_hours:    status.next_due_hours,
+      hours_remaining:   status.hours_remaining,
+      last_pm_date:      status.last_pm_date,
+      last_pm_type:      status.last_pm_type,
+
+      registration_state:      regState,
+      registration_expires_on: reg?.expires_on ?? null,
+      registration_days_until: daysUntilExpiration(reg?.expires_on ?? null, today),
+      license_plate:           reg?.license_plate ?? null,
+      jurisdiction:            reg?.jurisdiction ?? null,
 
       open_inspection_issue: failedUnits.has(u.id),
       last_inspection_date:  lastInspectionByUnit.get(u.id)?.slice(0, 10) ?? null,
@@ -243,6 +302,7 @@ export async function GET() {
     overdue_count:           overdueCount,
     due_soon_count:          dueSoonCount,
     failed_inspection_count: rows.filter(r => r.open_inspection_issue).length,
+    registration_alert_count: registrationAlertCount,
     spend_mtd:               showCost ? fleetMtd : null,
     spend_ytd:               showCost ? fleetYtd : null,
     units:                   rows,
