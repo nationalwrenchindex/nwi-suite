@@ -98,5 +98,19 @@ export async function POST(req: NextRequest) {
     companyName:   typeof company_name        === 'string' ? company_name        : null,
   })
 
-  return NextResponse.json({ invoice: data, customer_id }, { status: 201 })
+  // Persist the link. It was previously resolved here and returned to the client but
+  // never written, which left every HD invoice with no route back to a customers row —
+  // and therefore no way for the send paths to read that customer's no_sms / no_email
+  // flags. Best-effort after the insert, like the work-order flip above: failing to
+  // record the link must not cost us the invoice.
+  if (customer_id) {
+    const { error: linkError } = await supabase
+      .from('hd_invoices')
+      .update({ customer_id })
+      .eq('id', data.id)
+      .eq('user_id', user.id)
+    if (linkError) console.error('[hd/invoices] customer link failed', linkError)
+  }
+
+  return NextResponse.json({ invoice: { ...data, customer_id }, customer_id }, { status: 201 })
 }

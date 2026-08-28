@@ -12,6 +12,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { sendSmsResult } from '@/lib/twilio'
+import { getContactSuppression } from '@/lib/customer-contact'
 import { mintInvoiceToken, publicInvoiceUrl } from '@/lib/hd/invoice-token'
 import { buildInvoiceSms } from '@/lib/hd/sms-templates'
 
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // another subscriber's invoice is indistinguishable from a missing one.
   const { data: invoice, error: fetchErr } = await supabase
     .from('hd_invoices')
-    .select('id, invoice_number, status, total, customer_phone, customer_email, sent_at')
+    .select('id, invoice_number, status, total, customer_phone, customer_email, sent_at, customer_id')
     .eq('id', id)
     .eq('user_id', user.id)
     .single()
@@ -100,6 +101,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const to = (body.phone ?? invoice.customer_phone ?? '').trim()
   if (!to) {
     return NextResponse.json({ sent: false, error: 'No phone number for this customer.', url: publicUrl })
+  }
+
+  // A customer marked do-not-SMS is not texted, even on a manual send: the flag is
+  // the customer's instruction, not a preference about automation. Returns 200 with a
+  // reason and the link so the tech can still copy it and phone them instead.
+  const suppression = await getContactSuppression(supabase, invoice.customer_id as string | null)
+  if (suppression.no_sms) {
+    return NextResponse.json({
+      sent: false,
+      suppressed: true,
+      error: 'This customer has asked not to receive text messages.',
+      url: publicUrl,
+    })
   }
 
   const smsBody = buildInvoiceSms({

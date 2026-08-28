@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { sendSmsResult } from '@/lib/twilio'
+import { getContactSuppression } from '@/lib/customer-contact'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest) {
   // 2. Candidate invoices: sent/overdue, not yet fee'd, with a due date, for those techs.
   const { data: invoices, error: invErr } = await supabase
     .from('hd_invoices')
-    .select('id, invoice_number, user_id, customer_phone, total, subtotal_parts, line_items, due_date, status, late_fee_applied')
+    .select('id, invoice_number, user_id, customer_phone, total, subtotal_parts, line_items, due_date, status, late_fee_applied, customer_id')
     .in('user_id', userIds)
     .in('status', ['sent', 'overdue'])
     .eq('late_fee_applied', false)
@@ -118,7 +119,12 @@ export async function GET(request: NextRequest) {
     applied++
 
     // 6. Optional SMS to the customer.
-    if (settings.send_sms_notification !== false && inv.customer_phone) {
+    // The late fee is still applied to the invoice — the money is owed either way.
+    // Only the notification is suppressed, because that is what the customer opted
+    // out of. Suppressing the fee itself would let an opt-out cancel a charge.
+    const suppressed = (await getContactSuppression(supabase, inv.customer_id as string | null)).no_sms
+
+    if (settings.send_sms_notification !== false && inv.customer_phone && !suppressed) {
       const techName = nameMap.get(inv.user_id as string) ?? 'your mechanic'
       const body =
         `Invoice #${inv.invoice_number} from ${techName} is overdue. ` +
