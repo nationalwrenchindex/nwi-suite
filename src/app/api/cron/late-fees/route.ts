@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { sendSmsResult } from '@/lib/twilio'
 import { getContactSuppression } from '@/lib/customer-contact'
+import { authorizeCron } from '@/lib/cron-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -9,14 +10,8 @@ export const dynamic = 'force-dynamic'
 // Runs daily at 9am (see vercel.json). Applies a late fee to overdue HD invoices
 // for techs who have an active late_fee_settings row. Gated by CRON_SECRET.
 export async function GET(request: NextRequest) {
-  const incomingSecret =
-    request.headers.get('x-cron-secret') ??
-    request.headers.get('authorization')?.replace('Bearer ', '')
-
-  const expected = process.env.CRON_SECRET
-  if (expected && incomingSecret !== expected) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const denied = authorizeCron(request)
+  if (denied) return denied
 
   const supabase = createServiceClient()
   const now = Date.now()

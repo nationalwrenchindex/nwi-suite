@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { sendSmsResult } from '@/lib/twilio'
 import { getSmsBody } from '@/lib/torquewrench/sms-templates'
 import { getContactSuppressionByPhone } from '@/lib/customer-contact'
+import { authorizeCron } from '@/lib/cron-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,14 +12,8 @@ export const dynamic = 'force-dynamic'
 // Sends pending review-request SMS once the mechanic's send delay has elapsed.
 // Protected by x-cron-secret header (same CRON_SECRET used by /api/notifications/reminders).
 export async function GET(request: NextRequest) {
-  const incomingSecret =
-    request.headers.get('x-cron-secret') ??
-    request.headers.get('authorization')?.replace('Bearer ', '')
-
-  const expected = process.env.CRON_SECRET
-  if (expected && incomingSecret !== expected) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const denied = authorizeCron(request)
+  if (denied) return denied
 
   const supabase = createServiceClient()
   const appUrl   = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '')

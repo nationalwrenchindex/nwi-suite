@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { generateSocialPosts, generatePostImage } from '@/lib/social/generate'
 import type { SocialPlatform } from '@/lib/social/generate'
 import { isGeminiConfigured } from '@/lib/gemini/client'
+import { authorizeCron } from '@/lib/cron-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,14 +12,8 @@ export const dynamic = 'force-dynamic'
 // Generates today's social posts for all active subscribers.
 // Protected by x-cron-secret header.
 export async function GET(request: NextRequest) {
-  const incomingSecret =
-    request.headers.get('x-cron-secret') ??
-    request.headers.get('authorization')?.replace('Bearer ', '')
-
-  const expected = process.env.CRON_SECRET
-  if (expected && incomingSecret !== expected) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const denied = authorizeCron(request)
+  if (denied) return denied
 
   const openAiKey = process.env.OPENAI_API_KEY
 

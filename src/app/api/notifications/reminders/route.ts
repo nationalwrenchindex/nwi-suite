@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { dispatchNotification } from '@/lib/notifications'
+import { authorizeCron } from '@/lib/cron-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,14 +13,8 @@ export const dynamic = 'force-dynamic'
 // curl -X POST https://your-domain.com/api/notifications/reminders \
 //      -H "x-cron-secret: $CRON_SECRET"
 export async function GET(request: NextRequest) {
-  const incomingSecret =
-    request.headers.get('x-cron-secret') ??
-    request.headers.get('authorization')?.replace('Bearer ', '')
-
-  const expected = process.env.CRON_SECRET
-  if (expected && incomingSecret !== expected) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const denied = authorizeCron(request)
+  if (denied) return denied
 
   const supabase = await createClient()
 

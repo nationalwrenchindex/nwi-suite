@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { sendPmDueEmail, type PmDueUnit } from '@/lib/fleet-pro/pm-alert-email'
 import { pmStateFor } from '@/types/fleet-pro'
+import { authorizeCron } from '@/lib/cron-auth'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,14 +32,8 @@ interface ScheduleJoin {
 // Runs daily at 13:00 UTC (see vercel.json). Emails each fleet ONE digest listing
 // every unit due within 30 days or already overdue. Gated by CRON_SECRET.
 export async function GET(request: NextRequest) {
-  const incomingSecret =
-    request.headers.get('x-cron-secret') ??
-    request.headers.get('authorization')?.replace('Bearer ', '')
-
-  const expected = process.env.CRON_SECRET
-  if (expected && incomingSecret !== expected) {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-  }
+  const denied = authorizeCron(request)
+  if (denied) return denied
 
   const supabase = createServiceClient()
   const today    = todayIso()
