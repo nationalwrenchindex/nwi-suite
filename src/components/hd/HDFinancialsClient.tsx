@@ -51,6 +51,23 @@ interface HDQuote {
   valid_until:      string | null
 }
 
+// Shape of GET /api/hd/financials/summary. Every cost-derived field is nullable
+// because HD cost only exists on invoices written since markup tracking shipped —
+// null means "not known", and it must reach the screen as that rather than as 0.
+interface CostSummary {
+  total_revenue:           number
+  parts_revenue:           number
+  labor_revenue:           number
+  cogs_total:              number | null
+  cogs_known:              number
+  cogs_unknown:            number
+  cogs_partial:            boolean
+  revenue_with_known_cost: number
+  gross_profit:            number | null
+  gross_margin:            number | null
+  invoice_count:           number
+}
+
 interface HDExpense {
   id:           string
   category:     string
@@ -123,6 +140,122 @@ function statusCfg(map: Record<string, StatusCfg>, status: string | null | undef
   return { label: status || 'Unknown', color: '#9CA3AF', bg: '#9CA3AF20' }
 }
 
+function ymd(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+// Mirrors the period math in src/app/hd/financials/page.tsx so the margin block
+// covers exactly the range the rest of the page is showing.
+// Matched with an if-chain, not an object lookup: periodParam comes straight off the
+// ?period= query string, and a plain-object lookup on a key like 'constructor' hands
+// back an inherited member instead of undefined — the same hazard statusCfg() guards.
+function periodRange(periodParam: string): { from: string; to: string } {
+  const now = new Date()
+  if (periodParam === 'ytd') return { from: ymd(new Date(now.getFullYear(), 0, 1)), to: ymd(now) }
+  if (periodParam === '90d') return { from: ymd(new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)), to: ymd(now) }
+  return { from: ymd(new Date(now.getFullYear(), now.getMonth(), 1)), to: ymd(now) }
+}
+
+// ─── Cost & margin ─────────────────────────────────────────────────────────────
+// The one number on this page a subscriber prices their work off. It is therefore
+// allowed to say "unknown" — the API reports how many invoices in the range have no
+// recorded parts cost, and anything computed from a partial set is labelled as such
+// instead of being printed as if it covered the whole period.
+
+function CostMarginBlock({ periodParam, periodLabel }: { periodParam: string; periodLabel: string }) {
+  const [summary, setSummary] = useState<CostSummary | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [failed,  setFailed]  = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    const { from, to } = periodRange(periodParam)
+    fetch(`/api/hd/financials/summary?from_date=${from}&to_date=${to}`)
+      .then(r => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then(d => { if (!cancelled) setSummary(d.summary ?? null) })
+      .catch(() => { if (!cancelled) setFailed(true) })
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [periodParam])
+
+  if (loading) return <div className="h-32 animate-pulse rounded-xl" style={{ background: '#111920' }} />
+  if (failed || !summary) {
+    return (
+      <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+        <p className="font-condensed font-bold text-white text-lg tracking-wide mb-2">COST &amp; MARGIN</p>
+        <p className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>Margin data is unavailable right now.</p>
+      </div>
+    )
+  }
+
+  const s = summary
+  const noCost   = s.cogs_known === 0
+  const marginTx = s.gross_margin == null ? '—' : `${s.gross_margin.toFixed(0)}%`
+
+  // Colour the margin only when it is a real, complete figure. A partial or unknown
+  // margin rendered in confident green would read as a verdict on the business.
+  const marginColor = s.gross_margin == null || s.cogs_partial
+    ? 'white'
+    : s.gross_margin >= 40 ? 'green' : s.gross_margin >= 20 ? 'orange' : 'red'
+
+  // The qualifier is the honest part. cogs_total covers only the invoices whose cost
+  // was recorded, so the margin it produces describes those invoices — not the period.
+  const coverage = noCost
+    ? 'No parts cost recorded'
+    : s.cogs_partial
+      ? `Based on ${s.cogs_known} of ${s.invoice_count} invoices`
+      : `All ${s.invoice_count} invoice${s.invoice_count !== 1 ? 's' : ''}`
+
+  return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+        <StatCard label="Total Revenue" value={fmt(s.total_revenue)} color="green"  sub={`${s.invoice_count} invoice${s.invoice_count !== 1 ? 's' : ''} · ${periodLabel}`} />
+        <StatCard label="Parts Revenue" value={fmt(s.parts_revenue)} color="orange" sub="Billed to customers" />
+        <StatCard label="Labor Revenue" value={fmt(s.labor_revenue)} color="blue"   sub="Incl. diagnostic + road call" />
+        <StatCard
+          label="Cost of Goods Sold"
+          value={s.cogs_total == null ? '—' : fmt(s.cogs_total)}
+          color={s.cogs_total == null ? 'white' : 'red'}
+          sub={coverage}
+        />
+        <StatCard
+          label="Gross Profit"
+          value={s.gross_profit == null ? '—' : fmt(s.gross_profit)}
+          color={s.gross_profit == null ? 'white' : s.gross_profit >= 0 ? 'green' : 'red'}
+          sub={s.gross_profit == null ? 'Cost unknown' : `On ${fmt(s.revenue_with_known_cost)} of revenue`}
+        />
+        <StatCard
+          label="Gross Margin"
+          value={marginTx}
+          color={marginColor}
+          sub={s.gross_margin == null ? 'Cost unknown' : s.cogs_partial ? 'Partial — see note' : 'Full period'}
+        />
+      </div>
+
+      {(noCost || s.cogs_partial) && (
+        <div className="rounded-xl p-4" style={{ background: '#162030', border: `1px solid ${HD_ORANGE}40` }}>
+          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.55)' }}>
+            {noCost ? (
+              <>
+                <span style={{ color: HD_ORANGE }}>Cost not recorded.</span>{' '}
+                None of the {s.invoice_count} invoice{s.invoice_count !== 1 ? 's' : ''} in this period has a parts cost on file,
+                so margin cannot be calculated. Parts added with a markup on new invoices record their cost automatically.
+              </>
+            ) : (
+              <>
+                <span style={{ color: HD_ORANGE }}>Partial figure.</span>{' '}
+                {s.cogs_unknown} of {s.invoice_count} invoice{s.invoice_count !== 1 ? 's' : ''} in this period {s.cogs_unknown === 1 ? 'has' : 'have'} no
+                parts cost on file. The cost, profit and margin above cover only the {s.cogs_known} invoice{s.cogs_known !== 1 ? 's' : ''} that
+                do — treating the rest as zero-cost would report them as pure profit and overstate your margin.
+              </>
+            )}
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Overview tab ──────────────────────────────────────────────────────────────
 
 function OverviewTab({ stats }: { stats: OverviewStats }) {
@@ -133,6 +266,13 @@ function OverviewTab({ stats }: { stats: OverviewStats }) {
         <StatCard label="Outstanding"  value={fmt(stats.outstandingTotal)} color={stats.outstandingTotal > 0 ? 'orange' : 'white'} sub="Completed, not invoiced" />
         <StatCard label="Avg Job"      value={fmt(stats.avgJobValue)}      color="blue"  sub={`${stats.closedCount} jobs closed`} />
         <StatCard label="Labor Hours"  value={stats.totalLaborHours.toFixed(1)} color="white" sub={`@ $${stats.hourlyRate}/hr`} />
+      </div>
+
+      {/* Cost of goods and margin. Sourced from the invoices themselves rather than
+          from work orders, so it reports what was billed and what it cost to bill it. */}
+      <div>
+        <p className="font-condensed font-bold text-white text-lg tracking-wide mb-3">COST &amp; MARGIN</p>
+        <CostMarginBlock periodParam={stats.periodParam} periodLabel={stats.periodLabel} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

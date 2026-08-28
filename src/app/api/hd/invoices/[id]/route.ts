@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
 import { computeDueDate } from '@/lib/hd/payment-terms'
 import { resolveInvoiceFleetLinks } from '@/lib/fleet-pro/invoice-link'
+import { costingFromLineItems, isMissingCostingColumn } from '@/lib/hd/invoice-costing'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,6 +48,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     update.paid_at = new Date().toISOString()
   }
 
+  // Re-derive cost of goods whenever the edit rewrites the line items, so a corrected
+  // invoice does not keep reporting the margin of the version it replaced. Only when
+  // line_items is actually present: a status-only PUT (mark paid, mark sent) carries
+  // no items, and recomputing from an absent array would wipe a real cost to zero.
+  if ('line_items' in body) {
+    const costing = costingFromLineItems(body.line_items, {
+      diagnostic_fee: body.diagnostic_fee as number | string | null | undefined,
+      road_call_fee:  body.road_call_fee  as number | string | null | undefined,
+      subtotal_parts: body.subtotal_parts as number | string | null | undefined,
+    })
+    update.parts_cost = costing.parts_cost
+    update.parts_sell = costing.parts_sell
+  }
+
   // When an invoice is marked SENT, stamp sent_at (once) and compute the due date
   // from its payment terms. Client may pass payment_terms in the same PUT to override.
   if (body.status === 'sent' && !body.sent_at) {
@@ -88,13 +103,29 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     update.fleet_account_id = fleetLinks.fleet_account_id
   }
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('hd_invoices')
     .update(update)
     .eq('id', id)
     .eq('user_id', user.id)
     .select()
     .single()
+
+  // Same guard as the POST path: migration 119 is applied by hand, so the deploy can
+  // arrive first. An edit must not fail — and a mark-paid PUT must not fail — because
+  // a reporting column is not there yet.
+  if (error && isMissingCostingColumn(error)) {
+    console.error('[hd/invoices/:id] parts_cost/parts_sell missing — run migration 119', error.message)
+    delete update.parts_cost
+    delete update.parts_sell
+    ;({ data, error } = await supabase
+      .from('hd_invoices')
+      .update(update)
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select()
+      .single())
+  }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ invoice: data })

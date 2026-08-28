@@ -6,6 +6,10 @@ import * as chrono from 'chrono-node'
 import { createServiceClient } from '@/lib/supabase/service'
 import { sendSubscriberSms } from '@/lib/twilio'
 import { SERVICE_DURATIONS } from '@/lib/foreman/system-prompt'
+// Shared white-label helper: GSM-safes the name, trims it to the SMS budget, and
+// supplies the vendor-neutral fallback ("Your service provider"). Pure module —
+// no server deps — so importing it here costs nothing.
+import { normalizeBusinessName } from '@/lib/hd/sms-templates'
 
 const SERVER_URL = 'https://tools.nationalwrenchindex.com/api/webhooks/vapi'
 
@@ -785,12 +789,14 @@ async function handleBookAppointment(
       .eq('vapi_call_id', vapiCallId)
   }
 
-  // Fetch settings for SMS
-  const { data: settings } = await svc
-    .from('foreman_settings')
-    .select('mechanic_phone, mechanic_first_name, business_name')
-    .eq('user_id', userId)
-    .single()
+  // Fetch settings + profile for SMS. The profile is only needed for the
+  // customer-facing text: foreman_settings.business_name is optional, and the
+  // customer's confirmation must carry the SUBSCRIBER's identity, never the
+  // vendor's. One fetch, reused by both sends below.
+  const [{ data: settings }, { data: profile }] = await Promise.all([
+    svc.from('foreman_settings').select('mechanic_phone, mechanic_first_name, business_name').eq('user_id', userId).single(),
+    svc.from('profiles').select('business_name').eq('id', userId).single(),
+  ])
 
   const timeLabel = formatTimeLabel(jh, jm)
   const dateObj   = new Date(jobDate + 'T00:00:00')
@@ -812,8 +818,12 @@ async function handleBookAppointment(
 
   // SMS confirmation to customer (awaited)
   if (params.customer_phone && rawPhone.length >= 10) {
-    const biz  = settings?.business_name ?? 'your mechanic'
-    const body = `Appointment confirmed with ${biz}: ${serviceName} on ${dateLabel} at ${timeLabel}. See you then! — National Wrench Index`
+    // WHITE-LABEL: the customer booked with the mechanic, not with the mechanic's
+    // software vendor — a text signed "National Wrench Index" reads as a scam and
+    // undercuts the subscriber's brand. `||` (not `??`) so a blank settings value
+    // falls through to the profile instead of being treated as a real name.
+    const biz  = normalizeBusinessName((settings?.business_name ?? '').trim() || profile?.business_name)
+    const body = `${biz}: Your ${serviceName} is confirmed for ${dateLabel} at ${timeLabel}. See you then!`
     try {
       await sendSubscriberSms({ to: params.customer_phone, body })
       console.log('[booking-sms] customer SMS sent to', params.customer_phone)

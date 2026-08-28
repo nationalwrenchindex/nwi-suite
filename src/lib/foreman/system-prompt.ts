@@ -29,8 +29,17 @@ export interface ForemanPromptVars {
   workingDays:               string
 }
 
+// WHITE LABEL: the caller is the subscriber's customer and must never learn who
+// builds the software. The vendor attribution that used to close the first line
+// ("powered by National Wrench Index") is removed — an assistant told it works for a
+// business "powered by" a vendor will say so when a caller asks who it is.
+//
+// NOTE: editing this file does not by itself fix production. buildSystemPrompt is not
+// invoked anywhere in src/ — the webhook returns an assistantId plus overrides, and
+// the live prompt is held by the master assistant in the Vapi dashboard. If that one
+// was seeded from here it carries the same sentence and must be edited there too.
 export function buildSystemPrompt(v: ForemanPromptVars): string {
-  return `You are Foreman, a friendly and professional virtual receptionist for ${v.businessName}, a mobile mechanic business powered by National Wrench Index.
+  return `You are Foreman, a friendly and professional virtual receptionist for ${v.businessName}, a mobile mechanic business.
 
 Your job is to answer calls warmly, understand what the caller needs, check appointment availability, book jobs, and make callers feel confident they're in good hands.
 

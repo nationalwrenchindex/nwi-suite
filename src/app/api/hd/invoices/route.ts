@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
 import { logHDCustomer } from '@/lib/hd/customer-logging'
 import { resolveInvoiceFleetLinks } from '@/lib/fleet-pro/invoice-link'
+import { costingFromLineItems, isMissingCostingColumn } from '@/lib/hd/invoice-costing'
 
 export const dynamic = 'force-dynamic'
 
@@ -66,11 +67,39 @@ export async function POST(req: NextRequest) {
     unit_serial:   typeof body.unit_serial   === 'string' ? body.unit_serial   : null,
   })
 
-  const { data, error } = await supabase
+  // Cost of goods, lifted out of line_items and onto real columns at write time.
+  // The tech's cost only ever existed inside the line_items JSONB, so a dashboard
+  // wanting gross margin had to re-parse every invoice. Computing it here means the
+  // number is fixed at the moment of billing, exactly as the tech entered it, and
+  // cannot shift later if the costing rules change. parts_cost comes back null when
+  // any parts line has no recorded cost — that null is the point, see migration 119.
+  const costing = costingFromLineItems(body.line_items, {
+    diagnostic_fee: body.diagnostic_fee as number | string | null | undefined,
+    road_call_fee:  body.road_call_fee  as number | string | null | undefined,
+    subtotal_parts: body.subtotal_parts as number | string | null | undefined,
+  })
+
+  const baseRow   = { ...invoiceBody, user_id: user.id, invoice_number, ...fleetLinks }
+  const insertRow = { ...baseRow, parts_cost: costing.parts_cost, parts_sell: costing.parts_sell }
+
+  let { data, error } = await supabase
     .from('hd_invoices')
-    .insert({ ...invoiceBody, user_id: user.id, invoice_number, ...fleetLinks })
+    .insert(insertRow)
     .select()
     .single()
+
+  // Migrations here are applied by hand, so the deploy can land before 119 does.
+  // In that window the costing columns do not exist and the insert fails — which
+  // would cost the tech the invoice they just typed over a reporting field. Retry
+  // without them: degraded margin reporting is recoverable, a lost invoice is not.
+  if (error && isMissingCostingColumn(error)) {
+    console.error('[hd/invoices] parts_cost/parts_sell missing — run migration 119', error.message)
+    ;({ data, error } = await supabase
+      .from('hd_invoices')
+      .insert(baseRow)
+      .select()
+      .single())
+  }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
