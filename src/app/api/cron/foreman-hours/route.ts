@@ -1,12 +1,20 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
+import { authorizeCron } from '@/lib/cron-auth'
 import { setForemanActive, shouldForemanBeActiveForHours, type BusinessHours } from '@/lib/foreman/activate'
 
 // Vercel Cron: runs every 5 minutes.
 // For each user with auto_hours_activation = true, checks current time against
 // their business_hours and activates/deactivates Foreman accordingly.
 // Never overrides an active on_job reason.
-export async function GET() {
+//
+// Gated by CRON_SECRET. This route holds a service-role client and writes Foreman
+// activation state for every subscriber, so an unauthenticated caller could switch
+// call answering on or off across the whole customer base.
+export async function GET(request: NextRequest) {
+  const denied = authorizeCron(request)
+  if (denied) return denied
+
   const svc = createServiceClient()
 
   const { data: rows, error } = await svc

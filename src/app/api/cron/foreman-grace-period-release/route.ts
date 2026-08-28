@@ -1,10 +1,19 @@
-import { NextResponse } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
+import { authorizeCron } from '@/lib/cron-auth'
 import { releaseVapiPhoneNumber } from '@/lib/foreman/vapi-api'
 
 // Vercel Cron: runs daily at 2 AM UTC.
 // Releases Twilio + Vapi numbers for subscribers who cancelled 30+ days ago.
-export async function GET() {
+//
+// Gated by CRON_SECRET. The strictest of the cron guards matters most here: this
+// route releases real phone numbers at Twilio and Vapi, which is irreversible — a
+// released number goes back to the pool and the subscriber cannot get it back. An
+// unauthenticated caller could force every pending release to fire early.
+export async function GET(request: NextRequest) {
+  const denied = authorizeCron(request)
+  if (denied) return denied
+
   const svc = createServiceClient()
 
   const { data: rows, error } = await svc
