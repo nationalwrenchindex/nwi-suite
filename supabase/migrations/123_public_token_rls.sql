@@ -1,0 +1,101 @@
+-- Migration 123: remove the anon SELECT policies on invoices and quotes.
+--
+-- ── THE BUG ──────────────────────────────────────────────────────────────────
+-- 011_quote_approval_tracking.sql and 013_invoice_finalization.sql each added a
+-- permissive SELECT policy of the shape
+--
+--   USING (public_token IS NOT NULL)
+--
+-- The intent was "a customer holding a share link can read that document". What
+-- the predicate actually says is "the anon role may read EVERY row that has ever
+-- been shared, in every tenant". Nothing in it references the caller's token,
+-- because a USING clause has no access to one — it can only see the row. The
+-- row-scoping was left entirely to the application's .eq('public_token', token)
+-- filter, and a policy that depends on the caller remembering to filter is not a
+-- policy at all.
+--
+-- Confirmed against the live database with nothing but the publishable anon key:
+--
+--   GET /rest/v1/invoices?select=*  ->  7 of 9 rows,  spanning 2 user accounts
+--   GET /rest/v1/quotes?select=*    -> 13 of 14 rows, spanning 3 user accounts
+--
+-- The rows withheld in each case were exactly those with a NULL public_token,
+-- which is the predicate above, reading back. Exposed columns included total,
+-- line_items, notes, customer_id and due_date — every subscriber's pricing and
+-- every one of their customers' job details, enumerable by anyone who loads the
+-- front end and reads the anon key out of the page source. The anon key is not a
+-- secret; it is shipped to the browser by design. RLS is the only thing standing
+-- behind it, and here it was standing wide open.
+--
+-- ── WHY THE SHARE LINKS STILL WORK WITH NO ANON POLICY ───────────────────────
+-- The public document routes never used the anon policy in the first place. Every
+-- one of them reads through the SERVICE-ROLE client, which bypasses RLS entirely:
+--
+--   src/app/invoice/[token]/page.tsx                    createServiceClient
+--   src/app/quote/[token]/page.tsx                      createServiceClient
+--   src/app/api/invoices/public/[token]/route.ts        createServiceClient
+--   src/app/api/invoices/public/[token]/view/route.ts   createServiceClient
+--   src/app/api/invoices/public/[token]/tip/route.ts    createServiceClient
+--   src/app/api/quotes/public/[token]/route.ts          createServiceClient
+--   src/app/api/quotes/public/[token]/respond/route.ts  createServiceClient
+--   src/app/api/quotes/public/[token]/view/route.ts     createServiceClient
+--
+-- That is the correct shape, and dropping the policies makes the security model
+-- match it. The token becomes a CAPABILITY rather than a row filter: it is
+-- presented to a server route, compared against exactly one row on the server,
+-- and the read is performed by a credential the browser never holds. Possession
+-- of a token authorizes precisely the document that token names — and nothing
+-- else, because there is no query the anon key can issue against these tables at
+-- all once the policies are gone. A leaked token exposes one document. Under the
+-- old policy a leaked *anon key* exposed all of them, which is a different and
+-- much larger blast radius for the same accident.
+--
+-- This is the model migration 116 already established for hd_invoices, where the
+-- anon policy was deliberately never created. 123 brings the two LD tables in
+-- line with the HD precedent.
+
+-- ── invoices ─────────────────────────────────────────────────────────────────
+-- Created by 013_invoice_finalization.sql (inside a DO block guarded on
+-- pg_policies, hence the exact name below).
+DROP POLICY IF EXISTS "invoices: public view via token" ON public.invoices;
+
+-- ── quotes ───────────────────────────────────────────────────────────────────
+-- Created by 011_quote_approval_tracking.sql.
+DROP POLICY IF EXISTS "quotes: public view via token" ON public.quotes;
+
+
+-- ── WHAT SURVIVES ────────────────────────────────────────────────────────────
+-- The owner policies are untouched. Subscribers read and write their own rows in
+-- the app through the session client, and every one of these is scoped to
+-- auth.uid() = user_id, so none of them is reachable by the anon role:
+--
+--   public.invoices  (001_initial_schema.sql)
+--     "invoices: select own"   SELECT  USING       (auth.uid() = user_id)
+--     "invoices: insert own"   INSERT  WITH CHECK  (auth.uid() = user_id)
+--     "invoices: update own"   UPDATE  USING       (auth.uid() = user_id)
+--     "invoices: delete own"   DELETE  USING       (auth.uid() = user_id)
+--
+--   public.quotes    (009_create_quotes_table.sql)
+--     "quotes: select own"     SELECT  USING       (auth.uid() = user_id)
+--     "quotes: insert own"     INSERT  WITH CHECK  (auth.uid() = user_id)
+--     "quotes: update own"     UPDATE  USING       (auth.uid() = user_id)
+--     "quotes: delete own"     DELETE  USING       (auth.uid() = user_id)
+--
+-- After this migration each table has exactly four policies, all owner-scoped,
+-- and the anon role has zero readable rows in either table.
+--
+-- Verification, post-apply — both should return no rows:
+--   SELECT policyname, cmd, qual FROM pg_policies
+--   WHERE schemaname = 'public' AND tablename IN ('invoices','quotes')
+--     AND qual LIKE '%public_token%';
+--
+-- and with the anon key, both should return []:
+--   GET /rest/v1/invoices?select=id
+--   GET /rest/v1/quotes?select=id
+--
+-- while /invoice/<token> and /quote/<token> continue to render, because they
+-- never depended on the anon role.
+
+-- No index changes. idx_invoices_public_token and idx_quotes_public_token stay:
+-- they serve the service-role .eq('public_token', token) lookup, which is now the
+-- only path to these rows from outside the owner's session.

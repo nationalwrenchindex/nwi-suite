@@ -35,7 +35,13 @@ export async function POST(req: NextRequest) {
     .single()
 
   const hasPromo = !!body.promotionCodeId
-  const baseUrl  = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://nationalwrenchindex.com'
+  // NEXT_PUBLIC_APP_URL (the app host, tools.nationalwrenchindex.com) — NOT
+  // NEXT_PUBLIC_BASE_URL, which is set nowhere and fell back to the marketing
+  // domain, sending success_url off-app so the session_id round-trip that
+  // provisions HD access never ran. Matches every other checkout route,
+  // localhost fallback included: in dev that fails visibly instead of
+  // silently bouncing a developer into production.
+  const baseUrl  = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
   // Resolved from the price so the recorded tier can never disagree with what was
   // actually charged. Carried in metadata purely for logging and support lookups —

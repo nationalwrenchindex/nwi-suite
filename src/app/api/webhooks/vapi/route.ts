@@ -1,11 +1,19 @@
 // Vapi webhook — receives all Foreman call events.
-// MUST return 200 to Vapi on all paths to prevent retry storms.
+// MUST return 200 to Vapi on all paths to prevent retry storms — the one exception is
+// an unauthenticated request, which gets a 401 and never reaches any handler.
+//
+// LOGGING POLICY: this endpoint sees caller phone numbers, call summaries and
+// transcripts. Vercel ships every console line to a retained log store that is far
+// more widely readable than the database rows themselves, so nothing identifying is
+// logged here — only event types, ids, and masked phone numbers. When debugging a
+// specific call, read the foreman_calls row, not the logs.
 
 import { NextResponse, type NextRequest } from 'next/server'
 import * as chrono from 'chrono-node'
 import { createServiceClient } from '@/lib/supabase/service'
 import { sendSubscriberSms } from '@/lib/twilio'
 import { SERVICE_DURATIONS } from '@/lib/foreman/system-prompt'
+import { verifyVapiRequest } from '@/lib/vapi/verify-signature'
 // Shared white-label helper: GSM-safes the name, trims it to the SMS budget, and
 // supplies the vendor-neutral fallback ("Your service provider"). Pure module —
 // no server deps — so importing it here costs nothing.
@@ -47,9 +55,34 @@ interface ResolvedSubscriber {
 // ── Entry point ───────────────────────────────────────────────────────────────
 
 export async function POST(request: NextRequest) {
+  // The body is read as raw text rather than via request.json() because the request
+  // stream can only be consumed once and the HMAC path needs the exact bytes Vapi
+  // signed. Parsing happens after verification, so an unauthenticated payload is
+  // never interpreted as an event.
+  let rawBody: string
+  try {
+    rawBody = await request.text()
+  } catch {
+    console.error('[vapi] could not read request body')
+    return NextResponse.json({ ok: true }) // always 200
+  }
+
+  const auth = verifyVapiRequest(request.headers, rawBody)
+  if (!auth.ok) {
+    if (auth.reason === 'secret-not-configured') {
+      console.error('[vapi] VAPI_WEBHOOK_SECRET is not set — rejecting all webhook traffic. Set it to the "Server URL Secret" configured on the Vapi assistant/phone number.')
+    } else {
+      console.warn('[vapi] rejected unauthenticated webhook request:', auth.reason)
+    }
+    // 401 rather than the usual 200: a forged request is not a Vapi retry we want to
+    // suppress, and a genuine Vapi request that 401s should surface loudly in the
+    // dashboard rather than fail silently.
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  }
+
   let body: Record<string, unknown>
   try {
-    body = await request.json()
+    body = JSON.parse(rawBody) as Record<string, unknown>
   } catch {
     console.error('[vapi] invalid JSON body')
     return NextResponse.json({ ok: true }) // always 200
@@ -60,11 +93,11 @@ export async function POST(request: NextRequest) {
   const type       = message.type as string | undefined
   const vapiCallId = message.call?.id
 
-  console.log('[FULL VAPI PAYLOAD]', JSON.stringify(body, null, 2))
   console.log('[vapi] ── INCOMING ──────────────────────────────────')
-  console.log('[vapi] body:', JSON.stringify(body))
-  console.log('[vapi] event type:', type, '| callId:', vapiCallId)
-  console.log('[vapi] toolCallList:', JSON.stringify(message.toolCallList ?? null))
+  console.log('[vapi] event type:', type, '| callId:', vapiCallId, '| auth:', auth.via)
+  // Tool-call ARGUMENTS carry the caller's name, phone and vehicle, so only the
+  // function names are logged — enough to see which tool fired, nothing identifying.
+  console.log('[vapi] tool calls:', (message.toolCallList ?? []).map(tc => tc.function?.name ?? 'unknown').join(', ') || 'none')
 
   // Resolve subscriber once up front — used by all event handlers
   const svc        = createServiceClient()
@@ -136,7 +169,6 @@ async function resolveSubscriberId(
 
   // ── Step 2: match called phone number against foreman_settings.phone_number ─
   const calledRaw = extractCalledNumber(message)
-  console.log('[vapi] subscriber lookup: extracted called number from message =', calledRaw)
 
   if (!calledRaw) {
     console.log('[vapi] subscriber lookup: no called phone number found in any known path')
@@ -144,20 +176,19 @@ async function resolveSubscriberId(
   }
 
   const normalized = normalizeE164(calledRaw)
-  console.log('[vapi] subscriber lookup: normalized called number =', normalized)
 
   if (!normalized) {
-    console.log('[vapi] subscriber lookup: could not normalize', calledRaw, 'to E.164 — giving up')
+    console.log('[vapi] subscriber lookup: could not normalize called number', redactPhone(calledRaw), 'to E.164 — giving up')
     return null
   }
 
   const userId = await findUserIdByPhoneNumber(svc, normalized)
   if (userId) {
-    console.log('[vapi] subscriber lookup: phone_number', normalized, '→ userId=', userId)
+    console.log('[vapi] subscriber lookup: phone_number', redactPhone(normalized), '→ userId=', userId)
     return { userId, source: 'phone_number' }
   }
 
-  console.log('[vapi] subscriber lookup: phone_number', normalized, '→ NOT FOUND in foreman_settings')
+  console.log('[vapi] subscriber lookup: phone_number', redactPhone(normalized), '→ NOT FOUND in foreman_settings')
   return null
 }
 
@@ -170,9 +201,12 @@ function extractCalledNumber(message: VapiMessage): string | null {
     // NOTE: message.call?.customer?.number is the CALLER — do NOT use for subscriber lookup
   ]
 
+  // Log which path the number came from, not the number itself.
   for (const [i, candidate] of candidates.entries()) {
-    console.log('[vapi] subscriber lookup: path[' + i + '] =', candidate ?? '(empty)')
-    if (candidate) return candidate
+    if (candidate) {
+      console.log('[vapi] subscriber lookup: called number found at path[' + i + ']')
+      return candidate
+    }
   }
 
   return null
@@ -241,7 +275,7 @@ async function handleAssistantRequest(
   const calledNumber      = call.phoneNumber?.number
   const callerNumber      = call.customer?.number
 
-  console.log('[vapi assistant-request] vapiCallId:', vapiCallId, '| vapiPhoneNumberId:', vapiPhoneNumberId, '| calledNumber:', calledNumber, '| callerNumber:', callerNumber)
+  console.log('[vapi assistant-request] vapiCallId:', vapiCallId, '| vapiPhoneNumberId:', vapiPhoneNumberId, '| calledNumber:', redactPhone(calledNumber), '| callerNumber:', redactPhone(callerNumber))
 
   // Use pre-resolved userId if available; otherwise do assistant-request-specific lookup
   // (which also tries vapi_phone_number_id — a column tool-calls events don't always carry)
@@ -258,7 +292,7 @@ async function handleAssistantRequest(
   }
 
   if (!userId) {
-    console.error('[vapi assistant-request] could not identify subscriber — vapiPhoneNumberId:', vapiPhoneNumberId, 'calledNumber:', calledNumber)
+    console.error('[vapi assistant-request] could not identify subscriber — vapiPhoneNumberId:', vapiPhoneNumberId, 'calledNumber:', redactPhone(calledNumber))
     const fallback = {
       assistant: {
         name:         'Foreman Fallback',
@@ -410,13 +444,10 @@ async function handleFunctionCall(
       }
       console.log('[DIAG-3.1] fn:', fnName, '| arguments type:', typeof tc.function?.arguments, '| fnParams keys:', Object.keys(fnParams))
 
-      if (fnName === 'book_appointment') {
-        console.log('[BOOK APPOINTMENT RAW TOOL CALL]', JSON.stringify(tc, null, 2))
-        console.log('[BOOK APPOINTMENT ARGS KEYS]', Object.keys(fnParams))
-        console.log('[BOOK APPOINTMENT ARGS VALUES]', JSON.stringify(fnParams, null, 2))
-      }
-
-      console.log('[vapi tool-call] fn:', fnName, '| toolCallId:', toolCallId, '| callId:', vapiCallId, '| userId:', subscriber?.userId ?? 'UNKNOWN', '| params:', JSON.stringify(fnParams))
+      // Only the argument NAMES are logged. book_appointment's arguments are the
+      // caller's name, phone, and vehicle — the values belong in the customers/jobs
+      // rows, not in log retention.
+      console.log('[vapi tool-call] fn:', fnName, '| toolCallId:', toolCallId, '| callId:', vapiCallId, '| userId:', subscriber?.userId ?? 'UNKNOWN', '| param keys:', Object.keys(fnParams).join(','))
 
       let result: string
       if (!subscriber) {
@@ -444,7 +475,7 @@ async function handleFunctionCall(
     const fnName   = message.functionCall.name
     const fnParams = message.functionCall.parameters ?? {}
 
-    console.log('[vapi function-call] fn:', fnName, '| callId:', vapiCallId, '| userId:', subscriber?.userId ?? 'UNKNOWN', '| params:', JSON.stringify(fnParams))
+    console.log('[vapi function-call] fn:', fnName, '| callId:', vapiCallId, '| userId:', subscriber?.userId ?? 'UNKNOWN', '| param keys:', Object.keys(fnParams).join(','))
 
     let result: string
     if (!subscriber) {
@@ -478,7 +509,7 @@ async function dispatchToolCall(
   fnName: string | undefined,
   fnParams: Record<string, unknown>,
 ): Promise<string> {
-  console.log('[DIAG] dispatchToolCall called — fnName:', fnName, '| fnParams:', JSON.stringify(fnParams, null, 2))
+  console.log('[DIAG] dispatchToolCall called — fnName:', fnName, '| param keys:', Object.keys(fnParams).join(','))
 
   switch (fnName) {
     case 'check_availability':
@@ -513,7 +544,7 @@ async function dispatchToolCall(
       console.log('[SLOT INPUT LENGTH]', rawDatetime.length)
 
       if (!rawDatetime) {
-        console.error('[DIAG] book_appointment: ALL slot keys empty. Full fnParams:', JSON.stringify(fnParams, null, 2))
+        console.error('[DIAG] book_appointment: ALL slot keys empty. Param keys present:', Object.keys(fnParams).join(','))
         return "I'm missing the appointment time. Please ask the caller to state the exact date and time again — like 'Monday May eighteenth at 9 AM' — then call book_appointment with that datetime in the appointment_datetime field."
       }
 
@@ -661,7 +692,9 @@ async function handleBookAppointment(
     appointment_datetime: string
   },
 ): Promise<string> {
-  console.log('[book_appointment] userId:', userId, '| callId:', vapiCallId, '| params:', JSON.stringify(params))
+  // params carries the caller's name, phone and vehicle; only the non-identifying
+  // shape of the request is logged.
+  console.log('[book_appointment] userId:', userId, '| callId:', vapiCallId, '| service:', params.service_type, '| customerPhone:', redactPhone(params.customer_phone))
 
   // Parse datetime — accepts ISO strings AND natural language from Vapi
   const rawSlot = params.appointment_datetime
@@ -734,7 +767,9 @@ async function handleBookAppointment(
         .select('id')
         .single()
       if (custErr || !newCust) {
-        console.error('[book_appointment] customer insert error:', custErr)
+        // .message only: a PostgREST error's `details` echoes the offending row back,
+        // which for this insert is the caller's name and phone number.
+        console.error('[book_appointment] customer insert error:', custErr?.message)
         return "Booking failed: trouble saving customer information. Tell the caller you'll have someone follow up to confirm."
       }
       customerId = newCust.id as string
@@ -746,7 +781,7 @@ async function handleBookAppointment(
       .select('id')
       .single()
     if (custErr || !newCust) {
-      console.error('[book_appointment] customer insert error:', custErr)
+      console.error('[book_appointment] customer insert error:', custErr?.message)
       return "Booking failed: trouble saving customer information. Tell the caller you'll have someone follow up to confirm."
     }
     customerId = newCust.id as string
@@ -775,7 +810,9 @@ async function handleBookAppointment(
     .single()
 
   if (jobErr || !job) {
-    console.error('[book_appointment] job insert error:', jobErr)
+    // Same reasoning as the customer insert: the job's `notes` column carries the
+    // caller's vehicle description, and a raw error object can echo it back.
+    console.error('[book_appointment] job insert error:', jobErr?.message)
     return "Booking failed: trouble saving the appointment. Tell the caller you'll have someone follow up to confirm."
   }
 
@@ -810,7 +847,7 @@ async function handleBookAppointment(
     const body = `Foreman booked: ${firstName} ${lastName}${vehicleDesc ? ` · ${vehicleDesc}` : ''} · ${serviceName} · ${dateLabel} at ${timeLabel}${rawPhone.length >= 10 ? ' · ' + params.customer_phone : ''} — NWI Suite`
     try {
       await sendSubscriberSms({ to: settings.mechanic_phone, body })
-      console.log('[booking-sms] mechanic SMS sent to', settings.mechanic_phone)
+      console.log('[booking-sms] mechanic SMS sent to', redactPhone(settings.mechanic_phone))
     } catch (e) {
       console.error('[booking-sms] mechanic SMS failed:', e instanceof Error ? e.message : String(e))
     }
@@ -843,7 +880,7 @@ async function handleBookAppointment(
     const body = `${biz}: Your ${svcLabel} is confirmed for ${dateLabel} at ${timeLabel}. See you then! Reply STOP to opt out.`
     try {
       await sendSubscriberSms({ to: params.customer_phone, body })
-      console.log('[booking-sms] customer SMS sent to', params.customer_phone)
+      console.log('[booking-sms] customer SMS sent to', redactPhone(params.customer_phone))
     } catch (e) {
       console.error('[booking-sms] customer SMS failed:', e instanceof Error ? e.message : String(e))
     }
@@ -920,7 +957,9 @@ async function handleEndOfCall(
     caller_name:           callerName,
     appointment_booked:    existingCall?.appointment_booked ?? false,
   }
-  console.log('[vapi end-of-call] inserting foreman_calls row:', JSON.stringify(eocRow))
+  // The row itself holds the caller's phone, the call summary and the recording URL —
+  // the three most sensitive fields this endpoint ever touches. Log only the shape.
+  console.log('[vapi end-of-call] upserting foreman_calls row — callId:', vapiCallId, '| userId:', userId, '| outcome:', outcome, '| durationSeconds:', durationSeconds, '| hasSummary:', Boolean(summary), '| hasRecording:', Boolean(recordingUrl))
 
   // Upsert handles both "row exists" (update) and "row missing" (create) cases
   const { error: upsertErr } = await svc
@@ -948,7 +987,7 @@ async function handleEndOfCall(
     const smsBody    = `Foreman call: ${outcomeStr} (${dur}).${snippet} — View at ${appUrl}`
     try {
       await sendSubscriberSms({ to: settings.mechanic_phone, body: smsBody })
-      console.log('[end-of-call] mechanic SMS sent to', settings.mechanic_phone)
+      console.log('[end-of-call] mechanic SMS sent to', redactPhone(settings.mechanic_phone))
     } catch (e) {
       console.error('[end-of-call] mechanic SMS failed:', e instanceof Error ? e.message : String(e))
     }
@@ -999,6 +1038,15 @@ function parseSlotDatetime(input: string, referenceDate: Date = new Date()): Dat
 
   console.error('[parseSlotDatetime] all parsers failed for:', input)
   return null
+}
+
+// Reduce a phone number to its last four digits for logging. Enough to correlate a
+// log line with a specific call while debugging, not enough to identify or contact
+// the caller if the log store is ever exposed.
+function redactPhone(num: string | null | undefined): string {
+  if (!num) return '(none)'
+  const digits = String(num).replace(/\D/g, '')
+  return digits.length >= 4 ? `***${digits.slice(-4)}` : '***'
 }
 
 function toDateStr(date: Date): string {
