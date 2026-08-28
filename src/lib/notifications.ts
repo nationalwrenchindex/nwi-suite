@@ -13,6 +13,7 @@
  */
 
 import { formatDate, formatTime } from './scheduler'
+import { getContactSuppression } from '@/lib/customer-contact'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -305,10 +306,16 @@ export async function dispatchNotification({
   const message  = resolve(rawBody, ctx)
   const subject  = resolve(rawSubj, ctx)
 
+  // Per-customer suppression. Read once and consulted by both branches below.
+  // Distinct from smsConsent, which is opt-IN captured at booking; this is the
+  // mechanic marking a customer do-not-contact after the fact. Fails open — a
+  // lookup failure must not silently stop a working business's outreach.
+  const suppression = await getContactSuppression(supabase, customerId ?? null)
+
   const result: DispatchResult = { success: false, channel, message }
 
   // ── SMS — only if customer opted in at booking time ──
-  if ((channel === 'sms' || channel === 'both') && smsConsent) {
+  if ((channel === 'sms' || channel === 'both') && smsConsent && !suppression.no_sms) {
     const phone = c?.phone
     if (phone) {
       const r = await sendSms(phone, message)
@@ -325,7 +332,7 @@ export async function dispatchNotification({
   }
 
   // ── Email ──
-  if (channel === 'email' || channel === 'both') {
+  if ((channel === 'email' || channel === 'both') && !suppression.no_email) {
     const email = c?.email
     if (email) {
       const r = await sendEmail(email, subject, message)

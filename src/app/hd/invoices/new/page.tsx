@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { computeDueDate } from '@/lib/hd/payment-terms'
 import { useDefaultTaxPercent } from '@/lib/hd/use-default-tax-rate'
+import { DEFAULT_HD_PARTS_MARKUP, sellPrice, lineAmount } from '@/lib/hd/parts-pricing'
+import AddressAutofill from '@/components/hd/AddressAutofill'
 
 // Direct-invoice fast path: skip the quote/approval step and bill a trusted
 // customer directly. Mirrors the quote form but posts straight to /api/hd/invoices.
@@ -28,8 +30,13 @@ interface LineItem {
   description: string
   mobile_hours: number
   part_number: string
+  // Parts: unit_cost is the SELL price (cost + markup). The invoice document and
+  // the public pay page print it beside the amount, so the tech's own cost must
+  // never land here — it is kept separately below.
   quantity: number
   unit_cost: number
+  unit_cost_base?: number
+  markup_percent?: number
   amount: number
 }
 
@@ -73,7 +80,8 @@ export default function NewInvoicePage() {
   const [partsModal, setPartsModal] = useState(false)
 
   const [labor, setLabor] = useState({ description: '', hours: '1.0' })
-  const [parts, setParts] = useState({ part_number: '', description: '', quantity: '1', unit_cost: '0.00' })
+  const [parts, setParts] = useState({ part_number: '', description: '', quantity: '1', unit_cost: '0.00', markup: String(DEFAULT_HD_PARTS_MARKUP) })
+  const [partsMarkupDefault, setPartsMarkupDefault] = useState(DEFAULT_HD_PARTS_MARKUP)
 
   const [customerSearch, setCustomerSearch]   = useState('')
   const [customerResults, setCustomerResults] = useState<CustomerHit[]>([])
@@ -105,6 +113,29 @@ export default function NewInvoicePage() {
     if (defaultTaxPct == null) return
     setForm(f => (f.tax_rate === 0 ? { ...f, tax_rate: defaultTaxPct } : f))
   }, [defaultTaxPct])
+
+  // Seed the parts markup from the subscriber's saved default. That column is what
+  // the LD financials side bills from, so honouring it here keeps one subscriber on
+  // one markup instead of two depending on which suite they invoiced from.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/user/profile')
+        if (!res.ok) return
+        const json = await res.json()
+        const n = Number(json.default_parts_markup_percent)
+        if (cancelled || !Number.isFinite(n)) return
+        setPartsMarkupDefault(n)
+        // Only reseed a draft still showing the fallback, so a markup typed while
+        // the fetch was in flight is not overwritten.
+        setParts(d => (d.markup === String(DEFAULT_HD_PARTS_MARKUP) ? { ...d, markup: String(n) } : d))
+      } catch {
+        // Leave DEFAULT_HD_PARTS_MARKUP in place rather than blocking the tech.
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   // Prefill from a PM Schedules interval tap (?pm_type=...&unit_manufacturer=...) or
   // from the "Create Invoice" button on a work order, which carries the whole job in
@@ -280,14 +311,19 @@ export default function NewInvoicePage() {
   function addParts() {
     const description = parts.description.trim()
     if (!description) { setToast('Enter a part description.'); return }
-    const qty  = parseFloat(parts.quantity)  || 1
-    const cost = parseFloat(parts.unit_cost) || 0
+    const qty    = parseFloat(parts.quantity)  || 1
+    const cost   = parseFloat(parts.unit_cost) || 0
+    const markup = parseFloat(parts.markup)    || 0
     setLineItems(l => [...l, {
       id: crypto.randomUUID(), type: 'parts', description,
       mobile_hours: 0, part_number: parts.part_number.trim(),
-      quantity: qty, unit_cost: cost, amount: parseFloat((qty * cost).toFixed(2)),
+      quantity: qty,
+      unit_cost: sellPrice(cost, markup),
+      unit_cost_base: cost,
+      markup_percent: markup,
+      amount: lineAmount(qty, cost, markup),
     }])
-    setParts({ part_number: '', description: '', quantity: '1', unit_cost: '0.00' })
+    setParts({ part_number: '', description: '', quantity: '1', unit_cost: '0.00', markup: String(partsMarkupDefault) })
     setPartsModal(false)
   }
 
@@ -434,6 +470,12 @@ export default function NewInvoicePage() {
           {/* Billing address. Prefilled from the Intel Hub customer record or the work
               order's fleet account, but always editable — a fleet's registered address
               is often not where the invoice needs to go. */}
+          <div className="mb-4">
+            <AddressAutofill
+              value={{ address_line1: form.address_line1, address_line2: form.address_line2, city: form.city, state: form.state, zip: form.zip }}
+              onChange={a => setForm(f => ({ ...f, ...a }))}
+            />
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <Field label="Address Line 1">
               <input style={inp} value={form.address_line1} onChange={e => setField('address_line1', e.target.value)} placeholder="123 Main St" />
@@ -549,7 +591,11 @@ export default function NewInvoicePage() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm" style={{ color: TEXT }}>{item.description}</p>
                     <p className="text-xs" style={{ color: MUTED }}>
-                      {item.type === 'labor' ? `${item.mobile_hours} hrs × ${fmt(form.labor_rate)}/hr` : `${item.quantity} × ${fmt(item.unit_cost)}${item.part_number ? ` · ${item.part_number}` : ''}`}
+                      {/* Parts show the sell price the customer sees, with the cost and
+                          markup behind it so the tech can check the line before saving. */}
+                      {item.type === 'labor'
+                        ? `${item.mobile_hours} hrs × ${fmt(form.labor_rate)}/hr`
+                        : `${item.quantity} × ${fmt(item.unit_cost)}${item.markup_percent ? ` (cost ${fmt(item.unit_cost_base ?? 0)} + ${item.markup_percent}%)` : ''}${item.part_number ? ` · ${item.part_number}` : ''}`}
                     </p>
                   </div>
                   <span className="text-sm font-semibold" style={{ color: TEXT }}>{fmt(item.amount)}</span>
@@ -652,18 +698,28 @@ export default function NewInvoicePage() {
             <div className="flex flex-col gap-4">
               <Field label="Part Number"><input style={inp} value={parts.part_number} onChange={e => setParts(d => ({ ...d, part_number: e.target.value }))} placeholder="e.g. 37-33-6021" autoFocus /></Field>
               <Field label="Description"><input style={inp} value={parts.description} onChange={e => setParts(d => ({ ...d, description: e.target.value }))} placeholder="Part description" /></Field>
-              <div className="grid grid-cols-3 gap-4">
+              {/* Cost is what the tech paid; sell is what the customer is billed. The
+                  sell column is read-only so the two can never be typed out of step. */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <Field label="Quantity"><input style={inp} type="number" min={1} value={parts.quantity} onChange={e => setParts(d => ({ ...d, quantity: e.target.value }))} /></Field>
-                <Field label="Unit Cost">
+                <Field label="Your Cost">
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: MUTED }}>$</span>
                     <input style={{ ...inp, paddingLeft: 24 }} type="number" min={0} step={0.01} value={parts.unit_cost} onChange={e => setParts(d => ({ ...d, unit_cost: e.target.value }))} />
                   </div>
                 </Field>
-                <Field label="Total">
-                  <div className="flex items-center" style={{ height: 44, paddingLeft: 12, fontWeight: 600, color: TEXT }}>{fmt((parseFloat(parts.quantity) || 1) * (parseFloat(parts.unit_cost) || 0))}</div>
+                <Field label="Markup %">
+                  <input style={inp} type="number" min={0} step={1} value={parts.markup} onChange={e => setParts(d => ({ ...d, markup: e.target.value }))} />
+                </Field>
+                <Field label="Sell / Unit">
+                  <div className="flex items-center" style={{ height: 44, paddingLeft: 12, fontWeight: 600, color: TEXT }}>
+                    {fmt(sellPrice(parseFloat(parts.unit_cost) || 0, parseFloat(parts.markup) || 0))}
+                  </div>
                 </Field>
               </div>
+              <p className="text-sm" style={{ color: MUTED }}>
+                Line total: <strong style={{ color: TEXT }}>{fmt(lineAmount(parseFloat(parts.quantity) || 1, parseFloat(parts.unit_cost) || 0, parseFloat(parts.markup) || 0))}</strong>
+              </p>
               <div className="flex gap-3">
                 <button onClick={() => setPartsModal(false)} className="flex-1 py-2.5 rounded-lg font-semibold text-sm" style={{ background: '#F3F4F6', color: '#374151' }}>Cancel</button>
                 <button onClick={addParts} className="flex-1 py-2.5 rounded-lg font-semibold text-sm text-white" style={{ background: BLUE }}>Add Line</button>

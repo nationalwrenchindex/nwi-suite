@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { LABOR_GUIDE, type LaborGuideItem } from '@/lib/hd/labor-guide'
 import { useDefaultTaxPercent } from '@/lib/hd/use-default-tax-rate'
+import { DEFAULT_HD_PARTS_MARKUP, sellPrice, lineAmount } from '@/lib/hd/parts-pricing'
+import AddressAutofill from '@/components/hd/AddressAutofill'
 
 const ORANGE  = '#FF6600'
 const BLUE    = '#2969B0'
@@ -32,10 +34,14 @@ interface LineItem {
   mobile_hours_max: number
   requires_refrigeration: boolean
   recharge_added: boolean
-  // parts
+  // parts — unit_cost is the SELL price (cost + markup). The quote document and
+  // the converted invoice both print it beside the amount, so the tech's own cost
+  // never goes in this field; it is carried alongside for their records.
   part_number: string
   quantity: number
   unit_cost: number
+  unit_cost_base?: number
+  markup_percent?: number
   // billing amount uses mobile_hours (lower); amount_max for display
   amount: number
   amount_max: number
@@ -46,6 +52,7 @@ interface PartsDraft {
   description: string
   quantity: string
   unit_cost: string
+  markup: string
 }
 
 interface PartResult {
@@ -191,7 +198,8 @@ export default function NewQuotePage() {
   // recovery time becomes a SEPARATE labor line (matches buildRepairLines()).
   const [laborRefrig, setLaborRefrig] = useState<{ hours: number; service: string | null } | null>(null)
 
-  const [parts, setParts] = useState<PartsDraft>({ part_number: '', description: '', quantity: '1', unit_cost: '0.00' })
+  const [parts, setParts] = useState<PartsDraft>({ part_number: '', description: '', quantity: '1', unit_cost: '0.00', markup: String(DEFAULT_HD_PARTS_MARKUP) })
+  const [partsMarkupDefault, setPartsMarkupDefault] = useState(DEFAULT_HD_PARTS_MARKUP)
 
   const [form, setForm] = useState({
     company_name: '',
@@ -217,6 +225,29 @@ export default function NewQuotePage() {
     if (defaultTaxPct == null) return
     setForm(f => (f.tax_rate === 0 ? { ...f, tax_rate: defaultTaxPct } : f))
   }, [defaultTaxPct])
+
+  // Seed the parts markup from the subscriber's saved default. That column is what
+  // the LD financials side bills from, so honouring it here keeps one subscriber on
+  // one markup instead of two depending on which suite they quoted from.
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/user/profile')
+        if (!res.ok) return
+        const json = await res.json()
+        const n = Number(json.default_parts_markup_percent)
+        if (cancelled || !Number.isFinite(n)) return
+        setPartsMarkupDefault(n)
+        // Only reseed a draft still showing the fallback, so a markup typed while
+        // the fetch was in flight is not overwritten.
+        setParts(d => (d.markup === String(DEFAULT_HD_PARTS_MARKUP) ? { ...d, markup: String(n) } : d))
+      } catch {
+        // Leave DEFAULT_HD_PARTS_MARKUP in place rather than blocking the tech.
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   // ── Intel Hub customer picker ──
   const [customerSearch, setCustomerSearch]       = useState('')
@@ -645,9 +676,11 @@ export default function NewQuotePage() {
   }
 
   function addPartsItem() {
-    const qty  = parseFloat(parts.quantity)  || 1
-    const cost = parseFloat(parts.unit_cost) || 0
+    const qty    = parseFloat(parts.quantity)  || 1
+    const cost   = parseFloat(parts.unit_cost) || 0
+    const markup = parseFloat(parts.markup)    || 0
     if (!parts.description.trim()) { setToast('Enter a part description.'); return }
+    const amount = lineAmount(qty, cost, markup)
     const item: LineItem = {
       id: crypto.randomUUID(),
       type: 'parts',
@@ -656,12 +689,16 @@ export default function NewQuotePage() {
       mobile_hours: 0, mobile_hours_max: 0,
       requires_refrigeration: false, recharge_added: false,
       part_number: parts.part_number.trim(),
-      quantity: qty, unit_cost: cost,
-      amount: parseFloat((qty * cost).toFixed(2)),
-      amount_max: parseFloat((qty * cost).toFixed(2)),
+      quantity: qty,
+      unit_cost: sellPrice(cost, markup),
+      unit_cost_base: cost,
+      markup_percent: markup,
+      // Parts carry no hours range, so min and max are the same figure.
+      amount,
+      amount_max: amount,
     }
     setLineItems(l => [...l, item])
-    setParts({ part_number: '', description: '', quantity: '1', unit_cost: '0.00' })
+    setParts({ part_number: '', description: '', quantity: '1', unit_cost: '0.00', markup: String(partsMarkupDefault) })
     setPartsResults([])
     setPartsModal(false)
   }
@@ -808,6 +845,38 @@ export default function NewQuotePage() {
             </Field>
             <Field label="Email">
               <input style={inp} value={form.customer_email} onChange={e => setField('customer_email', e.target.value)} placeholder="customer@email.com" type="email" />
+            </Field>
+          </div>
+
+          {/* Billing address. Auto-filled when an Intel Hub customer is linked, but the
+              fields are always editable — the address on file is often not where this
+              quote needs to go, and the single-line parser above is deliberately
+              conservative about what it fills in. */}
+          <div className="mb-4">
+            <AddressAutofill
+              value={{ address_line1: form.address_line1, address_line2: form.address_line2, city: form.city, state: form.state, zip: form.zip }}
+              onChange={a => setForm(f => ({ ...f, ...a }))}
+            />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+            <Field label="Address Line 1">
+              <input style={inp} value={form.address_line1} onChange={e => setField('address_line1', e.target.value)} placeholder="123 Main St" />
+            </Field>
+            <Field label="Address Line 2">
+              <input style={inp} value={form.address_line2} onChange={e => setField('address_line2', e.target.value)} placeholder="Suite / Unit (optional)" />
+            </Field>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+            <div className="col-span-2">
+              <Field label="City">
+                <input style={inp} value={form.city} onChange={e => setField('city', e.target.value)} placeholder="Wauchula" />
+              </Field>
+            </div>
+            <Field label="State">
+              <input style={inp} value={form.state} onChange={e => setField('state', e.target.value)} placeholder="FL" maxLength={2} />
+            </Field>
+            <Field label="Zip">
+              <input style={inp} value={form.zip} onChange={e => setField('zip', e.target.value)} placeholder="33873" inputMode="numeric" />
             </Field>
           </div>
 
@@ -1107,6 +1176,13 @@ export default function NewQuotePage() {
                         {item.part_number && (
                           <span className="block text-xs font-mono mt-0.5 ml-7" style={{ color: MUTED }}>{item.part_number}</span>
                         )}
+                        {/* The Mobile column shows the sell price; the cost behind it is
+                            spelled out here so the tech can check the line before saving. */}
+                        {item.markup_percent ? (
+                          <span className="block text-xs mt-0.5 ml-7" style={{ color: MUTED }}>
+                            cost {fmt(item.unit_cost_base ?? 0)} + {item.markup_percent}% markup
+                          </span>
+                        ) : null}
                       </div>
                       <span className="text-xs text-right hidden md:block" style={{ color: MUTED }}>{`${item.quantity}×`}</span>
                       <span className="text-xs text-right" style={{ color: MUTED }}>{fmt(item.unit_cost)}</span>
@@ -1486,25 +1562,33 @@ export default function NewQuotePage() {
               <Field label="Description">
                 <input style={inp} value={parts.description} onChange={e => setParts(d => ({ ...d, description: e.target.value }))} placeholder="Part description" />
               </Field>
-              <div className="grid grid-cols-3 gap-4">
+              {/* Cost is what the tech paid; sell is what the customer is billed. The
+                  sell column is read-only so the two can never be typed out of step. */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <Field label="Quantity">
                   <input style={inp} type="number" min={1} value={parts.quantity} onChange={e => setParts(d => ({ ...d, quantity: e.target.value }))} />
                 </Field>
-                <Field label="Unit Cost">
+                <Field label="Your Cost">
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: MUTED }}>$</span>
                     <input style={{ ...inp, paddingLeft: 24 }} type="number" min={0} step={0.01} value={parts.unit_cost} onChange={e => setParts(d => ({ ...d, unit_cost: e.target.value }))} />
                   </div>
                 </Field>
-                <Field label="Total">
+                <Field label="Markup %">
+                  <input style={inp} type="number" min={0} step={1} value={parts.markup} onChange={e => setParts(d => ({ ...d, markup: e.target.value }))} />
+                </Field>
+                <Field label="Sell / Unit">
                   <div className="flex items-center" style={{ height: 44, paddingLeft: 12, fontWeight: 600, color: TEXT }}>
-                    {fmt((parseFloat(parts.quantity) || 1) * (parseFloat(parts.unit_cost) || 0))}
+                    {fmt(sellPrice(parseFloat(parts.unit_cost) || 0, parseFloat(parts.markup) || 0))}
                   </div>
                 </Field>
               </div>
+              <p className="text-sm" style={{ color: MUTED }}>
+                Line total: <strong style={{ color: TEXT }}>{fmt(lineAmount(parseFloat(parts.quantity) || 1, parseFloat(parts.unit_cost) || 0, parseFloat(parts.markup) || 0))}</strong>
+              </p>
               <div className="flex gap-3">
                 <button
-                  onClick={() => { setPartsModal(false); setParts({ part_number: '', description: '', quantity: '1', unit_cost: '0.00' }); setPartsResults([]) }}
+                  onClick={() => { setPartsModal(false); setParts({ part_number: '', description: '', quantity: '1', unit_cost: '0.00', markup: String(partsMarkupDefault) }); setPartsResults([]) }}
                   className="flex-1 py-2.5 rounded-lg font-semibold text-sm"
                   style={{ background: '#F3F4F6', color: '#374151' }}
                 >

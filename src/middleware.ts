@@ -59,8 +59,13 @@ export async function middleware(request: NextRequest) {
     effectivePath.startsWith('/hd/signup') ||
     effectivePath.startsWith('/hd/login')
 
+  // The customer paying an invoice has no account. Kept separate from isHDAuthRoute
+  // on purpose: that set also bounces a SIGNED-IN visitor to /hd/dashboard, which
+  // would stop a subscriber opening their own payment link to check it.
+  const isHDPublicRoute = effectivePath.startsWith('/hd/invoices/pay')
+
   const isHDProtected =
-    effectivePath.startsWith('/hd/') && !isHDAuthRoute
+    effectivePath.startsWith('/hd/') && !isHDAuthRoute && !isHDPublicRoute
 
   const isLegacyAuthRoute =
     effectivePath.startsWith('/login') ||

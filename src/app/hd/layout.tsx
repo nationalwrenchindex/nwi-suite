@@ -9,6 +9,14 @@ import HDNav from '@/components/hd/HDNav'
 // - Authenticated + no HD subscription: redirect to /hd/signup
 // - Authenticated + HD access: full layout with HDNav
 export default async function HDLayout({ children }: { children: React.ReactNode }) {
+  // The public invoice payment page is white-labelled as the SUBSCRIBER's document.
+  // It must render bare for everyone, not just anonymous visitors: a signed-in
+  // subscriber opening their own link would otherwise get it wrapped in HDNav and the
+  // NWI trademark footer, and an LD-only subscriber forwarded the link would be
+  // redirected to /hd/signup. Checked before the session so no branch can re-gate it.
+  const publicPath = (await headers()).get('x-pathname') ?? ''
+  if (publicPath.startsWith('/hd/invoices/pay')) return <>{children}</>
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
 

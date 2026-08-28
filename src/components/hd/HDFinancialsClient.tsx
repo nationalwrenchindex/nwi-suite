@@ -29,7 +29,10 @@ interface HDInvoice {
   unit_manufacturer: string | null
   unit_model:       string | null
   total:            number | null
-  status:           'unpaid' | 'paid' | 'partial' | 'void'
+  // Mirrors the hd_invoices status CHECK as widened by migration 077. Keeping this
+  // narrower than the DB is what hid the missing 'sent'/'overdue' colour entries
+  // from the compiler and crashed /hd/financials at runtime.
+  status:           'unpaid' | 'sent' | 'paid' | 'partial' | 'void' | 'overdue'
   created_at:       string
   paid_at:          string | null
 }
@@ -41,6 +44,8 @@ interface HDQuote {
   unit_manufacturer: string | null
   unit_model:       string | null
   total:            number | null
+  // Mirrors the hd_quotes status CHECK (migration 057). Reads through statusCfg()
+  // so a future widening of that CHECK degrades to a grey pill instead of a crash.
   status:           'draft' | 'sent' | 'approved' | 'declined'
   created_at:       string
   valid_until:      string | null
@@ -85,18 +90,37 @@ function StatCard({ label, value, sub, color = 'white' }: { label: string; value
   )
 }
 
-const INVOICE_STATUS: Record<HDInvoice['status'], { label: string; color: string; bg: string }> = {
+interface StatusCfg { label: string; color: string; bg: string }
+
+const INVOICE_STATUS: Record<HDInvoice['status'], StatusCfg> = {
   unpaid:  { label: 'Unpaid',  color: '#EF4444', bg: '#EF444420' },
+  // Same blue the quote map uses for 'sent', so "sent" means one thing site-wide.
+  sent:    { label: 'Sent',    color: '#60A5FA', bg: '#60A5FA20' },
   paid:    { label: 'Paid',    color: '#22C55E', bg: '#22C55E20' },
   partial: { label: 'Partial', color: '#F59E0B', bg: '#F59E0B20' },
   void:    { label: 'Void',    color: '#6B7280', bg: '#6B728020' },
+  // Deeper red than unpaid (#EF4444) plus a heavier background tint, so overdue
+  // reads as an escalation of unpaid rather than a different colour of the same thing.
+  overdue: { label: 'Overdue', color: '#DC2626', bg: '#DC262640' },
 }
 
-const QUOTE_STATUS: Record<HDQuote['status'], { label: string; color: string; bg: string }> = {
+const QUOTE_STATUS: Record<HDQuote['status'], StatusCfg> = {
   draft:    { label: 'Draft',    color: '#6B7280', bg: '#6B728020' },
   sent:     { label: 'Sent',     color: '#60A5FA', bg: '#60A5FA20' },
   approved: { label: 'Approved', color: '#22C55E', bg: '#22C55E20' },
   declined: { label: 'Declined', color: '#EF4444', bg: '#EF444420' },
+}
+
+// Every status pill resolves through here. A CHECK constraint can be widened by a
+// migration without this file being touched (that is exactly how 'sent'/'overdue'
+// started crashing the page), so an unknown status must still render. It falls back
+// to grey and prints the RAW database value: `cfg?.bg` would have rendered an
+// invisible pill and nobody would ever learn the status was unmapped.
+// hasOwnProperty guard because plain-object lookup on keys like 'constructor' or
+// 'toString' returns an inherited member instead of undefined.
+function statusCfg(map: Record<string, StatusCfg>, status: string | null | undefined): StatusCfg {
+  if (status && Object.prototype.hasOwnProperty.call(map, status)) return map[status]
+  return { label: status || 'Unknown', color: '#9CA3AF', bg: '#9CA3AF20' }
 }
 
 // ─── Overview tab ──────────────────────────────────────────────────────────────
@@ -218,7 +242,7 @@ function InvoicesTab() {
         <div className="rounded-xl overflow-hidden" style={{ background: '#111920', border: '1px solid #1e3040' }}>
           <div className="divide-y" style={{ borderColor: '#1e3040' }}>
             {invoices.map(inv => {
-              const cfg = INVOICE_STATUS[inv.status]
+              const cfg = statusCfg(INVOICE_STATUS, inv.status)
               return (
                 <Link
                   key={inv.id}
@@ -300,7 +324,7 @@ function QuotesTab() {
         <div className="rounded-xl overflow-hidden" style={{ background: '#111920', border: '1px solid #1e3040' }}>
           <div className="divide-y" style={{ borderColor: '#1e3040' }}>
             {quotes.map(q => {
-              const cfg = QUOTE_STATUS[q.status]
+              const cfg = statusCfg(QUOTE_STATUS, q.status)
               return (
                 <Link
                   key={q.id}
@@ -548,9 +572,12 @@ function PLTab({ stats }: { stats: OverviewStats }) {
   const netProfit     = stats.totalRevenue - totalExpenses
   const margin        = stats.totalRevenue > 0 ? (netProfit / stats.totalRevenue) * 100 : 0
 
-  const byCategory: Record<string, number> = {}
-  for (const e of expenses) byCategory[e.category] = (byCategory[e.category] ?? 0) + Number(e.amount)
-  const categoryRows = Object.entries(byCategory).sort((a, b) => b[1] - a[1])
+  // Map, not a plain object: expense.category is free text out of the database, and
+  // a key like '__proto__' or 'constructor' on an object literal either hits the
+  // prototype or silently drops the row from Object.entries.
+  const byCategory = new Map<string, number>()
+  for (const e of expenses) byCategory.set(e.category, (byCategory.get(e.category) ?? 0) + Number(e.amount))
+  const categoryRows = [...byCategory.entries()].sort((a, b) => b[1] - a[1])
 
   return (
     <div className="space-y-5">

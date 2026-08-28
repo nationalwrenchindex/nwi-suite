@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { sendSmsResult } from '@/lib/twilio'
 import { getSmsBody } from '@/lib/torquewrench/sms-templates'
+import { getContactSuppressionByPhone } from '@/lib/customer-contact'
 
 export const dynamic = 'force-dynamic'
 
@@ -80,6 +81,25 @@ export async function GET(request: NextRequest) {
 
     if (!review.customer_phone) {
       console.warn(`[tw-cron] Skipping review ${review.id} — no customer_phone`)
+      skipped++
+      continue
+    }
+
+    // A customer marked do-not-SMS must not receive a review request. Keyed on the
+    // phone because torquewrench_reviews carries no customer_id and its job_id is
+    // frequently null, so there is no other handle on who this is. Marked 'skipped'
+    // rather than left pending, or the cron would retry it every five minutes forever.
+    const suppression = await getContactSuppressionByPhone(
+      supabase,
+      review.user_id as string | null,
+      review.customer_phone as string | null,
+    )
+    if (suppression.no_sms) {
+      await supabase
+        .from('torquewrench_reviews')
+        .update({ status: 'skipped', send_attempted_at: new Date().toISOString() })
+        .eq('id', review.id)
+      console.log(`[tw-cron] Suppressed review ${review.id} — customer opted out of SMS`)
       skipped++
       continue
     }
