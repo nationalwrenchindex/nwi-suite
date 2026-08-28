@@ -4,16 +4,45 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+// Columns that exist on every deployment.
+const BASE_COLUMNS = 'average_mpg, fuel_type, offer_mpi_on_booking, default_labor_rate, default_parts_markup_percent, default_tax_percent'
+
+// True when the error is "this database has not run migration 121 yet". Migrations
+// here are applied by hand in the Supabase console, so a deploy can land before the
+// ALTER TABLE does. Selecting a column that does not exist fails the WHOLE query,
+// which would take the tax rate and the labor rate down with the markup — and this
+// endpoint prefills every HD and LD form. Mirrors isMissingCostingColumn() in
+// src/lib/hd/invoice-costing.ts, which exists for exactly this window.
+function isMissingHdMarkupColumn(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const message = String((error as { message?: unknown }).message ?? '').toLowerCase()
+  return (
+    message.includes('hd_parts_markup_percent') &&
+    (message.includes('does not exist') || message.includes('could not find') || message.includes('schema cache'))
+  )
+}
+
 export async function GET() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('profiles')
-    .select('average_mpg, fuel_type, offer_mpi_on_booking, default_labor_rate, default_parts_markup_percent, default_tax_percent')
+    .select(`${BASE_COLUMNS}, hd_parts_markup_percent`)
     .eq('id', user.id)
     .single()
+
+  // Pre-migration fallback: re-read without the new column. The response still
+  // carries hd_parts_markup_percent — as the 30 default below — so the HD forms get
+  // the right markup from the day the code deploys rather than the day the SQL runs.
+  if (error && isMissingHdMarkupColumn(error)) {
+    ({ data, error } = await supabase
+      .from('profiles')
+      .select(BASE_COLUMNS)
+      .eq('id', user.id)
+      .single())
+  }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
@@ -23,6 +52,13 @@ export async function GET() {
     offer_mpi_on_booking:          data?.offer_mpi_on_booking          ?? false,
     default_labor_rate:            data?.default_labor_rate            ?? 125,
     default_parts_markup_percent:  data?.default_parts_markup_percent  ?? 20,
+    // Two markups, not one. default_parts_markup_percent is the LD number (LD bills
+    // from it and LD Settings writes it); hd_parts_markup_percent is HD's own, added
+    // by migration 121. They are returned side by side rather than merged because a
+    // subscriber who sets 15% on light-duty brake pads has not thereby said anything
+    // about heavy-duty reefer parts. NULL = never set, so fall back to 30 — the HD
+    // brief's number and DEFAULT_HD_PARTS_MARKUP in src/lib/hd/parts-pricing.ts.
+    hd_parts_markup_percent:       data?.hd_parts_markup_percent       ?? 30,
     default_tax_percent:           data?.default_tax_percent           ?? 8.5,
   })
 }
@@ -77,6 +113,22 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'default_parts_markup_percent must be 0–999' }, { status: 400 })
     }
     update.default_parts_markup_percent = Math.round(n * 100) / 100
+  }
+
+  // HD's own markup (migration 121). Capped at 99 rather than the LD column's 999:
+  // this one is a percentage a tech types into a form, and a fat-fingered 300 would
+  // quadruple a $900 turbo without anything on screen looking obviously wrong.
+  // Writing this key never touches default_parts_markup_percent — that column is
+  // what LD bills from, and moving it would silently reprice live LD quotes.
+  // No pre-migration fallback on the write side, deliberately: GET degrades to the
+  // 30 default because a form still has to render, but a save that cannot persist
+  // must fail loudly rather than return ok and quietly discard the tech's number.
+  if ('hd_parts_markup_percent' in body) {
+    const n = Number(body.hd_parts_markup_percent)
+    if (isNaN(n) || n < 0 || n > 99) {
+      return NextResponse.json({ error: 'hd_parts_markup_percent must be 0–99' }, { status: 400 })
+    }
+    update.hd_parts_markup_percent = Math.round(n * 100) / 100
   }
 
   if ('default_tax_percent' in body) {

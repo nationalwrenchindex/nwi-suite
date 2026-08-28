@@ -42,6 +42,10 @@ interface Bucket {
   // Revenue from the invoices whose cost we actually know. Gross profit is computed
   // against THIS, not against total revenue — see the honesty note below.
   known_revenue: number
+  // The sales tax inside known_revenue. Carried separately so the margin base can be
+  // taken net of tax: you cannot earn a profit on money you are only holding for the
+  // state. See the TAX rule below.
+  known_tax:     number
   cogs_known:    number
   cogs_unknown:  number
   invoice_count: number
@@ -50,7 +54,7 @@ interface Bucket {
 function emptyBucket(): Bucket {
   return {
     revenue: 0, parts_revenue: 0, labor_revenue: 0, tax_collected: 0,
-    cogs_total: 0, known_revenue: 0, cogs_known: 0, cogs_unknown: 0, invoice_count: 0,
+    cogs_total: 0, known_revenue: 0, known_tax: 0, cogs_known: 0, cogs_unknown: 0, invoice_count: 0,
   }
 }
 
@@ -58,8 +62,11 @@ function emptyBucket(): Bucket {
 // Query params:
 //   from_date + to_date (YYYY-MM-DD) — defaults to Jan 1 of the current year → today
 //
-// Returns revenue split into parts and labor, cost of goods sold, gross profit and
-// gross margin, plus a per-month breakdown. Vocabulary (cogs_total, gross_profit,
+// Returns revenue split into parts and labor, sales tax collected, cost of goods
+// sold, gross profit and gross margin, plus a per-month breakdown. Two revenue
+// figures are reported and they are not interchangeable: `total_revenue` is what was
+// INVOICED (tax included, because hd_invoices.total is gross) and `net_revenue` is
+// what was EARNED (tax removed). Vocabulary (cogs_total, gross_profit,
 // gross_margin) deliberately matches /api/financials/overview so the LD and HD
 // suites report in the same language — but the numbers are derived from HD's own
 // data. LD gets COGS from auto_invoice expense rows; HD has no expense automation,
@@ -112,7 +119,11 @@ export async function GET(request: NextRequest) {
   const period = emptyBucket()
 
   for (const inv of invoices) {
+    // `total` is the amount INVOICED, and the HD invoice form computes it as
+    // taxBase + taxAmount — so it has sales tax inside it. That matters everywhere
+    // below: the tax has to come back out before the figure is called revenue.
     const revenue = Number(inv.total ?? 0)
+    const tax     = Number(inv.tax_amount ?? 0)
 
     // parts_sell is the authoritative parts revenue, but it is NULL on any invoice
     // written before migration 119 backfilled it. subtotal_parts is the same figure
@@ -138,13 +149,14 @@ export async function GET(request: NextRequest) {
       b.revenue       += revenue
       b.parts_revenue += partsRevenue
       b.labor_revenue += laborRevenue
-      b.tax_collected += Number(inv.tax_amount ?? 0)
+      b.tax_collected += tax
       if (cost === null) {
         b.cogs_unknown++
       } else {
         b.cogs_known++
         b.cogs_total    += cost
         b.known_revenue += revenue
+        b.known_tax     += tax
       }
     }
   }
@@ -157,10 +169,24 @@ export async function GET(request: NextRequest) {
   // explicitly (cogs_partial, cogs_known, cogs_unknown, revenue_with_known_cost) so
   // the UI can qualify the figure as "based on N of M invoices" rather than printing
   // a bare percentage that looks like it covers everything.
+  //
+  // TAX RULE: sales tax is collected on behalf of the state and remitted to it. It is
+  // never earnings, so it is never inside a profit or margin figure here. Because
+  // hd_invoices.total is gross (taxBase + taxAmount), that means subtracting it back
+  // out: `net_revenue` is the earned figure, `total_revenue` stays the amount
+  // invoiced, and the margin base is known_revenue MINUS known_tax. Leaving tax in
+  // the base would credit the business with profit on money it merely holds — and on
+  // a labor-only invoice, where COGS is a true zero, it would report the state's cut
+  // as 100% margin. `total_revenue` keeps its old meaning so nothing that already
+  // reads it changes underneath; net_revenue and tax_collected are what reconcile it
+  // (net_revenue + tax_collected = total_revenue, and net_revenue is also exactly
+  // parts_revenue + labor_revenue, since those are the two halves of the tax base).
   function shape(b: Bucket, key: { month: string } | { from_date: string; to_date: string }) {
+    const knownNet = b.known_revenue - b.known_tax
     return {
       ...key,
       total_revenue:            round2(b.revenue),
+      net_revenue:              round2(b.revenue - b.tax_collected),
       parts_revenue:            round2(b.parts_revenue),
       labor_revenue:            round2(b.labor_revenue),
       tax_collected:            round2(b.tax_collected),
@@ -168,9 +194,9 @@ export async function GET(request: NextRequest) {
       cogs_known:               b.cogs_known,
       cogs_unknown:             b.cogs_unknown,
       cogs_partial:             b.cogs_unknown > 0,
-      revenue_with_known_cost:  round2(b.known_revenue),
-      gross_profit:             b.cogs_known > 0 ? round2(b.known_revenue - b.cogs_total) : null,
-      gross_margin:             b.cogs_known > 0 ? marginPct(b.known_revenue, b.cogs_total) : null,
+      revenue_with_known_cost:  round2(knownNet),
+      gross_profit:             b.cogs_known > 0 ? round2(knownNet - b.cogs_total) : null,
+      gross_margin:             b.cogs_known > 0 ? marginPct(knownNet, b.cogs_total) : null,
       invoice_count:            b.invoice_count,
     }
   }

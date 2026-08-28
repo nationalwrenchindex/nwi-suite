@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { logHDCustomer } from '@/lib/hd/customer-logging'
 import { createClient } from '@/lib/supabase/server'
 import {
   EQUIPMENT_FORMS, EQUIPMENT_TYPE_LABEL, EQUIPMENT_INSPECTION_HOURS, isEquipmentType,
@@ -166,10 +167,23 @@ export async function POST(request: NextRequest) {
       part_number: '', quantity: 0, unit_cost: 0, amount,
     }
 
+    // Resolve (or create) the customers row before billing, so this invoice has a
+    // route back to that customer's no_sms / no_email flags. Without it, an invoice
+    // generated from an inspection stays invisible to contact suppression and the
+    // send paths silently text someone who asked not to be texted.
+    const linkedCustomerId = await logHDCustomer({
+      userId:        user.id,
+      customerName:  customerName,
+      customerPhone: customerPhone,
+      customerEmail: customerEmail,
+      companyName:   null,
+    })
+
     const { data: newInv, error: invErr } = await supabase
       .from('hd_invoices')
       .insert({
         user_id:           user.id,
+        customer_id:       linkedCustomerId,
         invoice_number:    invoiceNumber,
         // Fleet Pro linkage — fleetAccountId is already resolved from the unit above.
         unit_id:           body.unit_id,

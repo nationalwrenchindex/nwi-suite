@@ -3912,12 +3912,97 @@ const CHIP_CONFIG: Record<string, { label: string; bg: string; color: string }> 
   gates:       { label: 'Gates',       bg: '#1D4ED825', color: '#93C5FD' },
 }
 
+// Aftermarket cross-reference columns, in counter-preference order. Drives both the
+// chip row on each card and the part-number lookup below.
+const XREF_KEYS = [
+  'baldwin', 'napa_gold', 'luber_finer', 'donaldson',
+  'fleetguard', 'wix', 'dayco', 'continental', 'gates',
+] as const
+
+// unit_family values that mean "fits everything from this manufacturer" rather than
+// naming a model. See matchesUnitModel for why they are never filtered out.
+const UNIVERSAL_FAMILIES = new Set(['ALL', 'ALL-TK', 'ALL-CARRIER'])
+
+// The table is ~960 rows. Even a broad filter chip on its own can return several
+// hundred, which is unreadable on a phone at a parts counter and slow to paint, so
+// the card list is capped and the mechanic is told to narrow instead.
+const RESULT_LIMIT = 120
+
+// Mechanics type the same unit three different ways: "S-600", "s600", "s 600".
+// Fold case and strip separators so all of them collapse to one comparable key.
+// Applied to BOTH sides of every model comparison.
+function normalizeModel(value: string): string {
+  return value.toLowerCase().replace(/[\s\-._/]+/g, '')
+}
+
+function isUniversalFamily(unitFamily: string | null): boolean {
+  return !!unitFamily && UNIVERSAL_FAMILIES.has(unitFamily.trim().toUpperCase())
+}
+
+// unit_family holds a comma-separated fits-list — 'Precedent S-600,S-600M,S-610DE'
+// or 'X4 7300,X4 7500' — so the typed model is matched against each entry
+// individually rather than against the whole string.
+//
+// ALL / ALL-TK / ALL-Carrier rows are universal parts. "Applies to every unit"
+// includes the unit being searched, so they deliberately PASS a model search
+// instead of being dropped for not naming the model. They cannot be narrowed by
+// model at all — the manufacturer chips (TK / Carrier) are what separates
+// ALL-TK from ALL-Carrier — so they are sorted below the named-model hits by
+// modelSpecificity, keeping the exact fits first.
+function matchesUnitModel(unitFamily: string | null, needle: string): boolean {
+  if (!needle) return true
+  if (isUniversalFamily(unitFamily)) return true
+  if (!unitFamily) return false
+  const n = normalizeModel(needle)
+  return unitFamily.split(',').some(entry => normalizeModel(entry).includes(n))
+}
+
+// 0 = this row names the model, 1 = it is a universal row riding along.
+function modelSpecificity(unitFamily: string | null): number {
+  return isUniversalFamily(unitFamily) ? 1 : 0
+}
+
+// The Part / Function box searches part_function — that is what "belt" means to a
+// mechanic. The old single box also searched notes and every cross-ref column, so
+// "belt" matched any row whose notes merely mentioned one.
+//
+// The one exception: text containing a digit is almost certainly a part number in
+// hand ("781968", "50-00162-25"), never a description, so those also match the OEM
+// and aftermarket number columns. That keeps the counter workflow — number in hand,
+// find the cross-reference — without letting plain words leak back into number fields.
+function matchesPartQuery(part: PartsRefEntry, needle: string): boolean {
+  if (!needle) return true
+  if (part.part_function.toLowerCase().includes(needle)) return true
+  if (!/\d/.test(needle)) return false
+  const asNumber = normalizeModel(needle)
+  return [part.oem_part_number, ...XREF_KEYS.map(k => part[k])]
+    .some(v => v && normalizeModel(v).includes(asNumber))
+}
+
+// Notes carry supersession guidance ("Superseded by 781968", "STOCK THIS instead
+// of 50-00162-25") which is the single most useful line on the card — flag those
+// so they read as an instruction rather than as fine print.
+function isSupersessionNote(note: string): boolean {
+  return /supersed|instead of|stock this|replaced by|use\s+\d/i.test(note)
+}
+
+// 'ALL-TK' is a database value, not something to show a mechanic.
+function fitsLabel(part: PartsRefEntry): string | null {
+  if (!part.unit_family) return null
+  const fam = part.unit_family.trim().toUpperCase()
+  if (fam === 'ALL')         return 'Fits all units'
+  if (fam === 'ALL-TK')      return 'Fits all Thermo King units'
+  if (fam === 'ALL-CARRIER') return 'Fits all Carrier units'
+  return part.unit_family
+}
+
 function PartsReferencePanel() {
-  const [parts,   setParts]   = useState<PartsRefEntry[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error,   setError]   = useState<string | null>(null)
-  const [search,  setSearch]  = useState('')
-  const [filter,  setFilter]  = useState<PartsFilter>('all')
+  const [parts,     setParts]     = useState<PartsRefEntry[]>([])
+  const [loading,   setLoading]   = useState(true)
+  const [error,     setError]     = useState<string | null>(null)
+  const [modelText, setModelText] = useState('')
+  const [partText,  setPartText]  = useState('')
+  const [filter,    setFilter]    = useState<PartsFilter>('all')
 
   useEffect(() => {
     fetch('/api/hd/parts-reference')
@@ -3926,30 +4011,44 @@ function PartsReferencePanel() {
       .catch(() => { setError('Failed to load parts reference data.'); setLoading(false) })
   }, [])
 
-  const q = search.toLowerCase().trim()
+  const modelQ = modelText.trim()
+  const partQ  = partText.trim().toLowerCase()
+  const hasQuery = modelQ.length > 0 || partQ.length > 0
 
-  const byFilter = parts.filter(p => {
-    if (filter === 'Filter')     return p.part_category === 'Filter'
-    if (filter === 'Belt')       return p.part_category === 'Belt' || p.part_category === 'Stocking Note'
-    if (filter === 'Thermostat') return p.part_category === 'Thermostat'
-    if (filter === 'Note')       return p.part_category === 'Stocking Note' || p.part_category === 'Hardware'
-    if (filter === 'TK')         return p.manufacturer === 'TK'
-    if (filter === 'Carrier')    return p.manufacturer === 'Carrier' || p.manufacturer === 'Both'
-    return true
-  })
+  const matches = useMemo(() => {
+    const byFilter = parts.filter(p => {
+      if (filter === 'Filter')     return p.part_category === 'Filter'
+      if (filter === 'Belt')       return p.part_category === 'Belt' || p.part_category === 'Stocking Note'
+      if (filter === 'Thermostat') return p.part_category === 'Thermostat'
+      if (filter === 'Note')       return p.part_category === 'Stocking Note' || p.part_category === 'Hardware'
+      if (filter === 'TK')         return p.manufacturer === 'TK' || p.manufacturer === 'Both'
+      if (filter === 'Carrier')    return p.manufacturer === 'Carrier' || p.manufacturer === 'Both'
+      return true
+    })
 
-  const filtered = byFilter.filter(p => {
-    if (!q) return true
-    return [
-      p.manufacturer, p.unit_family, p.part_category, p.part_function,
-      p.oem_part_number, p.baldwin, p.napa_gold, p.luber_finer,
-      p.donaldson, p.fleetguard, p.wix, p.dayco, p.continental, p.gates, p.notes,
-    ].some(v => v?.toLowerCase().includes(q))
-  })
+    // Model AND function: both boxes are optional, either alone still searches, and
+    // together they intersect — "S-600" + "belt" returns S-600 belts, nothing else.
+    const found = byFilter.filter(p => matchesUnitModel(p.unit_family, modelQ) && matchesPartQuery(p, partQ))
 
-  const stockingNotes = filtered.filter(p => p.part_category === 'Stocking Note' || p.part_category === 'Hardware')
-  const regularParts  = filtered.filter(p => p.part_category !== 'Stocking Note' && p.part_category !== 'Hardware')
-  const showNotesAtTop = (filter === 'all' || filter === 'Belt') && stockingNotes.length > 0
+    // Named-model rows above universal ones, then alphabetically by what the
+    // mechanic reads first. Sort a copy — filter already returned a new array.
+    return found.sort((a, b) =>
+      modelSpecificity(a.unit_family) - modelSpecificity(b.unit_family) ||
+      a.part_function.localeCompare(b.part_function)
+    )
+  }, [parts, filter, modelQ, partQ])
+
+  // Stocking notes are their own category (a handful of rows) and always ride at the
+  // top of whatever matched. Hardware is NOT lumped in with them any more: it grew
+  // from a few rows to ~173 real parts with OEM numbers, so it renders as normal
+  // cards where its part numbers and cross-references are visible.
+  const stockingNotes = matches.filter(p => p.part_category === 'Stocking Note')
+  const regularParts  = matches.filter(p => p.part_category !== 'Stocking Note')
+
+  // With nothing typed and no chip picked, dumping every row is useless — prompt
+  // instead, and show the stocking notes, which are worth reading unprompted.
+  const idle    = !hasQuery && filter === 'all'
+  const visible = idle ? [] : regularParts.slice(0, RESULT_LIMIT)
 
   if (loading) {
     return (
@@ -3981,19 +4080,51 @@ function PartsReferencePanel() {
           Field-Verified Cross-Reference
         </p>
         <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>
-          Find the right part number for whatever supplier is nearby.
+          Search by unit model and what the part does — then buy it from whatever supplier is nearby.
         </p>
       </div>
 
-      {/* Search bar */}
-      <input
-        type="text"
-        value={search}
-        onChange={e => setSearch(e.target.value)}
-        placeholder="Search by OEM part number, Baldwin, NAPA, Dayco, description, or unit model…"
-        className="w-full px-4 py-3 rounded-xl text-sm text-white placeholder-white/20"
-        style={{ background: '#111920', border: '1px solid #1e3040' }}
-      />
+      {/* Two-field search: unit model AND part function */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label
+            htmlFor="parts-model"
+            className="block text-xs uppercase tracking-widest mb-1.5"
+            style={{ color: 'rgba(255,255,255,0.35)' }}
+          >
+            Unit Model
+          </label>
+          <input
+            id="parts-model"
+            type="text"
+            value={modelText}
+            onChange={e => setModelText(e.target.value)}
+            placeholder="S-600, X4 7300, Supra 950…"
+            autoComplete="off"
+            className="w-full px-4 py-3 rounded-xl text-sm text-white placeholder-white/20"
+            style={{ background: '#111920', border: '1px solid #1e3040' }}
+          />
+        </div>
+        <div>
+          <label
+            htmlFor="parts-function"
+            className="block text-xs uppercase tracking-widest mb-1.5"
+            style={{ color: 'rgba(255,255,255,0.35)' }}
+          >
+            Part / Function
+          </label>
+          <input
+            id="parts-function"
+            type="text"
+            value={partText}
+            onChange={e => setPartText(e.target.value)}
+            placeholder="belt, water pump, alternator, 781968…"
+            autoComplete="off"
+            className="w-full px-4 py-3 rounded-xl text-sm text-white placeholder-white/20"
+            style={{ background: '#111920', border: '1px solid #1e3040' }}
+          />
+        </div>
+      </div>
 
       {/* Filter buttons */}
       <div className="flex flex-wrap gap-2">
@@ -4021,8 +4152,31 @@ function PartsReferencePanel() {
         ))}
       </div>
 
-      {/* Stocking notes at top (All and Belts filters) */}
-      {showNotesAtTop && (
+      {/* Result count / clear */}
+      {!idle && (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
+            {regularParts.length === 0
+              ? 'No matching parts'
+              : `${regularParts.length} part${regularParts.length === 1 ? '' : 's'}${
+                  regularParts.length > RESULT_LIMIT ? ` — showing the first ${RESULT_LIMIT}` : ''
+                }`}
+          </p>
+          {hasQuery && (
+            <button
+              type="button"
+              onClick={() => { setModelText(''); setPartText('') }}
+              className="text-xs font-semibold flex-shrink-0"
+              style={{ color: HD_ORANGE }}
+            >
+              Clear search
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Stocking notes — always ride at the top of whatever matched */}
+      {stockingNotes.length > 0 && (
         <div className="space-y-2">
           <p className="text-xs uppercase tracking-widest" style={{ color: HD_ORANGE }}>
             Stocking Notes
@@ -4048,9 +4202,9 @@ function PartsReferencePanel() {
                 <span className="text-xs px-2 py-0.5 rounded" style={{ background: '#162030', color: 'rgba(255,255,255,0.4)' }}>
                   {note.manufacturer === 'Both' ? 'TK + Carrier' : note.manufacturer}
                 </span>
-                {note.unit_family && note.unit_family !== 'ALL' && (
+                {fitsLabel(note) && (
                   <span className="text-xs px-2 py-0.5 rounded" style={{ background: '#162030', color: 'rgba(255,255,255,0.4)' }}>
-                    {note.unit_family}
+                    {fitsLabel(note)}
                   </span>
                 )}
               </div>
@@ -4059,65 +4213,34 @@ function PartsReferencePanel() {
         </div>
       )}
 
-      {/* Notes-only view (filter === Note) */}
-      {filter === 'Note' && stockingNotes.length > 0 && (
-        <div className="space-y-2">
-          {stockingNotes.map(note => (
-            <div
-              key={note.id}
-              className="rounded-xl p-4"
-              style={{ background: '#1a0a00', border: `1px solid ${HD_ORANGE}40` }}
-            >
-              <p className="font-semibold text-sm mb-2" style={{ color: HD_ORANGE }}>
-                {note.part_function}
-              </p>
-              {note.notes && (
-                <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.75)' }}>
-                  {note.notes}
-                </p>
-              )}
-              <div className="flex gap-2 mt-2 flex-wrap">
-                <span className="text-xs px-2 py-0.5 rounded" style={{ background: '#162030', color: 'rgba(255,255,255,0.4)' }}>
-                  {note.manufacturer === 'Both' ? 'TK + Carrier' : note.manufacturer}
-                </span>
-                {note.unit_family && note.unit_family !== 'ALL' && (
-                  <span className="text-xs px-2 py-0.5 rounded" style={{ background: '#162030', color: 'rgba(255,255,255,0.4)' }}>
-                    {note.unit_family}
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
+      {/* Idle prompt — no query, no chip: say what is searchable instead of dumping it */}
+      {idle && (
+        <div className="rounded-xl p-5 text-center" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+          <p className="text-sm font-semibold mb-1.5 text-white">
+            {parts.length.toLocaleString()} parts searchable
+          </p>
+          <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.4)' }}>
+            Type a unit model, a part description, or both — &ldquo;S-600&rdquo; + &ldquo;belt&rdquo;.
+            Either box works on its own. A part number in the Part / Function box finds
+            its cross-references. Or pick a category below.
+          </p>
         </div>
       )}
 
-      {/* Regular parts cards */}
-      {regularParts.length === 0 && !showNotesAtTop && filter !== 'Note' && (
+      {!idle && regularParts.length === 0 && stockingNotes.length === 0 && (
         <p className="text-sm text-center py-8" style={{ color: 'rgba(255,255,255,0.3)' }}>
-          No results. Try a different search or filter.
+          No results. Try a shorter model (&ldquo;S-600&rdquo; rather than &ldquo;Precedent S-600DE&rdquo;)
+          or a broader part description.
         </p>
       )}
 
-      {regularParts.length > 0 && (
+      {/* Regular parts cards */}
+      {visible.length > 0 && (
         <div className="space-y-3">
-          {!q && filter === 'all' && (
-            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>
-              {regularParts.length} parts — search or filter to narrow results
-            </p>
-          )}
-
-          {regularParts.map(part => {
-            const chips = ([
-              { key: 'baldwin',     val: part.baldwin     },
-              { key: 'napa_gold',   val: part.napa_gold   },
-              { key: 'luber_finer', val: part.luber_finer },
-              { key: 'donaldson',   val: part.donaldson   },
-              { key: 'fleetguard',  val: part.fleetguard  },
-              { key: 'wix',         val: part.wix         },
-              { key: 'dayco',       val: part.dayco       },
-              { key: 'continental', val: part.continental },
-              { key: 'gates',       val: part.gates       },
-            ] as { key: string; val: string | null }[]).filter(c => c.val)
+          {visible.map(part => {
+            const chips = XREF_KEYS
+              .map(key => ({ key, val: part[key] }))
+              .filter((c): c is { key: typeof XREF_KEYS[number]; val: string } => !!c.val)
 
             const mfgColor =
               part.manufacturer === 'TK'      ? '#60A5FA' :
@@ -4125,6 +4248,10 @@ function PartsReferencePanel() {
             const mfgBg =
               part.manufacturer === 'TK'      ? '#1A6BAF22' :
               part.manufacturer === 'Both'    ? '#6B728022' : '#E85D2422'
+
+            const fits      = fitsLabel(part)
+            const universal = isUniversalFamily(part.unit_family)
+            const flagNote  = !!part.notes && isSupersessionNote(part.notes)
 
             return (
               <div
@@ -4136,7 +4263,7 @@ function PartsReferencePanel() {
                 <div className="px-4 pt-3 pb-3" style={{ background: '#162030' }}>
                   <div className="flex items-start gap-2 justify-between">
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs mb-1 leading-snug" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                      <p className="text-xs mb-1 leading-snug" style={{ color: 'rgba(255,255,255,0.55)' }}>
                         {part.part_function}
                       </p>
                       {part.oem_part_number ? (
@@ -4159,11 +4286,22 @@ function PartsReferencePanel() {
                       {part.manufacturer === 'Both' ? 'TK+CT' : part.manufacturer}
                     </span>
                   </div>
-                  {part.unit_family && (
-                    <p className="text-xs mt-1.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
-                      {part.unit_family}
-                    </p>
-                  )}
+                  <div className="flex flex-wrap items-center gap-2 mt-2">
+                    <span className="text-xs px-2 py-0.5 rounded" style={{ background: '#0d1820', color: 'rgba(255,255,255,0.45)' }}>
+                      {part.part_category}
+                    </span>
+                    {fits && (
+                      <span
+                        className="text-xs px-2 py-0.5 rounded"
+                        style={universal
+                          ? { background: '#0d1820', color: 'rgba(255,255,255,0.55)', fontStyle: 'italic' }
+                          : { background: '#0d1820', color: 'rgba(255,255,255,0.45)' }
+                        }
+                      >
+                        {fits}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Cross-reference chips */}
@@ -4192,17 +4330,38 @@ function PartsReferencePanel() {
                   </div>
                 )}
 
-                {/* Notes */}
+                {/* Notes — supersession guidance is the whole point of this field, so it
+                    gets the orange treatment rather than being greyed out at the bottom */}
                 {part.notes && (
-                  <div className="px-4 py-3" style={{ background: '#0d1820', borderTop: '1px solid #1e3040' }}>
-                    <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                      {part.notes}
-                    </p>
+                  <div
+                    className="px-4 py-3"
+                    style={flagNote
+                      ? { background: '#1a0a00', borderTop: `1px solid ${HD_ORANGE}40` }
+                      : { background: '#0d1820', borderTop: '1px solid #1e3040' }
+                    }
+                  >
+                    <div className="flex items-start gap-2">
+                      {flagNote && (
+                        <span style={{ color: HD_ORANGE, fontSize: 14, lineHeight: '1.4', flexShrink: 0 }}>⚑</span>
+                      )}
+                      <p
+                        className="text-sm leading-relaxed"
+                        style={{ color: flagNote ? HD_ORANGE : 'rgba(255,255,255,0.6)' }}
+                      >
+                        {part.notes}
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>
             )
           })}
+
+          {regularParts.length > RESULT_LIMIT && (
+            <p className="text-xs text-center py-2" style={{ color: 'rgba(255,255,255,0.3)' }}>
+              {regularParts.length - RESULT_LIMIT} more matches — add a unit model or part description to narrow.
+            </p>
+          )}
         </div>
       )}
 

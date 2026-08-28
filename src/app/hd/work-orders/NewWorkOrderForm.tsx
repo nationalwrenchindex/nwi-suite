@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import AddressAutofill, { type AddressValue } from '@/components/hd/AddressAutofill'
 
 const HD_ORANGE = '#E85D24'
 
@@ -37,6 +38,12 @@ export default function NewWorkOrderForm({ units, fleetAccounts, presetAccountId
   const [scheduledTime, setScheduledTime] = useState('09:00')
   const [estHours, setEstHours]           = useState('1')
   const [notes, setNotes]                 = useState('')
+  // Structured service address (migration 120). Separate from the free-text notes
+  // field, which holds gate codes and directions — those are not a mailing address
+  // and cannot be prefilled into the invoice form's line1/city/state/zip inputs.
+  const [address, setAddress]             = useState<AddressValue>({
+    address_line1: '', address_line2: '', city: '', state: '', zip: '',
+  })
   const [saving, setSaving]               = useState(false)
   const [error, setError]                 = useState<string | null>(null)
 
@@ -75,6 +82,11 @@ export default function NewWorkOrderForm({ units, fleetAccounts, presetAccountId
           scheduled_time:           scheduledTime || undefined,
           estimated_duration_hours: estHours || undefined,
           notes:                    notes || undefined,
+          address_line1:            address.address_line1 || undefined,
+          address_line2:            address.address_line2 || undefined,
+          city:                     address.city || undefined,
+          state:                    address.state || undefined,
+          zip:                      address.zip || undefined,
         }),
       })
       const data = await res.json()
@@ -151,6 +163,50 @@ export default function NewWorkOrderForm({ units, fleetAccounts, presetAccountId
         <div>
           <label className={lblCls} style={{ color: 'rgba(255,255,255,0.4)' }}>Scheduled Time</label>
           <input type="time" value={scheduledTime} onChange={e => setScheduledTime(e.target.value)} className={inputCls} style={inputStyle} />
+        </div>
+      </div>
+
+      {/* Service address. The single-line box parses a pasted address into the five
+          fields below it; those stay visible and editable because the parser leaves a
+          field blank rather than guessing it.
+          AddressAutofill is the light-suite component shared with the quote and
+          invoice forms, so it is inset on a light panel here rather than restyled —
+          one parser and one input, not a dark-suite fork of both that could drift. */}
+      <div>
+        <label className={lblCls} style={{ color: 'rgba(255,255,255,0.4)' }}>Service Address</label>
+        <div className="rounded-lg p-3" style={{ background: '#F4F5F7', border: '1px solid #1e3040' }}>
+          <AddressAutofill value={address} onChange={setAddress} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className={lblCls} style={{ color: 'rgba(255,255,255,0.4)' }}>Address Line 1</label>
+          <input value={address.address_line1} onChange={e => setAddress(a => ({ ...a, address_line1: e.target.value }))}
+            placeholder="123 Main St" className={inputCls} style={inputStyle} />
+        </div>
+        <div>
+          <label className={lblCls} style={{ color: 'rgba(255,255,255,0.4)' }}>Address Line 2</label>
+          <input value={address.address_line2} onChange={e => setAddress(a => ({ ...a, address_line2: e.target.value }))}
+            placeholder="Suite / Unit (optional)" className={inputCls} style={inputStyle} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="col-span-2">
+          <label className={lblCls} style={{ color: 'rgba(255,255,255,0.4)' }}>City</label>
+          <input value={address.city} onChange={e => setAddress(a => ({ ...a, city: e.target.value }))}
+            placeholder="Wauchula" className={inputCls} style={inputStyle} />
+        </div>
+        <div>
+          <label className={lblCls} style={{ color: 'rgba(255,255,255,0.4)' }}>State</label>
+          <input value={address.state} onChange={e => setAddress(a => ({ ...a, state: e.target.value }))}
+            placeholder="FL" maxLength={2} className={inputCls} style={inputStyle} />
+        </div>
+        <div>
+          <label className={lblCls} style={{ color: 'rgba(255,255,255,0.4)' }}>Zip</label>
+          <input value={address.zip} onChange={e => setAddress(a => ({ ...a, zip: e.target.value }))}
+            placeholder="33873" inputMode="numeric" className={inputCls} style={inputStyle} />
         </div>
       </div>
 

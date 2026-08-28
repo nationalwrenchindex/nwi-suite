@@ -61,6 +61,15 @@ export async function POST(req: NextRequest) {
       service_type:             str(body.service_type),
       service_requests:         str(body.job_description),
       comments:                 str(body.notes),
+      // Structured service address (migration 120). Kept separate from the free-text
+      // `location` column, which holds gate codes and yard directions — those are not
+      // a mailing address. These fields are what the "Create Invoice" handoff can
+      // prefill into the invoice form's individual address inputs.
+      address_line1:            str(body.address_line1),
+      address_line2:            str(body.address_line2),
+      city:                     str(body.city),
+      state:                    str(body.state),
+      zip:                      str(body.zip),
       estimated_duration_hours,
     })
     .select('id, work_order_number, scheduled_at')

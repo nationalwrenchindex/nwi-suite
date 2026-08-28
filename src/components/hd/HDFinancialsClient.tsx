@@ -8,18 +8,36 @@ const HD_BLUE   = '#1A6BAF'
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
+// Two families of numbers, and keeping them apart is the whole point of the naming.
+//
+//   invoice* — BILLING. Comes from hd_invoices, bounded on created_at, voids dropped.
+//              Money asked for. Same source and same rules as /api/hd/financials/
+//              summary, so the cards and the COST & MARGIN block always agree.
+//   job*     — JOBS. Comes from hd_work_orders, bounded on the effective job date.
+//              Work done. Says nothing about whether anyone has been billed.
+//
+// There used to be one field called `totalRevenue` fed from hd_work_orders while the
+// margin block read hd_invoices, and the page reported $0 revenue beside a $349
+// margin block as a result. Neither number was wrong; they answered different
+// questions under the same word. Nothing here is called plain "revenue" again.
 interface OverviewStats {
-  totalRevenue:    number
-  outstandingTotal: number
-  avgJobValue:     number
-  totalLaborHours: number
-  laborRevenue:    number
-  laborPct:        number
-  hourlyRate:      number
-  closedCount:     number
-  accountRows:     { name: string; revenue: number; count: number }[]
-  periodLabel:     string
-  periodParam:     string
+  // Billing
+  invoiceRevenue:    number  // invoiced total MINUS sales tax — see the tax note below
+  taxCollected:      number
+  invoiceCount:      number
+  // Jobs
+  jobsTotal:         number  // value of all work closed in the period
+  invoicedJobsTotal: number  // the subset already handed to invoicing
+  outstandingTotal:  number
+  avgJobValue:       number
+  totalLaborHours:   number
+  laborRevenue:      number
+  laborPct:          number
+  hourlyRate:        number
+  closedCount:       number
+  accountRows:       { name: string; revenue: number; count: number }[]
+  periodLabel:       string
+  periodParam:       string
 }
 
 interface HDInvoice {
@@ -55,7 +73,12 @@ interface HDQuote {
 // because HD cost only exists on invoices written since markup tracking shipped —
 // null means "not known", and it must reach the screen as that rather than as 0.
 interface CostSummary {
+  // total_revenue is the amount INVOICED and has sales tax inside it (hd_invoices.total
+  // is built as taxBase + taxAmount). net_revenue is what was earned. They differ by
+  // tax_collected, which is never treated as revenue or as profit anywhere on this page.
   total_revenue:           number
+  net_revenue:             number
+  tax_collected:           number
   parts_revenue:           number
   labor_revenue:           number
   cogs_total:              number | null
@@ -192,6 +215,13 @@ function CostMarginBlock({ periodParam, periodLabel }: { periodParam: string; pe
   const noCost   = s.cogs_known === 0
   const marginTx = s.gross_margin == null ? '—' : `${s.gross_margin.toFixed(0)}%`
 
+  // Read through Number(x) || 0 rather than straight off the object, the same
+  // defensive discipline statusCfg() applies to status lookups: these fields arrive
+  // over the wire, and a response from an older deployment that predates them would
+  // otherwise reach fmt() as undefined and throw on .toLocaleString().
+  const invoicedTotal = Number(s.total_revenue) || 0
+  const taxCollected  = Number(s.tax_collected) || 0
+
   // Colour the margin only when it is a real, complete figure. A partial or unknown
   // margin rendered in confident green would read as a verdict on the business.
   const marginColor = s.gross_margin == null || s.cogs_partial
@@ -209,7 +239,17 @@ function CostMarginBlock({ periodParam, periodLabel }: { periodParam: string; pe
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-        <StatCard label="Total Revenue" value={fmt(s.total_revenue)} color="green"  sub={`${s.invoice_count} invoice${s.invoice_count !== 1 ? 's' : ''} · ${periodLabel}`} />
+        {/* Labelled "Invoiced Total", not "Revenue": it is gross of sales tax, so it
+            is larger than the Revenue card above by exactly the tax. Parts + Labor
+            below add up to the Revenue card, not to this one. */}
+        <StatCard
+          label="Invoiced Total"
+          value={fmt(invoicedTotal)}
+          color="white"
+          sub={taxCollected > 0
+            ? `Incl. ${fmt(taxCollected)} tax · ${s.invoice_count} invoice${s.invoice_count !== 1 ? 's' : ''}`
+            : `${s.invoice_count} invoice${s.invoice_count !== 1 ? 's' : ''} · ${periodLabel}`}
+        />
         <StatCard label="Parts Revenue" value={fmt(s.parts_revenue)} color="orange" sub="Billed to customers" />
         <StatCard label="Labor Revenue" value={fmt(s.labor_revenue)} color="blue"   sub="Incl. diagnostic + road call" />
         <StatCard
@@ -222,7 +262,7 @@ function CostMarginBlock({ periodParam, periodLabel }: { periodParam: string; pe
           label="Gross Profit"
           value={s.gross_profit == null ? '—' : fmt(s.gross_profit)}
           color={s.gross_profit == null ? 'white' : s.gross_profit >= 0 ? 'green' : 'red'}
-          sub={s.gross_profit == null ? 'Cost unknown' : `On ${fmt(s.revenue_with_known_cost)} of revenue`}
+          sub={s.gross_profit == null ? 'Cost unknown' : `On ${fmt(s.revenue_with_known_cost)} of revenue, excl. tax`}
         />
         <StatCard
           label="Gross Margin"
@@ -261,15 +301,55 @@ function CostMarginBlock({ periodParam, periodLabel }: { periodParam: string; pe
 function OverviewTab({ stats }: { stats: OverviewStats }) {
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Revenue"      value={fmt(stats.totalRevenue)}    color="green" sub="Invoiced this period" />
-        <StatCard label="Outstanding"  value={fmt(stats.outstandingTotal)} color={stats.outstandingTotal > 0 ? 'orange' : 'white'} sub="Completed, not invoiced" />
-        <StatCard label="Avg Job"      value={fmt(stats.avgJobValue)}      color="blue"  sub={`${stats.closedCount} jobs closed`} />
-        <StatCard label="Labor Hours"  value={stats.totalLaborHours.toFixed(1)} color="white" sub={`@ $${stats.hourlyRate}/hr`} />
+      {/* ── BILLING ──────────────────────────────────────────────────────────────
+          Measures hd_invoices: money asked for. Everything below the JOBS heading
+          measures hd_work_orders: work done. The two are split under their own
+          headings because the page previously mixed them under one word, "Revenue",
+          and reported $0 next to a live margin block without either being wrong. */}
+      <div>
+        <p className="font-condensed font-bold text-white text-lg tracking-wide mb-3">BILLING</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <StatCard
+            label="Revenue"
+            value={fmt(stats.invoiceRevenue)}
+            color="green"
+            sub={`${stats.invoiceCount} invoice${stats.invoiceCount !== 1 ? 's' : ''} · excl. tax · ${stats.periodLabel}`}
+          />
+          {/* Tax is NOT revenue. It is collected on behalf of the state and owed
+              straight back to it, so it is never added into the Revenue card, into
+              net profit, or into gross margin — it gets its own card precisely so it
+              never has to be folded into one of theirs. */}
+          <StatCard
+            label="Tax Collected"
+            value={fmt(stats.taxCollected)}
+            color="blue"
+            sub="Held for the state — not revenue"
+          />
+        </div>
+        {stats.taxCollected > 0 && (
+          <p className="text-xs mt-3" style={{ color: 'rgba(255,255,255,0.3)' }}>
+            {fmt(stats.invoiceRevenue)} revenue + {fmt(stats.taxCollected)} sales tax
+            = {fmt(stats.invoiceRevenue + stats.taxCollected)} invoiced. Tax is remitted, not earned.
+          </p>
+        )}
       </div>
 
-      {/* Cost of goods and margin. Sourced from the invoices themselves rather than
-          from work orders, so it reports what was billed and what it cost to bill it. */}
+      {/* ── JOBS ─────────────────────────────────────────────────────────────────
+          Work orders, not invoices. A job can be closed without being billed, and a
+          bill can be raised for a job closed in a previous period, so these numbers
+          are not expected to reconcile with BILLING above — they answer a different
+          question and are grouped separately so nobody reads them as revenue. */}
+      <div>
+        <p className="font-condensed font-bold text-white text-lg tracking-wide mb-3">JOBS</p>
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+          <StatCard label="Outstanding"  value={fmt(stats.outstandingTotal)} color={stats.outstandingTotal > 0 ? 'orange' : 'white'} sub="Completed, not invoiced" />
+          <StatCard label="Avg Job"      value={fmt(stats.avgJobValue)}      color="blue"  sub={`${stats.closedCount} job${stats.closedCount !== 1 ? 's' : ''} closed`} />
+          <StatCard label="Labor Hours"  value={stats.totalLaborHours.toFixed(1)} color="white" sub={`@ $${stats.hourlyRate}/hr`} />
+        </div>
+      </div>
+
+      {/* Cost of goods and margin. Same source as the BILLING cards — hd_invoices,
+          same date column, same void rule — so the two blocks report one number. */}
       <div>
         <p className="font-condensed font-bold text-white text-lg tracking-wide mb-3">COST &amp; MARGIN</p>
         <CostMarginBlock periodParam={stats.periodParam} periodLabel={stats.periodLabel} />
@@ -278,13 +358,18 @@ function OverviewTab({ stats }: { stats: OverviewStats }) {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Revenue by account */}
         <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
-          <p className="font-condensed font-bold text-white text-lg tracking-wide mb-4">REVENUE BY FLEET ACCOUNT</p>
+          <p className="font-condensed font-bold text-white text-lg tracking-wide mb-1">WORK BY FLEET ACCOUNT</p>
+          <p className="text-xs mb-4" style={{ color: 'rgba(255,255,255,0.3)' }}>Job value closed this period</p>
           {stats.accountRows.length === 0 ? (
             <p className="text-sm py-8 text-center" style={{ color: 'rgba(255,255,255,0.25)' }}>No data for this period</p>
           ) : (
             <div className="space-y-3">
               {stats.accountRows.map(row => {
-                const pct = stats.totalRevenue > 0 ? (row.revenue / stats.totalRevenue) * 100 : 0
+                // Share of jobsTotal — the same work orders these rows are built from.
+                // The old denominator was the page's revenue figure, which counted a
+                // narrower set of work orders than the rows did, so the bars could
+                // total well over 100% of it.
+                const pct = stats.jobsTotal > 0 ? (row.revenue / stats.jobsTotal) * 100 : 0
                 return (
                   <div key={row.name}>
                     <div className="flex items-center justify-between mb-1">
@@ -316,7 +401,10 @@ function OverviewTab({ stats }: { stats: OverviewStats }) {
               </p>
             </div>
             <div className="rounded-lg p-4" style={{ background: '#162030' }}>
-              <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>Labor as % of Revenue</p>
+              {/* Of JOB value, not of invoiced revenue: the hours above come off work
+                  orders, so the denominator has to be those same work orders' totals
+                  or the ratio compares two different populations. */}
+              <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>Labor as % of Job Value</p>
               <p className="font-condensed font-bold text-2xl text-white">{stats.laborPct.toFixed(0)}%</p>
               <div className="mt-2 h-2 rounded-full overflow-hidden" style={{ background: '#1e3040' }}>
                 <div className="h-full rounded-full" style={{
@@ -709,8 +797,10 @@ function PLTab({ stats }: { stats: OverviewStats }) {
   if (loading) return <div className="h-40 animate-pulse rounded-xl" style={{ background: '#111920' }} />
 
   const totalExpenses = expenses.reduce((s, e) => s + Number(e.amount), 0)
-  const netProfit     = stats.totalRevenue - totalExpenses
-  const margin        = stats.totalRevenue > 0 ? (netProfit / stats.totalRevenue) * 100 : 0
+  // invoiceRevenue is already net of sales tax, so the tax never reaches net profit —
+  // the business does not earn the state's money and cannot spend it either.
+  const netProfit     = stats.invoiceRevenue - totalExpenses
+  const margin        = stats.invoiceRevenue > 0 ? (netProfit / stats.invoiceRevenue) * 100 : 0
 
   // Map, not a plain object: expense.category is free text out of the database, and
   // a key like '__proto__' or 'constructor' on an object literal either hits the
@@ -722,7 +812,7 @@ function PLTab({ stats }: { stats: OverviewStats }) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Revenue"    value={fmt(stats.totalRevenue)} color="green" sub={stats.periodLabel} />
+        <StatCard label="Revenue"    value={fmt(stats.invoiceRevenue)} color="green" sub={`Excl. tax · ${stats.periodLabel}`} />
         <StatCard label="Expenses"   value={fmt(totalExpenses)}      color="red"   sub={`${expenses.length} entries`} />
         <StatCard label="Net Profit" value={fmt(netProfit)}          color={netProfit >= 0 ? 'green' : 'red'} />
         <StatCard label="Margin"     value={`${margin.toFixed(0)}%`} color={margin >= 40 ? 'green' : margin >= 20 ? 'orange' : 'red'} />
@@ -732,10 +822,14 @@ function PLTab({ stats }: { stats: OverviewStats }) {
         <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide mb-4">INCOME SUMMARY</p>
           <div className="space-y-2.5">
+            {/* Only the first row feeds net profit. Tax is listed so the invoiced
+                total can be reconciled, and the last two are job-side figures shown
+                for context — labelled as such so they are not read as income. */}
             {[
-              { label: 'Invoiced Revenue', val: stats.totalRevenue,    color: '#22C55E' },
-              { label: 'Outstanding',      val: stats.outstandingTotal, color: HD_ORANGE },
-              { label: 'Labor Revenue',    val: stats.laborRevenue,     color: '#60A5FA' },
+              { label: 'Invoiced revenue (excl. tax)', val: stats.invoiceRevenue,   color: '#22C55E' },
+              { label: 'Sales tax collected',          val: stats.taxCollected,     color: '#60A5FA' },
+              { label: 'Jobs done, not yet invoiced',  val: stats.outstandingTotal, color: HD_ORANGE },
+              { label: 'Labor value of billed jobs',   val: stats.laborRevenue,     color: '#60A5FA' },
             ].map(row => (
               <div key={row.label} className="flex items-center justify-between py-1.5 border-b" style={{ borderColor: '#1e3040' }}>
                 <p className="text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>{row.label}</p>

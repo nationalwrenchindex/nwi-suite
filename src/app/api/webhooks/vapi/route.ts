@@ -823,7 +823,24 @@ async function handleBookAppointment(
     // undercuts the subscriber's brand. `||` (not `??`) so a blank settings value
     // falls through to the profile instead of being treated as a real name.
     const biz  = normalizeBusinessName((settings?.business_name ?? '').trim() || profile?.business_name)
-    const body = `${biz}: Your ${serviceName} is confirmed for ${dateLabel} at ${timeLabel}. See you then!`
+
+    // service_type is whatever the voice model typed into the tool call — it is not
+    // validated against SERVICE_DURATIONS, so it can be arbitrarily long and can carry
+    // a curly apostrophe or en-dash. One non-ASCII char flips the whole body to UCS-2,
+    // which cuts the two-segment budget from 306 chars to 134 and doubles the bill, so
+    // it goes through the same sanitizer + 40-char cap as the business name. That
+    // helper's blank-input fallback is a business-name phrase; compare against it
+    // rather than hardcoding the string, so a service type that sanitizes down to
+    // nothing degrades to a plain word instead of "Your Your service provider".
+    const svcSafe  = normalizeBusinessName(serviceName)
+    const svcLabel = svcSafe === normalizeBusinessName('') ? 'service' : svcSafe
+
+    // Opt-out goes last and is unconditional, matching buildInvoiceSms: 10DLC carriers
+    // expect it on the first message of a conversation, and this is usually the first
+    // thing the customer ever receives from the subscriber's number. Both variable
+    // fields are capped at 40, so the worst case is 40 + 40 + 11 + 8 + 67 = 166 chars —
+    // inside the 306-char two-segment budget with no degradation path needed.
+    const body = `${biz}: Your ${svcLabel} is confirmed for ${dateLabel} at ${timeLabel}. See you then! Reply STOP to opt out.`
     try {
       await sendSubscriberSms({ to: params.customer_phone, body })
       console.log('[booking-sms] customer SMS sent to', params.customer_phone)

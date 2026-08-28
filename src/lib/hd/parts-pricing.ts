@@ -5,11 +5,15 @@
 // Every HD form runs cost through here rather than doing its own arithmetic, so
 // a quote and the invoice it converts into cannot disagree by a rounding step.
 //
-// NOTE ON THE DEFAULT: 30 is the HD brief's number, but profiles already carries
-// `default_parts_markup_percent` (numeric, default 20) and the LD financials side
-// bills from it. The forms read the profile value when it is present and only
-// fall back to 30, so a subscriber who has set a markup gets one markup across
-// both suites instead of two different ones depending on which form they opened.
+// NOTE ON THE DEFAULT: 30 is the HD brief's number, and since migration 121 it is
+// also the default of `profiles.hd_parts_markup_percent` — the column the HD forms
+// seed from. This constant is what they show before that fetch lands and what they
+// fall back to if it fails, so the two must stay equal.
+//
+// It is deliberately NOT `profiles.default_parts_markup_percent` (default 20). That
+// column is the LD default and the LD side bills from it, so reading it here meant
+// any subscriber who had ever opened LD Settings silently got 20 in HD. Heavy-duty
+// parts do not carry light-duty margins; the two suites keep two numbers.
 export const DEFAULT_HD_PARTS_MARKUP = 30
 
 // Money is rounded once, at the point it becomes a dollar figure. Doing it on

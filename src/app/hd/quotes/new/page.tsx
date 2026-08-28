@@ -226,9 +226,12 @@ export default function NewQuotePage() {
     setForm(f => (f.tax_rate === 0 ? { ...f, tax_rate: defaultTaxPct } : f))
   }, [defaultTaxPct])
 
-  // Seed the parts markup from the subscriber's saved default. That column is what
-  // the LD financials side bills from, so honouring it here keeps one subscriber on
-  // one markup instead of two depending on which suite they quoted from.
+  // Seed the parts markup from the subscriber's saved HD default (migration 121).
+  // Deliberately hd_parts_markup_percent and not default_parts_markup_percent: the
+  // latter is the LD default, LD bills from it, and reading it here handed 20% to
+  // every subscriber who had ever opened LD Settings even though HD's number is 30.
+  // A quote converts straight into an invoice, so both forms must seed identically
+  // or the same job reprices itself on conversion.
   useEffect(() => {
     let cancelled = false
     ;(async () => {
@@ -236,7 +239,7 @@ export default function NewQuotePage() {
         const res = await fetch('/api/user/profile')
         if (!res.ok) return
         const json = await res.json()
-        const n = Number(json.default_parts_markup_percent)
+        const n = Number(json.hd_parts_markup_percent)
         if (cancelled || !Number.isFinite(n)) return
         setPartsMarkupDefault(n)
         // Only reseed a draft still showing the fallback, so a markup typed while

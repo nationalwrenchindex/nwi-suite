@@ -60,11 +60,15 @@ export async function logHDCustomer(params: LogParams): Promise<string | null> {
     //    phone (normalized digits).
     let existingId: string | null = null
     if (email) {
+      // Escape LIKE metacharacters. '_' is a single-character wildcard, so an
+      // unescaped "john_doe@x.com" also matches "johnXdoe@x.com" and can bind an
+      // invoice to the wrong person's contact record.
+      const emailPattern = email.replace(/[\\%_]/g, m => `\\${m}`)
       const { data } = await svc
         .from('customers')
         .select('id')
         .eq('user_id', params.userId)
-        .ilike('email', email)
+        .ilike('email', emailPattern)
         .limit(1)
       if (data && data[0]) existingId = data[0].id as string
     }
@@ -74,7 +78,15 @@ export async function logHDCustomer(params: LogParams): Promise<string | null> {
         .select('id, phone')
         .eq('user_id', params.userId)
         .not('phone', 'is', null)
-      const match = (data ?? []).find(c => ((c.phone as string | null) ?? '').replace(/\D/g, '') === phoneDigits)
+      // Compare the last TEN digits, not the whole string. Matching in full meant
+      // "+18635550100" and "863-555-0100" read as different people, so this function
+      // minted a SECOND customers row for someone it already had — and migration 118's
+      // ambiguity rule then refused to link either invoice, permanently. Same
+      // reconciliation the 118 backfill and getContactSuppressionByPhone already use.
+      const want  = phoneDigits.slice(-10)
+      const match = want.length < 10
+        ? undefined
+        : (data ?? []).find(c => ((c.phone as string | null) ?? '').replace(/\D/g, '').slice(-10) === want)
       if (match) existingId = match.id as string
     }
 

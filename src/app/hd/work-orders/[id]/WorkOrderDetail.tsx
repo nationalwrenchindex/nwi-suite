@@ -9,6 +9,7 @@ import { inspectionDateLabel, type InspectionSummary } from '@/lib/hd/inspection
 // BrandHeader has no hooks and no server-only imports, so it renders fine inside
 // this client component.
 import { BrandHeader } from '@/components/BrandHeader'
+import WorkOrderLineItems from '@/components/hd/WorkOrderLineItems'
 import type { Branding } from '@/lib/branding'
 
 const HD_ORANGE = '#E85D24'
@@ -307,6 +308,12 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
           </div>
         )}
       </div>
+
+      {/* Parts & labor priced on the job. Locked once the job is invoiced: the
+          invoice is the billed document from that point, so editing the source lines
+          would put the two out of step with nothing to reconcile them. Reopening the
+          work order unlocks them again. */}
+      <WorkOrderLineItems workOrderId={workOrderId} canEdit={status !== 'invoiced'} />
 
       {/* Inspections — aerial and DOT records attached to this work order */}
       <div className="rounded-xl overflow-hidden mb-6" style={{ border: '1px solid #1e3040' }}>
