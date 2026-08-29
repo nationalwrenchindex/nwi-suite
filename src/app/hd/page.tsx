@@ -67,9 +67,12 @@ const PLANS = [
   {
     key:      'elite',
     name:     'HD Elite',
-    price:    199,
+    price:    159,
     badge:    'RECOMMENDED',
-    features: ['Everything in Pro', 'Foreman AI Receptionist', 'Reefer Module', 'OEM Knowledge Base'],
+    // Foreman is a separately billed add-on (STRIPE_PRICE_FOREMAN, $59/mo), not an
+    // Elite entitlement, so it does not belong in this list even though
+    // HD_ELITE_MODULES carries an hd_foreman module flag.
+    features: ['Everything in Pro', 'Reefer Module', 'OEM Knowledge Base'],
   },
 ]
 
