@@ -10,7 +10,7 @@ const HD_TIER_PRICES: Record<string, number> = {
   hd_reefer:  79,
   hd_starter: 49,
   hd_pro:     99,
-  hd_elite:   199,
+  hd_elite:   159,
 }
 
 const HD_ORANGE = '#E85D24'

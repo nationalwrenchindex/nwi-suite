@@ -36,9 +36,12 @@ const PLANS: {
   {
     key:      'elite',
     name:     'HD Elite',
-    price:    199,
+    price:    159,
     badge:    'RECOMMENDED',
-    features: ['Everything in HD Pro', 'Reefer Module (alarm codes)', 'Foreman AI Receptionist'],
+    // Foreman is a separately billed $59/mo add-on with its own checkout route, not
+    // an Elite entitlement — listing it here promised something the subscription
+    // does not grant.
+    features: ['Everything in HD Pro', 'Reefer Module (alarm codes)', 'OEM Knowledge Base'],
   },
   {
     // One subscription covering both verticals. Price is loaded from Stripe at
