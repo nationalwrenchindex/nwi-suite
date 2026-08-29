@@ -13,6 +13,15 @@ const PLANS: {
   features: string[]
 }[] = [
   {
+    // Reefer Standalone leads, matching the order on /hd/signup. It is not a rung on
+    // the Starter/Pro/Elite ladder — it is transport-refrigeration diagnostics on
+    // their own, for techs who never touch the truck side.
+    key:      'hd_reefer',
+    name:     'Reefer Standalone',
+    price:    79,
+    features: ['Reefer Alarm Codes (TK, Carrier)', 'Reefer QuickWrench Diagnostics', 'EPA 608 Refrigerant Log', 'PM Interval Calculator'],
+  },
+  {
     key:      'starter',
     name:     'HD Starter',
     price:    49,
