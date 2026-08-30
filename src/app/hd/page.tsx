@@ -229,7 +229,10 @@ export default async function HDLandingPage() {
                   ))}
                 </ul>
                 <Link
-                  href="/hd/signup"
+                  // Carry the card's own key so signup opens on account creation with
+                  // this plan already chosen, instead of dropping the visitor back on
+                  // the picker to choose the thing they just clicked.
+                  href={`/hd/signup?plan=${key}`}
                   style={{
                     display:     'block',
                     textAlign:   'center',

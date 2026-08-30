@@ -71,9 +71,10 @@ function HDSignupForm() {
   // a visitor who has already picked a tier is not asked to pick it a second time.
   // Valid keys are the PLANS keys below: hd_reefer, starter, pro, elite, elite_bundle.
   //
-  // Nothing in the app links here with the parameter yet — /hd's nav and hero CTAs
-  // both point at bare /hd/signup, and its pricing cards carry no CTA of their own.
-  // This exists for campaign and pricing-card links; wiring those is a separate change.
+  // Each pricing card on /hd passes its own key. The nav and hero CTAs there stay on
+  // bare /hd/signup deliberately — they are "sign up" rather than "buy this tier", so
+  // they should still land on the picker. /hd/subscribe does not link here at all: it
+  // is the authenticated flow and calls /api/hd/checkout directly.
   //
   // Validated against PLANS rather than trusted: an unknown or absent key falls back
   // to the plan picker on 'pro' exactly as before, so a typo or a stale link degrades
