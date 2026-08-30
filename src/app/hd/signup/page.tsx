@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { Suspense, useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 
 const HD_ORANGE = '#E85D24'
@@ -63,12 +63,28 @@ function Spinner() {
   )
 }
 
-export default function HDSignupPage() {
-  const router  = useRouter()
+function HDSignupForm() {
+  const router       = useRouter()
+  const searchParams = useSearchParams()
 
-  // Signup form state
-  const [step,    setStep]    = useState<'plan' | 'account'>('plan')
-  const [plan,    setPlan]    = useState<string>('pro')
+  // ?plan=<key> deep-links straight into account creation with that plan chosen, so
+  // a visitor who has already picked a tier is not asked to pick it a second time.
+  // Valid keys are the PLANS keys below: hd_reefer, starter, pro, elite, elite_bundle.
+  //
+  // Nothing in the app links here with the parameter yet — /hd's nav and hero CTAs
+  // both point at bare /hd/signup, and its pricing cards carry no CTA of their own.
+  // This exists for campaign and pricing-card links; wiring those is a separate change.
+  //
+  // Validated against PLANS rather than trusted: an unknown or absent key falls back
+  // to the plan picker on 'pro' exactly as before, so a typo or a stale link degrades
+  // to the normal flow instead of carrying an unsellable plan key into checkout.
+  const requestedPlan = searchParams.get('plan')
+  const presetPlan    = PLANS.some(p => p.key === requestedPlan) ? requestedPlan : null
+
+  // Signup form state. Both are lazy initial values, not an effect: deriving them on
+  // the first render means the plan picker never paints before being skipped.
+  const [step,    setStep]    = useState<'plan' | 'account'>(presetPlan ? 'account' : 'plan')
+  const [plan,    setPlan]    = useState<string>(presetPlan ?? 'pro')
   const [email,   setEmail]   = useState('')
   const [pass,    setPass]    = useState('')
   const [name,    setName]    = useState('')
@@ -409,5 +425,17 @@ export default function HDSignupPage() {
         </p>
       </div>
     </div>
+  )
+}
+
+// useSearchParams() forces the subtree into client-side rendering, and Next refuses
+// to build a page that reads it without a Suspense boundary. Same split the login
+// page uses. fallback={null} rather than a skeleton because the boundary resolves in
+// the same tick on the client — a spinner here would only flicker.
+export default function HDSignupPage() {
+  return (
+    <Suspense fallback={null}>
+      <HDSignupForm />
+    </Suspense>
   )
 }
