@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { runGaugeDiagnostic, SEVERITY_CONFIG } from '@/lib/hd/gauge-diagnostic'
+import type { TrailerSystem } from '@/lib/hd/trailer/types'
 import PartsOnTheWay, { type PartInput } from '@/components/parts-delivery/PartsOnTheWay'
 import PartText from '@/components/parts/PartText'
 import type { PartVendor } from '@/lib/parts/parse-part-numbers'
@@ -137,7 +138,7 @@ const FMI_CODES = [
 type Manufacturer     = 'Thermo King' | 'Carrier Transicold'
 type UnitType         = 'truck' | 'trailer'
 type EngineBrand      = 'Cummins' | 'Detroit Diesel' | 'Mercedes-Benz' | 'PACCAR' | 'Volvo' | 'Mack' | 'International' | 'Caterpillar'
-type ActiveTab        = 'reefer' | 'truck' | 'electrical' | 'procedures' | 'parts'
+type ActiveTab        = 'reefer' | 'truck' | 'electrical' | 'procedures' | 'parts' | 'trailer'
 type ElectricalTopic  = 'Component Library' | 'Schematic Reading' | 'Fault Tracing' | 'Multimeter Guide' | 'Wire Repair'
 
 const ELECTRICAL_TOPICS: { key: ElectricalTopic; desc: string }[] = [
@@ -1272,6 +1273,11 @@ export default function HDQuickWrenchPage() {
   // ── Tab ──
   const [activeTab, setActiveTab] = useState<ActiveTab>('reefer')
 
+  // Seed text for the Trailer Systems panel. Set when the Parts Ref panel hands a
+  // search across ("brake chamber" typed at the parts counter, trailer specs matched),
+  // so the tech lands on the trailer tab with the same query already run.
+  const [trailerQuery, setTrailerQuery] = useState('')
+
   // ── Calculator state ──
   const [calcOpen,            setCalcOpen]            = useState(false)
   const [calcAmbient,         setCalcAmbient]         = useState('')
@@ -2077,11 +2083,12 @@ export default function HDQuickWrenchPage() {
             { key: 'electrical',  label: 'Electrical Systems' },
             { key: 'procedures',  label: 'Procedures'         },
             { key: 'parts',       label: 'Parts Ref'          },
+            { key: 'trailer',     label: 'Trailer Systems'    },
           ] as { key: ActiveTab; label: string }[]).map(tab => (
             <button
               key={tab.key}
               type="button"
-              onClick={() => { setActiveTab(tab.key); setPartsResult(null); setPartsError(null); setRepairItems([]); setSelectedRepairIds([]) }}
+              onClick={() => { setActiveTab(tab.key); setTrailerQuery(''); setPartsResult(null); setPartsError(null); setRepairItems([]); setSelectedRepairIds([]) }}
               className="flex-1 sm:flex-none px-5 py-3 rounded-lg text-sm font-semibold transition-colors"
               style={activeTab === tab.key
                 ? { background: HD_ORANGE, color: '#fff', minHeight: 44 }
@@ -3602,7 +3609,16 @@ export default function HDQuickWrenchPage() {
         )}
 
         {activeTab === 'parts' && (
-          <PartsReferencePanel />
+          <PartsReferencePanel
+            onOpenTrailer={q => { setTrailerQuery(q); setActiveTab('trailer') }}
+          />
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════════════
+            TRAILER SYSTEMS TAB
+        ══════════════════════════════════════════════════════════════════════ */}
+        {activeTab === 'trailer' && (
+          <TrailerSystemsPanel initialQuery={trailerQuery} />
         )}
 
       </div>
@@ -3996,7 +4012,7 @@ function fitsLabel(part: PartsRefEntry): string | null {
   return part.unit_family
 }
 
-function PartsReferencePanel() {
+function PartsReferencePanel({ onOpenTrailer }: { onOpenTrailer: (query: string) => void }) {
   const [parts,     setParts]     = useState<PartsRefEntry[]>([])
   const [loading,   setLoading]   = useState(true)
   const [error,     setError]     = useState<string | null>(null)
@@ -4014,6 +4030,21 @@ function PartsReferencePanel() {
   const modelQ = modelText.trim()
   const partQ  = partText.trim().toLowerCase()
   const hasQuery = modelQ.length > 0 || partQ.length > 0
+
+  // ── Cross-surface: trailer specs for a parts-counter search ──
+  // "brake chamber", "slack adjuster", "7-way plug" and "torque spec" are trailer
+  // reference entries, not reefer parts, so the Parts Ref table has nothing for
+  // them. Rather than change how parts are searched, the trailer library is read
+  // alongside it and matches are offered as their own section. Silent when the
+  // trailer table is empty, still loading, or unreachable.
+  const trailer = useTrailerReference()
+
+  // Two characters would match nearly every row; three is where a typed word starts
+  // meaning something ("abs", "air", "cam").
+  const trailerHits = useMemo(
+    () => (partQ.length >= 3 ? trailer.rows.filter(r => matchesTrailerQuery(r, partQ)) : []),
+    [trailer.rows, partQ],
+  )
 
   const matches = useMemo(() => {
     const byFilter = parts.filter(p => {
@@ -4213,6 +4244,60 @@ function PartsReferencePanel() {
         </div>
       )}
 
+      {/* Trailer cross-surface — the query matched the trailer reference library */}
+      {trailerHits.length > 0 && (
+        <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${HD_BLUE}55` }}>
+          <div
+            className="px-4 py-2.5 flex items-center justify-between gap-3"
+            style={{ background: '#162030' }}
+          >
+            <p className="text-xs uppercase tracking-widest" style={{ color: '#60A5FA' }}>
+              Also in Trailer Systems · {trailerHits.length}
+            </p>
+            <button
+              type="button"
+              onClick={() => onOpenTrailer(partText.trim())}
+              className="text-xs font-semibold flex-shrink-0"
+              style={{ color: HD_ORANGE }}
+            >
+              Open Trailer Systems →
+            </button>
+          </div>
+          <div style={{ background: '#111920' }}>
+            {trailerHits.slice(0, 4).map(row => (
+              <div
+                key={row.id}
+                className="px-4 py-2.5 flex items-start justify-between gap-3"
+                style={{ borderTop: '1px solid #1e3040' }}
+              >
+                <div className="min-w-0">
+                  <p className="text-sm text-white leading-snug">{row.component}</p>
+                  <p className="text-xs mt-0.5 leading-snug" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                    {row.system} · {row.description}
+                  </p>
+                </div>
+                {row.value && (
+                  <span
+                    className="text-sm font-bold flex-shrink-0 font-mono"
+                    style={{ color: HD_ORANGE }}
+                  >
+                    {formatSpec(row)}
+                  </span>
+                )}
+              </div>
+            ))}
+            {trailerHits.length > 4 && (
+              <p
+                className="px-4 py-2 text-xs"
+                style={{ borderTop: '1px solid #1e3040', color: 'rgba(255,255,255,0.3)' }}
+              >
+                {trailerHits.length - 4} more trailer {trailerHits.length - 4 === 1 ? 'spec' : 'specs'} match this search.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Idle prompt — no query, no chip: say what is searchable instead of dumping it */}
       {idle && (
         <div className="rounded-xl p-5 text-center" style={{ background: '#111920', border: '1px solid #1e3040' }}>
@@ -4227,7 +4312,8 @@ function PartsReferencePanel() {
         </div>
       )}
 
-      {!idle && regularParts.length === 0 && stockingNotes.length === 0 && (
+      {/* Trailer hits count as results — "No results" beside a list of them would be a lie */}
+      {!idle && regularParts.length === 0 && stockingNotes.length === 0 && trailerHits.length === 0 && (
         <p className="text-sm text-center py-8" style={{ color: 'rgba(255,255,255,0.3)' }}>
           No results. Try a shorter model (&ldquo;S-600&rdquo; rather than &ldquo;Precedent S-600DE&rdquo;)
           or a broader part description.
@@ -4371,6 +4457,408 @@ function PartsReferencePanel() {
           Part numbers provided for cross-reference and field reference purposes only.
           Always verify fitment for your specific unit model, engine type, and year before ordering.
           National Wrench Index is not responsible for incorrect part selection.
+        </p>
+      </div>
+
+    </div>
+  )
+}
+
+// ─── Trailer Systems Panel ────────────────────────────────────────────────────
+//
+// Reads hd_trailer_reference (migration 124) through /api/hd/trailer-reference.
+// The table is small — a few hundred spec rows — so it follows the Parts Ref
+// idiom: download it once, then filter every keystroke in TypeScript with no
+// round trip. The route's own q= / system= filters exist for API callers; this
+// panel deliberately does not use them, so no user text reaches the query.
+
+interface TrailerRefEntry {
+  id:           string
+  system:       TrailerSystem
+  component:    string
+  description:  string
+  value:        string | null
+  units:        string | null
+  notes:        string | null
+  manufacturer: string
+}
+
+// Display order for the filter chips and the grouped result list. Typed as
+// TrailerSystem[] so it cannot drift from the shared contract.
+const TRAILER_SYSTEM_ORDER: TrailerSystem[] = [
+  'Air Brakes',
+  'Brake Chambers',
+  'Slack Adjusters',
+  'Brake Shoes & Drums',
+  'ABS',
+  'Electrical',
+  'Torque Specs',
+]
+
+// Full names are too long for a chip row on a phone.
+const TRAILER_SYSTEM_LABEL: Record<TrailerSystem, string> = {
+  'Air Brakes':          'Air Brakes',
+  'Brake Chambers':      'Chambers',
+  'Slack Adjusters':     'Slacks',
+  'Brake Shoes & Drums': 'Shoes/Drums',
+  'ABS':                 'ABS',
+  'Electrical':          'Electrical',
+  'Torque Specs':        'Torque',
+}
+
+const TRAILER_SYSTEM_COLOR: Record<TrailerSystem, string> = {
+  'Air Brakes':          '#38BDF8',
+  'Brake Chambers':      '#FB923C',
+  'Slack Adjusters':     '#A78BFA',
+  'Brake Shoes & Drums': '#F87171',
+  'ABS':                 '#4ADE80',
+  'Electrical':          '#F59E0B',
+  'Torque Specs':        '#60A5FA',
+}
+
+function trailerSystemColor(system: string): string {
+  return TRAILER_SYSTEM_COLOR[system as TrailerSystem] ?? 'rgba(255,255,255,0.45)'
+}
+
+// '450-500' + 'PSI' → '450-500 PSI'. A value with no units renders bare; a row
+// with no value at all (a procedure, or an ABS code meaning) renders nothing.
+function formatSpec(row: TrailerRefEntry): string {
+  if (!row.value) return ''
+  return row.units ? `${row.value} ${row.units}` : row.value
+}
+
+// system is part of the searchable text so "abs" or "torque" finds the whole system
+// even when the row itself never repeats the word. value/units/notes are in as well,
+// so a figure in hand ("0.020") finds the row it belongs to.
+function trailerHaystack(row: TrailerRefEntry): string {
+  return [row.system, row.component, row.description, row.value, row.units, row.notes]
+    .filter(Boolean).join(' ').toLowerCase()
+}
+
+// Single characters match everything; they are noise, not search terms.
+function trailerTokens(needle: string): string[] {
+  return needle.split(/\s+/).filter(t => t.length > 1)
+}
+
+// Strict: every word must appear somewhere in the row. Token AND is what makes the
+// two-word searches work — "brake chamber" must not match every row that merely says
+// "brake", and "torque spec" finds the Torque Specs system through its name.
+function matchesTrailerQuery(row: TrailerRefEntry, needle: string): boolean {
+  if (!needle) return true
+  const tokens = trailerTokens(needle)
+  if (tokens.length === 0) return true
+  const hay = trailerHaystack(row)
+  return tokens.every(token => hay.includes(token))
+}
+
+// Strict token-AND, with one fallback: a multi-word query that matches nothing exactly
+// falls back to the rows matching the most of its words, best first. A tech types
+// "7-way plug" for a connector the book calls a "7-Way RV Blade Connector" — token AND
+// alone answers that with a blank screen while the row he wants is right there. The
+// fallback is deliberately NOT used by the Parts Ref cross-surface, where it would
+// pull trailer rows into an unrelated reefer-parts search ("water pump" → every row
+// that says "pump"). Here the tech has already asked for trailer data.
+function searchTrailerRows(
+  rows: TrailerRefEntry[],
+  needle: string,
+): { rows: TrailerRefEntry[]; relaxed: boolean } {
+  const tokens = needle ? trailerTokens(needle) : []
+  if (tokens.length === 0) return { rows, relaxed: false }
+
+  const scored = rows.map(row => {
+    const hay = trailerHaystack(row)
+    return { row, hits: tokens.filter(t => hay.includes(t)).length }
+  })
+
+  const strict = scored.filter(s => s.hits === tokens.length)
+  if (strict.length > 0 || tokens.length < 2) {
+    return { rows: strict.map(s => s.row), relaxed: false }
+  }
+
+  const partial = scored.filter(s => s.hits > 0).sort((a, b) => b.hits - a.hits)
+  return { rows: partial.map(s => s.row), relaxed: partial.length > 0 }
+}
+
+interface TrailerReferenceState {
+  rows:      TrailerRefEntry[]
+  loading:   boolean
+  error:     string | null
+  /** false when migration 124 has not been run — an empty state, not a failure. */
+  available: boolean
+}
+
+// Shared by the Trailer Systems panel and by the Parts Ref panel's cross-surface
+// section, so both read the same library from one place.
+function useTrailerReference(): TrailerReferenceState {
+  const [rows,      setRows]      = useState<TrailerRefEntry[]>([])
+  const [loading,   setLoading]   = useState(true)
+  const [error,     setError]     = useState<string | null>(null)
+  const [available, setAvailable] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/hd/trailer-reference')
+      .then(r => r.json())
+      .then((data: { trailer?: TrailerRefEntry[]; available?: boolean; error?: string }) => {
+        if (cancelled) return
+        if (data.error) { setError(data.error); setLoading(false); return }
+        setRows(data.trailer ?? [])
+        setAvailable(data.available !== false)
+        setLoading(false)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setError('Failed to load trailer reference data.')
+        setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [])
+
+  return { rows, loading, error, available }
+}
+
+function TrailerSystemsPanel({ initialQuery }: { initialQuery: string }) {
+  const { rows, loading, error, available } = useTrailerReference()
+
+  // Seeded from the Parts Ref hand-off; plain local state after that. The panel
+  // unmounts when the tab changes, so each arrival starts from the current hand-off.
+  const [searchText, setSearchText] = useState(initialQuery)
+  const [system,     setSystem]     = useState<TrailerSystem | 'all'>('all')
+
+  const needle = searchText.trim().toLowerCase()
+
+  const { matches, relaxed } = useMemo(() => {
+    const scoped = system === 'all' ? rows : rows.filter(r => r.system === system)
+    const found  = searchTrailerRows(scoped, needle)
+    // Grouping by system is worth more to a tech than raw relevance order, so the
+    // relaxed ranking is only used to decide WHICH rows show, not where they sit.
+    const sorted = [...found.rows].sort((a, b) =>
+      TRAILER_SYSTEM_ORDER.indexOf(a.system) - TRAILER_SYSTEM_ORDER.indexOf(b.system) ||
+      a.component.localeCompare(b.component)
+    )
+    return { matches: sorted, relaxed: found.relaxed }
+  }, [rows, system, needle])
+
+  const visible = matches.slice(0, RESULT_LIMIT)
+
+  // Grouped under system headings so a broad search still reads as a reference
+  // book rather than one long undifferentiated list.
+  const groups = useMemo(() => {
+    const bySystem = new Map<string, TrailerRefEntry[]>()
+    for (const row of visible) {
+      const list = bySystem.get(row.system)
+      if (list) list.push(row)
+      else bySystem.set(row.system, [row])
+    }
+    return [...bySystem.entries()].map(([name, list]) => ({ name, list }))
+  }, [visible])
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <div className="text-center">
+          <svg className="w-6 h-6 animate-spin mx-auto mb-3" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke={HD_ORANGE} strokeWidth="4" />
+            <path className="opacity-75" fill={HD_ORANGE} d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>Loading trailer reference...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-xl p-4" style={{ background: '#2d0a0a', border: '1px solid #7f1d1d' }}>
+        <p className="text-sm text-red-400">{error}</p>
+      </div>
+    )
+  }
+
+  // Nothing published yet — the table is missing, or exists with no rows. This is
+  // the state the panel ships in, before migration 124 is run and the library is
+  // seeded, so it has to read as "not here yet", not as a broken screen.
+  if (rows.length === 0) {
+    return (
+      <div className="rounded-xl p-6 text-center" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+        <p className="text-sm font-semibold mb-1.5 text-white">Trailer reference not loaded yet</p>
+        <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.4)' }}>
+          {available
+            ? 'The trailer systems library is published but has no entries yet. Air brakes, brake chambers, slack adjusters, shoes and drums, ABS, electrical and torque specs will appear here as soon as it is loaded.'
+            : 'The trailer systems library has not been published to this account yet. Everything else in QuickWrench works normally.'}
+        </p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-4">
+
+      <div>
+        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
+          Trailer Systems Reference
+        </p>
+        <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>
+          Air brakes, chambers, slack adjusters, shoes and drums, ABS, electrical and torque specs.
+        </p>
+      </div>
+
+      {/* Search */}
+      <div>
+        <label
+          htmlFor="trailer-search"
+          className="block text-xs uppercase tracking-widest mb-1.5"
+          style={{ color: 'rgba(255,255,255,0.35)' }}
+        >
+          Component / Spec
+        </label>
+        <input
+          id="trailer-search"
+          type="text"
+          value={searchText}
+          onChange={e => setSearchText(e.target.value)}
+          placeholder="brake chamber, slack adjuster, ABS code, 7-way plug…"
+          autoComplete="off"
+          className="w-full px-4 py-3 rounded-xl text-sm text-white placeholder-white/20"
+          style={{ background: '#111920', border: '1px solid #1e3040' }}
+        />
+      </div>
+
+      {/* System filter */}
+      <div className="flex flex-wrap gap-2">
+        {([
+          { key: 'all' as const, label: 'All' },
+          ...TRAILER_SYSTEM_ORDER.map(s => ({ key: s, label: TRAILER_SYSTEM_LABEL[s] })),
+        ]).map(f => (
+          <button
+            key={f.key}
+            type="button"
+            onClick={() => setSystem(f.key)}
+            className="px-4 py-2 rounded-lg text-xs font-semibold transition-colors"
+            style={system === f.key
+              ? { background: HD_ORANGE, color: '#fff' }
+              : { background: '#111920', color: 'rgba(255,255,255,0.45)', border: '1px solid #1e3040' }
+            }
+          >
+            {f.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Result count / clear */}
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
+          {matches.length === 0
+            ? 'No matching entries'
+            : `${relaxed ? 'No exact match — closest: ' : ''}${matches.length} ${
+                matches.length === 1 ? 'entry' : 'entries'
+              }${matches.length > RESULT_LIMIT ? ` — showing the first ${RESULT_LIMIT}` : ''}`}
+        </p>
+        {(needle.length > 0 || system !== 'all') && (
+          <button
+            type="button"
+            onClick={() => { setSearchText(''); setSystem('all') }}
+            className="text-xs font-semibold flex-shrink-0"
+            style={{ color: HD_ORANGE }}
+          >
+            Clear search
+          </button>
+        )}
+      </div>
+
+      {matches.length === 0 && (
+        <p className="text-sm text-center py-8" style={{ color: 'rgba(255,255,255,0.3)' }}>
+          No entries match. Try a single word (&ldquo;chamber&rdquo; rather than &ldquo;type 30 brake chamber&rdquo;)
+          or pick a system above.
+        </p>
+      )}
+
+      {/* Grouped results */}
+      {groups.map(group => (
+        <div key={group.name} className="space-y-3">
+          <p className="text-xs uppercase tracking-widest" style={{ color: trailerSystemColor(group.name) }}>
+            {group.name}
+          </p>
+
+          {group.list.map(row => {
+            const spec  = formatSpec(row)
+            const color = trailerSystemColor(row.system)
+
+            return (
+              <div key={row.id} className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
+
+                {/* Header — component, the spec value with its units, system badge */}
+                <div className="px-4 pt-3 pb-3" style={{ background: '#162030' }}>
+                  <div className="flex items-start gap-2 justify-between">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-sm text-white leading-snug">
+                        {row.component}
+                      </p>
+                      {spec && (
+                        <p
+                          className="font-bold text-2xl leading-tight mt-1"
+                          style={{ color: HD_ORANGE, fontFamily: 'monospace', wordBreak: 'break-word' }}
+                        >
+                          {spec}
+                        </p>
+                      )}
+                    </div>
+                    <span
+                      className="text-xs font-bold px-2 py-0.5 rounded flex-shrink-0 mt-0.5"
+                      style={{ background: `${color}22`, color }}
+                    >
+                      {TRAILER_SYSTEM_LABEL[row.system] ?? row.system}
+                    </span>
+                  </div>
+                  {row.manufacturer && row.manufacturer !== 'Trailer' && (
+                    <div className="flex flex-wrap items-center gap-2 mt-2">
+                      <span
+                        className="text-xs px-2 py-0.5 rounded"
+                        style={{ background: '#0d1820', color: 'rgba(255,255,255,0.45)' }}
+                      >
+                        {row.manufacturer}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Description */}
+                <div className="px-4 py-3" style={{ background: '#111920', borderTop: '1px solid #1e3040' }}>
+                  <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                    {row.description}
+                  </p>
+                </div>
+
+                {/* Notes — procedure detail, cautions, diagnosis steps */}
+                {row.notes && (
+                  <div className="px-4 py-3" style={{ background: '#0d1820', borderTop: '1px solid #1e3040' }}>
+                    <p className="text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                      Notes
+                    </p>
+                    <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                      {row.notes}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )
+          })}
+        </div>
+      ))}
+
+      {matches.length > RESULT_LIMIT && (
+        <p className="text-xs text-center py-2" style={{ color: 'rgba(255,255,255,0.3)' }}>
+          {matches.length - RESULT_LIMIT} more entries — narrow the search or pick a system.
+        </p>
+      )}
+
+      {/* Disclaimer */}
+      <div className="rounded-lg p-3" style={{ background: '#0d1820', border: '1px solid #1e3040' }}>
+        <p className="text-xs leading-relaxed text-center" style={{ color: 'rgba(255,255,255,0.2)' }}>
+          Trailer specifications provided for field reference only. Always verify against the axle,
+          brake, and ABS manufacturer service literature for the specific trailer, and follow FMCSA
+          brake adjustment limits. National Wrench Index is not responsible for out-of-adjustment
+          or out-of-service findings.
         </p>
       </div>
 
