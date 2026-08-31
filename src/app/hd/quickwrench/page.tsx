@@ -138,7 +138,7 @@ const FMI_CODES = [
 type Manufacturer     = 'Thermo King' | 'Carrier Transicold'
 type UnitType         = 'truck' | 'trailer'
 type EngineBrand      = 'Cummins' | 'Detroit Diesel' | 'Mercedes-Benz' | 'PACCAR' | 'Volvo' | 'Mack' | 'International' | 'Caterpillar'
-type ActiveTab        = 'reefer' | 'truck' | 'electrical' | 'procedures' | 'parts' | 'trailer'
+type ActiveTab        = 'reefer' | 'truck' | 'electrical' | 'procedures' | 'parts' | 'trailer' | 'abs'
 type ElectricalTopic  = 'Component Library' | 'Schematic Reading' | 'Fault Tracing' | 'Multimeter Guide' | 'Wire Repair'
 
 const ELECTRICAL_TOPICS: { key: ElectricalTopic; desc: string }[] = [
@@ -1278,6 +1278,11 @@ export default function HDQuickWrenchPage() {
   // so the tech lands on the trailer tab with the same query already run.
   const [trailerQuery, setTrailerQuery] = useState('')
 
+  // Trailer ABS session history — the last 5 diagnoses, held here rather than inside
+  // TrailerABSPanel so switching tabs (which unmounts the panel) does not lose them.
+  // In memory only: a page reload starts empty, by design.
+  const [absHistory, setAbsHistory] = useState<ABSHistoryEntry[]>([])
+
   // ── Calculator state ──
   const [calcOpen,            setCalcOpen]            = useState(false)
   const [calcAmbient,         setCalcAmbient]         = useState('')
@@ -1959,6 +1964,23 @@ export default function HDQuickWrenchPage() {
     pushPrefill(prefill, dest)
   }
 
+  // Trailer ABS uses the identical hand-off as reefer and truck: the panel builds the
+  // diagnosis-specific half of the payload, this adds the shared fields and the
+  // diagnostic-fee treatment each destination expects. No second path.
+  function pushAbsTo(payload: ABSPrefill, dest: WorkflowDest) {
+    pushPrefill({
+      unit_serial: '', unit_year: '',
+      truck_make:  '', truck_model: '', truck_year: '', vin: '',
+      service_type: 'Trailer ABS Diagnostic',
+      ...payload,
+      ...diagFeeFields(dest),
+      lineItems: [
+        ...payload.lineItems,
+        ...(includeDiagFee && dest !== 'invoice' ? [DIAG_FEE_LINE()] : []),
+      ],
+    }, dest)
+  }
+
   // ── Parts Manager lookups ──
   async function runPartsManager(payload: Record<string, string>) {
     setPartsLoading(true)
@@ -2084,6 +2106,7 @@ export default function HDQuickWrenchPage() {
             { key: 'procedures',  label: 'Procedures'         },
             { key: 'parts',       label: 'Parts Ref'          },
             { key: 'trailer',     label: 'Trailer Systems'    },
+            { key: 'abs',         label: 'Trailer ABS'        },
           ] as { key: ActiveTab; label: string }[]).map(tab => (
             <button
               key={tab.key}
@@ -3621,6 +3644,19 @@ export default function HDQuickWrenchPage() {
           <TrailerSystemsPanel initialQuery={trailerQuery} />
         )}
 
+        {/* ══════════════════════════════════════════════════════════════════════
+            TRAILER ABS TAB
+        ══════════════════════════════════════════════════════════════════════ */}
+        {activeTab === 'abs' && (
+          <TrailerABSPanel
+            laborRate={laborRate}
+            history={absHistory}
+            onHistory={setAbsHistory}
+            onPush={pushAbsTo}
+            onOpenTrailerReference={q => { setTrailerQuery(q); setActiveTab('trailer') }}
+          />
+        )}
+
       </div>
 
       {showDelivery && (
@@ -4861,6 +4897,950 @@ function TrailerSystemsPanel({ initialQuery }: { initialQuery: string }) {
           or out-of-service findings.
         </p>
       </div>
+
+    </div>
+  )
+}
+
+// ─── Trailer ABS Diagnostic Panel ─────────────────────────────────────────────
+//
+// AI blink-code diagnosis for trailer ABS, POSTed to /api/hd/trailer-abs-diagnostic.
+// The Trailer Systems tab next door is a static reference library that works with no
+// model call; this one is a live generation, so every state it can land in — slow,
+// failed, ambiguous, or with nothing to suggest — is handled on its own terms. When
+// the call fails the tech is handed to the static ABS rows in Trailer Systems, which
+// are real content that needs no model to read.
+
+type ABSManufacturer = 'wabco' | 'bendix' | 'haldex'
+
+interface ABSBrand {
+  key:      ABSManufacturer
+  /** Typographic wordmark. No brand logo art is shipped or invented here. */
+  wordmark: string
+  /** What a quote, work order, or invoice should call the unit. */
+  label:    string
+  systems:  string
+}
+
+const ABS_BRANDS: ABSBrand[] = [
+  { key: 'wabco',  wordmark: 'WABCO',  label: 'Meritor WABCO', systems: 'Easy-Stop / TCS trailer ABS' },
+  { key: 'bendix', wordmark: 'BENDIX', label: 'Bendix',        systems: 'EC-30 / EC-60 trailer ABS'   },
+  { key: 'haldex', wordmark: 'HALDEX', label: 'Haldex',        systems: 'TABS-6 / PLC trailer ABS'    },
+]
+
+function absBrand(key: ABSManufacturer): ABSBrand {
+  return ABS_BRANDS.find(b => b.key === key) ?? ABS_BRANDS[0]
+}
+
+interface ABSSpec { measure: string; where: string; passFail: string }
+interface ABSPart { name: string; partNumber: string; note: string }
+interface ABSLabor { low: number | null; high: number | null; description: string }
+
+/** The route's payload, normalised into exactly what this panel renders. */
+interface ABSResult {
+  faultDescription:      string
+  steps:                 string[]
+  specs:                 ABSSpec[]
+  tools:                 string[]
+  clarificationNeeded:   boolean
+  clarificationQuestion: string
+  parts:                 ABSPart[]
+  labor:                 ABSLabor | null
+}
+
+function absText(v: unknown): string {
+  if (typeof v === 'string') return v.trim()
+  if (typeof v === 'number' && Number.isFinite(v)) return String(v)
+  return ''
+}
+
+function absField(row: Record<string, unknown>, keys: string[]): string {
+  for (const k of keys) {
+    const t = absText(row[k])
+    if (t) return t
+  }
+  return ''
+}
+
+function absNumber(v: unknown): number | null {
+  const n = typeof v === 'number' ? v : typeof v === 'string' ? parseFloat(v) : NaN
+  return Number.isFinite(n) && n >= 0 ? n : null
+}
+
+// The generated arrays arrive as plain strings or as small objects depending on the
+// field and on what the model produced. Both are read, so a shape the panel did not
+// expect degrades into readable text rather than a section that renders empty.
+function absStrings(v: unknown): string[] {
+  if (!Array.isArray(v)) return []
+  return v.map(item => {
+    if (typeof item === 'string' || typeof item === 'number') return absText(item)
+    if (item && typeof item === 'object') {
+      const row  = item as Record<string, unknown>
+      const head = absField(row, ['step', 'action', 'text', 'description', 'name', 'tool', 'title'])
+      const tail = absField(row, ['detail', 'details', 'note', 'notes', 'why'])
+      return [head, tail].filter(Boolean).join(' — ')
+    }
+    return ''
+  }).filter(Boolean)
+}
+
+// specs_to_check ships as plain strings ("Sensor air gap: 0.010-0.030 in"). Splitting
+// on a colon, or on a spaced em dash, recovers the measurement/value split the table
+// wants. Numeric ranges use unspaced dashes, so a range is never mistaken for a split.
+function splitSpecString(t: string): ABSSpec {
+  const m = t.match(/^([^:]{2,60}):\s*(.+)$/) ?? t.match(/^(.{2,60}?)\s+—\s+(.+)$/)
+  return m
+    ? { measure: m[1].trim(), where: '', passFail: m[2].trim() }
+    : { measure: t, where: '', passFail: '' }
+}
+
+function absSpecs(v: unknown): ABSSpec[] {
+  if (!Array.isArray(v)) return []
+  const out: ABSSpec[] = []
+  for (const item of v) {
+    if (typeof item === 'string') {
+      const t = item.trim()
+      if (t) out.push(splitSpecString(t))
+      continue
+    }
+    if (!item || typeof item !== 'object') continue
+    const row      = item as Record<string, unknown>
+    const measure  = absField(row, ['measure', 'measurement', 'spec', 'what', 'check', 'component', 'name'])
+    const where    = absField(row, ['where', 'location', 'point', 'test_point', 'at'])
+    const passFail = absField(row, ['pass_fail', 'passFail', 'expected', 'spec_value', 'value', 'range', 'result'])
+    if (measure || where || passFail) out.push({ measure, where, passFail })
+  }
+  return out
+}
+
+function absParts(v: unknown): ABSPart[] {
+  if (!Array.isArray(v)) return []
+  const out: ABSPart[] = []
+  for (const item of v) {
+    if (typeof item === 'string') {
+      const t = item.trim()
+      if (t) out.push({ name: t, partNumber: '', note: '' })
+      continue
+    }
+    if (!item || typeof item !== 'object') continue
+    const row        = item as Record<string, unknown>
+    const name       = absField(row, ['part_function', 'name', 'description', 'part', 'component', 'title'])
+    const partNumber = absField(row, ['oem_part_number', 'part_number', 'partNumber', 'oem', 'sku'])
+    // part_category arrives as a slug — 'wheel_speed_sensor' reads badly on a card.
+    const category   = absField(row, ['part_category']).replace(/_/g, ' ')
+    const note = [
+      absField(row, ['manufacturer']),
+      category,
+      absField(row, ['note', 'notes', 'reason', 'detail']),
+    ].filter(Boolean).join(' · ')
+    if (name || partNumber) out.push({ name, partNumber, note })
+  }
+  return out
+}
+
+function absLabor(v: unknown): ABSLabor | null {
+  if (!v || typeof v !== 'object') return null
+  const row         = v as Record<string, unknown>
+  const low         = absNumber(row.low_hours)
+  const high        = absNumber(row.high_hours)
+  const description = absField(row, ['description', 'note', 'notes', 'basis'])
+  if (low === null && high === null && !description) return null
+  return { low, high, description }
+}
+
+function normalizeABSResult(raw: Record<string, unknown>): ABSResult {
+  return {
+    faultDescription:      absField(raw, ['fault_description', 'description', 'summary']),
+    steps:                 absStrings(raw.diagnostic_steps),
+    specs:                 absSpecs(raw.specs_to_check),
+    tools:                 absStrings(raw.tools_needed),
+    clarificationNeeded:   raw.clarification_needed === true,
+    clarificationQuestion: absField(raw, ['clarification_question']),
+    parts:                 absParts(raw.parts_suggestions),
+    labor:                 absLabor(raw.labor_estimate),
+  }
+}
+
+/** One diagnosis the tech ran this session. Held by the page, not by this panel. */
+interface ABSHistoryEntry {
+  id:           string
+  manufacturer: ABSManufacturer
+  ecu:          string
+  blink:        string
+  symptoms:     string
+  /** The clarifying question that was answered, when the loop was used. */
+  question:     string
+  answer:       string
+  result:       ABSResult
+  at:           number
+}
+
+const ABS_HISTORY_LIMIT = 5
+
+/** The half of the workflow prefill this panel owns; the page adds the shared fields. */
+interface ABSPrefill {
+  complaint:         string
+  diagnosis:         string
+  notes:             string
+  unit_manufacturer: string
+  unit_model:        string
+  lineItems: Array<{
+    id: string
+    type: 'labor'
+    description: string
+    book_hours: number; book_hours_max: number
+    mobile_hours: number; mobile_hours_max: number
+    requires_refrigeration: boolean
+    recharge_added: boolean
+    part_number: string; quantity: number; unit_cost: number
+    amount: number; amount_max: number
+  }>
+}
+
+function absHours(n: number): string {
+  return Number.isInteger(n) ? `${n}` : n.toFixed(1)
+}
+
+function absMoney(n: number): string {
+  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+}
+
+function absAgo(ts: number): string {
+  const mins = Math.floor((Date.now() - ts) / 60000)
+  if (mins < 1)  return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  return `${Math.floor(mins / 60)}h ago`
+}
+
+interface TrailerABSPanelProps {
+  laborRate:              number
+  history:                ABSHistoryEntry[]
+  onHistory:              (next: ABSHistoryEntry[]) => void
+  onPush:                 (payload: ABSPrefill, dest: WorkflowDest) => void
+  onOpenTrailerReference: (query: string) => void
+}
+
+function TrailerABSPanel({
+  laborRate, history, onHistory, onPush, onOpenTrailerReference,
+}: TrailerABSPanelProps) {
+
+  // Coming back to the tab reopens the most recent diagnosis rather than a blank
+  // form — the panel unmounts on every tab change, the history does not.
+  const seed = history[0] ?? null
+
+  const [manufacturer, setManufacturer] = useState<ABSManufacturer | null>(seed?.manufacturer ?? null)
+  const [ecu,          setEcu]          = useState(seed?.ecu      ?? '')
+  const [blink,        setBlink]        = useState(seed?.blink    ?? '')
+  const [symptoms,     setSymptoms]     = useState(seed?.symptoms ?? '')
+
+  const [activeId, setActiveId] = useState<string | null>(seed?.id     ?? null)
+  const [result,   setResult]   = useState<ABSResult | null>(seed?.result ?? null)
+
+  const [answer,   setAnswer]   = useState('')
+  const [loading,  setLoading]  = useState(false)
+  const [refining, setRefining] = useState(false)
+  const [elapsed,  setElapsed]  = useState(0)
+  const [error,    setError]    = useState<string | null>(null)
+  const startRef = useRef(0)
+
+  // A visible second counter, not just a spinner. The generation runs for tens of
+  // seconds and a bare spinner at 40s reads as a hung screen.
+  useEffect(() => {
+    if (!loading) return
+    setElapsed(0)
+    const t = setInterval(() => {
+      setElapsed(Math.round((Date.now() - startRef.current) / 1000))
+    }, 1000)
+    return () => clearInterval(t)
+  }, [loading])
+
+  const brand = manufacturer ? absBrand(manufacturer) : null
+  const code  = blink.trim()
+  const ready = manufacturer !== null && code.length > 0
+
+  const loadingMessage =
+    refining      ? 'Refining with your answer...'                        :
+    elapsed < 5   ? 'Reading the blink code...'                           :
+    elapsed < 12  ? `Checking ${brand ? brand.wordmark : 'ECU'} fault tables...` :
+    elapsed < 22  ? 'Building the diagnostic procedure...'                :
+                    'Still working — a full ABS procedure takes a moment...'
+
+  async function runDiagnostic(clarificationAnswer: string) {
+    if (!manufacturer || !code) return
+    const isRefine = clarificationAnswer.length > 0
+    const asked    = isRefine ? (result?.clarificationQuestion ?? '') : ''
+
+    startRef.current = Date.now()
+    setLoading(true)
+    setRefining(isRefine)
+    setError(null)
+    if (!isRefine) setResult(null)
+
+    try {
+      const res = await fetch('/api/hd/trailer-abs-diagnostic', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          manufacturer,
+          ecu_generation: ecu.trim(),
+          blink_code:     code,
+          ...(symptoms.trim()   ? { symptoms:             symptoms.trim()     } : {}),
+          ...(clarificationAnswer ? { clarification_answer: clarificationAnswer } : {}),
+        }),
+      })
+      const json = await res.json().catch(() => ({})) as Record<string, unknown>
+      if (!res.ok) throw new Error(absText(json.error) || `ABS diagnostic failed (${res.status})`)
+
+      const next = normalizeABSResult(json)
+      setResult(next)
+
+      // A refinement replaces the entry it came from and moves it to the front; a
+      // fresh diagnosis pushes a new one. Either way the list is capped at five.
+      const id: string = isRefine && activeId ? activeId : crypto.randomUUID()
+      const entry: ABSHistoryEntry = {
+        id,
+        manufacturer,
+        ecu:      ecu.trim(),
+        blink:    code,
+        symptoms: symptoms.trim(),
+        question: asked,
+        answer:   clarificationAnswer,
+        result:   next,
+        at:       Date.now(),
+      }
+      setActiveId(id)
+      onHistory([entry, ...history.filter(h => h.id !== id)].slice(0, ABS_HISTORY_LIMIT))
+      setAnswer('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'The ABS diagnostic could not be reached.')
+    } finally {
+      setLoading(false)
+      setRefining(false)
+    }
+  }
+
+  function restore(entry: ABSHistoryEntry) {
+    setManufacturer(entry.manufacturer)
+    setEcu(entry.ecu)
+    setBlink(entry.blink)
+    setSymptoms(entry.symptoms)
+    setResult(entry.result)
+    setActiveId(entry.id)
+    setAnswer('')
+    setError(null)
+  }
+
+  // Built for the shared hd_guided_diagnostic_prefill hand-off. The destination forms
+  // only accept labor line items, so matched parts ride along in the notes field where
+  // they stay visible to whoever prices the job.
+  function buildPrefill(): ABSPrefill | null {
+    if (!result || !brand) return null
+
+    const low  = result.labor?.low ?? 1.0
+    const high = Math.max(low, result.labor?.high ?? 1.5)
+    const fault = result.faultDescription
+    const partLines = result.parts.map(p => [p.partNumber, p.name].filter(Boolean).join(' ')).filter(Boolean)
+
+    return {
+      complaint: `Trailer ABS — ${brand.label}${ecu.trim() ? ` ${ecu.trim()}` : ''} blink code ${code}`,
+      diagnosis: fault,
+      notes: [
+        `Blink code ${code}`,
+        ecu.trim()               ? `ECU: ${ecu.trim()}`                        : null,
+        symptoms.trim()          ? `Symptom: ${symptoms.trim()}`               : null,
+        result.labor?.description ? `Labor basis: ${result.labor.description}` : null,
+        partLines.length         ? `Suggested parts: ${partLines.join('; ')}`  : null,
+      ].filter(Boolean).join(' | '),
+      unit_manufacturer: brand.label,
+      unit_model:        ecu.trim(),
+      lineItems: [{
+        id:                     crypto.randomUUID(),
+        type:                   'labor' as const,
+        description:            `Trailer ABS Diagnosis & Repair — ${brand.label} blink code ${code}${fault ? ` (${fault.slice(0, 70)})` : ''}`,
+        book_hours:             low, book_hours_max:   high,
+        mobile_hours:           low, mobile_hours_max: high,
+        requires_refrigeration: false,
+        recharge_added:         false,
+        part_number: '', quantity: 1, unit_cost: 0,
+        amount:     parseFloat((low  * laborRate).toFixed(2)),
+        amount_max: parseFloat((high * laborRate).toFixed(2)),
+      }],
+    }
+  }
+
+  const showClarify = result !== null && result.clarificationNeeded && result.clarificationQuestion.length > 0
+
+  // A clarification-first response carries safe steps but no diagnosis — the route
+  // blanks fault_description when it is asking rather than answering. Parts, labor and
+  // the workflow hand-off only mean something once there is a fault to bill against.
+  const hasDiagnosis = result !== null
+    && (result.faultDescription.length > 0 || (!result.clarificationNeeded && result.steps.length > 0))
+
+  // Which spec columns the payload actually populates.
+  const specHasWhere = result?.specs.some(s => s.where !== '')    ?? false
+  const specHasValue = result?.specs.some(s => s.passFail !== '') ?? false
+
+  return (
+    <div className="space-y-4">
+
+      <div>
+        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.35)' }}>
+          Trailer ABS Diagnostic
+        </p>
+        <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>
+          Blink-code diagnosis for WABCO, Bendix and Haldex trailer ABS — fault meaning,
+          test procedure, specs and labor.
+        </p>
+      </div>
+
+      {/* ── Session history ── */}
+      {history.length > 0 && (
+        <div>
+          <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.3)' }}>
+            This session
+          </p>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {history.map(h => {
+              const on = h.id === activeId
+              return (
+                <button
+                  key={h.id}
+                  type="button"
+                  onClick={() => restore(h)}
+                  className="px-3 py-2 rounded-lg text-left flex-shrink-0"
+                  style={on
+                    ? { background: '#162030', border: `1px solid ${HD_ORANGE}` }
+                    : { background: '#111920', border: '1px solid #1e3040' }}
+                >
+                  <span
+                    className="block text-sm font-bold leading-tight"
+                    style={{ color: on ? HD_ORANGE : '#fff', fontFamily: 'monospace' }}
+                  >
+                    {h.blink}
+                  </span>
+                  <span className="block text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                    {absBrand(h.manufacturer).wordmark} · {absAgo(h.at)}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+          <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.2)' }}>
+            Last {ABS_HISTORY_LIMIT} diagnoses, held in memory for this session only — a reload clears them.
+          </p>
+        </div>
+      )}
+
+      {/* ── 1. Manufacturer ── */}
+      <div>
+        <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.35)' }}>
+          ABS Manufacturer
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          {ABS_BRANDS.map(b => {
+            const on = manufacturer === b.key
+            return (
+              <button
+                key={b.key}
+                type="button"
+                onClick={() => setManufacturer(b.key)}
+                className="rounded-xl px-4 py-5 text-center transition-colors"
+                style={on
+                  ? { background: '#162030', border: `1px solid ${HD_ORANGE}`, minHeight: 104 }
+                  : { background: '#111920', border: '1px solid #1e3040',      minHeight: 104 }}
+              >
+                <span
+                  className="block font-condensed font-bold text-2xl"
+                  style={{ color: on ? HD_ORANGE : 'rgba(255,255,255,0.75)', letterSpacing: '0.18em' }}
+                >
+                  {b.wordmark}
+                </span>
+                <span className="block text-xs mt-2" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                  {b.label}
+                </span>
+                <span className="block text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.28)' }}>
+                  {b.systems}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* ── 2-5. Everything downstream of a manufacturer ── */}
+      {manufacturer !== null && (
+        <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
+          <div className="px-4 py-3" style={{ background: '#162030' }}>
+            <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.35)' }}>
+              Fault Detail
+            </p>
+          </div>
+
+          <div className="px-4 py-4 space-y-4" style={{ background: '#111920' }}>
+
+            {/* ECU generation */}
+            <div>
+              <label
+                htmlFor="abs-ecu"
+                className="block text-xs uppercase tracking-widest mb-1.5"
+                style={{ color: 'rgba(255,255,255,0.35)' }}
+              >
+                ECU Generation <span style={{ color: 'rgba(255,255,255,0.2)' }}>· optional</span>
+              </label>
+              <input
+                id="abs-ecu"
+                type="text"
+                value={ecu}
+                onChange={e => setEcu(e.target.value)}
+                placeholder="Check the label on the ECU housing — e.g. EC-60, Gen 4, TABS-6 Advanced"
+                autoComplete="off"
+                className="w-full px-4 py-3 rounded-xl text-sm text-white placeholder-white/20"
+                style={{ background: '#0d1820', border: '1px solid #1e3040' }}
+              />
+            </div>
+
+            {/* Blink code */}
+            <div>
+              <label
+                htmlFor="abs-blink"
+                className="block text-xs uppercase tracking-widest mb-1.5"
+                style={{ color: 'rgba(255,255,255,0.35)' }}
+              >
+                Blink Code
+              </label>
+              <input
+                id="abs-blink"
+                type="text"
+                value={blink}
+                onChange={e => setBlink(e.target.value)}
+                placeholder="2-1"
+                autoComplete="off"
+                inputMode="text"
+                className="w-full px-4 py-3 rounded-xl text-xl font-bold text-white placeholder-white/20"
+                style={{ background: '#0d1820', border: '1px solid #1e3040', fontFamily: 'monospace' }}
+              />
+              <p className="text-xs mt-1.5 leading-relaxed" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                Count the flashes: primary flashes — pause — secondary flashes. Enter as 2-1
+              </p>
+            </div>
+
+            {/* Symptoms */}
+            <div>
+              <label
+                htmlFor="abs-symptoms"
+                className="block text-xs uppercase tracking-widest mb-1.5"
+                style={{ color: 'rgba(255,255,255,0.35)' }}
+              >
+                Symptoms <span style={{ color: 'rgba(255,255,255,0.2)' }}>· optional</span>
+              </label>
+              <textarea
+                id="abs-symptoms"
+                value={symptoms}
+                onChange={e => setSymptoms(e.target.value)}
+                rows={3}
+                placeholder="Describe what the trailer is doing — dragging brakes, ABS light on, pulling to one side"
+                className="w-full px-4 py-3 rounded-xl text-sm text-white placeholder-white/20 resize-none"
+                style={{ background: '#0d1820', border: '1px solid #1e3040' }}
+              />
+            </div>
+
+            {/* Diagnose */}
+            <div>
+              <button
+                type="button"
+                onClick={() => runDiagnostic('')}
+                disabled={!ready || loading}
+                className="w-full rounded-xl font-condensed font-bold text-lg tracking-wide transition-colors"
+                style={ready && !loading
+                  ? { background: HD_ORANGE, color: '#fff', minHeight: 56 }
+                  : { background: '#162030', color: 'rgba(255,255,255,0.28)', border: '1px solid #1e3040', minHeight: 56 }}
+              >
+                {loading ? 'DIAGNOSING...' : 'DIAGNOSE'}
+              </button>
+              {!ready && (
+                <p className="text-xs mt-1.5 text-center" style={{ color: 'rgba(255,255,255,0.28)' }}>
+                  Pick a manufacturer and enter a blink code to run the diagnostic.
+                </p>
+              )}
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ── 8. Loading skeleton ── */}
+      {loading && (
+        <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
+          <div className="px-4 py-3 flex items-center gap-3" style={{ background: '#162030' }}>
+            <svg className="w-4 h-4 animate-spin flex-shrink-0" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke={HD_ORANGE} strokeWidth="4" />
+              <path className="opacity-75" fill={HD_ORANGE} d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <p className="text-sm font-semibold text-white flex-1">{loadingMessage}</p>
+            <span
+              className="text-xs flex-shrink-0"
+              style={{ color: 'rgba(255,255,255,0.35)', fontFamily: 'monospace' }}
+            >
+              {elapsed}s
+            </span>
+          </div>
+          <div className="px-4 py-4 space-y-3" style={{ background: '#111920' }}>
+            {['70%', '100%', '92%', '55%', '84%', '40%'].map((w, i) => (
+              <div
+                key={i}
+                className="rounded animate-pulse"
+                style={{ background: '#162030', height: i === 0 ? 18 : 12, width: w }}
+              />
+            ))}
+            <p className="text-xs pt-1 leading-relaxed" style={{ color: 'rgba(255,255,255,0.25)' }}>
+              The procedure is written for this specific fault, which takes longer than a table
+              lookup. Leave this open — the results land here.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* ── 9. Error, with the static reference as the way forward ── */}
+      {error !== null && !loading && (
+        <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #7f1d1d' }}>
+          <div className="px-4 py-3" style={{ background: '#2d0a0a' }}>
+            <p className="text-sm font-semibold text-red-400">ABS diagnostic unavailable</p>
+            <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.5)' }}>{error}</p>
+          </div>
+          <div className="px-4 py-4 space-y-3" style={{ background: '#111920' }}>
+            <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.6)' }}>
+              The Trailer Systems tab holds the ABS reference entries — code meanings, sensor
+              and modulator specs, wiring and torque values. That library is stored data, so it
+              works whether or not this diagnostic does.
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => onOpenTrailerReference('ABS')}
+                className="py-3 rounded-lg text-sm font-semibold"
+                style={{ background: HD_BLUE, color: '#fff', minHeight: 48 }}
+              >
+                Open ABS reference
+              </button>
+              <button
+                type="button"
+                onClick={() => runDiagnostic('')}
+                disabled={!ready}
+                className="py-3 rounded-lg text-sm font-semibold"
+                style={{ background: '#162030', color: 'rgba(255,255,255,0.75)', border: '1px solid #1e3040', minHeight: 48 }}
+              >
+                Try again
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Results ── */}
+      {result !== null && !loading && (
+        <div className="space-y-4">
+
+          {/* 7. Clarification — the safety path. Sits above everything and does not
+              look like the rest of the result, because answering it changes the answer. */}
+          {showClarify && (
+            <div className="rounded-xl overflow-hidden" style={{ border: '2px solid #F59E0B' }}>
+              <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#2a1c05' }}>
+                <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="#F59E0B" strokeWidth={2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-sm font-bold" style={{ color: '#F59E0B' }}>
+                  One thing needs confirming first
+                </p>
+              </div>
+              <div className="px-4 py-4 space-y-3" style={{ background: '#1a1204' }}>
+                <p className="text-base font-semibold leading-snug text-white">
+                  {result.clarificationQuestion}
+                </p>
+                <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                  The same blink code means different things depending on this. Everything below
+                  is preliminary until it is answered — answer it and the procedure is rewritten
+                  for your case.
+                </p>
+                <input
+                  type="text"
+                  value={answer}
+                  onChange={e => setAnswer(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && answer.trim()) runDiagnostic(answer.trim()) }}
+                  placeholder="Your answer"
+                  autoComplete="off"
+                  className="w-full px-4 py-3 rounded-xl text-sm text-white placeholder-white/20"
+                  style={{ background: '#0d1820', border: '1px solid #78500c' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => runDiagnostic(answer.trim())}
+                  disabled={answer.trim().length === 0}
+                  className="w-full py-3 rounded-lg text-sm font-bold"
+                  style={answer.trim().length > 0
+                    ? { background: '#F59E0B', color: '#1a1204', minHeight: 48 }
+                    : { background: '#2a1c05', color: 'rgba(255,255,255,0.28)', border: '1px solid #78500c', minHeight: 48 }}
+                >
+                  Answer &amp; refine diagnosis
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 6a. Fault description */}
+          {result.faultDescription && (
+            <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
+              <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#162030' }}>
+                <span
+                  className="text-lg font-bold"
+                  style={{ color: HD_ORANGE, fontFamily: 'monospace' }}
+                >
+                  {code}
+                </span>
+                <span className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                  {brand?.wordmark}{ecu.trim() ? ` · ${ecu.trim()}` : ''}
+                </span>
+                {showClarify && (
+                  <span
+                    className="ml-auto text-xs font-bold px-2 py-0.5 rounded flex-shrink-0"
+                    style={{ background: 'rgba(245,158,11,0.15)', color: '#F59E0B' }}
+                  >
+                    Preliminary
+                  </span>
+                )}
+              </div>
+              <div className="px-4 py-4" style={{ background: '#111920' }}>
+                <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.8)' }}>
+                  {result.faultDescription}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* 6b. Numbered diagnostic steps */}
+          {result.steps.length > 0 && (
+            <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
+              <div className="px-4 py-3" style={{ background: '#162030' }}>
+                <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                  Diagnostic Steps
+                </p>
+              </div>
+              <ol className="px-4 py-4 space-y-3" style={{ background: '#111920' }}>
+                {result.steps.map((step, i) => (
+                  <li key={i} className="flex gap-3">
+                    <span
+                      className="flex-shrink-0 flex items-center justify-center rounded-full text-xs font-bold"
+                      style={{ background: HD_ORANGE, color: '#fff', width: 24, height: 24 }}
+                    >
+                      {i + 1}
+                    </span>
+                    <span className="text-sm leading-relaxed pt-0.5" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                      {step}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+
+          {/* 6c. Specs table */}
+          {result.specs.length > 0 && (
+            <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
+              <div className="px-4 py-3" style={{ background: '#162030' }}>
+                <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                  Specs To Check
+                </p>
+              </div>
+              {/* Columns follow the data. A spec line that never carries a location
+                  would otherwise render a Where column of nothing but dashes, and a
+                  set with no values at all is a list, not a table. */}
+              {specHasValue ? (
+                <div className="overflow-x-auto" style={{ background: '#111920' }}>
+                  <table className="w-full text-sm" style={{ minWidth: specHasWhere ? 480 : 360, borderCollapse: 'collapse' }}>
+                    <thead>
+                      <tr style={{ background: '#0d1820' }}>
+                        {['Measure', ...(specHasWhere ? ['Where'] : []), 'Pass / Fail'].map(h => (
+                          <th
+                            key={h}
+                            className="text-left px-4 py-2 text-xs uppercase tracking-widest font-semibold"
+                            style={{ color: 'rgba(255,255,255,0.3)', borderBottom: '1px solid #1e3040' }}
+                          >
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {result.specs.map((s, i) => (
+                        <tr key={i} style={{ borderBottom: '1px solid #1e3040' }}>
+                          <td className="px-4 py-3 align-top text-white">{s.measure || '—'}</td>
+                          {specHasWhere && (
+                            <td className="px-4 py-3 align-top" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                              {s.where || '—'}
+                            </td>
+                          )}
+                          <td
+                            className="px-4 py-3 align-top font-semibold"
+                            style={{ color: HD_ORANGE, fontFamily: 'monospace' }}
+                          >
+                            {s.passFail || '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <ul className="px-4 py-4 space-y-2" style={{ background: '#111920' }}>
+                  {result.specs.map((s, i) => (
+                    <li key={i} className="flex gap-2.5 items-start">
+                      <span
+                        className="flex-shrink-0 rounded-full"
+                        style={{ background: HD_ORANGE, width: 6, height: 6, marginTop: 7 }}
+                      />
+                      <span className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                        {s.measure}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {/* 6d. Tools */}
+          {result.tools.length > 0 && (
+            <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
+              <div className="px-4 py-3" style={{ background: '#162030' }}>
+                <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                  Tools Needed
+                </p>
+              </div>
+              <div className="px-4 py-4" style={{ background: '#111920' }}>
+                <ul className="space-y-2">
+                  {result.tools.map((t, i) => (
+                    <li key={i} className="flex gap-2.5 items-start">
+                      <span
+                        className="flex-shrink-0 rounded-full"
+                        style={{ background: HD_BLUE, width: 6, height: 6, marginTop: 7 }}
+                      />
+                      <span className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                        {t}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          )}
+
+          {/* 11. Parts. The ABS parts catalogue is not loaded yet, so no match is the
+              ordinary case — this is a plain note, deliberately not a warning. */}
+          {hasDiagnosis && (
+          <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
+            <div className="px-4 py-3" style={{ background: '#162030' }}>
+              <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                Parts
+              </p>
+            </div>
+            <div className="px-4 py-4" style={{ background: '#111920' }}>
+              {result.parts.length === 0 ? (
+                <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                  No stocked parts match this fault. Order ABS components against the part number
+                  on the ECU housing label or the component itself.
+                </p>
+              ) : (
+                <ul className="space-y-3">
+                  {result.parts.map((p, i) => (
+                    <li key={i}>
+                      <div className="flex items-baseline gap-2 flex-wrap">
+                        <span className="text-sm font-semibold text-white">{p.name || p.partNumber}</span>
+                        {p.partNumber && p.name && (
+                          <span className="text-xs" style={{ color: HD_ORANGE, fontFamily: 'monospace' }}>
+                            {p.partNumber}
+                          </span>
+                        )}
+                      </div>
+                      {p.note && (
+                        <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                          {p.note}
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+          )}
+
+          {/* 12. Labor estimate */}
+          {hasDiagnosis && (
+          <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
+            <div className="px-4 py-3" style={{ background: '#162030' }}>
+              <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                Labor Estimate
+              </p>
+            </div>
+            <div className="px-4 py-4" style={{ background: '#111920' }}>
+              {result.labor === null || (result.labor.low === null && result.labor.high === null) ? (
+                <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.45)' }}>
+                  {result.labor?.description
+                    || 'No labor estimate for this fault — price it from your own book time.'}
+                </p>
+              ) : (
+                <>
+                  <p className="font-bold text-3xl leading-tight" style={{ color: HD_ORANGE }}>
+                    {result.labor.low !== null && result.labor.high !== null && result.labor.low !== result.labor.high
+                      ? `${absHours(result.labor.low)}–${absHours(result.labor.high)} hrs`
+                      : `${absHours((result.labor.low ?? result.labor.high) as number)} hrs`}
+                  </p>
+                  <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                    {absMoney((result.labor.low ?? result.labor.high ?? 0) * laborRate)}
+                    {result.labor.high !== null && result.labor.low !== null && result.labor.high !== result.labor.low
+                      ? ` – ${absMoney(result.labor.high * laborRate)}`
+                      : ''}
+                    {' '}at your {absMoney(laborRate)}/hr HD rate
+                  </p>
+                  {result.labor.description && (
+                    <p className="text-sm mt-2 leading-relaxed" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                      {result.labor.description}
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+          )}
+
+          {/* 13. Hand-off — the same hd_guided_diagnostic_prefill path the reefer and
+              truck tabs use, so a quote, work order and invoice all stay available. */}
+          {hasDiagnosis && (
+          <div className="space-y-2">
+            <WorkflowActions
+              onPush={dest => {
+                const payload = buildPrefill()
+                if (payload) onPush(payload, dest)
+              }}
+            />
+            <p className="text-xs text-center leading-relaxed" style={{ color: 'rgba(255,255,255,0.25)' }}>
+              Pre-filled with the fault, the estimated hours at your {absMoney(laborRate)}/hr HD rate,
+              and any matched parts.
+            </p>
+          </div>
+          )}
+
+          {/* Disclaimer */}
+          <div className="rounded-lg p-3" style={{ background: '#0d1820', border: '1px solid #1e3040' }}>
+            <p className="text-xs leading-relaxed text-center" style={{ color: 'rgba(255,255,255,0.2)' }}>
+              AI-assisted diagnosis for field reference only. Confirm the blink code and every
+              specification against the ABS manufacturer service literature for the specific ECU
+              before replacing components, and follow FMCSA brake requirements. National Wrench
+              Index is not responsible for out-of-service findings or misdiagnosis.
+            </p>
+          </div>
+
+        </div>
+      )}
 
     </div>
   )
