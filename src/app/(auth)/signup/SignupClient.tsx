@@ -1,11 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { Suspense, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { PLANS, SELECTABLE_MODULES, MODULE_LABELS, MODULE_DESCRIPTIONS } from '@/lib/stripe-plans'
 import type { PlanTier, SelectableModule } from '@/lib/stripe-plans'
+import { resolveLdSlug, ldSlugNeedsModulePick, describeSlugResolution } from '@/lib/plan-slugs'
 
 type SignupPlan = PlanTier | 'foreman'
 type ProfessionType = 'mobile_mechanic' | 'other'
@@ -52,8 +53,21 @@ interface Props {
   foremanAvailable: boolean
 }
 
-export default function SignupClient({ foremanAvailable }: Props) {
-  const router = useRouter()
+function SignupForm({ foremanAvailable }: Props) {
+  const router       = useRouter()
+  const searchParams = useSearchParams()
+
+  // ?plan=<slug> preselects the tier so the subscriber never picks it twice. Resolved
+  // once on first render rather than in an effect, so step 2 never paints before being
+  // skipped. An unknown slug resolves to null and the normal two-step flow runs.
+  const rawSlug     = searchParams.get('plan')
+  const presetTier  = resolveLdSlug(rawSlug)
+  // Starter and Pro still need their module picker — see SLUG_REQUIRES_MODULE_PICK.
+  // The plan is locked in those cases, but the step is still shown, because
+  // /api/stripe/checkout 400s without exactly the right number of modules and the
+  // account would already exist by then.
+  const needsModules = ldSlugNeedsModulePick(presetTier)
+  const [preselected] = useState<PlanTier | null>(presetTier)
 
   const [step, setStep]               = useState<1 | 2>(1)
   const [fullName, setFullName]       = useState('')
@@ -61,7 +75,7 @@ export default function SignupClient({ foremanAvailable }: Props) {
   const [password, setPassword]       = useState('')
   const [confirmPwd, setConfirmPwd]   = useState('')
   const [profession, setProfession]   = useState<ProfessionType>('mobile_mechanic')
-  const [plan, setPlan]               = useState<SignupPlan>('starter')
+  const [plan, setPlan]               = useState<SignupPlan>(presetTier ?? 'starter')
   const [selectedModules, setSelectedModules]   = useState<SelectableModule[]>([])
   const [moduleWarningShown, setModuleWarningShown] = useState(false)
   const [loading, setLoading]         = useState(false)
@@ -100,15 +114,28 @@ export default function SignupClient({ foremanAvailable }: Props) {
     const err = validateStep1()
     if (err) { setError(err); return }
     setError(null)
+
+    // Preselected and nothing left to ask -> straight to account creation and checkout.
+    // Starter and Pro fall through to step 2 because their modules are still unanswered;
+    // that step renders with the plan locked, so the tier is still only chosen once.
+    if (preselected && !needsModules) {
+      void runSignup()
+      return
+    }
     setStep(2)
   }
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault()
+    await runSignup()
+  }
+
+  async function runSignup() {
     setLoading(true)
     setError(null)
 
     console.log('[handleSignup] plan:', plan, '| selectedModules:', selectedModules)
+    console.log(describeSlugResolution('ld', rawSlug, preselected))
 
     if (plan === 'starter' && selectedModules.length === 0) {
       setModuleWarningShown(true)
@@ -214,8 +241,10 @@ export default function SignupClient({ foremanAvailable }: Props) {
         </p>
       </div>
 
-      {/* Step indicator */}
-      <div className="flex items-center gap-2 mb-7">
+      {/* Step indicator. Hidden entirely when a slug preselected a plan that needs no
+          module picks — there is only one step left, and a "1 of 2" that never reaches
+          2 reads as an interrupted flow. */}
+      <div className={`flex items-center gap-2 mb-7 ${preselected && !needsModules ? 'hidden' : ''}`}>
         {[1, 2].map((s) => (
           <div key={s} className="flex items-center gap-2">
             <div
@@ -230,12 +259,27 @@ export default function SignupClient({ foremanAvailable }: Props) {
               {step > s ? '✓' : s}
             </div>
             <span className={`text-xs font-medium ${step === s ? 'text-white' : 'text-white/30'}`}>
-              {s === 1 ? 'Your Info' : 'Choose Plan'}
+              {s === 1 ? 'Your Info' : needsModules ? 'Pick Modules' : 'Choose Plan'}
             </span>
             {s < 2 && <div className="w-8 h-px bg-dark-border mx-1" />}
           </div>
         ))}
       </div>
+
+      {/* Confirms which plan the link chose, so the subscriber can see it before paying
+          and is not surprised at the Stripe page. */}
+      {preselected && (
+        <div className="mb-5 rounded-lg border border-orange/30 bg-orange/5 px-4 py-3">
+          <p className="text-xs uppercase tracking-wider text-white/40 mb-0.5">Selected plan</p>
+          <p className="text-white font-medium text-sm">
+            {PLANS.find(p => p.tier === preselected)?.name ?? preselected}
+            {(() => {
+              const price = PLANS.find(p => p.tier === preselected)?.price
+              return typeof price === 'number' ? ` — $${(price / 100).toFixed(0)}/mo` : ''
+            })()}
+          </p>
+        </div>
+      )}
 
       {error && <div className="alert-error mb-5">{error}</div>}
 
@@ -328,7 +372,9 @@ export default function SignupClient({ foremanAvailable }: Props) {
           </div>
 
           <button type="submit" className="btn-primary mt-2">
-            NEXT — CHOOSE PLAN
+            {preselected
+              ? (needsModules ? 'NEXT — PICK YOUR MODULES' : 'CREATE ACCOUNT & CONTINUE TO PAYMENT')
+              : 'NEXT — CHOOSE PLAN'}
           </button>
 
           <p className="text-center text-white/40 text-xs pt-1">
@@ -353,8 +399,13 @@ export default function SignupClient({ foremanAvailable }: Props) {
 
           <div className="space-y-3 mb-5">
 
-            {/* ── Main tier cards: Starter, Pro, Full Suite, Full Suite Plus, Elite ── */}
-            {PLANS.filter(p => p.tier !== 'foreman_standalone' && p.tier !== 'quickwrench').map((p) => {
+            {/* ── Main tier cards: Starter, Pro, Full Suite, Full Suite Plus, Elite ──
+                Suppressed when a slug already chose the plan. The subscriber reached
+                this step only because their tier still needs module picks; re-showing
+                every tier would be asking them to choose the plan a second time, which
+                is the whole thing preselection exists to avoid. The chosen plan is
+                confirmed in the banner above. */}
+            {!preselected && PLANS.filter(p => p.tier !== 'foreman_standalone' && p.tier !== 'quickwrench').map((p) => {
               const isSelected = plan === p.tier
               const isElite    = p.tier === 'elite'
               const dollars    = (p.price / 100).toFixed(0)
@@ -576,5 +627,17 @@ export default function SignupClient({ foremanAvailable }: Props) {
         </form>
       )}
     </div>
+  )
+}
+
+// useSearchParams() puts the subtree into client-side rendering and Next refuses to
+// build a page that reads it without a Suspense boundary. Same split /hd/signup and
+// (auth)/login already use. fallback={null} because the boundary resolves in the same
+// tick on the client — a skeleton here would only flicker.
+export default function SignupClient(props: Props) {
+  return (
+    <Suspense fallback={null}>
+      <SignupForm {...props} />
+    </Suspense>
   )
 }

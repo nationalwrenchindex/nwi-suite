@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { resolveHdSlug, describeSlugResolution } from '@/lib/plan-slugs'
 
 const HD_ORANGE = '#E85D24'
 const HD_BLUE   = '#1A6BAF'
@@ -76,11 +77,19 @@ function HDSignupForm() {
   // they should still land on the picker. /hd/subscribe does not link here at all: it
   // is the authenticated flow and calls /api/hd/checkout directly.
   //
-  // Validated against PLANS rather than trusted: an unknown or absent key falls back
-  // to the plan picker on 'pro' exactly as before, so a typo or a stale link degrades
-  // to the normal flow instead of carrying an unsellable plan key into checkout.
+  // Validated rather than trusted: an unknown or absent value falls back to the plan
+  // picker on 'pro', so a typo or a stale link degrades to the normal flow instead of
+  // carrying an unsellable plan key into checkout.
+  //
+  // Two spellings are accepted. The public slugs (hd-elite, reefer-standalone, …) are
+  // what marketing links use and what /signup uses for the light-duty side; the raw
+  // PLANS keys (elite, hd_reefer, …) are accepted too so the links this page shipped
+  // with keep working. resolveHdSlug() is tried first because a slug is unambiguous
+  // about its vertical — "pro" alone could mean either suite.
   const requestedPlan = searchParams.get('plan')
-  const presetPlan    = PLANS.some(p => p.key === requestedPlan) ? requestedPlan : null
+  const presetPlan    =
+    resolveHdSlug(requestedPlan) ??
+    (PLANS.some(p => p.key === requestedPlan) ? requestedPlan : null)
 
   // Signup form state. Both are lazy initial values, not an effect: deriving them on
   // the first render means the plan picker never paints before being skipped.
@@ -163,6 +172,7 @@ function HDSignupForm() {
       if (signupErr) throw signupErr
       if (!data.user) throw new Error('Signup failed — please try again.')
 
+      console.log(describeSlugResolution('hd', requestedPlan, presetPlan))
       const body: Record<string, unknown> = { plan, userId: data.user.id }
       if (promotionCodeId) body.promotionCodeId = promotionCodeId
 

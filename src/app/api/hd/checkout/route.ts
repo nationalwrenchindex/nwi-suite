@@ -23,6 +23,10 @@ export async function POST(req: NextRequest) {
 
   const plan    = body.plan ?? 'pro'
   const priceId = HD_PRICE_MAP[plan]
+  // Plan key -> price ID, logged at the point of resolution. Paired with the
+  // slug -> plan line /hd/signup logs, the whole chain is visible when a marketing
+  // link sells the wrong tier.
+  console.log(`[hd/checkout] plan=${plan} -> priceId=${priceId ?? 'UNSET'}`)
   if (!priceId) {
     // No Stripe price configured yet — redirect to dashboard directly
     return NextResponse.json({ url: '/hd/dashboard' })

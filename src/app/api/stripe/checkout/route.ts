@@ -68,6 +68,12 @@ export async function POST(request: NextRequest) {
     )
   }
 
+  // Tier -> price ID, logged at the point of resolution. Paired with the slug -> tier
+  // line the signup page logs, this makes the whole chain visible: a link that sells
+  // the wrong plan shows up as a mismatch between the two, rather than as a customer
+  // discovering it on their receipt.
+  console.log(`[stripe/checkout] tier=${tier} -> priceId=${priceId} (source=${body.source ?? 'unknown'})`)
+
   // Verify the price ID round-trips back to the correct tier via env var mapping
   const verifiedTier = getTierFromPriceId(priceId)
   console.log(`[checkout] price_id=${priceId} → tier=${verifiedTier ?? 'UNKNOWN — check STRIPE_PRICE_* env vars'}`)
