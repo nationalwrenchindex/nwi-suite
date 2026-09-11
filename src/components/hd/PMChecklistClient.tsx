@@ -113,11 +113,17 @@ export default function PMChecklistClient({
   invoices,
   fleetAccounts,
   userId,
+  initialUnitId = '',
+  workOrderId   = null,
 }: {
   units:         UnitOption[]
   invoices:      InvoiceOption[]
   fleetAccounts: FleetAccountOption[]
   userId:        string
+  /** Preselected unit when the checklist was started from a work order. */
+  initialUnitId?: string
+  /** Work order this PM belongs to, carried through to hd_pm_checklists.work_order_id. */
+  workOrderId?:   string | null
 }) {
   const router = useRouter()
 
@@ -127,7 +133,12 @@ export default function PMChecklistClient({
   const [selectedAccountId, setSelectedAccountId] = useState<string>('')
   const [customerSearch,    setCustomerSearch]    = useState<string>('')
   const [showAccts,         setShowAccts]         = useState(false)
-  const [selectedUnit, setSelectedUnit] = useState<string>('')
+  // Preselected from ?unit= when started from a work order. Guarded against a unit the
+  // tech cannot see, so a stale or hand-edited link falls back to the picker instead of
+  // writing a PM against someone else's unit id.
+  const [selectedUnit, setSelectedUnit] = useState<string>(
+    initialUnitId && units.some(u => u.id === initialUnitId) ? initialUnitId : '',
+  )
   const [pmType,     setPmType]     = useState<PMTypeValue>('3000hr')
   const [isMultiTemp, setIsMultiTemp] = useState(false)
   const [techName,   setTechName]   = useState('')
@@ -304,7 +315,11 @@ export default function PMChecklistClient({
 
     const body = {
       unit_id:           selectedUnit || null,
-      work_order_id:     null,
+      // Carried from ?work_order= so the finished PM links back to the job it was done
+      // on. This was hardcoded null, which is why the work_order_id column on
+      // hd_pm_checklists had no writer and PMs never appeared on a work order. The API
+      // route also closes an in_progress work order when this is present.
+      work_order_id:     workOrderId,
       invoice_action,
       invoice_id,
       customer_name:     selectedAccountName || null,

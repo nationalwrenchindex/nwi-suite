@@ -4,7 +4,15 @@ import PMChecklistClient from '@/components/hd/PMChecklistClient'
 
 export const metadata = { title: 'PM Checklist — NWI HD Suite' }
 
-export default async function PMChecklistPage() {
+// ?work_order= and ?unit= are set by the "Start Reefer PM Inspection" button on a work
+// order, so the checklist opens against the right unit and the finished record links
+// back to the job. Both are optional — opened from the nav, the form behaves as before.
+export default async function PMChecklistPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ work_order?: string; unit?: string }>
+}) {
+  const { work_order: workOrderId, unit: unitId } = await searchParams
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
@@ -53,6 +61,8 @@ export default async function PMChecklistPage() {
         invoices={invoices ?? []}
         fleetAccounts={fleetAccounts ?? []}
         userId={user.id}
+        initialUnitId={unitId ?? ''}
+        workOrderId={workOrderId ?? null}
       />
     </main>
   )

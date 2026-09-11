@@ -1,5 +1,6 @@
 import { Resend } from 'resend'
 import { createServiceClient } from '@/lib/supabase/service'
+import { buildPMReport } from '@/lib/hd/pm-report-items'
 
 const FROM = 'NWI HD Suite <onboarding@resend.dev>'
 
@@ -65,8 +66,10 @@ export async function sendPmReportEmail({
     const techName   = (pm.tech_name as string) || (profile?.hd_tech_name as string) || (profile?.full_name as string) || '—'
     const business   = (profile?.business_name as string) || 'HD Suite'
     const flagged    = Array.isArray(pm.flagged_items) ? (pm.flagged_items as Flagged[]) : []
-    const inspected  = pm.checklist_data && typeof pm.checklist_data === 'object'
-      ? Object.keys(pm.checklist_data as Record<string, unknown>).length : 0
+    // Full record, same join the on-screen report uses, so the two documents can never
+    // disagree about what was inspected.
+    const report     = buildPMReport(pm.checklist_data)
+    const inspected  = report.total
     const battery    = pm.battery_cca != null ? `${pm.battery_cca} CCA${Number(pm.battery_cca) < 800 ? ' — REPLACE' : ' ✓'}` : '—'
     const sig        = pm.signature_base64 as string | null
 
@@ -76,6 +79,20 @@ export async function sendPmReportEmail({
       ? `<ul style="margin:6px 0 0;padding-left:18px;color:#B45309">${flagged.map(f =>
           `<li style="margin-bottom:3px">${esc(f.text)}${f.section ? ` <span style="color:#9CA3AF">(${esc(f.section)})</span>` : ''}</li>`).join('')}</ul>`
       : `<span style="color:#16A34A">None — all items passed</span>`
+
+    // COMPLETE INSPECTION RECORD — every point, not just the failures. Table-based and
+    // inline-styled because email clients discard <style> blocks and most CSS.
+    const STATE_COLOR: Record<string, string> = {
+      Pass: '#16A34A', Fail: '#DC2626', 'N/A': '#9CA3AF', 'Not recorded': '#9CA3AF',
+    }
+    const fullRecordHtml = report.sections.map(section => `
+      <tr><td colspan="2" style="padding:10px 12px 4px;font-size:12px;font-weight:700;color:#374151;background:#F3F4F6;border-top:1px solid #E5E7EB">${esc(section.title)}</td></tr>
+      ${section.items.map(item => `
+      <tr${item.failed ? ' style="background:#FEF2F2"' : ''}>
+        <td style="padding:5px 12px;font-size:12px;color:${item.failed ? '#991B1B' : '#374151'};border-top:1px solid #F3F4F6">${esc(item.text)}</td>
+        <td style="padding:5px 12px;font-size:12px;font-weight:700;white-space:nowrap;text-align:right;color:${STATE_COLOR[item.label] ?? '#9CA3AF'};border-top:1px solid #F3F4F6">${esc(item.label)}</td>
+      </tr>`).join('')}
+    `).join('')
 
     const row = (label: string, value: string) =>
       `<tr><td style="padding:6px 12px;color:#6B7280;font-size:13px;white-space:nowrap">${esc(label)}</td>` +
@@ -94,6 +111,7 @@ export async function sendPmReportEmail({
       ${row('Date', esc(dateStr))}
       ${row('Technician', esc(techName))}
       ${row('Items Inspected', String(inspected))}
+      ${row('Result Breakdown', `${report.passed} pass &middot; <span style="color:${report.failed ? '#DC2626' : '#16A34A'}">${report.failed} fail</span> &middot; ${report.na} N/A`)}
       ${row('Items Flagged', `<span style="color:${flagged.length ? '#B45309' : '#16A34A'}">${flagged.length}</span>`)}
       ${row('Battery CCA', esc(battery))}
       ${row('Alarm Codes Found', esc(pm.alarm_codes_found) || '—')}
@@ -102,6 +120,11 @@ export async function sendPmReportEmail({
 
     <p style="margin:18px 0 4px;font-size:13px;font-weight:700;color:#374151">Flagged Items — Customer Review</p>
     ${flaggedHtml}
+
+    ${report.sections.length ? `
+    <p style="margin:18px 0 4px;font-size:13px;font-weight:700;color:#374151">Complete Inspection Record</p>
+    <p style="margin:0 0 6px;font-size:12px;color:#6B7280">Every point inspected on this unit, with its result.</p>
+    <table style="border-collapse:collapse;width:100%;border:1px solid #E5E7EB;border-radius:8px">${fullRecordHtml}</table>` : ''}
 
     <p style="margin:18px 0 4px;font-size:13px;font-weight:700;color:#374151">Technician Signature</p>
     ${sig ? `<img src="${sig}" alt="Signature" style="max-height:90px;border:1px solid #E5E7EB;border-radius:6px;background:#fff" />`

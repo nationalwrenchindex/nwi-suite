@@ -12,7 +12,7 @@ import type { createClient } from '@/lib/supabase/server'
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>
 
-export type InspectionFamily = 'aerial' | 'dot' | 'equipment'
+export type InspectionFamily = 'aerial' | 'dot' | 'equipment' | 'pm'
 
 /** The shape both tables collapse into. */
 export interface InspectionSummary {
@@ -58,6 +58,21 @@ interface EquipmentRow {
   created_at:      string
 }
 
+/**
+ * The reefer PM. Shaped differently from the other three: it has no inspection_date
+ * (completed_at is the timestamp) and no overall_result, because a PM does not pass or
+ * fail as a whole — the result is derived from whether anything was flagged.
+ */
+interface PMRow {
+  id:            string
+  pm_type:       string | null
+  completed_at:  string | null
+  flagged_items: unknown
+  tech_name:     string | null
+  tech_initials: string | null
+  created_at:    string
+}
+
 /** Anything that is not an explicit pass is treated as a fail — never silently green. */
 function toResult(value: string | null): 'pass' | 'fail' {
   return value === 'pass' ? 'pass' : 'fail'
@@ -87,7 +102,7 @@ async function loadInspections(
   column:   'work_order_id' | 'unit_id',
   value:    string,
 ): Promise<InspectionSummary[]> {
-  const [aerialRes, dotRes, equipRes] = await Promise.all([
+  const [aerialRes, dotRes, equipRes, pmRes] = await Promise.all([
     supabase
       .from('hd_aerial_inspections')
       .select('id, inspection_type, inspection_date, overall_result, inspector_name, operator_name, created_at')
@@ -103,15 +118,22 @@ async function loadInspections(
       .select('id, equipment_type, inspection_date, overall_result, inspector_name, operator_name, created_at')
       .eq('user_id', userId)
       .eq(column, value),
+    supabase
+      .from('hd_pm_checklists')
+      .select('id, pm_type, completed_at, flagged_items, tech_name, tech_initials, created_at')
+      .eq('user_id', userId)
+      .eq(column, value),
   ])
 
   if (aerialRes.error) console.error('[hd inspections] aerial load failed:', aerialRes.error.message)
   if (dotRes.error)    console.error('[hd inspections] dot load failed:',    dotRes.error.message)
   if (equipRes.error)  console.error('[hd inspections] equipment load failed:', equipRes.error.message)
+  if (pmRes.error)     console.error('[hd inspections] pm load failed:',     pmRes.error.message)
 
   const aerial = (aerialRes.data ?? []) as unknown as AerialRow[]
   const dot    = (dotRes.data    ?? []) as unknown as DotRow[]
   const equip  = (equipRes.data  ?? []) as unknown as EquipmentRow[]
+  const pm     = (pmRes.data     ?? []) as unknown as PMRow[]
 
   const combined: InspectionSummary[] = [
     ...aerial.map(row => ({
@@ -146,6 +168,24 @@ async function loadInspections(
       href:      `/hd/equipment-inspections/${row.id}`,
       createdAt: row.created_at,
     })),
+    ...pm.map(row => {
+      // completed_at is a timestamp; the other three store a DATE. Truncating keeps the
+      // shared sort and inspectionDateLabel() working on one format.
+      const completed = (row.completed_at ?? row.created_at).slice(0, 10)
+      const flaggedCount = Array.isArray(row.flagged_items) ? row.flagged_items.length : 0
+      return {
+        id:        row.id,
+        family:    'pm' as const,
+        typeLabel: `Reefer PM${row.pm_type ? ` — ${row.pm_type}` : ''}`,
+        date:      completed,
+        // A PM has no overall_result column. Anything flagged is a fail, which matches
+        // toResult()'s posture everywhere else: never silently green.
+        result:    (flaggedCount === 0 ? 'pass' : 'fail') as 'pass' | 'fail',
+        inspectorName: row.tech_name ?? row.tech_initials,
+        href:      `/hd/pm-checklist/${row.id}`,
+        createdAt: row.created_at,
+      }
+    }),
   ]
 
   return combined.sort((a, b) =>

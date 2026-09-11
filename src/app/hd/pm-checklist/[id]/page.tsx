@@ -2,6 +2,7 @@ import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
+import { buildPMReport } from '@/lib/hd/pm-report-items'
 
 export const metadata = { title: 'PM Report — NWI HD Suite' }
 
@@ -44,7 +45,11 @@ export default async function PMChecklistReportPage({ params }: { params: Promis
   }
 
   const flagged   = Array.isArray(pm.flagged_items) ? (pm.flagged_items as Flagged[]) : []
-  const inspected = pm.checklist_data && typeof pm.checklist_data === 'object' ? Object.keys(pm.checklist_data).length : 0
+  // The complete record — every point the tech actually inspected, with its result.
+  // `inspected` now comes from the same join the item list is built from, so the count
+  // in the summary can never disagree with the number of rows below it.
+  const report    = buildPMReport(pm.checklist_data)
+  const inspected = report.total
   const sig       = pm.signature_base64 as string | null
 
   const rows: [string, string][] = [
@@ -54,6 +59,7 @@ export default async function PMChecklistReportPage({ params }: { params: Promis
     ['Date', fmtDate(pm.completed_at as string | null)],
     ['Technician', (pm.tech_name as string) || (pm.tech_initials as string) || '—'],
     ['Items Inspected', String(inspected)],
+    ['Result Breakdown', `${report.passed} pass · ${report.failed} fail · ${report.na} N/A`],
     ['Items Flagged', String(flagged.length)],
     ['Battery CCA', pm.battery_cca != null ? `${pm.battery_cca} CCA${Number(pm.battery_cca) < 800 ? ' — REPLACE' : ''}` : '—'],
     ['Alarm Codes Found', (pm.alarm_codes_found as string) || '—'],
@@ -101,6 +107,60 @@ export default async function PMChecklistReportPage({ params }: { params: Promis
             </div>
           )}
         </div>
+
+        {/* COMPLETE INSPECTION RECORD.
+            Previously this report showed only the flagged items, so a customer saw the
+            handful that failed and had to take the other seventy on trust. Every point
+            the tech inspected is now listed with its own result. Failures keep the red
+            treatment; passes and N/A are muted so the failures still read at a glance. */}
+        {report.sections.length > 0 && (
+          <div className="rounded-xl overflow-hidden mb-6" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+            <div className="px-5 py-3" style={{ background: '#0d1820', borderBottom: '1px solid #1e3040' }}>
+              <p className="font-condensed font-bold text-white text-lg tracking-wide">COMPLETE INSPECTION RECORD</p>
+              <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                Every point inspected on this unit, with its result.
+              </p>
+            </div>
+
+            {report.sections.map(section => (
+              <div key={section.id}>
+                <div className="px-5 py-2" style={{ background: '#162030', borderTop: '1px solid #1e3040', borderBottom: '1px solid #1e3040' }}>
+                  <p className="font-condensed font-bold text-xs tracking-widest" style={{ color: 'rgba(255,255,255,0.55)' }}>
+                    {section.title.toUpperCase()}
+                  </p>
+                </div>
+                {section.items.map((item, i) => {
+                  const color =
+                    item.state === 'pass' ? '#22C55E'
+                    : item.state === 'flag' ? '#EF4444'
+                    : item.state === 'na'   ? 'rgba(255,255,255,0.35)'
+                    : 'rgba(255,255,255,0.25)'
+                  return (
+                    <div
+                      key={item.id}
+                      className="flex items-start justify-between gap-4 px-5 py-2.5 text-sm"
+                      style={{
+                        borderTop: i > 0 ? '1px solid #16202c' : undefined,
+                        background: item.failed ? 'rgba(239,68,68,0.07)' : undefined,
+                      }}
+                    >
+                      <span style={{ color: item.failed ? '#FCA5A5' : 'rgba(255,255,255,0.75)' }}>
+                        <span className="text-xs mr-2" style={{ color: 'rgba(255,255,255,0.25)' }}>{item.id}</span>
+                        {item.text}
+                      </span>
+                      <span
+                        className="font-condensed font-bold text-xs tracking-wide whitespace-nowrap mt-0.5"
+                        style={{ color }}
+                      >
+                        {item.label.toUpperCase()}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide mb-3">TECHNICIAN SIGNATURE</p>

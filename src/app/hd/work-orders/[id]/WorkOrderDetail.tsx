@@ -360,6 +360,16 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
           >
             + Start Equipment Inspection
           </Link>
+          {/* Reefer PM. The transport-refrigeration inspection is the PM checklist —
+              same signed record, same unit link — so this starts that form rather than
+              introducing a second reefer inspection type alongside it. */}
+          <Link
+            href={`/hd/pm-checklist?work_order=${workOrderId}${wo.unit ? `&unit=${wo.unit.id}` : ''}`}
+            className="px-4 py-2 rounded-lg text-xs font-condensed font-bold tracking-wide transition-colors"
+            style={{ background: '#162030', color: 'rgba(255,255,255,0.7)', border: '1px solid #1e3040' }}
+          >
+            + Start Reefer PM Inspection
+          </Link>
           {!wo.unit && (
             <p className="text-xs self-center" style={{ color: 'rgba(255,255,255,0.3)' }}>
               No unit on this work order — you will select one on the form.
