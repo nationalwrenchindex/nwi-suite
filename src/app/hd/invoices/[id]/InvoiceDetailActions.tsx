@@ -13,10 +13,35 @@ const TEXT   = '#1A1A1A'
 type SendState = 'idle' | 'sending' | 'sent' | 'failed'
 
 interface SendResponse {
-  sent?:  boolean
-  error?: string
-  url?:   string
-  to?:    string
+  sent?:         boolean
+  error?:        string
+  url?:          string
+  to?:           string
+  sent_count?:   number
+  last_sent_at?: string | null
+}
+
+/**
+ * "12 Sep, 2:14 PM" — day and time, because the question a tech is asking is
+ * "was this chased recently?", which a bare date cannot answer. The year is
+ * added only when the send was not this year, so the common case stays short.
+ *
+ * Rendered with suppressHydrationWarning wherever it is used: the server
+ * formats in UTC and the browser in the tech's own zone, and the browser's
+ * answer is the correct one.
+ */
+function formatSentAt(iso: string | null): string {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  const sameYear = d.getFullYear() === new Date().getFullYear()
+  return d.toLocaleString('en-US', {
+    month:  'short',
+    day:    'numeric',
+    ...(sameYear ? {} : { year: 'numeric' }),
+    hour:   'numeric',
+    minute: '2-digit',
+  })
 }
 
 export default function InvoiceDetailActions({
@@ -24,6 +49,9 @@ export default function InvoiceDetailActions({
   invoiceNumber,
   currentStatus,
   customerPhone,
+  customerEmail = null,
+  sentCount = 0,
+  lastSentAt = null,
   pmChecklistId = null,
   dotInspectionId = null,
   aerialInspectionId = null,
@@ -32,6 +60,10 @@ export default function InvoiceDetailActions({
   invoiceNumber: string
   currentStatus: string
   customerPhone: string | null
+  /** Email is the only channel that can carry the PM report attachment. */
+  customerEmail?: string | null
+  sentCount?: number
+  lastSentAt?: string | null
   pmChecklistId?: string | null
   dotInspectionId?: string | null
   aerialInspectionId?: string | null
@@ -40,11 +72,22 @@ export default function InvoiceDetailActions({
   const [busy, setBusy]   = useState(false)
   const [toast, setToast] = useState('')
 
+  // Seeded from the server row, then advanced from the send response rather than
+  // re-read. router.refresh() is still called for the status change, but it is a
+  // round trip the tech should not have to wait on to see that their resend
+  // landed — the count and timestamp are already in the reply.
+  const [count, setCount]   = useState(sentCount)
+  const [lastAt, setLastAt] = useState<string | null>(lastSentAt)
+
   // SMS panel state. `phone` is seeded from the invoice but stays editable — the
   // number on file is often the shop's main line, not the person waiting on the
   // truck, and the tech knows which one to text.
   const [smsOpen, setSmsOpen]   = useState(false)
   const [phone, setPhone]       = useState(customerPhone ?? '')
+  const [email, setEmail]       = useState(customerEmail ?? '')
+  // Which channel the last attempt used, so the success and failure copy names the
+  // right one rather than always saying "text".
+  const [lastChannel, setLastChannel] = useState<'sms' | 'email'>('sms')
   const [sendState, setSend]    = useState<SendState>('idle')
   const [sendError, setError]   = useState('')
   const [payUrl, setPayUrl]     = useState('')
@@ -84,8 +127,19 @@ export default function InvoiceDetailActions({
     }
   }
 
-  async function sendSMS() {
-    if (!phone.trim()) { setSend('failed'); setError('Enter a phone number to text.'); return }
+  /**
+   * One sender for both channels. SMS carries a link; email carries the same link plus
+   * the PM report as an attachment, which is the only route by which that report
+   * reaches a customer — a text cannot carry a file.
+   */
+  async function send(channel: 'sms' | 'email') {
+    const target = channel === 'sms' ? phone.trim() : email.trim()
+    if (!target) {
+      setSend('failed')
+      setError(channel === 'sms' ? 'Enter a phone number to text.' : 'Enter an email address to send to.')
+      return
+    }
+    setLastChannel(channel)
     setSend('sending')
     setError('')
     setCopied(false)
@@ -93,7 +147,9 @@ export default function InvoiceDetailActions({
       const res  = await fetch(`/api/hd/invoices/${invoiceId}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method: 'sms', phone: phone.trim() }),
+        body: JSON.stringify(
+          channel === 'sms' ? { method: 'sms', phone: target } : { method: 'email', email: target },
+        ),
       })
       const data = await res.json() as SendResponse
       // The route answers 200 on a delivery failure so the link survives; keep
@@ -101,14 +157,20 @@ export default function InvoiceDetailActions({
       if (data.url) setPayUrl(data.url)
       if (data.sent) {
         setSend('sent')
+        // Advance the send record from the response so the label flips to
+        // "Resend Invoice" and the timestamp moves without a reload.
+        if (typeof data.sent_count === 'number') setCount(data.sent_count)
+        else setCount(c => c + 1)
+        setLastAt(data.last_sent_at ?? new Date().toISOString())
         router.refresh()   // status may have moved unpaid -> sent
       } else {
         setSend('failed')
-        setError(data.error ?? 'The text could not be delivered.')
+        setError(data.error ?? `The ${channel === 'sms' ? 'text' : 'email'} could not be delivered.`)
       }
     } catch (err) {
       setSend('failed')
-      setError(err instanceof Error ? err.message : 'Network error — the text was not sent.')
+      setError(err instanceof Error ? err.message
+        : `Network error — the ${channel === 'sms' ? 'text' : 'email'} was not sent.`)
     }
   }
 
@@ -188,7 +250,7 @@ export default function InvoiceDetailActions({
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 014.69 12 19.79 19.79 0 011.61 3.44 2 2 0 013.6 1.27h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L7.91 8.91a16 16 0 006 6l.92-.92a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
           </svg>
-          {sendState === 'sent' ? 'Sent' : 'Text Invoice'}
+          {count > 0 ? 'Resend Invoice' : 'Send Invoice'}
         </button>
 
         <button
@@ -201,13 +263,25 @@ export default function InvoiceDetailActions({
         </button>
       </div>
 
+      {/* Sits directly under the send button, because it is the fact that
+          decides whether to press it. Absent entirely when the invoice has
+          never gone out — "Send Invoice" with no timestamp already says that,
+          and a "Never sent" line would just be noise on a fresh invoice. */}
+      {count > 0 && lastAt && (
+        <p className="text-xs" style={{ color: MUTED }} suppressHydrationWarning>
+          {count > 1
+            ? `Sent ${count} times · last ${formatSentAt(lastAt)}`
+            : `Sent ${formatSentAt(lastAt)}`}
+        </p>
+      )}
+
       {smsOpen && (
         <div
           className="p-4 rounded-xl w-full sm:w-[380px] text-left"
           style={{ background: '#FFFFFF', border: `1px solid ${BORDER}` }}
         >
           <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: '#9CA3AF' }}>
-            Text invoice to customer
+            Send invoice to customer
           </p>
 
           <label className="block text-xs mb-1" style={{ color: MUTED }}>Mobile number</label>
@@ -229,17 +303,48 @@ export default function InvoiceDetailActions({
           )}
 
           <button
-            onClick={sendSMS}
+            onClick={() => send('sms')}
             disabled={sending}
             className="mt-3 w-full px-4 py-2 rounded-lg font-semibold text-sm text-white disabled:opacity-60"
             style={{ background: ORANGE, minHeight: 44 }}
           >
-            {sending ? 'Sending…' : sendState === 'sent' ? 'Send again' : 'Send text'}
+            {sending && lastChannel === 'sms' ? 'Sending…' : count > 0 ? 'Send text again' : 'Send text'}
           </button>
+
+          {/* Email. Separate from the text option because it is not a cosmetic
+              alternative: a text carries only a link, while the email carries the PM
+              inspection report as an attachment. For a customer who wants the paperwork
+              rather than just a way to pay, this is the channel that delivers it. */}
+          <div className="mt-4 pt-4" style={{ borderTop: `1px solid ${BORDER}` }}>
+            <label className="block text-xs mb-1" style={{ color: MUTED }}>Email address</label>
+            <input
+              type="email"
+              inputMode="email"
+              value={email}
+              onChange={e => { setEmail(e.target.value); if (sendState !== 'idle') setSend('idle') }}
+              placeholder="customer@example.com"
+              disabled={sending}
+              className="w-full px-3 py-2 rounded-lg text-sm"
+              style={{ border: `1px solid ${BORDER}`, color: TEXT, background: '#FFFFFF', minHeight: 44 }}
+            />
+            {hasReports && (
+              <p className="text-xs mt-2" style={{ color: MUTED }}>
+                The full inspection report is attached to the email.
+              </p>
+            )}
+            <button
+              onClick={() => send('email')}
+              disabled={sending}
+              className="mt-3 w-full px-4 py-2 rounded-lg font-semibold text-sm disabled:opacity-60"
+              style={{ background: '#FFFFFF', color: TEXT, border: `1px solid ${BORDER}`, minHeight: 44 }}
+            >
+              {sending && lastChannel === 'email' ? 'Sending…' : count > 0 ? 'Send email again' : 'Send email'}
+            </button>
+          </div>
 
           {sendState === 'sent' && (
             <p className="mt-3 text-sm font-semibold" style={{ color: '#16a34a' }}>
-              Sent to {phone}. The customer can view and pay from the link.
+              Sent to {lastChannel === 'sms' ? phone : email}. The customer can view and pay from the link.
             </p>
           )}
 

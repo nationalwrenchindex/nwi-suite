@@ -5,6 +5,7 @@ import { checkHDAccess } from '@/lib/hd-access'
 import InvoiceDetailActions from './InvoiceDetailActions'
 import { termsDisplay, formatDueDate } from '@/lib/hd/payment-terms'
 import { AERIAL_TYPE_LABEL } from '@/lib/hd/aerial/forms'
+import { findInvoicePMChecklists } from '@/lib/hd/pm-report-attachment'
 import type { AerialInspectionType } from '@/types/aerial'
 
 const ORANGE = '#FF6600'
@@ -49,15 +50,22 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const hasAccess = await checkHDAccess(user.id)
   if (!hasAccess) redirect('/hd/signup')
 
-  const [{ data: inv }, { data: profile }, { data: pmChecklist }, { data: dotInspection }, { data: aerialInspection }] = await Promise.all([
+  const [{ data: inv }, { data: profile }, { data: dotInspection }, { data: aerialInspection }] = await Promise.all([
     supabase.from('hd_invoices').select('*').eq('id', id).eq('user_id', user.id).single(),
     supabase.from('profiles').select('business_name, phone').eq('id', user.id).single(),
-    supabase.from('hd_pm_checklists').select('id, pm_type').eq('invoice_id', id).eq('user_id', user.id).maybeSingle(),
     supabase.from('hd_dot_inspections').select('id, inspection_id, overall_result').eq('invoice_id', id).eq('user_id', user.id).maybeSingle(),
     supabase.from('hd_aerial_inspections').select('id, inspection_type, overall_result, removed_from_service').eq('invoice_id', id).eq('user_id', user.id).maybeSingle(),
   ])
 
   if (!inv) notFound()
+
+  // PMs reach an invoice two ways — attached directly, or performed on the same work
+  // order. The second link is the newer writer, and a PM that used only that one was
+  // invisible here. Runs after the invoice because it needs the invoice's work_order_id,
+  // and returns a list because one job can carry several PMs.
+  const pmChecklists = await findInvoicePMChecklists(
+    supabase, user.id, id, (inv.work_order_id as string | null) ?? null,
+  )
 
   const items: LineItem[] = Array.isArray(inv.line_items) ? inv.line_items : []
   const st = STATUS_STYLE[inv.status] ?? STATUS_STYLE.unpaid
@@ -94,9 +102,14 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             invoiceNumber={inv.invoice_number}
             currentStatus={inv.status}
             customerPhone={inv.customer_phone}
-            pmChecklistId={pmChecklist?.id ?? null}
+            customerEmail={(inv.customer_email as string | null) ?? null}
+            pmChecklistId={pmChecklists[0]?.id ?? null}
             dotInspectionId={dotInspection?.id ?? null}
             aerialInspectionId={aerialInspection?.id ?? null}
+            /* Columns arrive in migration 129. Reading them off a row that predates it
+               yields undefined, which these defaults absorb — the page renders either way. */
+            sentCount={(inv.sent_count as number) ?? 0}
+            lastSentAt={(inv.last_sent_at as string | null) ?? null}
           />
         </div>
 
@@ -277,7 +290,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             </div>
 
             {/* Attached reports (PM checklist / DOT inspection) */}
-            {(pmChecklist || dotInspection || aerialInspection) && (
+            {(pmChecklists.length > 0 || dotInspection || aerialInspection) && (
               <div className="mb-8">
                 <div className="flex items-baseline justify-between mb-3 gap-3 flex-wrap">
                   <h3 className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#9CA3AF' }}>Attached Reports</h3>
@@ -294,15 +307,27 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                   </a>
                 </div>
                 <div className="space-y-2">
-                  {pmChecklist && (
-                    <Link href={`/hd/pm-checklist/${pmChecklist.id}`} className="flex items-center justify-between p-4 rounded-lg" style={{ background: '#F9FAFB', border: '1px solid #E5E7EB' }}>
+                  {pmChecklists.map(pm => (
+                    <div key={pm.id} className="flex items-center justify-between gap-3 p-4 rounded-lg flex-wrap" style={{ background: '#F9FAFB', border: '1px solid #E5E7EB' }}>
                       <div>
                         <p className="text-sm font-semibold" style={{ color: '#1A1A1A' }}>📋 PM Checklist</p>
-                        <p className="text-xs" style={{ color: '#6B7280' }}>Preventive Maintenance report attached{pmChecklist.pm_type ? ` — ${pmChecklist.pm_type}` : ''}</p>
+                        <p className="text-xs" style={{ color: '#6B7280' }}>
+                          Preventive Maintenance report attached{pm.pm_type ? ` — ${pm.pm_type}` : ''} · {fmtDate(pm.completed_at ?? pm.created_at)}
+                        </p>
+                        {/* The pass/fail split comes from the same join the report itself is
+                            built from, so this line can never disagree with the document. */}
+                        <p className="text-xs mt-0.5" style={{ color: pm.report.failed > 0 ? '#b91c1c' : '#16a34a' }}>
+                          {pm.report.total} inspected · {pm.report.passed} pass · {pm.report.failed} fail · {pm.report.na} N/A
+                        </p>
                       </div>
-                      <span className="text-sm font-semibold" style={{ color: BLUE }}>View PM Report →</span>
-                    </Link>
-                  )}
+                      <div className="flex items-center gap-4">
+                        <Link href={`/hd/pm-checklist/${pm.id}`} className="text-sm font-semibold" style={{ color: BLUE }}>View →</Link>
+                        <a href={`/api/hd/pm-checklist/${pm.id}/pdf`} target="_blank" rel="noopener noreferrer" className="text-sm font-semibold" style={{ color: BLUE }}>
+                          Print PM report →
+                        </a>
+                      </div>
+                    </div>
+                  ))}
                   {dotInspection && (
                     <Link href={`/hd/dot-inspections/${dotInspection.id}`} className="flex items-center justify-between p-4 rounded-lg" style={{ background: '#F9FAFB', border: '1px solid #E5E7EB' }}>
                       <div>
