@@ -198,6 +198,11 @@ export async function POST(req: NextRequest) {
       signature_base64:      signature_base64 ?? null,
       tech_name:             tech_name ?? null,
       completed_at:          new Date().toISOString(),
+      // Locked on creation, matching the DOT, aerial and equipment routes: the form
+      // only posts on submit, so a row exists only once it has been signed. There is
+      // no draft state to leave unlocked.
+      locked:                true,
+      locked_at:             new Date().toISOString(),
     })
     .select('id')
     .single()

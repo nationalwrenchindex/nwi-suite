@@ -170,6 +170,16 @@ export default async function PMChecklistReportPage({ params }: { params: Promis
           ) : (
             <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>Signed digitally</p>
           )}
+          {/* Signing stamp, matching the aerial and DOT detail pages. Rows predating
+              migration 126 have no locked_at and simply omit the line. */}
+          {pm.locked && pm.locked_at != null && (
+            <p className="text-xs mt-3" style={{ color: 'rgba(255,255,255,0.35)' }}>
+              Record locked {new Date(pm.locked_at as string).toLocaleString('en-US', {
+                month: 'short', day: 'numeric', year: 'numeric',
+                hour: 'numeric', minute: '2-digit',
+              })} · ID {String(pm.id).slice(0, 8)}
+            </p>
+          )}
         </div>
       </div>
     </main>
