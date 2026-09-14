@@ -6,6 +6,7 @@ import InvoiceDetailActions from './InvoiceDetailActions'
 import { termsDisplay, formatDueDate } from '@/lib/hd/payment-terms'
 import { AERIAL_TYPE_LABEL } from '@/lib/hd/aerial/forms'
 import { findInvoicePMChecklists } from '@/lib/hd/pm-report-attachment'
+import { resolveLateFeeSettings, assessLateFee, lateFeeBlockMessage } from '@/lib/hd/late-fee'
 import type { AerialInspectionType } from '@/types/aerial'
 
 const ORANGE = '#FF6600'
@@ -70,6 +71,18 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const items: LineItem[] = Array.isArray(inv.line_items) ? inv.line_items : []
   const st = STATUS_STYLE[inv.status] ?? STATUS_STYLE.unpaid
 
+  // Late fee, computed by the same module the send route charges from
+  // (src/lib/hd/late-fee.ts), off the same late_fee_settings row the nightly cron
+  // reads. The number shown here is therefore the number that gets charged — if
+  // this page did its own arithmetic the tech could be quoted one figure and the
+  // customer billed another.
+  const lateFeeSettings   = await resolveLateFeeSettings(supabase, user.id)
+  const lateFee           = assessLateFee(inv, lateFeeSettings, new Date())
+  const lateFeeApplied    = Boolean(inv.late_fee_applied) && Number(inv.late_fee_amount) > 0
+  // The rate recorded on the row (migration 130) is what actually produced the
+  // charge; settings may have moved since. undefined on a pre-130 database.
+  const appliedRate       = inv.late_fee_percentage == null ? null : Number(inv.late_fee_percentage)
+
   return (
     <div style={{ background: '#F4F5F7', minHeight: '100dvh', padding: '24px 20px' }}>
       <div style={{ maxWidth: 860, margin: '0 auto' }}>
@@ -96,6 +109,22 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             <span className="text-xs font-semibold px-2.5 py-1 rounded-full capitalize" style={{ background: st.bg, color: st.color }}>
               {inv.status}
             </span>
+
+            {/* OVERDUE is a fact about the calendar, not a status. An invoice can sit
+                at 'sent' for sixty days and nothing moves it to 'overdue' until the
+                cron touches it — and the cron has never run. This badge is computed
+                from due_date on every render, so the tech sees the truth today. */}
+            {lateFee.isOverdue && !lateFeeApplied && (
+              <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: '#FEE2E2', color: '#b91c1c' }}>
+                Overdue {lateFee.daysOverdue}d
+              </span>
+            )}
+
+            {lateFeeApplied && (
+              <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: '#FEF3C7', color: '#92400e' }}>
+                Late fee applied · {fmt(inv.late_fee_amount)}
+              </span>
+            )}
           </div>
           <InvoiceDetailActions
             invoiceId={inv.id}
@@ -103,6 +132,16 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             currentStatus={inv.status}
             customerPhone={inv.customer_phone}
             customerEmail={(inv.customer_email as string | null) ?? null}
+            /* The modal offers "Resend with Late Fee" only when this says it can be
+               charged, and prints lateFeeBlockedReason instead when it cannot. Both
+               come from the shared calculator, so the amount on the button is the
+               amount the send route writes. */
+            lateFeeChargeable={lateFee.chargeable}
+            lateFeeAmount={lateFee.feeAmount}
+            lateFeeDaysOverdue={lateFee.daysOverdue}
+            lateFeePercentage={lateFee.percentage}
+            lateFeeBlockedReason={lateFee.chargeable ? null : lateFeeBlockMessage(lateFee)}
+            lateFeeAlreadyApplied={lateFeeApplied}
             pmChecklistId={pmChecklists[0]?.id ?? null}
             dotInspectionId={dotInspection?.id ?? null}
             aerialInspectionId={aerialInspection?.id ?? null}
@@ -141,8 +180,16 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
               {inv.due_date && (
                 <p className="text-sm font-semibold" style={{ color: inv.status === 'overdue' ? '#b91c1c' : '#6B7280' }}>Payment Due: {formatDueDate(inv.due_date)}</p>
               )}
-              {inv.late_fee_applied && Number(inv.late_fee_amount) > 0 && (
-                <p className="text-sm font-semibold" style={{ color: '#b91c1c' }}>Late Fee: {fmt(inv.late_fee_amount)}</p>
+              {lateFeeApplied && (
+                <p className="text-sm font-semibold" style={{ color: '#b91c1c' }}>
+                  Late Fee: {fmt(inv.late_fee_amount)}
+                  {/* The rate is printed from the invoice's own record of it, not from
+                      current settings — that is what makes the charge explainable to a
+                      customer months later even if the tech has since changed it. */}
+                  {appliedRate != null && appliedRate > 0 && (
+                    <span style={{ color: '#9CA3AF', fontWeight: 400 }}> ({appliedRate}%/mo)</span>
+                  )}
+                </p>
               )}
               {inv.paid_at && (
                 <p className="text-sm font-semibold" style={{ color: '#16a34a' }}>Paid: {fmtDate(inv.paid_at)}</p>
@@ -286,6 +333,27 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                   <span className="font-bold text-base" style={{ color: '#1A1A1A' }}>TOTAL DUE</span>
                   <span className="font-bold text-3xl" style={{ color: ORANGE }}>{fmt(inv.total)}</span>
                 </div>
+
+                {/* NOT yet charged, and deliberately outside the totals column above —
+                    the customer's copy must not imply a fee that has not been added.
+                    This is the quote for what "Resend with Late Fee" would add, shown
+                    to the tech so the decision is made with the number in front of them. */}
+                {lateFee.chargeable && (
+                  <div className="mt-3 p-3 rounded-lg" style={{ background: '#FFFBEB', border: '1px solid #FDE68A' }}>
+                    <div className="flex justify-between items-baseline gap-2">
+                      <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#92400e' }}>
+                        Late fee available
+                      </span>
+                      <span className="text-base font-bold" style={{ color: '#92400e' }}>{fmt(lateFee.feeAmount)}</span>
+                    </div>
+                    <p className="text-xs mt-1" style={{ color: '#a16207' }}>
+                      {lateFee.daysOverdue} day{lateFee.daysOverdue === 1 ? '' : 's'} past due
+                      {lateFee.percentage != null ? ` · ${lateFee.percentage}% per month` : ' · flat fee'}
+                      {lateFeeSettings.isDefault ? ' (default — not yet configured in Settings)' : ''}.
+                      Not charged until you choose “Resend with Late Fee”.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 

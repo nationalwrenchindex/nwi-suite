@@ -100,6 +100,13 @@ export async function GET(request: NextRequest) {
         total:              Math.round((invTotal + fee) * 100) / 100,
         late_fee_applied:   true,
         late_fee_amount:    fee,
+        // Record the rate this fee was actually computed from (migration 130). The
+        // manual "Resend with Late Fee" path writes it too, so a fee can be explained
+        // months later even if late_fee_settings has moved since. Null on a flat fee,
+        // where a percentage would be a fiction.
+        late_fee_percentage: settings.fee_type === 'percentage'
+          ? Number(settings.percentage_rate ?? 0)
+          : null,
         late_fee_applied_at: new Date().toISOString(),
         status:             'overdue',
         updated_at:         new Date().toISOString(),

@@ -16,6 +16,13 @@ import { getContactSuppression } from '@/lib/customer-contact'
 import { mintInvoiceToken, publicInvoiceUrl } from '@/lib/hd/invoice-token'
 import { buildInvoiceSms, buildInvoiceEmail } from '@/lib/hd/sms-templates'
 import { buildPMReportAttachment } from '@/lib/hd/pm-report-attachment'
+import {
+  resolveLateFeeSettings,
+  assessLateFee,
+  buildLateFeeUpdate,
+  lateFeeBlockMessage,
+  isMissingLateFeePercentageColumn,
+} from '@/lib/hd/late-fee'
 
 export const dynamic = 'force-dynamic'
 
@@ -27,6 +34,11 @@ interface SendBody {
   method: 'sms' | 'email'
   phone?: string
   email?: string
+  /**
+   * Apply the late fee to the invoice as part of this send. See the LATE FEE
+   * block in the handler for the ordering and the rollback contract.
+   */
+  applyLateFee?: boolean
 }
 
 interface EmailAttachment {
@@ -59,9 +71,13 @@ async function buildAttachment(
   try {
     const report = await buildPMReportAttachment(svc, userId, invoiceId)
     if (!report) return null
+    // Already base64 — the builder encodes the PDF itself, so the caller does not
+    // need to know whether the payload is text or binary. It used to hand back an
+    // HTML string that was encoded here; re-encoding a base64 string would produce
+    // a file that downloads but will not open.
     return {
       filename: report.filename,
-      content:  Buffer.from(report.html, 'utf8').toString('base64'),
+      content:  report.content,
     }
   } catch (err) {
     console.error(
@@ -92,7 +108,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // another subscriber's invoice is indistinguishable from a missing one.
   const { data: invoice, error: fetchErr } = await supabase
     .from('hd_invoices')
-    .select('id, invoice_number, status, total, customer_phone, customer_email, sent_at, sent_count, last_sent_at, customer_id')
+    .select('id, invoice_number, status, total, customer_phone, customer_email, sent_at, sent_count, last_sent_at, customer_id, due_date, line_items, subtotal_parts, late_fee_applied, late_fee_amount, late_fee_applied_at')
     .eq('id', id)
     .eq('user_id', user.id)
     .single()
@@ -133,6 +149,123 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   } catch (err) {
     console.error('[hd-invoice-send] token mint failed:', err instanceof Error ? err.message : String(err))
     return NextResponse.json({ error: 'Could not create a payment link for this invoice.' }, { status: 500 })
+  }
+
+  // ── LATE FEE ─────────────────────────────────────────────────────────────
+  // "Resend with Late Fee" on the invoice page sets applyLateFee. The fee is
+  // computed by src/lib/hd/late-fee.ts — the same module the invoice page shows
+  // the number from, so what the tech was quoted is what the customer is charged.
+  //
+  // ORDERING: APPLY, THEN SEND, THEN UNDO IF THE SEND FAILED.
+  // The point of the feature is that the customer receives the NEW total, so the
+  // fee has to be on the row before the message is composed — sending first and
+  // charging after would text them a figure that is already wrong. The cost of
+  // that ordering is the window where the fee is applied and the send then fails,
+  // which would leave an invoice carrying a charge the customer was never told
+  // about and which the UI would then refuse to re-apply ('already_applied').
+  //
+  // So every failure path below goes through abortSend(), which restores the row
+  // to its pre-fee state and says so in the response. That is a compensating
+  // write, not a transaction — Supabase's REST layer gives no cross-statement
+  // rollback — so if the revert ITSELF fails the response carries
+  // late_fee_reverted: false and the tech is told the fee is still on the invoice.
+  // Loud and recoverable beats silent and wrong.
+  //
+  // An ineligible invoice is refused outright (409) rather than quietly sent
+  // without the fee: the tech pressed a button that said "with late fee", and a
+  // send that silently does something else is worse than one that does nothing.
+  let effectiveTotal = invoice.total as number | string | null
+  let appliedFee: { amount: number; percentage: number | null } | null = null
+  let revertLateFee: (() => Promise<boolean>) | null = null
+
+  if (body.applyLateFee) {
+    const settings   = await resolveLateFeeSettings(supabase, user.id)
+    const assessment = assessLateFee(invoice, settings)
+
+    if (!assessment.chargeable) {
+      return NextResponse.json({
+        sent:             false,
+        late_fee_applied: false,
+        error:            lateFeeBlockMessage(assessment) || 'A late fee cannot be applied to this invoice.',
+        url:              publicUrl,
+      }, { status: 409 })
+    }
+
+    const feeUpdate = buildLateFeeUpdate(invoice, assessment, id)
+
+    let { error: feeErr } = await supabase
+      .from('hd_invoices').update(feeUpdate).eq('id', id).eq('user_id', user.id)
+
+    // Pre-130 database: everything except the audit column can still be written.
+    if (feeErr && isMissingLateFeePercentageColumn(feeErr)) {
+      const withoutRate = { ...feeUpdate }
+      delete withoutRate.late_fee_percentage
+      console.warn('[hd-invoice-send] late_fee_percentage missing — run migration 130; applying fee without it')
+      ;({ error: feeErr } = await supabase
+        .from('hd_invoices').update(withoutRate).eq('id', id).eq('user_id', user.id))
+    }
+
+    if (feeErr) {
+      // Nothing was sent and nothing was charged — a plain failure.
+      console.error('[hd-invoice-send] late fee update failed:', feeErr.message)
+      return NextResponse.json({
+        sent:             false,
+        late_fee_applied: false,
+        error:            'The late fee could not be added to this invoice, so nothing was sent.',
+        url:              publicUrl,
+      }, { status: 500 })
+    }
+
+    effectiveTotal = feeUpdate.total as number
+    appliedFee     = { amount: assessment.feeAmount, percentage: assessment.percentage }
+
+    // Snapshot taken from the row as it was read at the top of this handler.
+    const before: Record<string, unknown> = {
+      line_items:          invoice.line_items ?? [],
+      subtotal_parts:      invoice.subtotal_parts ?? 0,
+      total:               invoice.total ?? 0,
+      late_fee_applied:    invoice.late_fee_applied ?? false,
+      late_fee_amount:     invoice.late_fee_amount ?? 0,
+      late_fee_applied_at: invoice.late_fee_applied_at ?? null,
+      status:              invoice.status,
+      updated_at:          new Date().toISOString(),
+    }
+    revertLateFee = async () => {
+      // late_fee_percentage is cleared in the same statement where it exists; on a
+      // pre-130 database the retry drops it, exactly as the forward write does.
+      let { error } = await supabase
+        .from('hd_invoices').update({ ...before, late_fee_percentage: null }).eq('id', id).eq('user_id', user.id)
+      if (error && isMissingLateFeePercentageColumn(error)) {
+        ;({ error } = await supabase
+          .from('hd_invoices').update(before).eq('id', id).eq('user_id', user.id))
+      }
+      if (error) {
+        console.error('[hd-invoice-send] LATE FEE REVERT FAILED for', id, '-', error.message)
+        return false
+      }
+      return true
+    }
+  }
+
+  /**
+   * Every "not delivered" exit. Undoes the late fee first when one was applied,
+   * so a failed send never leaves a charge on an invoice the customer never got.
+   * Callers pass the same payload they would have returned; `sent: false` and the
+   * late-fee outcome are added here so no exit can forget them.
+   */
+  async function abortSend(payload: Record<string, unknown>, status = 200) {
+    const reverted = revertLateFee ? await revertLateFee() : null
+    return NextResponse.json({
+      sent: false,
+      ...payload,
+      ...(reverted === null ? {} : {
+        late_fee_applied:  !reverted,
+        late_fee_reverted: reverted,
+        ...(reverted ? {} : {
+          warning: 'The late fee could not be removed after the failed send — it is still on this invoice.',
+        }),
+      }),
+    }, { status })
   }
 
   // Records a successful delivery on the row, for either channel.
@@ -200,13 +333,12 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (method === 'email') {
     const toEmail = (body.email ?? invoice.customer_email ?? '').trim()
     if (!toEmail) {
-      return NextResponse.json({ sent: false, error: 'No email address for this customer.', url: publicUrl })
+      return abortSend({ error: 'No email address for this customer.', url: publicUrl })
     }
 
     const emailSuppression = await getContactSuppression(supabase, invoice.customer_id as string | null)
     if (emailSuppression.no_email) {
-      return NextResponse.json({
-        sent:       false,
+      return abortSend({
         suppressed: true,
         error:      'This customer has asked not to receive email.',
         url:        publicUrl,
@@ -217,8 +349,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!apiKey) {
       // Say so plainly rather than returning a fake success: a tech who believes
       // the invoice went out will not follow up, and the bill ages.
-      return NextResponse.json({
-        sent:  false,
+      return abortSend({
         error: 'Email delivery is not configured on this deployment. Use SMS, or copy the link and send it yourself.',
         url:   publicUrl,
       })
@@ -228,7 +359,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       businessName:  profile?.business_name as string | null | undefined,
       businessPhone: profile?.phone as string | null | undefined,
       invoiceNumber: invoice.invoice_number as string,
-      total:         invoice.total as number | string | null,
+      // effectiveTotal, not invoice.total: when a late fee was just applied the
+      // customer must be quoted the new figure, which is the whole point of
+      // charging before sending.
+      total:         effectiveTotal,
       url:           publicUrl,
       hasReports,
     })
@@ -249,16 +383,14 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       if (sendErr) {
         // 200 on purpose, same contract as the SMS branch below: the request
         // succeeded, the mail provider did not, and the tech keeps the link.
-        return NextResponse.json({
-          sent:  false,
+        return abortSend({
           error: sendErr.message || 'The email could not be delivered.',
           url:   publicUrl,
           to:    toEmail,
         })
       }
     } catch (err) {
-      return NextResponse.json({
-        sent:  false,
+      return abortSend({
         error: err instanceof Error ? err.message : 'The email could not be delivered.',
         url:   publicUrl,
         to:    toEmail,
@@ -272,13 +404,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       url:        publicUrl,
       attached:   Boolean(attachment),
       ...record,
+      ...(appliedFee ? {
+        late_fee_applied:    true,
+        late_fee_amount:     appliedFee.amount,
+        late_fee_percentage: appliedFee.percentage,
+        total:               effectiveTotal,
+      } : {}),
     })
   }
 
   // ── SMS ──────────────────────────────────────────────────────────────────
   const to = (body.phone ?? invoice.customer_phone ?? '').trim()
   if (!to) {
-    return NextResponse.json({ sent: false, error: 'No phone number for this customer.', url: publicUrl })
+    return abortSend({ error: 'No phone number for this customer.', url: publicUrl })
   }
 
   // A customer marked do-not-SMS is not texted, even on a manual send: the flag is
@@ -286,8 +424,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   // reason and the link so the tech can still copy it and phone them instead.
   const suppression = await getContactSuppression(supabase, invoice.customer_id as string | null)
   if (suppression.no_sms) {
-    return NextResponse.json({
-      sent: false,
+    return abortSend({
       suppressed: true,
       error: 'This customer has asked not to receive text messages.',
       url: publicUrl,
@@ -298,7 +435,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     businessName:  profile?.business_name as string | null | undefined,
     businessPhone: profile?.phone as string | null | undefined,
     invoiceNumber: invoice.invoice_number as string,
-    total:         invoice.total as number | string | null,
+    // Post-late-fee figure — see the email branch.
+    total:         effectiveTotal,
     url:           publicUrl,
     hasReports,
   })
@@ -308,8 +446,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!result.success) {
     // 200 on purpose — the request succeeded, the carrier did not. The client
     // renders result.error and keeps the link copyable.
-    return NextResponse.json({
-      sent:  false,
+    return abortSend({
       error: result.error ?? 'Text message could not be delivered.',
       url:   publicUrl,
       to,
@@ -325,5 +462,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     to,
     url:  publicUrl,
     ...record,
+    ...(appliedFee ? {
+      late_fee_applied:    true,
+      late_fee_amount:     appliedFee.amount,
+      late_fee_percentage: appliedFee.percentage,
+      total:               effectiveTotal,
+    } : {}),
   })
 }

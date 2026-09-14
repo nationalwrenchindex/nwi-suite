@@ -19,6 +19,19 @@ interface SendResponse {
   to?:           string
   sent_count?:   number
   last_sent_at?: string | null
+  /** True once the route has charged the fee; false if it charged and then rolled back. */
+  late_fee_applied?:  boolean
+  late_fee_amount?:   number
+  /** false means the rollback after a failed send did NOT work — the fee is still on the row. */
+  late_fee_reverted?: boolean
+  warning?:           string
+}
+
+/** Which of the two resend choices the tech picked. */
+type SendMode = 'original' | 'late_fee'
+
+function money(n: number) {
+  return `$${n.toFixed(2)}`
 }
 
 /**
@@ -55,6 +68,12 @@ export default function InvoiceDetailActions({
   pmChecklistId = null,
   dotInspectionId = null,
   aerialInspectionId = null,
+  lateFeeChargeable = false,
+  lateFeeAmount = 0,
+  lateFeeDaysOverdue = 0,
+  lateFeePercentage = null,
+  lateFeeBlockedReason = null,
+  lateFeeAlreadyApplied = false,
 }: {
   invoiceId: string
   invoiceNumber: string
@@ -67,6 +86,18 @@ export default function InvoiceDetailActions({
   pmChecklistId?: string | null
   dotInspectionId?: string | null
   aerialInspectionId?: string | null
+  /* ── Late fee ──────────────────────────────────────────────────────────────
+     All six come from src/lib/hd/late-fee.ts, evaluated on the server in
+     page.tsx. Nothing here recomputes a fee: the amount shown on the button is
+     the amount the send route writes, because both read the same assessment. */
+  lateFeeChargeable?: boolean
+  lateFeeAmount?: number
+  lateFeeDaysOverdue?: number
+  /** Monthly rate, or null for a flat fee. */
+  lateFeePercentage?: number | null
+  /** One sentence saying why a fee cannot be charged. Null when it can. */
+  lateFeeBlockedReason?: string | null
+  lateFeeAlreadyApplied?: boolean
 }) {
   const router = useRouter()
   const [busy, setBusy]   = useState(false)
@@ -79,10 +110,17 @@ export default function InvoiceDetailActions({
   const [count, setCount]   = useState(sentCount)
   const [lastAt, setLastAt] = useState<string | null>(lastSentAt)
 
-  // SMS panel state. `phone` is seeded from the invoice but stays editable — the
+  // Send modal state. `phone` is seeded from the invoice but stays editable — the
   // number on file is often the shop's main line, not the person waiting on the
   // truck, and the tech knows which one to text.
-  const [smsOpen, setSmsOpen]   = useState(false)
+  const [sendOpen, setSendOpen] = useState(false)
+  // null = the two-choice screen. Picking a choice reveals the channel picker, so
+  // the "with or without a fee" decision is made once, before any recipient is
+  // typed, and cannot be ambiguous at the moment a send button is pressed.
+  const [mode, setMode]         = useState<SendMode | null>(null)
+  // Flipped locally the instant a fee-bearing send succeeds, so the late-fee
+  // choice closes off immediately instead of waiting on router.refresh().
+  const [feeJustApplied, setFeeJustApplied] = useState(false)
   const [phone, setPhone]       = useState(customerPhone ?? '')
   const [email, setEmail]       = useState(customerEmail ?? '')
   // Which channel the last attempt used, so the success and failure copy names the
@@ -94,6 +132,14 @@ export default function InvoiceDetailActions({
   const [copied, setCopied]     = useState(false)
 
   const hasReports = Boolean(pmChecklistId || dotInspectionId || aerialInspectionId)
+
+  // Option B is genuinely unavailable, not a disabled button that shrugs: either a
+  // fee can be charged right now or the modal prints the sentence explaining why not.
+  const feeApplied     = lateFeeAlreadyApplied || feeJustApplied
+  const canChargeFee   = lateFeeChargeable && !feeApplied
+  const feeBlockedWhy  = feeApplied
+    ? 'A late fee has already been applied to this invoice.'
+    : (lateFeeBlockedReason ?? 'A late fee cannot be applied to this invoice.')
 
   function showToast(msg: string) {
     setToast(msg)
@@ -128,9 +174,15 @@ export default function InvoiceDetailActions({
   }
 
   /**
-   * One sender for both channels. SMS carries a link; email carries the same link plus
-   * the PM report as an attachment, which is the only route by which that report
-   * reaches a customer — a text cannot carry a file.
+   * One sender for both channels AND both modes. SMS carries a link; email carries
+   * the same link plus the PM report as an attachment, which is the only route by
+   * which that report reaches a customer — a text cannot carry a file.
+   *
+   * `applyLateFee` rides along on the same request rather than being a separate
+   * "add fee" call the tech makes first. That is deliberate: the route charges the
+   * fee and sends inside one handler, and rolls the charge back if the delivery
+   * fails, so there is no state where the invoice carries a fee the customer was
+   * never told about.
    */
   async function send(channel: 'sms' | 'email') {
     const target = channel === 'sms' ? phone.trim() : email.trim()
@@ -139,6 +191,7 @@ export default function InvoiceDetailActions({
       setError(channel === 'sms' ? 'Enter a phone number to text.' : 'Enter an email address to send to.')
       return
     }
+    const applyLateFee = mode === 'late_fee'
     setLastChannel(channel)
     setSend('sending')
     setError('')
@@ -147,9 +200,10 @@ export default function InvoiceDetailActions({
       const res  = await fetch(`/api/hd/invoices/${invoiceId}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(
-          channel === 'sms' ? { method: 'sms', phone: target } : { method: 'email', email: target },
-        ),
+        body: JSON.stringify({
+          ...(channel === 'sms' ? { method: 'sms', phone: target } : { method: 'email', email: target }),
+          ...(applyLateFee ? { applyLateFee: true } : {}),
+        }),
       })
       const data = await res.json() as SendResponse
       // The route answers 200 on a delivery failure so the link survives; keep
@@ -157,21 +211,41 @@ export default function InvoiceDetailActions({
       if (data.url) setPayUrl(data.url)
       if (data.sent) {
         setSend('sent')
+        if (data.late_fee_applied) setFeeJustApplied(true)
         // Advance the send record from the response so the label flips to
         // "Resend Invoice" and the timestamp moves without a reload.
         if (typeof data.sent_count === 'number') setCount(data.sent_count)
         else setCount(c => c + 1)
         setLastAt(data.last_sent_at ?? new Date().toISOString())
-        router.refresh()   // status may have moved unpaid -> sent
+        router.refresh()   // status, total and the late-fee badges may all have moved
       } else {
         setSend('failed')
-        setError(data.error ?? `The ${channel === 'sms' ? 'text' : 'email'} could not be delivered.`)
+        // A failed fee-bearing send normally rolls the charge back. When the
+        // rollback itself failed the route says so, and that has to reach the tech
+        // verbatim — the invoice is now carrying a fee the customer never received.
+        const stuck = data.late_fee_applied === true && data.late_fee_reverted === false
+        setError([
+          data.error ?? `The ${channel === 'sms' ? 'text' : 'email'} could not be delivered.`,
+          stuck ? (data.warning ?? 'The late fee could not be removed and is still on this invoice.') : '',
+        ].filter(Boolean).join(' '))
+        if (stuck) { setFeeJustApplied(true); router.refresh() }
       }
     } catch (err) {
       setSend('failed')
       setError(err instanceof Error ? err.message
         : `Network error — the ${channel === 'sms' ? 'text' : 'email'} was not sent.`)
+      // A network error means we never saw the reply. The server may have charged
+      // and rolled back, or charged and not — reload so the page shows the truth.
+      if (applyLateFee) router.refresh()
     }
+  }
+
+  /** Opens the modal on the two-choice screen, clearing any previous attempt. */
+  function openSendModal() {
+    setSendOpen(true)
+    setMode(null)
+    setSend('idle')
+    setError('')
   }
 
   async function copyLink() {
@@ -239,7 +313,7 @@ export default function InvoiceDetailActions({
         </Link>
 
         <button
-          onClick={() => setSmsOpen(o => !o)}
+          onClick={() => (sendOpen ? setSendOpen(false) : openSendModal())}
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold text-sm"
           style={
             sendState === 'sent'
@@ -275,14 +349,115 @@ export default function InvoiceDetailActions({
         </p>
       )}
 
-      {smsOpen && (
+      {/* ── SEND MODAL ────────────────────────────────────────────────────────
+          Two screens. The first asks the only question that changes what the
+          customer is charged — original, or with the late fee — and the second
+          asks how to deliver it. Splitting them keeps the money decision from
+          being something you might click past on the way to a phone number.
+
+          Both channels survive the split: the second screen is the panel that was
+          here before, text and email intact, and whichever choice was made on the
+          first screen rides along on the request. */}
+      {sendOpen && (
         <div
-          className="p-4 rounded-xl w-full sm:w-[380px] text-left"
-          style={{ background: '#FFFFFF', border: `1px solid ${BORDER}` }}
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ background: 'rgba(17,24,39,0.5)' }}
+          onClick={() => { if (!sending) setSendOpen(false) }}
+          role="presentation"
         >
-          <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: '#9CA3AF' }}>
-            Send invoice to customer
-          </p>
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Send invoice ${invoiceNumber}`}
+          onClick={e => e.stopPropagation()}
+          className="p-4 rounded-xl w-full sm:w-[420px] text-left overflow-y-auto"
+          style={{ background: '#FFFFFF', border: `1px solid ${BORDER}`, maxHeight: '88vh' }}
+        >
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#9CA3AF' }}>
+              {mode === null ? `Send ${invoiceNumber}` : mode === 'late_fee' ? 'Resend with late fee' : 'Resend original invoice'}
+            </p>
+            <button
+              onClick={() => setSendOpen(false)}
+              disabled={sending}
+              aria-label="Close"
+              className="text-sm leading-none px-2 py-1 rounded disabled:opacity-40"
+              style={{ color: MUTED }}
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* ── Screen 1: which resend? ─────────────────────────────────────── */}
+          {mode === null && (
+            <div className="flex flex-col gap-3">
+              {/* Option A — always available. */}
+              <button
+                onClick={() => { setMode('original'); setSend('idle'); setError('') }}
+                className="w-full text-left p-3 rounded-lg"
+                style={{ background: '#F9FAFB', border: `1px solid ${BORDER}` }}
+              >
+                <span className="block text-sm font-semibold" style={{ color: TEXT }}>
+                  {count > 0 ? 'Resend Original Invoice' : 'Send Invoice'}
+                </span>
+                <span className="block text-xs mt-1" style={{ color: MUTED }}>
+                  Sends the invoice exactly as it stands. Nothing on it changes.
+                </span>
+              </button>
+
+              {/* Option B — offered only when a fee can actually be charged. When it
+                  cannot, the choice is absent and its place is taken by the reason,
+                  rather than a dead button the tech clicks at and gets nothing from. */}
+              {canChargeFee ? (
+                <button
+                  onClick={() => { setMode('late_fee'); setSend('idle'); setError('') }}
+                  className="w-full text-left p-3 rounded-lg"
+                  style={{ background: '#FFFBEB', border: '1px solid #FDE68A' }}
+                >
+                  <span className="flex items-baseline justify-between gap-2">
+                    <span className="text-sm font-semibold" style={{ color: '#92400e' }}>Resend with Late Fee</span>
+                    <span className="text-sm font-bold" style={{ color: '#92400e' }}>+{money(lateFeeAmount)}</span>
+                  </span>
+                  <span className="block text-xs mt-1" style={{ color: '#a16207' }}>
+                    {lateFeeDaysOverdue} day{lateFeeDaysOverdue === 1 ? '' : 's'} past due
+                    {lateFeePercentage != null ? ` · ${lateFeePercentage}% per month` : ' · flat fee'}.
+                    Adds the fee as a line item and sends the customer the new total.
+                  </span>
+                </button>
+              ) : (
+                <div className="w-full p-3 rounded-lg" style={{ background: '#F9FAFB', border: `1px dashed ${BORDER}` }}>
+                  <span className="block text-sm font-semibold" style={{ color: '#9CA3AF' }}>
+                    Resend with Late Fee — unavailable
+                  </span>
+                  <span className="block text-xs mt-1" style={{ color: MUTED }}>{feeBlockedWhy}</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ── Screen 2: how to deliver it? ────────────────────────────────── */}
+          {mode !== null && (
+          <>
+          <button
+            onClick={() => { setMode(null); setSend('idle'); setError('') }}
+            disabled={sending}
+            className="text-xs mb-3 disabled:opacity-40"
+            style={{ color: BLUE }}
+          >
+            ← Back
+          </button>
+
+          {/* The chosen mode restated on the delivery screen, because this is the
+              last point before the customer is charged. */}
+          <div className="p-3 rounded-lg mb-3" style={mode === 'late_fee'
+            ? { background: '#FFFBEB', border: '1px solid #FDE68A' }
+            : { background: '#F9FAFB', border: `1px solid ${BORDER}` }}>
+            <p className="text-xs" style={{ color: mode === 'late_fee' ? '#a16207' : MUTED }}>
+              {mode === 'late_fee'
+                ? `A late fee of ${money(lateFeeAmount)} will be added to this invoice, then the new total is sent. If the send fails the fee is removed again.`
+                : 'The invoice is sent as-is. No late fee is added.'}
+            </p>
+          </div>
 
           <label className="block text-xs mb-1" style={{ color: MUTED }}>Mobile number</label>
           <input
@@ -344,7 +519,10 @@ export default function InvoiceDetailActions({
 
           {sendState === 'sent' && (
             <p className="mt-3 text-sm font-semibold" style={{ color: '#16a34a' }}>
-              Sent to {lastChannel === 'sms' ? phone : email}. The customer can view and pay from the link.
+              Sent to {lastChannel === 'sms' ? phone : email}.{' '}
+              {feeJustApplied
+                ? `The ${money(lateFeeAmount)} late fee is on the invoice and the customer has the new total.`
+                : 'The customer can view and pay from the link.'}
             </p>
           )}
 
@@ -370,6 +548,9 @@ export default function InvoiceDetailActions({
               </button>
             </div>
           )}
+          </>
+          )}
+        </div>
         </div>
       )}
     </div>

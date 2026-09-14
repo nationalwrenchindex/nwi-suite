@@ -1,14 +1,16 @@
-// GET /api/hd/pm-checklist/[id]/pdf — the printable PM inspection report.
+// GET /api/hd/pm-checklist/[id]/pdf — the PM inspection report, as an actual PDF.
 //
-// Same generation approach as /api/hd/invoices/[id]/pdf and
-// /api/hd/dot-inspections/[id]/pdf: a self-contained HTML document served as text/html
-// with a print button, which the browser turns into a PDF. No PDF library is involved
-// on purpose — those routes set the pattern and a second mechanism would mean two ways
-// for the same signed record to render.
+// Unlike /api/hd/invoices/[id]/pdf and /api/hd/dot-inspections/[id]/pdf, which serve
+// self-contained HTML with a print button and let the browser do the conversion, this
+// route returns real PDF bytes. The reason is the other consumer: the same document is
+// attached to the invoice email, and a .html attachment is what a customer's mail
+// client quarantines or refuses to open on a phone. Once the bytes had to exist for the
+// email, serving anything else here would have meant two renderings of one signed
+// record that could drift apart.
 //
 // The document itself is built in src/lib/hd/pm-report-attachment.ts, which the invoice
 // email also calls, so the copy the tech prints and the copy the customer receives are
-// the same document.
+// the same bytes.
 //
 // Three audiences reach this record, matching the DOT route: the mechanic who performed
 // the PM, the fleet whose unit it is, and the partner who resells that fleet. Anyone
@@ -87,7 +89,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const doc = await renderPMReportDocumentForChecklists(svc, [String(pm.id)], { invoiceNumber })
   if (!doc) return new NextResponse('Not found', { status: 404 })
 
-  return new NextResponse(doc.html, {
-    headers: { 'Content-Type': 'text/html; charset=utf-8' },
+  // `inline` so the link opens in the browser's PDF viewer rather than dropping a file
+  // into Downloads unasked — the tech following "Print PM report" wants to look at it,
+  // and the viewer's own save button is right there when they want the file.
+  return new NextResponse(Buffer.from(doc.bytes), {
+    headers: {
+      'Content-Type':        'application/pdf',
+      'Content-Disposition': `inline; filename="${doc.filename}"`,
+      'Content-Length':      String(doc.bytes.length),
+      'Cache-Control':       'private, no-store',
+    },
   })
 }
