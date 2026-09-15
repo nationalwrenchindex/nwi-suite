@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import type { FleetProRole } from '@/types/fleet-pro'
-import { ROLE_LABELS, canManageMembers } from '@/types/fleet-pro'
+import { ROLE_LABELS, canManageMembers, canViewCosts } from '@/types/fleet-pro'
 import { FleetProWordmark, NWI_ORANGE } from './brand'
 
 interface NavItem { href: string; label: string }
@@ -17,10 +17,19 @@ export default function FleetProNav({
 }) {
   const pathname = usePathname()
 
+  // Compliance sits next to PM because they are the same job — the deadlines that
+  // take a truck off the road — and it is shown to every role: an expiring medical
+  // card is not financial information.
+  //
+  // Replacement is gated on canViewCosts, matching its API. /api/fleet-pro/replacement
+  // answers a viewer with 403 by design (the flag itself is a money figure), so
+  // showing the tab to a viewer would offer a link that can only fail.
   const items: NavItem[] = [
-    { href: '/fleet-pro',         label: 'Fleet'    },
-    { href: '/fleet-pro/pm',      label: 'PM Schedule' },
-    { href: '/fleet-pro/reports', label: 'Reports'  },
+    { href: '/fleet-pro',            label: 'Fleet'       },
+    { href: '/fleet-pro/pm',         label: 'PM Schedule' },
+    { href: '/fleet-pro/compliance', label: 'Compliance'  },
+    ...(canViewCosts(role)    ? [{ href: '/fleet-pro/replacement', label: 'Replacement' }] : []),
+    { href: '/fleet-pro/reports',    label: 'Reports'     },
     ...(canManageMembers(role) ? [{ href: '/fleet-pro/team', label: 'Team' }] : []),
   ]
 

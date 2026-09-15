@@ -8,6 +8,8 @@ import { computeRegistrationState, daysUntilExpiration, registrationNeedsAttenti
 import type { RegistrationState } from '@/types/fleet-pro-registration'
 import { canViewCosts } from '@/types/fleet-pro'
 import type { FleetProDashboard, FleetProUnitRow, PmState } from '@/types/fleet-pro'
+import { loadFleetCosts, fleetCostPerMile, fleetCostPerHour } from '@/lib/fleet-pro/cost'
+import { emptyBreakdown } from '@/types/fleet-pro-cost'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,6 +35,8 @@ interface UnitRecord {
 
 // Fields the PM fix adds to the wire. Kept local because src/types/fleet-pro.ts is
 // owned elsewhere; see the report for what should be promoted into it.
+// The cost fields that used to be planned for here now live on FleetProUnitRow
+// itself — three surfaces read them, so a local interface was the wrong home.
 interface DashboardUnitRow extends FleetProUnitRow {
   registration_state:        RegistrationState
   registration_expires_on:   string | null
@@ -125,12 +129,18 @@ export async function GET() {
     registration_alert_count: 0,
     spend_mtd:        showCost ? 0 : null,
     spend_ytd:        showCost ? 0 : null,
+    // A fleet with no miles on file has no cost per mile. Null, not 0 — "$0.00/mi"
+    // reads as free when it means unknown.
+    fleet_cost_per_mile: null,
+    fleet_cost_per_hour: null,
+    fleet_cost_12mo:     showCost ? 0 : null,
+    units_with_mileage:  0,
     units:            [],
   }
 
   if (unitIds.length === 0) return NextResponse.json({ dashboard: empty })
 
-  const [pmRes, woRes, dotRes, aerialRes, equipRes, invRes, regRes] = await Promise.all([
+  const [pmRes, woRes, dotRes, aerialRes, equipRes, invRes, regRes, costRes] = await Promise.all([
     svc.from('fleet_pro_pm_schedules')
       .select('unit_id, interval_days, next_due_date')
       .eq('fleet_account_id', fleetId)
@@ -172,6 +182,21 @@ export async function GET() {
       .select('unit_id, license_plate, jurisdiction, expires_on')
       .eq('fleet_account_id', fleetId)
       .in('unit_id', unitIds),
+
+    // The rolling twelve-month cost basis — invoices, outside vendor entries and the
+    // meter series, summed per unit in one place (src/lib/fleet-pro/cost.ts). Loaded
+    // for EVERY caller, including viewers: the role gate strips the figures on the
+    // way out at the bottom of this file, and branching the query on role would give
+    // two code paths where the withholding rule has to be remembered twice.
+    //
+    // Caught rather than thrown. Cost is one panel of this page; a manager whose PMs
+    // are overdue still needs the PM list even if the cost engine trips over a
+    // malformed invoice, so a failure degrades this page to no-cost instead of 500ing
+    // the whole dashboard.
+    loadFleetCosts(svc, fleetId, unitIds, now).catch(err => {
+      console.error('[fleet-pro/dashboard costs]', err)
+      return null
+    }),
   ])
 
   const failed = [pmRes, woRes, dotRes, aerialRes, equipRes, invRes, regRes].find(r => r.error)
@@ -225,6 +250,11 @@ export async function GET() {
     if (inv.created_at >= monthStart) mtdByUnit.set(inv.unit_id, (mtdByUnit.get(inv.unit_id) ?? 0) + amount)
   }
 
+  // When the cost engine was caught above, every unit falls back to a zeroed
+  // breakdown so the row shape on the wire never varies with the engine's health.
+  const costBreakdowns = units.map(u => costRes?.get(u.id) ?? emptyBreakdown(u.id))
+  const costByUnit = new Map(costBreakdowns.map(c => [c.unit_id, c]))
+
   let overdueCount = 0
   let dueSoonCount = 0
   // Expired, missing and expiring-within-60-days all count: a plate a manager cannot
@@ -251,6 +281,7 @@ export async function GET() {
     if (registrationNeedsAttention(regState)) registrationAlertCount++
 
     const lastService = lastServiceByUnit.get(u.id) ?? null
+    const cost = costByUnit.get(u.id) ?? emptyBreakdown(u.id)
 
     return {
       id:                   u.id,
@@ -288,6 +319,24 @@ export async function GET() {
 
       spend_mtd: showCost ? mtd : null,
       spend_ytd: showCost ? ytd : null,
+
+      // SAME WITHHOLDING RULE AS spend_mtd/spend_ytd, applied field by field: a
+      // viewer's payload carries nulls, not zeros, so there is nothing to read out
+      // of the network tab and nothing that looks like a real $0 figure.
+      cost_12mo:     showCost ? cost.total_cost  : null,
+      cost_parts:    showCost ? cost.parts_cost  : null,
+      cost_labor:    showCost ? cost.labor_cost  : null,
+      cost_other:    showCost ? cost.other_cost  : null,
+      cost_vendor:   showCost ? cost.vendor_cost : null,
+      cost_per_mile: showCost ? cost.cost_per_mile : null,
+      cost_per_hour: showCost ? cost.cost_per_hour : null,
+      cost_months:   showCost ? cost.months : null,
+
+      // Use, not money. A viewer sees how hard the asset has been worked — that is
+      // the portal doing its job — and no spend figure can be derived from it.
+      miles_driven:  cost.miles_driven,
+      hours_run:     cost.hours_run,
+      repair_events: cost.repair_events,
     }
   })
 
@@ -296,8 +345,19 @@ export async function GET() {
     a.unit_number.localeCompare(b.unit_number, 'en', { numeric: true }),
   )
 
+  // Fleet-wide, from the breakdowns rather than from the rows: the rows have already
+  // been nulled for viewers, and the aggregate has to be computed from the real
+  // figures and then withheld once, not summed from a column of nulls.
+  const fleetCostTotal = costBreakdowns.reduce((sum, c) => sum + c.total_cost, 0)
+
   const dashboard: FleetProDashboard = {
     ...empty,
+    fleet_cost_per_mile: showCost ? fleetCostPerMile(costBreakdowns) : null,
+    fleet_cost_per_hour: showCost ? fleetCostPerHour(costBreakdowns) : null,
+    fleet_cost_12mo:     showCost ? fleetCostTotal : null,
+    // Not withheld: it is a count of units, not money, and it is what tells a manager
+    // the fleet average is drawn from 4 of his 60 trucks and should not be trusted yet.
+    units_with_mileage:  costBreakdowns.filter(c => c.miles_driven !== null && c.miles_driven > 0).length,
     unit_count:              rows.length,
     overdue_count:           overdueCount,
     due_soon_count:          dueSoonCount,

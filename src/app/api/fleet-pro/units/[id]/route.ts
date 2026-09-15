@@ -17,6 +17,8 @@ import type { PmSource } from '@/lib/fleet-pro/pm-status'
 import type { FleetProUnitDetail, FleetProUnitRow, ServiceEvent, ServiceEventKind } from '@/types/fleet-pro'
 import { canSeeCostBasis } from '@/types/fleet-pro-partner'
 import type { MeterReading, UnitMonthCost, FleetProViewerKind } from '@/types/fleet-pro-partner'
+import { loadFleetCosts } from '@/lib/fleet-pro/cost'
+import type { UnitCostBreakdown } from '@/types/fleet-pro-cost'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,6 +46,17 @@ interface UnitDetailPayload extends Omit<FleetProUnitDetail, 'events' | 'unit'> 
   meter_readings: MeterReading[]
   /** Null — not zeroed — for viewers, same rule as every other cost figure. */
   cost_by_month:  UnitMonthCost[] | null
+  /**
+   * The rolling twelve-month cost basis from src/lib/fleet-pro/cost.ts.
+   *
+   * NOT the same series as cost_by_month above, and deliberately kept alongside it:
+   * cost_by_month is invoices only, because that is what the partner drill-down and
+   * the old table were built to show. This one also folds in fleet_pro_service_entries
+   * — the outside vendor work a tech photographed at the QR page — which is money the
+   * unit genuinely cost and which the cost-per-mile figure has to include. Collapsing
+   * the two would silently change what the existing table means.
+   */
+  cost:           UnitCostBreakdown | null
   viewer_kind:    FleetProViewerKind
 }
 
@@ -175,6 +188,15 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   }
 
   const fleetId = access.fleetId
+
+  // Kicked off before the big fan-out below and awaited after it, so it rides along
+  // with those ten queries instead of adding a round trip after them. Caught for the
+  // same reason as on the dashboard: the service history is the point of this page
+  // and must still render if the cost engine trips.
+  const costPromise = loadFleetCosts(svc, fleetId, [unitId]).catch(err => {
+    console.error('[fleet-pro/units/[id] costs]', err)
+    return null
+  })
 
   const [
     { data: workOrders },
@@ -490,6 +512,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
   const showCosts = access.showCosts
 
+  const costBreakdown = (await costPromise)?.get(unitId) ?? null
+
   const unit: DetailUnitRow = {
     id:                   String(unitRow.id),
     unit_number:          (unitRow.unit_number as string | null) ?? '',
@@ -521,6 +545,21 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
     spend_mtd:            showCosts ? spendMtd : null,
     spend_ytd:            showCosts ? spendYtd : null,
+
+    // Money obeys the withholding rule; use does not. Same split as the dashboard —
+    // a viewer may know the truck ran 82,000 miles, not what those miles cost.
+    cost_12mo:     showCosts ? costBreakdown?.total_cost    ?? null : null,
+    cost_parts:    showCosts ? costBreakdown?.parts_cost    ?? null : null,
+    cost_labor:    showCosts ? costBreakdown?.labor_cost    ?? null : null,
+    cost_other:    showCosts ? costBreakdown?.other_cost    ?? null : null,
+    cost_vendor:   showCosts ? costBreakdown?.vendor_cost   ?? null : null,
+    cost_per_mile: showCosts ? costBreakdown?.cost_per_mile ?? null : null,
+    cost_per_hour: showCosts ? costBreakdown?.cost_per_hour ?? null : null,
+    cost_months:   showCosts ? costBreakdown?.months        ?? null : null,
+
+    miles_driven:  costBreakdown?.miles_driven  ?? null,
+    hours_run:     costBreakdown?.hours_run     ?? null,
+    repair_events: costBreakdown?.repair_events ?? null,
   }
 
   // COST WITHHOLDING: viewers are not merely shown a blank column — the figures
@@ -538,6 +577,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     // Withheld the same way as every other figure — the month-by-month breakdown
     // would otherwise hand a viewer the total spend one subtraction later.
     cost_by_month:  showCosts ? costByMonth : null,
+    // Withheld whole rather than field by field: everything inside it except the
+    // meter spans is money, and those already ride on `unit` above.
+    cost:           showCosts ? costBreakdown : null,
     viewer_kind:    access.kind,
   }
 

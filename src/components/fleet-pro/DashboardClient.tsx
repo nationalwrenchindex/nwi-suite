@@ -1,11 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
 import type { FleetProDashboard, FleetProUnitRow, PmState } from '@/types/fleet-pro'
+import { formatPerMile } from '@/types/fleet-pro-cost'
 import { FleetProWordmark, NWI_ORANGE } from './brand'
 import { registrationLabel, todayIso, REGISTRATION_COLOR, REGISTRATION_LABEL } from '@/lib/fleet-pro/registration'
 import type { RegistrationState } from '@/types/fleet-pro-registration'
+import ReplacementCard from './ReplacementCard'
+import type { ReplacementReport } from '@/types/fleet-pro-replacement'
 
 // ─── Wire shape ───────────────────────────────────────────────────────────────
 // PM is hours-based on hd_units for most fleets and date-based only when a manager
@@ -45,14 +48,61 @@ const PM_STYLE: Record<PmState, { label: string; color: string }> = {
   unscheduled: { label: 'Unscheduled', color: MUTED },
 }
 
+// Mirrors the route's own ranking so re-sorting on the client reproduces the order
+// the server sent rather than approximating it.
+const PM_RANK: Record<PmState, number> = { overdue: 0, due_soon: 1, unscheduled: 2, scheduled: 3 }
+
 const usd = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
   maximumFractionDigits: 0,
 })
 
-function money(n: number | null): string {
-  return n === null ? '—' : usd.format(n)
+function money(n: number | null | undefined): string {
+  return n === null || n === undefined ? '—' : usd.format(n)
+}
+
+// ─── Sorting ──────────────────────────────────────────────────────────────────
+// PM-overdue-first is kept as the default: it is what the page was built to answer
+// and what a manager opening it at 6am is looking for. Cost per mile is an
+// investigation, not a morning check, so it is a choice rather than the new default.
+
+type SortKey = 'pm' | 'cost_per_mile' | 'cost_12mo' | 'unit'
+
+const SORT_LABELS: { key: SortKey; label: string }[] = [
+  { key: 'pm',            label: 'PM overdue first' },
+  { key: 'cost_per_mile', label: 'Highest cost per mile' },
+  { key: 'cost_12mo',     label: 'Highest 12-mo cost' },
+  { key: 'unit',          label: 'Unit number' },
+]
+
+function byUnitNumber(a: UnitRow, b: UnitRow): number {
+  return a.unit_number.localeCompare(b.unit_number, 'en', { numeric: true })
+}
+
+/**
+ * Descending by a money figure, with UNKNOWN PINNED LAST.
+ *
+ * A unit with no meter history has a null cost per mile, not a zero. Sorting nulls
+ * as 0 would bury them at the bottom of an ascending sort and float them to the top
+ * of a descending one — and "the most expensive unit in the fleet" showing a row
+ * that has never been measured is exactly the wrong answer. They always sink,
+ * whichever direction the comparison runs, and keep unit order among themselves.
+ */
+function byMoneyDesc(a: number | null | undefined, b: number | null | undefined): number | null {
+  const av = a ?? null
+  const bv = b ?? null
+  if (av === null && bv === null) return null   // tie — fall through to unit number
+  if (av === null) return 1
+  if (bv === null) return -1
+  if (av === bv) return null
+  return bv - av
+}
+
+/** Miles over the rolling window. Null stays unknown; it is never "0 mi". */
+function miles(n: number | null | undefined): string {
+  if (n === null || n === undefined) return 'miles unknown'
+  return `${Math.round(n).toLocaleString('en-US')} mi`
 }
 
 function shortDate(iso: string | null): string {
@@ -130,6 +180,26 @@ function UnitTableRow({ unit, index, showCosts }: { unit: UnitRow; index: number
           <span className="block text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>{unit.truck_trailer_number}</span>
         )}
       </td>
+      {/* THE headline figure. Cost per mile is the number that decides whether a
+          unit stays in the fleet, so it sits second from the left in the same weight
+          as the unit number rather than at the far right end of a scroll. */}
+      {showCosts && (
+        <td className="px-4 py-3">
+          <span
+            className="font-condensed font-bold text-lg leading-none"
+            style={{ color: unit.cost_per_mile == null ? MUTED : FP_ORANGE }}
+          >
+            {formatPerMile(unit.cost_per_mile ?? null)}
+          </span>
+          <span className="block text-xs mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
+            {/* An em dash on its own is a dead end. Say WHY there is no figure — the
+                fix is a meter reading, and the manager is the one who can enter it. */}
+            {unit.cost_per_mile == null
+              ? 'No mileage on file'
+              : `${money(unit.cost_12mo)} · ${miles(unit.miles_driven)}`}
+          </span>
+        </td>
+      )}
       <td className="px-4 py-3 text-sm text-white">
         {makeModel}
         {unit.year && <span className="block text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>{unit.year}</span>}
@@ -183,6 +253,32 @@ export default function DashboardClient() {
   const [dashboard, setDashboard] = useState<Dashboard | null>(null)
   const [error, setError]         = useState<string | null>(null)
   const [loading, setLoading]     = useState(true)
+  const [sortKey, setSortKey]     = useState<SortKey>('pm')
+  // Replacement candidates ride on their own request. Deliberately NOT folded into
+  // the dashboard payload: the report scans work-order downtime across the fleet,
+  // and making the PM list wait on it would slow down the thing this page is for.
+  // A failure here leaves the section absent rather than breaking the dashboard.
+  const [replacement, setReplacement] = useState<ReplacementReport | null>(null)
+
+  // Sorted here rather than refetched: the whole fleet is already on the client, and
+  // a round trip to reorder 60 rows the browser is holding would be slower and would
+  // lose the manager's place on the page.
+  const sortedUnits = useMemo(() => {
+    const rows = [...(dashboard?.units ?? [])]
+    switch (sortKey) {
+      case 'cost_per_mile':
+        return rows.sort((a, b) => byMoneyDesc(a.cost_per_mile, b.cost_per_mile) ?? byUnitNumber(a, b))
+      case 'cost_12mo':
+        return rows.sort((a, b) => byMoneyDesc(a.cost_12mo, b.cost_12mo) ?? byUnitNumber(a, b))
+      case 'unit':
+        return rows.sort(byUnitNumber)
+      case 'pm':
+      default:
+        // The server already returns this order; it is restated so switching away
+        // and back does not require a refetch to get it.
+        return rows.sort((a, b) => PM_RANK[a.pm_state] - PM_RANK[b.pm_state] || byUnitNumber(a, b))
+    }
+  }, [dashboard, sortKey])
 
   useEffect(() => {
     let cancelled = false
@@ -204,6 +300,31 @@ export default function DashboardClient() {
     load()
     return () => { cancelled = true }
   }, [])
+
+  // Gated on can_view_costs, and therefore chained behind the dashboard rather than
+  // fired alongside it. /api/fleet-pro/replacement answers a viewer with 403 by
+  // design — the flag IS a money figure — so asking on their behalf would log a
+  // permission failure on every dashboard load a viewer performs.
+  const canViewCosts = dashboard?.can_view_costs ?? false
+
+  useEffect(() => {
+    if (!canViewCosts) { setReplacement(null); return }
+    let cancelled = false
+
+    async function loadReplacement() {
+      try {
+        const res  = await fetch('/api/fleet-pro/replacement')
+        if (!res.ok) return
+        const json = await res.json()
+        if (!cancelled) setReplacement(json.report as ReplacementReport)
+      } catch {
+        // Silent: the dashboard is still fully usable without this section.
+      }
+    }
+
+    loadReplacement()
+    return () => { cancelled = true }
+  }, [canViewCosts])
 
   const header = (
     <div className="mb-6">
@@ -229,15 +350,35 @@ export default function DashboardClient() {
 
   const showCosts = dashboard.can_view_costs
   const headers = [
-    'Unit', 'Make / Model', 'Type', 'PM Status', 'Next Due', 'Last Service', 'Inspection', 'Registration',
+    'Unit',
+    ...(showCosts ? ['Cost / Mile'] : []),
+    'Make / Model', 'Type', 'PM Status', 'Next Due', 'Last Service', 'Inspection', 'Registration',
     ...(showCosts ? ['MTD', 'YTD'] : []),
   ]
+
+  // How much of the fleet the average actually rests on. A cost per mile drawn from
+  // 4 of 60 trucks is not the fleet's cost per mile, and the tile has to say so
+  // rather than let a manager quote it in a budget meeting.
+  const withMileage = dashboard.units_with_mileage ?? 0
+  const fleetCpmSub = withMileage === 0
+    ? 'No meter readings yet'
+    : `${withMileage} of ${dashboard.unit_count} units measured`
 
   return (
     <div>
       {header}
 
-      <div className={`grid grid-cols-2 gap-4 mb-6 ${showCosts ? 'lg:grid-cols-6' : 'lg:grid-cols-4'}`}>
+      <div className={`grid grid-cols-2 gap-4 mb-6 ${showCosts ? 'lg:grid-cols-7' : 'lg:grid-cols-4'}`}>
+        {/* Leads the strip when the viewer is allowed money: it is the one figure on
+            this page that answers "what is this fleet costing me to run". */}
+        {showCosts && (
+          <KpiCard
+            label="Fleet $/Mile"
+            value={formatPerMile(dashboard.fleet_cost_per_mile ?? null)}
+            color={dashboard.fleet_cost_per_mile == null ? MUTED : FP_ORANGE}
+            sub={fleetCpmSub}
+          />
+        )}
         <KpiCard label="Units"        value={String(dashboard.unit_count)} sub={dashboard.fleet_name} />
         <KpiCard label="Overdue"      value={String(dashboard.overdue_count)}
                  color={dashboard.overdue_count > 0 ? RED : '#ffffff'} sub="PM past due" />
@@ -250,6 +391,56 @@ export default function DashboardClient() {
         {showCosts && <KpiCard label="Spend YTD" value={money(dashboard.spend_ytd)} sub="This year" />}
       </div>
 
+      {/* ── Replacement review ──────────────────────────────────────────────
+          Above the unit table, because a truck that has eaten half its own value
+          is a budget decision and the table below is an operations list — it
+          would never be found buried at row 40. Absent entirely when nothing is
+          flagged: an empty "0 candidates" panel trains people to skip the space
+          where the real warning will one day appear. */}
+      {replacement && replacement.candidates.length > 0 && (
+        <div className="mb-6">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 mb-3">
+            <h2 className="font-condensed font-bold text-white text-lg tracking-wide">
+              REPLACEMENT REVIEW
+            </h2>
+            <Link
+              href="/fleet-pro/replacement"
+              className="text-xs font-semibold hover:underline"
+              style={{ color: NWI_ORANGE }}
+            >
+              Full report &amp; PDF →
+            </Link>
+          </div>
+          <p className="text-xs mb-3" style={{ color: MUTED }}>
+            {replacement.candidate_count} of {replacement.unit_count} units crossed this
+            fleet&rsquo;s threshold ({replacement.thresholds.cost_ratio_pct}% of value, or{' '}
+            {replacement.thresholds.breakdown_min}+ breakdowns) in the last 12 months.
+          </p>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {replacement.candidates.slice(0, 6).map(c => (
+              <ReplacementCard
+                key={c.unit_id}
+                candidate={c}
+                thresholds={replacement.thresholds}
+                href={`/fleet-pro/units/${c.unit_id}`}
+                compact
+              />
+            ))}
+          </div>
+          {/* The grid is capped so the operations table is never pushed off the
+              first screen by a fleet with twenty flagged trucks. */}
+          {replacement.candidates.length > 6 && (
+            <Link
+              href="/fleet-pro/replacement"
+              className="inline-block mt-3 text-xs font-semibold hover:underline"
+              style={{ color: NWI_ORANGE }}
+            >
+              + {replacement.candidates.length - 6} more flagged for review
+            </Link>
+          )}
+        </div>
+      )}
+
       {dashboard.units.length === 0 ? (
         <div className="rounded-xl p-10 text-center" style={{ background: '#111920', border: '1px solid #1e3040' }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide mb-1">NO UNITS YET</p>
@@ -258,9 +449,34 @@ export default function DashboardClient() {
           </p>
         </div>
       ) : (
+        <>
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+          {showCosts && (
+            <p className="text-xs" style={{ color: MUTED }}>
+              {money(dashboard.fleet_cost_12mo)} spent across the fleet in the last 12 months
+            </p>
+          )}
+          {/* A native select rather than a custom menu: it is one control, and the
+              phone's own picker beats anything hand-rolled at 360px. */}
+          <label className="flex items-center gap-2 text-xs ml-auto" style={{ color: MUTED }}>
+            Sort
+            <select
+              value={sortKey}
+              onChange={e => setSortKey(e.target.value as SortKey)}
+              className="rounded-lg px-2 py-1.5 text-xs text-white"
+              style={{ background: '#162030', border: '1px solid #1e3040' }}
+            >
+              {SORT_LABELS
+                // Sorting by money is meaningless to someone who is not sent any.
+                .filter(o => showCosts || (o.key !== 'cost_per_mile' && o.key !== 'cost_12mo'))
+                .map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+            </select>
+          </label>
+        </div>
+
         <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px]" style={{ background: '#111920' }}>
+            <table className="w-full min-w-[720px]" style={{ background: '#111920' }}>
               <thead style={{ background: '#162030' }}>
                 <tr>
                   {headers.map(h => (
@@ -271,13 +487,14 @@ export default function DashboardClient() {
                 </tr>
               </thead>
               <tbody>
-                {dashboard.units.map((unit, i) => (
+                {sortedUnits.map((unit, i) => (
                   <UnitTableRow key={unit.id} unit={unit} index={i} showCosts={showCosts} />
                 ))}
               </tbody>
             </table>
           </div>
         </div>
+        </>
       )}
     </div>
   )

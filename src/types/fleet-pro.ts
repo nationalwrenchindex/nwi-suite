@@ -1,6 +1,8 @@
 // ─── NWI Fleet Pro — shared types ─────────────────────────────────────────────
 // Client-safe. No Supabase or Stripe imports here.
 
+import type { MonthlyCost } from './fleet-pro-cost'
+
 export type FleetProRole   = 'manager' | 'supervisor' | 'viewer'
 export type FleetProStatus = 'invited' | 'active' | 'revoked'
 
@@ -83,6 +85,32 @@ export interface FleetProUnitRow {
   // Null for viewers — cost is withheld by role, not merely hidden in the UI.
   spend_mtd:          number | null
   spend_ytd:          number | null
+
+  // ── Rolling twelve-month cost basis ────────────────────────────────────────
+  // Produced by src/lib/fleet-pro/cost.ts and flattened onto the row so the list
+  // does not have to carry a nested object through three components. Optional for
+  // the same reason as the PM fields above: the partner drill-down builds its own
+  // row shape and has no cost engine behind it.
+  //
+  // MONEY IS WITHHELD BY ROLE, USE IS NOT. Every `cost_*` field below is null for a
+  // read-only viewer, exactly like spend_mtd/spend_ytd. miles_driven, hours_run and
+  // repair_events survive for viewers because they are not money and nothing about
+  // spend can be reconstructed from them — a viewer being able to see that a truck
+  // ran 82,000 miles is the point of the portal, not a leak.
+  cost_12mo?:         number | null   // total spend across the window
+  cost_parts?:        number | null
+  cost_labor?:        number | null
+  cost_other?:        number | null   // tax, fees — the remainder, so the three reconcile
+  cost_vendor?:       number | null   // subset of cost_12mo billed by an outside shop
+  cost_per_mile?:     number | null   // null when mileage is unknown — never a fake 0
+  cost_per_hour?:     number | null
+
+  miles_driven?:      number | null   // span of the meter series inside the window
+  hours_run?:         number | null
+  repair_events?:     number | null
+
+  /** Twelve entries, oldest first. Null for viewers — it sums to the total. */
+  cost_months?:       MonthlyCost[] | null
 }
 
 export interface FleetProDashboard {
@@ -99,6 +127,20 @@ export interface FleetProDashboard {
   registration_alert_count?: number
   spend_mtd:        number | null
   spend_ytd:        number | null
+
+  // ── Fleet-wide cost basis, rolling twelve months ───────────────────────────
+  // A RATIO OF SUMS, not the mean of the per-unit ratios — see fleetCostPerMile in
+  // src/lib/fleet-pro/cost.ts for why averaging the ratios produces a number no
+  // manager recognizes. Null for viewers, and also null when no unit in the fleet
+  // has enough meter history to give the ratio a denominator.
+  // Optional so the partner drill-down, which builds its own dashboard shape, is
+  // unaffected — the same concession registration_alert_count makes.
+  fleet_cost_per_mile?: number | null
+  fleet_cost_per_hour?: number | null
+  fleet_cost_12mo?:     number | null
+  /** How many units actually contributed miles to fleet_cost_per_mile. */
+  units_with_mileage?:  number
+
   units:            FleetProUnitRow[]
 }
 

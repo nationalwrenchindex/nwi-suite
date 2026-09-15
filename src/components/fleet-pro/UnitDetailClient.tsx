@@ -1,10 +1,13 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import type { FleetProUnitDetail, FleetProUnitRow, ServiceEvent, ServiceEventKind, PmState } from '@/types/fleet-pro'
 import type { MeterReading, UnitMonthCost } from '@/types/fleet-pro-partner'
+import type { UnitCostBreakdown } from '@/types/fleet-pro-cost'
+import { formatPerHour, formatPerMile } from '@/types/fleet-pro-cost'
 import { NWI_BLUE, NWI_ORANGE } from './brand'
+import CostTrendChart from './CostTrendChart'
 import RegistrationSection from './RegistrationSection'
 
 
@@ -33,6 +36,9 @@ interface UnitDetail extends Omit<FleetProUnitDetail, 'events' | 'unit'> {
   events:          UnitServiceEvent[]
   meter_readings?: MeterReading[]
   cost_by_month?:  UnitMonthCost[] | null
+  // The rolling twelve-month basis from the cost engine. Distinct from cost_by_month
+  // above, which is invoices only — see the route for why both are on the wire.
+  cost?:           UnitCostBreakdown | null
 }
 
 const ACCENT = NWI_ORANGE
@@ -159,37 +165,133 @@ function Stat({ label, value, sub, color }: { label: string; value: string; sub?
   )
 }
 
+/**
+ * Manager-only meter entry.
+ *
+ * The other four writers of this table (pre-trip, work order, PM, invoice) all depend
+ * on someone else doing their job first. A trailer nobody pre-trips has no mileage at
+ * all, and with no mileage there is no cost per mile — so the figure the whole page is
+ * built around is one the manager has to be able to feed himself.
+ */
+function MeterEntryForm({ unitId, onSaved }: { unitId: string; onSaved: () => void }) {
+  const [odometer, setOdometer] = useState('')
+  const [hours,    setHours]    = useState('')
+  const [date,     setDate]     = useState(() => new Date().toISOString().slice(0, 10))
+  const [saving,   setSaving]   = useState(false)
+  const [message,  setMessage]  = useState<{ text: string; ok: boolean } | null>(null)
+
+  const today = new Date().toISOString().slice(0, 10)
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault()
+    if (saving) return
+
+    // Mirrors the route's own rule so the common mistake is answered instantly rather
+    // than after a round trip. The server still enforces it — this is a courtesy, not
+    // the check.
+    if (!odometer.trim() && !hours.trim()) {
+      setMessage({ text: 'Enter an odometer reading, engine hours, or both', ok: false })
+      return
+    }
+
+    setSaving(true)
+    setMessage(null)
+    try {
+      const res = await fetch(`/api/fleet-pro/units/${unitId}/meter`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          odometer:     odometer.trim() || null,
+          engine_hours: hours.trim() || null,
+          reading_date: date || null,
+        }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setMessage({ text: (json as { error?: string }).error ?? 'Could not save the reading', ok: false })
+        return
+      }
+      setOdometer('')
+      setHours('')
+      setMessage({ text: 'Reading saved', ok: true })
+      onSaved()
+    } catch {
+      setMessage({ text: 'Could not save the reading', ok: false })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const field = 'rounded-lg px-3 py-2 text-sm text-white w-full'
+  const fieldStyle = { background: STRIP, border: `1px solid ${BORDER}` }
+
+  return (
+    <form onSubmit={submit} className="px-4 py-4" style={{ background: CARD, borderTop: `1px solid ${BORDER}` }}>
+      <p className="text-[10px] uppercase tracking-widest mb-2" style={{ color: DIM }}>Record a reading</p>
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+        <input
+          className={field} style={fieldStyle}
+          type="number" inputMode="decimal" step="0.1" min="0"
+          placeholder="Odometer" aria-label="Odometer"
+          value={odometer} onChange={e => setOdometer(e.target.value)}
+        />
+        <input
+          className={field} style={fieldStyle}
+          type="number" inputMode="decimal" step="0.01" min="0"
+          placeholder="Engine hours" aria-label="Engine hours"
+          value={hours} onChange={e => setHours(e.target.value)}
+        />
+        {/* Backdating is allowed — catching up a month of missed entries is normal —
+            but a future reading would fall outside the rolling window and never count. */}
+        <input
+          className={field} style={fieldStyle}
+          type="date" max={today} aria-label="Reading date"
+          value={date} onChange={e => setDate(e.target.value)}
+        />
+        <button
+          type="submit" disabled={saving}
+          className="rounded-lg px-3 py-2 text-sm font-semibold disabled:opacity-50"
+          style={{ background: ACCENT, color: '#0b1218' }}
+        >
+          {saving ? 'Saving…' : 'Save reading'}
+        </button>
+      </div>
+      {message && (
+        <p className="text-xs mt-2" style={{ color: message.ok ? '#22C55E' : RED }}>{message.text}</p>
+      )}
+    </form>
+  )
+}
+
 export default function UnitDetailClient({ unitId }: { unitId: string }) {
   const [detail,  setDetail]  = useState<UnitDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
 
-  useEffect(() => {
-    let cancelled = false
-
-    async function load() {
-      setLoading(true)
-      setError(null)
-      try {
-        const res  = await fetch(`/api/fleet-pro/units/${unitId}`, { cache: 'no-store' })
-        const json = await res.json().catch(() => ({}))
-        if (cancelled) return
-        if (!res.ok) {
-          setError((json as { error?: string }).error ?? 'Could not load this unit')
-          setDetail(null)
-        } else {
-          setDetail((json as { detail: UnitDetail }).detail)
-        }
-      } catch {
-        if (!cancelled) setError('Could not load this unit')
-      } finally {
-        if (!cancelled) setLoading(false)
+  // Lifted out of the effect so a saved meter reading can pull the page again. It has
+  // to be a full reload, not a local patch: a new odometer changes miles driven, which
+  // changes cost per mile and the whole breakdown, and only the server knows the
+  // twelve-month span.
+  const load = useCallback(async (showSpinner: boolean) => {
+    if (showSpinner) setLoading(true)
+    setError(null)
+    try {
+      const res  = await fetch(`/api/fleet-pro/units/${unitId}`, { cache: 'no-store' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setError((json as { error?: string }).error ?? 'Could not load this unit')
+        setDetail(null)
+      } else {
+        setDetail((json as { detail: UnitDetail }).detail)
       }
+    } catch {
+      setError('Could not load this unit')
+    } finally {
+      setLoading(false)
     }
-
-    load()
-    return () => { cancelled = true }
   }, [unitId])
+
+  useEffect(() => { load(true) }, [load])
 
   const backLink = (
     <p className="text-xs uppercase tracking-widest mb-1" style={{ color: DIM }}>
@@ -232,6 +334,8 @@ export default function UnitDetailClient({ unitId }: { unitId: string }) {
   // spend is information. The section itself only appears once there is spend to
   // show, so a brand-new unit does not get a wall of $0.00.
   const costByMonth   = detail.cost_by_month ?? []
+  // The rolling-window basis. Null for viewers and for a payload that predates it.
+  const cost          = detail.cost ?? null
   const hasCostMonths = costByMonth.some(m => m.invoice_count > 0)
   const costTotal     = costByMonth.reduce((sum, m) => sum + m.cost, 0)
 
@@ -306,14 +410,111 @@ export default function UnitDetailClient({ unitId }: { unitId: string }) {
         <Stat label="Last Service"    value={fmtDate(unit.last_service_date)} />
       </div>
 
+      {/* ── Cost per mile ───────────────────────────────────────────────────── */}
+      {/* Absent entirely for viewers: the server sends null, so there is nothing
+          rendered here to hide. Sits above registration and history because it is
+          the figure that decides whether this asset stays in the fleet. */}
+      {can_view_costs && cost && (
+        <>
+          <h2 className="font-condensed font-bold text-xl text-white tracking-wide mb-3">
+            COST TO RUN — LAST 12 MONTHS
+          </h2>
+          <div className="rounded-xl mb-6 px-4 py-4" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase tracking-widest mb-1" style={{ color: DIM }}>Cost / Mile</p>
+                <p
+                  className="font-condensed font-bold text-3xl leading-none"
+                  style={{ color: cost.cost_per_mile == null ? DIM : ACCENT }}
+                >
+                  {formatPerMile(cost.cost_per_mile)}
+                </p>
+                <p className="text-xs mt-1" style={{ color: DIM }}>
+                  {/* Never "0 miles". An unmeasured truck and a parked one are not the
+                      same fact, and the dash has to say which one this is. */}
+                  {cost.miles_driven == null
+                    ? 'No mileage recorded'
+                    : `${Math.round(cost.miles_driven).toLocaleString('en-US')} mi driven`}
+                </p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase tracking-widest mb-1" style={{ color: DIM }}>Cost / Hour</p>
+                <p
+                  className="font-condensed font-bold text-3xl leading-none"
+                  style={{ color: cost.cost_per_hour == null ? DIM : NWI_BLUE }}
+                >
+                  {formatPerHour(cost.cost_per_hour)}
+                </p>
+                <p className="text-xs mt-1" style={{ color: DIM }}>
+                  {cost.hours_run == null
+                    ? 'No hours recorded'
+                    : `${Math.round(cost.hours_run).toLocaleString('en-US')} hrs run`}
+                </p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase tracking-widest mb-1" style={{ color: DIM }}>12-Month Cost</p>
+                <p className="font-condensed font-bold text-3xl leading-none text-white">
+                  {fmtMoney(cost.total_cost)}
+                </p>
+                <p className="text-xs mt-1" style={{ color: DIM }}>In-house + outside vendor</p>
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] uppercase tracking-widest mb-1" style={{ color: DIM }}>Repair Events</p>
+                <p className="font-condensed font-bold text-3xl leading-none text-white">
+                  {cost.repair_events.toLocaleString('en-US')}
+                </p>
+                <p className="text-xs mt-1" style={{ color: DIM }}>Billable visits</p>
+              </div>
+            </div>
+
+            {/* Parts + labor + other reconcile exactly against the total; outside
+                vendor is the same money cut a second way, by who billed it, so it is
+                listed apart rather than as a fourth addend that would double-count. */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-4" style={{ borderTop: `1px solid ${BORDER}` }}>
+              {[
+                { label: 'Parts',          value: cost.parts_cost,  color: ACCENT },
+                { label: 'Labor',          value: cost.labor_cost,  color: NWI_BLUE },
+                { label: 'Tax / Fees',     value: cost.other_cost,  color: DIM2 },
+                { label: 'Outside Vendor', value: cost.vendor_cost, color: '#F59E0B' },
+              ].map(part => (
+                <div key={part.label} className="min-w-0">
+                  <p className="text-[10px] uppercase tracking-widest mb-1" style={{ color: DIM }}>{part.label}</p>
+                  <p className="text-sm font-semibold truncate" style={{ color: part.color }}>
+                    {fmtMoney(part.value)}
+                  </p>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs mt-3" style={{ color: DIM }}>
+              Parts, labor and tax/fees add up to the 12-month cost. Outside vendor is the share of
+              that same total billed by a third-party shop, not an additional charge.
+            </p>
+
+            <div className="mt-5 pt-4" style={{ borderTop: `1px solid ${BORDER}` }}>
+              <CostTrendChart months={cost.months} />
+            </div>
+          </div>
+        </>
+      )}
+
       {/* ── Registration ────────────────────────────────────────────────────── */}
       <RegistrationSection unitId={unitId} canEdit={detail.can_edit} />
 
       {/* ── Meter history ───────────────────────────────────────────────────── */}
-      {meterReadings.length > 0 && (
+      {/* Shown to a manager even with no readings on file: the unit with an empty
+          meter history is precisely the one whose cost per mile cannot be computed,
+          and hiding the entry form from him is hiding the fix. */}
+      {(meterReadings.length > 0 || detail.can_edit) && (
         <>
           <h2 className="font-condensed font-bold text-xl text-white tracking-wide mb-3">METER HISTORY</h2>
           <div className="rounded-xl overflow-hidden mb-6" style={{ border: `1px solid ${BORDER}` }}>
+            {meterReadings.length === 0 ? (
+              <p className="px-4 py-4 text-sm" style={{ background: CARD, color: DIM2 }}>
+                No meter readings on file. Cost per mile needs at least two readings in the
+                last twelve months — until then this unit shows a dash rather than a guess.
+              </p>
+            ) : (
+            <>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 px-4 py-4" style={{ background: CARD }}>
               <div className="min-w-0">
                 <p className="text-[10px] uppercase tracking-widest mb-1" style={{ color: DIM }}>Odometer</p>
@@ -359,6 +560,9 @@ export default function UnitDetailClient({ unitId }: { unitId: string }) {
                 </tbody>
               </table>
             </div>
+            </>
+            )}
+            {detail.can_edit && <MeterEntryForm unitId={unitId} onSaved={() => load(false)} />}
           </div>
         </>
       )}
