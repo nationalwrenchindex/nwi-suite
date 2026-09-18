@@ -156,11 +156,19 @@ function navIcon(path: string) {
   return icons[path] ?? null
 }
 
+// Cargo Watch is deliberately absent. Both of its API routes
+// (/api/hd/cargo-watch/events and /session) address a single hardcoded Notehub
+// device — PROJECT_ID and DEVICE_ID are literals for one physical Delta Sentinel
+// unit, not a per-user lookup. Every HD subscriber who opened it was reading the
+// founder's own device: its cargo temperature, battery, signal and GPS location.
+//
+// The nav entry stays out until the routes resolve a device from the signed-in
+// user's fleet. The page, the routes and the 'cargo-watch' icon above are all
+// left intact, so restoring this is one line once that is true.
 const NAV_ITEMS: NavItem[] = [
   { href: '/hd/dashboard',       label: 'Dashboard'     },
   { href: '/hd/scheduler',       label: 'Scheduler'     },
   { href: '/hd/quickwrench',     label: 'HD QuickWrench'},
-  { href: '/hd/cargo-watch',     label: 'Cargo Watch'   },
   { href: '/hd/intel',           label: 'Intel Hub'     },
   { href: '/hd/financials',      label: 'Financials'    },
   { href: '/hd/parts',           label: 'Parts Lookup'  },
