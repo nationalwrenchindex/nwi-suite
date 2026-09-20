@@ -165,6 +165,28 @@ export async function POST(req: NextRequest) {
 
   const fleetAccountId = (unit.fleet_account_id as string | null) ?? null
 
+  // ── driver identity ─────────────────────────────────────────────────────────
+  // driver_id (migration 133) is what makes a per-driver completion rate possible;
+  // driver_name has been free text since 106 and stays as the fallback for anyone not
+  // on the roster. VERIFIED against this unit's fleet before it is stored — a driver
+  // uuid is client-supplied, and without the check a valid id from another carrier's
+  // roster could be pinned to this inspection.
+  //
+  // A failed lookup degrades to null rather than rejecting: the inspection is a legal
+  // safety record and must never be refused over an attribution detail.
+  let driverId: string | null = null
+  const driverIdRaw = typeof body.driver_id === 'string' ? body.driver_id : ''
+  if (UUID_RE.test(driverIdRaw) && fleetAccountId) {
+    const { data: driver } = await svc
+      .from('fleet_pro_drivers')
+      .select('id')
+      .eq('id', driverIdRaw)
+      .eq('fleet_account_id', fleetAccountId)
+      .eq('active', true)
+      .maybeSingle()
+    driverId = driver ? String(driver.id) : null
+  }
+
   const checklistData = checklist(body.checklist_data)
   const defectRows    = defects(body.defects)
   const odometer      = meter(body.odometer, MAX_ODOMETER, 1)
@@ -178,6 +200,7 @@ export async function POST(req: NextRequest) {
   const insertRow = {
     fleet_account_id:  fleetAccountId,
     unit_id:           unitId,
+    driver_id:         driverId,
     driver_name:       str(body.driver_name, MAX_NAME_CHARS),
     inspection_date:   inspectionDate(body.inspection_date),
     odometer,

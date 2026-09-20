@@ -10,6 +10,8 @@ import { canViewCosts } from '@/types/fleet-pro'
 import type { FleetProDashboard, FleetProUnitRow, PmState } from '@/types/fleet-pro'
 import { loadFleetCosts, fleetCostPerMile, fleetCostPerHour } from '@/lib/fleet-pro/cost'
 import { emptyBreakdown } from '@/types/fleet-pro-cost'
+import { loadMpgAlerts } from '@/lib/fleet-pro/fuel'
+import type { FuelAlert } from '@/types/fleet-pro-fuel'
 
 export const dynamic = 'force-dynamic'
 
@@ -138,9 +140,14 @@ export async function GET() {
     units:            [],
   }
 
-  if (unitIds.length === 0) return NextResponse.json({ dashboard: empty })
+  // fuel_alerts rides as its own top-level key rather than a field on
+  // FleetProDashboard: src/types/fleet-pro.ts is shared with other work in flight, and
+  // this route already carries several fields the same way (see DashboardUnitRow).
+  if (unitIds.length === 0) {
+    return NextResponse.json({ dashboard: empty, fuel_alerts: [] as FuelAlert[] })
+  }
 
-  const [pmRes, woRes, dotRes, aerialRes, equipRes, invRes, regRes, costRes] = await Promise.all([
+  const [pmRes, woRes, dotRes, aerialRes, equipRes, invRes, regRes, costRes, fuelAlerts] = await Promise.all([
     svc.from('fleet_pro_pm_schedules')
       .select('unit_id, interval_days, next_due_date')
       .eq('fleet_account_id', fleetId)
@@ -196,6 +203,18 @@ export async function GET() {
     loadFleetCosts(svc, fleetId, unitIds, now).catch(err => {
       console.error('[fleet-pro/dashboard costs]', err)
       return null
+    }),
+
+    // Fuel economy alerts. Loaded for EVERY caller including viewers, and NOT gated on
+    // showCost below: MPG is a use figure, not a money figure. A yard supervisor who
+    // can see that unit 12 is down 20% is exactly the person who catches a dragging
+    // brake before it becomes a tow. The fillup's dollar cost is never on this wire.
+    //
+    // Caught rather than thrown, same rule as the cost engine: the PM list is what
+    // this page is for, and a fuel table problem must not 500 it.
+    loadMpgAlerts(svc, fleetId, unitIds, new Map(units.map(u => [u.id, u.unit_number ?? '']))).catch(err => {
+      console.error('[fleet-pro/dashboard fuel]', err)
+      return [] as FuelAlert[]
     }),
   ])
 
@@ -368,5 +387,5 @@ export async function GET() {
     units:                   rows,
   }
 
-  return NextResponse.json({ dashboard })
+  return NextResponse.json({ dashboard, fuel_alerts: fuelAlerts })
 }

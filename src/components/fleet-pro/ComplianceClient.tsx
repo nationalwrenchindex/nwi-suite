@@ -16,6 +16,7 @@
 // If this file ever starts deciding what is red, the screen and the inbox will drift.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import type { FleetProRole } from '@/types/fleet-pro'
 import { canEditUnits } from '@/types/fleet-pro'
 import {
@@ -71,6 +72,17 @@ export default function ComplianceClient({ role }: { role: FleetProRole }) {
 
   const [tab,     setTab]     = useState<Tab>('calendar')
   const [data,    setData]    = useState<ComplianceCalendar | null>(null)
+
+  // ?tab=drivers opens the roster directly. The driver detail page links back here and
+  // would otherwise dump the manager on the Calendar tab, one click from where they
+  // started. Read from window in an effect rather than through useSearchParams: the
+  // hook forces a Suspense boundary on this subtree at build time, which is a lot of
+  // ceremony for restoring one tab.
+  useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get('tab')
+    if (requested === 'drivers' || requested === 'carrier') setTab(requested)
+  }, [])
+
   const [drivers, setDrivers] = useState<FleetProDriver[]>([])
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
@@ -658,7 +670,14 @@ function DriversPanel({
               <tbody>
                 {drivers.map(d => (
                   <tr key={d.id} style={{ borderTop: '1px solid #1e3040', opacity: d.active ? 1 : 0.5 }}>
-                    <td className="px-4 py-3 font-bold text-white">{d.full_name}</td>
+                    {/* The name is the way into the driver's record — inspection and
+                        fuel history, the incident log and the scorecard. The roster
+                        stays the roster; everything about one person lives there. */}
+                    <td className="px-4 py-3 font-bold">
+                      <Link href={`/fleet-pro/drivers/${d.id}`} style={{ color: NWI_BLUE }}>
+                        {d.full_name}
+                      </Link>
+                    </td>
                     <td className="px-4 py-3" style={{ color: 'rgba(255,255,255,0.7)' }}>
                       {d.cdl_number ?? '—'}
                       {d.cdl_state ? ` (${d.cdl_state})` : ''}

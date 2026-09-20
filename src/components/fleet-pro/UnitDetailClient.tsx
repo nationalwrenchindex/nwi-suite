@@ -9,6 +9,7 @@ import { formatPerHour, formatPerMile } from '@/types/fleet-pro-cost'
 import { NWI_BLUE, NWI_ORANGE } from './brand'
 import CostTrendChart from './CostTrendChart'
 import RegistrationSection from './RegistrationSection'
+import ScanInvoiceClient from './ScanInvoiceClient'
 
 
 interface UnitServiceEvent extends Omit<ServiceEvent, 'kind'> {
@@ -267,6 +268,7 @@ export default function UnitDetailClient({ unitId }: { unitId: string }) {
   const [detail,  setDetail]  = useState<UnitDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState<string | null>(null)
+  const [scanning, setScanning] = useState(false)
 
   // Lifted out of the effect so a saved meter reading can pull the page again. It has
   // to be a full reload, not a local patch: a new odometer changes miles driven, which
@@ -376,17 +378,42 @@ export default function UnitDetailClient({ unitId }: { unitId: string }) {
         </h1>
         {unit.status && <Pill text={unit.status} color={ACCENT} />}
         {unit.open_inspection_issue && <Pill text="Failed inspection" color={RED} />}
+        {/* Cost-gated, like every other money surface on this page: an invoice IS a
+            cost figure, and a viewer who could photograph one would read the total
+            off the confirmation screen. Sits before the QR button because filing a
+            shop's paper invoice is the common daily action of the two. */}
+        {can_view_costs && (
+          <button
+            onClick={() => setScanning(true)}
+            className="ml-auto px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap"
+            style={{ background: ACCENT, color: '#0b1218' }}
+          >
+            Scan Invoice
+          </button>
+        )}
         {/* Opens in a new tab so the print dialog does not lose the unit page behind it. */}
         <Link
           href={`/fleet-pro/units/${unitId}/qr-sticker`}
           target="_blank"
           rel="noopener noreferrer"
-          className="ml-auto px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap"
+          className={`${can_view_costs ? '' : 'ml-auto '}px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap`}
           style={{ border: `1px solid ${ACCENT}`, color: ACCENT }}
         >
           Print QR Sticker
         </Link>
       </div>
+
+      {scanning && (
+        <ScanInvoiceClient
+          unitId={unitId}
+          unitNumber={unit.unit_number || 'Unit'}
+          onClose={() => setScanning(false)}
+          // Full reload, same reason a saved meter reading triggers one: a new cost
+          // record changes total spend, cost per mile and the monthly breakdown, and
+          // only the server knows the twelve-month span.
+          onSaved={() => load(false)}
+        />
+      )}
       {identity && <p className="text-sm mb-4" style={{ color: DIM2 }}>{identity}</p>}
 
       <div

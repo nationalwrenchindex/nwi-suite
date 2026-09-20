@@ -1,11 +1,11 @@
 'use client'
 
-// The first screen behind the QR sticker: who is holding the phone?
+// The first screen behind the QR sticker: who is holding the phone, and why?
 //
-// One sticker, two jobs. At 5am it is a driver doing a walkaround. At 2pm it is a
-// technician holding the paper invoice for the repair he just finished. Both scan the
-// same code, so the page has to ask — once, with two targets big enough to hit in
-// gloves — and then get out of the way.
+// One sticker, three jobs. At 5am it is a driver doing a walkaround. At noon it is the
+// same driver at a fuel island. At 2pm it is a technician holding the paper invoice for
+// the repair he just finished. All three scan the same code, so the page has to ask —
+// once, with targets big enough to hit in gloves — and then get out of the way.
 //
 // The pre-trip branch renders PretripClient completely unchanged, including its own
 // header, which is why this component does NOT wrap it: PretripClient already draws
@@ -17,6 +17,7 @@ import { useState } from 'react'
 import { NWI_ORANGE } from '@/components/fleet-pro/brand'
 import PretripClient from './PretripClient'
 import TechServiceEntry from './TechServiceEntry'
+import FuelLogClient from './FuelLogClient'
 import type { PretripUnitInfo } from '@/types/fleet-pro-partner'
 
 // Kept in step with PretripClient — the two halves of this flow must not drift apart
@@ -27,7 +28,7 @@ const BORDER = '#1e3040'
 const MUTED  = 'rgba(255,255,255,0.55)'
 const FAINT  = 'rgba(255,255,255,0.35)'
 
-type Mode = 'choose' | 'pretrip' | 'service'
+type Mode = 'choose' | 'pretrip' | 'service' | 'fuel'
 
 export default function EntryChooser({
   unitId,
@@ -48,11 +49,13 @@ export default function EntryChooser({
     <main style={pageStyle}>
       <UnitHeader
         unit={initialUnit}
-        onBack={mode === 'service' ? () => setMode('choose') : null}
+        onBack={mode === 'choose' ? null : () => setMode('choose')}
       />
 
       {mode === 'service' ? (
         <TechServiceEntry unitId={unitId} />
+      ) : mode === 'fuel' ? (
+        <FuelLogClient unitId={unitId} />
       ) : (
         <div style={{ flex: 1, padding: 16, maxWidth: 640, margin: '0 auto', width: '100%' }}>
           <p style={{ margin: '4px 0 16px', fontSize: 15, color: MUTED, lineHeight: 1.5 }}>
@@ -63,6 +66,15 @@ export default function EntryChooser({
             title="Driver Pre-Trip Inspection"
             detail="Daily walkaround. Works with no signal."
             onClick={() => setMode('pretrip')}
+          />
+
+          {/* Second, not third: the driver who just did the walkaround is the same
+              person who fuels this truck, and he is a far more frequent visitor to
+              this screen than the technician below. */}
+          <ChoiceButton
+            title="Log Fuel"
+            detail="Photograph the pump. Records gallons, cost and miles per gallon."
+            onClick={() => setMode('fuel')}
           />
 
           <ChoiceButton

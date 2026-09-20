@@ -33,8 +33,14 @@ export default function FleetProNav({
     ...(canManageMembers(role) ? [{ href: '/fleet-pro/team', label: 'Team' }] : []),
   ]
 
+  // No entry of its own for the driver detail page: it is a drill-down from the roster
+  // on the Compliance tab, not a destination, and there is no driver LIST page to link
+  // to. Without this arm no tab lights up while a manager is on a driver's record,
+  // which reads as having navigated out of the portal.
   function isActive(href: string) {
-    return href === '/fleet-pro' ? pathname === '/fleet-pro' : pathname.startsWith(href)
+    if (href === '/fleet-pro') return pathname === '/fleet-pro'
+    if (href === '/fleet-pro/compliance' && pathname.startsWith('/fleet-pro/drivers')) return true
+    return pathname.startsWith(href)
   }
 
   return (

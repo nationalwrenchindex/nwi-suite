@@ -6,7 +6,8 @@
 // A capability URL is only as safe as what it exposes, so this route is written to
 // the standard of PUBLIC DATA:
 //
-//   returns  — unit number, make/model/year, serial, fleet branding, last meter
+//   returns  — unit number, make/model/year, serial, fleet branding, last meter,
+//              and the fleet's active driver NAMES (see the note on the roster below)
 //   NEVER    — costs, invoices, work orders, customer contacts, fleet member emails,
 //              PM state, anything about any OTHER unit, or the fleet_account_id
 //
@@ -16,7 +17,9 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { getFleetBranding } from '@/lib/fleet-pro/partner-access'
+import { lastKnownOdometer } from '@/lib/fleet-pro/fuel'
 import type { PretripUnitInfo } from '@/types/fleet-pro-partner'
+import type { FuelRosterDriver } from '@/types/fleet-pro-fuel'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,7 +50,7 @@ function num(value: unknown): number | null {
 async function loadUnitInfo(
   unitId: string,
 ): Promise<
-  | { status: 'ok'; info: PretripUnitInfo }
+  | { status: 'ok'; info: PretripUnitInfo; roster: FuelRosterDriver[]; lastOdometer: number | null }
   | { status: 'not_found' }
   | { status: 'unavailable' }
 > {
@@ -72,7 +75,20 @@ async function loadUnitInfo(
 
   const fleetAccountId = (unit.fleet_account_id as string | null) ?? null
 
-  const [branding, { data: lastReading }] = await Promise.all([
+  // The driver roster for the fuel screen's "who are you" picker.
+  //
+  // DELIBERATELY NARROW: id and full_name, active drivers only, and only for a fleet
+  // this unit actually belongs to. fleet_pro_drivers also holds CDL numbers, licence
+  // states, medical card dates, phones and emails — none of which may cross this
+  // boundary. A QR sticker photographed off the side of a parked truck is a public
+  // capability, and it must not turn into the carrier's driver list with licence
+  // numbers attached. The names alone are what the picker needs, and a driver's name
+  // is already written on the inspection he files.
+  //
+  // The 200 cap is a real bound, not a formality: PostgREST silently truncates an
+  // unbounded select, and a dropdown past a couple of hundred names is unusable on a
+  // phone anyway — a fleet that large needs a search box, not a longer list.
+  const [branding, { data: lastReading }, rosterRes, lastOdometer] = await Promise.all([
     fleetAccountId ? getFleetBranding(fleetAccountId) : Promise.resolve(null),
     svc.from('fleet_pro_unit_meter_readings')
       .select('odometer, engine_hours')
@@ -80,10 +96,36 @@ async function loadUnitInfo(
       .order('reading_date', { ascending: false })
       .limit(1)
       .maybeSingle(),
+    fleetAccountId
+      ? svc.from('fleet_pro_drivers')
+          .select('id, full_name')
+          .eq('fleet_account_id', fleetAccountId)
+          .eq('active', true)
+          .order('full_name', { ascending: true })
+          .limit(200)
+      : Promise.resolve({ data: [], error: null }),
+    // Highest odometer across BOTH meter sources — see lastKnownOdometer. The
+    // pre-trip form's last_odometer below stays on the meter table alone so the
+    // driver's existing screen is unchanged; the fuel screen needs the stricter
+    // figure because it is the floor for the reading he is about to type.
+    lastKnownOdometer(svc, unitId),
   ])
+
+  // A roster failure is not a unit failure: the fuel screen falls back to a free-text
+  // name box, which is what an off-roster driver uses anyway.
+  if (rosterRes.error) {
+    console.error('[inspect/[unitId]] driver roster load failed:', rosterRes.error.message)
+  }
+
+  const roster: FuelRosterDriver[] = (rosterRes.data ?? []).map(d => ({
+    id:        String(d.id),
+    full_name: (d.full_name as string | null) ?? '',
+  })).filter(d => d.full_name.length > 0)
 
   return {
     status: 'ok',
+    roster,
+    lastOdometer,
     info: {
       unit_id:        String(unit.id),
       unit_number:    (unit.unit_number as string | null) ?? '',
@@ -115,7 +157,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ uni
     return NextResponse.json({ error: 'Temporarily unavailable' }, { status: 503 })
   }
 
-  return NextResponse.json({ unit: result.info }, {
+  return NextResponse.json({
+    unit:   result.info,
+    // Separate top-level keys rather than fields on PretripUnitInfo: that type is the
+    // pre-trip form's contract and is shared with the offline queue, and widening it
+    // would put a driver roster into every cached inspection payload on every phone.
+    roster:        result.roster,
+    last_odometer: result.lastOdometer,
+  }, {
     headers: {
       // Storable so the service worker can keep a copy for the offline render, but
       // always revalidated when there is signal — a unit's meter reading goes stale

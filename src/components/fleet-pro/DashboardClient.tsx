@@ -9,6 +9,7 @@ import { registrationLabel, todayIso, REGISTRATION_COLOR, REGISTRATION_LABEL } f
 import type { RegistrationState } from '@/types/fleet-pro-registration'
 import ReplacementCard from './ReplacementCard'
 import type { ReplacementReport } from '@/types/fleet-pro-replacement'
+import { MPG_DROP_ALERT_PCT, type FuelAlert } from '@/types/fleet-pro-fuel'
 
 // ─── Wire shape ───────────────────────────────────────────────────────────────
 // PM is hours-based on hd_units for most fleets and date-based only when a manager
@@ -259,6 +260,10 @@ export default function DashboardClient() {
   // and making the PM list wait on it would slow down the thing this page is for.
   // A failure here leaves the section absent rather than breaking the dashboard.
   const [replacement, setReplacement] = useState<ReplacementReport | null>(null)
+  // Fuel alerts arrive on the dashboard response itself rather than a second request:
+  // unlike the replacement report they are not cost-gated, so there is no role check
+  // to wait on and no reason to make the browser ask twice.
+  const [fuelAlerts, setFuelAlerts] = useState<FuelAlert[]>([])
 
   // Sorted here rather than refetched: the whole fleet is already on the client, and
   // a round trip to reorder 60 rows the browser is holding would be slower and would
@@ -290,6 +295,7 @@ export default function DashboardClient() {
         if (cancelled) return
         if (!res.ok) { setError(json?.error ?? 'Could not load the fleet dashboard'); return }
         setDashboard(json.dashboard as Dashboard)
+        setFuelAlerts((json.fuel_alerts ?? []) as FuelAlert[])
       } catch {
         if (!cancelled) setError('Could not load the fleet dashboard')
       } finally {
@@ -390,6 +396,67 @@ export default function DashboardClient() {
         {showCosts && <KpiCard label="Spend MTD" value={money(dashboard.spend_mtd)} sub="This month" />}
         {showCosts && <KpiCard label="Spend YTD" value={money(dashboard.spend_ytd)} sub="This year" />}
       </div>
+
+      {/* ── Fuel economy alerts ─────────────────────────────────────────────
+          Above replacement review, because this is the only panel on the page
+          that is time-sensitive in days rather than quarters: a truck losing
+          fuel economy is usually losing it to something mechanical that is
+          still cheap to fix. Absent entirely when nothing is flagged — an empty
+          "0 alerts" box trains people to skip the space where the real warning
+          will one day appear, the same reasoning as the section below.
+
+          Not gated on showCosts: MPG is a use figure. No dollar amount from a
+          fillup is on this wire at all. */}
+      {fuelAlerts.length > 0 && (
+        <div className="mb-6">
+          <h2 className="font-condensed font-bold text-white text-lg tracking-wide mb-1">
+            FUEL ECONOMY ALERTS
+          </h2>
+          <p className="text-xs mb-3" style={{ color: MUTED }}>
+            {fuelAlerts.length === 1 ? 'One unit came in' : `${fuelAlerts.length} units came in`}{' '}
+            more than {MPG_DROP_ALERT_PCT}% below {fuelAlerts.length === 1 ? 'its' : 'their'} own
+            rolling average on the last fillup.
+          </p>
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {fuelAlerts.slice(0, 6).map(alert => (
+              <div
+                key={alert.unit_id}
+                className="rounded-xl p-4"
+                style={{ background: '#111920', border: `1px solid ${RED}55`, borderLeft: `4px solid ${RED}` }}
+              >
+                <div className="flex items-baseline justify-between gap-2 mb-2">
+                  <Link
+                    href={`/fleet-pro/units/${alert.unit_id}`}
+                    className="font-condensed font-bold text-white tracking-wide hover:underline"
+                  >
+                    {alert.unit_number || 'Unit'}
+                  </Link>
+                  <span className="text-lg font-bold tabular-nums" style={{ color: RED }}>
+                    −{alert.drop_pct.toFixed(1)}%
+                  </span>
+                </div>
+                <p className="text-sm tabular-nums" style={{ color: 'rgba(255,255,255,0.75)' }}>
+                  {alert.latest_mpg.toFixed(2)} mpg
+                  <span style={{ color: MUTED }}> vs {alert.average_mpg.toFixed(2)} avg</span>
+                </p>
+                {/* The sample size is shown rather than hidden: an average drawn from
+                    three tanks is a hint, one drawn from thirty is a finding, and the
+                    manager deciding whether to pull the truck needs to know which. */}
+                <p className="text-xs mt-2" style={{ color: MUTED }}>
+                  {alert.fuel_date || 'recent'} · over {alert.sample_size} prior fillup
+                  {alert.sample_size === 1 ? '' : 's'}
+                  {alert.driver_name ? ` · ${alert.driver_name}` : ''}
+                </p>
+              </div>
+            ))}
+          </div>
+          {fuelAlerts.length > 6 && (
+            <p className="text-xs mt-3" style={{ color: MUTED }}>
+              + {fuelAlerts.length - 6} more flagged
+            </p>
+          )}
+        </div>
+      )}
 
       {/* ── Replacement review ──────────────────────────────────────────────
           Above the unit table, because a truck that has eaten half its own value

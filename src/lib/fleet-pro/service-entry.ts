@@ -251,3 +251,139 @@ export function extractJsonObject(text: string): string | null {
   }
   return null
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FLEET-MANAGER SCAN (authenticated)
+//
+// Everything above is shared by the two unauthenticated /api/inspect routes. What
+// follows is additive, for the manager-side capture on /fleet-pro/units/[id]:
+// /api/fleet-pro/service-entries/extract and .../service-entries.
+//
+// Same document, same sanitizer, two differences that justify the extra surface:
+//
+//   * the manager is logged in and membership-checked, so his photo CAN be kept —
+//     the QR flow deliberately drops it, because an open endpoint plus object
+//     storage is a free bucket for anyone holding a unit id;
+//   * he is filing an invoice against a truck he picked from a list, so the unit
+//     number and VIN printed on the page are worth reading: they are what catches
+//     an invoice about to be filed against the wrong truck.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** fleet_pro_service_entries.source. Distinguishes the two capture paths in
+ *  reporting. Nothing branches on it, and cost.ts deliberately does not filter on
+ *  it, so both kinds of record roll into cost per mile identically. */
+export const SERVICE_ENTRY_SOURCE_QR           = 'qr_tech_entry'
+export const SERVICE_ENTRY_SOURCE_MANAGER_SCAN = 'fleet_manager_scan'
+
+export const MAX_UNIT_NUMBER_CHARS = 64
+
+/**
+ * A VIN is 17 characters and never contains I, O or Q — they were left out of the
+ * standard precisely because they are unreadable next to 1 and 0. That exclusion is
+ * what makes this worth checking rather than accepting any 17-character run: it
+ * rejects most OCR noise for free, and a misread VIN is worse than no VIN, because
+ * it would silently preselect the wrong truck.
+ */
+export const VIN_RE = /^[A-HJ-NPR-Z0-9]{17}$/
+
+/** What the invoice says the truck IS, as opposed to what it cost. Deliberately NOT
+ *  folded into ExtractedServiceEntry: neither field is ever written to a column —
+ *  they only preselect a unit on the confirmation screen — and widening the shared
+ *  interface would push two new nulls into the QR flow's extracted_raw audit copy. */
+export interface ExtractedInvoiceIdentity {
+  unit_number: string | null
+  vin:         string | null
+}
+
+export const EMPTY_IDENTITY: ExtractedInvoiceIdentity = {
+  unit_number: null,
+  vin:         null,
+}
+
+/** Uppercased and stripped of the separators a shop writes into a VIN by hand.
+ *  Anything that is not exactly a valid VIN afterwards becomes null: a partial VIN
+ *  cannot match a truck, and must not look like it tried. */
+export function normalizeVin(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const cleaned = value.toUpperCase().replace(/[^A-Z0-9]/g, '')
+  return VIN_RE.test(cleaned) ? cleaned : null
+}
+
+export function normalizeIdentity(value: unknown): ExtractedInvoiceIdentity {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return { ...EMPTY_IDENTITY }
+  const row = value as Record<string, unknown>
+  return {
+    unit_number: cleanText(row.unit_number, MAX_UNIT_NUMBER_CHARS),
+    vin:         normalizeVin(row.vin),
+  }
+}
+
+/**
+ * The transcription prompt, verbatim from /api/inspect/extract-invoice.
+ *
+ * DUPLICATED, and that is a compromise rather than a preference. The route holds the
+ * original as a module-private const, so there is nothing to import; this copy exists
+ * because the manager path needs the identical rules and the alternative was writing
+ * a second, weaker prompt. The two must be changed together until somebody points the
+ * route at this constant and deletes its own copy — which is a one-line change, and
+ * the reason the text is reproduced here exactly rather than paraphrased.
+ */
+export const INVOICE_EXTRACTION_SYSTEM = `You are a transcription system for heavy-truck repair invoices. You output JSON and nothing else.
+
+You are looking at a photograph taken by a technician standing in a shop or a yard. It may be crooked, glared, creased, shadowed, folded, partly out of frame, or out of focus.
+
+THE RULE: report only what you can actually READ on the document. If a value is not printed on the page, or is printed but not legible, return null for that field. Do not infer it. Do not estimate it. Do not calculate it from the other numbers. Do not fill it in from what repair invoices usually contain.
+
+Null is a correct answer and it is expected. Every field you return is shown to the technician on a confirmation screen before anything is saved, and he types in whatever you left blank — that costs him a few seconds. A confident wrong number costs far more, because it does not look wrong: it is saved as this truck's cost history, it feeds the fleet's spend reports, and it is used to argue about a repair bill months later. Blank beats plausible, every time.
+
+Specifically:
+- NEVER add up line items to produce a subtotal, tax or total that is not printed. If the total is not printed, total is null.
+- NEVER complete a partially legible value. If two characters of an invoice number are unreadable, invoice_number is null, not a guess.
+- NEVER assume the year on a date. If the printed date has no year, service_date is null.
+- If the invoice shows one lump sum with no breakdown, put it in total and leave labor_cost, parts_cost and tax null.
+- Transcribe text as written on the page in the shop's own words. Do not summarize, translate, tidy up, or expand abbreviations.
+
+Fields:
+- service_date: the date the work was performed or invoiced, as "YYYY-MM-DD".
+- labor_description: the work performed, transcribed from the page.
+- parts: an array of the parts actually itemized as line items, each { "name": string, "qty": number|null, "cost": number|null } where cost is the extended line cost as printed. Use [] if no parts are itemized.
+- labor_cost, parts_cost, tax, total: numbers, only where printed with that meaning.
+- vendor_name: the shop or vendor that ISSUED the invoice. Not the customer, not the fleet, not the truck owner.
+- invoice_number: the invoice or work-order number as printed.
+
+Numbers must be plain JSON numbers: no currency symbols, no thousands separators, no quotes.
+
+Return the JSON object alone. No markdown fence, no explanation, no commentary before or after.`
+
+/**
+ * Two extra fields for the manager path, appended to INVOICE_EXTRACTION_SYSTEM.
+ *
+ * An addendum rather than a second prompt on purpose: the hallucination guard in the
+ * original — null beats plausible, never do arithmetic, never complete a partial
+ * read — is the reason a figure on a cost report can be trusted, and a rewritten
+ * prompt would quietly undo it. The route composes the two.
+ *
+ * The same rule is restated for the VIN specifically, because a VIN is the field a
+ * model is most tempted to repair: it knows what a valid one looks like, and
+ * seventeen characters that "look right" would preselect a truck nobody chose.
+ */
+export const INVOICE_IDENTITY_ADDENDUM = `
+
+Two additional fields, used only to suggest which truck this invoice belongs to. A person confirms the truck before anything is saved.
+- unit_number: the fleet's own unit, truck or trailer number as printed on the invoice, if one appears. Otherwise null.
+- vin: the full 17-character VIN, only if all 17 characters are legible. If any character is unclear, or fewer than 17 are printed, return null. Never reconstruct or correct a VIN.`
+
+/**
+ * PNG and JPEG signatures — the only part of an upload that is actually evidence of
+ * what the bytes are, since the declared MIME type is just a string the client chose.
+ * Authentication does not change that: a logged-in manager can still post a
+ * mislabelled blob, by accident or otherwise.
+ */
+export function imageMagicMatches(bytes: Uint8Array, declared: AllowedImageType): boolean {
+  if (declared === 'image/png') {
+    return bytes.length > 8 &&
+      bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47 &&
+      bytes[4] === 0x0d && bytes[5] === 0x0a && bytes[6] === 0x1a && bytes[7] === 0x0a
+  }
+  return bytes.length > 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff
+}
