@@ -3,6 +3,8 @@ import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import PartsComingSoon from '@/components/hd/PartsComingSoon'
+import { FLEET_UNIT_LIST_SELECT, FLEET_UNIT_PAGE_SIZE, type FleetUnitListRow } from '@/app/api/hd/fleet-units/list'
+import FleetUnitList from './FleetUnitList'
 
 export const metadata = { title: 'Fleet Units — NWI HD Suite' }
 
@@ -26,14 +28,6 @@ function pmInterval(manufacturer: string, pmType: string | null): number {
   if (m.includes('thermo'))  return isVisual ? 1500 : 3000
   if (m.includes('carrier')) return isVisual ? 750  : 1500
   return isVisual ? 1000 : 2000
-}
-
-function pmBadge(totalHours: number | null, nextDue: number | null): { label: string; color: string } | null {
-  if (nextDue == null || totalHours == null) return null
-  const t = Number(totalHours), n = Number(nextDue)
-  if (t > n)       return { label: 'PM OVERDUE',  color: '#EF4444' }
-  if (t > n - 150) return { label: 'PM DUE SOON', color: '#F59E0B' }
-  return { label: 'PM Current', color: '#22C55E' }
 }
 
 export default async function FleetUnitsPage({
@@ -77,12 +71,32 @@ export default async function FleetUnitsPage({
   // Always scoped to this user; additionally narrowed to one fleet account whenever the
   // param is present (filter on the raw id so it holds even if the name lookup fails —
   // combined with user_id scoping, a foreign id simply returns nothing).
+  // Paged: PostgREST silently caps any response at 1,000 rows, so loading every
+  // unit at once would quietly drop the rest off the bottom of the table. The
+  // header total comes from its own exact/head count carrying the same fleet
+  // filter, so it reports the real number however few rows this page carries.
   let unitsQuery = supabase
     .from('hd_units')
-    .select('*, fleet_account:hd_fleet_accounts(fleet_name)')
+    .select(FLEET_UNIT_LIST_SELECT)
     .eq('user_id', user.id)
-  if (fleetAccountId) unitsQuery = unitsQuery.eq('fleet_account_id', fleetAccountId)
-  const { data: units } = await unitsQuery.order('unit_number')
+  let unitsCountQuery = supabase
+    .from('hd_units')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+  if (fleetAccountId) {
+    unitsQuery      = unitsQuery.eq('fleet_account_id', fleetAccountId)
+    unitsCountQuery = unitsCountQuery.eq('fleet_account_id', fleetAccountId)
+  }
+
+  const [{ data: units }, { count: unitCount }] = await Promise.all([
+    // Must match the API's ordering exactly, or the offsets the client sends
+    // would page through a different sequence than this first page came from.
+    unitsQuery.order('unit_number').order('id').range(0, FLEET_UNIT_PAGE_SIZE - 1),
+    unitsCountQuery,
+  ])
+
+  const unitRows  = (units ?? []) as unknown as FleetUnitListRow[]
+  const unitTotal = unitCount ?? unitRows.length
 
   // ── Save (insert OR update) ────────────────────────────────────────────────
   async function saveUnit(formData: FormData) {
@@ -141,9 +155,6 @@ export default async function FleetUnitsPage({
     redirect(`/hd/fleet-units?saved=${unitId ? 'updated' : 'created'}${accountId ? `&fleet_account_id=${accountId}` : ''}`)
   }
 
-  const statusColor = (s: string) =>
-    s === 'active' ? '#22C55E' : s === 'out_of_service' ? '#EF4444' : 'rgba(255,255,255,0.4)'
-
   const inputStyle = { background: '#162030', border: '1px solid #1e3040' }
   const ev = (k: string) => (editUnit?.[k] != null ? String(editUnit[k]) : '')
 
@@ -153,6 +164,9 @@ export default async function FleetUnitsPage({
         <div>
           <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>HD Suite</p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">FLEET UNITS</h1>
+          <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+            {unitTotal.toLocaleString()} unit{unitTotal !== 1 ? 's' : ''}
+          </p>
           {fleetAccountName && (
             <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
               Showing units for <span style={{ color: '#60A5FA' }}>{fleetAccountName}</span>
@@ -278,95 +292,18 @@ export default async function FleetUnitsPage({
         </form>
       )}
 
-      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
-        {!units || units.length === 0 ? (
-          <div className="py-16 text-center" style={{ background: '#111920' }}>
-            <svg className="w-10 h-10 mx-auto mb-3" style={{ color: 'rgba(255,255,255,0.15)' }} fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
-              <rect x="1" y="3" width="15" height="13" rx="2" />
-              <path d="M16 8h4l3 5v3h-7V8z" /><circle cx="5.5" cy="18.5" r="2.5" /><circle cx="18.5" cy="18.5" r="2.5" />
-            </svg>
-            <p className="text-sm mb-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
-              {fleetAccountName ? `No units for ${fleetAccountName} yet` : 'No fleet units yet'}
-            </p>
-            <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.2)' }}>Add your refrigerated units to start tracking PMs and work orders</p>
-            <Link href={scopedAccountId ? `?new=1&fleet_account_id=${scopedAccountId}` : '?new=1'} className="text-xs px-4 py-2 rounded-lg font-semibold" style={{ background: HD_ORANGE, color: '#fff' }}>
-              + Add First Unit
-            </Link>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-          <table className="w-full min-w-[820px]" style={{ background: '#111920' }}>
-            <thead style={{ background: '#162030' }}>
-              <tr>
-                {['Unit #', 'Fleet', 'Manufacturer / Model', 'Serial / BM', 'Total Hours', 'Next PM', 'PM Status', ''].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.4)' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {(units as unknown as {
-                id: string; unit_number: string; manufacturer: string; model: string
-                serial_number: string | null; bm_number: string | null
-                total_hours: number | null; next_pm_due_hours: number | null; status: string
-                fleet_account: { fleet_name: string } | null
-              }[]).map((u, i) => {
-                const hoursUntil = u.next_pm_due_hours !== null && u.total_hours !== null
-                  ? Number(u.next_pm_due_hours) - Number(u.total_hours)
-                  : null
-                const badge = pmBadge(u.total_hours, u.next_pm_due_hours)
-                return (
-                  <tr key={u.id} style={{ borderTop: i > 0 ? '1px solid #1e3040' : undefined }}>
-                    <td className="px-4 py-3 text-sm text-white font-medium">{u.unit_number}</td>
-                    <td className="px-4 py-3 text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>{u.fleet_account?.fleet_name ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm text-white">{u.manufacturer} {u.model}</td>
-                    <td className="px-4 py-3 text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>
-                      {u.serial_number ?? '—'}{u.bm_number ? ` · BM ${u.bm_number}` : ''}
-                    </td>
-                    <td className="px-4 py-3 text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>
-                      {u.total_hours !== null ? `${Number(u.total_hours).toFixed(0)} hrs` : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-sm">
-                      {hoursUntil !== null ? (
-                        <span style={{ color: hoursUntil <= 0 ? '#EF4444' : hoursUntil <= 150 ? HD_ORANGE : '#22C55E' }}>
-                          {hoursUntil <= 0 ? 'OVERDUE' : `${hoursUntil.toFixed(0)} hrs`}
-                        </span>
-                      ) : '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      {badge ? (
-                        <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: `${badge.color}20`, color: badge.color }}>
-                          {badge.label}
-                        </span>
-                      ) : (
-                        <span className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-2 justify-end">
-                        <Link
-                          href={`/hd/fleet-units/${u.id}/inspections`}
-                          className="text-xs font-semibold px-3 py-1 rounded-lg whitespace-nowrap"
-                          style={{ color: 'rgba(255,255,255,0.6)', border: '1px solid #1e3040' }}
-                        >
-                          Inspections
-                        </Link>
-                        <Link
-                          href={scopedAccountId ? `?edit=${u.id}&fleet_account_id=${scopedAccountId}` : `?edit=${u.id}`}
-                          className="text-xs font-semibold px-3 py-1 rounded-lg"
-                          style={{ color: '#60A5FA', border: '1px solid #1e3040' }}
-                        >
-                          Edit
-                        </Link>
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-          </div>
-        )}
-      </div>
+      {/* key: a fleet-account change is a URL navigation, not a remount, so without
+          it the client would keep the previous fleet's accumulated rows and append
+          the new fleet's pages onto them. unitTotal is in the key so adding a unit
+          re-seeds the list too. */}
+      <FleetUnitList
+        key={`${fleetAccountId ?? 'all'}:${unitTotal}`}
+        initialRows={unitRows}
+        total={unitTotal}
+        fleetAccountId={fleetAccountId}
+        fleetAccountName={fleetAccountName}
+        scopedAccountId={scopedAccountId}
+      />
 
       <PartsComingSoon />
     </main>

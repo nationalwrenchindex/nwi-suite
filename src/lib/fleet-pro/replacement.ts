@@ -25,6 +25,8 @@
 // work order is still down as of now.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
+import { fetchAllRowsForIds } from '@/lib/fleet-pro/fetch-scoped'
 import { loadFleetCosts, windowStart } from '@/lib/fleet-pro/cost'
 import { COST_WINDOW_MONTHS } from '@/types/fleet-pro-cost'
 import {
@@ -37,10 +39,6 @@ import {
   type ReplacementThresholds,
 } from '@/types/fleet-pro-replacement'
 import type { FleetProMembership } from '@/types/fleet-pro'
-
-// Same ceiling the dashboard and the cost engine use — a large municipal fleet's
-// twelve months of work orders must not be silently truncated by PostgREST.
-const ROW_CEILING = 20_000
 
 const MS_PER_DAY = 86_400_000
 
@@ -263,44 +261,56 @@ async function loadDowntime(
   const startIso = isoDate(start)
   const windowDays = Math.max(1, (now.getTime() - start.getTime()) / MS_PER_DAY)
 
-  const [woRes, entryRes] = await Promise.all([
-    svc.from('hd_work_orders')
-      .select('id, unit_id, status, service_type, created_at, completed_at')
-      .eq('fleet_account_id', fleetId)
-      .in('unit_id', unitIds)
-      .gte('created_at', startIso)
-      .limit(ROW_CEILING),
+  let workOrders: WorkOrderRow[]
+  let serviceEntries: EntryRow[]
+  try {
+    ;[workOrders, serviceEntries] = await Promise.all([
+      fetchAllRowsForIds<WorkOrderRow, string>(unitIds, (ids, from, to) =>
+        svc.from('hd_work_orders')
+          .select('id, unit_id, status, service_type, created_at, completed_at')
+          .eq('fleet_account_id', fleetId)
+          .in('unit_id', ids)
+          .gte('created_at', startIso)
+          .order('id', { ascending: true })
+          .range(from, to)),
 
-    // Counted here rather than taken from the cost engine because that engine
-    // reports events and money together in one number (repair_events), and this
-    // rule needs the outside-vendor half of it on its own. No money is summed here.
-    svc.from('fleet_pro_service_entries')
-      .select('unit_id')
-      .eq('fleet_account_id', fleetId)
-      .in('unit_id', unitIds)
-      .gte('service_date', startIso)
-      .limit(ROW_CEILING),
-  ])
-
-  const failed = [woRes, entryRes].find(r => r.error)
-  if (failed?.error) throw new Error(`replacement downtime load: ${failed.error.message}`)
-
-  const workOrders = (woRes.data ?? []) as WorkOrderRow[]
+      // Counted here rather than taken from the cost engine because that engine
+      // reports events and money together in one number (repair_events), and this
+      // rule needs the outside-vendor half of it on its own. No money is summed here.
+      fetchAllRowsForIds<EntryRow, string>(unitIds, (ids, from, to) =>
+        svc.from('fleet_pro_service_entries')
+          .select('unit_id')
+          .eq('fleet_account_id', fleetId)
+          .in('unit_id', ids)
+          .gte('service_date', startIso)
+          .order('id', { ascending: true })
+          .range(from, to)),
+    ])
+  } catch (err) {
+    // Same message prefix the two .error checks used to raise, so the route's
+    // existing handling of a downtime failure is unchanged.
+    throw new Error(`replacement downtime load: ${err instanceof Error ? err.message : String(err)}`)
+  }
 
   // hd_pm_checklists carries no fleet_account_id of its own — the fleet is reached
   // through the unit, exactly as migration 105's RLS policy does it. unitIds is
   // already fleet-scoped, so scoping on unit_id here is the same tenant boundary.
   const pmWorkOrderIds = new Set<string>()
   if (workOrders.length > 0) {
-    const { data: pmData, error: pmError } = await svc
-      .from('hd_pm_checklists')
-      .select('work_order_id')
-      .in('unit_id', unitIds)
-      .not('work_order_id', 'is', null)
-      .limit(ROW_CEILING)
+    let pmData: PmLinkRow[]
+    try {
+      pmData = await fetchAllRowsForIds<PmLinkRow, string>(unitIds, (ids, from, to) => svc
+        .from('hd_pm_checklists')
+        .select('work_order_id')
+        .in('unit_id', ids)
+        .not('work_order_id', 'is', null)
+        .order('id', { ascending: true })
+        .range(from, to))
+    } catch (err) {
+      throw new Error(`replacement downtime load: ${err instanceof Error ? err.message : String(err)}`)
+    }
 
-    if (pmError) throw new Error(`replacement downtime load: ${pmError.message}`)
-    for (const row of (pmData ?? []) as PmLinkRow[]) {
+    for (const row of pmData) {
       if (row.work_order_id) pmWorkOrderIds.add(row.work_order_id)
     }
   }
@@ -321,7 +331,7 @@ async function loadDowntime(
     }
   }
 
-  for (const e of (entryRes.data ?? []) as EntryRow[]) {
+  for (const e of serviceEntries) {
     if (!e.unit_id) continue
     const rec = out.get(e.unit_id)
     if (!rec) continue
@@ -351,17 +361,21 @@ export async function buildReplacementReport(
 ): Promise<ReplacementReport> {
   const fleetId = membership.fleet_account_id
 
-  const { data: unitData, error: unitError } = await svc
-    .from('hd_units')
-    .select('id, unit_number, manufacturer, model, year, unit_type, serial_number, status, estimated_value, value_updated_at')
-    .eq('fleet_account_id', fleetId)
-    .eq('active', true)
-    .order('unit_number', { ascending: true })
-    .limit(ROW_CEILING)
-
-  if (unitError) throw new Error(`replacement units load: ${unitError.message}`)
-
-  const units   = (unitData ?? []) as UnitRow[]
+  let units: UnitRow[]
+  try {
+    units = await fetchAllRows<UnitRow>((from, to) => svc
+      .from('hd_units')
+      .select('id, unit_number, manufacturer, model, year, unit_type, serial_number, status, estimated_value, value_updated_at')
+      .eq('fleet_account_id', fleetId)
+      .eq('active', true)
+      // unit_number is not unique, and offset paging over a non-total order drops
+      // and repeats rows between windows. id breaks every tie.
+      .order('unit_number', { ascending: true })
+      .order('id',          { ascending: true })
+      .range(from, to))
+  } catch (err) {
+    throw new Error(`replacement units load: ${err instanceof Error ? err.message : String(err)}`)
+  }
   const unitIds = units.map(u => u.id)
 
   const thresholds = await loadReplacementThresholds(svc, fleetId)

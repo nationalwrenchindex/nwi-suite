@@ -19,6 +19,7 @@
 // corrected in place — so all of them count.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { fetchAllRowsForIds } from '@/lib/fleet-pro/fetch-scoped'
 import {
   COST_WINDOW_MONTHS,
   emptyBreakdown,
@@ -27,9 +28,15 @@ import {
   type UnitCostBreakdown,
 } from '@/types/fleet-pro-cost'
 
-// Matches the ceiling the dashboard route already uses; a large municipal fleet's
-// twelve-month history must not be silently truncated by PostgREST's default.
-const ROW_CEILING = 20_000
+// ── WHY THERE IS NO ROW CEILING ──────────────────────────────────────────────
+// There used to be a `.limit(20_000)` here, on the theory that asking for a big
+// number keeps a large fleet's twelve-month history whole. It does not: PostgREST
+// caps every response at 1,000 rows and still answers 200, so on any fleet past
+// that many invoices in a year this engine was quietly summing a fraction of the
+// spend and reporting it as the unit's total cost — and, worse, dividing a
+// truncated cost by a truncated meter span for cost per mile. Every query below is
+// paged to exhaustion instead, chunked over the unit ids so the `.in()` list cannot
+// outgrow the URL length limit.
 
 interface InvoiceRow {
   unit_id:        string | null
@@ -139,30 +146,46 @@ export async function loadFleetCosts(
   // hd_invoices keeps the filter: it is written in-session by the mechanic, its
   // fleet id is always populated, and matching the dashboard's existing spend
   // rule exactly matters more here than the hypothetical null.
-  const [invRes, entryRes, meterRes] = await Promise.all([
-    svc.from('hd_invoices')
-      .select('unit_id, total, subtotal_parts, subtotal_labor, status, created_at')
-      .eq('fleet_account_id', fleetId)
-      .in('unit_id', unitIds)
-      .gte('created_at', start)
-      .limit(ROW_CEILING),
+  //
+  // Each query is chunked over `unitIds` and paged inside each chunk. The chunks are
+  // disjoint sets of units, so every unit's rows still arrive together and in order —
+  // which is what the meter span below depends on.
+  let invoiceRows: InvoiceRow[], entryRows: ServiceEntryRow[], meterRows: MeterRow[]
 
-    svc.from('fleet_pro_service_entries')
-      .select('unit_id, total, parts_cost, labor_cost, vendor_name, service_date')
-      .in('unit_id', unitIds)
-      .gte('service_date', start)
-      .limit(ROW_CEILING),
+  try {
+    [invoiceRows, entryRows, meterRows] = await Promise.all([
+      fetchAllRowsForIds<InvoiceRow, string>(unitIds, (ids, from, to) =>
+        svc.from('hd_invoices')
+          .select('unit_id, total, subtotal_parts, subtotal_labor, status, created_at')
+          .eq('fleet_account_id', fleetId)
+          .in('unit_id', ids)
+          .gte('created_at', start)
+          .order('id', { ascending: true })
+          .range(from, to)),
 
-    svc.from('fleet_pro_unit_meter_readings')
-      .select('unit_id, odometer, engine_hours, reading_date')
-      .in('unit_id', unitIds)
-      .gte('reading_date', start)
-      .order('reading_date', { ascending: true })
-      .limit(ROW_CEILING),
-  ])
+      fetchAllRowsForIds<ServiceEntryRow, string>(unitIds, (ids, from, to) =>
+        svc.from('fleet_pro_service_entries')
+          .select('unit_id, total, parts_cost, labor_cost, vendor_name, service_date')
+          .in('unit_id', ids)
+          .gte('service_date', start)
+          .order('id', { ascending: true })
+          .range(from, to)),
 
-  const failed = [invRes, entryRes, meterRes].find(r => r.error)
-  if (failed?.error) throw new Error(`fleet cost load: ${failed.error.message}`)
+      // reading_date keeps driving the sort — the span below reads the first and last
+      // row per unit — with `id` appended, because several readings can share a date
+      // and a date alone is not the total order range paging requires.
+      fetchAllRowsForIds<MeterRow, string>(unitIds, (ids, from, to) =>
+        svc.from('fleet_pro_unit_meter_readings')
+          .select('unit_id, odometer, engine_hours, reading_date')
+          .in('unit_id', ids)
+          .gte('reading_date', start)
+          .order('reading_date', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, to)),
+    ])
+  } catch (err) {
+    throw new Error(`fleet cost load: ${err instanceof Error ? err.message : String(err)}`)
+  }
 
   const monthly = new Map<string, Map<string, number>>()
   for (const id of unitIds) monthly.set(id, new Map(skeleton.map(m => [m, 0])))
@@ -176,7 +199,7 @@ export async function loadFleetCosts(
   }
 
   // ── In-house invoices ──────────────────────────────────────────────────────
-  for (const inv of (invRes.data ?? []) as InvoiceRow[]) {
+  for (const inv of invoiceRows) {
     if (!inv.unit_id || !inv.created_at) continue
     // Matches the dashboard's existing rule: void is excluded, a NULL status is a
     // real unpaid invoice and counts.
@@ -201,7 +224,7 @@ export async function loadFleetCosts(
   }
 
   // ── Outside vendor entries ─────────────────────────────────────────────────
-  for (const e of (entryRes.data ?? []) as ServiceEntryRow[]) {
+  for (const e of entryRows) {
     if (!e.unit_id || !e.service_date) continue
     const row = out.get(e.unit_id)
     if (!row) continue
@@ -230,7 +253,7 @@ export async function loadFleetCosts(
   const firstOdo = new Map<string, number>(), lastOdo = new Map<string, number>()
   const firstHrs = new Map<string, number>(), lastHrs = new Map<string, number>()
 
-  for (const m of (meterRes.data ?? []) as MeterRow[]) {
+  for (const m of meterRows) {
     const odo = numOrNull(m.odometer)
     if (odo !== null) {
       if (!firstOdo.has(m.unit_id)) firstOdo.set(m.unit_id, odo)

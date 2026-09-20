@@ -12,6 +12,8 @@ import { loadFleetCosts, fleetCostPerMile, fleetCostPerHour } from '@/lib/fleet-
 import { emptyBreakdown } from '@/types/fleet-pro-cost'
 import { loadMpgAlerts } from '@/lib/fleet-pro/fuel'
 import type { FuelAlert } from '@/types/fleet-pro-fuel'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
+import { fetchAllRowsForIds } from '@/lib/fleet-pro/fetch-scoped'
 
 export const dynamic = 'force-dynamic'
 
@@ -63,9 +65,12 @@ interface InvoiceRecord    { unit_id: string | null; total: number | null; statu
 // top rather than being buried alphabetically halfway down a 60-unit list.
 const PM_RANK: Record<PmState, number> = { overdue: 0, due_soon: 1, unscheduled: 2, scheduled: 3 }
 
-// PostgREST caps an unbounded select at its own default; ask for a ceiling high
-// enough that a large municipal fleet's history is not silently truncated.
-const ROW_CEILING = 20_000
+// NO ROW CEILING HERE ANY MORE. PostgREST answers at most 1,000 rows and still
+// returns 200, so a `.limit(20_000)` only ever documented an intention — a municipal
+// fleet's invoices were being truncated and spend_ytd under-reported with no error.
+// Every list below is paged to exhaustion instead, and because the unit list is now
+// unbounded, the `.in('unit_id', …)` filters built from it are chunked so they cannot
+// outgrow the URL length limit.
 
 function dateKey(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, '0')
@@ -103,20 +108,28 @@ export async function GET() {
   const monthStart = dateKey(new Date(now.getFullYear(), now.getMonth(), 1))
   const yearStart  = `${now.getFullYear()}-01-01`
 
-  const { data: unitData, error: unitError } = await svc
-    .from('hd_units')
-    .select(`id, unit_number, truck_trailer_number, manufacturer, model, serial_number, year, unit_type, status, ${PM_UNIT_COLUMNS}`)
-    .eq('fleet_account_id', fleetId)
-    .eq('active', true)
-    .order('unit_number', { ascending: true })
-    .limit(ROW_CEILING)
-
-  if (unitError) {
-    console.error('[fleet-pro/dashboard units]', unitError)
-    return NextResponse.json({ error: unitError.message }, { status: 500 })
+  // Paged, with `id` appended to the existing unit_number sort: `.range()` is a
+  // LIMIT/OFFSET window, and unit_number is not unique enough to be a total order —
+  // two units sharing a number would reshuffle between pages, which both duplicates
+  // rows and drops them.
+  let units: UnitRecord[]
+  try {
+    units = await fetchAllRows<UnitRecord>((from, to) => svc
+      .from('hd_units')
+      .select(`id, unit_number, truck_trailer_number, manufacturer, model, serial_number, year, unit_type, status, ${PM_UNIT_COLUMNS}`)
+      .eq('fleet_account_id', fleetId)
+      .eq('active', true)
+      .order('unit_number', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, to))
+  } catch (err) {
+    console.error('[fleet-pro/dashboard units]', err)
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Failed to load units' },
+      { status: 500 },
+    )
   }
 
-  const units   = (unitData ?? []) as UnitRecord[]
   const unitIds = units.map(u => u.id)
 
   const empty: FleetProDashboard = {
@@ -147,48 +160,80 @@ export async function GET() {
     return NextResponse.json({ dashboard: empty, fuel_alerts: [] as FuelAlert[] })
   }
 
-  const [pmRes, woRes, dotRes, aerialRes, equipRes, invRes, regRes, costRes, fuelAlerts] = await Promise.all([
+  // Each of these is chunked over the unit ids (`.in()` rides in the URL) and then
+  // paged inside every chunk (PostgREST stops at 1,000 rows without saying so).
+  // `id` is the ORDER BY on all of them: none had a meaningful sort to preserve, and
+  // range paging needs a total order or it duplicates and drops rows.
+  const fetchSchedules = () => fetchAllRowsForIds<PmRecord, string>(unitIds, (ids, from, to) =>
     svc.from('fleet_pro_pm_schedules')
       .select('unit_id, interval_days, next_due_date')
       .eq('fleet_account_id', fleetId)
-      .in('unit_id', unitIds),
+      .in('unit_id', ids)
+      .order('id', { ascending: true })
+      .range(from, to))
 
+  const fetchWorkOrders = () => fetchAllRowsForIds<WorkOrderRecord, string>(unitIds, (ids, from, to) =>
     svc.from('hd_work_orders')
       .select('unit_id, completed_at, created_at')
       .eq('fleet_account_id', fleetId)
-      .in('unit_id', unitIds)
-      .limit(ROW_CEILING),
+      .in('unit_id', ids)
+      .order('id', { ascending: true })
+      .range(from, to))
 
-    svc.from('hd_dot_inspections')
+  const fetchInspections = (table: string) => fetchAllRowsForIds<InspectionRecord, string>(unitIds, (ids, from, to) =>
+    svc.from(table)
       .select('unit_id, inspection_date, overall_result')
       .eq('fleet_account_id', fleetId)
-      .in('unit_id', unitIds)
-      .limit(ROW_CEILING),
+      .in('unit_id', ids)
+      .order('id', { ascending: true })
+      .range(from, to))
 
-    svc.from('hd_aerial_inspections')
-      .select('unit_id, inspection_date, overall_result')
-      .eq('fleet_account_id', fleetId)
-      .in('unit_id', unitIds)
-      .limit(ROW_CEILING),
-
-    svc.from('hd_equipment_inspections')
-      .select('unit_id, inspection_date, overall_result')
-      .eq('fleet_account_id', fleetId)
-      .in('unit_id', unitIds)
-      .limit(ROW_CEILING),
-
-    // hd_invoices has no invoice_date; created_at is the billing timestamp.
+  // hd_invoices has no invoice_date; created_at is the billing timestamp.
+  const fetchInvoices = () => fetchAllRowsForIds<InvoiceRecord, string>(unitIds, (ids, from, to) =>
     svc.from('hd_invoices')
       .select('unit_id, total, status, created_at')
       .eq('fleet_account_id', fleetId)
-      .in('unit_id', unitIds)
+      .in('unit_id', ids)
       .gte('created_at', yearStart)
-      .limit(ROW_CEILING),
+      .order('id', { ascending: true })
+      .range(from, to))
 
+  // One registration row per unit, so this one was never going to outrun the 1,000-row
+  // cap on its own — but its `.in()` list is the same now-unbounded unit list as the
+  // queries above, so it goes through the same chunking rather than being the one
+  // query that blows the URL limit on a 1,200-unit fleet.
+  const fetchRegistrations = () => fetchAllRowsForIds<RegistrationRecord, string>(unitIds, (ids, from, to) =>
     svc.from('fleet_pro_unit_registration')
       .select('unit_id, license_plate, jurisdiction, expires_on')
       .eq('fleet_account_id', fleetId)
-      .in('unit_id', unitIds),
+      .in('unit_id', ids)
+      .order('id', { ascending: true })
+      .range(from, to))
+
+  let loaded: [
+    PmRecord[], WorkOrderRecord[], InspectionRecord[], InspectionRecord[], InspectionRecord[],
+    InvoiceRecord[], RegistrationRecord[],
+    Awaited<ReturnType<typeof loadFleetCosts>> | null,
+    FuelAlert[],
+  ]
+
+  // The fan-out is unchanged: every table still loads concurrently, each one now
+  // paging itself to exhaustion.
+  try {
+    loaded = await Promise.all([
+    fetchSchedules(),
+
+    fetchWorkOrders(),
+
+    fetchInspections('hd_dot_inspections'),
+
+    fetchInspections('hd_aerial_inspections'),
+
+    fetchInspections('hd_equipment_inspections'),
+
+    fetchInvoices(),
+
+    fetchRegistrations(),
 
     // The rolling twelve-month cost basis — invoices, outside vendor entries and the
     // meter series, summed per unit in one place (src/lib/fleet-pro/cost.ts). Loaded
@@ -216,24 +261,30 @@ export async function GET() {
       console.error('[fleet-pro/dashboard fuel]', err)
       return [] as FuelAlert[]
     }),
-  ])
-
-  const failed = [pmRes, woRes, dotRes, aerialRes, equipRes, invRes, regRes].find(r => r.error)
-  if (failed?.error) {
-    console.error('[fleet-pro/dashboard]', failed.error)
-    return NextResponse.json({ error: failed.error.message }, { status: 500 })
+    ])
+  } catch (err) {
+    // Same 500 the `failed` check used to return: the paging helper throws on a
+    // PostgREST error instead of handing back a short list, and a short list is what
+    // used to make this page under-report spend.
+    console.error('[fleet-pro/dashboard]', err)
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Failed to load the fleet dashboard' },
+      { status: 500 },
+    )
   }
+
+  const [pmRows, workOrders, dotRows, aerialRows, equipRows, invoiceRows, regRows, costRes, fuelAlerts] = loaded
 
   // Units with no registration row still classify — as 'missing', which is red, the
   // same as expired. A truck with no plate on file is not a truck that is compliant.
   const regByUnit = new Map<string, RegistrationRecord>()
-  for (const row of (regRes.data ?? []) as RegistrationRecord[]) regByUnit.set(row.unit_id, row)
+  for (const row of regRows) regByUnit.set(row.unit_id, row)
 
   const pmByUnit = new Map<string, PmRecord>()
-  for (const row of (pmRes.data ?? []) as PmRecord[]) pmByUnit.set(row.unit_id, row)
+  for (const row of pmRows) pmByUnit.set(row.unit_id, row)
 
   const lastServiceByUnit = new Map<string, string>()
-  for (const wo of (woRes.data ?? []) as WorkOrderRecord[]) {
+  for (const wo of workOrders) {
     if (!wo.unit_id) continue
     const when = wo.completed_at ?? wo.created_at
     if (!when) continue
@@ -243,11 +294,11 @@ export async function GET() {
 
   const lastInspectionByUnit = new Map<string, string>()
   const failedUnits = new Set<string>()
-  const inspections = [
-    ...(dotRes.data ?? []),
-    ...(aerialRes.data ?? []),
-    ...(equipRes.data ?? []),
-  ] as InspectionRecord[]
+  const inspections: InspectionRecord[] = [
+    ...dotRows,
+    ...aerialRows,
+    ...equipRows,
+  ]
 
   for (const insp of inspections) {
     if (!insp.unit_id) continue
@@ -259,7 +310,7 @@ export async function GET() {
 
   const mtdByUnit = new Map<string, number>()
   const ytdByUnit = new Map<string, number>()
-  for (const inv of (invRes.data ?? []) as InvoiceRecord[]) {
+  for (const inv of invoiceRows) {
     // Filtered here rather than with .neq() because PostgREST's neq also drops
     // NULL statuses, which are real unpaid invoices.
     if (!inv.unit_id || inv.status === 'void' || !inv.created_at) continue

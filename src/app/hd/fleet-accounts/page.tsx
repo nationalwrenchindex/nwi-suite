@@ -2,6 +2,8 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDStarterAccess } from '@/lib/hd-access'
+import { FLEET_ACCOUNT_LIST_SELECT, FLEET_ACCOUNT_PAGE_SIZE, type FleetAccountListRow } from '@/app/api/hd/fleet-accounts/list'
+import FleetAccountList from './FleetAccountList'
 
 export const metadata = { title: 'Fleet Accounts — NWI HD Suite' }
 
@@ -22,11 +24,28 @@ export default async function FleetAccountsPage({
   const params   = await searchParams
   const showForm = params.new === '1'
 
-  const { data: accounts } = await supabase
-    .from('hd_fleet_accounts')
-    .select('*')
-    .eq('user_id', user.id)
-    .order('fleet_name')
+  // Paged: PostgREST silently caps any response at 1,000 rows, so loading every
+  // account at once would quietly hide the rest. The header total comes from its
+  // own exact/head count and reports the real number regardless of how many rows
+  // this first page carries.
+  const [{ data: accounts }, { count: accountCount }] = await Promise.all([
+    supabase
+      .from('hd_fleet_accounts')
+      .select(FLEET_ACCOUNT_LIST_SELECT)
+      .eq('user_id', user.id)
+      // Must match the API's ordering exactly, or the offsets the client sends
+      // would page through a different sequence than this first page came from.
+      .order('fleet_name')
+      .order('id')
+      .range(0, FLEET_ACCOUNT_PAGE_SIZE - 1),
+    supabase
+      .from('hd_fleet_accounts')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id),
+  ])
+
+  const rows  = (accounts ?? []) as FleetAccountListRow[]
+  const total = accountCount ?? rows.length
 
   async function addAccount(formData: FormData) {
     'use server'
@@ -54,6 +73,9 @@ export default async function FleetAccountsPage({
         <div>
           <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>HD Suite</p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">FLEET ACCOUNTS</h1>
+          <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+            {total.toLocaleString()} account{total !== 1 ? 's' : ''}
+          </p>
         </div>
         <Link
           href="?new=1"
@@ -101,42 +123,10 @@ export default async function FleetAccountsPage({
         </form>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {!accounts || accounts.length === 0 ? (
-          <div className="col-span-full py-16 text-center rounded-xl" style={{ background: '#111920', border: '1px solid #1e3040' }}>
-            <p className="text-sm mb-1" style={{ color: 'rgba(255,255,255,0.3)' }}>No fleet accounts yet</p>
-            <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.2)' }}>Add commercial fleet customers to organize your service accounts</p>
-            <Link href="?new=1" className="text-xs px-4 py-2 rounded-lg font-semibold" style={{ background: HD_ORANGE, color: '#fff' }}>
-              + Add First Account
-            </Link>
-          </div>
-        ) : (
-          (accounts as {
-            id: string; fleet_name: string; contact_name: string | null
-            contact_phone: string | null; contact_email: string | null; address: string | null
-          }[]).map(a => (
-            <div key={a.id} className="relative rounded-xl p-5 transition-colors hover:border-white/20" style={{ background: '#111920', border: '1px solid #1e3040' }}>
-              {/* Full-card link to the detail page */}
-              <Link href={`/hd/fleet-accounts/${a.id}`} className="absolute inset-0 rounded-xl" aria-label={`View ${a.fleet_name}`} />
-              {/* Edit link sits above the overlay */}
-              <Link
-                href={`/hd/fleet-accounts/${a.id}?edit=1`}
-                className="absolute top-3 right-3 z-10 text-xs font-semibold px-2.5 py-1 rounded-lg"
-                style={{ color: '#60A5FA', border: '1px solid #1e3040', background: '#111920' }}
-              >
-                Edit
-              </Link>
-              <div className="relative pointer-events-none pr-12">
-                <p className="font-condensed font-bold text-white text-lg tracking-wide">{a.fleet_name}</p>
-                {a.contact_name  && <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.6)' }}>{a.contact_name}</p>}
-                {a.contact_phone && <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>{a.contact_phone}</p>}
-                {a.contact_email && <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>{a.contact_email}</p>}
-                {a.address       && <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.3)' }}>📍 {a.address}</p>}
-              </div>
-            </div>
-          ))
-        )}
-      </div>
+      {/* key: a server re-render (a newly added account, say) does not remount a
+          client component on its own, so without it the grid would keep the stale
+          rows it had already accumulated. */}
+      <FleetAccountList key={total} initialRows={rows} total={total} />
     </main>
   )
 }

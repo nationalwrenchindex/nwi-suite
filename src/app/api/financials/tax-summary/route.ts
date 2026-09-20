@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import type { TaxMonthRow } from '@/types/financials'
 
 // LD invoices carry two status columns. The legacy `status` enum is stale — invoices
@@ -51,27 +52,45 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'from_date must not be after to_date' }, { status: 400 })
   }
 
-  const [ldResult, hdResult] = await Promise.all([
+  // A tax year runs to thousands of invoices, and PostgREST silently truncates at
+  // 1,000 rows — which would under-report tax owed to the state. Both sides are paged
+  // to exhaustion, ordered by `id` so the range windows walk a stable sequence.
+  const fetchLD = () => fetchAllRows((from, to) =>
     supabase
       .from('invoices')
       .select('id, subtotal, tax_amount, invoice_date')
       .eq('user_id', user.id)
       .in('invoice_status', LD_ISSUED)
       .gte('invoice_date', fromDate)
-      .lte('invoice_date', toDate),
+      .lte('invoice_date', toDate)
+      .order('id', { ascending: true })
+      .range(from, to)
+  )
 
-    // hd_invoices has no invoice_date column, so the issue date is created_at.
+  // hd_invoices has no invoice_date column, so the issue date is created_at.
+  const fetchHD = () => fetchAllRows((from, to) =>
     supabase
       .from('hd_invoices')
       .select('id, subtotal_labor, subtotal_parts, diagnostic_fee, road_call_fee, tax_amount, created_at')
       .eq('user_id', user.id)
       .in('status', HD_ISSUED)
       .gte('created_at', `${fromDate}T00:00:00.000Z`)
-      .lte('created_at', `${toDate}T23:59:59.999Z`),
-  ])
+      .lte('created_at', `${toDate}T23:59:59.999Z`)
+      .order('id', { ascending: true })
+      .range(from, to)
+  )
 
-  if (ldResult.error) return NextResponse.json({ error: ldResult.error.message }, { status: 500 })
-  if (hdResult.error) return NextResponse.json({ error: hdResult.error.message }, { status: 500 })
+  let ldInvoices: Awaited<ReturnType<typeof fetchLD>>
+  let hdInvoices: Awaited<ReturnType<typeof fetchHD>>
+
+  try {
+    ;[ldInvoices, hdInvoices] = await Promise.all([fetchLD(), fetchHD()])
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Failed to load tax summary' },
+      { status: 500 },
+    )
+  }
 
   const monthMap = new Map<string, { invoice_count: number; taxable_amount: number; tax_collected: number }>()
   for (const m of monthsBetween(fromDate, toDate)) {
@@ -82,7 +101,7 @@ export async function GET(request: NextRequest) {
   let hd_tax = 0
 
   // LD: tax_amount = subtotal × tax_rate, so the taxable base is subtotal.
-  for (const inv of ldResult.data ?? []) {
+  for (const inv of ldInvoices) {
     const bucket = monthMap.get(String(inv.invoice_date).slice(0, 7))
     if (!bucket) continue
     const tax = Number(inv.tax_amount ?? 0)
@@ -93,7 +112,7 @@ export async function GET(request: NextRequest) {
   }
 
   // HD: taxable base mirrors the invoice form — labor + parts + diagnostic + road call.
-  for (const inv of hdResult.data ?? []) {
+  for (const inv of hdInvoices) {
     const bucket = monthMap.get(String(inv.created_at).slice(0, 7))
     if (!bucket) continue
     const tax = Number(inv.tax_amount ?? 0)

@@ -3,11 +3,23 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { sendPmDueEmail, type PmDueUnit } from '@/lib/fleet-pro/pm-alert-email'
 import { pmStateFor } from '@/types/fleet-pro'
 import { authorizeCron } from '@/lib/cron-auth'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 
 export const dynamic = 'force-dynamic'
 
+// Paging multiplies this sweep's round trips — a tenant past the 1,000-row cap now
+// costs several sequential requests per table where it used to cost one. The default
+// function timeout is short enough that a large fleet could be cut off mid-sweep, which
+// would reintroduce the skipped-rows bug through the back door. 60s matches the other
+// long-running crons (see api/directory-agent/*).
+export const maxDuration = 60
+
 const LIVE_FLEET_STATUSES = ['active', 'trialing', 'past_due']
 const WARNING_WINDOW_DAYS = 30
+
+// PostgREST caps a response at 1,000 rows and still answers 200. Unpaged, the
+// schedules past the cap are never alerted on and the cron reports a clean run.
+const PAGE_SIZE = 500
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
@@ -41,24 +53,33 @@ export async function GET(request: NextRequest) {
 
   // 1. Schedules inside the window (overdue included — lte, no lower bound), on
   //    fleets whose Fleet Pro subscription is still live.
-  const { data: rows, error } = await supabase
-    .from('fleet_pro_pm_schedules')
-    .select(`
-      id, fleet_account_id, next_due_date, alert_sent_for,
-      hd_units!inner ( unit_number ),
-      hd_fleet_accounts!inner ( fleet_name, fleet_pro_enabled, fleet_pro_status )
-    `)
-    .not('next_due_date', 'is', null)
-    .lte('next_due_date', horizon)
-    .eq('hd_fleet_accounts.fleet_pro_enabled', true)
-    .in('hd_fleet_accounts.fleet_pro_status', LIVE_FLEET_STATUSES)
-
-  if (error) {
-    console.error('[fleet-pro-pm-alerts] schedule load failed:', error.message)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  //    Ordered by id so the range paging walks a stable sequence — unordered,
+  //    Postgres may hand back a row twice and skip another that is due.
+  let rows: Record<string, unknown>[]
+  try {
+    rows = await fetchAllRows<Record<string, unknown>>(
+      (from, to) => supabase
+        .from('fleet_pro_pm_schedules')
+        .select(`
+          id, fleet_account_id, next_due_date, alert_sent_for,
+          hd_units!inner ( unit_number ),
+          hd_fleet_accounts!inner ( fleet_name, fleet_pro_enabled, fleet_pro_status )
+        `)
+        .not('next_due_date', 'is', null)
+        .lte('next_due_date', horizon)
+        .eq('hd_fleet_accounts.fleet_pro_enabled', true)
+        .in('hd_fleet_accounts.fleet_pro_status', LIVE_FLEET_STATUSES)
+        .order('id', { ascending: true })
+        .range(from, to),
+      PAGE_SIZE,
+    )
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'schedule load failed'
+    console.error('[fleet-pro-pm-alerts] schedule load failed:', message)
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 
-  const candidates = (rows ?? []) as unknown as ScheduleJoin[]
+  const candidates = rows as unknown as ScheduleJoin[]
 
   // 2. DEDUPE. Only alert when this exact due date has not already been alerted
   //    for. Without this a unit sitting 25 days out is emailed every morning for
@@ -100,19 +121,25 @@ export async function GET(request: NextRequest) {
   for (const [fleetAccountId, group] of byFleet) {
     // 4. Recipients: active managers and supervisors. Read-only viewers do not
     //    get operational alerts.
-    const { data: members, error: memberErr } = await supabase
-      .from('fleet_pro_members')
-      .select('email')
-      .eq('fleet_account_id', fleetAccountId)
-      .eq('status', 'active')
-      .in('role', ['manager', 'supervisor'])
-
-    if (memberErr) {
-      console.error(`[fleet-pro-pm-alerts] member load failed for ${fleetAccountId}:`, memberErr.message)
+    let members: Record<string, unknown>[]
+    try {
+      members = await fetchAllRows<Record<string, unknown>>(
+        (from, until) => supabase
+          .from('fleet_pro_members')
+          .select('email')
+          .eq('fleet_account_id', fleetAccountId)
+          .eq('status', 'active')
+          .in('role', ['manager', 'supervisor'])
+          .order('id', { ascending: true })
+          .range(from, until),
+        PAGE_SIZE,
+      )
+    } catch (err) {
+      console.error(`[fleet-pro-pm-alerts] member load failed for ${fleetAccountId}:`, err instanceof Error ? err.message : err)
       continue
     }
 
-    const to = [...new Set((members ?? [])
+    const to = [...new Set(members
       .map(m => (m.email as string | null)?.trim().toLowerCase())
       .filter((e): e is string => !!e))]
 

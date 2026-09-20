@@ -1,8 +1,49 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDStarterAccess } from '@/lib/hd-access'
+import { WORK_ORDER_LIST_SELECT, WORK_ORDER_PAGE_SIZE } from './list'
 
 export const dynamic = 'force-dynamic'
+
+// GET /api/hd/work-orders?limit=&offset= — one page of the work-order list.
+// PostgREST silently truncates at 1,000 rows, so the list pages instead of
+// loading everything; `count` comes from its own exact/head query so the header
+// total stays truthful no matter how few rows the caller has loaded.
+export async function GET(req: NextRequest) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const ok = await checkHDStarterAccess(user.id)
+  if (!ok) return NextResponse.json({ error: 'HD access required' }, { status: 403 })
+
+  const sp     = req.nextUrl.searchParams
+  const limit  = Math.min(Number(sp.get('limit') ?? WORK_ORDER_PAGE_SIZE), 200)
+  const offset = Number(sp.get('offset') ?? 0)
+
+  const [{ data, error }, { count }] = await Promise.all([
+    supabase
+      .from('hd_work_orders')
+      .select(WORK_ORDER_LIST_SELECT)
+      .eq('user_id', user.id)
+      // created_at alone is not unique, and offset paging over a non-deterministic
+      // order drops and repeats rows between pages. id breaks every tie.
+      .order('created_at', { ascending: false })
+      .order('id',         { ascending: false })
+      .range(offset, offset + limit - 1),
+    supabase
+      .from('hd_work_orders')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', user.id),
+  ])
+
+  if (error) {
+    console.error('[hd/work-orders GET]', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  return NextResponse.json({ work_orders: data ?? [], count: count ?? 0 })
+}
 
 // POST /api/hd/work-orders — book a new job/appointment.
 // Inserts into hd_work_orders with scheduled_at set so it appears on the calendar.

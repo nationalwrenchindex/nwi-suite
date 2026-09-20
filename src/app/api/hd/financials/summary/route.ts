@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import { checkHDAccess } from '@/lib/hd-access'
 import { marginPct } from '@/lib/hd/invoice-costing'
 
@@ -96,21 +97,39 @@ export async function GET(request: NextRequest) {
 
   // hd_invoices has no invoice_date column — created_at is the issue date, the same
   // substitution /api/financials/tax-summary makes.
-  const { data, error } = await supabase
-    .from('hd_invoices')
-    .select('id, status, total, tax_amount, subtotal_parts, subtotal_labor, diagnostic_fee, road_call_fee, parts_cost, parts_sell, created_at')
-    .eq('user_id', user.id)
-    .gte('created_at', `${fromDate}T00:00:00.000Z`)
-    .lt('created_at',  `${nextDayUTC(toDate)}T00:00:00.000Z`)
+  //
+  // Every row here feeds revenue, COGS and the monthly breakdown, so the query is paged
+  // to exhaustion: PostgREST caps a response at 1,000 rows and returns a 200, so a
+  // single unpaged read would quietly report a fraction of the year's money as the
+  // whole of it. Pages are ordered by `id` so the range windows walk a stable sequence.
+  const fetchInvoices = () => fetchAllRows((from, to) =>
+    supabase
+      .from('hd_invoices')
+      .select('id, status, total, tax_amount, subtotal_parts, subtotal_labor, diagnostic_fee, road_call_fee, parts_cost, parts_sell, created_at')
+      .eq('user_id', user.id)
+      .gte('created_at', `${fromDate}T00:00:00.000Z`)
+      .lt('created_at',  `${nextDayUTC(toDate)}T00:00:00.000Z`)
+      .order('id', { ascending: true })
+      .range(from, to)
+  )
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  let data: Awaited<ReturnType<typeof fetchInvoices>>
+
+  try {
+    data = await fetchInvoices()
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Failed to load HD financials' },
+      { status: 500 },
+    )
+  }
 
   // Voids are dropped HERE, in JS, and not with `.neq('status', 'void')`. PostgREST
   // renders neq as SQL `<>`, which is NULL-propagating: a row whose status is NULL
   // evaluates to NULL, not true, and is filtered out along with the voids. Those NULL
   // rows are real unpaid invoices, and dropping them silently understates revenue.
   // Same reasoning as the LD status handling in /api/financials/tax-summary.
-  const invoices = (data ?? []).filter(inv => inv.status !== 'void')
+  const invoices = data.filter(inv => inv.status !== 'void')
 
   const months = monthsBetween(fromDate, toDate)
   const monthMap = new Map<string, Bucket>()

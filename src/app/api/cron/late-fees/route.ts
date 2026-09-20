@@ -3,8 +3,32 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { sendSmsResult } from '@/lib/twilio'
 import { getContactSuppression } from '@/lib/customer-contact'
 import { authorizeCron } from '@/lib/cron-auth'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 
 export const dynamic = 'force-dynamic'
+
+// Paging multiplies this sweep's round trips — a tenant past the 1,000-row cap now
+// costs several sequential requests per table where it used to cost one. The default
+// function timeout is short enough that a large fleet could be cut off mid-sweep, which
+// would reintroduce the skipped-rows bug through the back door. 60s matches the other
+// long-running crons (see api/directory-agent/*).
+export const maxDuration = 60
+
+// PostgREST answers 200 with at most 1,000 rows, so an unpaged sweep quietly
+// stops charging late fees on every invoice past the cap. Both loads below page.
+const PAGE_SIZE = 500
+
+// An `.in()` list rides in the query string; once the settings load is unbounded
+// the tech list can outgrow the URL, so it goes out in batches.
+const IN_CHUNK = 200
+
+type Row = Record<string, unknown>
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
+  return out
+}
 
 // ─── GET /api/cron/late-fees ─────────────────────────────────────────────────
 // Runs daily at 9am (see vercel.json). Applies a late fee to overdue HD invoices
@@ -18,16 +42,26 @@ export async function GET(request: NextRequest) {
   const DAY = 24 * 60 * 60 * 1000
 
   // 1. Techs with an active late-fee configuration.
-  const { data: settingsList, error: settingsErr } = await supabase
-    .from('late_fee_settings')
-    .select('*')
-    .eq('active', true)
-
-  if (settingsErr) {
-    console.error('[late-fees] settings load failed:', settingsErr.message)
-    return NextResponse.json({ error: settingsErr.message }, { status: 500 })
+  //    `.order('id')` is load-bearing: range paging an unordered query can repeat
+  //    or skip rows, and a skipped tech is a tech whose invoices go unfee'd.
+  let settingsList: Row[]
+  try {
+    settingsList = await fetchAllRows<Row>(
+      (from, to) => supabase
+        .from('late_fee_settings')
+        .select('*')
+        .eq('active', true)
+        .order('id', { ascending: true })
+        .range(from, to),
+      PAGE_SIZE,
+    )
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'settings load failed'
+    console.error('[late-fees] settings load failed:', message)
+    return NextResponse.json({ error: message }, { status: 500 })
   }
-  if (!settingsList || settingsList.length === 0) {
+
+  if (settingsList.length === 0) {
     return NextResponse.json({ processed: 0, applied: 0, smsSent: 0 })
   }
 
@@ -35,29 +69,55 @@ export async function GET(request: NextRequest) {
   const userIds = [...settingsMap.keys()]
 
   // 2. Candidate invoices: sent/overdue, not yet fee'd, with a due date, for those techs.
-  const { data: invoices, error: invErr } = await supabase
-    .from('hd_invoices')
-    .select('id, invoice_number, user_id, customer_phone, total, subtotal_parts, line_items, due_date, status, late_fee_applied, customer_id')
-    .in('user_id', userIds)
-    .in('status', ['sent', 'overdue'])
-    .eq('late_fee_applied', false)
-    .not('due_date', 'is', null)
-
-  if (invErr) {
-    console.error('[late-fees] invoice load failed:', invErr.message)
-    return NextResponse.json({ error: invErr.message }, { status: 500 })
+  const invoices: Row[] = []
+  try {
+    for (const ids of chunk(userIds, IN_CHUNK)) {
+      const page = await fetchAllRows<Row>(
+        (from, to) => supabase
+          .from('hd_invoices')
+          .select('id, invoice_number, user_id, customer_phone, total, subtotal_parts, line_items, due_date, status, late_fee_applied, customer_id')
+          .in('user_id', ids)
+          .in('status', ['sent', 'overdue'])
+          .eq('late_fee_applied', false)
+          .not('due_date', 'is', null)
+          .order('id', { ascending: true })
+          .range(from, to),
+        PAGE_SIZE,
+      )
+      invoices.push(...page)
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'invoice load failed'
+    console.error('[late-fees] invoice load failed:', message)
+    return NextResponse.json({ error: message }, { status: 500 })
   }
-  if (!invoices || invoices.length === 0) {
+
+  if (invoices.length === 0) {
     return NextResponse.json({ processed: 0, applied: 0, smsSent: 0 })
   }
 
-  // 3. Tech display names for the SMS.
-  const { data: profiles } = await supabase
-    .from('profiles')
-    .select('id, hd_tech_name, business_name, full_name')
-    .in('id', userIds)
-  const nameMap = new Map((profiles ?? []).map(p => [p.id as string,
-    (p.hd_tech_name as string) || (p.business_name as string) || (p.full_name as string) || 'your mechanic']))
+  // 3. Tech display names for the SMS. A failure here is logged and tolerated —
+  //    it only costs the SMS its greeting, and the fees themselves are still owed.
+  const nameMap = new Map<string, string>()
+  try {
+    for (const ids of chunk(userIds, IN_CHUNK)) {
+      const profiles = await fetchAllRows<Row>(
+        (from, to) => supabase
+          .from('profiles')
+          .select('id, hd_tech_name, business_name, full_name')
+          .in('id', ids)
+          .order('id', { ascending: true })
+          .range(from, to),
+        PAGE_SIZE,
+      )
+      for (const p of profiles) {
+        nameMap.set(p.id as string,
+          (p.hd_tech_name as string) || (p.business_name as string) || (p.full_name as string) || 'your mechanic')
+      }
+    }
+  } catch (err) {
+    console.error('[late-fees] profile load failed:', err instanceof Error ? err.message : err)
+  }
 
   let applied = 0, smsSent = 0
 

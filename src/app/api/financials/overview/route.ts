@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import type { DayBreakdown, WeekBreakdown } from '@/types/financials'
 
 // Monday-start ISO week
@@ -43,48 +44,84 @@ export async function GET(request: NextRequest) {
 
   const COGS_CATEGORIES = new Set(['parts_cogs', 'shop_supplies'])
 
-  const [invResult, expResult, jobsResult, timeJobsResult] = await Promise.all([
+  // Every query below feeds a money total or a breakdown row, so none of them may stop
+  // at PostgREST's silent 1,000-row cap — each is paged to exhaustion by fetchAllRows.
+  // The rows are genuinely needed (daily/weekly buckets, service mix, estimate-vs-actual
+  // variance), so a count-only query cannot stand in for them. Each page is ordered by
+  // `id` so the range windows walk a stable sequence rather than an arbitrary one.
+  const fetchInvoices = () => fetchAllRows((from, to) =>
     supabase
       .from('invoices')
       .select('id, total, status, invoice_status, due_date, net_profit, cogs_total, invoice_date')
       .eq('user_id', user.id)
       .gte('invoice_date', fromDate)
-      .lte('invoice_date', toDate),
+      .lte('invoice_date', toDate)
+      .order('id', { ascending: true })
+      .range(from, to)
+  )
 
+  const fetchExpenses = () => fetchAllRows((from, to) =>
     supabase
       .from('expenses')
       .select('id, amount, category, transaction_type, expense_date')
       .eq('user_id', user.id)
       .gte('expense_date', fromDate)
-      .lte('expense_date', toDate),
+      .lte('expense_date', toDate)
+      .order('id', { ascending: true })
+      .range(from, to)
+  )
 
+  const fetchJobs = () => fetchAllRows((from, to) =>
     supabase
       .from('jobs')
-      .select('service_type, job_date')
+      .select('id, service_type, job_date')
       .eq('user_id', user.id)
       .gte('job_date', fromDate)
       .lte('job_date', toDate)
-      .neq('status', 'cancelled'),
+      .neq('status', 'cancelled')
+      .order('id', { ascending: true })
+      .range(from, to)
+  )
 
+  const fetchTimeJobs = () => fetchAllRows((from, to) =>
     supabase
       .from('jobs')
-      .select('estimated_duration_minutes, actual_start_at, actual_end_at')
+      .select('id, estimated_duration_minutes, actual_start_at, actual_end_at')
       .eq('user_id', user.id)
       .gte('job_date', fromDate)
       .lte('job_date', toDate)
       .not('actual_start_at', 'is', null)
       .not('actual_end_at', 'is', null)
-      .not('estimated_duration_minutes', 'is', null),
-  ])
+      .not('estimated_duration_minutes', 'is', null)
+      .order('id', { ascending: true })
+      .range(from, to)
+  )
 
-  if (invResult.error)  return NextResponse.json({ error: invResult.error.message },  { status: 500 })
-  if (expResult.error)  return NextResponse.json({ error: expResult.error.message },  { status: 500 })
-  if (jobsResult.error) return NextResponse.json({ error: jobsResult.error.message }, { status: 500 })
+  let fetched: [
+    Awaited<ReturnType<typeof fetchInvoices>>,
+    Awaited<ReturnType<typeof fetchExpenses>>,
+    Awaited<ReturnType<typeof fetchJobs>>,
+    Awaited<ReturnType<typeof fetchTimeJobs>>,
+  ]
 
-  const invoices  = invResult.data  ?? []
-  const expenses  = expResult.data  ?? []
-  const jobs      = jobsResult.data ?? []
-  const timeJobs  = timeJobsResult.data ?? []
+  try {
+    fetched = await Promise.all([
+      fetchInvoices(),
+      fetchExpenses(),
+      fetchJobs(),
+      // The time-variance query is the one whose failure was never fatal: the original
+      // read `timeJobsResult.data ?? []` without checking its error, so a failure there
+      // just left avg_time_variance null. That stays true.
+      fetchTimeJobs().catch(() => []),
+    ])
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Failed to load financials' },
+      { status: 500 },
+    )
+  }
+
+  const [invoices, expenses, jobs, timeJobs] = fetched
 
   // The legacy `status` enum is not kept in sync by the finalize path — a finalized
   // or paid invoice can still read 'draft' there — so `invoice_status` (migration 012)

@@ -11,6 +11,8 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { requirePartner } from '@/lib/fleet-pro/partner-access'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
+import { fetchAllRowsForIds } from '@/lib/fleet-pro/fetch-scoped'
 import type { PartnerAccountRow } from '@/components/fleet-pro/partner/AccountsClient'
 
 export const dynamic = 'force-dynamic'
@@ -38,6 +40,9 @@ interface ResellerRecord {
   brand_accent_color: string | null
 }
 
+interface UnitCountRow   { fleet_account_id: string | null }
+interface MemberCountRow { fleet_account_id: string; status: string | null }
+
 /** Trimmed, length-capped text, or null for anything blank or non-string. */
 function text(value: unknown, max = 200): string | null {
   if (typeof value !== 'string') return null
@@ -60,40 +65,76 @@ export async function GET() {
   // The reseller rows ARE the scope of this response. Every id used below comes
   // from this query filtered by partner_id, so no other partner's customer can be
   // reached even if one of the follow-up queries were somehow influenced.
-  const { data: resellerRows, error: resellerError } = await svc
-    .from('fleet_pro_reseller_accounts')
-    .select('fleet_account_id, brand_name, brand_logo_url, brand_accent_color')
-    .eq('partner_id', partner.id)
-
-  if (resellerError) {
-    console.error('[fleet-pro/partner/accounts] reseller list failed:', resellerError.message)
+  //
+  // Paged, like everything below it: PostgREST stops at 1,000 rows and still answers
+  // 200, so an unpaged book of business quietly loses its tail — and every count on
+  // this page is scoped by the ids this query returns.
+  let reseller: ResellerRecord[]
+  try {
+    reseller = await fetchAllRows<ResellerRecord>((from, to) => svc
+      .from('fleet_pro_reseller_accounts')
+      .select('fleet_account_id, brand_name, brand_logo_url, brand_accent_color')
+      .eq('partner_id', partner.id)
+      .order('id', { ascending: true })
+      .range(from, to))
+  } catch (err) {
+    console.error('[fleet-pro/partner/accounts] reseller list failed:', err instanceof Error ? err.message : err)
     return NextResponse.json({ error: 'Could not load your fleet accounts' }, { status: 500 })
   }
 
-  const reseller = (resellerRows ?? []) as ResellerRecord[]
-  const ids      = reseller.map(r => r.fleet_account_id)
+  const ids = reseller.map(r => r.fleet_account_id)
 
   if (ids.length === 0) {
     return NextResponse.json({ accounts: [], partner_name: partner.partner_name })
   }
 
-  const [{ data: accountRows }, { data: unitRows }, { data: memberRows }] = await Promise.all([
-    svc.from('hd_fleet_accounts')
-      .select('id, fleet_name, contact_name, contact_phone, contact_email, fleet_pro_enabled, fleet_pro_status, created_at')
-      .in('id', ids),
-    svc.from('hd_units')
-      .select('id, fleet_account_id')
-      .in('fleet_account_id', ids),
-    svc.from('fleet_pro_members')
-      .select('id, fleet_account_id, status')
-      .in('fleet_account_id', ids),
+  // Each of the three is chunked over `ids` (an `.in()` list rides in the URL) and
+  // paged inside each chunk, ordered by `id` because range paging needs a total order.
+  //
+  // Each also keeps the failure behavior it already had: this route never checked
+  // these three for errors, so a failure showed up as a zero count on a page that
+  // still rendered. The pager throws, so each one catches and logs rather than turning
+  // a quiet zero into a 500 the partner cannot get past.
+  const [accountRows, unitRows, memberRows] = await Promise.all([
+    fetchAllRowsForIds<AccountRecord, string>(ids, (chunk, from, to) =>
+      svc.from('hd_fleet_accounts')
+        .select('id, fleet_name, contact_name, contact_phone, contact_email, fleet_pro_enabled, fleet_pro_status, created_at')
+        .in('id', chunk)
+        .order('id', { ascending: true })
+        .range(from, to),
+    ).catch(err => {
+      console.error('[fleet-pro/partner/accounts] account list failed:', err)
+      return [] as AccountRecord[]
+    }),
+
+    fetchAllRowsForIds<UnitCountRow, string>(ids, (chunk, from, to) =>
+      svc.from('hd_units')
+        .select('id, fleet_account_id')
+        .in('fleet_account_id', chunk)
+        .order('id', { ascending: true })
+        .range(from, to),
+    ).catch(err => {
+      console.error('[fleet-pro/partner/accounts] unit count failed:', err)
+      return [] as UnitCountRow[]
+    }),
+
+    fetchAllRowsForIds<MemberCountRow, string>(ids, (chunk, from, to) =>
+      svc.from('fleet_pro_members')
+        .select('id, fleet_account_id, status')
+        .in('fleet_account_id', chunk)
+        .order('id', { ascending: true })
+        .range(from, to),
+    ).catch(err => {
+      console.error('[fleet-pro/partner/accounts] member count failed:', err)
+      return [] as MemberCountRow[]
+    }),
   ])
 
   const accounts = new Map<string, AccountRecord>()
-  for (const row of (accountRows ?? []) as AccountRecord[]) accounts.set(row.id, row)
+  for (const row of accountRows) accounts.set(row.id, row)
 
   const unitCounts = new Map<string, number>()
-  for (const row of (unitRows ?? []) as { fleet_account_id: string | null }[]) {
+  for (const row of unitRows) {
     if (!row.fleet_account_id) continue
     unitCounts.set(row.fleet_account_id, (unitCounts.get(row.fleet_account_id) ?? 0) + 1)
   }
@@ -101,7 +142,7 @@ export async function GET() {
   // Revoked members are kept as a record of who used to have access; counting them
   // here would tell the partner his customer has seats that cannot sign in.
   const memberCounts = new Map<string, number>()
-  for (const row of (memberRows ?? []) as { fleet_account_id: string; status: string | null }[]) {
+  for (const row of memberRows) {
     if (row.status === 'revoked') continue
     memberCounts.set(row.fleet_account_id, (memberCounts.get(row.fleet_account_id) ?? 0) + 1)
   }

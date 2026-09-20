@@ -2,7 +2,15 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
-import InvoiceListActions from './InvoiceListActions'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
+import {
+  HD_INVOICE_LIST_SELECT,
+  HD_INVOICE_PAGE_SIZE,
+  HD_INVOICE_STATUSES,
+  applyHDInvoiceListFilter,
+  type HDInvoiceListRow,
+} from '@/app/api/hd/invoices/list'
+import InvoiceList from './InvoiceList'
 
 const ORANGE = '#FF6600'
 
@@ -15,13 +23,11 @@ const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
   void:    { bg: '#F3F4F6', color: '#6B7280' },
 }
 
-function fmt(n: number | null) {
-  return `$${(n ?? 0).toFixed(2)}`
-}
+/** Statuses that still owe money — the "outstanding" figure in the header. */
+const OUTSTANDING_STATUSES = new Set(['unpaid', 'sent', 'overdue'])
 
-function fmtDate(s: string | null) {
-  if (!s) return '—'
-  return new Date(s).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+function fmt(n: number) {
+  return `$${n.toFixed(2)}`
 }
 
 export default async function InvoicesPage({ searchParams }: { searchParams: Promise<{ filter?: string }> }) {
@@ -33,20 +39,59 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
   if (!hasAccess) redirect('/hd/signup')
 
   const { filter } = await searchParams
+  const listFilter = filter === 'overdue' ? 'overdue' : null
 
-  const { data: invoices } = await supabase
-    .from('hd_invoices')
-    .select('id, invoice_number, customer_name, unit_manufacturer, unit_model, total, status, payment_terms, due_date, created_at, paid_at')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
-    .limit(200)
+  // The list is paged. It previously pulled a flat .limit(200) and filtered
+  // "overdue" in memory, which stopped being honest the moment a tech crossed
+  // 200 invoices — and PostgREST would have capped it at 1,000 regardless.
+  //
+  // Three separate reads, all carrying the same filter so they describe the same
+  // set of rows:
+  //   1. the first page of rows;
+  //   2. an exact/head count, which is the header total — it stays correct no
+  //      matter how few rows are actually loaded;
+  //   3. status + total for every matching invoice, paged to exhaustion, which is
+  //      what the outstanding figure and the status strip are summed from. This
+  //      cannot be a PostgREST aggregate: this project's API rejects those with
+  //      PGRST123, so the rows have to come back and be added up here.
+  const [{ data: invoices }, { count: invoiceCount }, summaryRows] = await Promise.all([
+    applyHDInvoiceListFilter(
+      supabase.from('hd_invoices').select(HD_INVOICE_LIST_SELECT).eq('user_id', user.id),
+      listFilter,
+    )
+      // Must match the API's ordering exactly, or the offsets the client sends
+      // would page through a different sequence than this first page came from.
+      .order('created_at', { ascending: false })
+      .order('id',         { ascending: false })
+      .range(0, HD_INVOICE_PAGE_SIZE - 1),
 
-  const todayStr = new Date().toISOString().slice(0, 10)
-  const allRows = invoices ?? []
-  const rows = filter === 'overdue'
-    ? allRows.filter(i => i.status === 'overdue' || (i.due_date && String(i.due_date) < todayStr && i.status !== 'paid' && i.status !== 'void'))
-    : allRows
-  const totalUnpaid = rows.filter(i => i.status === 'unpaid' || i.status === 'sent' || i.status === 'overdue').reduce((s, i) => s + (i.total ?? 0), 0)
+    applyHDInvoiceListFilter(
+      supabase.from('hd_invoices').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
+      listFilter,
+    ),
+
+    fetchAllRows<{ status: string; total: number | null }>((from, to) =>
+      applyHDInvoiceListFilter(
+        supabase.from('hd_invoices').select('status, total').eq('user_id', user.id),
+        listFilter,
+      )
+        .order('created_at', { ascending: false })
+        .order('id',         { ascending: false })
+        .range(from, to),
+    ),
+  ])
+
+  const rows  = (invoices ?? []) as HDInvoiceListRow[]
+  const total = invoiceCount ?? rows.length
+
+  const totalUnpaid = summaryRows
+    .filter(i => OUTSTANDING_STATUSES.has(i.status))
+    .reduce((s, i) => s + Number(i.total ?? 0), 0)
+
+  const statusCounts = summaryRows.reduce<Record<string, number>>((acc, i) => {
+    acc[i.status] = (acc[i.status] ?? 0) + 1
+    return acc
+  }, {})
 
   return (
     <div style={{ background: '#F4F5F7', minHeight: '100dvh', padding: '24px 20px' }}>
@@ -59,9 +104,9 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
               INVOICES
             </h1>
             <p style={{ color: '#6B7280', fontSize: 14, marginTop: 2 }}>
-              {filter === 'overdue' && <span className="font-semibold" style={{ color: '#b91c1c' }}>Overdue · </span>}
-              {rows.length} invoice{rows.length !== 1 ? 's' : ''}
-              {filter === 'overdue' && <Link href="/hd/invoices" className="ml-2 underline" style={{ color: '#6B7280' }}>show all</Link>}
+              {listFilter === 'overdue' && <span className="font-semibold" style={{ color: '#b91c1c' }}>Overdue · </span>}
+              {total.toLocaleString()} invoice{total !== 1 ? 's' : ''}
+              {listFilter === 'overdue' && <Link href="/hd/invoices" className="ml-2 underline" style={{ color: '#6B7280' }}>show all</Link>}
               {totalUnpaid > 0 && (
                 <span className="ml-3 font-semibold" style={{ color: '#dc2626' }}>
                   {fmt(totalUnpaid)} outstanding
@@ -93,117 +138,27 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
           </div>
         </div>
 
-        {/* Table */}
-        <div style={{ background: '#FFFFFF', borderRadius: 12, border: '1px solid #E5E7EB', overflow: 'hidden' }}>
-          {rows.length === 0 ? (
-            <div className="text-center py-16">
-              <svg className="w-12 h-12 mx-auto mb-4" fill="none" stroke="#D1D5DB" strokeWidth={1.5} viewBox="0 0 24 24">
-                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-              </svg>
-              <p style={{ color: '#6B7280', fontSize: 15 }}>No invoices yet</p>
-              <p style={{ color: '#9CA3AF', fontSize: 13, marginTop: 4 }}>Create a direct invoice, or build a quote and convert it</p>
-              <div className="flex items-center justify-center gap-3 mt-4">
-                <Link
-                  href="/hd/invoices/new"
-                  className="inline-block px-5 py-2 rounded-lg font-semibold text-sm text-white"
-                  style={{ background: ORANGE }}
-                >
-                  Create an invoice
-                </Link>
-                <Link
-                  href="/hd/quotes/new"
-                  className="inline-block px-5 py-2 rounded-lg font-semibold text-sm"
-                  style={{ background: '#FFFFFF', color: ORANGE, border: `1px solid ${ORANGE}` }}
-                >
-                  Create a quote
-                </Link>
-              </div>
-            </div>
-          ) : (
-            <>
-              {/* Desktop table (md+) */}
-              <div className="hidden md:block">
-                <div
-                  className="grid gap-3 px-4 py-3 text-xs font-semibold uppercase tracking-wide"
-                  style={{ gridTemplateColumns: '160px 1fr 1fr 90px 90px 120px auto', background: '#F9FAFB', borderBottom: '1px solid #E5E7EB', color: '#6B7280' }}
-                >
-                  <span>Invoice #</span>
-                  <span>Customer</span>
-                  <span>Unit</span>
-                  <span>Total</span>
-                  <span>Status</span>
-                  <span>Date</span>
-                  <span>Actions</span>
-                </div>
-                {rows.map(inv => {
-                  const st = STATUS_STYLE[inv.status] ?? STATUS_STYLE.unpaid
-                  return (
-                    <div
-                      key={inv.id}
-                      className="grid gap-3 px-4 py-3 items-center"
-                      style={{ gridTemplateColumns: '160px 1fr 1fr 90px 90px 120px auto', borderBottom: '1px solid #F3F4F6' }}
-                    >
-                      <span className="font-mono text-xs font-semibold" style={{ color: ORANGE }}>{inv.invoice_number}</span>
-                      <span className="text-sm font-medium truncate" style={{ color: '#1A1A1A' }}>{inv.customer_name}</span>
-                      <span className="text-sm truncate" style={{ color: '#6B7280' }}>
-                        {[inv.unit_manufacturer, inv.unit_model].filter(Boolean).join(' ') || '—'}
-                      </span>
-                      <span className="text-sm font-semibold" style={{ color: '#1A1A1A' }}>{fmt(inv.total)}</span>
-                      <span>
-                        <span className="text-xs font-semibold px-2 py-1 rounded-full capitalize" style={{ background: st.bg, color: st.color }}>
-                          {inv.status}
-                        </span>
-                      </span>
-                      <span className="text-xs" style={{ color: '#9CA3AF' }}>
-                        {inv.status === 'paid' && inv.paid_at ? fmtDate(inv.paid_at) : fmtDate(inv.created_at)}
-                      </span>
-                      <InvoiceListActions invoiceId={inv.id} invoiceNumber={inv.invoice_number} currentStatus={inv.status} />
-                    </div>
-                  )
-                })}
-              </div>
+        {/* Table.
+            key: switching between all and overdue is a URL navigation, not a
+            remount, so without it the client would keep the previous filter's
+            accumulated rows and append the new filter's pages onto them. total is
+            in the key so a newly created invoice re-seeds the list too. */}
+        <InvoiceList
+          key={`${listFilter ?? 'all'}:${total}`}
+          initialRows={rows}
+          total={total}
+          filter={listFilter}
+        />
 
-              {/* Mobile cards (below md) */}
-              <div className="block md:hidden">
-                {rows.map(inv => {
-                  const st = STATUS_STYLE[inv.status] ?? STATUS_STYLE.unpaid
-                  const unit = [inv.unit_manufacturer, inv.unit_model].filter(Boolean).join(' ')
-                  return (
-                    <div key={inv.id} className="p-4" style={{ borderBottom: '1px solid #F3F4F6' }}>
-                      <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className="font-mono text-xs font-semibold" style={{ color: ORANGE }}>{inv.invoice_number}</span>
-                        <span className="text-xs font-semibold px-2 py-1 rounded-full capitalize" style={{ background: st.bg, color: st.color }}>{inv.status}</span>
-                      </div>
-                      <p className="text-sm font-medium" style={{ color: '#1A1A1A' }}>{inv.customer_name}</p>
-                      {unit && <p className="text-xs" style={{ color: '#6B7280' }}>{unit}</p>}
-                      <p className="text-sm mt-1" style={{ color: '#1A1A1A' }}>
-                        <span className="font-semibold">{fmt(inv.total)}</span>
-                        <span style={{ color: '#9CA3AF' }}> • {inv.status === 'paid' && inv.paid_at ? fmtDate(inv.paid_at) : fmtDate(inv.created_at)}</span>
-                      </p>
-                      <div className="mt-3">
-                        <InvoiceListActions invoiceId={inv.id} invoiceNumber={inv.invoice_number} currentStatus={inv.status} />
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Summary */}
-        {rows.length > 0 && (
+        {/* Summary — counted across every matching invoice, not just the loaded page. */}
+        {total > 0 && (
           <div className="flex gap-6 mt-4">
-            {(['unpaid','sent','overdue','paid','partial','void'] as const).map(s => {
-              const count = rows.filter(i => i.status === s).length
-              const st = STATUS_STYLE[s]
-              return (
-                <div key={s} className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full" style={{ background: st.color }} />
-                  <span className="text-xs" style={{ color: '#6B7280' }}>{count} {s}</span>
-                </div>
-              )
-            })}
+            {HD_INVOICE_STATUSES.map(s => (
+              <div key={s} className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full" style={{ background: STATUS_STYLE[s].color }} />
+                <span className="text-xs" style={{ color: '#6B7280' }}>{statusCounts[s] ?? 0} {s}</span>
+              </div>
+            ))}
           </div>
         )}
       </div>

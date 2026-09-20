@@ -4,10 +4,19 @@ import { checkHDAccess } from '@/lib/hd-access'
 import { logHDCustomer } from '@/lib/hd/customer-logging'
 import { resolveInvoiceFleetLinks } from '@/lib/fleet-pro/invoice-link'
 import { costingFromLineItems, isMissingCostingColumn } from '@/lib/hd/invoice-costing'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
+import { HD_INVOICE_LIST_SELECT, HD_INVOICE_DEFAULT_LIMIT, applyHDInvoiceListFilter } from './list'
 
 export const dynamic = 'force-dynamic'
 
-export async function GET() {
+// GET /api/hd/invoices?filter=&limit=&offset= — one page of the invoice list.
+//
+// This used to return a flat .limit(200), which meant an invoice numbered past
+// the 200th simply did not exist as far as any caller was concerned; PostgREST
+// would have silently capped it at 1,000 regardless. `count` is its own exact/head
+// query carrying the same filter, so the header total is the real total no matter
+// how few rows the caller has actually loaded.
+export async function GET(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -15,15 +24,69 @@ export async function GET() {
   const hasAccess = await checkHDAccess(user.id)
   if (!hasAccess) return NextResponse.json({ error: 'HD subscription required' }, { status: 403 })
 
-  const { data, error } = await supabase
-    .from('hd_invoices')
-    .select('id, invoice_number, customer_name, unit_manufacturer, unit_model, total, status, payment_terms, created_at, paid_at')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
-    .limit(200)
+  const sp     = req.nextUrl.searchParams
+  const filter = sp.get('filter')
+  const limit  = Math.min(Number(sp.get('limit') ?? HD_INVOICE_DEFAULT_LIMIT), 200)
+  const offset = Number(sp.get('offset') ?? 0)
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ invoices: data })
+  // ?totals=1 — money figures over EVERY matching invoice, not just the page.
+  // HDFinancialsClient used to call this endpoint bare and reduce whatever came
+  // back into its Outstanding/Collected tiles, so those figures were a sum of at
+  // most `HD_INVOICE_DEFAULT_LIMIT` invoices presented as the whole book. Opt-in
+  // because it reads every matching row: the list page must not pay for it.
+  const wantTotals = sp.get('totals') === '1'
+
+  const rowsQuery = applyHDInvoiceListFilter(
+    supabase.from('hd_invoices').select(HD_INVOICE_LIST_SELECT).eq('user_id', user.id),
+    filter,
+  )
+  const countQuery = applyHDInvoiceListFilter(
+    supabase.from('hd_invoices').select('id', { count: 'exact', head: true }).eq('user_id', user.id),
+    filter,
+  )
+
+  const [{ data, error }, { count }] = await Promise.all([
+    rowsQuery
+      // created_at is not unique, and offset paging over a non-deterministic order
+      // drops and repeats rows between pages. id breaks every tie.
+      .order('created_at', { ascending: false })
+      .order('id',         { ascending: false })
+      .range(offset, offset + limit - 1),
+    countQuery,
+  ])
+
+  if (error) {
+    console.error('[hd/invoices GET]', error)
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  // A totals failure must not take the list down with it, and must not fall back to
+  // summing the page either — that is the bug being fixed, wearing a disguise. The
+  // caller simply gets no `totals` key and renders a dash instead of a plausible lie.
+  let totals: Record<string, number> | undefined
+  if (wantTotals) {
+    try {
+      // Only (status, total) — the narrowest row that can carry the sum.
+      const rows = await fetchAllRows<{ status: string; total: number | null }>((from, to) =>
+        applyHDInvoiceListFilter(
+          supabase.from('hd_invoices').select('status, total').eq('user_id', user.id),
+          filter,
+        )
+          .order('id', { ascending: true })
+          .range(from, to),
+      )
+      totals = {}
+      for (const r of rows) {
+        totals[r.status] = (totals[r.status] ?? 0) + Number(r.total ?? 0)
+      }
+      totals.invoice_count = rows.length
+    } catch (err) {
+      console.error('[hd/invoices GET totals]', err)
+      totals = undefined
+    }
+  }
+
+  return NextResponse.json({ invoices: data ?? [], count: count ?? 0, ...(totals ? { totals } : {}) })
 }
 
 export async function POST(req: NextRequest) {

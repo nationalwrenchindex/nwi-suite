@@ -29,10 +29,24 @@ import {
 } from '@/lib/fleet-pro/compliance-alert-email'
 import { complianceNeedsAlert, todayIso } from '@/lib/fleet-pro/compliance'
 import { buildComplianceCalendar } from '@/app/api/fleet-pro/compliance/calendar'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 
 export const dynamic = 'force-dynamic'
 
+// Paging multiplies this sweep's round trips — a tenant past the 1,000-row cap now
+// costs several sequential requests per table where it used to cost one. The default
+// function timeout is short enough that a large fleet could be cut off mid-sweep, which
+// would reintroduce the skipped-rows bug through the back door. 60s matches the other
+// long-running crons (see api/directory-agent/*).
+export const maxDuration = 60
+
 const LIVE_FLEET_STATUSES = ['active', 'trialing', 'past_due']
+
+// PostgREST caps a response at 1,000 rows and still answers 200, so the fleet
+// sweep pages: fleet number 1,001 would otherwise never be told anything.
+const PAGE_SIZE = 500
+
+type Row = Record<string, unknown>
 
 /**
  * Re-send an unchanged digest after this many days. The fingerprint alone would go
@@ -75,15 +89,24 @@ export async function GET(request: NextRequest) {
   // 1. Every fleet whose Fleet Pro subscription is still live. Same liveness rule the
   //    RLS helpers apply — a lapsed department stops being emailed, not just stops
   //    being able to log in.
-  const { data: fleets, error: fleetErr } = await supabase
-    .from('hd_fleet_accounts')
-    .select('id, fleet_name, contact_phone')
-    .eq('fleet_pro_enabled', true)
-    .in('fleet_pro_status', LIVE_FLEET_STATUSES)
-
-  if (fleetErr) {
-    console.error('[fleet-pro-compliance-alerts] fleet load failed:', fleetErr.message)
-    return NextResponse.json({ error: fleetErr.message }, { status: 500 })
+  //    Ordered by id because range paging without a total order can repeat one
+  //    fleet and silently drop another.
+  let fleets: Row[]
+  try {
+    fleets = await fetchAllRows<Row>(
+      (from, to) => supabase
+        .from('hd_fleet_accounts')
+        .select('id, fleet_name, contact_phone')
+        .eq('fleet_pro_enabled', true)
+        .in('fleet_pro_status', LIVE_FLEET_STATUSES)
+        .order('id', { ascending: true })
+        .range(from, to),
+      PAGE_SIZE,
+    )
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'fleet load failed'
+    console.error('[fleet-pro-compliance-alerts] fleet load failed:', message)
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 
   let fleetsWithItems = 0
@@ -91,7 +114,7 @@ export async function GET(request: NextRequest) {
   let smsSent         = 0
   let skippedUnchanged = 0
 
-  for (const fleet of fleets ?? []) {
+  for (const fleet of fleets) {
     const fleetId   = fleet.id as string
     const fleetName = (fleet.fleet_name as string | null) ?? 'Your Fleet'
 
@@ -119,19 +142,25 @@ export async function GET(request: NextRequest) {
 
     // 4. Recipients: active managers and supervisors. Read-only viewers do not get
     //    operational alerts — the same rule the PM cron applies.
-    const { data: members, error: memberErr } = await supabase
-      .from('fleet_pro_members')
-      .select('email')
-      .eq('fleet_account_id', fleetId)
-      .eq('status', 'active')
-      .in('role', ['manager', 'supervisor'])
-
-    if (memberErr) {
-      console.error(`[fleet-pro-compliance-alerts] member load failed for ${fleetId}:`, memberErr.message)
+    let members: Row[]
+    try {
+      members = await fetchAllRows<Row>(
+        (from, until) => supabase
+          .from('fleet_pro_members')
+          .select('email')
+          .eq('fleet_account_id', fleetId)
+          .eq('status', 'active')
+          .in('role', ['manager', 'supervisor'])
+          .order('id', { ascending: true })
+          .range(from, until),
+        PAGE_SIZE,
+      )
+    } catch (err) {
+      console.error(`[fleet-pro-compliance-alerts] member load failed for ${fleetId}:`, err instanceof Error ? err.message : err)
       continue
     }
 
-    const to = [...new Set((members ?? [])
+    const to = [...new Set(members
       .map(m => (m.email as string | null)?.trim().toLowerCase())
       .filter((e): e is string => !!e))]
 
@@ -181,12 +210,12 @@ export async function GET(request: NextRequest) {
   }
 
   console.log(
-    `[fleet-pro-compliance-alerts] done: fleets=${(fleets ?? []).length} ` +
+    `[fleet-pro-compliance-alerts] done: fleets=${fleets.length} ` +
     `withItems=${fleetsWithItems} emailsSent=${emailsSent} smsSent=${smsSent} unchanged=${skippedUnchanged}`,
   )
 
   return NextResponse.json({
-    fleets:     (fleets ?? []).length,
+    fleets:     fleets.length,
     withItems:  fleetsWithItems,
     emailsSent,
     smsSent,

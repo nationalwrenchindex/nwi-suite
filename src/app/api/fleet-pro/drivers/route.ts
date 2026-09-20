@@ -13,6 +13,7 @@ import { requireFleetProMember } from '@/lib/fleet-pro/access'
 import { canEditUnits } from '@/types/fleet-pro'
 import type { DriversPayload } from '@/types/fleet-pro-compliance'
 import { DRIVER_COLUMNS, toDriver, validateDriverBody, type DriverRow } from './shared'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 
 export const dynamic = 'force-dynamic'
 
@@ -31,20 +32,32 @@ export async function GET() {
   const { membership } = gate
 
   const svc = createServiceClient()
-  const { data, error } = await svc
-    .from('fleet_pro_drivers')
-    .select(DRIVER_COLUMNS)
-    .eq('fleet_account_id', membership.fleet_account_id)
-    .order('active', { ascending: false })
-    .order('full_name', { ascending: true })
 
-  if (error) {
-    console.error('[fleet-pro/drivers] load failed:', error.message)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  // Paged: the roster had no limit and no paging at all, so a fleet past 1,000 drivers
+  // silently lost the tail of its own list — PostgREST caps the response and still
+  // answers 200. The existing active/full_name sort is kept and `id` appended: two
+  // drivers can share a name, and range paging needs a total order or it duplicates
+  // some rows and drops others.
+  let rows: DriverRow[]
+  try {
+    rows = await fetchAllRows<DriverRow>((from, to) => svc
+      .from('fleet_pro_drivers')
+      .select(DRIVER_COLUMNS)
+      .eq('fleet_account_id', membership.fleet_account_id)
+      .order('active', { ascending: false })
+      .order('full_name', { ascending: true })
+      .order('id', { ascending: true })
+      .range(from, to))
+  } catch (err) {
+    console.error('[fleet-pro/drivers] load failed:', err instanceof Error ? err.message : err)
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Failed to load the driver roster' },
+      { status: 500 },
+    )
   }
 
   const payload: DriversPayload = {
-    drivers:  (data ?? []).map(row => toDriver(row as DriverRow, membership.role)),
+    drivers:  rows.map(row => toDriver(row, membership.role)),
     can_edit: canEditUnits(membership.role),
     role:     membership.role,
   }

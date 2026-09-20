@@ -22,6 +22,9 @@ function formatMinutes(mins: number): string {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+/** Rows per request, and therefore per "Load More" press. */
+const JOBS_PAGE_SIZE = 50
+
 const ALL_STATUSES: { value: '' | JobStatus; label: string }[] = [
   { value: '',             label: 'All Statuses' },
   { value: 'scheduled',   label: 'Scheduled'    },
@@ -597,6 +600,12 @@ export default function MyJobsTab({
   const [jobs,     setJobs]     = useState<Job[]>([])
   const [loading,  setLoading]  = useState(true)
   const [error,    setError]    = useState<string | null>(null)
+  // Pagination. `total` is the API's exact count for the current filters, so the
+  // header reports every matching job even though only a page of them is loaded;
+  // `exhausted` records a short page, which means there is nothing left to ask for.
+  const [total,       setTotal]       = useState(0)
+  const [exhausted,   setExhausted]   = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
 
   // Filter state
   const [status,      setStatus]    = useState<'' | JobStatus>('')
@@ -615,27 +624,72 @@ export default function MyJobsTab({
   // Ref so lunchVersion effect can call the latest fetchJobs without stale closure
   const fetchJobsRef = useRef<() => Promise<void>>(async () => {})
 
-  const fetchJobs = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-
+  const filterParams = useCallback(() => {
     const params = new URLSearchParams()
     if (status)   params.set('status',       status)
     if (search)   params.set('service_type', search)
     if (fromDate) params.set('from_date',    fromDate)
     if (toDate)   params.set('to_date',      toDate)
+    return params
+  }, [status, search, fromDate, toDate])
+
+  /**
+   * Loads the first page for the current filters.
+   *
+   * /api/jobs has always accepted offset/limit, but this component never sent
+   * them, so it silently showed the first 100 jobs and offered no way to reach
+   * the rest. Every filter change runs through here, which REPLACES the list
+   * rather than appending — appending across a filter change would leave the old
+   * filter's jobs sitting above the new one's.
+   */
+  const fetchJobs = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+
+    const params = filterParams()
+    params.set('limit',  String(JOBS_PAGE_SIZE))
+    params.set('offset', '0')
 
     try {
       const res = await fetch(`/api/jobs?${params}`)
       if (!res.ok) throw new Error('Failed to load jobs')
       const data = await res.json()
-      setJobs(data.jobs ?? [])
+      const page = (data.jobs ?? []) as Job[]
+      setJobs(page)
+      setTotal(data.count ?? page.length)
+      setExhausted(page.length < JOBS_PAGE_SIZE)
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unknown error')
     } finally {
       setLoading(false)
     }
-  }, [status, search, fromDate, toDate])
+  }, [filterParams])
+
+  async function loadMoreJobs() {
+    setLoadingMore(true)
+    setError(null)
+
+    const params = filterParams()
+    params.set('limit',  String(JOBS_PAGE_SIZE))
+    params.set('offset', String(jobs.length))
+
+    try {
+      const res = await fetch(`/api/jobs?${params}`)
+      if (!res.ok) throw new Error('Failed to load more jobs')
+      const data = await res.json()
+      const page = (data.jobs ?? []) as Job[]
+      setJobs(prev => [...prev, ...page])
+      if (typeof data.count === 'number') setTotal(data.count)
+      // A short page means there is nothing left behind it.
+      if (page.length < JOBS_PAGE_SIZE) setExhausted(true)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Unknown error')
+    } finally {
+      setLoadingMore(false)
+    }
+  }
+
+  const hasMoreJobs = !exhausted && jobs.length < total
 
   useEffect(() => { fetchJobsRef.current = fetchJobs }, [fetchJobs])
   useEffect(() => { fetchJobs() }, [fetchJobs])
@@ -801,7 +855,10 @@ export default function MyJobsTab({
       {!loading && jobs.length > 0 && (
         <div className="space-y-3">
           <div className="flex items-center justify-between text-white/40 text-xs mb-1">
-            <span>{jobs.length} job{jobs.length !== 1 ? 's' : ''}</span>
+            <span>
+              {total.toLocaleString()} job{total !== 1 ? 's' : ''}
+              {jobs.length < total && <> · showing {jobs.length.toLocaleString()}</>}
+            </span>
             <button onClick={onBookJob} className="text-orange hover:text-orange-light transition-colors font-medium">
               + Book New Job
             </button>
@@ -819,6 +876,18 @@ export default function MyJobsTab({
               lunchActive={lunchActive}
             />
           ))}
+
+          {hasMoreJobs && (
+            <div className="flex justify-center pt-2">
+              <button
+                onClick={loadMoreJobs}
+                disabled={loadingMore}
+                className="border border-dark-border text-white/70 hover:border-white/30 hover:text-white font-condensed font-semibold rounded-lg px-6 py-2.5 text-sm transition-colors disabled:opacity-50"
+              >
+                {loadingMore ? 'LOADING…' : 'LOAD MORE'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 

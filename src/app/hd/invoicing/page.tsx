@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 
 export const metadata = { title: 'Invoicing — NWI HD Suite' }
 
@@ -11,16 +12,38 @@ export default async function InvoicingPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
 
-  const { data: workOrders } = await supabase
-    .from('hd_work_orders')
-    .select('id, work_order_number, total_amount, status, completed_at, fleet_account:hd_fleet_accounts(fleet_name), unit:hd_units(unit_number)')
-    .eq('user_id', user.id)
-    .in('status', ['completed', 'invoiced'])
-    .order('completed_at', { ascending: false })
-    .limit(50)
+  // The table shows the 50 most recent work orders. The money tiles above it must NOT
+  // be summed from that page — they were, and so they reported the last 50 jobs as if
+  // they were the whole book. Nor can the limit simply be dropped: PostgREST caps a
+  // response at 1,000 rows and returns a 200, so an unbounded read would under-report
+  // just as quietly once a shop crosses the cap. The totals get their own paged query
+  // over every completed/invoiced row, selecting only the two columns they need.
+  const [workOrdersResult, totalRows] = await Promise.all([
+    supabase
+      .from('hd_work_orders')
+      .select('id, work_order_number, total_amount, status, completed_at, fleet_account:hd_fleet_accounts(fleet_name), unit:hd_units(unit_number)')
+      .eq('user_id', user.id)
+      .in('status', ['completed', 'invoiced'])
+      .order('completed_at', { ascending: false })
+      .limit(50),
 
-  const totalInvoiced = (workOrders ?? []).filter(w => w.status === 'invoiced').reduce((s, w) => s + Number(w.total_amount ?? 0), 0)
-  const totalOutstanding = (workOrders ?? []).filter(w => w.status === 'completed').reduce((s, w) => s + Number(w.total_amount ?? 0), 0)
+    // This page has never surfaced a load error — a failed query just rendered empty —
+    // so a failure here falls back to no rows rather than throwing the whole route.
+    fetchAllRows((from, to) =>
+      supabase
+        .from('hd_work_orders')
+        .select('id, total_amount, status')
+        .eq('user_id', user.id)
+        .in('status', ['completed', 'invoiced'])
+        .order('id', { ascending: true })
+        .range(from, to)
+    ).catch(() => []),
+  ])
+
+  const workOrders = workOrdersResult.data
+
+  const totalInvoiced = totalRows.filter(w => w.status === 'invoiced').reduce((s, w) => s + Number(w.total_amount ?? 0), 0)
+  const totalOutstanding = totalRows.filter(w => w.status === 'completed').reduce((s, w) => s + Number(w.total_amount ?? 0), 0)
 
   return (
     <main className="flex-1 p-4 sm:p-6">

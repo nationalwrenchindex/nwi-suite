@@ -33,22 +33,34 @@ export async function GET(request: NextRequest) {
     .eq('user_id', user.id)
     .order('job_date', { ascending: true })
     .order('job_time', { ascending: true, nullsFirst: true })
+    // job_date + job_time is not unique — two jobs can share a slot, and offset
+    // paging over a non-deterministic order drops and repeats rows between pages.
+    .order('id', { ascending: true })
     .range(offset, offset + limit - 1)
 
-  if (date)        query = query.eq('job_date', date)
-  if (status)      query = query.eq('status', status)
-  if (serviceType) query = query.ilike('service_type', `%${serviceType}%`)
-  if (fromDate)    query = query.gte('job_date', fromDate)
-  if (toDate)      query = query.lte('job_date', toDate)
+  // `count` used to be read off the ranged query, which never asked for one, so it
+  // was always null and the scheduler's "N jobs" line could only ever report the
+  // page it happened to be holding. Its own exact/head query, carrying the same
+  // filters, gives the true total however few rows the caller has loaded.
+  let countQuery = supabase
+    .from('jobs')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
 
-  const { data, error, count } = await query
+  if (date)        { query = query.eq('job_date', date);                          countQuery = countQuery.eq('job_date', date) }
+  if (status)      { query = query.eq('status', status);                          countQuery = countQuery.eq('status', status) }
+  if (serviceType) { query = query.ilike('service_type', `%${serviceType}%`);      countQuery = countQuery.ilike('service_type', `%${serviceType}%`) }
+  if (fromDate)    { query = query.gte('job_date', fromDate);                      countQuery = countQuery.gte('job_date', fromDate) }
+  if (toDate)      { query = query.lte('job_date', toDate);                        countQuery = countQuery.lte('job_date', toDate) }
+
+  const [{ data, error }, { count }] = await Promise.all([query, countQuery])
 
   if (error) {
     console.error('[GET /api/jobs]', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ jobs: data ?? [], count })
+  return NextResponse.json({ jobs: data ?? [], count: count ?? 0 })
 }
 
 // ─── POST /api/jobs ───────────────────────────────────────────────────────────

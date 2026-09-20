@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { requirePartner, getPartnerFleetIds } from '@/lib/fleet-pro/partner-access'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
+import { fetchAllRowsForIds } from '@/lib/fleet-pro/fetch-scoped'
 import {
   computePmStatus,
   PM_UNIT_COLUMNS,
@@ -103,9 +105,11 @@ interface InspectionRecord {
   overall_result:   string | null
 }
 
-// PostgREST caps an unbounded select at its own default; ask for a ceiling high
-// enough that a partner running nine fleets does not get silently truncated.
-const ROW_CEILING   = 20_000
+// PostgREST answers at most 1,000 rows and still returns 200, so a `.limit()` of any
+// size was never the fix — it is the cap doing its work quietly. Every list that feeds
+// a total below is PAGED to exhaustion (fetchAllRows / fetchAllRowsForIds), and the id
+// list it is scoped by is chunked so `.in()` cannot outgrow the URL. The two inspection
+// feeds keep a real cap: they are the activity strip's newest rows, not a total.
 const ACTIVITY_CAP  = 25
 const PM_ALERT_CAP  = 25
 
@@ -171,80 +175,123 @@ export async function GET() {
   const monthStart = dateKey(new Date(now.getFullYear(), now.getMonth(), 1))
   const yearStart  = `${now.getFullYear()}-01-01`
 
-  const [accountRes, brandRes, unitRes, memberRes, pmRes, woRes, invRes, pretripRes, dotRes, aerialRes] =
-    await Promise.all([
-      svc.from('hd_fleet_accounts')
-        .select('id, fleet_name, fleet_pro_enabled, fleet_pro_status, fleet_pro_stripe_subscription_id')
-        .in('id', fleetIds),
+  // Ordering is part of the paging contract, not decoration: `.range()` is a
+  // LIMIT/OFFSET window, so every paged query below carries a TOTAL order. Where a
+  // date column already drove the sort it keeps it and `id` is appended as the unique
+  // tiebreaker — ties are otherwise free to reshuffle between windows, which both
+  // duplicates rows and drops them.
+  const fetchAccounts = () => fetchAllRowsForIds<AccountRecord, string>(fleetIds, (ids, from, to) =>
+    svc.from('hd_fleet_accounts')
+      .select('id, fleet_name, fleet_pro_enabled, fleet_pro_status, fleet_pro_stripe_subscription_id')
+      .in('id', ids)
+      .order('id', { ascending: true })
+      .range(from, to))
 
-      svc.from('fleet_pro_reseller_accounts')
-        .select('fleet_account_id, brand_name, brand_logo_url')
-        .eq('partner_id', partner.id),
+  const fetchBrands = () => fetchAllRows<ResellerRecord>((from, to) =>
+    svc.from('fleet_pro_reseller_accounts')
+      .select('fleet_account_id, brand_name, brand_logo_url')
+      .eq('partner_id', partner.id)
+      .order('id', { ascending: true })
+      .range(from, to))
 
-      svc.from('hd_units')
-        .select(`id, fleet_account_id, unit_number, active, ${PM_UNIT_COLUMNS}`)
-        .in('fleet_account_id', fleetIds)
-        .limit(ROW_CEILING),
+  const fetchUnits = () => fetchAllRowsForIds<UnitRecord, string>(fleetIds, (ids, from, to) =>
+    svc.from('hd_units')
+      .select(`id, fleet_account_id, unit_number, active, ${PM_UNIT_COLUMNS}`)
+      .in('fleet_account_id', ids)
+      .order('id', { ascending: true })
+      .range(from, to))
 
-      svc.from('fleet_pro_members')
-        .select('fleet_account_id')
-        .in('fleet_account_id', fleetIds)
-        .eq('status', 'active')
-        .limit(ROW_CEILING),
+  const fetchMembers = () => fetchAllRowsForIds<MemberRecord, string>(fleetIds, (ids, from, to) =>
+    svc.from('fleet_pro_members')
+      .select('fleet_account_id')
+      .in('fleet_account_id', ids)
+      .eq('status', 'active')
+      .order('id', { ascending: true })
+      .range(from, to))
 
-      svc.from('fleet_pro_pm_schedules')
-        .select('fleet_account_id, unit_id, next_due_date')
-        .in('fleet_account_id', fleetIds)
-        .limit(ROW_CEILING),
+  const fetchSchedules = () => fetchAllRowsForIds<PmRecord, string>(fleetIds, (ids, from, to) =>
+    svc.from('fleet_pro_pm_schedules')
+      .select('fleet_account_id, unit_id, next_due_date')
+      .in('fleet_account_id', ids)
+      .order('id', { ascending: true })
+      .range(from, to))
 
-      svc.from('hd_work_orders')
-        .select('fleet_account_id, unit_id, work_order_number, service_type, status, total_amount, completed_at, created_at')
-        .in('fleet_account_id', fleetIds)
-        .order('created_at', { ascending: false })
-        .limit(ROW_CEILING),
+  const fetchWorkOrders = () => fetchAllRowsForIds<WorkOrderRecord, string>(fleetIds, (ids, from, to) =>
+    svc.from('hd_work_orders')
+      .select('fleet_account_id, unit_id, work_order_number, service_type, status, total_amount, completed_at, created_at')
+      .in('fleet_account_id', ids)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: true })
+      .range(from, to))
 
-      // hd_invoices has no invoice_date; created_at is the billing timestamp. Held
-      // to the current year because that is the widest window either revenue figure
-      // needs, and the activity feed only ever shows the newest 25 anyway.
-      svc.from('hd_invoices')
-        .select('fleet_account_id, unit_id, invoice_number, total, status, created_at')
-        .in('fleet_account_id', fleetIds)
-        .gte('created_at', yearStart)
-        .order('created_at', { ascending: false })
-        .limit(ROW_CEILING),
+  // hd_invoices has no invoice_date; created_at is the billing timestamp. Held
+  // to the current year because that is the widest window either revenue figure
+  // needs, and the activity feed only ever shows the newest 25 anyway.
+  const fetchInvoices = () => fetchAllRowsForIds<InvoiceRecord, string>(fleetIds, (ids, from, to) =>
+    svc.from('hd_invoices')
+      .select('fleet_account_id, unit_id, invoice_number, total, status, created_at')
+      .in('fleet_account_id', ids)
+      .gte('created_at', yearStart)
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: true })
+      .range(from, to))
 
-      svc.from('fleet_pro_pretrip_inspections')
-        .select('fleet_account_id, unit_id, driver_name, inspection_date, overall_result, defects')
-        .in('fleet_account_id', fleetIds)
-        .order('inspection_date', { ascending: false })
-        .limit(ROW_CEILING),
+  const fetchPretrips = () => fetchAllRowsForIds<PretripRecord, string>(fleetIds, (ids, from, to) =>
+    svc.from('fleet_pro_pretrip_inspections')
+      .select('fleet_account_id, unit_id, driver_name, inspection_date, overall_result, defects')
+      .in('fleet_account_id', ids)
+      .order('inspection_date', { ascending: false })
+      .order('id', { ascending: true })
+      .range(from, to))
 
-      svc.from('hd_dot_inspections')
-        .select('fleet_account_id, unit_id, inspection_date, overall_result')
-        .in('fleet_account_id', fleetIds)
-        .order('inspection_date', { ascending: false })
-        .limit(ACTIVITY_CAP),
-
-      svc.from('hd_aerial_inspections')
-        .select('fleet_account_id, unit_id, inspection_date, overall_result')
-        .in('fleet_account_id', fleetIds)
-        .order('inspection_date', { ascending: false })
-        .limit(ACTIVITY_CAP),
-    ])
-
-  const failed = [accountRes, brandRes, unitRes, memberRes, pmRes, woRes, invRes, pretripRes, dotRes, aerialRes]
-    .find(r => r.error)
-  if (failed?.error) {
-    console.error('[fleet-pro/partner/dashboard]', failed.error)
-    return NextResponse.json({ error: failed.error.message }, { status: 500 })
+  // The two inspection streams feed the activity strip ONLY — no count, no money —
+  // so they keep their cap at the strip's own length instead of being paged.
+  const fetchNewestInspections = async (table: string): Promise<InspectionRecord[]> => {
+    const { data, error } = await svc.from(table)
+      .select('fleet_account_id, unit_id, inspection_date, overall_result')
+      .in('fleet_account_id', fleetIds)
+      .order('inspection_date', { ascending: false })
+      .limit(ACTIVITY_CAP)
+    if (error) throw new Error(error.message)
+    return (data ?? []) as InspectionRecord[]
   }
 
-  const accounts = (accountRes.data ?? []) as AccountRecord[]
+  let loaded: [
+    AccountRecord[], ResellerRecord[], UnitRecord[], MemberRecord[], PmRecord[],
+    WorkOrderRecord[], InvoiceRecord[], PretripRecord[], InspectionRecord[], InspectionRecord[],
+  ]
+
+  // Still one fan-out: each table's pages run concurrently with every other table's.
+  // fetchAllRows throws on a PostgREST error rather than handing back a short list, so
+  // the failure lands here and becomes the same 500 this route already returned when
+  // any one of these queries errored.
+  try {
+    loaded = await Promise.all([
+      fetchAccounts(),
+      fetchBrands(),
+      fetchUnits(),
+      fetchMembers(),
+      fetchSchedules(),
+      fetchWorkOrders(),
+      fetchInvoices(),
+      fetchPretrips(),
+      fetchNewestInspections('hd_dot_inspections'),
+      fetchNewestInspections('hd_aerial_inspections'),
+    ])
+  } catch (err) {
+    console.error('[fleet-pro/partner/dashboard]', err)
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Failed to load partner dashboard' },
+      { status: 500 },
+    )
+  }
+
+  const [accounts, brandRows, units, memberRows, pmRows, workOrders, invoices, pretrips, dotRows, aerialRows] = loaded
 
   // Branding and fleet name, resolved once so every row and every activity entry
   // reads with the same label the customer sees on their own portal.
   const brandByFleet = new Map<string, ResellerRecord>()
-  for (const r of (brandRes.data ?? []) as ResellerRecord[]) brandByFleet.set(r.fleet_account_id, r)
+  for (const r of brandRows) brandByFleet.set(r.fleet_account_id, r)
 
   const nameByFleet = new Map<string, string>()
   for (const a of accounts) {
@@ -252,7 +299,6 @@ export async function GET() {
   }
 
   // ─── Units ──────────────────────────────────────────────────────────────────
-  const units       = (unitRes.data ?? []) as UnitRecord[]
   const unitNumbers = new Map<string, string>()
   const unitCounts  = new Map<string, number>()
   for (const u of units) {
@@ -265,7 +311,7 @@ export async function GET() {
   }
 
   const memberCounts = new Map<string, number>()
-  for (const m of (memberRes.data ?? []) as MemberRecord[]) {
+  for (const m of memberRows) {
     if (!m.fleet_account_id) continue
     memberCounts.set(m.fleet_account_id, (memberCounts.get(m.fleet_account_id) ?? 0) + 1)
   }
@@ -275,7 +321,7 @@ export async function GET() {
   // manager-set date override that almost no fleet fills in, so iterating it was
   // producing zero alerts for partners whose customers all run hours-based PM.
   const schedByUnit = new Map<string, PmRecord>()
-  for (const pm of (pmRes.data ?? []) as PmRecord[]) {
+  for (const pm of pmRows) {
     if (pm.unit_id) schedByUnit.set(pm.unit_id, pm)
   }
 
@@ -327,7 +373,7 @@ export async function GET() {
   const ytdByFleet         = new Map<string, number>()
   const lastServiceByFleet = new Map<string, string>()
 
-  for (const wo of (woRes.data ?? []) as WorkOrderRecord[]) {
+  for (const wo of workOrders) {
     if (!wo.fleet_account_id) continue
     const when = wo.completed_at ?? wo.created_at
     if (!when) continue
@@ -335,7 +381,6 @@ export async function GET() {
     if (best) lastServiceByFleet.set(wo.fleet_account_id, best)
   }
 
-  const invoices = (invRes.data ?? []) as InvoiceRecord[]
   for (const inv of invoices) {
     // Filtered here rather than with .neq() because PostgREST's neq also drops NULL
     // statuses, which are real unpaid invoices.
@@ -349,7 +394,6 @@ export async function GET() {
   }
 
   // ─── Open defects ───────────────────────────────────────────────────────────
-  const pretrips     = (pretripRes.data ?? []) as PretripRecord[]
   const defectCounts = new Map<string, number>()
   for (const p of pretrips) {
     if (!p.fleet_account_id || p.overall_result !== 'fail') continue
@@ -420,7 +464,7 @@ export async function GET() {
     })
   }
 
-  for (const wo of (woRes.data ?? []) as WorkOrderRecord[]) {
+  for (const wo of workOrders) {
     const amount = Number(wo.total_amount ?? 0)
     const label  = wo.service_type || 'Work order'
     push(
@@ -461,11 +505,11 @@ export async function GET() {
     )
   }
 
-  for (const d of (dotRes.data ?? []) as InspectionRecord[]) {
+  for (const d of dotRows) {
     push(d.fleet_account_id, d.unit_id, d.inspection_date, 'dot_inspection', 'DOT inspection', null, d.overall_result ?? null)
   }
 
-  for (const a of (aerialRes.data ?? []) as InspectionRecord[]) {
+  for (const a of aerialRows) {
     push(a.fleet_account_id, a.unit_id, a.inspection_date, 'aerial_inspection', 'Aerial inspection', null, a.overall_result ?? null)
   }
 

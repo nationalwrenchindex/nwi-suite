@@ -12,6 +12,7 @@
 // those two cases differently and the average must not contain either.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { fetchAllRowsForIds } from '@/lib/fleet-pro/fetch-scoped'
 import {
   MAX_PLAUSIBLE_MPG,
   MPG_DROP_ALERT_PCT,
@@ -20,11 +21,11 @@ import {
   type FuelAlert,
 } from '@/types/fleet-pro-fuel'
 
-/** Ceiling on rows pulled per sweep. PostgREST silently truncates an unbounded select
- *  at its own default, which on a fleet with a year of daily fillups would quietly
- *  drop the oldest history and shift every average. Asked for explicitly so the cap
- *  is a number in this file rather than a surprise in the database's config. */
-const FUEL_ROW_CEILING = 20_000
+/* NO ROW CEILING. A `.limit()` above 1,000 does nothing on this stack: PostgREST
+ * truncates at its own db-max-rows and still answers 200, so a fleet with a year of
+ * daily fillups was quietly losing its oldest history and shifting every average.
+ * The sweep is paged to exhaustion instead, and chunked over the unit ids because
+ * `.in()` rides in the URL and the caller's unit list is no longer capped at 1,000. */
 
 export interface FuelLogRow {
   unit_id:      string
@@ -144,23 +145,31 @@ export async function loadMpgAlerts(
 ): Promise<FuelAlert[]> {
   if (unitIds.length === 0) return []
 
-  const { data, error } = await svc
-    .from('fleet_pro_fuel_log')
-    .select('unit_id, fuel_date, gallons, mpg, driver_name')
-    .eq('fleet_account_id', fleetId)
-    .in('unit_id', unitIds)
-    .not('mpg', 'is', null)
-    .order('fuel_date', { ascending: false })
-    .limit(FUEL_ROW_CEILING)
-
-  if (error) {
-    console.error('[fleet-pro/fuel] alert sweep failed:', error.message)
+  // fuel_date keeps driving the sort, with `id` appended: range paging needs a total
+  // order, and a date column alone lets same-day fillups reshuffle between windows —
+  // which would both duplicate and drop rows out of the averages below. Chunks are
+  // disjoint sets of units, so every unit's history still arrives newest-first.
+  let rows: FuelLogRow[]
+  try {
+    rows = await fetchAllRowsForIds<FuelLogRow, string>(unitIds, (ids, from, to) =>
+      svc.from('fleet_pro_fuel_log')
+        .select('unit_id, fuel_date, gallons, mpg, driver_name')
+        .eq('fleet_account_id', fleetId)
+        .in('unit_id', ids)
+        .not('mpg', 'is', null)
+        .order('fuel_date', { ascending: false })
+        .order('id', { ascending: true })
+        .range(from, to))
+  } catch (err) {
+    // Unchanged policy: [] rather than a throw. This is one card on a dashboard whose
+    // main job is the PM list.
+    console.error('[fleet-pro/fuel] alert sweep failed:', err instanceof Error ? err.message : err)
     return []
   }
 
   // Newest first from the query, so the first row seen per unit is its latest fillup.
   const byUnit = new Map<string, FuelLogRow[]>()
-  for (const row of (data ?? []) as FuelLogRow[]) {
+  for (const row of rows) {
     if (!row.unit_id) continue
     const list = byUnit.get(row.unit_id)
     if (list) list.push(row)

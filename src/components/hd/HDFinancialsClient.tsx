@@ -427,31 +427,52 @@ function OverviewTab({ stats }: { stats: OverviewStats }) {
 
 function InvoicesTab() {
   const [invoices, setInvoices] = useState<HDInvoice[]>([])
+  const [totals,   setTotals]   = useState<Record<string, number> | null>(null)
+  const [count,    setCount]    = useState(0)
   const [loading,  setLoading]  = useState(true)
 
+  // ?totals=1 makes the server sum every matching invoice. The rows below are still
+  // only a page of the book, so they can fill the table but must never feed a figure:
+  // these tiles used to reduce whatever the bare call returned, which was capped at
+  // 200 rows and shown as the whole book. `count` is an exact head count for the same
+  // reason — invoices.length only ever describes the page.
   useEffect(() => {
-    fetch('/api/hd/invoices')
+    fetch('/api/hd/invoices?totals=1')
       .then(r => r.json())
-      .then(d => setInvoices(d.invoices ?? []))
+      .then(d => {
+        setInvoices(d.invoices ?? [])
+        setTotals(d.totals ?? null)
+        setCount(Number(d.count ?? 0))
+      })
       .finally(() => setLoading(false))
   }, [])
 
   if (loading) return <div className="h-40 animate-pulse rounded-xl" style={{ background: '#111920' }} />
 
-  const totalUnpaid = invoices.filter(i => i.status === 'unpaid').reduce((s, i) => s + Number(i.total ?? 0), 0)
-  const totalPaid   = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + Number(i.total ?? 0), 0)
+  // No totals means the server-side sum failed. Show a dash: a figure derived from the
+  // page here would be wrong by exactly the margin this whole change exists to remove.
+  const totalUnpaid = totals ? Number(totals.unpaid ?? 0) : null
+  const totalPaid   = totals ? Number(totals.paid   ?? 0) : null
 
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-        <StatCard label="Total Invoices" value={String(invoices.length)}   color="white" />
-        <StatCard label="Outstanding"    value={fmt(totalUnpaid)}           color={totalUnpaid > 0 ? 'red' : 'white'} />
-        <StatCard label="Collected"      value={fmt(totalPaid)}             color="green" />
+        <StatCard label="Total Invoices" value={String(count)} color="white" />
+        <StatCard
+          label="Outstanding"
+          value={totalUnpaid == null ? '—' : fmt(totalUnpaid)}
+          color={totalUnpaid != null && totalUnpaid > 0 ? 'red' : 'white'}
+        />
+        <StatCard
+          label="Collected"
+          value={totalPaid == null ? '—' : fmt(totalPaid)}
+          color={totalPaid == null ? 'white' : 'green'}
+        />
       </div>
 
       <div className="flex items-center justify-between">
         <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>
-          {invoices.length} Invoice{invoices.length !== 1 ? 's' : ''}
+          {count} Invoice{count !== 1 ? 's' : ''}{invoices.length < count ? ` · showing ${invoices.length}` : ''}
         </p>
         <Link
           href="/hd/invoicing"

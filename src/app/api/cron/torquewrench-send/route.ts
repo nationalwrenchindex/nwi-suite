@@ -4,8 +4,32 @@ import { sendSmsResult } from '@/lib/twilio'
 import { getSmsBody } from '@/lib/torquewrench/sms-templates'
 import { getContactSuppressionByPhone } from '@/lib/customer-contact'
 import { authorizeCron } from '@/lib/cron-auth'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 
 export const dynamic = 'force-dynamic'
+
+// Paging multiplies this sweep's round trips — a tenant past the 1,000-row cap now
+// costs several sequential requests per table where it used to cost one. The default
+// function timeout is short enough that a large fleet could be cut off mid-sweep, which
+// would reintroduce the skipped-rows bug through the back door. 60s matches the other
+// long-running crons (see api/directory-agent/*).
+export const maxDuration = 60
+
+// PostgREST stops at 1,000 rows and still returns 200, so a backlog past the cap
+// would never be sent — the cron would report success having skipped the tail.
+const PAGE_SIZE = 500
+
+// `.in()` lists ride in the URL, so the mechanic list goes out in batches now
+// that the review load is unbounded.
+const IN_CHUNK = 200
+
+type Row = Record<string, unknown>
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
+  return out
+}
 
 // ─── GET /api/cron/torquewrench-send ─────────────────────────────────────────
 // Runs every 5 minutes (see vercel.json).
@@ -19,33 +43,55 @@ export async function GET(request: NextRequest) {
   const appUrl   = (process.env.NEXT_PUBLIC_APP_URL ?? '').replace(/\/$/, '')
   const now      = Date.now()
 
-  // All pending reviews not yet sent, under retry limit
-  const { data: reviews, error: reviewsErr } = await supabase
-    .from('torquewrench_reviews')
-    .select('*')
-    .eq('status', 'pending')
-    .is('send_attempted_at', null)
-    .lt('send_attempts', 3)
-
-  if (reviewsErr) {
-    console.error('[tw-cron] DB error:', reviewsErr.message)
-    return NextResponse.json({ error: reviewsErr.message }, { status: 500 })
+  // All pending reviews not yet sent, under retry limit. Ordered oldest-first so
+  // the range paging has a stable order to walk — without one, Postgres is free
+  // to hand back the same row twice and drop another entirely.
+  let reviews: Row[]
+  try {
+    reviews = await fetchAllRows<Row>(
+      (from, to) => supabase
+        .from('torquewrench_reviews')
+        .select('*')
+        .eq('status', 'pending')
+        .is('send_attempted_at', null)
+        .lt('send_attempts', 3)
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true })
+        .range(from, to),
+      PAGE_SIZE,
+    )
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'review load failed'
+    console.error('[tw-cron] DB error:', message)
+    return NextResponse.json({ error: message }, { status: 500 })
   }
 
-  if (!reviews || reviews.length === 0) {
+  if (reviews.length === 0) {
     return NextResponse.json({ processed: 0, sent: 0, skipped: 0, failed: 0 })
   }
 
-  // Batch-load settings for all unique mechanics
+  // Batch-load settings for all unique mechanics. A failure here would otherwise
+  // mark every review 'skipped' and report a clean run, so it fails the cron.
   const userIds = [...new Set(reviews.map((r) => r.user_id as string))]
-  const { data: settingsList } = await supabase
-    .from('torquewrench_settings')
-    .select('*')
-    .in('user_id', userIds)
-
-  const settingsMap = new Map(
-    (settingsList ?? []).map((s) => [s.user_id as string, s]),
-  )
+  const settingsMap = new Map<string, Row>()
+  try {
+    for (const ids of chunk(userIds, IN_CHUNK)) {
+      const settingsList = await fetchAllRows<Row>(
+        (from, to) => supabase
+          .from('torquewrench_settings')
+          .select('*')
+          .in('user_id', ids)
+          .order('id', { ascending: true })
+          .range(from, to),
+        PAGE_SIZE,
+      )
+      for (const s of settingsList) settingsMap.set(s.user_id as string, s)
+    }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'settings load failed'
+    console.error('[tw-cron] settings load failed:', message)
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
 
   let sent = 0, skipped = 0, failed = 0
 

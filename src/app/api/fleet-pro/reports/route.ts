@@ -4,6 +4,7 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { requireFleetProMember } from '@/lib/fleet-pro/access'
 import { canViewCosts } from '@/types/fleet-pro'
 import type { FleetProReport, MonthTotal } from '@/types/fleet-pro'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 
 export const dynamic = 'force-dynamic'
 
@@ -12,9 +13,10 @@ export const dynamic = 'force-dynamic'
 interface UnitRecord    { id: string; unit_number: string | null }
 interface InvoiceRecord { unit_id: string | null; total: number | null; status: string | null; created_at: string | null }
 
-// Same ceiling the dashboard uses — a municipal fleet's yearly billing must not be
-// silently truncated by PostgREST's default page size.
-const ROW_CEILING = 20_000
+// NO ROW CEILING. This is a budget submission: PostgREST stops at 1,000 rows and
+// still answers 200, so a `.limit(20_000)` did not widen anything — it just made the
+// truncation look intentional. A county past 1,000 invoices in the window was being
+// handed a grand total short of what it actually spent. Both queries page instead.
 
 // Invoices billed before migration 102 linked work orders to units have unit_id NULL
 // and cannot be attributed to any truck. They are still real money the county spent,
@@ -104,31 +106,44 @@ export async function GET(request: Request) {
   // instead — never to anything supplied by the request.
   const svc = createServiceClient()
 
-  const [unitRes, invRes] = await Promise.all([
-    svc.from('hd_units')
-      .select('id, unit_number')
-      .eq('fleet_account_id', fleetId)
-      .limit(ROW_CEILING),
+  // `id` is the ORDER BY on both: range paging is a LIMIT/OFFSET window and needs a
+  // total order, neither query had a sort worth preserving, and the report does its
+  // own sorting in memory further down.
+  let units: UnitRecord[], invoiceRows: InvoiceRecord[]
 
-    // hd_invoices has no invoice_date column; created_at is the billing timestamp.
-    // to_date is inclusive, so the bound is an exclusive `< the following midnight`
-    // rather than a lte on 23:59:59, which would drop the final second of the range.
-    svc.from('hd_invoices')
-      .select('unit_id, total, status, created_at')
-      .eq('fleet_account_id', fleetId)
-      .gte('created_at', `${fromDate}T00:00:00Z`)
-      .lt('created_at', `${nextDay(toDate)}T00:00:00Z`)
-      .limit(ROW_CEILING),
-  ])
+  try {
+    [units, invoiceRows] = await Promise.all([
+      fetchAllRows<UnitRecord>((from, to) =>
+        svc.from('hd_units')
+          .select('id, unit_number')
+          .eq('fleet_account_id', fleetId)
+          .order('id', { ascending: true })
+          .range(from, to)),
 
-  const failed = [unitRes, invRes].find(r => r.error)
-  if (failed?.error) {
-    console.error('[fleet-pro/reports]', failed.error)
-    return NextResponse.json({ error: failed.error.message }, { status: 500 })
+      // hd_invoices has no invoice_date column; created_at is the billing timestamp.
+      // to_date is inclusive, so the bound is an exclusive `< the following midnight`
+      // rather than a lte on 23:59:59, which would drop the final second of the range.
+      fetchAllRows<InvoiceRecord>((from, to) =>
+        svc.from('hd_invoices')
+          .select('unit_id, total, status, created_at')
+          .eq('fleet_account_id', fleetId)
+          .gte('created_at', `${fromDate}T00:00:00Z`)
+          .lt('created_at', `${nextDay(toDate)}T00:00:00Z`)
+          .order('id', { ascending: true })
+          .range(from, to)),
+    ])
+  } catch (err) {
+    // The same 500 the error check used to produce: the pager throws rather than
+    // returning the short list that made this report under-report spend.
+    console.error('[fleet-pro/reports]', err)
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Failed to build the report' },
+      { status: 500 },
+    )
   }
 
   const unitNumbers = new Map<string, string>()
-  for (const u of (unitRes.data ?? []) as UnitRecord[]) {
+  for (const u of units) {
     unitNumbers.set(u.id, u.unit_number ?? '(no number)')
   }
 
@@ -142,7 +157,7 @@ export async function GET(request: Request) {
   let grandTotal     = 0
   let invoiceCount   = 0
 
-  for (const inv of (invRes.data ?? []) as InvoiceRecord[]) {
+  for (const inv of invoiceRows) {
     // Voids are filtered here rather than with .neq() because PostgREST's neq also
     // drops NULL statuses, which are real unpaid invoices.
     if (inv.status === 'void' || !inv.created_at) continue
