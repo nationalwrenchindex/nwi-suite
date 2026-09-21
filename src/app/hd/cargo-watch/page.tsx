@@ -8,11 +8,11 @@ import {
 // ─── NWI brand colors (Cargo Watch) ─────────────────────────────────────────────
 const ORANGE   = '#FF6600'
 const BLUE     = '#2969B0'
-const BG       = '#1a1a1a'
+const BG       = '#1A1A1A'
 const SURFACE  = '#242424'
 const BORDER   = '#333333'
-const MUTED     = 'rgba(255,255,255,0.5)'
-const FAINT      = 'rgba(255,255,255,0.35)'
+const MUTED     = 'rgba(var(--hd-ink-rgb), 0.5)'
+const FAINT      = 'rgba(var(--hd-ink-rgb), 0.35)'
 
 const DEVICE_ID = 'dev:862063070141804'
 
@@ -211,7 +211,7 @@ export default function CargoWatchPage() {
               className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full"
               style={isOnline
                 ? { background: '#0f2f1c', color: '#22C55E', border: '1px solid #1c5c34' }
-                : { background: '#2a2a2a', color: MUTED, border: `1px solid ${BORDER}` }}
+                : { background: '#2A2A2A', color: MUTED, border: `1px solid ${BORDER}` }}
             >
               <span
                 className="w-1.5 h-1.5 rounded-full"
@@ -353,7 +353,7 @@ export default function CargoWatchPage() {
                     width={44}
                   />
                   <Tooltip
-                    contentStyle={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: 8, color: '#fff' }}
+                    contentStyle={{ background: BG, border: `1px solid ${BORDER}`, borderRadius: 8, color: 'var(--hd-text)' }}
                     labelStyle={{ color: MUTED }}
                     formatter={(v) => (typeof v === 'number' ? `${v}°F` : '—')}
                   />

@@ -76,9 +76,9 @@ export default async function WorkOrdersPage({
     <main className="flex-1 p-4 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>HD Suite</p>
+          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>HD Suite</p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">WORK ORDERS</h1>
-          <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+          <p className="text-sm mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
             {total.toLocaleString()} work order{total !== 1 ? 's' : ''}
           </p>
         </div>

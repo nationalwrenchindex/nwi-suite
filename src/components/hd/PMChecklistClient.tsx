@@ -54,8 +54,8 @@ function StepBadge({ n, active, done }: { n: number; active: boolean; done: bool
     <div
       className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
       style={{
-        background: done ? '#22C55E' : active ? HD_ORANGE : '#1e3040',
-        color:      done || active ? '#fff' : 'rgba(255,255,255,0.3)',
+        background: done ? '#22C55E' : active ? HD_ORANGE : 'var(--hd-border)',
+        color:      done || active ? '#fff' : 'rgba(var(--hd-ink-rgb), 0.3)',
       }}
     >
       {done ? '✓' : n}
@@ -89,8 +89,8 @@ function ItemButtons({
       onClick={() => onChange(state === val ? null : val)}
       className="px-2.5 py-1 rounded text-xs font-semibold transition-all"
       style={{
-        background:  state === val ? activeBg : '#1e3040',
-        color:       state === val ? activeColor : 'rgba(255,255,255,0.4)',
+        background:  state === val ? activeBg : 'var(--hd-border)',
+        color:       state === val ? activeColor : 'rgba(var(--hd-ink-rgb), 0.4)',
         border:      state === val ? `1px solid ${activeColor}60` : '1px solid transparent',
       }}
     >
@@ -368,23 +368,23 @@ export default function PMChecklistClient({
   if (step === 'done') {
     return (
       <div className="max-w-2xl mx-auto p-6 text-center">
-        <div className="rounded-2xl p-8" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+        <div className="rounded-2xl p-8" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
           <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4" style={{ background: '#14532d' }}>
             <svg className="w-8 h-8 text-green-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <polyline points="20 6 9 17 4 12" />
             </svg>
           </div>
           <h2 className="font-condensed font-bold text-2xl text-white mb-2">PM CHECKLIST COMPLETE</h2>
-          <p className="text-sm mb-2" style={{ color: 'rgba(255,255,255,0.5)' }}>
+          <p className="text-sm mb-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
             {totalItems} items inspected · {flaggedItems.length} flagged for customer review
           </p>
           {flaggedItems.length > 0 && (
-            <div className="mt-4 text-left rounded-xl p-4" style={{ background: '#162030' }}>
+            <div className="mt-4 text-left rounded-xl p-4" style={{ background: 'var(--hd-inner)' }}>
               <p className="font-semibold mb-2" style={{ color: HD_ORANGE }}>Flagged Items</p>
               {flaggedItems.map(f => (
-                <div key={f.id} className="py-1.5 border-b text-sm" style={{ borderColor: '#1e3040', color: 'rgba(255,255,255,0.7)' }}>
+                <div key={f.id} className="py-1.5 border-b text-sm" style={{ borderColor: 'var(--hd-border)', color: 'rgba(var(--hd-ink-rgb), 0.7)' }}>
                   <span className="font-medium" style={{ color: HD_ORANGE }}>⚑ </span>{f.text}
-                  <span className="text-xs ml-2" style={{ color: 'rgba(255,255,255,0.3)' }}>{f.section}</span>
+                  <span className="text-xs ml-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>{f.section}</span>
                 </div>
               ))}
             </div>
@@ -404,7 +404,7 @@ export default function PMChecklistClient({
                 className="px-5 py-2.5 rounded-lg text-sm font-semibold border disabled:opacity-60"
                 style={{
                   color: emailState === 'sent' ? '#22C55E' : emailState === 'error' ? '#EF4444' : '#60A5FA',
-                  borderColor: '#1e3040',
+                  borderColor: 'var(--hd-border)',
                 }}
               >
                 {emailState === 'sending' ? 'Sending…'
@@ -416,13 +416,13 @@ export default function PMChecklistClient({
             <button
               onClick={() => router.push('/hd/dashboard')}
               className="px-5 py-2.5 rounded-lg text-sm font-semibold border"
-              style={{ color: 'rgba(255,255,255,0.6)', borderColor: '#1e3040' }}
+              style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)', borderColor: 'var(--hd-border)' }}
             >
               Back to Dashboard
             </button>
           </div>
           {emailState === 'sent' && (
-            <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.4)' }}>A copy of this report was emailed to your account email.</p>
+            <p className="text-xs mt-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>A copy of this report was emailed to your account email.</p>
           )}
         </div>
       </div>
@@ -444,13 +444,13 @@ export default function PMChecklistClient({
               />
               <span
                 className="text-xs hidden sm:block"
-                style={{ color: step === s.key ? '#fff' : 'rgba(255,255,255,0.3)' }}
+                style={{ color: step === s.key ? '#fff' : 'rgba(var(--hd-ink-rgb), 0.3)' }}
               >
                 {s.label}
               </span>
             </div>
             {i < steps.length - 1 && (
-              <div className="w-6 h-px" style={{ background: '#1e3040' }} />
+              <div className="w-6 h-px" style={{ background: 'var(--hd-border)' }} />
             )}
           </div>
         ))}
@@ -458,12 +458,12 @@ export default function PMChecklistClient({
 
       {/* ── STEP 1: Setup ─────────────────────────────────────────────────── */}
       {step === 'setup' && (
-        <div className="rounded-xl p-6 space-y-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+        <div className="rounded-xl p-6 space-y-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
           <h2 className="font-condensed font-bold text-xl text-white tracking-wide">PM SETUP</h2>
 
           {/* Customer (fleet account) search — filters the unit dropdown below */}
           <div style={{ position: 'relative' }}>
-            <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+            <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
               Select Customer (optional)
             </label>
             <div style={{ position: 'relative' }}>
@@ -473,21 +473,21 @@ export default function PMChecklistClient({
                 onFocus={() => setShowAccts(true)}
                 placeholder="Search fleet accounts by name"
                 className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/25"
-                style={{ background: '#162030', border: '1px solid #1e3040' }}
+                style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
               />
               {selectedAccountId && (
-                <button type="button" onClick={clearAccount} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold px-2 py-1 rounded" style={{ background: '#1e3040', color: 'rgba(255,255,255,0.6)' }}>Clear</button>
+                <button type="button" onClick={clearAccount} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold px-2 py-1 rounded" style={{ background: 'var(--hd-border)', color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>Clear</button>
               )}
             </div>
             {showAccts && acctMatches.length > 0 && !selectedAccountId && (
-              <div style={{ position: 'absolute', zIndex: 20, left: 0, right: 0, marginTop: 4, background: '#111920', border: '1px solid #1e3040', borderRadius: 8, overflow: 'hidden', maxHeight: 220, overflowY: 'auto' }}>
+              <div style={{ position: 'absolute', zIndex: 20, left: 0, right: 0, marginTop: 4, background: 'var(--hd-card)', border: '1px solid var(--hd-border)', borderRadius: 8, overflow: 'hidden', maxHeight: 220, overflowY: 'auto' }}>
                 {acctMatches.map(a => (
                   <button
                     key={a.id}
                     type="button"
                     onMouseDown={e => { e.preventDefault(); pickAccount(a) }}
                     className="w-full text-left px-3 py-2.5 text-sm text-white hover:bg-white/5"
-                    style={{ borderBottom: '1px solid #1e3040' }}
+                    style={{ borderBottom: '1px solid var(--hd-border)' }}
                   >
                     {a.fleet_name}
                   </button>
@@ -495,7 +495,7 @@ export default function PMChecklistClient({
               </div>
             )}
             {selectedAccountId && (
-              <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+              <p className="text-xs mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
                 Showing units for <span style={{ color: '#60A5FA' }}>{selectedAccountName}</span> · {visibleUnits.length} unit{visibleUnits.length !== 1 ? 's' : ''}
               </p>
             )}
@@ -503,14 +503,14 @@ export default function PMChecklistClient({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
                 Invoice
               </label>
               <select
                 value={selectedInvoice}
                 onChange={e => setSelectedInvoice(e.target.value)}
                 className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white"
-                style={{ background: '#162030', border: '1px solid #1e3040' }}
+                style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
               >
                 <option value={INV_CREATE}>+ Create new invoice for this PM</option>
                 <option value={INV_NONE}>-- No invoice (standalone PM record)</option>
@@ -524,14 +524,14 @@ export default function PMChecklistClient({
             </div>
 
             <div>
-              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
                 Fleet Unit
               </label>
               <select
                 value={selectedUnit}
                 onChange={e => setSelectedUnit(e.target.value)}
                 className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white"
-                style={{ background: '#162030', border: '1px solid #1e3040' }}
+                style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
               >
                 <option value="">— Select unit —</option>
                 {visibleUnits.map(u => (
@@ -544,14 +544,14 @@ export default function PMChecklistClient({
             </div>
 
             <div>
-              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
                 PM Type
               </label>
               <select
                 value={pmType}
                 onChange={e => setPmType(e.target.value as PMTypeValue)}
                 className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white"
-                style={{ background: '#162030', border: '1px solid #1e3040' }}
+                style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
               >
                 {PM_TYPES.map(t => (
                   <option key={t.value} value={t.value}>{t.label}</option>
@@ -560,7 +560,7 @@ export default function PMChecklistClient({
             </div>
 
             <div>
-              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
                 Tech Name
               </label>
               <input
@@ -569,7 +569,7 @@ export default function PMChecklistClient({
                 onChange={e => setTechName(e.target.value)}
                 placeholder="Technician name"
                 className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/30"
-                style={{ background: '#162030', border: '1px solid #1e3040' }}
+                style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
               />
             </div>
           </div>
@@ -582,15 +582,15 @@ export default function PMChecklistClient({
               onChange={e => setIsMultiTemp(e.target.checked)}
               className="w-4 h-4 rounded"
             />
-            <label htmlFor="multitemp" className="text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>
+            <label htmlFor="multitemp" className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.7)' }}>
               Multi-temp unit (includes Section 3 — Remote Evaporators)
             </label>
           </div>
 
           {selectedUnitData && (
-            <div className="rounded-lg p-3 text-sm" style={{ background: '#162030', border: '1px solid #1e3040' }}>
+            <div className="rounded-lg p-3 text-sm" style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}>
               <p className="font-medium text-white">{selectedUnitData.manufacturer} {selectedUnitData.model}</p>
-              <p style={{ color: 'rgba(255,255,255,0.5)' }}>
+              <p style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
                 Unit #{selectedUnitData.unit_number}
                 {selectedUnitData.total_hours !== null ? ` · ${Number(selectedUnitData.total_hours).toFixed(0)} hours` : ''}
                 {' · '}{(selectedUnitData.unit_type ?? 'trailer').charAt(0).toUpperCase() + (selectedUnitData.unit_type ?? 'trailer').slice(1)}
@@ -620,26 +620,26 @@ export default function PMChecklistClient({
                 SAFETY PLACARD — REQUIRED ACKNOWLEDGMENT
               </h2>
             </div>
-            <p className="text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>
+            <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>
               All items must be acknowledged before the PM checklist unlocks. This confirms you have read and understand each hazard.
             </p>
           </div>
 
-          <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
+          <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
             {SAFETY_ITEMS.map((item, i) => (
               <div
                 key={item.id}
                 className="flex gap-4 p-4 cursor-pointer"
                 style={{
-                  background:   safetyChecked[item.id] ? '#0d1f15' : '#111920',
-                  borderBottom: i < SAFETY_ITEMS.length - 1 ? '1px solid #1e3040' : undefined,
+                  background:   safetyChecked[item.id] ? '#0d1f15' : 'var(--hd-card)',
+                  borderBottom: i < SAFETY_ITEMS.length - 1 ? '1px solid var(--hd-border)' : undefined,
                 }}
                 onClick={() => setSafetyChecked(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
               >
                 <div
                   className="w-6 h-6 rounded flex items-center justify-center flex-shrink-0 mt-0.5"
                   style={{
-                    background: safetyChecked[item.id] ? '#22C55E' : '#1e3040',
+                    background: safetyChecked[item.id] ? '#22C55E' : 'var(--hd-border)',
                     border:     safetyChecked[item.id] ? 'none' : '1px solid #374151',
                   }}
                 >
@@ -651,18 +651,18 @@ export default function PMChecklistClient({
                 </div>
                 <div>
                   <p className="font-semibold text-sm text-white mb-0.5">{i + 1}. {item.title}</p>
-                  <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.55)' }}>{item.text}</p>
+                  <p className="text-xs leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.55)' }}>{item.text}</p>
                 </div>
               </div>
             ))}
           </div>
 
           {/* Initials + date + time */}
-          <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+          <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
             <p className="text-sm font-semibold text-white mb-3">Tech Acknowledgment</p>
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Initials</label>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Initials</label>
                 <input
                   type="text"
                   value={safetyInitials}
@@ -670,27 +670,27 @@ export default function PMChecklistClient({
                   placeholder="JD"
                   maxLength={4}
                   className="w-full px-3 py-2.5 rounded-lg text-sm text-white text-center font-bold uppercase placeholder-white/20"
-                  style={{ background: '#162030', border: '1px solid #1e3040' }}
+                  style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
                 />
               </div>
               <div>
-                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Date</label>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Date</label>
                 <input
                   type="date"
                   value={safetyDate}
                   onChange={e => setSafetyDate(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-lg text-sm text-white"
-                  style={{ background: '#162030', border: '1px solid #1e3040' }}
+                  style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
                 />
               </div>
               <div>
-                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Time</label>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Time</label>
                 <input
                   type="time"
                   value={safetyTime}
                   onChange={e => setSafetyTime(e.target.value)}
                   className="w-full px-3 py-2.5 rounded-lg text-sm text-white"
-                  style={{ background: '#162030', border: '1px solid #1e3040' }}
+                  style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
                 />
               </div>
             </div>
@@ -700,7 +700,7 @@ export default function PMChecklistClient({
             <button
               onClick={() => setStep('setup')}
               className="px-4 py-2.5 rounded-lg text-sm border"
-              style={{ color: 'rgba(255,255,255,0.5)', borderColor: '#1e3040' }}
+              style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)', borderColor: 'var(--hd-border)' }}
             >
               ← Back
             </button>
@@ -709,8 +709,8 @@ export default function PMChecklistClient({
               onClick={() => setStep('checklist')}
               className="flex-1 py-2.5 rounded-xl font-semibold text-sm transition-opacity"
               style={{
-                background: safetyComplete ? HD_ORANGE : '#1e3040',
-                color:      safetyComplete ? '#fff' : 'rgba(255,255,255,0.3)',
+                background: safetyComplete ? HD_ORANGE : 'var(--hd-border)',
+                color:      safetyComplete ? '#fff' : 'rgba(var(--hd-ink-rgb), 0.3)',
                 cursor:     safetyComplete ? 'pointer' : 'not-allowed',
               }}
             >
@@ -727,20 +727,20 @@ export default function PMChecklistClient({
       {step === 'checklist' && (
         <div className="space-y-4">
           {/* Progress bar */}
-          <div className="rounded-xl p-4" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+          <div className="rounded-xl p-4" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
             <div className="flex items-center justify-between mb-2">
               <p className="text-sm font-medium text-white">Progress</p>
               <p className="text-sm" style={{ color: HD_ORANGE }}>{pct}% — {doneItems}/{totalItems}</p>
             </div>
-            <div className="h-2 rounded-full overflow-hidden" style={{ background: '#1e3040' }}>
+            <div className="h-2 rounded-full overflow-hidden" style={{ background: 'var(--hd-border)' }}>
               <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: HD_ORANGE }} />
             </div>
           </div>
 
           {/* Sections */}
           {visibleSections.map(section => (
-            <div key={section.id} className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
-              <div className="px-4 py-3" style={{ background: '#162030' }}>
+            <div key={section.id} className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
+              <div className="px-4 py-3" style={{ background: 'var(--hd-inner)' }}>
                 <p className="font-condensed font-bold text-white tracking-wide text-sm">{section.title.toUpperCase()}</p>
                 {(section.showWhen === 'multitemp') && (
                   <p className="text-xs mt-0.5" style={{ color: HD_ORANGE }}>Multi-temp units only</p>
@@ -752,7 +752,7 @@ export default function PMChecklistClient({
                 )}
               </div>
 
-              <div style={{ background: '#111920' }}>
+              <div style={{ background: 'var(--hd-card)' }}>
                 {section.items.map((item, i) => {
                   const state = itemStates[item.id] ?? null
                   const isAutoFlagged = item.input?.autoFlag && itemInputs[item.id]
@@ -764,13 +764,13 @@ export default function PMChecklistClient({
                       key={item.id}
                       className="px-4 py-3"
                       style={{
-                        borderBottom: i < section.items.length - 1 ? '1px solid #1e3040' : undefined,
+                        borderBottom: i < section.items.length - 1 ? '1px solid var(--hd-border)' : undefined,
                         background:   state === 'flag' || isAutoFlagged ? '#2a1200' : undefined,
                       }}
                     >
                       <div className="flex items-start gap-3">
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.85)' }}>
+                          <p className="text-sm leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.85)' }}>
                             {i + 1}. {item.text}
                           </p>
                           {item.refWarn && <RefWarn />}
@@ -795,7 +795,7 @@ export default function PMChecklistClient({
                               }}
                               placeholder={item.input.label}
                               className="mt-2 w-full max-w-xs px-3 py-1.5 rounded-lg text-sm text-white placeholder-white/30"
-                              style={{ background: '#162030', border: '1px solid #1e3040' }}
+                              style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
                             />
                           )}
                         </div>
@@ -812,11 +812,11 @@ export default function PMChecklistClient({
           ))}
 
           {/* Alarm codes (Section 4 supplement) */}
-          <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+          <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
             <p className="font-condensed font-bold text-white mb-3">ALARM CODES</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
                   Alarm Codes Found
                 </label>
                 <input
@@ -825,11 +825,11 @@ export default function PMChecklistClient({
                   onChange={e => setAlarmFound(e.target.value)}
                   placeholder="e.g. 91, 127"
                   className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/30"
-                  style={{ background: '#162030', border: '1px solid #1e3040' }}
+                  style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
                 />
               </div>
               <div>
-                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
                   Alarm Codes Cleared
                 </label>
                 <input
@@ -838,7 +838,7 @@ export default function PMChecklistClient({
                   onChange={e => setAlarmCleared(e.target.value)}
                   placeholder="e.g. 91, 127"
                   className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/30"
-                  style={{ background: '#162030', border: '1px solid #1e3040' }}
+                  style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
                 />
               </div>
             </div>
@@ -851,7 +851,7 @@ export default function PMChecklistClient({
                 ⚑ {flaggedItems.length} Flagged Item{flaggedItems.length !== 1 ? 's' : ''} — Customer Review Required
               </p>
               {flaggedItems.map(f => (
-                <p key={f.id} className="text-xs py-1 border-b" style={{ color: 'rgba(255,255,255,0.65)', borderColor: '#2a1200' }}>
+                <p key={f.id} className="text-xs py-1 border-b" style={{ color: 'rgba(var(--hd-ink-rgb), 0.65)', borderColor: '#2a1200' }}>
                   {f.text}
                 </p>
               ))}
@@ -862,7 +862,7 @@ export default function PMChecklistClient({
             <button
               onClick={() => setStep('safety')}
               className="px-4 py-2.5 rounded-lg text-sm border"
-              style={{ color: 'rgba(255,255,255,0.5)', borderColor: '#1e3040' }}
+              style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)', borderColor: 'var(--hd-border)' }}
             >
               ← Back
             </button>
@@ -880,30 +880,30 @@ export default function PMChecklistClient({
       {/* ── STEP 4: Signature + Complete ──────────────────────────────────── */}
       {step === 'signature' && (
         <div className="space-y-4">
-          <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+          <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
             <h2 className="font-condensed font-bold text-xl text-white tracking-wide mb-4">TECH SIGNATURE</h2>
 
             {/* PM Summary */}
-            <div className="rounded-lg p-4 mb-5" style={{ background: '#162030' }}>
-              <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>PM Summary</p>
+            <div className="rounded-lg p-4 mb-5" style={{ background: 'var(--hd-inner)' }}>
+              <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>PM Summary</p>
               <div className="grid grid-cols-2 gap-y-1 text-sm">
-                <p style={{ color: 'rgba(255,255,255,0.5)' }}>PM Type</p>
+                <p style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>PM Type</p>
                 <p className="text-white">{PM_TYPES.find(t => t.value === pmType)?.label}</p>
-                <p style={{ color: 'rgba(255,255,255,0.5)' }}>Unit</p>
+                <p style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>Unit</p>
                 <p className="text-white">
                   {selectedUnitData
                     ? `${selectedUnitData.unit_number} — ${selectedUnitData.manufacturer} ${selectedUnitData.model}`
                     : 'No unit selected'}
                 </p>
-                <p style={{ color: 'rgba(255,255,255,0.5)' }}>Items Inspected</p>
+                <p style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>Items Inspected</p>
                 <p className="text-white">{totalItems}</p>
-                <p style={{ color: 'rgba(255,255,255,0.5)' }}>Items Flagged</p>
+                <p style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>Items Flagged</p>
                 <p style={{ color: flaggedItems.length > 0 ? HD_ORANGE : '#22C55E' }}>
                   {flaggedItems.length}
                 </p>
                 {itemInputs['1-18'] && (
                   <>
-                    <p style={{ color: 'rgba(255,255,255,0.5)' }}>Battery CCA</p>
+                    <p style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>Battery CCA</p>
                     <p style={{ color: Number(itemInputs['1-18']) < 800 ? '#EF4444' : '#22C55E' }}>
                       {itemInputs['1-18']} CCA {Number(itemInputs['1-18']) < 800 ? '— REPLACE' : '✓'}
                     </p>
@@ -920,7 +920,7 @@ export default function PMChecklistClient({
                   type="button"
                   onClick={clearSig}
                   className="text-xs px-2 py-1 rounded border"
-                  style={{ color: 'rgba(255,255,255,0.4)', borderColor: '#1e3040' }}
+                  style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)', borderColor: 'var(--hd-border)' }}
                 >
                   Clear
                 </button>
@@ -930,7 +930,7 @@ export default function PMChecklistClient({
                 width={560}
                 height={140}
                 className="w-full rounded-lg touch-none"
-                style={{ background: '#162030', border: `2px solid ${hasSig ? HD_ORANGE : '#1e3040'}`, cursor: 'crosshair', maxHeight: 140 }}
+                style={{ background: 'var(--hd-inner)', border: `2px solid ${hasSig ? HD_ORANGE : 'var(--hd-border)'}`, cursor: 'crosshair', maxHeight: 140 }}
                 onMouseDown={startDraw}
                 onMouseMove={draw}
                 onMouseUp={stopDraw}
@@ -940,7 +940,7 @@ export default function PMChecklistClient({
                 onTouchEnd={stopDraw}
               />
               {!hasSig && (
-                <p className="text-xs text-center mt-1" style={{ color: 'rgba(255,255,255,0.25)' }}>
+                <p className="text-xs text-center mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>
                   Draw signature above (optional)
                 </p>
               )}
@@ -957,7 +957,7 @@ export default function PMChecklistClient({
             <button
               onClick={() => setStep('checklist')}
               className="px-4 py-2.5 rounded-lg text-sm border"
-              style={{ color: 'rgba(255,255,255,0.5)', borderColor: '#1e3040' }}
+              style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)', borderColor: 'var(--hd-border)' }}
             >
               ← Back
             </button>

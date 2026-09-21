@@ -64,7 +64,7 @@ export default async function WorkOrderDetailPage({
   )
 
   return (
-    <main className="flex-1 min-h-screen" style={{ background: '#0a0f14' }}>
+    <main className="flex-1 min-h-screen" style={{ background: 'var(--hd-bg)' }}>
       <WorkOrderDetail
         workOrder={wo as unknown as Parameters<typeof WorkOrderDetail>[0]['workOrder']}
         photos={photosWithUrls}

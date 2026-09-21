@@ -166,18 +166,18 @@ function StepIndicator({ step }: { step: Step }) {
               <div
                 className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
                 style={{
-                  background: done ? '#22C55E' : current ? HD_ORANGE : '#1e3040',
-                  color: done || current ? 'white' : 'rgba(255,255,255,0.3)',
+                  background: done ? '#22C55E' : current ? HD_ORANGE : 'var(--hd-border)',
+                  color: done || current ? 'white' : 'rgba(var(--hd-ink-rgb), 0.3)',
                 }}
               >
                 {done ? '✓' : i + 1}
               </div>
-              <span className="text-xs font-medium" style={{ color: current ? 'white' : done ? '#22C55E' : 'rgba(255,255,255,0.3)' }}>
+              <span className="text-xs font-medium" style={{ color: current ? 'white' : done ? '#22C55E' : 'rgba(var(--hd-ink-rgb), 0.3)' }}>
                 {s.label}
               </span>
             </div>
             {i < steps.length - 1 && (
-              <div className="w-8 h-px mx-2" style={{ background: done ? '#22C55E40' : '#1e3040' }} />
+              <div className="w-8 h-px mx-2" style={{ background: done ? '#22C55E40' : 'var(--hd-border)' }} />
             )}
           </div>
         )
@@ -190,21 +190,21 @@ function StepIndicator({ step }: { step: Step }) {
 function PreviewTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
   const preview = rows.slice(0, 6)
   return (
-    <div className="overflow-x-auto rounded-lg" style={{ border: '1px solid #1e3040' }}>
+    <div className="overflow-x-auto rounded-lg" style={{ border: '1px solid var(--hd-border)' }}>
       <table className="text-xs min-w-max">
-        <thead style={{ background: '#162030' }}>
+        <thead style={{ background: 'var(--hd-inner)' }}>
           <tr>
             {headers.map(h => (
               <th key={h} className="px-3 py-2 text-left whitespace-nowrap uppercase tracking-wider"
-                style={{ color: 'rgba(255,255,255,0.5)', borderBottom: '1px solid #1e3040' }}>
+                style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)', borderBottom: '1px solid var(--hd-border)' }}>
                 {h}
               </th>
             ))}
           </tr>
         </thead>
-        <tbody style={{ background: '#111920' }}>
+        <tbody style={{ background: 'var(--hd-card)' }}>
           {preview.map((row, i) => (
-            <tr key={i} style={{ borderTop: i > 0 ? '1px solid #1e3040' : undefined }}>
+            <tr key={i} style={{ borderTop: i > 0 ? '1px solid var(--hd-border)' : undefined }}>
               {headers.map((h, j) => (
                 <td key={h} className="px-3 py-1.5 text-white/70 whitespace-nowrap max-w-xs truncate">
                   {row[j] ?? ''}
@@ -215,7 +215,7 @@ function PreviewTable({ headers, rows }: { headers: string[]; rows: string[][] }
         </tbody>
       </table>
       {rows.length > 6 && (
-        <p className="px-3 py-2 text-xs" style={{ color: 'rgba(255,255,255,0.3)', borderTop: '1px solid #1e3040', background: '#111920' }}>
+        <p className="px-3 py-2 text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)', borderTop: '1px solid var(--hd-border)', background: 'var(--hd-card)' }}>
           +{rows.length - 6} more rows
         </p>
       )}
@@ -357,7 +357,7 @@ export default function ImportWizard() {
     <div className="p-4 sm:p-6 max-w-3xl">
       {/* Header */}
       <div className="mb-6">
-        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>HD Suite</p>
+        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>HD Suite</p>
         <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">IMPORT DATA</h1>
       </div>
 
@@ -372,7 +372,7 @@ export default function ImportWizard() {
       {/* ── Step 1: Format Selection ── */}
       {step === 'format' && (
         <div className="space-y-4">
-          <p className="text-sm mb-6" style={{ color: 'rgba(255,255,255,0.5)' }}>
+          <p className="text-sm mb-6" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
             Select the format that matches your CSV file.
           </p>
           <div className="grid gap-4">
@@ -381,9 +381,9 @@ export default function ImportWizard() {
                 key={f.id}
                 onClick={() => selectFormat(f.id)}
                 className="text-left rounded-xl p-5 transition-all"
-                style={{ background: '#111920', border: `1px solid #1e3040` }}
+                style={{ background: 'var(--hd-card)', border: `1px solid var(--hd-border)` }}
                 onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = `${HD_ORANGE}80` }}
-                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#1e3040' }}
+                onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--hd-border)' }}
               >
                 <div className="flex items-start gap-4">
                   <div className="flex-shrink-0 w-12 h-12 rounded-xl flex items-center justify-center" style={{ background: `${HD_ORANGE}15`, color: HD_ORANGE }}>
@@ -392,21 +392,21 @@ export default function ImportWizard() {
                   <div className="flex-1 min-w-0">
                     <p className="font-condensed font-bold text-white text-lg tracking-wide">{f.title}</p>
                     <p className="text-xs font-medium mb-1" style={{ color: HD_ORANGE }}>{f.subtitle}</p>
-                    <p className="text-sm mb-3" style={{ color: 'rgba(255,255,255,0.5)' }}>{f.desc}</p>
+                    <p className="text-sm mb-3" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>{f.desc}</p>
                     <div className="flex flex-wrap gap-1">
                       {f.expectedCols.slice(0, 7).map(c => (
-                        <span key={c} className="text-xs px-1.5 py-0.5 rounded font-mono" style={{ background: '#162030', color: 'rgba(255,255,255,0.5)' }}>
+                        <span key={c} className="text-xs px-1.5 py-0.5 rounded font-mono" style={{ background: 'var(--hd-inner)', color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
                           {c}
                         </span>
                       ))}
                       {f.expectedCols.length > 7 && (
-                        <span className="text-xs px-1.5 py-0.5 rounded" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                        <span className="text-xs px-1.5 py-0.5 rounded" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
                           +{f.expectedCols.length - 7} more
                         </span>
                       )}
                     </div>
                   </div>
-                  <svg className="w-5 h-5 flex-shrink-0 mt-1" style={{ color: 'rgba(255,255,255,0.2)' }} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                  <svg className="w-5 h-5 flex-shrink-0 mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.2)' }} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                     <polyline points="9 18 15 12 9 6" />
                   </svg>
                 </div>
@@ -420,37 +420,37 @@ export default function ImportWizard() {
       {step === 'upload' && (
         <div className="space-y-6">
           <div className="flex items-center gap-3">
-            <button onClick={() => setStep('format')} className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>← Back</button>
+            <button onClick={() => setStep('format')} className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>← Back</button>
             <p className="font-condensed font-bold text-white text-lg tracking-wide">{selectedFormat?.title}</p>
           </div>
 
           {/* Upload area */}
           <div
             className="rounded-xl p-8 text-center cursor-pointer"
-            style={{ background: '#111920', border: `2px dashed #1e3040` }}
+            style={{ background: 'var(--hd-card)', border: `2px dashed var(--hd-border)` }}
             onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = `${HD_ORANGE}60` }}
-            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#1e3040' }}
+            onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--hd-border)' }}
             onClick={() => fileRef.current?.click()}
           >
-            <svg className="w-10 h-10 mx-auto mb-3" style={{ color: 'rgba(255,255,255,0.2)' }} fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+            <svg className="w-10 h-10 mx-auto mb-3" style={{ color: 'rgba(var(--hd-ink-rgb), 0.2)' }} fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
               <polyline points="17 8 12 3 7 8" />
               <line x1="12" y1="3" x2="12" y2="15" />
             </svg>
             <p className="text-sm font-medium text-white mb-1">Click to upload CSV</p>
-            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>or drag and drop — CSV files only</p>
+            <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>or drag and drop — CSV files only</p>
           </div>
           <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFile} />
 
           {/* Expected columns for the selected format */}
           {selectedFormat && format !== 'custom' && (
-            <div className="rounded-xl p-4" style={{ background: '#111920', border: '1px solid #1e3040' }}>
-              <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>
+            <div className="rounded-xl p-4" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
+              <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
                 Expected Columns
               </p>
               <div className="flex flex-wrap gap-1.5">
                 {selectedFormat.expectedCols.map(c => (
-                  <span key={c} className="text-xs px-2 py-0.5 rounded font-mono" style={{ background: '#162030', color: 'rgba(255,255,255,0.6)' }}>
+                  <span key={c} className="text-xs px-2 py-0.5 rounded font-mono" style={{ background: 'var(--hd-inner)', color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>
                     {c}
                   </span>
                 ))}
@@ -460,18 +460,18 @@ export default function ImportWizard() {
 
           {/* Fullbay field mapping reference */}
           {format === 'fullbay' && (
-            <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
-              <div className="px-4 py-3" style={{ background: '#0d1820', borderBottom: '1px solid #1e3040' }}>
-                <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.5)' }}>
+            <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
+              <div className="px-4 py-3" style={{ background: 'var(--hd-sunken)', borderBottom: '1px solid var(--hd-border)' }}>
+                <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
                   Fullbay → HD Suite Field Reference
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-0" style={{ background: '#111920' }}>
+              <div className="grid grid-cols-2 gap-0" style={{ background: 'var(--hd-card)' }}>
                 {FULLBAY_FIELD_MAP.map(([fb, hd], i) => (
-                  <div key={fb} className="flex items-center gap-2 px-3 py-1.5 text-xs" style={{ borderBottom: i < FULLBAY_FIELD_MAP.length - 2 ? '1px solid #1e3040' : undefined, borderRight: i % 2 === 0 ? '1px solid #1e3040' : undefined }}>
-                    <span className="font-mono" style={{ color: 'rgba(255,255,255,0.5)', minWidth: 120 }}>{fb}</span>
+                  <div key={fb} className="flex items-center gap-2 px-3 py-1.5 text-xs" style={{ borderBottom: i < FULLBAY_FIELD_MAP.length - 2 ? '1px solid var(--hd-border)' : undefined, borderRight: i % 2 === 0 ? '1px solid var(--hd-border)' : undefined }}>
+                    <span className="font-mono" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)', minWidth: 120 }}>{fb}</span>
                     <svg className="w-3 h-3 flex-shrink-0" style={{ color: HD_ORANGE }} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6" /></svg>
-                    <span style={{ color: 'rgba(255,255,255,0.75)' }}>{hd}</span>
+                    <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.75)' }}>{hd}</span>
                   </div>
                 ))}
               </div>
@@ -487,7 +487,7 @@ export default function ImportWizard() {
           <p className="text-sm font-medium text-white">
             {format === 'custom' ? 'AI is mapping your columns…' : 'Importing data…'}
           </p>
-          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>This may take a moment</p>
+          <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>This may take a moment</p>
         </div>
       )}
 
@@ -495,42 +495,42 @@ export default function ImportWizard() {
       {step === 'preview' && csv && (
         <div className="space-y-5">
           <div className="flex items-center gap-3">
-            <button onClick={() => setStep('upload')} className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>← Back</button>
+            <button onClick={() => setStep('upload')} className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>← Back</button>
             <p className="font-condensed font-bold text-white text-lg tracking-wide">Preview & Confirm</p>
           </div>
 
           {/* Row / column summary */}
           <div className="flex gap-4 text-sm">
-            <div className="px-4 py-3 rounded-lg" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+            <div className="px-4 py-3 rounded-lg" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
               <span className="font-bold text-white text-lg">{csv.rows.length}</span>
-              <span className="text-xs ml-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>rows detected</span>
+              <span className="text-xs ml-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>rows detected</span>
             </div>
-            <div className="px-4 py-3 rounded-lg" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+            <div className="px-4 py-3 rounded-lg" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
               <span className="font-bold text-white text-lg">{csv.headers.length}</span>
-              <span className="text-xs ml-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>columns</span>
+              <span className="text-xs ml-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>columns</span>
             </div>
           </div>
 
           {/* Custom: AI mapping review table */}
           {format === 'custom' && mapping.length > 0 && (
             <div>
-              <p className="text-xs uppercase tracking-widest mb-2 font-semibold" style={{ color: 'rgba(255,255,255,0.4)' }}>
+              <p className="text-xs uppercase tracking-widest mb-2 font-semibold" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
                 AI Column Mapping — Review & Edit
               </p>
-              <div className="rounded-lg overflow-hidden" style={{ border: '1px solid #1e3040' }}>
-                <div className="grid grid-cols-3 px-3 py-2 text-xs uppercase tracking-wider" style={{ background: '#162030', color: 'rgba(255,255,255,0.4)' }}>
+              <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
+                <div className="grid grid-cols-3 px-3 py-2 text-xs uppercase tracking-wider" style={{ background: 'var(--hd-inner)', color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
                   <span>Your Column</span><span>Maps To</span><span>Confidence</span>
                 </div>
                 {mapping.map((m, i) => {
-                  const color = m.confidence === 'high' ? '#22C55E' : m.confidence === 'medium' ? '#F59E0B' : 'rgba(255,255,255,0.3)'
+                  const color = m.confidence === 'high' ? '#22C55E' : m.confidence === 'medium' ? '#F59E0B' : 'rgba(var(--hd-ink-rgb), 0.3)'
                   return (
-                    <div key={i} className="grid grid-cols-3 px-3 py-2 items-center text-sm" style={{ borderTop: '1px solid #1e3040', background: '#111920' }}>
+                    <div key={i} className="grid grid-cols-3 px-3 py-2 items-center text-sm" style={{ borderTop: '1px solid var(--hd-border)', background: 'var(--hd-card)' }}>
                       <span className="text-white font-mono text-xs">{m.csv_header}</span>
                       <select
                         value={m.field_key ?? ''}
                         onChange={e => updateMapping(i, e.target.value || null)}
                         className="text-xs rounded px-2 py-1 mr-4"
-                        style={{ background: '#162030', color: 'rgba(255,255,255,0.8)', border: '1px solid #1e3040' }}
+                        style={{ background: 'var(--hd-inner)', color: 'rgba(var(--hd-ink-rgb), 0.8)', border: '1px solid var(--hd-border)' }}
                       >
                         <option value="">— skip —</option>
                         {fields.map(f => (
@@ -547,7 +547,7 @@ export default function ImportWizard() {
 
           {/* CSV data preview */}
           <div>
-            <p className="text-xs uppercase tracking-widest mb-2 font-semibold" style={{ color: 'rgba(255,255,255,0.4)' }}>
+            <p className="text-xs uppercase tracking-widest mb-2 font-semibold" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
               Data Preview (first 6 rows)
             </p>
             <PreviewTable headers={csv.headers} rows={csv.rows} />
@@ -568,7 +568,7 @@ export default function ImportWizard() {
             >
               Import {csv.rows.length} {format === 'invoices' ? 'Invoice' : format === 'fullbay' ? 'Work Order' : 'Unit'}{csv.rows.length !== 1 ? 's' : ''}
             </button>
-            <button onClick={reset} className="px-4 py-2.5 rounded-lg text-sm" style={{ color: 'rgba(255,255,255,0.4)', border: '1px solid #1e3040' }}>
+            <button onClick={reset} className="px-4 py-2.5 rounded-lg text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)', border: '1px solid var(--hd-border)' }}>
               Cancel
             </button>
           </div>
@@ -587,13 +587,13 @@ export default function ImportWizard() {
             <p className="font-condensed font-bold text-white text-xl tracking-wide">IMPORT COMPLETE</p>
           </div>
 
-          <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
-            <div className="px-5 py-3" style={{ background: '#0d1820', borderBottom: '1px solid #1e3040' }}>
-              <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>
+          <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
+            <div className="px-5 py-3" style={{ background: 'var(--hd-sunken)', borderBottom: '1px solid var(--hd-border)' }}>
+              <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
                 Import Summary
               </p>
             </div>
-            <div className="divide-y" style={{ background: '#111920', borderColor: '#1e3040' }}>
+            <div className="divide-y" style={{ background: 'var(--hd-card)', borderColor: 'var(--hd-border)' }}>
               {[
                 results.fleet_accounts_created > 0 && {
                   label: 'Fleet accounts created',
@@ -618,7 +618,7 @@ export default function ImportWizard() {
                 results.work_orders_skipped > 0 && {
                   label: 'Duplicates skipped',
                   value: results.work_orders_skipped,
-                  color: 'rgba(255,255,255,0.4)',
+                  color: 'rgba(var(--hd-ink-rgb), 0.4)',
                 },
                 results.total_revenue && results.total_revenue > 0 && {
                   label: 'Total revenue imported',
@@ -629,14 +629,14 @@ export default function ImportWizard() {
                 results.date_range && {
                   label: 'Date range',
                   value: `${formatDate(results.date_range.min)} — ${formatDate(results.date_range.max)}`,
-                  color: 'rgba(255,255,255,0.6)',
+                  color: 'rgba(var(--hd-ink-rgb), 0.6)',
                   isStr: true,
                 },
               ].filter(Boolean).map((item, i) => {
                 const it = item as { label: string; value: number | string; color: string; isStr?: boolean }
                 return (
-                  <div key={i} className="flex items-center justify-between px-5 py-3 text-sm" style={{ borderColor: '#1e3040' }}>
-                    <span style={{ color: 'rgba(255,255,255,0.6)' }}>{it.label}</span>
+                  <div key={i} className="flex items-center justify-between px-5 py-3 text-sm" style={{ borderColor: 'var(--hd-border)' }}>
+                    <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>{it.label}</span>
                     <span className="font-bold" style={{ color: it.color }}>
                       {it.isStr ? it.value : it.value.toLocaleString()}
                     </span>
@@ -651,16 +651,16 @@ export default function ImportWizard() {
               View Fleet Accounts →
             </Link>
             {format !== 'custom' && (
-              <Link href="/hd/work-orders" className="px-5 py-2.5 rounded-lg text-sm font-semibold" style={{ background: '#162030', color: 'rgba(255,255,255,0.8)', border: '1px solid #1e3040' }}>
+              <Link href="/hd/work-orders" className="px-5 py-2.5 rounded-lg text-sm font-semibold" style={{ background: 'var(--hd-inner)', color: 'rgba(var(--hd-ink-rgb), 0.8)', border: '1px solid var(--hd-border)' }}>
                 View Work Orders →
               </Link>
             )}
             {format === 'custom' && (
-              <Link href="/hd/fleet-units" className="px-5 py-2.5 rounded-lg text-sm font-semibold" style={{ background: '#162030', color: 'rgba(255,255,255,0.8)', border: '1px solid #1e3040' }}>
+              <Link href="/hd/fleet-units" className="px-5 py-2.5 rounded-lg text-sm font-semibold" style={{ background: 'var(--hd-inner)', color: 'rgba(var(--hd-ink-rgb), 0.8)', border: '1px solid var(--hd-border)' }}>
                 View Fleet Units →
               </Link>
             )}
-            <button onClick={reset} className="px-5 py-2.5 rounded-lg text-sm" style={{ color: 'rgba(255,255,255,0.4)', border: '1px solid #1e3040' }}>
+            <button onClick={reset} className="px-5 py-2.5 rounded-lg text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)', border: '1px solid var(--hd-border)' }}>
               Import Another File
             </button>
           </div>

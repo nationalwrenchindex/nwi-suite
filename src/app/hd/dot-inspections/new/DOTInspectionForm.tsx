@@ -77,10 +77,10 @@ function SubItemRow({
 }) {
   const isFail = state.result === 'fail'
   return (
-    <div style={{ background: isFail ? '#1a0505' : even ? '#0f1820' : '#111920', borderTop: '1px solid #1e3040' }}>
+    <div style={{ background: isFail ? '#1a0505' : even ? '#0f1820' : 'var(--hd-card)', borderTop: '1px solid var(--hd-border)' }}>
       <div className="flex items-center gap-3 px-4 py-2">
         <div className="flex-1 min-w-0">
-          <p className="text-xs leading-snug" style={{ color: isFail ? '#EF4444CC' : 'rgba(255,255,255,0.65)' }}>
+          <p className="text-xs leading-snug" style={{ color: isFail ? '#EF4444CC' : 'rgba(var(--hd-ink-rgb), 0.65)' }}>
             {label}
           </p>
           {safetyCritical && (
@@ -98,8 +98,8 @@ function SubItemRow({
                 width: 44, padding: '4px 0', borderRadius: 4,
                 background: state.result === r
                   ? r === 'pass' ? '#22C55E' : r === 'fail' ? '#EF4444' : '#4B5563'
-                  : '#162030',
-                color: state.result === r ? '#fff' : 'rgba(255,255,255,0.28)',
+                  : 'var(--hd-inner)',
+                color: state.result === r ? '#fff' : 'rgba(var(--hd-ink-rgb), 0.28)',
               }}>
               {r === 'na' ? 'N/A' : r.toUpperCase()}
             </button>
@@ -132,13 +132,13 @@ function CategoryBlock({ num, catId, label, state, onChange }: {
   const failCt   = items.filter(i => state.items[i.id]?.result === 'fail').length
 
   return (
-    <div className="overflow-hidden" style={{ border: `1px solid ${isFail ? '#EF444440' : '#1e3040'}`, borderRadius: 6 }}>
+    <div className="overflow-hidden" style={{ border: `1px solid ${isFail ? '#EF444440' : 'var(--hd-border)'}`, borderRadius: 6 }}>
       {/* Dark header bar */}
       <button type="button" onClick={() => setExpanded(e => !e)}
         className="w-full flex items-center gap-3 px-4 py-2.5 text-left"
-        style={{ background: isFail ? '#1a0000' : '#0d1820' }}>
+        style={{ background: isFail ? '#1a0000' : 'var(--hd-sunken)' }}>
         <span className="text-xs font-mono font-bold w-5 text-right flex-shrink-0"
-          style={{ color: 'rgba(255,255,255,0.4)' }}>{num}</span>
+          style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{num}</span>
         <p className="flex-1 text-sm font-bold text-white tracking-wide uppercase">{label}</p>
         {failCt > 0 && (
           <span className="text-xs font-bold px-2 py-0.5 rounded"
@@ -152,7 +152,7 @@ function CategoryBlock({ num, catId, label, state, onChange }: {
           {isFail ? 'FAIL' : derived === 'na' ? 'N/A' : 'PASS'}
         </span>
         <svg className="w-4 h-4 transition-transform duration-150 flex-shrink-0"
-          style={{ color: 'rgba(255,255,255,0.3)', transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+          style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)', transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
           fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
         </svg>
@@ -217,13 +217,13 @@ function InfoCell({ label, value, editable, type = 'text', onChange, children }:
   onChange?: (v: string) => void; children?: React.ReactNode
 }) {
   return (
-    <td className="px-3 py-2 align-top" style={{ borderBottom: '1px solid #1e3040', borderRight: '1px solid #1e3040', width: '50%', verticalAlign: 'top' }}>
-      <div className="text-xs uppercase tracking-wider mb-0.5" style={{ color: 'rgba(255,255,255,0.4)', fontSize: 9, letterSpacing: '0.08em' }}>{label}</div>
+    <td className="px-3 py-2 align-top" style={{ borderBottom: '1px solid var(--hd-border)', borderRight: '1px solid var(--hd-border)', width: '50%', verticalAlign: 'top' }}>
+      <div className="text-xs uppercase tracking-wider mb-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)', fontSize: 9, letterSpacing: '0.08em' }}>{label}</div>
       {children ?? (
         editable ? (
           <input type={type} value={value ?? ''} onChange={e => onChange?.(e.target.value)}
             className="w-full bg-transparent text-sm text-white outline-none border-b border-dashed"
-            style={{ borderColor: 'rgba(255,255,255,0.15)', paddingBottom: 2 }} />
+            style={{ borderColor: 'rgba(var(--hd-ink-rgb), 0.15)', paddingBottom: 2 }} />
         ) : (
           <div className="text-sm text-white font-medium">{value || '—'}</div>
         )
@@ -444,7 +444,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
         {/* ═══════════════════════════════════════════════════════════════════
             DOCUMENT HEADER — white-labeled to subscriber company
         ═══════════════════════════════════════════════════════════════════ */}
-        <div className="flex items-center gap-4 px-6 py-4 border-b no-print" style={{ background: '#0d1820', borderColor: '#1e3040' }}>
+        <div className="flex items-center gap-4 px-6 py-4 border-b no-print" style={{ background: 'var(--hd-sunken)', borderColor: 'var(--hd-border)' }}>
           {/* Left — company branding */}
           <div className="flex-shrink-0 w-44">
             {logoUrl ? (
@@ -462,7 +462,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
             <p className="font-condensed font-bold text-white text-xl tracking-widest leading-tight">
               ANNUAL VEHICLE INSPECTION REPORT
             </p>
-            <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.45)' }}>
+            <p className="text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.45)' }}>
               Per 49 CFR Part 396 — Federal Motor Carrier Safety Regulations
             </p>
           </div>
@@ -470,21 +470,21 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
           {/* Right — ID + date */}
           <div className="flex-shrink-0 w-44 text-right">
             <p className="text-sm font-mono font-bold text-white">{inspectionId}</p>
-            <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>{printDate}</p>
-            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>Page 1</p>
+            <p className="text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{printDate}</p>
+            <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>Page 1</p>
           </div>
         </div>
 
         {/* ── Customer / unit / invoice selectors (screen only) ── */}
-        <div className="px-6 py-3 border-b no-print space-y-3" style={{ background: '#111920', borderColor: '#1e3040' }}>
+        <div className="px-6 py-3 border-b no-print space-y-3" style={{ background: 'var(--hd-card)', borderColor: 'var(--hd-border)' }}>
           <div className="flex items-center justify-between gap-3">
-            <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Inspection Setup</p>
-            <Link href="/hd/dot-inspections" className="text-xs px-3 py-1.5 rounded-lg flex-shrink-0" style={{ color: 'rgba(255,255,255,0.4)', border: '1px solid #1e3040' }}>← Back</Link>
+            <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Inspection Setup</p>
+            <Link href="/hd/dot-inspections" className="text-xs px-3 py-1.5 rounded-lg flex-shrink-0" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)', border: '1px solid var(--hd-border)' }}>← Back</Link>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {/* Customer search */}
             <div style={{ position: 'relative' }}>
-              <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>Customer</label>
+              <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Customer</label>
               <div style={{ position: 'relative' }}>
                 <input
                   value={customerName}
@@ -492,17 +492,17 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
                   onFocus={() => setShowAccts(true)}
                   placeholder="Search fleet accounts"
                   className="w-full px-3 py-2 rounded-lg text-base sm:text-sm text-white placeholder-white/25"
-                  style={{ background: '#162030', border: '1px solid #1e3040' }}
+                  style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
                 />
                 {selectedAccountId && (
-                  <button type="button" onClick={clearAccount} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold px-2 py-0.5 rounded" style={{ background: '#1e3040', color: 'rgba(255,255,255,0.6)' }}>Clear</button>
+                  <button type="button" onClick={clearAccount} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold px-2 py-0.5 rounded" style={{ background: 'var(--hd-border)', color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>Clear</button>
                 )}
               </div>
               {showAccts && acctMatches.length > 0 && !selectedAccountId && (
-                <div style={{ position: 'absolute', zIndex: 20, left: 0, right: 0, marginTop: 4, background: '#111920', border: '1px solid #1e3040', borderRadius: 8, overflow: 'hidden', maxHeight: 200, overflowY: 'auto' }}>
+                <div style={{ position: 'absolute', zIndex: 20, left: 0, right: 0, marginTop: 4, background: 'var(--hd-card)', border: '1px solid var(--hd-border)', borderRadius: 8, overflow: 'hidden', maxHeight: 200, overflowY: 'auto' }}>
                   {acctMatches.map(a => (
                     <button key={a.id} type="button" onMouseDown={ev => { ev.preventDefault(); pickAccount(a) }}
-                      className="w-full text-left px-3 py-2 text-sm text-white hover:bg-white/5" style={{ borderBottom: '1px solid #1e3040' }}>
+                      className="w-full text-left px-3 py-2 text-sm text-white hover:bg-white/5" style={{ borderBottom: '1px solid var(--hd-border)' }}>
                       {a.fleet_name}
                     </button>
                   ))}
@@ -512,10 +512,10 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
 
             {/* Unit (filtered by customer) */}
             <div>
-              <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>Unit</label>
+              <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Unit</label>
               <select value={selectedUnitId} onChange={e => setSelectedUnitId(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg text-base sm:text-sm text-white"
-                style={{ background: '#162030', border: '1px solid #1e3040' }}>
+                style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}>
                 <option value="">— No unit selected —</option>
                 {visibleUnits.map(u => (
                   <option key={u.id} value={u.id}>{u.unit_number} — {u.manufacturer} {u.model}</option>
@@ -525,10 +525,10 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
 
             {/* Invoice options */}
             <div>
-              <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>Invoice</label>
+              <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Invoice</label>
               <select value={selectedInvoice} onChange={e => setSelectedInvoice(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg text-base sm:text-sm text-white"
-                style={{ background: '#162030', border: '1px solid #1e3040' }}>
+                style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}>
                 <option value={INV_CREATE}>+ Create new invoice for this inspection</option>
                 <option value={INV_NONE}>-- No invoice (standalone)</option>
                 {invoices.map(inv => (
@@ -545,8 +545,8 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
         {/* ═══════════════════════════════════════════════════════════════════
             UNIT INFO TABLE
         ═══════════════════════════════════════════════════════════════════ */}
-        <div className="px-6 py-4 border-b" style={{ borderColor: '#1e3040', background: '#0a0f14' }}>
-          <table className="w-full" style={{ borderCollapse: 'collapse', border: '1px solid #1e3040' }}>
+        <div className="px-6 py-4 border-b" style={{ borderColor: 'var(--hd-border)', background: 'var(--hd-bg)' }}>
+          <table className="w-full" style={{ borderCollapse: 'collapse', border: '1px solid var(--hd-border)' }}>
             <tbody>
               <tr>
                 <InfoCell label="Unit Number"     value={selectedUnit?.unit_number     ?? '—'} />
@@ -555,7 +555,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
                     ? <div className="text-sm text-white">{selectedAccount.fleet_name}</div>
                     : <input value={customerName} onChange={e => setCustomerName(e.target.value)} placeholder="Customer name"
                         className="w-full bg-transparent text-sm text-white outline-none border-b border-dashed placeholder-white/25"
-                        style={{ borderColor: 'rgba(255,255,255,0.15)', paddingBottom: 2 }} />}
+                        style={{ borderColor: 'rgba(var(--hd-ink-rgb), 0.15)', paddingBottom: 2 }} />}
                 </InfoCell>
               </tr>
               <tr>
@@ -569,10 +569,10 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
                     : <div className="flex gap-2">
                         <input value={unitManufacturer} onChange={e => setUnitManufacturer(e.target.value)} placeholder="Manufacturer"
                           className="w-1/2 bg-transparent text-sm text-white outline-none border-b border-dashed placeholder-white/25"
-                          style={{ borderColor: 'rgba(255,255,255,0.15)', paddingBottom: 2 }} />
+                          style={{ borderColor: 'rgba(var(--hd-ink-rgb), 0.15)', paddingBottom: 2 }} />
                         <input value={unitModel} onChange={e => setUnitModel(e.target.value)} placeholder="Model"
                           className="w-1/2 bg-transparent text-sm text-white outline-none border-b border-dashed placeholder-white/25"
-                          style={{ borderColor: 'rgba(255,255,255,0.15)', paddingBottom: 2 }} />
+                          style={{ borderColor: 'rgba(var(--hd-ink-rgb), 0.15)', paddingBottom: 2 }} />
                       </div>}
                 </InfoCell>
                 <InfoCell label="Year"            value={selectedUnit?.year?.toString() ?? '—'} />
@@ -583,7 +583,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
                     ? <div className="text-sm text-white">{selectedUnit.serial_number ?? '—'}</div>
                     : <input value={unitSerial} onChange={e => setUnitSerial(e.target.value)} placeholder="VIN / Serial"
                         className="w-full bg-transparent text-sm text-white outline-none border-b border-dashed placeholder-white/25"
-                        style={{ borderColor: 'rgba(255,255,255,0.15)', paddingBottom: 2 }} />}
+                        style={{ borderColor: 'rgba(var(--hd-ink-rgb), 0.15)', paddingBottom: 2 }} />}
                 </InfoCell>
                 <InfoCell label="Odometer / Hour Meter" value={odometerHours} editable onChange={setOdometerHours} />
               </tr>
@@ -595,7 +595,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
                 <InfoCell label="Inspection Date *">
                   <input type="date" value={inspDate} onChange={e => setInspDate(e.target.value)} required
                     className="w-full bg-transparent text-sm text-white outline-none border-b border-dashed"
-                    style={{ borderColor: 'rgba(255,255,255,0.15)', paddingBottom: 2 }} />
+                    style={{ borderColor: 'rgba(var(--hd-ink-rgb), 0.15)', paddingBottom: 2 }} />
                 </InfoCell>
                 <InfoCell label="Location" value={location} editable onChange={setLocation} />
               </tr>
@@ -628,7 +628,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
               CVSA INSPECTION ITEMS
             </p>
             <Link href="/hd/dot-inspections" className="text-xs no-print"
-              style={{ color: 'rgba(255,255,255,0.3)' }}>
+              style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
               ← Back to inspections
             </Link>
           </div>
@@ -653,11 +653,11 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
         {/* ═══════════════════════════════════════════════════════════════════
             ELECTRONIC SIGNATURE
         ═══════════════════════════════════════════════════════════════════ */}
-        <div className="px-6 py-4 mx-6 mb-4 rounded-xl" style={{ border: '1px solid #1e3040', background: '#111920' }}>
+        <div className="px-6 py-4 mx-6 mb-4 rounded-xl" style={{ border: '1px solid var(--hd-border)', background: 'var(--hd-card)' }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide mb-3">INSPECTOR CERTIFICATION</p>
 
-          <div className="rounded-lg p-4 mb-4" style={{ background: '#0d1820', border: `1px solid ${HD_BLUE}30` }}>
-            <p className="text-xs leading-relaxed" style={{ color: 'rgba(255,255,255,0.55)' }}>
+          <div className="rounded-lg p-4 mb-4" style={{ background: 'var(--hd-sunken)', border: `1px solid ${HD_BLUE}30` }}>
+            <p className="text-xs leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.55)' }}>
               By signing below, I certify that this vehicle has been inspected in accordance with FMCSA 49 CFR Part 396,
               that all defects found have been noted, and that I am a qualified inspector as defined by 49 CFR 396.19.
               This electronic signature is legally equivalent to a handwritten signature.
@@ -666,32 +666,32 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
 
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
-              <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+              <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
                 Inspector Printed Name *
               </label>
               <input type="text" value={inspectorName} onChange={e => setInspectorName(e.target.value)}
                 placeholder="Full name" required
                 className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20"
-                style={{ background: '#162030', border: '1px solid #1e3040' }} />
+                style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }} />
             </div>
             <div>
-              <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+              <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
                 Certification Number
               </label>
               <input type="text" value={inspectorCert} onChange={e => setInspectorCert(e.target.value)}
                 placeholder="Inspector cert #"
                 className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20"
-                style={{ background: '#162030', border: '1px solid #1e3040' }} />
+                style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }} />
             </div>
           </div>
 
-          <label className="block text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>
+          <label className="block text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
             Electronic Signature *
           </label>
           <canvas id="sig-canvas" className="w-full rounded-lg touch-none"
             style={{
-              height: 130, background: '#162030', cursor: 'crosshair', display: 'block',
-              border: `2px solid ${hasSignature ? HD_ORANGE : '#1e3040'}`,
+              height: 130, background: 'var(--hd-inner)', cursor: 'crosshair', display: 'block',
+              border: `2px solid ${hasSignature ? HD_ORANGE : 'var(--hd-border)'}`,
             }} />
           <SignatureCanvasSetup onHasSignature={(v) => {
             setHasSignature(v)
@@ -704,7 +704,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
                 ✓ Signature captured — {signedAt}
               </p>
             ) : (
-              <p className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>Sign above with mouse or touch</p>
+              <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>Sign above with mouse or touch</p>
             )}
             <button type="button"
               onClick={() => {
@@ -713,7 +713,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
                 c.getContext('2d')!.clearRect(0, 0, c.width, c.height)
                 setHasSignature(false); setSignedAt(null)
               }}
-              className="text-xs px-2 py-1 rounded" style={{ color: 'rgba(255,255,255,0.35)', border: '1px solid #1e3040' }}>
+              className="text-xs px-2 py-1 rounded" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)', border: '1px solid var(--hd-border)' }}>
               Clear
             </button>
           </div>
@@ -745,7 +745,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
               </span>
             )}
           </button>
-          <p className="text-xs text-center mt-2" style={{ color: 'rgba(255,255,255,0.2)' }}>
+          <p className="text-xs text-center mt-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.2)' }}>
             Once signed, this record is permanently locked and cannot be edited. A PDF can be generated after submission.
           </p>
         </div>
@@ -754,13 +754,13 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
 
       {/* ── Sticky bottom totals bar ── */}
       <div className="no-print fixed bottom-0 inset-x-0 lg:left-56 z-40 flex items-center gap-4 px-5 py-3"
-        style={{ background: '#0a0f14', borderTop: '2px solid #1e3040' }}>
-        <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.3)' }}>Items:</span>
+        style={{ background: 'var(--hd-bg)', borderTop: '2px solid var(--hd-border)' }}>
+        <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>Items:</span>
         <span className="text-sm font-bold" style={{ color: '#22C55E' }}>✓ {passCount} Pass</span>
         {failCount > 0 && <span className="text-sm font-bold" style={{ color: '#EF4444' }}>✗ {failCount} Fail</span>}
-        <span className="text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>{naCount} N/A</span>
+        <span className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{naCount} N/A</span>
         <div className="flex-1" />
-        <span className="text-xs uppercase tracking-widest mr-1" style={{ color: 'rgba(255,255,255,0.35)' }}>Overall</span>
+        <span className="text-xs uppercase tracking-widest mr-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>Overall</span>
         <span className="text-sm font-bold px-3 py-1 rounded-full"
           style={{
             background: overallPass ? '#22C55E20' : '#EF444420',
@@ -770,7 +770,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
           {overallPass ? 'PASS' : `FAIL — ${failCount} violation${failCount !== 1 ? 's' : ''}`}
         </span>
         {inspectionId && (
-          <span className="text-xs font-mono ml-2" style={{ color: 'rgba(255,255,255,0.2)' }}>{inspectionId}</span>
+          <span className="text-xs font-mono ml-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.2)' }}>{inspectionId}</span>
         )}
       </div>
     </>

@@ -6,6 +6,27 @@ html.dark {
   --bg-input:     #2a2a2a;
   --bg-lighter:   #2e2e2e;
   --border-color: #333333;
+
+  /* HD Suite chrome. HD renders its surfaces through inline styles rather than
+     utility classes, so the light-mode remapping further down this file — which
+     works by overriding class rules — can never reach it. These variables are how
+     HD participates in the theme at all: the components reference var(--hd-*) and
+     the value swaps here. Brand orange, brand blue and the status colors are
+     deliberately absent; they are identical in both themes and stay literal. */
+  --hd-bg:            #0a0f14;
+  --hd-card:          #111920;
+  --hd-inner:         #162030;
+  --hd-sunken:        #0d1820;
+  --hd-border:        #1e3040;
+  --hd-text:          #ffffff;
+  --hd-footer:        #1a1a1a;
+  --hd-footer-border: #2a2a2a;
+
+  /* HD writes white text at a dozen different alphas through inline styles
+     (rgba(255,255,255,.4) and friends), which no class override can reach. Kept as
+     an RGB TRIPLET, not a color, so every existing alpha survives the swap intact:
+     rgba(var(--hd-ink-rgb), 0.4). Same idea as the text-white/NN remaps below. */
+  --hd-ink-rgb:       255, 255, 255;
 }
 
 html.light {
@@ -14,6 +35,20 @@ html.light {
   --bg-input:     #f0f0f0;
   --bg-lighter:   #e8e8e8;
   --border-color: #e0e0e0;
+
+  /* HD light mode reuses LD's neutral palette so the two suites read as one
+     product. The cool blue-black cast is intentionally dropped rather than
+     lightened — a tinted near-white fights LD's #f5f5f5 when a user crosses
+     between suites, which they do constantly. */
+  --hd-bg:            #f5f5f5;
+  --hd-card:          #ffffff;
+  --hd-inner:         #f0f0f0;
+  --hd-sunken:        #ebeef2;
+  --hd-border:        #e0e0e0;
+  --hd-text:          #1a1a1a;
+  --hd-footer:        #ededed;
+  --hd-footer-border: #dcdcdc;
+  --hd-ink-rgb:       26, 26, 26;
 }
 
 @tailwind base;

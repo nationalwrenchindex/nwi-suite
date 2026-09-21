@@ -50,32 +50,32 @@ export default function FleetAccountList({
     <>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {rows.length === 0 ? (
-          <div className="col-span-full py-16 text-center rounded-xl" style={{ background: '#111920', border: '1px solid #1e3040' }}>
-            <p className="text-sm mb-1" style={{ color: 'rgba(255,255,255,0.3)' }}>No fleet accounts yet</p>
-            <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.2)' }}>Add commercial fleet customers to organize your service accounts</p>
-            <Link href="?new=1" className="text-xs px-4 py-2 rounded-lg font-semibold" style={{ background: HD_ORANGE, color: '#fff' }}>
+          <div className="col-span-full py-16 text-center rounded-xl" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
+            <p className="text-sm mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>No fleet accounts yet</p>
+            <p className="text-xs mb-3" style={{ color: 'rgba(var(--hd-ink-rgb), 0.2)' }}>Add commercial fleet customers to organize your service accounts</p>
+            <Link href="?new=1" className="text-xs px-4 py-2 rounded-lg font-semibold" style={{ background: HD_ORANGE, color: 'var(--hd-text)' }}>
               + Add First Account
             </Link>
           </div>
         ) : (
           rows.map(a => (
-            <div key={a.id} className="relative rounded-xl p-5 transition-colors hover:border-white/20" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+            <div key={a.id} className="relative rounded-xl p-5 transition-colors hover:border-white/20" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
               {/* Full-card link to the detail page */}
               <Link href={`/hd/fleet-accounts/${a.id}`} className="absolute inset-0 rounded-xl" aria-label={`View ${a.fleet_name}`} />
               {/* Edit link sits above the overlay */}
               <Link
                 href={`/hd/fleet-accounts/${a.id}?edit=1`}
                 className="absolute top-3 right-3 z-10 text-xs font-semibold px-2.5 py-1 rounded-lg"
-                style={{ color: '#60A5FA', border: '1px solid #1e3040', background: '#111920' }}
+                style={{ color: '#60A5FA', border: '1px solid var(--hd-border)', background: 'var(--hd-card)' }}
               >
                 Edit
               </Link>
               <div className="relative pointer-events-none pr-12">
                 <p className="font-condensed font-bold text-white text-lg tracking-wide">{a.fleet_name}</p>
-                {a.contact_name  && <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.6)' }}>{a.contact_name}</p>}
-                {a.contact_phone && <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>{a.contact_phone}</p>}
-                {a.contact_email && <p className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>{a.contact_email}</p>}
-                {a.address       && <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.3)' }}>📍 {a.address}</p>}
+                {a.contact_name  && <p className="text-sm mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>{a.contact_name}</p>}
+                {a.contact_phone && <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>{a.contact_phone}</p>}
+                {a.contact_email && <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>{a.contact_email}</p>}
+                {a.address       && <p className="text-xs mt-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>📍 {a.address}</p>}
               </div>
             </div>
           ))
@@ -90,14 +90,14 @@ export default function FleetAccountList({
 
       {hasMore && (
         <div className="flex flex-col items-center gap-2 mt-4">
-          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>
+          <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
             Showing {rows.length.toLocaleString()} of {total.toLocaleString()}
           </p>
           <button
             onClick={loadMore}
             disabled={loading}
             className="px-5 py-2.5 rounded-lg text-sm font-semibold disabled:opacity-50"
-            style={{ color: 'rgba(255,255,255,0.7)', background: '#111920', border: '1px solid #1e3040' }}
+            style={{ color: 'rgba(var(--hd-ink-rgb), 0.7)', background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}
           >
             {loading ? 'Loading…' : 'Load More'}
           </button>

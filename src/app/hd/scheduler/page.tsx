@@ -50,10 +50,10 @@ export default async function HDSchedulerPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>HD Suite</p>
+          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>HD Suite</p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">SCHEDULER</h1>
           {techName && (
-            <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>{techName}</p>
+            <p className="text-sm mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{techName}</p>
           )}
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">

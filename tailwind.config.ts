@@ -29,11 +29,15 @@ const config: Config = {
           input:   'var(--bg-input)',
           lighter: 'var(--bg-lighter)',
         },
+        // Point at the same variables the HD inline styles use, so a class and an
+        // inline style resolve to one value per theme. orange/blue stay literal:
+        // the brand does not change between light and dark.
         hd: {
-          bg:     '#0a0f14',
-          card:   '#111920',
-          inner:  '#162030',
-          border: '#1e3040',
+          bg:     'var(--hd-bg)',
+          card:   'var(--hd-card)',
+          inner:  'var(--hd-inner)',
+          sunken: 'var(--hd-sunken)',
+          border: 'var(--hd-border)',
           orange: '#E85D24',
           blue:   '#1A6BAF',
         },

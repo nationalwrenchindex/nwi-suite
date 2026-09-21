@@ -20,9 +20,9 @@ import {
 // column is read-only in both so cost and sell can never be typed out of step.
 
 const HD_ORANGE = '#E85D24'
-const CARD      = '#111920'
-const HEAD      = '#162030'
-const BORDER    = '#1e3040'
+const CARD      = 'var(--hd-card)'
+const HEAD      = 'var(--hd-inner)'
+const BORDER    = 'var(--hd-border)'
 const BLUE      = '#3B82F6'
 
 // Rows are edited as strings so a half-typed "1." or a cleared field does not snap
@@ -203,9 +203,9 @@ export default function WorkOrderLineItems({ workOrderId, canEdit }: { workOrder
 
   return (
     <div className="rounded-xl overflow-hidden mb-6" style={{ border: `1px solid ${BORDER}` }}>
-      <div className="px-5 py-3 flex flex-wrap items-center justify-between gap-2" style={{ background: '#0d1820', borderBottom: `1px solid ${BORDER}` }}>
+      <div className="px-5 py-3 flex flex-wrap items-center justify-between gap-2" style={{ background: 'var(--hd-sunken)', borderBottom: `1px solid ${BORDER}` }}>
         <p className="font-condensed font-bold text-white text-sm tracking-widest">PARTS &amp; LABOR</p>
-        <span className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
+        <span className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
           {lines.length} line{lines.length !== 1 ? 's' : ''}
         </span>
       </div>
@@ -248,10 +248,10 @@ export default function WorkOrderLineItems({ workOrderId, canEdit }: { workOrder
         )}
 
         {loading ? (
-          <p className="p-5 text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>Loading line items…</p>
+          <p className="p-5 text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>Loading line items…</p>
         ) : lines.length === 0 ? (
           <div className="p-5">
-            <p className="text-xs py-4 text-center" style={{ color: 'rgba(255,255,255,0.25)', border: `1px dashed ${BORDER}`, borderRadius: 8 }}>
+            <p className="text-xs py-4 text-center" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)', border: `1px dashed ${BORDER}`, borderRadius: 8 }}>
               {canEdit ? 'No parts or labor on this job yet — add a line above' : 'No parts or labor on this job'}
             </p>
           </div>
@@ -259,7 +259,7 @@ export default function WorkOrderLineItems({ workOrderId, canEdit }: { workOrder
           <div className="overflow-x-auto">
             <table className="w-full text-sm" style={{ minWidth: 860 }}>
               <thead style={{ background: HEAD }}>
-                <tr style={{ color: 'rgba(255,255,255,0.4)' }}>
+                <tr style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
                   <th className={thCls} style={{ width: 60 }}>Type</th>
                   <th className={thCls} style={{ width: 130 }}>Part #</th>
                   <th className={thCls}>Description</th>
@@ -294,7 +294,7 @@ export default function WorkOrderLineItems({ workOrderId, canEdit }: { workOrder
                             placeholder="37-33-6021"
                           />
                         ) : (
-                          <span style={{ color: 'rgba(255,255,255,0.25)' }}>—</span>
+                          <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>—</span>
                         )}
                       </td>
                       <td className="px-3 py-2">
@@ -322,7 +322,7 @@ export default function WorkOrderLineItems({ workOrderId, canEdit }: { workOrder
                             placeholder="0.00"
                           />
                         ) : (
-                          <span style={{ color: 'rgba(255,255,255,0.25)' }}>—</span>
+                          <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>—</span>
                         )}
                       </td>
                       <td className="px-3 py-2">
@@ -333,7 +333,7 @@ export default function WorkOrderLineItems({ workOrderId, canEdit }: { workOrder
                             value={d.markup_percent} onChange={e => update(d.key, { markup_percent: e.target.value })}
                           />
                         ) : (
-                          <span style={{ color: 'rgba(255,255,255,0.25)' }}>—</span>
+                          <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>—</span>
                         )}
                       </td>
                       <td className="px-3 py-2">
@@ -342,7 +342,7 @@ export default function WorkOrderLineItems({ workOrderId, canEdit }: { workOrder
                             markup — the hourly rate is already the sell price, so it
                             stays an editable field. */}
                         {isPart ? (
-                          <span className="font-semibold" style={{ color: 'rgba(255,255,255,0.85)' }}>{fmt(draftSell(d))}</span>
+                          <span className="font-semibold" style={{ color: 'rgba(var(--hd-ink-rgb), 0.85)' }}>{fmt(draftSell(d))}</span>
                         ) : (
                           <input
                             type="number" min="0" step="0.01"
@@ -357,9 +357,9 @@ export default function WorkOrderLineItems({ workOrderId, canEdit }: { workOrder
                         <td className="px-3 py-2">
                           <div className="flex items-center gap-1">
                             <button type="button" onClick={() => move(i, -1)} disabled={i === 0}
-                              className="px-1.5 py-0.5 rounded text-xs disabled:opacity-25" style={{ color: 'rgba(255,255,255,0.5)', border: `1px solid ${BORDER}` }} title="Move up">↑</button>
+                              className="px-1.5 py-0.5 rounded text-xs disabled:opacity-25" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)', border: `1px solid ${BORDER}` }} title="Move up">↑</button>
                             <button type="button" onClick={() => move(i, 1)} disabled={i === lines.length - 1}
-                              className="px-1.5 py-0.5 rounded text-xs disabled:opacity-25" style={{ color: 'rgba(255,255,255,0.5)', border: `1px solid ${BORDER}` }} title="Move down">↓</button>
+                              className="px-1.5 py-0.5 rounded text-xs disabled:opacity-25" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)', border: `1px solid ${BORDER}` }} title="Move down">↓</button>
                             <button type="button" onClick={() => removeLine(d.key)}
                               className="px-1.5 py-0.5 rounded text-xs" style={{ color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)' }} title="Remove line">×</button>
                           </div>
@@ -376,16 +376,16 @@ export default function WorkOrderLineItems({ workOrderId, canEdit }: { workOrder
         {lines.length > 0 && (
           <div className="px-5 py-4 flex justify-end" style={{ borderTop: `1px solid ${BORDER}` }}>
             <div style={{ width: 260 }}>
-              <div className="flex justify-between py-1 text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>
+              <div className="flex justify-between py-1 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
                 <span>Labor</span><span>{fmt(totals.labor)}</span>
               </div>
-              <div className="flex justify-between py-1 text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>
+              <div className="flex justify-between py-1 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
                 <span>Parts</span><span>{fmt(totals.parts)}</span>
               </div>
               {/* Margin is the tech's own figure, shown here because this screen is
                   the internal job sheet. It is not on any customer-facing document. */}
               {totals.partsCost > 0 && (
-                <div className="flex justify-between py-1 text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                <div className="flex justify-between py-1 text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
                   <span>Parts cost (your margin {fmt(totals.parts - totals.partsCost)})</span><span>{fmt(totals.partsCost)}</span>
                 </div>
               )}
@@ -396,7 +396,7 @@ export default function WorkOrderLineItems({ workOrderId, canEdit }: { workOrder
               {/* The work order's own total_amount is a separate stored figure that
                   predates these rows. It is left untouched on purpose so the
                   financials pages that read it do not shift under a saved line. */}
-              <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.3)' }}>
+              <p className="text-xs mt-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
                 Carried onto the invoice when you bill this job.
               </p>
             </div>

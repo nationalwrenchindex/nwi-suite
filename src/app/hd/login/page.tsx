@@ -28,7 +28,7 @@ export default function HDLoginPage() {
   }
 
   return (
-    <div className="min-h-dvh flex items-center justify-center p-6" style={{ background: '#0a0f14' }}>
+    <div className="min-h-dvh flex items-center justify-center p-6" style={{ background: 'var(--hd-bg)' }}>
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
           <div className="inline-flex items-center gap-3 mb-3">
@@ -44,9 +44,9 @@ export default function HDLoginPage() {
           <h1 className="font-condensed font-bold text-2xl text-white tracking-wide">SIGN IN</h1>
         </div>
 
-        <form onSubmit={handleLogin} className="rounded-xl p-6 space-y-4" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+        <form onSubmit={handleLogin} className="rounded-xl p-6 space-y-4" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
           <div>
-            <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Email</label>
+            <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Email</label>
             <input
               type="email"
               value={email}
@@ -54,11 +54,11 @@ export default function HDLoginPage() {
               required
               placeholder="you@example.com"
               className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
-              style={{ background: '#162030', border: '1px solid #1e3040' }}
+              style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
             />
           </div>
           <div>
-            <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Password</label>
+            <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Password</label>
             <input
               type="password"
               value={pass}
@@ -66,7 +66,7 @@ export default function HDLoginPage() {
               required
               placeholder="••••••••"
               className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
-              style={{ background: '#162030', border: '1px solid #1e3040' }}
+              style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
             />
           </div>
           {error && <p className="text-sm text-red-400">{error}</p>}
@@ -80,7 +80,7 @@ export default function HDLoginPage() {
           </button>
         </form>
 
-        <p className="text-center text-xs mt-4" style={{ color: 'rgba(255,255,255,0.25)' }}>
+        <p className="text-center text-xs mt-4" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>
           No account?{' '}
           <a href="/hd/signup" style={{ color: HD_ORANGE }}>Start today</a>
         </p>

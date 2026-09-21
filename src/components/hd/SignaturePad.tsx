@@ -111,7 +111,7 @@ export default function SignaturePad({
     <div>
       <canvas
         ref={canvasRef}
-        style={{ width: '100%', height, background: '#0f1820', border: '1px solid #1e3040', borderRadius: 8, touchAction: 'none' }}
+        style={{ width: '100%', height, background: '#0f1820', border: '1px solid var(--hd-border)', borderRadius: 8, touchAction: 'none' }}
       />
       <div className="flex items-center justify-between mt-1.5">
         <p className="text-white/25 text-xs">

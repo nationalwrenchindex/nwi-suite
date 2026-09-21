@@ -286,7 +286,7 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
                 <a
                   href={telHref(bizPhone)}
                   className="inline-block w-full font-bold text-base rounded-lg py-3.5"
-                  style={{ background: ORANGE, color: '#FFFFFF' }}
+                  style={{ background: ORANGE, color: 'var(--hd-text)' }}
                 >
                   Call {bizPhone}
                 </a>

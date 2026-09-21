@@ -64,7 +64,7 @@ export default function ExportData() {
 
   return (
     <div className="space-y-3">
-      <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>
+      <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
         Exports: Fleet Accounts, Units, Work Orders, PM Checklists, DOT Inspections, EPA Log
       </p>
       <button

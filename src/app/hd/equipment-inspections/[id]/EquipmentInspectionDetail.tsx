@@ -82,11 +82,11 @@ export default function EquipmentInspectionDetail({
         </button>
       </div>
 
-      <div className="print-doc rounded-xl p-6" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+      <div className="print-doc rounded-xl p-6" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
 
         {/* Document header — subscriber branding. Never .no-print: the brand is
             part of the document, not the app chrome. */}
-        <div className="pb-4 mb-4" style={{ borderBottom: '2px solid #1e3040' }}>
+        <div className="pb-4 mb-4" style={{ borderBottom: '2px solid var(--hd-border)' }}>
           <BrandHeader branding={branding} className="text-white mb-3" />
           <p className="font-condensed font-bold text-xl text-white tracking-wide">{def.title}</p>
           <p className="text-white/50 text-xs mt-0.5">{def.citation}</p>
@@ -137,16 +137,16 @@ export default function EquipmentInspectionDetail({
             <p className="text-white text-sm font-semibold mb-1.5">
               <span className="text-white/30 mr-2">§{section.num}</span>{section.label}
             </p>
-            <div style={{ border: '1px solid #1e3040', borderRadius: 6, overflow: 'hidden' }}>
+            <div style={{ border: '1px solid var(--hd-border)', borderRadius: 6, overflow: 'hidden' }}>
               {section.items.map((item, i) => {
                 const st = record.inspection_data?.sections?.[section.id]?.items?.[item.id]
                 const pill = resultPill((st?.result ?? '') as ItemResult | '')
                 return (
-                  <div key={item.id} style={{ borderTop: i === 0 ? undefined : '1px solid #1e3040' }}>
+                  <div key={item.id} style={{ borderTop: i === 0 ? undefined : '1px solid var(--hd-border)' }}>
                     <div className="flex items-center gap-3 px-3 py-1.5">
                       <p className="flex-1 text-xs text-white/70">{item.label}</p>
                       <span className={`text-xs font-bold px-2 py-0.5 rounded ${pill.cls}`}
-                        style={{ background: pill.bg, color: '#fff', minWidth: 42, textAlign: 'center' }}>
+                        style={{ background: pill.bg, color: 'var(--hd-text)', minWidth: 42, textAlign: 'center' }}>
                         {pill.label}
                       </span>
                     </div>
@@ -195,7 +195,7 @@ export default function EquipmentInspectionDetail({
         )}
 
         {/* Signature block */}
-        <div className="pt-4 print-section" style={{ borderTop: '2px solid #1e3040' }}>
+        <div className="pt-4 print-section" style={{ borderTop: '2px solid var(--hd-border)' }}>
           <div className="grid grid-cols-2 gap-6">
             <div>
               <p className="text-white/35 text-xs uppercase tracking-widest mb-1">Inspector</p>

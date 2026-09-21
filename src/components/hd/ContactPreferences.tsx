@@ -13,7 +13,7 @@ import { suppressionLabel, type ContactSuppression } from '@/lib/customer-contac
 
 const HD_ORANGE = '#E85D24'
 
-const inputStyle = { background: '#162030', border: '1px solid #1e3040' }
+const inputStyle = { background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }
 
 interface Props {
   customerId: string
@@ -98,12 +98,12 @@ export default function ContactPreferences({ customerId, canEdit }: Props) {
   }, [customerId])
 
   const card = 'rounded-xl p-4 sm:p-5'
-  const cardStyle = { background: '#111b28', border: '1px solid #1e3040' }
+  const cardStyle = { background: '#111b28', border: '1px solid var(--hd-border)' }
 
   if (loading) {
     return (
       <div className={card} style={cardStyle}>
-        <p className="text-sm" style={{ color: 'rgba(255,255,255,0.35)' }}>Loading contact preferences…</p>
+        <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>Loading contact preferences…</p>
       </div>
     )
   }
@@ -132,7 +132,7 @@ export default function ContactPreferences({ customerId, canEdit }: Props) {
       <div className="flex items-start justify-between gap-3 mb-3">
         <div>
           <h3 className="text-sm font-semibold text-white">Contact Preferences</h3>
-          <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>
+          <p className="text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
             Stops automated texts and emails. Does not affect calls you place yourself.
           </p>
         </div>
@@ -143,7 +143,7 @@ export default function ContactPreferences({ customerId, canEdit }: Props) {
         <label className={`flex items-center justify-between gap-3 ${canEdit ? 'cursor-pointer' : ''}`}>
           <div>
             <span className="text-sm font-semibold text-white">Do not send SMS</span>
-            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>No review requests, reminders, or invoice texts.</p>
+            <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>No review requests, reminders, or invoice texts.</p>
           </div>
           <input
             type="checkbox"
@@ -158,7 +158,7 @@ export default function ContactPreferences({ customerId, canEdit }: Props) {
         <label className={`flex items-center justify-between gap-3 ${canEdit ? 'cursor-pointer' : ''}`}>
           <div>
             <span className="text-sm font-semibold text-white">Do not send email</span>
-            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>No emailed invoices, receipts, or reports.</p>
+            <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>No emailed invoices, receipts, or reports.</p>
           </div>
           <input
             type="checkbox"
@@ -171,7 +171,7 @@ export default function ContactPreferences({ customerId, canEdit }: Props) {
         </label>
 
         <div>
-          <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+          <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
             Note (optional)
           </label>
           <textarea
@@ -193,7 +193,7 @@ export default function ContactPreferences({ customerId, canEdit }: Props) {
       {saved && <p className="text-sm mt-3" style={{ color: '#22C55E' }}>Saved</p>}
 
       {prefs.contact_prefs_updated_at && (
-        <p className="text-xs mt-3" style={{ color: 'rgba(255,255,255,0.3)' }}>
+        <p className="text-xs mt-3" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
           Last updated {new Date(prefs.contact_prefs_updated_at).toLocaleDateString()}
         </p>
       )}

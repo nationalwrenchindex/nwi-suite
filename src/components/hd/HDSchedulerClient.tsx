@@ -118,7 +118,7 @@ function JobCard({ wo, laborRate }: { wo: WorkOrder; laborRate: number }) {
   return (
     <div
       className="rounded-xl p-5 flex flex-col gap-4"
-      style={{ background: '#111920', border: `1px solid ${color}50` }}
+      style={{ background: 'var(--hd-card)', border: `1px solid ${color}50` }}
     >
       {/* Header */}
       <div className="flex items-start justify-between">
@@ -134,7 +134,7 @@ function JobCard({ wo, laborRate }: { wo: WorkOrder; laborRate: number }) {
           <p className="font-condensed font-bold text-white text-lg tracking-wide leading-tight">
             {wo.work_order_number ?? `WO-${wo.id.slice(0, 6).toUpperCase()}`}
           </p>
-          <p className="text-sm mt-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
+          <p className="text-sm mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
             {wo.service_type ?? 'Service'}
           </p>
         </div>
@@ -145,14 +145,14 @@ function JobCard({ wo, laborRate }: { wo: WorkOrder; laborRate: number }) {
 
       {/* Unit and fleet info */}
       {(wo.unit || wo.fleet_account) && (
-        <div className="rounded-lg p-3 space-y-1" style={{ background: '#162030' }}>
+        <div className="rounded-lg p-3 space-y-1" style={{ background: 'var(--hd-inner)' }}>
           {wo.unit && (
             <p className="text-sm text-white font-medium">
               {wo.unit.unit_number} — {wo.unit.manufacturer} {wo.unit.model}
             </p>
           )}
           {wo.fleet_account && (
-            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>{wo.fleet_account.fleet_name}</p>
+            <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>{wo.fleet_account.fleet_name}</p>
           )}
         </div>
       )}
@@ -160,12 +160,12 @@ function JobCard({ wo, laborRate }: { wo: WorkOrder; laborRate: number }) {
       {/* Timer display */}
       {status === 'in_progress' && (
         <div className="rounded-lg p-4 text-center" style={{ background: `${HD_ORANGE}15`, border: `1px solid ${HD_ORANGE}30` }}>
-          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>On Job</p>
+          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>On Job</p>
           <p className="font-condensed font-bold text-4xl" style={{ color: HD_ORANGE }}>
             {timerOn ? formatElapsed(elapsed) : '--:--'}
           </p>
           {elapsed > 0 && (
-            <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+            <p className="text-xs mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
               est. ${laborEst.toFixed(0)} @ ${laborRate}/hr
             </p>
           )}
@@ -253,7 +253,7 @@ export default function HDSchedulerClient({
             className="px-4 py-2 rounded-lg text-sm font-medium"
             style={filter === f.key
               ? { background: `${HD_ORANGE}20`, color: HD_ORANGE, border: `1px solid ${HD_ORANGE}50` }
-              : { color: 'rgba(255,255,255,0.4)', border: '1px solid #1e3040' }
+              : { color: 'rgba(var(--hd-ink-rgb), 0.4)', border: '1px solid var(--hd-border)' }
             }
           >
             {f.label}
@@ -262,8 +262,8 @@ export default function HDSchedulerClient({
       </div>
 
       {displayed.length === 0 ? (
-        <div className="py-16 text-center rounded-xl" style={{ background: '#111920', border: '1px solid #1e3040' }}>
-          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>
+        <div className="py-16 text-center rounded-xl" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
+          <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
             {filter === 'active' ? 'No active jobs' : 'No work orders'}
           </p>
         </div>

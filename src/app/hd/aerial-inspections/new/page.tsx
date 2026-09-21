@@ -66,7 +66,7 @@ export default async function NewAerialInspectionPage({
               key={t}
               href={`/hd/aerial-inspections/new?type=${t}${params.unit ? `&unit=${params.unit}` : ''}${params.work_order ? `&work_order=${params.work_order}` : ''}`}
               className="block rounded-xl p-4 transition-colors hover:border-orange/40"
-              style={{ background: '#111920', border: '1px solid #1e3040' }}
+              style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}
             >
               <p className="text-white font-semibold">{def.title}</p>
               <p className="text-white/40 text-xs mt-0.5">{def.citation}</p>

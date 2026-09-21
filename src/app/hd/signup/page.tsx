@@ -200,7 +200,7 @@ function HDSignupForm() {
   })()
 
   return (
-    <div className="min-h-dvh flex flex-col items-center justify-center p-6" style={{ background: '#0a0f14' }}>
+    <div className="min-h-dvh flex flex-col items-center justify-center p-6" style={{ background: 'var(--hd-bg)' }}>
       <div className="w-full max-w-4xl">
 
         {/* Logo */}
@@ -215,7 +215,7 @@ function HDSignupForm() {
             </div>
             <div className="text-left">
               <p className="font-condensed font-bold text-white text-xl tracking-wide leading-none">NWI HD SUITE</p>
-              <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Heavy Duty &amp; Transport Refrigeration</p>
+              <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Heavy Duty &amp; Transport Refrigeration</p>
             </div>
           </div>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">
@@ -235,10 +235,10 @@ function HDSignupForm() {
 
                 const borderColor = isSelected
                   ? HD_ORANGE
-                  : isRecommended ? HD_ORANGE : '#1e3040'
+                  : isRecommended ? HD_ORANGE : 'var(--hd-border)'
                 const bg = isSelected
                   ? `${HD_ORANGE}18`
-                  : isRecommended ? `${HD_ORANGE}0D` : '#111920'
+                  : isRecommended ? `${HD_ORANGE}0D` : 'var(--hd-card)'
                 const shadow = isRecommended && !isSelected
                   ? '0 0 0 3px rgba(232,93,36,0.2)'
                   : undefined
@@ -261,7 +261,7 @@ function HDSignupForm() {
                         className="absolute -top-2.5 left-4 text-[10px] font-bold px-2.5 py-0.5 rounded-full uppercase tracking-wide"
                         style={{
                           background: isRecommended ? HD_ORANGE : HD_BLUE,
-                          color: '#fff',
+                          color: 'var(--hd-text)',
                         }}
                       >
                         {p.badge}
@@ -269,11 +269,11 @@ function HDSignupForm() {
                     )}
                     <p className="font-condensed font-bold text-white text-lg tracking-wide">{p.name}</p>
                     <p className="font-condensed font-bold text-3xl mt-1 mb-3" style={{ color: HD_ORANGE }}>
-                      {priceOf(p) === null ? '—' : `$${priceOf(p)}`}<span className="text-base font-normal" style={{ color: 'rgba(255,255,255,0.4)' }}>/mo</span>
+                      {priceOf(p) === null ? '—' : `$${priceOf(p)}`}<span className="text-base font-normal" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>/mo</span>
                     </p>
                     <ul className="space-y-1.5">
                       {p.features.map(f => (
-                        <li key={f} className="flex items-start gap-2 text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>
+                        <li key={f} className="flex items-start gap-2 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.7)' }}>
                           <span className="flex-shrink-0 mt-0.5" style={{ color: isSelected ? HD_ORANGE : '#22C55E' }}>✓</span>
                           {f}
                         </li>
@@ -296,14 +296,14 @@ function HDSignupForm() {
                   </svg>
                   <div className="flex-1">
                     <p className="text-sm font-semibold text-green-400">Promo code applied</p>
-                    <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                    <p className="text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
                       You will not be charged for 90 days. Your first payment of {selectedPrice === null ? 'your plan amount' : `$${selectedPrice}`}/month will be on {promoFirstPaymentDate}.
                       Card is required but will not be charged until {promoFirstPaymentDate}.
                     </p>
                     <button
                       onClick={handleRemovePromo}
                       className="text-xs mt-1.5 underline"
-                      style={{ color: 'rgba(255,255,255,0.3)' }}
+                      style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}
                     >
                       Remove code
                     </button>
@@ -311,7 +311,7 @@ function HDSignupForm() {
                 </div>
               ) : (
                 <div>
-                  <p className="text-xs mb-2" style={{ color: 'rgba(255,255,255,0.3)' }}>Have a promo code?</p>
+                  <p className="text-xs mb-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>Have a promo code?</p>
                   <div className="flex gap-2 max-w-sm">
                     <input
                       type="text"
@@ -323,14 +323,14 @@ function HDSignupForm() {
                       onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleApplyPromo() } }}
                       placeholder="Enter promo code"
                       className="flex-1 min-w-0 px-3 py-2 rounded-lg text-sm text-white placeholder-white/20"
-                      style={{ background: '#111920', border: '1px solid #1e3040' }}
+                      style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}
                     />
                     <button
                       type="button"
                       onClick={handleApplyPromo}
                       disabled={!promoInput.trim() || promoStatus === 'checking'}
                       className="px-4 py-2 rounded-lg text-sm font-medium transition-opacity disabled:opacity-40 whitespace-nowrap"
-                      style={{ border: '1px solid #1e3040', color: 'rgba(255,255,255,0.5)' }}
+                      style={{ border: '1px solid var(--hd-border)', color: 'rgba(var(--hd-ink-rgb), 0.5)' }}
                     >
                       {promoStatus === 'checking' ? <Spinner /> : 'Apply'}
                     </button>
@@ -350,7 +350,7 @@ function HDSignupForm() {
             >
               Continue with {selectedPlan.name} →
             </button>
-            <p className="text-center text-xs mt-3" style={{ color: 'rgba(255,255,255,0.3)' }}>
+            <p className="text-center text-xs mt-3" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
               {promoStatus === 'valid'
                 ? 'Card required · Cancel anytime'
                 : 'Cancel anytime'}
@@ -361,7 +361,7 @@ function HDSignupForm() {
         {/* ── Step 2: Account creation ── */}
         {step === 'account' && (
           <form onSubmit={handleSignup} className="max-w-md mx-auto">
-            <div className="rounded-xl p-6 space-y-4" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+            <div className="rounded-xl p-6 space-y-4" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
               <div className="flex items-center justify-between">
                 <p className="font-condensed font-bold text-white text-lg">Account Details</p>
                 <div className="flex items-center gap-2">
@@ -383,7 +383,7 @@ function HDSignupForm() {
                 { label: 'Password',       value: pass,  setter: setPass,  type: 'password', placeholder: '8+ characters'        },
               ].map(({ label, value, setter, type, placeholder }) => (
                 <div key={label}>
-                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
                     {label}
                   </label>
                   <input
@@ -393,7 +393,7 @@ function HDSignupForm() {
                     placeholder={placeholder}
                     required
                     className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
-                    style={{ background: '#162030', border: '1px solid #1e3040' }}
+                    style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
                   />
                 </div>
               ))}
@@ -423,14 +423,14 @@ function HDSignupForm() {
               type="button"
               onClick={() => setStep('plan')}
               className="mt-3 text-xs w-full text-center"
-              style={{ color: 'rgba(255,255,255,0.3)' }}
+              style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}
             >
               ← Change plan
             </button>
           </form>
         )}
 
-        <p className="text-center text-xs mt-6" style={{ color: 'rgba(255,255,255,0.25)' }}>
+        <p className="text-center text-xs mt-6" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>
           Already have an account?{' '}
           <a href="/hd/login" style={{ color: HD_ORANGE }}>Sign in</a>
         </p>

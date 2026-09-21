@@ -127,13 +127,13 @@ export default function ImportData() {
     setImported(0)
   }
 
-  const confidenceColor = (c: string) => c === 'high' ? '#22C55E' : c === 'medium' ? '#F59E0B' : 'rgba(255,255,255,0.3)'
+  const confidenceColor = (c: string) => c === 'high' ? '#22C55E' : c === 'medium' ? '#F59E0B' : 'rgba(var(--hd-ink-rgb), 0.3)'
 
   return (
     <div>
       {phase === 'idle' && (
         <div className="space-y-3">
-          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>
+          <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
             Upload a CSV file of fleet units. AI maps your column headers to NWI fields — you review before importing.
           </p>
           <input
@@ -146,7 +146,7 @@ export default function ImportData() {
           <button
             onClick={() => fileRef.current?.click()}
             className="px-5 py-2.5 rounded-lg text-sm font-semibold"
-            style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.7)', border: '1px solid #1e3040' }}
+            style={{ background: 'rgba(var(--hd-ink-rgb), 0.05)', color: 'rgba(var(--hd-ink-rgb), 0.7)', border: '1px solid var(--hd-border)' }}
           >
             Upload CSV →
           </button>
@@ -156,29 +156,29 @@ export default function ImportData() {
       {phase === 'mapping' && (
         <div className="flex items-center gap-2 py-3">
           <div className="w-4 h-4 rounded-full border-2 animate-spin" style={{ borderColor: `${HD_ORANGE}40`, borderTopColor: HD_ORANGE }} />
-          <span className="text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>AI is mapping your columns…</span>
+          <span className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>AI is mapping your columns…</span>
         </div>
       )}
 
       {phase === 'confirm' && (
         <div className="space-y-4">
-          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>
+          <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
             {rowCount} rows detected. Review column mappings below, then import.
           </p>
-          <div className="rounded-lg overflow-hidden" style={{ border: '1px solid #1e3040' }}>
-            <div className="grid grid-cols-3 px-3 py-2 text-xs uppercase tracking-wider" style={{ background: '#162030', color: 'rgba(255,255,255,0.4)' }}>
+          <div className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
+            <div className="grid grid-cols-3 px-3 py-2 text-xs uppercase tracking-wider" style={{ background: 'var(--hd-inner)', color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
               <span>Your Column</span>
               <span>Maps To</span>
               <span>Confidence</span>
             </div>
             {mapping.map((m, i) => (
-              <div key={i} className="grid grid-cols-3 px-3 py-2 items-center text-sm" style={{ borderTop: '1px solid #1e3040', background: '#111920' }}>
+              <div key={i} className="grid grid-cols-3 px-3 py-2 items-center text-sm" style={{ borderTop: '1px solid var(--hd-border)', background: 'var(--hd-card)' }}>
                 <span className="text-white font-mono text-xs">{m.csv_header}</span>
                 <select
                   value={m.field_key ?? ''}
                   onChange={e => updateMapping(i, e.target.value || null)}
                   className="text-xs rounded px-2 py-1 mr-4"
-                  style={{ background: '#162030', color: 'rgba(255,255,255,0.8)', border: '1px solid #1e3040' }}
+                  style={{ background: 'var(--hd-inner)', color: 'rgba(var(--hd-ink-rgb), 0.8)', border: '1px solid var(--hd-border)' }}
                 >
                   <option value="">— skip —</option>
                   {fields.map(f => (
@@ -202,7 +202,7 @@ export default function ImportData() {
             <button
               onClick={reset}
               className="px-4 py-2.5 rounded-lg text-sm"
-              style={{ color: 'rgba(255,255,255,0.4)', border: '1px solid #1e3040' }}
+              style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)', border: '1px solid var(--hd-border)' }}
             >
               Cancel
             </button>
@@ -213,7 +213,7 @@ export default function ImportData() {
       {phase === 'importing' && (
         <div className="flex items-center gap-2 py-3">
           <div className="w-4 h-4 rounded-full border-2 animate-spin" style={{ borderColor: `${HD_ORANGE}40`, borderTopColor: HD_ORANGE }} />
-          <span className="text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>Importing rows…</span>
+          <span className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>Importing rows…</span>
         </div>
       )}
 
@@ -222,14 +222,14 @@ export default function ImportData() {
           <p className="text-sm font-semibold" style={{ color: '#22C55E' }}>
             Successfully imported {imported} unit{imported !== 1 ? 's' : ''}
           </p>
-          <button onClick={reset} className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Import another file</button>
+          <button onClick={reset} className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Import another file</button>
         </div>
       )}
 
       {phase === 'error' && (
         <div className="space-y-3">
           <p className="text-sm text-red-400">{error}</p>
-          <button onClick={reset} className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>Try again</button>
+          <button onClick={reset} className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Try again</button>
         </div>
       )}
     </div>

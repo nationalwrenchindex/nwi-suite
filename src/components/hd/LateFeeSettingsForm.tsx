@@ -13,7 +13,7 @@ interface Props {
   initialActive:         boolean
 }
 
-const inputStyle = { background: '#162030', border: '1px solid #1e3040' }
+const inputStyle = { background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }
 
 export default function LateFeeSettingsForm({
   initialFeeType, initialFlatFee, initialPercentageRate, initialGraceDays, initialSendSms, initialActive,
@@ -63,14 +63,14 @@ export default function LateFeeSettingsForm({
       <label className="flex items-center justify-between gap-3 cursor-pointer">
         <div>
           <span className="text-sm font-semibold text-white">Late fees active</span>
-          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>Master switch — turn the whole engine on or off.</p>
+          <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>Master switch — turn the whole engine on or off.</p>
         </div>
         <input type="checkbox" checked={active} onChange={e => setActive(e.target.checked)} className="w-5 h-5" style={{ accentColor: HD_ORANGE }} />
       </label>
 
       {/* Fee type toggle */}
       <div>
-        <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Fee Type</label>
+        <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Fee Type</label>
         <div className="flex gap-2">
           {(['flat', 'percentage'] as const).map(t => (
             <button
@@ -79,8 +79,8 @@ export default function LateFeeSettingsForm({
               onClick={() => setFeeType(t)}
               className="flex-1 py-2.5 rounded-lg text-sm font-semibold capitalize transition-colors"
               style={feeType === t
-                ? { background: HD_ORANGE, color: '#fff', border: `1px solid ${HD_ORANGE}` }
-                : { background: '#162030', color: 'rgba(255,255,255,0.6)', border: '1px solid #1e3040' }}
+                ? { background: HD_ORANGE, color: 'var(--hd-text)', border: `1px solid ${HD_ORANGE}` }
+                : { background: 'var(--hd-inner)', color: 'rgba(var(--hd-ink-rgb), 0.6)', border: '1px solid var(--hd-border)' }}
             >
               {t === 'flat' ? 'Flat Fee' : 'Percentage'}
             </button>
@@ -91,13 +91,13 @@ export default function LateFeeSettingsForm({
       {/* Flat fee amount */}
       {feeType === 'flat' ? (
         <div>
-          <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Flat Fee Amount ($)</label>
+          <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Flat Fee Amount ($)</label>
           <input type="number" min="0" step="0.01" value={flatFee} onChange={e => setFlatFee(e.target.value)}
             placeholder="25.00" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={inputStyle} />
         </div>
       ) : (
         <div>
-          <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Monthly Rate (% of invoice total)</label>
+          <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Monthly Rate (% of invoice total)</label>
           <input type="number" min="0" step="0.1" value={rate} onChange={e => setRate(e.target.value)}
             placeholder="1.5" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={inputStyle} />
         </div>
@@ -105,17 +105,17 @@ export default function LateFeeSettingsForm({
 
       {/* Grace period */}
       <div>
-        <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Grace Period (days past due)</label>
+        <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Grace Period (days past due)</label>
         <input type="number" min="0" step="1" value={graceDays} onChange={e => setGraceDays(e.target.value)}
           placeholder="0" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={inputStyle} />
-        <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>Days after the due date before a late fee is applied.</p>
+        <p className="text-xs mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>Days after the due date before a late fee is applied.</p>
       </div>
 
       {/* Send SMS */}
       <label className="flex items-center justify-between gap-3 cursor-pointer">
         <div>
           <span className="text-sm font-semibold text-white">Send SMS when late fee applied</span>
-          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>Texts the customer that a fee was added.</p>
+          <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>Texts the customer that a fee was added.</p>
         </div>
         <input type="checkbox" checked={sendSms} onChange={e => setSendSms(e.target.checked)} className="w-5 h-5" style={{ accentColor: HD_ORANGE }} />
       </label>

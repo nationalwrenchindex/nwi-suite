@@ -122,10 +122,10 @@ function fmtDate(iso: string) { return new Date(iso).toLocaleDateString('en-US',
 function StatCard({ label, value, sub, color = 'white' }: { label: string; value: string; sub?: string; color?: string }) {
   const textColor = color === 'orange' ? HD_ORANGE : color === 'blue' ? '#60A5FA' : color === 'green' ? '#22C55E' : color === 'red' ? '#EF4444' : '#ffffff'
   return (
-    <div className="rounded-xl p-5 flex flex-col gap-1" style={{ background: '#111920', border: '1px solid #1e3040' }}>
-      <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>{label}</p>
+    <div className="rounded-xl p-5 flex flex-col gap-1" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
+      <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{label}</p>
       <p className="font-condensed font-bold text-3xl leading-none" style={{ color: textColor }}>{value}</p>
-      {sub && <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>{sub}</p>}
+      {sub && <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>{sub}</p>}
     </div>
   )
 }
@@ -201,12 +201,12 @@ function CostMarginBlock({ periodParam, periodLabel }: { periodParam: string; pe
     return () => { cancelled = true }
   }, [periodParam])
 
-  if (loading) return <div className="h-32 animate-pulse rounded-xl" style={{ background: '#111920' }} />
+  if (loading) return <div className="h-32 animate-pulse rounded-xl" style={{ background: 'var(--hd-card)' }} />
   if (failed || !summary) {
     return (
-      <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+      <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
         <p className="font-condensed font-bold text-white text-lg tracking-wide mb-2">COST &amp; MARGIN</p>
-        <p className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>Margin data is unavailable right now.</p>
+        <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>Margin data is unavailable right now.</p>
       </div>
     )
   }
@@ -273,8 +273,8 @@ function CostMarginBlock({ periodParam, periodLabel }: { periodParam: string; pe
       </div>
 
       {(noCost || s.cogs_partial) && (
-        <div className="rounded-xl p-4" style={{ background: '#162030', border: `1px solid ${HD_ORANGE}40` }}>
-          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.55)' }}>
+        <div className="rounded-xl p-4" style={{ background: 'var(--hd-inner)', border: `1px solid ${HD_ORANGE}40` }}>
+          <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.55)' }}>
             {noCost ? (
               <>
                 <span style={{ color: HD_ORANGE }}>Cost not recorded.</span>{' '}
@@ -327,7 +327,7 @@ function OverviewTab({ stats }: { stats: OverviewStats }) {
           />
         </div>
         {stats.taxCollected > 0 && (
-          <p className="text-xs mt-3" style={{ color: 'rgba(255,255,255,0.3)' }}>
+          <p className="text-xs mt-3" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
             {fmt(stats.invoiceRevenue)} revenue + {fmt(stats.taxCollected)} sales tax
             = {fmt(stats.invoiceRevenue + stats.taxCollected)} invoiced. Tax is remitted, not earned.
           </p>
@@ -357,11 +357,11 @@ function OverviewTab({ stats }: { stats: OverviewStats }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Revenue by account */}
-        <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+        <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide mb-1">WORK BY FLEET ACCOUNT</p>
-          <p className="text-xs mb-4" style={{ color: 'rgba(255,255,255,0.3)' }}>Job value closed this period</p>
+          <p className="text-xs mb-4" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>Job value closed this period</p>
           {stats.accountRows.length === 0 ? (
-            <p className="text-sm py-8 text-center" style={{ color: 'rgba(255,255,255,0.25)' }}>No data for this period</p>
+            <p className="text-sm py-8 text-center" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>No data for this period</p>
           ) : (
             <div className="space-y-3">
               {stats.accountRows.map(row => {
@@ -375,11 +375,11 @@ function OverviewTab({ stats }: { stats: OverviewStats }) {
                     <div className="flex items-center justify-between mb-1">
                       <p className="text-sm text-white truncate">{row.name}</p>
                       <div className="flex items-center gap-3">
-                        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>{row.count} job{row.count !== 1 ? 's' : ''}</p>
+                        <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{row.count} job{row.count !== 1 ? 's' : ''}</p>
                         <p className="text-sm font-medium" style={{ color: HD_ORANGE }}>{fmt(row.revenue)}</p>
                       </div>
                     </div>
-                    <div className="h-1.5 rounded-full overflow-hidden" style={{ background: '#1e3040' }}>
+                    <div className="h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--hd-border)' }}>
                       <div className="h-full rounded-full" style={{ width: `${pct}%`, background: HD_ORANGE }} />
                     </div>
                   </div>
@@ -390,30 +390,30 @@ function OverviewTab({ stats }: { stats: OverviewStats }) {
         </div>
 
         {/* Labor efficiency */}
-        <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+        <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide mb-4">LABOR EFFICIENCY</p>
           <div className="space-y-4">
-            <div className="rounded-lg p-4" style={{ background: '#162030' }}>
-              <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>Labor Revenue</p>
+            <div className="rounded-lg p-4" style={{ background: 'var(--hd-inner)' }}>
+              <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Labor Revenue</p>
               <p className="font-condensed font-bold text-2xl" style={{ color: '#22C55E' }}>{fmt(stats.laborRevenue)}</p>
-              <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+              <p className="text-xs mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
                 {stats.totalLaborHours.toFixed(1)} hrs × ${stats.hourlyRate}/hr
               </p>
             </div>
-            <div className="rounded-lg p-4" style={{ background: '#162030' }}>
+            <div className="rounded-lg p-4" style={{ background: 'var(--hd-inner)' }}>
               {/* Of JOB value, not of invoiced revenue: the hours above come off work
                   orders, so the denominator has to be those same work orders' totals
                   or the ratio compares two different populations. */}
-              <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>Labor as % of Job Value</p>
+              <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Labor as % of Job Value</p>
               <p className="font-condensed font-bold text-2xl text-white">{stats.laborPct.toFixed(0)}%</p>
-              <div className="mt-2 h-2 rounded-full overflow-hidden" style={{ background: '#1e3040' }}>
+              <div className="mt-2 h-2 rounded-full overflow-hidden" style={{ background: 'var(--hd-border)' }}>
                 <div className="h-full rounded-full" style={{
                   width: `${Math.min(100, stats.laborPct)}%`,
                   background: stats.laborPct > 80 ? '#22C55E' : stats.laborPct > 50 ? HD_ORANGE : '#EF4444',
                 }} />
               </div>
             </div>
-            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>
+            <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
               Update your rate in <Link href="/hd/settings" style={{ color: HD_ORANGE }}>Settings</Link>
             </p>
           </div>
@@ -447,7 +447,7 @@ function InvoicesTab() {
       .finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <div className="h-40 animate-pulse rounded-xl" style={{ background: '#111920' }} />
+  if (loading) return <div className="h-40 animate-pulse rounded-xl" style={{ background: 'var(--hd-card)' }} />
 
   // No totals means the server-side sum failed. Show a dash: a figure derived from the
   // page here would be wrong by exactly the margin this whole change exists to remove.
@@ -471,7 +471,7 @@ function InvoicesTab() {
       </div>
 
       <div className="flex items-center justify-between">
-        <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>
+        <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
           {count} Invoice{count !== 1 ? 's' : ''}{invoices.length < count ? ` · showing ${invoices.length}` : ''}
         </p>
         <Link
@@ -484,12 +484,12 @@ function InvoicesTab() {
       </div>
 
       {invoices.length === 0 ? (
-        <div className="py-16 text-center rounded-xl" style={{ background: '#111920', border: '1px solid #1e3040' }}>
-          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>No invoices yet</p>
+        <div className="py-16 text-center rounded-xl" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
+          <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>No invoices yet</p>
         </div>
       ) : (
-        <div className="rounded-xl overflow-hidden" style={{ background: '#111920', border: '1px solid #1e3040' }}>
-          <div className="divide-y" style={{ borderColor: '#1e3040' }}>
+        <div className="rounded-xl overflow-hidden" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
+          <div className="divide-y" style={{ borderColor: 'var(--hd-border)' }}>
             {invoices.map(inv => {
               const cfg = statusCfg(INVOICE_STATUS, inv.status)
               return (
@@ -511,10 +511,10 @@ function InvoicesTab() {
                       </span>
                     </div>
                     {inv.customer_name && (
-                      <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>{inv.customer_name}</p>
+                      <p className="text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>{inv.customer_name}</p>
                     )}
                     {(inv.unit_manufacturer || inv.unit_model) && (
-                      <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                      <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
                         {inv.unit_manufacturer} {inv.unit_model}
                       </p>
                     )}
@@ -523,7 +523,7 @@ function InvoicesTab() {
                     <p className="text-sm font-semibold" style={{ color: HD_ORANGE }}>
                       {inv.total != null ? fmt(Number(inv.total)) : '—'}
                     </p>
-                    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>{fmtDate(inv.created_at)}</p>
+                    <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>{fmtDate(inv.created_at)}</p>
                   </div>
                 </Link>
               )
@@ -548,12 +548,12 @@ function QuotesTab() {
       .finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <div className="h-40 animate-pulse rounded-xl" style={{ background: '#111920' }} />
+  if (loading) return <div className="h-40 animate-pulse rounded-xl" style={{ background: 'var(--hd-card)' }} />
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>
+        <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
           {quotes.length} Quote{quotes.length !== 1 ? 's' : ''}
         </p>
         <Link
@@ -566,12 +566,12 @@ function QuotesTab() {
       </div>
 
       {quotes.length === 0 ? (
-        <div className="py-16 text-center rounded-xl" style={{ background: '#111920', border: '1px solid #1e3040' }}>
-          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>No quotes yet</p>
+        <div className="py-16 text-center rounded-xl" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
+          <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>No quotes yet</p>
         </div>
       ) : (
-        <div className="rounded-xl overflow-hidden" style={{ background: '#111920', border: '1px solid #1e3040' }}>
-          <div className="divide-y" style={{ borderColor: '#1e3040' }}>
+        <div className="rounded-xl overflow-hidden" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
+          <div className="divide-y" style={{ borderColor: 'var(--hd-border)' }}>
             {quotes.map(q => {
               const cfg = statusCfg(QUOTE_STATUS, q.status)
               return (
@@ -593,10 +593,10 @@ function QuotesTab() {
                       </span>
                     </div>
                     {q.customer_name && (
-                      <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>{q.customer_name}</p>
+                      <p className="text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>{q.customer_name}</p>
                     )}
                     {(q.unit_manufacturer || q.unit_model) && (
-                      <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                      <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
                         {q.unit_manufacturer} {q.unit_model}
                       </p>
                     )}
@@ -605,7 +605,7 @@ function QuotesTab() {
                     <p className="text-sm font-semibold" style={{ color: HD_ORANGE }}>
                       {q.total != null ? fmt(Number(q.total)) : '—'}
                     </p>
-                    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>{fmtDate(q.created_at)}</p>
+                    <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>{fmtDate(q.created_at)}</p>
                   </div>
                 </Link>
               )
@@ -666,13 +666,13 @@ function ExpensesTab() {
 
   const total = expenses.reduce((s, e) => s + Number(e.amount), 0)
 
-  if (loading) return <div className="h-40 animate-pulse rounded-xl" style={{ background: '#111920' }} />
+  if (loading) return <div className="h-40 animate-pulse rounded-xl" style={{ background: 'var(--hd-card)' }} />
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>
+          <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
             {expenses.length} Expense{expenses.length !== 1 ? 's' : ''}
           </p>
           {expenses.length > 0 && (
@@ -690,43 +690,43 @@ function ExpensesTab() {
 
       {/* Add form */}
       {adding && (
-        <div className="rounded-xl p-5 space-y-3" style={{ background: '#111920', border: `1px solid ${HD_ORANGE}40` }}>
+        <div className="rounded-xl p-5 space-y-3" style={{ background: 'var(--hd-card)', border: `1px solid ${HD_ORANGE}40` }}>
           <p className="font-condensed font-bold text-white tracking-wide">LOG EXPENSE</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-xs mb-1 block" style={{ color: 'rgba(255,255,255,0.4)' }}>Category</label>
+              <label className="text-xs mb-1 block" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Category</label>
               <select
                 value={form.category}
                 onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
                 className="w-full px-3 py-2 rounded-lg text-sm text-white"
-                style={{ background: '#162030', border: '1px solid #1e3040' }}
+                style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
               >
                 {EXPENSE_CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
             <div>
-              <label className="text-xs mb-1 block" style={{ color: 'rgba(255,255,255,0.4)' }}>Date</label>
+              <label className="text-xs mb-1 block" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Date</label>
               <input
                 type="date"
                 value={form.expense_date}
                 onChange={e => setForm(f => ({ ...f, expense_date: e.target.value }))}
                 className="w-full px-3 py-2 rounded-lg text-sm text-white"
-                style={{ background: '#162030', border: '1px solid #1e3040' }}
+                style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
               />
             </div>
             <div>
-              <label className="text-xs mb-1 block" style={{ color: 'rgba(255,255,255,0.4)' }}>Description *</label>
+              <label className="text-xs mb-1 block" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Description *</label>
               <input
                 type="text"
                 value={form.description}
                 onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
                 placeholder="e.g. O'Reilly filters"
                 className="w-full px-3 py-2 rounded-lg text-sm text-white placeholder-white/20"
-                style={{ background: '#162030', border: '1px solid #1e3040' }}
+                style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
               />
             </div>
             <div>
-              <label className="text-xs mb-1 block" style={{ color: 'rgba(255,255,255,0.4)' }}>Amount *</label>
+              <label className="text-xs mb-1 block" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Amount *</label>
               <input
                 type="number"
                 step="0.01"
@@ -735,19 +735,19 @@ function ExpensesTab() {
                 onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
                 placeholder="0.00"
                 className="w-full px-3 py-2 rounded-lg text-sm text-white placeholder-white/20"
-                style={{ background: '#162030', border: '1px solid #1e3040' }}
+                style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
               />
             </div>
           </div>
           <div>
-            <label className="text-xs mb-1 block" style={{ color: 'rgba(255,255,255,0.4)' }}>Notes (optional)</label>
+            <label className="text-xs mb-1 block" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Notes (optional)</label>
             <input
               type="text"
               value={form.notes}
               onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
               placeholder="Optional notes"
               className="w-full px-3 py-2 rounded-lg text-sm text-white placeholder-white/20"
-              style={{ background: '#162030', border: '1px solid #1e3040' }}
+              style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
             />
           </div>
           <button
@@ -763,12 +763,12 @@ function ExpensesTab() {
 
       {/* List */}
       {expenses.length === 0 ? (
-        <div className="py-16 text-center rounded-xl" style={{ background: '#111920', border: '1px solid #1e3040' }}>
-          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>No expenses logged yet</p>
+        <div className="py-16 text-center rounded-xl" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
+          <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>No expenses logged yet</p>
         </div>
       ) : (
-        <div className="rounded-xl overflow-hidden" style={{ background: '#111920', border: '1px solid #1e3040' }}>
-          <div className="divide-y" style={{ borderColor: '#1e3040' }}>
+        <div className="rounded-xl overflow-hidden" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
+          <div className="divide-y" style={{ borderColor: 'var(--hd-border)' }}>
             {expenses.map(exp => (
               <div key={exp.id} className="flex items-center justify-between px-5 py-3.5">
                 <div className="min-w-0 flex-1">
@@ -781,14 +781,14 @@ function ExpensesTab() {
                       {exp.category}
                     </span>
                   </div>
-                  <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>{fmtDate(exp.expense_date)}</p>
+                  <p className="text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>{fmtDate(exp.expense_date)}</p>
                 </div>
                 <div className="flex items-center gap-4 flex-shrink-0 ml-4">
                   <p className="text-sm font-semibold" style={{ color: '#EF4444' }}>-{fmt(Number(exp.amount))}</p>
                   <button
                     onClick={() => handleDelete(exp.id)}
                     className="text-xs"
-                    style={{ color: 'rgba(255,255,255,0.2)' }}
+                    style={{ color: 'rgba(var(--hd-ink-rgb), 0.2)' }}
                   >
                     ✕
                   </button>
@@ -815,7 +815,7 @@ function PLTab({ stats }: { stats: OverviewStats }) {
       .finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <div className="h-40 animate-pulse rounded-xl" style={{ background: '#111920' }} />
+  if (loading) return <div className="h-40 animate-pulse rounded-xl" style={{ background: 'var(--hd-card)' }} />
 
   const totalExpenses = expenses.reduce((s, e) => s + Number(e.amount), 0)
   // invoiceRevenue is already net of sales tax, so the tax never reaches net profit —
@@ -840,7 +840,7 @@ function PLTab({ stats }: { stats: OverviewStats }) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+        <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide mb-4">INCOME SUMMARY</p>
           <div className="space-y-2.5">
             {/* Only the first row feeds net profit. Tax is listed so the invoiced
@@ -852,23 +852,23 @@ function PLTab({ stats }: { stats: OverviewStats }) {
               { label: 'Jobs done, not yet invoiced',  val: stats.outstandingTotal, color: HD_ORANGE },
               { label: 'Labor value of billed jobs',   val: stats.laborRevenue,     color: '#60A5FA' },
             ].map(row => (
-              <div key={row.label} className="flex items-center justify-between py-1.5 border-b" style={{ borderColor: '#1e3040' }}>
-                <p className="text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>{row.label}</p>
+              <div key={row.label} className="flex items-center justify-between py-1.5 border-b" style={{ borderColor: 'var(--hd-border)' }}>
+                <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>{row.label}</p>
                 <p className="text-sm font-semibold" style={{ color: row.color }}>{fmt(row.val)}</p>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+        <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide mb-4">EXPENSES BY CATEGORY</p>
           {categoryRows.length === 0 ? (
-            <p className="text-sm py-6 text-center" style={{ color: 'rgba(255,255,255,0.25)' }}>No expenses logged</p>
+            <p className="text-sm py-6 text-center" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>No expenses logged</p>
           ) : (
             <div className="space-y-2.5">
               {categoryRows.map(([cat, amt]) => (
-                <div key={cat} className="flex items-center justify-between py-1.5 border-b" style={{ borderColor: '#1e3040' }}>
-                  <p className="text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>{cat}</p>
+                <div key={cat} className="flex items-center justify-between py-1.5 border-b" style={{ borderColor: 'var(--hd-border)' }}>
+                  <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>{cat}</p>
                   <p className="text-sm font-semibold" style={{ color: '#EF4444' }}>-{fmt(amt)}</p>
                 </div>
               ))}
@@ -882,20 +882,20 @@ function PLTab({ stats }: { stats: OverviewStats }) {
       </div>
 
       {/* Net profit bar */}
-      <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+      <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
         <div className="flex items-center justify-between mb-3">
           <p className="font-condensed font-bold text-white text-lg tracking-wide">NET PROFIT — {stats.periodLabel}</p>
           <p className="font-condensed font-bold text-2xl" style={{ color: netProfit >= 0 ? '#22C55E' : '#EF4444' }}>
             {netProfit >= 0 ? '' : '-'}{fmt(Math.abs(netProfit))}
           </p>
         </div>
-        <div className="h-3 rounded-full overflow-hidden" style={{ background: '#1e3040' }}>
+        <div className="h-3 rounded-full overflow-hidden" style={{ background: 'var(--hd-border)' }}>
           <div className="h-full rounded-full" style={{
             width: `${Math.min(100, Math.max(0, margin))}%`,
             background: margin >= 40 ? '#22C55E' : margin >= 20 ? HD_ORANGE : '#EF4444',
           }} />
         </div>
-        <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.3)' }}>{margin.toFixed(0)}% profit margin</p>
+        <p className="text-xs mt-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>{margin.toFixed(0)}% profit margin</p>
       </div>
     </div>
   )
@@ -921,25 +921,25 @@ export default function HDFinancialsClient({ stats }: { stats: OverviewStats }) 
               href={`/hd/financials?period=${p.key}`}
               className="px-3 py-1.5 rounded-lg text-xs font-semibold"
               style={stats.periodParam === p.key
-                ? { background: HD_ORANGE, color: '#fff' }
-                : { color: 'rgba(255,255,255,0.4)', border: '1px solid #1e3040' }
+                ? { background: HD_ORANGE, color: 'var(--hd-text)' }
+                : { color: 'rgba(var(--hd-ink-rgb), 0.4)', border: '1px solid var(--hd-border)' }
               }
             >
               {p.label}
             </a>
           ))}
         </div>
-        <p className="text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>{stats.periodLabel}</p>
+        <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{stats.periodLabel}</p>
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-1 mb-6 border-b overflow-x-auto" style={{ borderColor: '#1e3040' }}>
+      <div className="flex items-center gap-1 mb-6 border-b overflow-x-auto" style={{ borderColor: 'var(--hd-border)' }}>
         {TABS.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
             className="px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors relative flex-shrink-0"
-            style={activeTab === tab.id ? { color: HD_ORANGE } : { color: 'rgba(255,255,255,0.4)' }}
+            style={activeTab === tab.id ? { color: HD_ORANGE } : { color: 'rgba(var(--hd-ink-rgb), 0.4)' }}
           >
             {tab.label}
             {activeTab === tab.id && (

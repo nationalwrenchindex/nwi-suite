@@ -47,11 +47,11 @@ export default async function PMChecklistPage({
   return (
     <main className="flex-1 py-6">
       <div className="px-4 sm:px-6 mb-6">
-        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
           Preventive Maintenance
         </p>
         <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">PM CHECKLIST</h1>
-        <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+        <p className="text-sm mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
           Transport refrigeration comprehensive PM — safety placard required before checklist unlocks.
         </p>
       </div>

@@ -17,9 +17,9 @@ const TEXT    = '#1A1A1A'
 const MUTED   = '#6B7280'
 
 // HD Suite dark theme — used by the labor modal
-const D_BG       = '#0d1820'
-const D_BORDER   = '#1e3040'
-const D_INPUT_BG = '#162030'
+const D_BG       = 'var(--hd-sunken)'
+const D_BORDER   = 'var(--hd-border)'
+const D_INPUT_BG = 'var(--hd-inner)'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -97,7 +97,7 @@ const dInp = {
   borderRadius: 8,
   padding: '10px 12px',
   fontSize: 14,
-  color: '#FFFFFF',
+  color: 'var(--hd-text)',
   background: D_INPUT_BG,
   outline: 'none',
   minHeight: 44,
@@ -1310,7 +1310,7 @@ export default function NewQuotePage() {
           >
             {/* Modal header */}
             <div className="flex items-center justify-between px-5 pt-5 pb-3 shrink-0" style={{ borderBottom: `1px solid ${D_BORDER}` }}>
-              <h3 className="font-condensed font-bold text-xl" style={{ color: '#FFFFFF' }}>ADD LABOR LINE</h3>
+              <h3 className="font-condensed font-bold text-xl" style={{ color: 'var(--hd-text)' }}>ADD LABOR LINE</h3>
               <button onClick={closeLaborModal} style={{ color: '#8a9bad' }}>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />

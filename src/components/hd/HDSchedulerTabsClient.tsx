@@ -62,7 +62,7 @@ export default function HDSchedulerTabsClient({
   return (
     <div>
       {/* Tab bar */}
-      <div className="flex items-center gap-1 mb-6 border-b" style={{ borderColor: '#1e3040' }}>
+      <div className="flex items-center gap-1 mb-6 border-b" style={{ borderColor: 'var(--hd-border)' }}>
         {TABS.map(tab => (
           <button
             key={tab.id}
@@ -70,7 +70,7 @@ export default function HDSchedulerTabsClient({
             className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors relative"
             style={activeTab === tab.id
               ? { color: HD_ORANGE }
-              : { color: 'rgba(255,255,255,0.4)' }
+              : { color: 'rgba(var(--hd-ink-rgb), 0.4)' }
             }
           >
             {tab.icon}

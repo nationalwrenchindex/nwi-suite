@@ -211,7 +211,7 @@ export default function HDCalendarClient() {
   }
 
   if (!mounted) {
-    return <div className="h-64 animate-pulse rounded-xl" style={{ background: '#111920' }} />
+    return <div className="h-64 animate-pulse rounded-xl" style={{ background: 'var(--hd-card)' }} />
   }
 
   const grid   = buildGrid(viewYear, viewMonth)
@@ -227,7 +227,7 @@ export default function HDCalendarClient() {
           { label: 'Completed',  color: '#22C55E'  },
           { label: 'Cancelled',  color: '#6B7280'  },
         ].map(l => (
-          <span key={l.label} className="flex items-center gap-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+          <span key={l.label} className="flex items-center gap-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
             <span className="w-2 h-2 rounded-full inline-block" style={{ background: l.color }} />
             {l.label}
           </span>
@@ -244,7 +244,7 @@ export default function HDCalendarClient() {
             <button
               onClick={prevMonth}
               className="w-9 h-9 flex items-center justify-center rounded-xl transition-colors"
-              style={{ border: '1px solid #1e3040', color: 'rgba(255,255,255,0.5)' }}
+              style={{ border: '1px solid var(--hd-border)', color: 'rgba(var(--hd-ink-rgb), 0.5)' }}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -267,7 +267,7 @@ export default function HDCalendarClient() {
             <button
               onClick={nextMonth}
               className="w-9 h-9 flex items-center justify-center rounded-xl transition-colors"
-              style={{ border: '1px solid #1e3040', color: 'rgba(255,255,255,0.5)' }}
+              style={{ border: '1px solid var(--hd-border)', color: 'rgba(var(--hd-ink-rgb), 0.5)' }}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
@@ -278,14 +278,14 @@ export default function HDCalendarClient() {
           {/* Day labels */}
           <div className="grid grid-cols-7 mb-1">
             {DAY_LABELS.map(d => (
-              <p key={d} className="text-center text-xs py-1.5 font-medium" style={{ color: 'rgba(255,255,255,0.3)' }}>
+              <p key={d} className="text-center text-xs py-1.5 font-medium" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
                 {d}
               </p>
             ))}
           </div>
 
           {/* Grid */}
-          <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040', background: '#0a0f14' }}>
+          <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hd-border)', background: 'var(--hd-bg)' }}>
             {loading ? (
               <div className="h-64 flex items-center justify-center">
                 <div className="w-5 h-5 border-2 rounded-full animate-spin" style={{ borderColor: HD_ORANGE, borderTopColor: 'transparent' }} />
@@ -295,7 +295,7 @@ export default function HDCalendarClient() {
                 <div
                   key={wi}
                   className="grid grid-cols-7"
-                  style={{ borderBottom: wi < grid.length - 1 ? '1px solid #1e3040' : undefined }}
+                  style={{ borderBottom: wi < grid.length - 1 ? '1px solid var(--hd-border)' : undefined }}
                 >
                   {week.map((dateStr, di) => {
                     const wos        = dateStr ? (calendar[dateStr] ?? []) : []
@@ -309,7 +309,7 @@ export default function HDCalendarClient() {
                         disabled={!dateStr}
                         className="p-1.5 text-left min-h-[72px] sm:min-h-[88px] transition-colors"
                         style={{
-                          borderRight: di < 6 ? '1px solid #1e3040' : undefined,
+                          borderRight: di < 6 ? '1px solid var(--hd-border)' : undefined,
                           background:  isSelected
                             ? `${HD_ORANGE}18`
                             : isToday
@@ -323,7 +323,7 @@ export default function HDCalendarClient() {
                               className="text-xs font-medium inline-flex items-center justify-center w-6 h-6 rounded-full mb-1"
                               style={{
                                 background: isToday ? HD_ORANGE : 'transparent',
-                                color: isToday ? '#fff' : isSelected ? HD_ORANGE : 'rgba(255,255,255,0.6)',
+                                color: isToday ? '#fff' : isSelected ? HD_ORANGE : 'rgba(var(--hd-ink-rgb), 0.6)',
                                 fontWeight: isToday || isSelected ? 700 : 400,
                               }}
                             >
@@ -343,7 +343,7 @@ export default function HDCalendarClient() {
                                 </div>
                               ))}
                               {wos.length > 3 && (
-                                <p className="text-[9px] pl-0.5" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                                <p className="text-[9px] pl-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
                                   +{wos.length - 3}
                                 </p>
                               )}
@@ -361,10 +361,10 @@ export default function HDCalendarClient() {
 
         {/* ── Day panel ── */}
         <div className="lg:w-80 xl:w-96 flex-shrink-0">
-          <div className="rounded-xl overflow-hidden" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+          <div className="rounded-xl overflow-hidden" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
 
             {/* Panel header */}
-            <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid #1e3040' }}>
+            <div className="px-4 py-3 flex items-center justify-between" style={{ borderBottom: '1px solid var(--hd-border)' }}>
               <p className="font-condensed font-bold text-white text-sm tracking-wide">
                 {selected
                   ? new Date(selected + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
@@ -382,7 +382,7 @@ export default function HDCalendarClient() {
             <div className="p-3">
               {dayWOs.length === 0 ? (
                 <div className="py-10 text-center">
-                  <p className="text-sm mb-3" style={{ color: 'rgba(255,255,255,0.25)' }}>No jobs scheduled</p>
+                  <p className="text-sm mb-3" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>No jobs scheduled</p>
                   <button onClick={() => openBooking(selected)} className="text-xs" style={{ color: HD_ORANGE }}>
                     + Schedule a job
                   </button>
@@ -394,7 +394,7 @@ export default function HDCalendarClient() {
                       key={wo.id}
                       href="/hd/work-orders"
                       className="block rounded-xl p-3 transition-opacity hover:opacity-80"
-                      style={{ background: '#162030', border: `1px solid ${STATUS_COLOR[wo.status]}35` }}
+                      style={{ background: 'var(--hd-inner)', border: `1px solid ${STATUS_COLOR[wo.status]}35` }}
                     >
                       <div className="flex items-start justify-between gap-2 mb-1.5">
                         <p className="text-sm text-white font-medium leading-tight">
@@ -408,19 +408,19 @@ export default function HDCalendarClient() {
                         </span>
                       </div>
                       {wo.unit ? (
-                        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                        <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
                           {wo.unit.unit_number} — {wo.unit.manufacturer} {wo.unit.model}
                         </p>
                       ) : (wo.customer_name || wo.unit_manufacturer) && (
-                        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                        <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
                           {[wo.customer_name, [wo.unit_manufacturer, wo.unit_model].filter(Boolean).join(' ')].filter(Boolean).join(' — ')}
                         </p>
                       )}
                       {wo.fleet_account && (
-                        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>{wo.fleet_account.fleet_name}</p>
+                        <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>{wo.fleet_account.fleet_name}</p>
                       )}
                       {wo.service_type && (
-                        <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>{wo.service_type}</p>
+                        <p className="text-xs mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{wo.service_type}</p>
                       )}
                       {wo.total_amount && (
                         <p className="text-sm font-semibold mt-1" style={{ color: HD_ORANGE }}>
@@ -441,9 +441,9 @@ export default function HDCalendarClient() {
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
           <div
             className="sm:rounded-xl"
-            style={{ background: '#0d1820', border: '1px solid #1e3040', borderRadius: '12px 12px 0 0', width: '100%', maxWidth: 540, maxHeight: '92dvh', display: 'flex', flexDirection: 'column' }}
+            style={{ background: 'var(--hd-sunken)', border: '1px solid var(--hd-border)', borderRadius: '12px 12px 0 0', width: '100%', maxWidth: 540, maxHeight: '92dvh', display: 'flex', flexDirection: 'column' }}
           >
-            <div className="flex items-center justify-between px-5 pt-5 pb-3 shrink-0" style={{ borderBottom: '1px solid #1e3040' }}>
+            <div className="flex items-center justify-between px-5 pt-5 pb-3 shrink-0" style={{ borderBottom: '1px solid var(--hd-border)' }}>
               <h3 className="font-condensed font-bold text-xl text-white">BOOK A JOB</h3>
               <button onClick={() => setBooking(false)} style={{ color: '#8a9bad' }}>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
@@ -457,65 +457,65 @@ export default function HDCalendarClient() {
 
               <div className="grid grid-cols-2 gap-3">
                 <label className="flex flex-col gap-1">
-                  <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Customer Name *</span>
-                  <input value={bookingForm.customer_name} onChange={e => setBookingForm(f => ({ ...f, customer_name: e.target.value }))} placeholder="Fleet or customer" className="px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20" style={{ background: '#162030', border: '1px solid #1e3040' }} />
+                  <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Customer Name *</span>
+                  <input value={bookingForm.customer_name} onChange={e => setBookingForm(f => ({ ...f, customer_name: e.target.value }))} placeholder="Fleet or customer" className="px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20" style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }} />
                 </label>
                 <label className="flex flex-col gap-1">
-                  <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Phone</span>
-                  <input value={bookingForm.customer_phone} onChange={e => setBookingForm(f => ({ ...f, customer_phone: e.target.value }))} placeholder="(555) 000-0000" className="px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20" style={{ background: '#162030', border: '1px solid #1e3040' }} />
+                  <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Phone</span>
+                  <input value={bookingForm.customer_phone} onChange={e => setBookingForm(f => ({ ...f, customer_phone: e.target.value }))} placeholder="(555) 000-0000" className="px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20" style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }} />
                 </label>
               </div>
 
               <div className="grid grid-cols-3 gap-3">
                 <label className="flex flex-col gap-1">
-                  <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Manufacturer</span>
-                  <input value={bookingForm.unit_manufacturer} onChange={e => setBookingForm(f => ({ ...f, unit_manufacturer: e.target.value }))} placeholder="Thermo King" className="px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20" style={{ background: '#162030', border: '1px solid #1e3040' }} />
+                  <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Manufacturer</span>
+                  <input value={bookingForm.unit_manufacturer} onChange={e => setBookingForm(f => ({ ...f, unit_manufacturer: e.target.value }))} placeholder="Thermo King" className="px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20" style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }} />
                 </label>
                 <label className="flex flex-col gap-1">
-                  <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Model</span>
-                  <input value={bookingForm.unit_model} onChange={e => setBookingForm(f => ({ ...f, unit_model: e.target.value }))} placeholder="S-600" className="px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20" style={{ background: '#162030', border: '1px solid #1e3040' }} />
+                  <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Model</span>
+                  <input value={bookingForm.unit_model} onChange={e => setBookingForm(f => ({ ...f, unit_model: e.target.value }))} placeholder="S-600" className="px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20" style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }} />
                 </label>
                 <label className="flex flex-col gap-1">
-                  <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Serial</span>
-                  <input value={bookingForm.unit_serial} onChange={e => setBookingForm(f => ({ ...f, unit_serial: e.target.value }))} placeholder="Serial #" className="px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20" style={{ background: '#162030', border: '1px solid #1e3040' }} />
+                  <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Serial</span>
+                  <input value={bookingForm.unit_serial} onChange={e => setBookingForm(f => ({ ...f, unit_serial: e.target.value }))} placeholder="Serial #" className="px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20" style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }} />
                 </label>
               </div>
 
               <label className="flex flex-col gap-1">
-                <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Job Type</span>
-                <select value={bookingForm.service_type} onChange={e => setBookingForm(f => ({ ...f, service_type: e.target.value }))} className="px-3 py-2.5 rounded-lg text-sm text-white" style={{ background: '#162030', border: '1px solid #1e3040' }}>
+                <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Job Type</span>
+                <select value={bookingForm.service_type} onChange={e => setBookingForm(f => ({ ...f, service_type: e.target.value }))} className="px-3 py-2.5 rounded-lg text-sm text-white" style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}>
                   {JOB_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </label>
 
               <label className="flex flex-col gap-1">
-                <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Job Description</span>
-                <textarea rows={2} value={bookingForm.job_description} onChange={e => setBookingForm(f => ({ ...f, job_description: e.target.value }))} placeholder="What needs to be done?" className="px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20 resize-none" style={{ background: '#162030', border: '1px solid #1e3040' }} />
+                <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Job Description</span>
+                <textarea rows={2} value={bookingForm.job_description} onChange={e => setBookingForm(f => ({ ...f, job_description: e.target.value }))} placeholder="What needs to be done?" className="px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20 resize-none" style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }} />
               </label>
 
               <div className="grid grid-cols-3 gap-3">
                 <label className="flex flex-col gap-1">
-                  <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Date *</span>
-                  <input type="date" value={bookingDate} onChange={e => setBookingDate(e.target.value)} className="px-3 py-2.5 rounded-lg text-sm text-white" style={{ background: '#162030', border: '1px solid #1e3040' }} />
+                  <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Date *</span>
+                  <input type="date" value={bookingDate} onChange={e => setBookingDate(e.target.value)} className="px-3 py-2.5 rounded-lg text-sm text-white" style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }} />
                 </label>
                 <label className="flex flex-col gap-1">
-                  <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Time</span>
-                  <input type="time" value={bookingForm.scheduled_time} onChange={e => setBookingForm(f => ({ ...f, scheduled_time: e.target.value }))} className="px-3 py-2.5 rounded-lg text-sm text-white" style={{ background: '#162030', border: '1px solid #1e3040' }} />
+                  <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Time</span>
+                  <input type="time" value={bookingForm.scheduled_time} onChange={e => setBookingForm(f => ({ ...f, scheduled_time: e.target.value }))} className="px-3 py-2.5 rounded-lg text-sm text-white" style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }} />
                 </label>
                 <label className="flex flex-col gap-1">
-                  <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Est. Hours</span>
-                  <input type="number" min={0} step={0.5} value={bookingForm.estimated_duration_hours} onChange={e => setBookingForm(f => ({ ...f, estimated_duration_hours: e.target.value }))} className="px-3 py-2.5 rounded-lg text-sm text-white" style={{ background: '#162030', border: '1px solid #1e3040' }} />
+                  <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Est. Hours</span>
+                  <input type="number" min={0} step={0.5} value={bookingForm.estimated_duration_hours} onChange={e => setBookingForm(f => ({ ...f, estimated_duration_hours: e.target.value }))} className="px-3 py-2.5 rounded-lg text-sm text-white" style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }} />
                 </label>
               </div>
 
               <label className="flex flex-col gap-1">
-                <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Notes</span>
-                <textarea rows={2} value={bookingForm.notes} onChange={e => setBookingForm(f => ({ ...f, notes: e.target.value }))} placeholder="Location, gate code, contact on site..." className="px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20 resize-none" style={{ background: '#162030', border: '1px solid #1e3040' }} />
+                <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Notes</span>
+                <textarea rows={2} value={bookingForm.notes} onChange={e => setBookingForm(f => ({ ...f, notes: e.target.value }))} placeholder="Location, gate code, contact on site..." className="px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20 resize-none" style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }} />
               </label>
             </div>
 
-            <div className="flex gap-3 px-5 pb-5 pt-3 shrink-0" style={{ borderTop: '1px solid #1e3040' }}>
-              <button onClick={() => setBooking(false)} className="flex-1 py-2.5 rounded-lg font-semibold text-sm" style={{ background: '#162030', color: '#c9d5e0', border: '1px solid #1e3040' }}>Cancel</button>
+            <div className="flex gap-3 px-5 pb-5 pt-3 shrink-0" style={{ borderTop: '1px solid var(--hd-border)' }}>
+              <button onClick={() => setBooking(false)} className="flex-1 py-2.5 rounded-lg font-semibold text-sm" style={{ background: 'var(--hd-inner)', color: '#c9d5e0', border: '1px solid var(--hd-border)' }}>Cancel</button>
               <button onClick={submitBooking} disabled={bookingSaving} className="flex-1 py-2.5 rounded-lg font-semibold text-sm text-white disabled:opacity-50" style={{ background: HD_ORANGE }}>
                 {bookingSaving ? 'Booking…' : 'Book Job'}
               </button>

@@ -264,7 +264,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                 <div style={{ border: '1px solid #E5E7EB', borderRadius: 8, overflow: 'hidden' }}>
                   {/* Desktop table (md+) */}
                   <div className="hidden md:block">
-                    <div className="grid text-xs font-semibold uppercase tracking-wide px-4 py-2.5" style={{ gridTemplateColumns: '70px 1fr 100px 100px 100px', background: '#1A1A1A', color: '#FFFFFF', gap: 8 }}>
+                    <div className="grid text-xs font-semibold uppercase tracking-wide px-4 py-2.5" style={{ gridTemplateColumns: '70px 1fr 100px 100px 100px', background: '#1A1A1A', color: 'var(--hd-text)', gap: 8 }}>
                       <span>Type</span><span>Description</span><span className="text-right">Hrs/Qty</span><span className="text-right">Rate</span><span className="text-right">Amount</span>
                     </div>
                     {items.map(item => (

@@ -100,7 +100,7 @@ export default async function EquipmentInspectionsDashboard() {
         </div>
 
         {machineList.length === 0 ? (
-          <div className="rounded-xl p-8 text-center" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+          <div className="rounded-xl p-8 text-center" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
             <p className="text-white/40 text-sm">No equipment inspections recorded yet.</p>
             <p className="text-white/25 text-xs mt-1">
               Start one from a work order, or with the button above.
@@ -108,15 +108,15 @@ export default async function EquipmentInspectionsDashboard() {
           </div>
         ) : (
           machineList.map(m => (
-            <div key={m.label + (m.unitId ?? '')} className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
-              <div className="px-5 py-3 flex items-center justify-between" style={{ background: '#0d1820', borderBottom: '1px solid #1e3040' }}>
+            <div key={m.label + (m.unitId ?? '')} className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
+              <div className="px-5 py-3 flex items-center justify-between" style={{ background: 'var(--hd-sunken)', borderBottom: '1px solid var(--hd-border)' }}>
                 <p className="font-condensed font-bold text-white text-sm tracking-widest">{m.label.toUpperCase()}</p>
-                <span className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
+                <span className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
                   {m.latest.size} class{m.latest.size !== 1 ? 'es' : ''} inspected
                 </span>
               </div>
 
-              <div style={{ background: '#111920' }}>
+              <div style={{ background: 'var(--hd-card)' }}>
                 {[...m.latest.entries()].map(([type, r], i) => {
                   const interval = isEquipmentType(type) ? EQUIPMENT_INTERVAL_DAYS[type as EquipmentType] : 1
                   const age      = daysSince(r.inspection_date)
@@ -128,11 +128,11 @@ export default async function EquipmentInspectionsDashboard() {
                     <div
                       key={type}
                       className="flex items-center justify-between gap-3 px-5 py-3"
-                      style={{ borderTop: i > 0 ? '1px solid #1e3040' : undefined }}
+                      style={{ borderTop: i > 0 ? '1px solid var(--hd-border)' : undefined }}
                     >
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-white">{label}</p>
-                        <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                        <p className="text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
                           {new Date(`${r.inspection_date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                           {' · '}{r.inspector_name ?? r.operator_name ?? 'Unsigned'}
                         </p>

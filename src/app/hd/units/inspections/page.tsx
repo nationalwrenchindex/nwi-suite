@@ -101,7 +101,7 @@ function InspectionCell({ state }: { state: CellState }) {
   }
   if (!state.overdue) {
     return (
-      <td className="px-4 py-3 text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>
+      <td className="px-4 py-3 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.7)' }}>
         {formatDate(state.date)}
       </td>
     )
@@ -257,18 +257,18 @@ export default async function UnitInspectionsPage({
     return s ? `/hd/units/inspections?${s}` : '/hd/units/inspections'
   }
 
-  const inputStyle = { background: '#162030', border: '1px solid #1e3040' }
+  const inputStyle = { background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }
   const hasFilters = !!typeFilter || !!from || !!to
 
   return (
     <main className="flex-1 p-4 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div>
-          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
             HD Suite — Compliance
           </p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">UNIT INSPECTION STATUS</h1>
-          <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+          <p className="text-sm mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
             Latest pre-use, frequent, annual and DOT inspection per unit — overdue cadences flagged in red.
           </p>
         </div>
@@ -276,19 +276,19 @@ export default async function UnitInspectionsPage({
 
       {/* Summary */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <div className="rounded-xl p-5 flex flex-col gap-1" style={{ background: '#111920', border: '1px solid #1e3040' }}>
-          <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Total Units</p>
+        <div className="rounded-xl p-5 flex flex-col gap-1" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
+          <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Total Units</p>
           <p className="font-condensed font-bold text-3xl leading-none text-white">{totalUnits}</p>
         </div>
-        <div className="rounded-xl p-5 flex flex-col gap-1" style={{ background: '#111920', border: '1px solid #1e3040' }}>
-          <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Units Overdue</p>
+        <div className="rounded-xl p-5 flex flex-col gap-1" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
+          <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Units Overdue</p>
           <p className="font-condensed font-bold text-3xl leading-none" style={{ color: '#EF4444' }}>{overdueUnits}</p>
-          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>Any cadence past due</p>
+          <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>Any cadence past due</p>
         </div>
-        <div className="rounded-xl p-5 flex flex-col gap-1" style={{ background: '#111920', border: '1px solid #1e3040' }}>
-          <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>Units Compliant</p>
+        <div className="rounded-xl p-5 flex flex-col gap-1" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
+          <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Units Compliant</p>
           <p className="font-condensed font-bold text-3xl leading-none" style={{ color: '#22C55E' }}>{compliantUnits}</p>
-          <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>All four cadences current</p>
+          <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>All four cadences current</p>
         </div>
       </div>
 
@@ -299,7 +299,7 @@ export default async function UnitInspectionsPage({
           className="px-3 py-1 rounded-full text-xs font-medium"
           style={!typeFilter
             ? { background: `${HD_ORANGE}25`, color: HD_ORANGE, border: `1px solid ${HD_ORANGE}50` }
-            : { color: 'rgba(255,255,255,0.4)', border: '1px solid #1e3040' }
+            : { color: 'rgba(var(--hd-ink-rgb), 0.4)', border: '1px solid var(--hd-border)' }
           }
         >
           All Units
@@ -311,7 +311,7 @@ export default async function UnitInspectionsPage({
             className="px-3 py-1 rounded-full text-xs font-medium"
             style={typeFilter === c
               ? { background: `${HD_ORANGE}25`, color: HD_ORANGE, border: `1px solid ${HD_ORANGE}50` }
-              : { color: 'rgba(255,255,255,0.4)', border: '1px solid #1e3040' }
+              : { color: 'rgba(var(--hd-ink-rgb), 0.4)', border: '1px solid var(--hd-border)' }
             }
           >
             {COLUMN_LABEL[c]} Overdue
@@ -323,37 +323,37 @@ export default async function UnitInspectionsPage({
         {/* Preserved so the date form does not drop the active type chip. */}
         {typeFilter && <input type="hidden" name="type" value={typeFilter} />}
         <div>
-          <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>From</label>
+          <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>From</label>
           <input name="from" type="date" defaultValue={from ?? ''} className="px-3 py-2.5 rounded-lg text-base sm:text-sm text-white" style={inputStyle} />
         </div>
         <div>
-          <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>To</label>
+          <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>To</label>
           <input name="to" type="date" defaultValue={to ?? ''} className="px-3 py-2.5 rounded-lg text-base sm:text-sm text-white" style={inputStyle} />
         </div>
         <button type="submit" className="px-4 py-2.5 rounded-lg text-sm font-semibold text-white" style={{ background: HD_BLUE }}>
           Apply
         </button>
         {hasFilters && (
-          <Link href="/hd/units/inspections" className="px-4 py-2.5 rounded-lg text-sm" style={{ color: 'rgba(255,255,255,0.4)', border: '1px solid #1e3040' }}>
+          <Link href="/hd/units/inspections" className="px-4 py-2.5 rounded-lg text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)', border: '1px solid var(--hd-border)' }}>
             Clear
           </Link>
         )}
       </form>
 
-      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
+      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
         {rows.length === 0 ? (
-          <div className="py-16 text-center" style={{ background: '#111920' }}>
-            <svg className="w-10 h-10 mx-auto mb-3" style={{ color: 'rgba(255,255,255,0.15)' }} fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+          <div className="py-16 text-center" style={{ background: 'var(--hd-card)' }}>
+            <svg className="w-10 h-10 mx-auto mb-3" style={{ color: 'rgba(var(--hd-ink-rgb), 0.15)' }} fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
               <rect x="1" y="3" width="15" height="13" rx="2" />
               <path d="M16 8h4l3 5v3h-7V8z" /><circle cx="5.5" cy="18.5" r="2.5" /><circle cx="18.5" cy="18.5" r="2.5" />
             </svg>
-            <p className="text-sm mb-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
+            <p className="text-sm mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
               {totalUnits === 0 ? 'No fleet units yet' : 'No units match these filters'}
             </p>
             {totalUnits === 0 && (
               <>
-                <p className="text-xs mb-3" style={{ color: 'rgba(255,255,255,0.2)' }}>Add your units to start tracking inspection compliance</p>
-                <Link href="/hd/fleet-units?new=1" className="text-xs px-4 py-2 rounded-lg font-semibold" style={{ background: HD_ORANGE, color: '#fff' }}>
+                <p className="text-xs mb-3" style={{ color: 'rgba(var(--hd-ink-rgb), 0.2)' }}>Add your units to start tracking inspection compliance</p>
+                <Link href="/hd/fleet-units?new=1" className="text-xs px-4 py-2 rounded-lg font-semibold" style={{ background: HD_ORANGE, color: 'var(--hd-text)' }}>
                   + Add First Unit
                 </Link>
               </>
@@ -361,17 +361,17 @@ export default async function UnitInspectionsPage({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px]" style={{ background: '#111920' }}>
-              <thead style={{ background: '#162030' }}>
+            <table className="w-full min-w-[900px]" style={{ background: 'var(--hd-card)' }}>
+              <thead style={{ background: 'var(--hd-inner)' }}>
                 <tr>
                   {['Unit #', 'Make / Model', 'Pre-Use', 'Frequent', 'Annual', 'DOT', 'Status'].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.4)' }}>{h}</th>
+                    <th key={h} className="px-4 py-3 text-left text-xs uppercase tracking-wider" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {rows.map((s, i) => (
-                  <tr key={s.unit.id} style={{ borderTop: i > 0 ? '1px solid #1e3040' : undefined }}>
+                  <tr key={s.unit.id} style={{ borderTop: i > 0 ? '1px solid var(--hd-border)' : undefined }}>
                     <td className="px-4 py-3 text-sm text-white font-medium">{s.unit.unit_number}</td>
                     <td className="px-4 py-3 text-sm text-white">
                       {[s.unit.manufacturer, s.unit.model].filter(Boolean).join(' ') || '—'}
@@ -383,7 +383,7 @@ export default async function UnitInspectionsPage({
                           <span className="text-xs font-bold px-2 py-0.5 rounded-full text-red-400 bg-red-500/10">
                             OVERDUE
                           </span>
-                          <span className="block text-[10px] mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                          <span className="block text-[10px] mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
                             {s.overdueTypes.map(t => COLUMN_LABEL[t]).join(' · ')}
                           </span>
                         </>

@@ -96,7 +96,7 @@ export default function HDSettingsForm({ initialLaborRate, initialTechName, init
   return (
     <form onSubmit={handleSave} className="space-y-4">
       <div>
-        <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+        <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
           Labor Rate ($/hr)
         </label>
         <input
@@ -107,12 +107,12 @@ export default function HDSettingsForm({ initialLaborRate, initialTechName, init
           onChange={e => setLaborRate(e.target.value)}
           placeholder="125.00"
           className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20"
-          style={{ background: '#162030', border: '1px solid #1e3040' }}
+          style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
         />
       </div>
 
       <div>
-        <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+        <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
           Tech Name
         </label>
         <input
@@ -121,12 +121,12 @@ export default function HDSettingsForm({ initialLaborRate, initialTechName, init
           onChange={e => setTechName(e.target.value)}
           placeholder="John Smith"
           className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20"
-          style={{ background: '#162030', border: '1px solid #1e3040' }}
+          style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
         />
       </div>
 
       <div>
-        <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+        <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
           EPA 608 Certification #
         </label>
         <input
@@ -135,9 +135,9 @@ export default function HDSettingsForm({ initialLaborRate, initialTechName, init
           onChange={e => setEpaCert(e.target.value)}
           placeholder="XXX-XXXXXXXX"
           className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20"
-          style={{ background: '#162030', border: '1px solid #1e3040' }}
+          style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
         />
-        <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
+        <p className="text-xs mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
           Auto-populates EPA 608 log entries
         </p>
       </div>
@@ -148,21 +148,21 @@ export default function HDSettingsForm({ initialLaborRate, initialTechName, init
           endpoint the LD suite already uses, so there is one bucket, one column
           and one delete path rather than two half-features. */}
       <div>
-        <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+        <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
           Company Logo
         </label>
 
         <div className="flex items-center gap-3">
           <div
             className="rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{ width: 96, height: 64, background: '#162030', border: '1px solid #1e3040' }}
+            style={{ width: 96, height: 64, background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
           >
             {logoUrl ? (
               /* eslint-disable-next-line @next/next/no-img-element */
               <img src={logoUrl} alt="Company logo" className="max-h-full max-w-full object-contain p-1"
                 onError={e => (e.currentTarget.style.display = 'none')} />
             ) : (
-              <span className="text-xs" style={{ color: 'rgba(255,255,255,0.25)' }}>No logo</span>
+              <span className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>No logo</span>
             )}
           </div>
 
@@ -185,14 +185,14 @@ export default function HDSettingsForm({ initialLaborRate, initialTechName, init
             </button>
             {logoUrl && !uploadingLogo && (
               <button type="button" onClick={() => void removeLogo()}
-                className="text-xs underline" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                className="text-xs underline" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
                 Remove logo
               </button>
             )}
           </div>
         </div>
 
-        <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.3)' }}>
+        <p className="text-xs mt-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
           Replaces NWI branding on work orders, invoices, inspection reports and your booking page.
           PNG, JPG, WEBP or SVG. If no logo is set, your business name is shown instead.
         </p>

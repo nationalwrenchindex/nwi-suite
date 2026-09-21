@@ -75,7 +75,7 @@ export default async function NewDOTInspectionPage({
   } | null
 
   return (
-    <main className="flex-1 min-h-screen" style={{ background: '#0a0f14' }}>
+    <main className="flex-1 min-h-screen" style={{ background: 'var(--hd-bg)' }}>
       <DOTInspectionForm
         units={(units ?? []) as Array<{
           id: string

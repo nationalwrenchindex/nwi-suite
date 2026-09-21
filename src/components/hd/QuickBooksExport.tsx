@@ -126,10 +126,10 @@ export default function QuickBooksExport() {
   }
 
   return (
-    <div className="rounded-xl p-5 space-y-4" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+    <div className="rounded-xl p-5 space-y-4" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
       <div>
         <p className="font-condensed font-bold text-white text-lg tracking-wide">QUICKBOOKS EXPORT</p>
-        <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+        <p className="text-xs mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
           Export invoices for your accountant. Voided invoices are excluded.
         </p>
       </div>
@@ -142,8 +142,8 @@ export default function QuickBooksExport() {
             onClick={() => applyPreset(p.key)}
             className="px-3 py-1.5 rounded-lg text-xs font-semibold"
             style={preset === p.key
-              ? { background: HD_ORANGE, color: '#fff' }
-              : { color: 'rgba(255,255,255,0.4)', border: '1px solid #1e3040' }
+              ? { background: HD_ORANGE, color: 'var(--hd-text)' }
+              : { color: 'rgba(var(--hd-ink-rgb), 0.4)', border: '1px solid var(--hd-border)' }
             }
           >
             {p.label}
@@ -154,35 +154,35 @@ export default function QuickBooksExport() {
       {/* Date inputs — always visible so the resolved preset range is auditable */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
-          <label className="text-xs mb-1 block" style={{ color: 'rgba(255,255,255,0.4)' }}>From</label>
+          <label className="text-xs mb-1 block" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>From</label>
           <input
             type="date"
             value={from}
             onChange={e => { setPreset('custom'); setFrom(e.target.value) }}
             className="w-full px-3 py-2 rounded-lg text-sm text-white"
-            style={{ background: '#162030', border: '1px solid #1e3040' }}
+            style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
           />
         </div>
         <div>
-          <label className="text-xs mb-1 block" style={{ color: 'rgba(255,255,255,0.4)' }}>To</label>
+          <label className="text-xs mb-1 block" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>To</label>
           <input
             type="date"
             value={to}
             onChange={e => { setPreset('custom'); setTo(e.target.value) }}
             className="w-full px-3 py-2 rounded-lg text-sm text-white"
-            style={{ background: '#162030', border: '1px solid #1e3040' }}
+            style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
           />
         </div>
       </div>
 
       {/* Range summary */}
-      <div className="rounded-lg px-4 py-3" style={{ background: '#162030' }}>
+      <div className="rounded-lg px-4 py-3" style={{ background: 'var(--hd-inner)' }}>
         {loading ? (
-          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>Checking range…</p>
+          <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Checking range…</p>
         ) : error ? (
           <p className="text-sm text-red-400">{error}</p>
         ) : count === 0 ? (
-          <p className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>
+          <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
             No invoices in this range — pick a wider range to export.
           </p>
         ) : (
@@ -191,7 +191,7 @@ export default function QuickBooksExport() {
               <span className="font-semibold">{count}</span> invoice{count !== 1 ? 's' : ''} ready
             </p>
             <p className="text-sm font-semibold" style={{ color: HD_ORANGE }}>{fmtMoney(data?.total ?? 0)}</p>
-            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
+            <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
               {data?.from_date} → {data?.to_date}
             </p>
           </div>
@@ -218,7 +218,7 @@ export default function QuickBooksExport() {
         </button>
       </div>
 
-      <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>
+      <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
         IIF imports into QuickBooks Desktop (File → Utilities → Import). CSV imports into
         QuickBooks Online (Settings → Import Data → Invoices).
       </p>

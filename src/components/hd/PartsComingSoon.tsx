@@ -26,7 +26,7 @@ export default function PartsComingSoon() {
     <div
       className="rounded-xl p-6 mt-6"
       style={{
-        background: 'linear-gradient(135deg, #111920 0%, #0d1820 100%)',
+        background: 'linear-gradient(135deg, var(--hd-card) 0%, var(--hd-sunken) 100%)',
         border: `1px solid ${HD_ORANGE}40`,
       }}
     >
@@ -53,10 +53,10 @@ export default function PartsComingSoon() {
             </span>
           </div>
 
-          <p className="text-sm leading-relaxed mb-4" style={{ color: 'rgba(255,255,255,0.6)' }}>
+          <p className="text-sm leading-relaxed mb-4" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>
             NWI HD Suite is pending approval for{' '}
-            <span style={{ color: 'rgba(255,255,255,0.85)' }}>O&apos;Reilly Auto Parts</span> and{' '}
-            <span style={{ color: 'rgba(255,255,255,0.85)' }}>NAPA</span> API integration for real-time
+            <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.85)' }}>O&apos;Reilly Auto Parts</span> and{' '}
+            <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.85)' }}>NAPA</span> API integration for real-time
             heavy duty parts pricing and availability. Once approved, parts lookup will be available directly
             from work orders and HD QuickWrench results — no more tab-switching.
           </p>
@@ -72,7 +72,7 @@ export default function PartsComingSoon() {
               <span
                 key={f}
                 className="px-2.5 py-1 rounded-full"
-                style={{ background: '#162030', color: 'rgba(255,255,255,0.5)', border: '1px solid #1e3040' }}
+                style={{ background: 'var(--hd-inner)', color: 'rgba(var(--hd-ink-rgb), 0.5)', border: '1px solid var(--hd-border)' }}
               >
                 {f}
               </span>

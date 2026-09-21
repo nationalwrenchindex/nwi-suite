@@ -5,6 +5,7 @@ import { resolveBranding } from '@/lib/branding'
 import HDSettingsForm from '@/components/hd/HDSettingsForm'
 import LateFeeSettingsForm from '@/components/hd/LateFeeSettingsForm'
 import ExportData from '@/components/hd/ExportData'
+import ThemeToggle from '@/components/layout/ThemeToggle'
 
 export const metadata = { title: 'Settings — NWI HD Suite' }
 
@@ -50,12 +51,12 @@ export default async function HDSettingsPage() {
   return (
     <main className="flex-1 p-6">
       <div className="mb-6">
-        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>HD Suite</p>
+        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>HD Suite</p>
         <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">SETTINGS</h1>
       </div>
 
       <div className="max-w-xl space-y-6">
-        <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+        <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide mb-4">ACCOUNT</p>
           {[
             { label: 'Name',     value: p?.full_name     ?? '—' },
@@ -63,16 +64,33 @@ export default async function HDSettingsPage() {
             { label: 'Business', value: p?.business_name ?? '—' },
             { label: 'Phone',    value: p?.phone         ?? '—' },
           ].map(({ label, value }) => (
-            <div key={label} className="flex justify-between py-3 border-b text-sm" style={{ borderColor: '#1e3040' }}>
-              <span style={{ color: 'rgba(255,255,255,0.4)' }}>{label}</span>
+            <div key={label} className="flex justify-between py-3 border-b text-sm" style={{ borderColor: 'var(--hd-border)' }}>
+              <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{label}</span>
               <span className="text-white">{value}</span>
             </div>
           ))}
         </div>
 
-        <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+        {/* Display — same position and content as the LD card in /settings, in HD's
+            card idiom. Deliberately the same ThemeToggle component, not a copy: it
+            owns the nwi-theme key and the <html> class, so a tech who switches here
+            finds LD already switched, and vice versa. */}
+        <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
+          <p className="font-condensed font-bold text-white text-lg tracking-wide mb-4">DISPLAY</p>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-semibold text-white text-sm">Color Theme</p>
+              <p className="text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                Switch between dark and light mode
+              </p>
+            </div>
+            <ThemeToggle />
+          </div>
+        </div>
+
+        <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide mb-1">FIELD SETTINGS</p>
-          <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.5)' }}>
+          <p className="text-sm mb-4" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
             Labor rate, technician name, EPA 608 certification, and company logo for printed documents.
           </p>
           <HDSettingsForm
@@ -83,9 +101,9 @@ export default async function HDSettingsPage() {
           />
         </div>
 
-        <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+        <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide mb-1">LATE FEE SETTINGS</p>
-          <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.5)' }}>
+          <p className="text-sm mb-4" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
             Automatically apply a late fee to overdue invoices. Runs daily at 9am and can text the customer.
           </p>
           <LateFeeSettingsForm
@@ -98,33 +116,33 @@ export default async function HDSettingsPage() {
           />
         </div>
 
-        <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+        <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide mb-1">DATA EXPORT</p>
-          <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.5)' }}>
+          <p className="text-sm mb-4" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
             Download all your fleet data as CSV files in a ZIP archive.
           </p>
           <ExportData />
         </div>
 
-        <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+        <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide mb-1">DATA IMPORT</p>
-          <p className="text-sm mb-4" style={{ color: 'rgba(255,255,255,0.5)' }}>
+          <p className="text-sm mb-4" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
             Import from your current invoice app, Fullbay, or any CSV with AI column mapping.
           </p>
           <Link
             href="/hd/import"
             className="inline-block px-5 py-2.5 rounded-lg text-sm font-semibold"
-            style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(255,255,255,0.7)', border: '1px solid #1e3040' }}
+            style={{ background: 'rgba(var(--hd-ink-rgb), 0.05)', color: 'rgba(var(--hd-ink-rgb), 0.7)', border: '1px solid var(--hd-border)' }}
           >
             Open Import Wizard →
           </Link>
         </div>
 
-        <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+        <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide mb-2">BILLING</p>
-          <p className="text-sm mb-3" style={{ color: 'rgba(255,255,255,0.5)' }}>Manage your HD Suite subscription.</p>
+          <p className="text-sm mb-3" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>Manage your HD Suite subscription.</p>
           <a href="/billing" className="inline-block px-4 py-2 rounded-lg text-sm font-medium border transition-colors"
-            style={{ color: 'rgba(255,255,255,0.6)', borderColor: '#1e3040' }}>
+            style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)', borderColor: 'var(--hd-border)' }}>
             Manage Subscription →
           </a>
         </div>

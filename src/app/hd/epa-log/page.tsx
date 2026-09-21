@@ -31,9 +31,9 @@ export default async function EPALogPage({
     <main className="flex-1 p-4 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div>
-          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>HD Suite — Compliance</p>
+          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>HD Suite — Compliance</p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">EPA 608 REFRIGERANT LOG</h1>
-          <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+          <p className="text-sm mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
             Federal regulation requires tracking all refrigerant recovered, added, and charged.
             EPA 608 licensed technicians only.
           </p>
@@ -48,15 +48,15 @@ export default async function EPALogPage({
       </div>
 
       {showForm && (
-        <div className="rounded-xl p-5 mb-6" style={{ background: '#111920', border: `1px solid ${HD_ORANGE}50` }}>
+        <div className="rounded-xl p-5 mb-6" style={{ background: 'var(--hd-card)', border: `1px solid ${HD_ORANGE}50` }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide mb-1">LOG REFRIGERANT ENTRY</p>
-          <p className="text-sm mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>
+          <p className="text-sm mb-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
             Full EPA log entry form coming in the next update. All refrigerant work must be performed by EPA 608 certified technicians only.
           </p>
           <p className="text-xs font-semibold mb-4" style={{ color: '#EF4444' }}>
             ⚠ Federal regulation requires tracking all refrigerant recovered, added, and charged.
           </p>
-          <Link href="/hd/epa-log" className="text-xs px-4 py-2 rounded-lg" style={{ color: 'rgba(255,255,255,0.3)', border: '1px solid #1e3040' }}>
+          <Link href="/hd/epa-log" className="text-xs px-4 py-2 rounded-lg" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)', border: '1px solid var(--hd-border)' }}>
             Cancel
           </Link>
         </div>
@@ -76,25 +76,25 @@ export default async function EPALogPage({
           { label: 'R-404A', value: `${(log ?? []).filter(e => e.refrigerant_type === 'R-404A').reduce((s, e) => s + Number(e.pounds), 0).toFixed(1)} lbs` },
           { label: 'R-452A', value: `${(log ?? []).filter(e => e.refrigerant_type === 'R-452A').reduce((s, e) => s + Number(e.pounds), 0).toFixed(1)} lbs` },
         ].map(({ label, value }) => (
-          <div key={label} className="rounded-xl p-4" style={{ background: '#111920', border: '1px solid #1e3040' }}>
-            <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>{label}</p>
+          <div key={label} className="rounded-xl p-4" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
+            <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{label}</p>
             <p className="font-condensed font-bold text-xl text-white">{value}</p>
           </div>
         ))}
       </div>
 
-      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
+      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
         {!log || log.length === 0 ? (
-          <div className="py-16 text-center" style={{ background: '#111920' }}>
-            <p className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>No EPA log entries yet</p>
+          <div className="py-16 text-center" style={{ background: 'var(--hd-card)' }}>
+            <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>No EPA log entries yet</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
-          <table className="w-full min-w-[600px]" style={{ background: '#111920' }}>
-            <thead style={{ background: '#162030' }}>
+          <table className="w-full min-w-[600px]" style={{ background: 'var(--hd-card)' }}>
+            <thead style={{ background: 'var(--hd-inner)' }}>
               <tr>
                 {['Date', 'Unit', 'Refrigerant', 'Action', 'Pounds', 'Reason', 'Cert #'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.4)' }}>{h}</th>
+                  <th key={h} className="px-4 py-3 text-left text-xs uppercase tracking-wider" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -104,16 +104,16 @@ export default async function EPALogPage({
                 pounds: number; reason: string | null; tech_certification_number: string | null
                 unit: { unit_number: string; manufacturer: string; model: string } | null
               }[]).map((e, i) => (
-                <tr key={e.id} style={{ borderTop: i > 0 ? '1px solid #1e3040' : undefined }}>
+                <tr key={e.id} style={{ borderTop: i > 0 ? '1px solid var(--hd-border)' : undefined }}>
                   <td className="px-4 py-3 text-sm text-white">{e.date}</td>
-                  <td className="px-4 py-3 text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                  <td className="px-4 py-3 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>
                     {e.unit ? `${e.unit.unit_number}` : '—'}
                   </td>
                   <td className="px-4 py-3 text-sm" style={{ color: HD_ORANGE }}>{e.refrigerant_type}</td>
                   <td className="px-4 py-3 text-sm text-white capitalize">{e.action.replace('_', ' ')}</td>
                   <td className="px-4 py-3 text-sm font-medium text-white">{Number(e.pounds).toFixed(2)} lbs</td>
-                  <td className="px-4 py-3 text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>{e.reason ?? '—'}</td>
-                  <td className="px-4 py-3 text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>{e.tech_certification_number ?? '—'}</td>
+                  <td className="px-4 py-3 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>{e.reason ?? '—'}</td>
+                  <td className="px-4 py-3 text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{e.tech_certification_number ?? '—'}</td>
                 </tr>
               ))}
             </tbody>

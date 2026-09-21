@@ -581,7 +581,7 @@ export default function GuidedDiagnostic({ alarmCode }: { alarmCode: string }) {
           <div className="rounded-2xl overflow-hidden" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
 
             <div className="px-6 py-5" style={{ background: ORANGE }}>
-              <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.7)' }}>
+              <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.7)' }}>
                 Code 25 — Root Cause Identified
               </p>
               <p className="font-condensed font-bold text-2xl text-white leading-tight">

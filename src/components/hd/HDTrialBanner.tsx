@@ -44,7 +44,7 @@ export default function HDTrialBanner({
         <p className="font-semibold text-sm text-white">
           Free Trial Active — {daysLeft} day{daysLeft !== 1 ? 's' : ''} remaining
         </p>
-        <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.5)' }}>
+        <p className="text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
           Your first payment of ${monthlyPrice}/month will be on {dateFmt}.
           {' '}Cancel anytime before then — you will never be charged.
         </p>
@@ -52,7 +52,7 @@ export default function HDTrialBanner({
           onClick={handleCancel}
           disabled={loading}
           className="text-xs mt-1.5 underline disabled:opacity-50"
-          style={{ color: 'rgba(255,255,255,0.35)' }}
+          style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}
         >
           {loading ? 'Opening portal…' : `Cancel anytime before ${dateFmt}`}
         </button>

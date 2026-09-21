@@ -64,11 +64,11 @@ export default async function DOTInspectionsPage({
     <main className="flex-1 p-4 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div>
-          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
             HD Suite — Compliance
           </p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">DOT INSPECTIONS</h1>
-          <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+          <p className="text-sm mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
             Annual CVSA inspection records — digitally signed and locked.
           </p>
         </div>
@@ -89,13 +89,13 @@ export default async function DOTInspectionsPage({
           defaultValue={q}
           placeholder="Search unit # or inspector…"
           className="px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/30 col-span-1 md:col-span-2"
-          style={{ background: '#111920', border: '1px solid #1e3040' }}
+          style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}
         />
         <select
           name="result"
           defaultValue={result}
           className="px-3 py-2.5 rounded-lg text-sm text-white"
-          style={{ background: '#111920', border: '1px solid #1e3040' }}
+          style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}
         >
           <option value="">All Results</option>
           <option value="pass">Pass</option>
@@ -105,7 +105,7 @@ export default async function DOTInspectionsPage({
           name="unit"
           defaultValue={unitId}
           className="px-3 py-2.5 rounded-lg text-sm text-white"
-          style={{ background: '#111920', border: '1px solid #1e3040' }}
+          style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}
         >
           <option value="">All Units</option>
           {(units ?? []).map(u => (
@@ -125,7 +125,7 @@ export default async function DOTInspectionsPage({
             <Link
               href="/hd/dot-inspections"
               className="px-4 py-2 rounded-lg text-sm"
-              style={{ color: 'rgba(255,255,255,0.4)', border: '1px solid #1e3040' }}
+              style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)', border: '1px solid var(--hd-border)' }}
             >
               Clear
             </Link>
@@ -141,7 +141,7 @@ export default async function DOTInspectionsPage({
             className="px-3 py-1 rounded-full text-xs font-medium transition-colors"
             style={!acctId
               ? { background: `${HD_ORANGE}25`, color: HD_ORANGE, border: `1px solid ${HD_ORANGE}50` }
-              : { color: 'rgba(255,255,255,0.4)', border: '1px solid #1e3040' }
+              : { color: 'rgba(var(--hd-ink-rgb), 0.4)', border: '1px solid var(--hd-border)' }
             }
           >
             All Accounts
@@ -153,7 +153,7 @@ export default async function DOTInspectionsPage({
               className="px-3 py-1 rounded-full text-xs font-medium transition-colors"
               style={acctId === a.id
                 ? { background: `${HD_ORANGE}25`, color: HD_ORANGE, border: `1px solid ${HD_ORANGE}50` }
-                : { color: 'rgba(255,255,255,0.4)', border: '1px solid #1e3040' }
+                : { color: 'rgba(var(--hd-ink-rgb), 0.4)', border: '1px solid var(--hd-border)' }
               }
             >
               {a.fleet_name}
@@ -164,8 +164,8 @@ export default async function DOTInspectionsPage({
 
       {/* List */}
       {rows.length === 0 ? (
-        <div className="py-20 text-center rounded-xl" style={{ background: '#111920', border: '1px solid #1e3040' }}>
-          <p className="text-sm mb-2" style={{ color: 'rgba(255,255,255,0.3)' }}>
+        <div className="py-20 text-center rounded-xl" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
+          <p className="text-sm mb-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
             {q || result || unitId || acctId ? 'No inspections match your filters' : 'No inspections recorded yet'}
           </p>
           {!q && !result && !unitId && !acctId && (
@@ -175,11 +175,11 @@ export default async function DOTInspectionsPage({
           )}
         </div>
       ) : (
-        <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
+        <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
           {/* Table header — desktop only */}
           <div
             className="hidden sm:grid text-xs uppercase tracking-widest px-5 py-3"
-            style={{ gridTemplateColumns: '1fr 1fr 80px 1fr 120px', background: '#0d1820', color: 'rgba(255,255,255,0.35)' }}
+            style={{ gridTemplateColumns: '1fr 1fr 80px 1fr 120px', background: 'var(--hd-sunken)', color: 'rgba(var(--hd-ink-rgb), 0.35)' }}
           >
             <span>Unit</span>
             <span>Date</span>
@@ -193,10 +193,10 @@ export default async function DOTInspectionsPage({
             const unit = ins.unit as { unit_number?: string; manufacturer?: string; model?: string } | null
             const acct = ins.fleet_account as { fleet_name?: string } | null
             const isPassed = ins.overall_result === 'pass'
-            const rowBg = i % 2 === 0 ? '#111920' : '#0f1820'
+            const rowBg = i % 2 === 0 ? 'var(--hd-card)' : '#0f1820'
 
             return (
-              <div key={ins.id} style={{ borderTop: i > 0 ? '1px solid #1e3040' : undefined }}>
+              <div key={ins.id} style={{ borderTop: i > 0 ? '1px solid var(--hd-border)' : undefined }}>
                 {/* Mobile card */}
                 <div
                   className="sm:hidden px-4 py-4 text-sm"
@@ -208,12 +208,12 @@ export default async function DOTInspectionsPage({
                         {unit?.unit_number ?? '—'}
                       </p>
                       {unit?.manufacturer && (
-                        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                        <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
                           {unit.manufacturer} {unit.model}
                         </p>
                       )}
                       {acct?.fleet_name && (
-                        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>{acct.fleet_name}</p>
+                        <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>{acct.fleet_name}</p>
                       )}
                     </div>
                     <span
@@ -234,7 +234,7 @@ export default async function DOTInspectionsPage({
                           year: 'numeric', month: 'short', day: 'numeric',
                         })}
                       </p>
-                      <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                      <p className="text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
                         {ins.inspector_name ?? '—'}
                       </p>
                     </div>
@@ -262,12 +262,12 @@ export default async function DOTInspectionsPage({
                       {unit?.unit_number ?? '—'}
                     </p>
                     {unit?.manufacturer && (
-                      <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                      <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
                         {unit.manufacturer} {unit.model}
                       </p>
                     )}
                     {acct?.fleet_name && (
-                      <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>{acct.fleet_name}</p>
+                      <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>{acct.fleet_name}</p>
                     )}
                   </div>
 
@@ -278,7 +278,7 @@ export default async function DOTInspectionsPage({
                         year: 'numeric', month: 'short', day: 'numeric',
                       })}
                     </p>
-                    <p className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>
+                    <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
                       {ins.inspection_id ?? `DOT-${ins.id.slice(0, 8).toUpperCase()}`}
                     </p>
                   </div>
@@ -298,7 +298,7 @@ export default async function DOTInspectionsPage({
                   </div>
 
                   {/* Inspector */}
-                  <p style={{ color: 'rgba(255,255,255,0.7)' }}>{ins.inspector_name ?? '—'}</p>
+                  <p style={{ color: 'rgba(var(--hd-ink-rgb), 0.7)' }}>{ins.inspector_name ?? '—'}</p>
 
                   {/* Actions */}
                   <div className="flex gap-2 justify-end">

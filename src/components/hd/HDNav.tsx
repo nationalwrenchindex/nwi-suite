@@ -215,10 +215,10 @@ export default function HDNav({ businessName }: { businessName?: string }) {
         className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-colors"
         style={isActive
           ? { background: `${HD_ORANGE}20`, color: HD_ORANGE, minHeight: 44 }
-          : { color: 'rgba(255,255,255,0.5)', minHeight: 44 }
+          : { color: 'rgba(var(--hd-ink-rgb), 0.5)', minHeight: 44 }
         }
-        onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.9)' }}
-        onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.5)' }}
+        onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(var(--hd-ink-rgb), 0.9)' }}
+        onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(var(--hd-ink-rgb), 0.5)' }}
       >
         <span className="flex-shrink-0">{item.icon}</span>
         <span className="font-medium truncate">{item.label}</span>
@@ -229,7 +229,7 @@ export default function HDNav({ businessName }: { businessName?: string }) {
   const sidebarContent = (
     <>
       {/* Logo */}
-      <div className="px-4 pt-5 pb-4 flex items-center gap-3 border-b" style={{ borderColor: '#1e3040' }}>
+      <div className="px-4 pt-5 pb-4 flex items-center gap-3 border-b" style={{ borderColor: 'var(--hd-border)' }}>
         <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0"
           style={{ background: HD_ORANGE }}>
           <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -240,7 +240,7 @@ export default function HDNav({ businessName }: { businessName?: string }) {
         </div>
         <div className="min-w-0">
           <p className="font-condensed font-bold text-white text-sm leading-tight tracking-wide">NWI HD SUITE</p>
-          <p className="text-xs truncate" style={{ color: 'rgba(255,255,255,0.35)' }}>
+          <p className="text-xs truncate" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
             {businessName ?? 'Heavy Duty'}
           </p>
         </div>
@@ -267,13 +267,13 @@ export default function HDNav({ businessName }: { businessName?: string }) {
       </nav>
 
       {/* Footer */}
-      <div className="px-3 pb-4 pt-2 border-t" style={{ borderColor: '#1e3040' }}>
+      <div className="px-3 pb-4 pt-2 border-t" style={{ borderColor: 'var(--hd-border)' }}>
         <button
           onClick={signOut}
           className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors text-left"
-          style={{ color: 'rgba(255,255,255,0.35)' }}
-          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.7)' }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,0.35)' }}
+          style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'rgba(var(--hd-ink-rgb), 0.7)' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'rgba(var(--hd-ink-rgb), 0.35)' }}
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -289,7 +289,7 @@ export default function HDNav({ businessName }: { businessName?: string }) {
       {/* Desktop sidebar — visible at md (768px) and up */}
       <aside
         className="hidden md:flex flex-col w-56 flex-shrink-0 min-h-dvh sticky top-0"
-        style={{ background: '#0a0f14', borderRight: '1px solid #1e3040' }}
+        style={{ background: 'var(--hd-bg)', borderRight: '1px solid var(--hd-border)' }}
       >
         {sidebarContent}
       </aside>
@@ -297,12 +297,12 @@ export default function HDNav({ businessName }: { businessName?: string }) {
       {/* Mobile top bar — visible below md (768px) */}
       <header
         className="md:hidden flex items-center gap-3 px-4 h-14 sticky top-0 z-40"
-        style={{ background: '#0a0f14', borderBottom: '1px solid #1e3040' }}
+        style={{ background: 'var(--hd-bg)', borderBottom: '1px solid var(--hd-border)' }}
       >
         <button
           onClick={() => setOpen(true)}
           className="flex items-center justify-center rounded-lg transition-colors"
-          style={{ color: 'rgba(255,255,255,0.6)', minWidth: 44, minHeight: 44 }}
+          style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)', minWidth: 44, minHeight: 44 }}
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <line x1="3" y1="12" x2="21" y2="12" />
@@ -335,12 +335,12 @@ export default function HDNav({ businessName }: { businessName?: string }) {
           <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
           <aside
             className="relative flex flex-col w-64 max-h-dvh overflow-y-auto"
-            style={{ background: '#0a0f14', borderRight: '1px solid #1e3040' }}
+            style={{ background: 'var(--hd-bg)', borderRight: '1px solid var(--hd-border)' }}
           >
             <button
               onClick={() => setOpen(false)}
               className="absolute top-3 right-3 p-1.5 rounded-lg"
-              style={{ color: 'rgba(255,255,255,0.4)' }}
+              style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />

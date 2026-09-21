@@ -75,7 +75,7 @@ const CATEGORIES = [
 ]
 
 function statusColor(s: string) {
-  return s === 'in_progress' ? HD_ORANGE : s === 'completed' ? '#22C55E' : s === 'invoiced' ? '#3B82F6' : 'rgba(255,255,255,0.4)'
+  return s === 'in_progress' ? HD_ORANGE : s === 'completed' ? '#22C55E' : s === 'invoiced' ? '#3B82F6' : 'rgba(var(--hd-ink-rgb), 0.4)'
 }
 function statusLabel(s: string) {
   return s === 'in_progress' ? 'In Progress' : s === 'completed' ? 'Completed' : s === 'invoiced' ? 'Invoiced' : 'Open'
@@ -231,7 +231,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
           when not. This is the subscriber's document, so their mark leads it. */}
       <div
         className="rounded-xl px-5 py-4 mb-5 text-white"
-        style={{ background: '#111920', border: '1px solid #1e3040' }}
+        style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}
       >
         <BrandHeader branding={branding} subtitle={`Work Order ${woLabel}`} />
       </div>
@@ -239,7 +239,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div>
-          <Link href="/hd/work-orders" className="text-xs mb-2 inline-block" style={{ color: 'rgba(255,255,255,0.4)' }}>
+          <Link href="/hd/work-orders" className="text-xs mb-2 inline-block" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
             ← Work Orders
           </Link>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">{woLabel}</h1>
@@ -247,7 +247,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
             <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: `${statusColor(status)}20`, color: statusColor(status) }}>
               {statusLabel(status)}
             </span>
-            {wo.service_type && <span className="text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>{wo.service_type}</span>}
+            {wo.service_type && <span className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>{wo.service_type}</span>}
             {/* An invoiced job is already billed, so offer the way back out instead of
                 a second Create Invoice that would quietly double-bill it. */}
             {status === 'invoiced' ? (
@@ -255,7 +255,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
                 onClick={handleReopen}
                 disabled={reopening}
                 className="px-3 py-1.5 rounded-lg text-xs font-condensed font-bold tracking-wide disabled:opacity-50"
-                style={{ background: '#162030', color: 'rgba(255,255,255,0.7)', border: '1px solid #1e3040' }}
+                style={{ background: 'var(--hd-inner)', color: 'rgba(var(--hd-ink-rgb), 0.7)', border: '1px solid var(--hd-border)' }}
               >
                 {reopening ? 'Reopening…' : '↩ Reopen Work Order'}
               </button>
@@ -270,13 +270,13 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
             )}
           </div>
         </div>
-        <p className="text-xs mt-1 flex-shrink-0" style={{ color: 'rgba(255,255,255,0.4)' }}>
+        <p className="text-xs mt-1 flex-shrink-0" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
           {new Date(wo.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
         </p>
       </div>
 
       {/* Work Order Info */}
-      <div className="rounded-xl p-5 mb-6" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+      <div className="rounded-xl p-5 mb-6" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
         <p className="font-condensed font-bold text-white text-sm tracking-widest mb-3">WORK ORDER DETAILS</p>
         <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
           {[
@@ -290,21 +290,21 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
             { label: 'Serial / VIN', value: wo.unit?.serial_number ?? '—' },
           ].map(({ label, value }) => (
             <div key={label}>
-              <span className="text-xs uppercase tracking-wider block mb-0.5" style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10 }}>{label}</span>
-              <span style={{ color: 'rgba(255,255,255,0.85)' }}>{value}</span>
+              <span className="text-xs uppercase tracking-wider block mb-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)', fontSize: 10 }}>{label}</span>
+              <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.85)' }}>{value}</span>
             </div>
           ))}
         </div>
         {wo.service_requests && (
-          <div className="mt-4 pt-4" style={{ borderTop: '1px solid #1e3040' }}>
-            <span className="text-xs uppercase tracking-wider block mb-1" style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10 }}>Service Requests</span>
-            <p className="text-sm whitespace-pre-wrap" style={{ color: 'rgba(255,255,255,0.75)' }}>{wo.service_requests}</p>
+          <div className="mt-4 pt-4" style={{ borderTop: '1px solid var(--hd-border)' }}>
+            <span className="text-xs uppercase tracking-wider block mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)', fontSize: 10 }}>Service Requests</span>
+            <p className="text-sm whitespace-pre-wrap" style={{ color: 'rgba(var(--hd-ink-rgb), 0.75)' }}>{wo.service_requests}</p>
           </div>
         )}
         {wo.comments && (
-          <div className="mt-4 pt-4" style={{ borderTop: '1px solid #1e3040' }}>
-            <span className="text-xs uppercase tracking-wider block mb-1" style={{ color: 'rgba(255,255,255,0.35)', fontSize: 10 }}>Comments</span>
-            <p className="text-sm whitespace-pre-wrap" style={{ color: 'rgba(255,255,255,0.75)' }}>{wo.comments}</p>
+          <div className="mt-4 pt-4" style={{ borderTop: '1px solid var(--hd-border)' }}>
+            <span className="text-xs uppercase tracking-wider block mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)', fontSize: 10 }}>Comments</span>
+            <p className="text-sm whitespace-pre-wrap" style={{ color: 'rgba(var(--hd-ink-rgb), 0.75)' }}>{wo.comments}</p>
           </div>
         )}
       </div>
@@ -316,10 +316,10 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
       <WorkOrderLineItems workOrderId={workOrderId} canEdit={status !== 'invoiced'} />
 
       {/* Inspections — aerial and DOT records attached to this work order */}
-      <div className="rounded-xl overflow-hidden mb-6" style={{ border: '1px solid #1e3040' }}>
-        <div className="px-5 py-3 flex items-center justify-between" style={{ background: '#0d1820', borderBottom: '1px solid #1e3040' }}>
+      <div className="rounded-xl overflow-hidden mb-6" style={{ border: '1px solid var(--hd-border)' }}>
+        <div className="px-5 py-3 flex items-center justify-between" style={{ background: 'var(--hd-sunken)', borderBottom: '1px solid var(--hd-border)' }}>
           <p className="font-condensed font-bold text-white text-sm tracking-widest">INSPECTIONS</p>
-          <span className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>
+          <span className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
             {inspections.length} record{inspections.length !== 1 ? 's' : ''}
           </span>
         </div>
@@ -330,7 +330,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
             both inspection tables had no writer before this. The DOT form also
             takes the free-text unit fields, since it can run against a machine
             that is not a registered unit and would otherwise lose that context. */}
-        <div className="px-5 py-3 flex flex-wrap gap-2" style={{ background: '#0f1820', borderBottom: '1px solid #1e3040' }}>
+        <div className="px-5 py-3 flex flex-wrap gap-2" style={{ background: '#0f1820', borderBottom: '1px solid var(--hd-border)' }}>
           <Link
             href={`/hd/aerial-inspections/new?work_order=${workOrderId}${wo.unit ? `&unit=${wo.unit.id}` : ''}`}
             className="px-4 py-2 rounded-lg text-xs font-condensed font-bold tracking-wide transition-colors"
@@ -349,14 +349,14 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
                 : '')
             }
             className="px-4 py-2 rounded-lg text-xs font-condensed font-bold tracking-wide transition-colors"
-            style={{ background: '#162030', color: 'rgba(255,255,255,0.7)', border: '1px solid #1e3040' }}
+            style={{ background: 'var(--hd-inner)', color: 'rgba(var(--hd-ink-rgb), 0.7)', border: '1px solid var(--hd-border)' }}
           >
             + Start DOT Inspection
           </Link>
           <Link
             href={`/hd/equipment-inspections/new?work_order=${workOrderId}${wo.unit ? `&unit=${wo.unit.id}` : ''}`}
             className="px-4 py-2 rounded-lg text-xs font-condensed font-bold tracking-wide transition-colors"
-            style={{ background: '#162030', color: 'rgba(255,255,255,0.7)', border: '1px solid #1e3040' }}
+            style={{ background: 'var(--hd-inner)', color: 'rgba(var(--hd-ink-rgb), 0.7)', border: '1px solid var(--hd-border)' }}
           >
             + Start Equipment Inspection
           </Link>
@@ -366,21 +366,21 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
           <Link
             href={`/hd/pm-checklist?work_order=${workOrderId}${wo.unit ? `&unit=${wo.unit.id}` : ''}`}
             className="px-4 py-2 rounded-lg text-xs font-condensed font-bold tracking-wide transition-colors"
-            style={{ background: '#162030', color: 'rgba(255,255,255,0.7)', border: '1px solid #1e3040' }}
+            style={{ background: 'var(--hd-inner)', color: 'rgba(var(--hd-ink-rgb), 0.7)', border: '1px solid var(--hd-border)' }}
           >
             + Start Reefer PM Inspection
           </Link>
           {!wo.unit && (
-            <p className="text-xs self-center" style={{ color: 'rgba(255,255,255,0.3)' }}>
+            <p className="text-xs self-center" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
               No unit on this work order — you will select one on the form.
             </p>
           )}
         </div>
 
-        <div style={{ background: '#111920' }}>
+        <div style={{ background: 'var(--hd-card)' }}>
           {inspections.length === 0 ? (
             <div className="p-5">
-              <p className="text-xs py-4 text-center" style={{ color: 'rgba(255,255,255,0.25)', border: '1px dashed #1e3040', borderRadius: 8 }}>
+              <p className="text-xs py-4 text-center" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)', border: '1px dashed var(--hd-border)', borderRadius: 8 }}>
                 No inspections attached to this work order
               </p>
             </div>
@@ -391,11 +391,11 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
                 <div
                   key={`${ins.family}-${ins.id}`}
                   className="flex items-center justify-between gap-3 px-5 py-4"
-                  style={{ borderTop: i > 0 ? '1px solid #1e3040' : undefined }}
+                  style={{ borderTop: i > 0 ? '1px solid var(--hd-border)' : undefined }}
                 >
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-white">{ins.typeLabel}</p>
-                    <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                    <p className="text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
                       {inspectionDateLabel(ins.date)} · {ins.inspectorName ?? 'Unsigned'}
                     </p>
                   </div>
@@ -426,13 +426,13 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
       </div>
 
       {/* Photo Documentation */}
-      <div className="rounded-xl overflow-hidden mb-6" style={{ border: '1px solid #1e3040' }}>
-        <div className="px-5 py-3 flex items-center justify-between" style={{ background: '#0d1820', borderBottom: '1px solid #1e3040' }}>
+      <div className="rounded-xl overflow-hidden mb-6" style={{ border: '1px solid var(--hd-border)' }}>
+        <div className="px-5 py-3 flex items-center justify-between" style={{ background: 'var(--hd-sunken)', borderBottom: '1px solid var(--hd-border)' }}>
           <p className="font-condensed font-bold text-white text-sm tracking-widest">PHOTO DOCUMENTATION</p>
-          <span className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>{photos.length} photo{photos.length !== 1 ? 's' : ''}</span>
+          <span className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>{photos.length} photo{photos.length !== 1 ? 's' : ''}</span>
         </div>
 
-        <div className="divide-y" style={{ background: '#111920', '--tw-divide-opacity': 1, borderColor: '#1e3040' } as React.CSSProperties}>
+        <div className="divide-y" style={{ background: 'var(--hd-card)', '--tw-divide-opacity': 1, borderColor: 'var(--hd-border)' } as React.CSSProperties}>
           {CATEGORIES.map(cat => {
             const catPhotos = photos.filter(p => p.category === cat.id)
             const isUploading = uploading[cat.id]
@@ -453,7 +453,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
                       onClick={() => fileRefs.current[cat.id]?.click()}
                       disabled={isUploading}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
-                      style={{ background: isUploading ? '#1e3040' : `${HD_ORANGE}20`, color: isUploading ? 'rgba(255,255,255,0.4)' : HD_ORANGE, border: `1px solid ${HD_ORANGE}40` }}
+                      style={{ background: isUploading ? 'var(--hd-border)' : `${HD_ORANGE}20`, color: isUploading ? 'rgba(var(--hd-ink-rgb), 0.4)' : HD_ORANGE, border: `1px solid ${HD_ORANGE}40` }}
                     >
                       {isUploading ? (
                         <>
@@ -468,13 +468,13 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
                 </div>
 
                 {catPhotos.length === 0 ? (
-                  <p className="text-xs py-4 text-center" style={{ color: 'rgba(255,255,255,0.25)', border: '1px dashed #1e3040', borderRadius: 8 }}>
+                  <p className="text-xs py-4 text-center" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)', border: '1px dashed var(--hd-border)', borderRadius: 8 }}>
                     No photos yet — tap Add Photo to capture
                   </p>
                 ) : (
                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                     {catPhotos.map(photo => (
-                      <div key={photo.id} className="relative group rounded-lg overflow-hidden aspect-square" style={{ background: '#162030' }}>
+                      <div key={photo.id} className="relative group rounded-lg overflow-hidden aspect-square" style={{ background: 'var(--hd-inner)' }}>
                         {photo.signedUrl ? (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
@@ -485,7 +485,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
-                            <span className="text-xs" style={{ color: 'rgba(255,255,255,0.3)' }}>No preview</span>
+                            <span className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>No preview</span>
                           </div>
                         )}
                         <button
@@ -497,7 +497,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
                           ×
                         </button>
                         {photo.caption && (
-                          <div className="absolute bottom-0 inset-x-0 px-1.5 py-1 text-xs truncate" style={{ background: 'rgba(0,0,0,0.7)', color: 'rgba(255,255,255,0.8)', fontSize: 10 }}>
+                          <div className="absolute bottom-0 inset-x-0 px-1.5 py-1 text-xs truncate" style={{ background: 'rgba(0,0,0,0.7)', color: 'rgba(var(--hd-ink-rgb), 0.8)', fontSize: 10 }}>
                             {photo.caption}
                           </div>
                         )}
@@ -527,7 +527,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
           />
           <button
             className="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center text-white font-bold"
-            style={{ background: 'rgba(255,255,255,0.15)' }}
+            style={{ background: 'rgba(var(--hd-ink-rgb), 0.15)' }}
             onClick={() => setLightbox(null)}
           >
             ×

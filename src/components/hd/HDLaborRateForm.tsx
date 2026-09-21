@@ -41,9 +41,9 @@ export default function HDLaborRateForm({ initialRate }: { initialRate: string |
           min="0"
           max="999"
           className="flex-1 px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
-          style={{ background: '#162030', border: '1px solid #1e3040' }}
+          style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
         />
-        <span className="text-sm" style={{ color: 'rgba(255,255,255,0.4)' }}>/hr</span>
+        <span className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>/hr</span>
         <button
           onClick={handleSave}
           disabled={saving || !rate}

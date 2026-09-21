@@ -40,10 +40,10 @@ function ItemRow({
 }) {
   const isFail = state.result === 'fail'
   return (
-    <div style={{ background: isFail ? '#1a0505' : even ? '#0f1820' : '#111920', borderTop: '1px solid #1e3040' }}>
+    <div style={{ background: isFail ? '#1a0505' : even ? '#0f1820' : 'var(--hd-card)', borderTop: '1px solid var(--hd-border)' }}>
       <div className="flex items-center gap-3 px-4 py-2">
         <div className="flex-1 min-w-0">
-          <p className="text-xs leading-snug" style={{ color: isFail ? '#EF4444CC' : 'rgba(255,255,255,0.65)' }}>
+          <p className="text-xs leading-snug" style={{ color: isFail ? '#EF4444CC' : 'rgba(var(--hd-ink-rgb), 0.65)' }}>
             {label}
           </p>
           {safetyCritical && (
@@ -61,8 +61,8 @@ function ItemRow({
                 width: 44, padding: '4px 0', borderRadius: 4,
                 background: state.result === r
                   ? r === 'pass' ? '#22C55E' : r === 'fail' ? '#EF4444' : '#4B5563'
-                  : '#162030',
-                color: state.result === r ? '#fff' : 'rgba(255,255,255,0.28)',
+                  : 'var(--hd-inner)',
+                color: state.result === r ? '#fff' : 'rgba(var(--hd-ink-rgb), 0.28)',
               }}>
               {r === 'na' ? 'N/A' : r.toUpperCase()}
             </button>
@@ -210,21 +210,21 @@ export default function EquipmentChecklist({
   }
 
   const inp = 'w-full px-3 py-2 rounded text-sm text-white placeholder-white/20'
-  const inpStyle = { background: '#0f1820', border: '1px solid #1e3040' } as const
+  const inpStyle = { background: '#0f1820', border: '1px solid var(--hd-border)' } as const
   const lbl = 'text-white/40 text-xs uppercase tracking-widest block mb-1.5'
 
   return (
     <div className="space-y-5">
 
       {/* Heading */}
-      <div className="rounded-xl p-4" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+      <div className="rounded-xl p-4" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
         <h1 className="font-condensed font-bold text-xl text-white tracking-wide">{def.title}</h1>
         <p className="text-white/40 text-xs mt-0.5">{def.citation}</p>
         <p className="text-white/30 text-xs mt-1.5">{def.cadence}</p>
       </div>
 
       {/* Unit + context */}
-      <div className="rounded-xl p-4 space-y-3" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+      <div className="rounded-xl p-4 space-y-3" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
         <div>
           <label className={lbl}>Unit</label>
           <select value={unitId} onChange={e => setUnitId(e.target.value)} className={inp} style={inpStyle}>
@@ -300,7 +300,7 @@ export default function EquipmentChecklist({
 
       {/* Sections */}
       {def.sections.map(section => (
-        <div key={section.id} className="rounded-xl overflow-hidden" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+        <div key={section.id} className="rounded-xl overflow-hidden" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
           <div className="px-4 py-2.5" style={{ background: '#0d151c' }}>
             <p className="text-white text-sm font-semibold">
               <span className="text-white/30 mr-2">§{section.num}</span>{section.label}
@@ -335,7 +335,7 @@ export default function EquipmentChecklist({
 
       {/* Load test — ASME B30.5 documentation, cranes only */}
       {def.requiresLoadTest && (
-        <div className="rounded-xl p-4 space-y-3" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+        <div className="rounded-xl p-4 space-y-3" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
           <p className="text-white text-sm font-semibold">Load Test Documentation</p>
           <label className="flex items-center gap-2 text-white/70 text-sm">
             <input type="checkbox" checked={loadTestDone} onChange={e => setLoadTestDone(e.target.checked)} />
@@ -355,7 +355,7 @@ export default function EquipmentChecklist({
       )}
 
       {/* Sign-off */}
-      <div className="rounded-xl p-4 space-y-3" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+      <div className="rounded-xl p-4 space-y-3" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
         <div className="grid grid-cols-2 gap-3">
           <div><label className={lbl}>Inspector Name</label>
             <input className={inp} style={inpStyle} value={inspector} onChange={e => setInspector(e.target.value)} /></div>
@@ -371,7 +371,7 @@ export default function EquipmentChecklist({
       </div>
 
       {/* Summary + submit */}
-      <div className="rounded-xl p-4" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+      <div className="rounded-xl p-4" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
         <div className="flex items-center justify-between mb-3">
           <p className="text-white/50 text-sm">
             Result:{' '}

@@ -10,7 +10,7 @@ const HD_ORANGE = '#E85D24'
 const HD_BLUE   = '#1A6BAF'
 
 const WO_STATUS_STYLE: Record<string, { bg: string; color: string; label: string }> = {
-  open:        { bg: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.6)', label: 'Open' },
+  open:        { bg: 'rgba(var(--hd-ink-rgb), 0.08)', color: 'rgba(var(--hd-ink-rgb), 0.6)', label: 'Open' },
   in_progress: { bg: `${HD_ORANGE}25`,          color: HD_ORANGE,              label: 'In Progress' },
   completed:   { bg: 'rgba(96,165,250,0.15)',   color: '#60A5FA',              label: 'Completed' },
   invoiced:    { bg: 'rgba(34,197,94,0.15)',    color: '#22C55E',              label: 'Invoiced' },
@@ -18,7 +18,7 @@ const WO_STATUS_STYLE: Record<string, { bg: string; color: string; label: string
 
 const UNIT_STATUS_STYLE: Record<string, { color: string; label: string }> = {
   active:         { color: '#22C55E', label: 'Active' },
-  inactive:       { color: 'rgba(255,255,255,0.4)', label: 'Inactive' },
+  inactive:       { color: 'rgba(var(--hd-ink-rgb), 0.4)', label: 'Inactive' },
   out_of_service: { color: '#EF4444', label: 'Out of Service' },
 }
 
@@ -126,16 +126,16 @@ export default async function FleetAccountDetailPage({
 
   // ── Edit mode ──
   if (editMode) {
-    const inputStyle = { background: '#162030', border: '1px solid #1e3040' }
+    const inputStyle = { background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }
     const lbl = 'block text-xs uppercase tracking-widest mb-1.5'
     const cls = 'w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20'
     return (
       <main className="flex-1 p-4 sm:p-6">
         <div className="mb-6">
-          <Link href={`/hd/fleet-accounts/${account.id}`} className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>← {account.fleet_name}</Link>
+          <Link href={`/hd/fleet-accounts/${account.id}`} className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>← {account.fleet_name}</Link>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide mt-2">EDIT FLEET ACCOUNT</h1>
         </div>
-        <form action={updateAccount} className="max-w-2xl rounded-xl p-6 space-y-4" style={{ background: '#111920', border: `1px solid ${HD_ORANGE}50` }}>
+        <form action={updateAccount} className="max-w-2xl rounded-xl p-6 space-y-4" style={{ background: 'var(--hd-card)', border: `1px solid ${HD_ORANGE}50` }}>
           {saveError && (
             <p className="text-sm px-3 py-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)' }}>
               Account could not be saved. Business name is required.
@@ -143,33 +143,33 @@ export default async function FleetAccountDetailPage({
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2">
-              <label className={lbl} style={{ color: 'rgba(255,255,255,0.4)' }}>Business / Fleet Name *</label>
+              <label className={lbl} style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Business / Fleet Name *</label>
               <input name="fleet_name" required defaultValue={account.fleet_name ?? ''} className={cls} style={inputStyle} />
             </div>
             <div>
-              <label className={lbl} style={{ color: 'rgba(255,255,255,0.4)' }}>Contact Name</label>
+              <label className={lbl} style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Contact Name</label>
               <input name="contact_name" defaultValue={account.contact_name ?? ''} className={cls} style={inputStyle} />
             </div>
             <div>
-              <label className={lbl} style={{ color: 'rgba(255,255,255,0.4)' }}>Phone</label>
+              <label className={lbl} style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Phone</label>
               <input name="contact_phone" type="tel" defaultValue={account.contact_phone ?? ''} className={cls} style={inputStyle} />
             </div>
             <div>
-              <label className={lbl} style={{ color: 'rgba(255,255,255,0.4)' }}>Email</label>
+              <label className={lbl} style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Email</label>
               <input name="contact_email" type="email" defaultValue={account.contact_email ?? ''} className={cls} style={inputStyle} />
             </div>
             <div>
-              <label className={lbl} style={{ color: 'rgba(255,255,255,0.4)' }}>Address</label>
+              <label className={lbl} style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Address</label>
               <input name="address" defaultValue={account.address ?? ''} className={cls} style={inputStyle} />
             </div>
             <div className="sm:col-span-2">
-              <label className={lbl} style={{ color: 'rgba(255,255,255,0.4)' }}>Notes</label>
+              <label className={lbl} style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Notes</label>
               <textarea name="notes" rows={3} defaultValue={account.notes ?? ''} className={`${cls} resize-none`} style={inputStyle} />
             </div>
           </div>
           <div className="flex gap-3 pt-2">
             <button type="submit" className="px-6 py-2.5 rounded-lg text-sm font-semibold text-white" style={{ background: HD_ORANGE }}>Save Account</button>
-            <Link href={`/hd/fleet-accounts/${account.id}`} className="px-4 py-2.5 rounded-lg text-sm border" style={{ color: 'rgba(255,255,255,0.5)', borderColor: '#1e3040' }}>Cancel</Link>
+            <Link href={`/hd/fleet-accounts/${account.id}`} className="px-4 py-2.5 rounded-lg text-sm border" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)', borderColor: 'var(--hd-border)' }}>Cancel</Link>
           </div>
         </form>
       </main>
@@ -186,19 +186,19 @@ export default async function FleetAccountDetailPage({
     <main className="flex-1 p-4 sm:p-6">
       {/* Breadcrumb + header */}
       <div className="mb-6">
-        <Link href="/hd/fleet-accounts" className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>
+        <Link href="/hd/fleet-accounts" className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
           ← Fleet Accounts
         </Link>
         <div className="flex flex-wrap items-center justify-between gap-3 mt-2">
           <div>
-            <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>HD Suite · Fleet Account</p>
+            <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>HD Suite · Fleet Account</p>
             <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">{account.fleet_name}</h1>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <Link
               href={`/hd/fleet-accounts/${account.id}?edit=1`}
               className="px-4 py-2.5 rounded-lg text-sm font-semibold"
-              style={{ color: '#60A5FA', border: '1px solid #1e3040' }}
+              style={{ color: '#60A5FA', border: '1px solid var(--hd-border)' }}
             >
               Edit
             </Link>
@@ -225,8 +225,8 @@ export default async function FleetAccountDetailPage({
           { label: 'Open Orders',  value: openWoCount,          color: openWoCount > 0 ? HD_ORANGE : '#ffffff' },
           { label: 'Total Billed', value: fmtMoney(totalBilled), color: '#22C55E' },
         ].map(k => (
-          <div key={k.label} className="rounded-xl p-4 sm:p-5 flex flex-col gap-1" style={{ background: '#111920', border: '1px solid #1e3040' }}>
-            <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(255,255,255,0.4)' }}>{k.label}</p>
+          <div key={k.label} className="rounded-xl p-4 sm:p-5 flex flex-col gap-1" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
+            <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{k.label}</p>
             <p className="font-condensed font-bold text-2xl sm:text-3xl leading-none" style={{ color: k.color }}>{k.value}</p>
           </div>
         ))}
@@ -234,7 +234,7 @@ export default async function FleetAccountDetailPage({
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Account info */}
-        <div className="rounded-xl p-5 h-fit" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+        <div className="rounded-xl p-5 h-fit" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide mb-4">ACCOUNT INFO</p>
           {[
             { label: 'Contact',  value: account.contact_name },
@@ -243,15 +243,15 @@ export default async function FleetAccountDetailPage({
             { label: 'Address',  value: account.address },
             { label: 'Added',    value: fmtDate(account.created_at) },
           ].map(({ label, value }) => (
-            <div key={label} className="flex justify-between gap-4 py-2.5 border-b text-sm" style={{ borderColor: '#1e3040' }}>
-              <span className="shrink-0" style={{ color: 'rgba(255,255,255,0.4)' }}>{label}</span>
+            <div key={label} className="flex justify-between gap-4 py-2.5 border-b text-sm" style={{ borderColor: 'var(--hd-border)' }}>
+              <span className="shrink-0" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{label}</span>
               <span className="text-right text-white">{value || '—'}</span>
             </div>
           ))}
           {account.notes && (
             <div className="mt-4">
-              <p className="text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Notes</p>
-              <p className="text-sm leading-relaxed" style={{ color: 'rgba(255,255,255,0.7)' }}>{account.notes}</p>
+              <p className="text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Notes</p>
+              <p className="text-sm leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.7)' }}>{account.notes}</p>
             </div>
           )}
         </div>
@@ -259,15 +259,15 @@ export default async function FleetAccountDetailPage({
         {/* Units + work orders */}
         <div className="lg:col-span-2 space-y-6">
           {/* Fleet units */}
-          <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+          <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
             <div className="flex items-center justify-between mb-4">
               <p className="font-condensed font-bold text-white text-lg tracking-wide">FLEET UNITS</p>
               <Link href={`/hd/fleet-units?new=1&fleet_account_id=${account.id}`} className="text-xs" style={{ color: HD_ORANGE }}>Manage units →</Link>
             </div>
             {unitList.length === 0 ? (
-              <p className="text-sm py-6 text-center" style={{ color: 'rgba(255,255,255,0.25)' }}>No units assigned to this account yet.</p>
+              <p className="text-sm py-6 text-center" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>No units assigned to this account yet.</p>
             ) : (
-              <div className="divide-y" style={{ borderColor: '#1e3040' }}>
+              <div className="divide-y" style={{ borderColor: 'var(--hd-border)' }}>
                 {unitList.map(u => {
                   const st = UNIT_STATUS_STYLE[u.status ?? 'active'] ?? UNIT_STATUS_STYLE.active
                   return (
@@ -275,15 +275,15 @@ export default async function FleetAccountDetailPage({
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-white font-medium">
                           {u.unit_number}
-                          {u.truck_trailer_number ? <span style={{ color: 'rgba(255,255,255,0.4)' }}> · {u.truck_trailer_number}</span> : null}
+                          {u.truck_trailer_number ? <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}> · {u.truck_trailer_number}</span> : null}
                         </p>
-                        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                        <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
                           {[u.year, u.manufacturer, u.model].filter(Boolean).join(' ')}
                           {u.unit_type ? ` · ${u.unit_type}` : ''}
                         </p>
                       </div>
                       {u.total_hours != null && (
-                        <span className="text-xs" style={{ color: 'rgba(255,255,255,0.35)' }}>{Number(u.total_hours).toFixed(0)} hrs</span>
+                        <span className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>{Number(u.total_hours).toFixed(0)} hrs</span>
                       )}
                       <span className="text-xs font-medium" style={{ color: st.color }}>{st.label}</span>
                     </div>
@@ -294,22 +294,22 @@ export default async function FleetAccountDetailPage({
           </div>
 
           {/* Work orders */}
-          <div className="rounded-xl p-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
+          <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
             <div className="flex items-center justify-between mb-4">
               <p className="font-condensed font-bold text-white text-lg tracking-wide">WORK ORDERS</p>
               <Link href="/hd/work-orders" className="text-xs" style={{ color: HD_ORANGE }}>All work orders →</Link>
             </div>
             {woList.length === 0 ? (
-              <p className="text-sm py-6 text-center" style={{ color: 'rgba(255,255,255,0.25)' }}>No work orders for this account yet.</p>
+              <p className="text-sm py-6 text-center" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>No work orders for this account yet.</p>
             ) : (
-              <div className="divide-y" style={{ borderColor: '#1e3040' }}>
+              <div className="divide-y" style={{ borderColor: 'var(--hd-border)' }}>
                 {woList.map(w => {
                   const st = WO_STATUS_STYLE[w.status ?? 'open'] ?? WO_STATUS_STYLE.open
                   return (
                     <Link key={w.id} href={`/hd/work-orders/${w.id}`} className="py-3 flex items-center gap-3 transition-opacity hover:opacity-80">
                       <div className="flex-1 min-w-0">
                         <p className="text-sm text-white font-medium">{w.work_order_number ?? `WO-${w.id.slice(0, 6).toUpperCase()}`}</p>
-                        <p className="text-xs" style={{ color: 'rgba(255,255,255,0.4)' }}>
+                        <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
                           {w.service_type ?? 'Service'} · {fmtDate(w.completed_at ?? w.created_at)}
                         </p>
                       </div>

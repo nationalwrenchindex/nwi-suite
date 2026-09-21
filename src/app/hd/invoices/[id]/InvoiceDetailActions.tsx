@@ -267,7 +267,7 @@ export default function InvoiceDetailActions({
     <div className="flex flex-col gap-2 items-stretch sm:items-end">
       <div className="flex items-center gap-2 flex-wrap">
         {toast && (
-          <span className="text-xs px-3 py-1.5 rounded-lg" style={{ background: TEXT, color: '#fff' }}>
+          <span className="text-xs px-3 py-1.5 rounded-lg" style={{ background: TEXT, color: 'var(--hd-text)' }}>
             {toast}
           </span>
         )}

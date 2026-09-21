@@ -18,14 +18,14 @@ export default function HDUpgradePage() {
           </svg>
         </div>
         <h1 className="font-condensed font-bold text-2xl text-white tracking-wide mb-2">HD STARTER REQUIRED</h1>
-        <p className="text-sm mb-6" style={{ color: 'rgba(255,255,255,0.5)' }}>
+        <p className="text-sm mb-6" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
           This module is available on HD Starter and above. Your current plan includes QuickWrench, EPA 608 Log, and PM intervals.
         </p>
-        <div className="rounded-xl p-5 mb-5" style={{ background: '#111920', border: '1px solid #1e3040' }}>
-          <p className="text-xs uppercase tracking-widest mb-3" style={{ color: 'rgba(255,255,255,0.4)' }}>Your Reefer Plan Includes</p>
+        <div className="rounded-xl p-5 mb-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
+          <p className="text-xs uppercase tracking-widest mb-3" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Your Reefer Plan Includes</p>
           <div className="space-y-2 text-sm text-left">
             {['HD QuickWrench (alarm codes + web search)', 'EPA 608 Refrigerant Log', 'PM Interval Calculator', 'Alarm Code Lookup'].map(f => (
-              <div key={f} className="flex items-center gap-2" style={{ color: 'rgba(255,255,255,0.7)' }}>
+              <div key={f} className="flex items-center gap-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.7)' }}>
                 <span style={{ color: '#22C55E' }}>✓</span>{f}
               </div>
             ))}
@@ -42,7 +42,7 @@ export default function HDUpgradePage() {
           <Link
             href="/hd/dashboard"
             className="block w-full py-3 rounded-xl text-sm"
-            style={{ color: 'rgba(255,255,255,0.4)', border: '1px solid #1e3040' }}
+            style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)', border: '1px solid var(--hd-border)' }}
           >
             Back to Dashboard
           </Link>

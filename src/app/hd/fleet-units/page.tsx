@@ -155,20 +155,20 @@ export default async function FleetUnitsPage({
     redirect(`/hd/fleet-units?saved=${unitId ? 'updated' : 'created'}${accountId ? `&fleet_account_id=${accountId}` : ''}`)
   }
 
-  const inputStyle = { background: '#162030', border: '1px solid #1e3040' }
+  const inputStyle = { background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }
   const ev = (k: string) => (editUnit?.[k] != null ? String(editUnit[k]) : '')
 
   return (
     <main className="flex-1 p-4 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>HD Suite</p>
+          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>HD Suite</p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">FLEET UNITS</h1>
-          <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+          <p className="text-sm mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
             {unitTotal.toLocaleString()} unit{unitTotal !== 1 ? 's' : ''}
           </p>
           {fleetAccountName && (
-            <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+            <p className="text-sm mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
               Showing units for <span style={{ color: '#60A5FA' }}>{fleetAccountName}</span>
               {' · '}<Link href="/hd/fleet-units" className="underline">show all units</Link>
             </p>
@@ -191,12 +191,12 @@ export default async function FleetUnitsPage({
 
       {/* Inline create / edit form */}
       {showForm && (
-        <form action={saveUnit} className="rounded-xl p-6 mb-6 space-y-4" style={{ background: '#111920', border: `1px solid ${HD_ORANGE}50` }}>
+        <form action={saveUnit} className="rounded-xl p-6 mb-6 space-y-4" style={{ background: 'var(--hd-card)', border: `1px solid ${HD_ORANGE}50` }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide">{isEdit ? 'EDIT FLEET UNIT' : 'ADD FLEET UNIT'}</p>
           {isEdit && <input type="hidden" name="unit_id" value={editId!} />}
           {fleetAccountName && scopedAccountId && !isEdit && (
             <div className="flex items-center gap-2 text-sm">
-              <span style={{ color: 'rgba(255,255,255,0.5)' }}>Adding unit to</span>
+              <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>Adding unit to</span>
               <span className="px-2 py-0.5 rounded font-semibold" style={{ background: `${HD_BLUE}30`, color: '#60A5FA' }}>{fleetAccountName}</span>
               <input type="hidden" name="fleet_account_id" value={scopedAccountId} />
             </div>
@@ -209,11 +209,11 @@ export default async function FleetUnitsPage({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Unit # *</label>
+              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Unit # *</label>
               <input name="unit_number" required defaultValue={ev('unit_number')} placeholder="e.g. TRL-001" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={inputStyle} />
             </div>
             <div>
-              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Manufacturer *</label>
+              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Manufacturer *</label>
               <input name="manufacturer" list="manufacturer-options" required defaultValue={ev('manufacturer')} placeholder="Thermo King, Carrier, Freightliner…" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={inputStyle} />
               <datalist id="manufacturer-options">
                 <option value="Thermo King" />
@@ -221,30 +221,30 @@ export default async function FleetUnitsPage({
               </datalist>
             </div>
             <div>
-              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Model *</label>
+              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Model *</label>
               <input name="model" required defaultValue={ev('model')} placeholder="e.g. Precedent S-600" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={inputStyle} />
             </div>
             <div>
-              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Serial Number</label>
+              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Serial Number</label>
               <input name="serial_number" defaultValue={ev('serial_number')} placeholder="10-digit serial" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={inputStyle} />
             </div>
             <div>
-              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>BM Number</label>
+              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>BM Number</label>
               <input name="bm_number" defaultValue={ev('bm_number')} placeholder="e.g. 363xxx" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={inputStyle} />
             </div>
             <div>
-              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Unit Type</label>
+              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Unit Type</label>
               <select name="unit_type" defaultValue={ev('unit_type') || 'trailer'} className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white" style={inputStyle}>
                 <option value="trailer">Trailer</option>
                 <option value="truck">Truck</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Year</label>
+              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Year</label>
               <input name="year" type="number" defaultValue={ev('year')} placeholder="e.g. 2020" min="1990" max="2030" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={inputStyle} />
             </div>
             <div>
-              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Refrigerant</label>
+              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Refrigerant</label>
               <select name="refrigerant_type" defaultValue={ev('refrigerant_type') || 'R-404A'} className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white" style={inputStyle}>
                 <option value="R-404A">R-404A</option>
                 <option value="R-452A">R-452A</option>
@@ -253,39 +253,39 @@ export default async function FleetUnitsPage({
               </select>
             </div>
             <div>
-              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Current Hours</label>
+              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Current Hours</label>
               <input name="total_hours" type="number" defaultValue={ev('total_hours')} placeholder="e.g. 4500" min="0" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={inputStyle} />
             </div>
           </div>
 
           {/* PM History */}
           <div className="pt-2">
-            <p className="text-xs uppercase tracking-widest mb-2 font-semibold" style={{ color: 'rgba(255,255,255,0.5)' }}>Last PM Service</p>
+            <p className="text-xs uppercase tracking-widest mb-2 font-semibold" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>Last PM Service</p>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
-                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Last PM Type</label>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Last PM Type</label>
                 <select name="last_pm_type" defaultValue={ev('last_pm_type')} className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white" style={inputStyle}>
                   <option value="">— Select —</option>
                   {PM_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Last PM Date</label>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Last PM Date</label>
                 <input name="last_pm_date" type="date" defaultValue={ev('last_pm_date').slice(0, 10)} className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white" style={inputStyle} />
               </div>
               <div>
-                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(255,255,255,0.4)' }}>Last PM Hours</label>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Last PM Hours</label>
                 <input name="last_pm_hours" type="number" min="0" defaultValue={ev('last_pm_hours')} placeholder="e.g. 3000" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={inputStyle} />
               </div>
             </div>
-            <p className="text-xs mt-1.5" style={{ color: 'rgba(255,255,255,0.3)' }}>Next PM due is auto-calculated from Last PM Hours + the manufacturer interval.</p>
+            <p className="text-xs mt-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>Next PM due is auto-calculated from Last PM Hours + the manufacturer interval.</p>
           </div>
 
           <div className="flex gap-3 pt-2">
             <button type="submit" className="px-6 py-2.5 rounded-lg text-sm font-semibold text-white" style={{ background: HD_ORANGE }}>
               {isEdit ? 'Update Unit' : 'Save Unit'}
             </button>
-            <Link href="/hd/fleet-units" className="px-4 py-2.5 rounded-lg text-sm border" style={{ color: 'rgba(255,255,255,0.5)', borderColor: '#1e3040' }}>
+            <Link href="/hd/fleet-units" className="px-4 py-2.5 rounded-lg text-sm border" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)', borderColor: 'var(--hd-border)' }}>
               Cancel
             </Link>
           </div>

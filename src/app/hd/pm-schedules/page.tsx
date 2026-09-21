@@ -25,9 +25,9 @@ export default async function PMSchedulesPage() {
     <main className="flex-1 p-4 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(255,255,255,0.4)' }}>HD Suite</p>
+          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>HD Suite</p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">PM SCHEDULES</h1>
-          <p className="text-sm mt-1" style={{ color: 'rgba(255,255,255,0.4)' }}>
+          <p className="text-sm mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
             Thermo King: every 3000 hrs (1500 hr visual) · Carrier: every 1500 hrs (750 hr visual)
           </p>
         </div>
@@ -64,23 +64,23 @@ export default async function PMSchedulesPage() {
             ],
           },
         ].map(({ brand, color, intervals }) => (
-          <div key={brand} className="rounded-xl p-5" style={{ background: '#111920', border: `1px solid ${color}40` }}>
+          <div key={brand} className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: `1px solid ${color}40` }}>
             <p className="font-condensed font-bold text-white text-lg tracking-wide mb-3" style={{ color }}>{brand}</p>
             {intervals.map(({ type, hours }) => (
               <Link
                 key={type}
                 href={`/hd/invoices/new?pm_type=${encodeURIComponent(type)}&unit_manufacturer=${encodeURIComponent(brand)}`}
                 className="flex justify-between items-center py-2 border-b text-sm transition-colors hover:bg-white/5 rounded px-1 -mx-1"
-                style={{ borderColor: '#1e3040' }}
+                style={{ borderColor: 'var(--hd-border)' }}
               >
-                <span style={{ color: 'rgba(255,255,255,0.7)' }}>{type}</span>
+                <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.7)' }}>{type}</span>
                 <span className="font-medium whitespace-nowrap" style={{ color }}>{hours} ›</span>
               </Link>
             ))}
           </div>
         ))}
       </div>
-      <p className="text-xs mb-6" style={{ color: 'rgba(255,255,255,0.3)' }}>Tap any interval to start a new invoice pre-filled for that PM service.</p>
+      <p className="text-xs mb-6" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>Tap any interval to start a new invoice pre-filled for that PM service.</p>
 
       {/* Truck & trailer PM intervals (chassis, mileage/time based) */}
       <h2 className="font-condensed font-bold text-white text-xl tracking-wide mb-4">TRUCK &amp; TRAILER PM INTERVALS</h2>
@@ -110,7 +110,7 @@ export default async function PMSchedulesPage() {
             ],
           },
         ].map(({ brand, mfr, color, intervals }) => (
-          <div key={brand} className="rounded-xl p-5" style={{ background: '#111920', border: `1px solid ${color}40` }}>
+          <div key={brand} className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: `1px solid ${color}40` }}>
             <p className="font-condensed font-bold text-white text-lg tracking-wide mb-3" style={{ color }}>{brand}</p>
             {intervals.map(({ type, when, detail }) => (
               <Link
@@ -119,13 +119,13 @@ export default async function PMSchedulesPage() {
                   ? `/hd/dot-inspections/new?unit_manufacturer=${encodeURIComponent(mfr)}`
                   : `/hd/invoices/new?pm_type=${encodeURIComponent(type)}&unit_manufacturer=${encodeURIComponent(mfr)}`}
                 className="block py-2 border-b transition-colors hover:bg-white/5 rounded px-1 -mx-1"
-                style={{ borderColor: '#1e3040' }}
+                style={{ borderColor: 'var(--hd-border)' }}
               >
                 <div className="flex justify-between gap-3 text-sm">
-                  <span style={{ color: 'rgba(255,255,255,0.7)' }}>{type}</span>
+                  <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.7)' }}>{type}</span>
                   <span className="font-medium whitespace-nowrap" style={{ color }}>{when} ›</span>
                 </div>
-                <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.35)' }}>{detail}</p>
+                <p className="text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>{detail}</p>
               </Link>
             ))}
           </div>
@@ -134,18 +134,18 @@ export default async function PMSchedulesPage() {
 
       {/* Unit PM status */}
       <h2 className="font-condensed font-bold text-white text-xl tracking-wide mb-4">FLEET UNIT STATUS</h2>
-      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #1e3040' }}>
+      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
         {!units || units.length === 0 ? (
-          <div className="py-16 text-center" style={{ background: '#111920' }}>
-            <p className="text-sm" style={{ color: 'rgba(255,255,255,0.3)' }}>No active units — add fleet units to track PM schedules</p>
+          <div className="py-16 text-center" style={{ background: 'var(--hd-card)' }}>
+            <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>No active units — add fleet units to track PM schedules</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px]" style={{ background: '#111920' }}>
-            <thead style={{ background: '#162030' }}>
+          <table className="w-full min-w-[640px]" style={{ background: 'var(--hd-card)' }}>
+            <thead style={{ background: 'var(--hd-inner)' }}>
               <tr>
                 {['Unit', 'Type', 'Manufacturer / Model', 'Total Hours', 'Last PM', 'Next PM Due', 'Hours Until PM', 'Status'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs uppercase tracking-wider" style={{ color: 'rgba(255,255,255,0.4)' }}>{h}</th>
+                  <th key={h} className="px-4 py-3 text-left text-xs uppercase tracking-wider" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -165,7 +165,7 @@ export default async function PMSchedulesPage() {
                   : 'ok'
                 const statusClr = pmStatus === 'overdue' ? '#EF4444' : pmStatus === 'due_soon' ? HD_ORANGE : '#22C55E'
                 return (
-                  <tr key={u.id} style={{ borderTop: i > 0 ? '1px solid #1e3040' : undefined }}>
+                  <tr key={u.id} style={{ borderTop: i > 0 ? '1px solid var(--hd-border)' : undefined }}>
                     <td className="px-4 py-3 text-sm text-white font-medium">{u.unit_number}</td>
                     <td className="px-4 py-3">
                       <span className="text-xs font-medium px-2 py-0.5 rounded-full capitalize"
@@ -173,14 +173,14 @@ export default async function PMSchedulesPage() {
                         {u.unit_type ?? 'trailer'}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm" style={{ color: 'rgba(255,255,255,0.7)' }}>{u.manufacturer} {u.model}</td>
-                    <td className="px-4 py-3 text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                    <td className="px-4 py-3 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.7)' }}>{u.manufacturer} {u.model}</td>
+                    <td className="px-4 py-3 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>
                       {u.total_hours !== null ? `${Number(u.total_hours).toFixed(0)} hrs` : '—'}
                     </td>
-                    <td className="px-4 py-3 text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>
+                    <td className="px-4 py-3 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
                       {u.last_pm_date ? new Date(u.last_pm_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                     </td>
-                    <td className="px-4 py-3 text-sm" style={{ color: 'rgba(255,255,255,0.6)' }}>
+                    <td className="px-4 py-3 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>
                       {u.next_pm_due_hours !== null ? `${Number(u.next_pm_due_hours).toFixed(0)} hrs` : '—'}
                     </td>
                     <td className="px-4 py-3 text-sm font-medium" style={{ color: statusClr }}>
