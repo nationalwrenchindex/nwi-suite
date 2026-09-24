@@ -24,7 +24,7 @@ export default async function SettingsPage() {
   const [{ data: profile }, hasQW, { data: pricingRows }, { data: adjPresets }, { data: listing }] = await Promise.all([
     supabase
       .from('profiles')
-      .select('full_name, business_name, slug, share_sms_template, share_email_subject, share_email_body, default_payment_instructions, average_mpg, fuel_type, offer_mpi_on_booking, default_labor_rate, default_parts_markup_percent, default_tax_percent, business_type, bill_consumables_separately, phone, sms_booking_notifications_enabled, business_logo_url, city, state')
+      .select('full_name, business_name, slug, share_sms_template, share_email_subject, share_email_body, default_payment_instructions, average_mpg, fuel_type, offer_mpi_on_booking, default_labor_rate, default_parts_markup_percent, default_tax_percent, business_type, bill_consumables_separately, phone, sms_booking_notifications_enabled, business_logo_url, city, state, work_orders_enabled')
       .eq('id', user.id)
       .single(),
     hasQuickWrenchAccess(user.id),
@@ -74,11 +74,12 @@ export default async function SettingsPage() {
     business_logo_url?:                  string | null
     city?:                               string | null
     state?:                              string | null
+    work_orders_enabled?:                boolean | null
   }
 
   return (
     <div className="min-h-dvh bg-dark flex flex-col">
-      <AppNav businessName={p.business_name ?? ''} businessType={p.business_type ?? undefined} />
+      <AppNav workOrdersEnabled={p.work_orders_enabled ?? false} businessName={p.business_name ?? ''} businessType={p.business_type ?? undefined} />
       <main className="flex-1 max-w-2xl w-full mx-auto px-4 sm:px-6 py-8">
         <div className="mb-8">
           <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Account</p>
@@ -148,6 +149,7 @@ export default async function SettingsPage() {
           initialTaxPct={p.default_tax_percent ?? 8.5}
           initialPricingRows={(pricingRows ?? []) as PricingRow[]}
           initialBillConsumables={p.bill_consumables_separately ?? false}
+          initialWorkOrdersEnabled={p.work_orders_enabled ?? false}
           initialPhone={p.phone ?? null}
           initialCity={p.city ?? ''}
           initialState={p.state ?? ''}

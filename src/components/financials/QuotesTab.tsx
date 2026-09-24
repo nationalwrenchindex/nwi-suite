@@ -2,6 +2,11 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import type { Quote, QuoteStatus, LineItem, ServiceLine, Adjustment, AdjustmentPreset } from '@/types/financials'
+import LineItemEditor, { LineItemTable } from '@/components/shared/LineItemEditor'
+import {
+  round2, isLaborItem, fromLineItems, toLineItems, computeTotals,
+  type EditItem,
+} from '@/components/shared/line-items'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -25,22 +30,7 @@ const fmtDateTime = (s: string | null | undefined) => {
   })
 }
 
-function round2(n: number): number {
-  return Math.round(n * 100) / 100
-}
-
-function isLaborItem(li: LineItem): boolean {
-  return /^labor/i.test((li.description ?? '').trim())
-}
-
 // ─── Types ─────────────────────────────────────────────────────────────────────
-
-interface EditItem {
-  _id:         string
-  description: string
-  quantity:    number
-  unit_price:  number   // BASE price (pre-markup), what the tech paid/sourced
-}
 
 interface EditServiceLine extends ServiceLine {
   _id: string
@@ -461,12 +451,14 @@ function SendQuoteModal({
 function QuoteDetailModal({
   quote:      initialQuote,
   isDetailer = false,
+  workOrdersEnabled = false,
   onClose,
   onUpdated,
   onDeleted,
 }: {
   quote:       Quote
   isDetailer?: boolean
+  workOrdersEnabled?: boolean
   onClose:     () => void
   onUpdated:   (q: Quote) => void
   onDeleted:   (id: string) => void
@@ -477,18 +469,10 @@ function QuoteDetailModal({
 
   // ── Derive base prices from stored post-markup unit prices ──────────────────
   const initMarkupPct = initialQuote.parts_markup_percent ?? 0
+  // The detailer model carries one synthetic 'Service' row that is not a part, so
+  // it is excluded from the parts table rather than shown as a zero-quantity line.
   const [initialItems] = useState<EditItem[]>(() =>
-    (initialQuote.line_items ?? [])
-      .filter(li => !isLaborItem(li))
-      .filter(li => !(isDetailer && li.description?.trim() === 'Service'))
-      .map((li, i) => ({
-        _id:         `li-${i}`,
-        description: li.description,
-        quantity:    li.quantity,
-        unit_price:  initMarkupPct > 0
-          ? round2(li.unit_price / (1 + initMarkupPct / 100))
-          : li.unit_price,
-      }))
+    fromLineItems(initialQuote.line_items, initMarkupPct, isDetailer ? 'Service' : undefined)
   )
   const [initLaborHours] = useState(initialQuote.labor_hours ?? 0)
   const [initLaborRate]  = useState(initialQuote.labor_rate  ?? 125)
@@ -519,6 +503,7 @@ function QuoteDetailModal({
   const [markupPct,   setMarkupPct]   = useState(initMarkup)
   const [taxPct,      setTaxPct]      = useState(initTaxPct)
   const [notes,       setNotes]       = useState(initNotes)
+  const [poNumber,    setPoNumber]    = useState(initialQuote.po_number ?? '')
   const [custName,    setCustName]    = useState(initCustName)
   const [custPhone,   setCustPhone]   = useState(initCustPhone)
   const [vehicleId,   setVehicleId]   = useState<string | null>(initialQuote.vehicle_id)
@@ -535,13 +520,10 @@ function QuoteDetailModal({
   const [editingAdjId,   setEditingAdjId]   = useState<string | null>(null)
   const [editingAdjVals, setEditingAdjVals] = useState({ name: '', price_cents: 0 })
 
-  // ── Inline line-item editing ───────────────────────────────────────────────
-  const [editingId,     setEditingId]     = useState<string | null>(null)
-  const [editingVals,   setEditingVals]   = useState({ description: '', quantity: 1, unit_price: 0 })
-  const [addingNew,     setAddingNew]     = useState(false)
-  const [newItemVals,   setNewItemVals]   = useState({ description: '', quantity: 1, unit_price: 0 })
 
   // ── Vehicle change modal ───────────────────────────────────────────────────
+  const [editorNonce, setEditorNonce] = useState(0)
+
   const [showVehicleModal, setShowVehicleModal] = useState(false)
 
   // ── Phase 2: send / mark modals ────────────────────────────────────────────
@@ -553,6 +535,7 @@ function QuoteDetailModal({
   // ── Phase 3: Push to Invoice ────────────────────────────────────────────────
   const [showConvertModal,      setShowConvertModal]      = useState(false)
   const [converting,            setConverting]            = useState(false)
+  const [convertingWO,          setConvertingWO]          = useState(false)
   const [convertedInvoiceNum,   setConvertedInvoiceNum]   = useState<string | null>(null)
 
   // Fetch the invoice number for converted quotes (for the banner display)
@@ -618,15 +601,20 @@ function QuoteDetailModal({
   const liveStatus = liveQuote.status as QuoteStatus
 
   // ── Live calculations ──────────────────────────────────────────────────────
-  const partsBase           = isDetailer ? 0 : items.reduce((s, li) => s + li.quantity * li.unit_price, 0)
-  const markupAmt           = isDetailer ? 0 : partsBase * (markupPct / 100)
-  const partsTotal          = partsBase + markupAmt
-  const laborSubtotal       = isDetailer ? 0 : (laborHours || 0) * (laborRate || 0)
+  // Parts + labour maths is shared with work orders (components/shared/line-items).
+  // The detailer model bills services and adjustments instead of parts, so it keeps
+  // its own subtotal and simply feeds zeroed parts through the same tax step.
+  const lineInputs = { items, markupPct, laborHours, laborRate, taxPct }
+  const t                   = computeTotals(isDetailer ? { ...lineInputs, items: [], laborHours: 0, laborRate: 0 } : lineInputs)
+  const partsBase           = t.partsBase
+  const markupAmt           = t.markupAmt
+  const partsTotal          = t.partsTotal
+  const laborSubtotal       = t.laborSubtotal
   const servicesSubtotal    = isDetailer ? serviceLines.reduce((s, sl) => s + sl.price_cents / 100, 0) : 0
   const adjustmentsSubtotal = isDetailer ? adjustments.reduce((s, a) => s + a.price_cents / 100, 0) : 0
-  const subtotal            = isDetailer ? servicesSubtotal + adjustmentsSubtotal : partsTotal + laborSubtotal
-  const taxAmount           = round2(subtotal * ((taxPct || 0) / 100))
-  const grandTotal          = round2(subtotal + taxAmount)
+  const subtotal            = isDetailer ? servicesSubtotal + adjustmentsSubtotal : t.subtotal
+  const taxAmount           = isDetailer ? round2(subtotal * ((taxPct || 0) / 100)) : t.taxAmount
+  const grandTotal          = isDetailer ? round2(subtotal + taxAmount)             : t.grandTotal
 
   // ── Prevent accidental navigation when dirty ───────────────────────────────
   useEffect(() => {
@@ -662,38 +650,6 @@ function QuoteDetailModal({
     toastRef.current = setTimeout(() => setToast(null), 4000)
   }
 
-  // ── Item editing helpers ───────────────────────────────────────────────────
-  function startEditItem(item: EditItem) {
-    setEditingId(item._id)
-    setEditingVals({ description: item.description, quantity: item.quantity, unit_price: item.unit_price })
-  }
-
-  function commitEditItem() {
-    if (!editingVals.description.trim()) return
-    setItems(prev => prev.map(li =>
-      li._id === editingId
-        ? { ...li, description: editingVals.description.trim(), quantity: editingVals.quantity, unit_price: editingVals.unit_price }
-        : li
-    ))
-    setEditingId(null)
-  }
-
-  function removeItem(id: string) {
-    setItems(prev => prev.filter(li => li._id !== id))
-    if (editingId === id) setEditingId(null)
-  }
-
-  function commitNewItem() {
-    if (!newItemVals.description.trim()) return
-    setItems(prev => [...prev, {
-      _id:         `new-${Date.now()}`,
-      description: newItemVals.description.trim(),
-      quantity:    newItemVals.quantity,
-      unit_price:  newItemVals.unit_price,
-    }])
-    setNewItemVals({ description: '', quantity: 1, unit_price: 0 })
-    setAddingNew(false)
-  }
 
   // ── Validation ─────────────────────────────────────────────────────────────
   function validate(): string | null {
@@ -738,27 +694,14 @@ function QuoteDetailModal({
           customer_name:        custName,
           customer_phone:       custPhone,
           vehicle_id:           vehicleId,
+          po_number:            poNumber,
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           service_lines:        serviceLines.map(({ _id, ...sl }) => sl),
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           adjustments:          adjustments.map(({ _id, ...a }) => a),
         }
       } else {
-        const markup = markupPct / 100
-        const savedLineItems = [
-          ...items.map(li => ({
-            description: li.description,
-            quantity:    li.quantity,
-            unit_price:  round2(li.unit_price * (1 + markup)),
-            total:       round2(li.quantity * li.unit_price * (1 + markup)),
-          })),
-          ...(laborHours > 0 ? [{
-            description: 'Labor',
-            quantity:    laborHours,
-            unit_price:  laborRate,
-            total:       round2(laborHours * laborRate),
-          }] : []),
-        ]
+        const savedLineItems = toLineItems({ items, markupPct, laborHours, laborRate })
         body = {
           line_items:           savedLineItems,
           labor_hours:          laborHours,
@@ -773,6 +716,7 @@ function QuoteDetailModal({
           customer_name:        custName,
           customer_phone:       custPhone,
           vehicle_id:           vehicleId,
+          po_number:            poNumber,
         }
       }
 
@@ -809,8 +753,9 @@ function QuoteDetailModal({
     setVehicle(initialQuote.vehicle)
     setServiceLines(initServiceLines)
     setAdjustments(initAdjustments)
-    setEditingId(null)
-    setAddingNew(false)
+    // LineItemEditor owns its own inline-edit state, so a discard clears it by
+    // remounting rather than by reaching in — same visible behaviour as before.
+    setEditorNonce(n => n + 1)
     setEditingSlId(null)
     setAddingAdj(false)
     setValidationErr(null)
@@ -899,6 +844,26 @@ function QuoteDetailModal({
       return
     }
     onClose()
+  }
+
+  // Opens a work order from this approved quote. The server copies the money off
+  // the quote row, so nothing here can change what the customer approved.
+  async function handleConvertToWorkOrder() {
+    setConvertingWO(true)
+    try {
+      const res  = await fetch(`/api/quotes/${initialQuote.id}/to-work-order`, { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok) {
+        // 409 carries the existing work order, so a double-click lands on it
+        // rather than reporting a failure the tech cannot act on.
+        if (json.work_order_id) { window.location.href = `/work-orders/${json.work_order_id}`; return }
+        throw new Error(json.error ?? 'Could not create work order')
+      }
+      window.location.href = `/work-orders/${json.work_order_id}`
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Could not create work order', 'error')
+      setConvertingWO(false)
+    }
   }
 
   // ── Push to Invoice (Phase 3) ───────────────────────────────────────────────
@@ -1142,153 +1107,9 @@ function QuoteDetailModal({
                 <p className="text-white/30 text-xs uppercase tracking-widest">Line Items</p>
 
                 {isDraft ? (
-                  <div className="rounded-xl border border-white/10 overflow-hidden">
-                    <div className="hidden md:grid grid-cols-[1fr_56px_80px_80px_52px] gap-1 px-3 py-2 border-b border-white/10 bg-white/5">
-                      <span className="text-white/30 text-[10px] uppercase tracking-wider">Part / Description</span>
-                      <span className="text-white/30 text-[10px] uppercase tracking-wider text-right">Qty</span>
-                      <span className="text-white/30 text-[10px] uppercase tracking-wider text-right">Base Price</span>
-                      <span className="text-white/30 text-[10px] uppercase tracking-wider text-right">Total</span>
-                      <span />
-                    </div>
-
-                    {items.length === 0 && !addingNew && (
-                      <div className="px-4 py-4 text-white/25 text-sm text-center">
-                        No parts — add one below or skip if labor-only.
-                      </div>
-                    )}
-
-                    {items.map(li => (
-                      <div key={li._id} className="border-b border-white/5 last:border-0">
-                        {editingId === li._id ? (
-                          <div className="p-3 space-y-2 bg-orange/5">
-                            <input
-                              autoFocus
-                              className="nwi-input text-sm w-full"
-                              placeholder="Part name"
-                              value={editingVals.description}
-                              onChange={e => setEditingVals(v => ({ ...v, description: e.target.value }))}
-                            />
-                            <div className="grid grid-cols-2 gap-2">
-                              <div>
-                                <label className="nwi-label text-[10px]">Qty</label>
-                                <input
-                                  type="number" min={0} step={1}
-                                  className="nwi-input text-sm"
-                                  value={editingVals.quantity}
-                                  onChange={e => setEditingVals(v => ({ ...v, quantity: Number(e.target.value) || 0 }))}
-                                />
-                              </div>
-                              <div>
-                                <label className="nwi-label text-[10px]">Base Price ($)</label>
-                                <input
-                                  type="number" min={0} step={0.01}
-                                  className="nwi-input text-sm"
-                                  value={editingVals.unit_price}
-                                  onChange={e => setEditingVals(v => ({ ...v, unit_price: Number(e.target.value) || 0 }))}
-                                />
-                              </div>
-                            </div>
-                            <div className="flex gap-2">
-                              <button onClick={commitEditItem} className="px-3 py-1.5 bg-orange hover:bg-orange-hover text-white text-xs font-semibold rounded-lg transition-colors">Apply</button>
-                              <button onClick={() => setEditingId(null)} className="px-3 py-1.5 border border-white/15 text-white/50 hover:text-white text-xs rounded-lg transition-colors">Cancel</button>
-                            </div>
-                          </div>
-                        ) : (() => {
-                          const rowActions = (
-                            <>
-                              <button onClick={() => startEditItem(li)} className="p-1.5 text-white/25 hover:text-orange transition-colors rounded" title="Edit item">
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                              </button>
-                              <button onClick={() => removeItem(li._id)} className="p-1.5 text-white/25 hover:text-danger transition-colors rounded" title="Remove item">
-                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-                              </button>
-                            </>
-                          )
-                          return (
-                            <div className="px-3 py-2.5 hover:bg-white/[0.03]">
-                              {/* Mobile: stacked card so the full part / description is always visible */}
-                              <div className="md:hidden space-y-1.5">
-                                <div className="flex items-start justify-between gap-2">
-                                  <span className="text-white/80 text-sm break-words min-w-0 flex-1">{li.description}</span>
-                                  <div className="flex items-center gap-0.5 flex-shrink-0">{rowActions}</div>
-                                </div>
-                                <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 text-xs">
-                                  <span className="text-white/40">Qty <span className="text-white/70">{li.quantity}</span></span>
-                                  <span className="text-white/40">Base <span className="text-white/70">{fmt(li.unit_price)}</span></span>
-                                  <span className="text-white/40">Total <span className="text-white font-medium">{fmt(li.quantity * li.unit_price)}</span></span>
-                                </div>
-                              </div>
-                              {/* Desktop: aligned column grid */}
-                              <div className="hidden md:grid grid-cols-[1fr_56px_80px_80px_52px] gap-1 items-center">
-                                <span className="text-white/80 text-sm truncate">{li.description}</span>
-                                <span className="text-white/50 text-sm text-right">{li.quantity}</span>
-                                <span className="text-white/50 text-sm text-right">{fmt(li.unit_price)}</span>
-                                <span className="text-white text-sm font-medium text-right">{fmt(li.quantity * li.unit_price)}</span>
-                                <div className="flex items-center justify-end gap-0.5">{rowActions}</div>
-                              </div>
-                            </div>
-                          )
-                        })()}
-                      </div>
-                    ))}
-
-                    {addingNew ? (
-                      <div className="p-3 space-y-2 bg-white/5 border-t border-white/10">
-                        <input
-                          autoFocus
-                          className="nwi-input text-sm w-full"
-                          placeholder="Part name or description"
-                          value={newItemVals.description}
-                          onChange={e => setNewItemVals(v => ({ ...v, description: e.target.value }))}
-                          onKeyDown={e => { if (e.key === 'Enter') commitNewItem() }}
-                        />
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="nwi-label text-[10px]">Qty</label>
-                            <input type="number" min={0} step={1} className="nwi-input text-sm" value={newItemVals.quantity} onChange={e => setNewItemVals(v => ({ ...v, quantity: Number(e.target.value) || 0 }))} />
-                          </div>
-                          <div>
-                            <label className="nwi-label text-[10px]">Base Price ($)</label>
-                            <input type="number" min={0} step={0.01} className="nwi-input text-sm" value={newItemVals.unit_price} onChange={e => setNewItemVals(v => ({ ...v, unit_price: Number(e.target.value) || 0 }))} />
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          <button onClick={commitNewItem} className="px-3 py-1.5 bg-orange hover:bg-orange-hover text-white text-xs font-semibold rounded-lg transition-colors">Add Item</button>
-                          <button onClick={() => { setAddingNew(false); setNewItemVals({ description: '', quantity: 1, unit_price: 0 }) }} className="px-3 py-1.5 border border-white/15 text-white/50 hover:text-white text-xs rounded-lg transition-colors">Cancel</button>
-                        </div>
-                      </div>
-                    ) : (
-                      <button onClick={() => { setAddingNew(true); setEditingId(null) }} className="w-full flex items-center gap-2 px-4 py-3 text-white/40 hover:text-orange hover:bg-white/5 text-xs transition-colors border-t border-white/5">
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
-                        Add Line Item
-                      </button>
-                    )}
-                  </div>
+                  <LineItemEditor key={editorNonce} items={items} onChange={setItems} />
                 ) : (
-                  Array.isArray(initialQuote.line_items) && initialQuote.line_items.length > 0 && (
-                    <div className="bg-white/5 rounded-xl overflow-hidden">
-                      <table className="w-full text-sm">
-                        <thead>
-                          <tr className="border-b border-white/10">
-                            <th className="text-left px-4 py-2.5 text-white/40 font-medium">Description</th>
-                            <th className="text-right px-4 py-2.5 text-white/40 font-medium">Qty</th>
-                            <th className="text-right px-4 py-2.5 text-white/40 font-medium">Unit</th>
-                            <th className="text-right px-4 py-2.5 text-white/40 font-medium">Total</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {initialQuote.line_items.map((li, i) => (
-                            <tr key={i} className="border-b border-white/5 last:border-0">
-                              <td className="px-4 py-2.5 text-white/80">{li.description}</td>
-                              <td className="px-4 py-2.5 text-white/60 text-right">{li.quantity}</td>
-                              <td className="px-4 py-2.5 text-white/60 text-right">{fmt(li.unit_price)}</td>
-                              <td className="px-4 py-2.5 text-white font-medium text-right">{fmt(li.total)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )
+                  <LineItemTable lineItems={initialQuote.line_items} />
                 )}
               </div>
             )}
@@ -1636,6 +1457,21 @@ function QuoteDetailModal({
               </div>
             )}
 
+            {/* ── PO number ── */}
+            <div className="space-y-2">
+              <p className="text-white/30 text-xs uppercase tracking-widest">PO Number</p>
+              {isDraft ? (
+                <input
+                  className="nwi-input text-sm w-full"
+                  placeholder="Customer's purchase order reference"
+                  value={poNumber}
+                  onChange={e => setPoNumber(e.target.value)}
+                />
+              ) : (
+                <p className="text-white/70 text-sm font-mono">{initialQuote.po_number ?? '—'}</p>
+              )}
+            </div>
+
             {/* ── Notes ── */}
             {isDraft ? (
               <div className="space-y-2">
@@ -1889,6 +1725,27 @@ function QuoteDetailModal({
                       className="px-4 py-2.5 border border-white/15 text-white/60 hover:text-white hover:border-white/30 text-sm font-medium rounded-lg transition-colors"
                     >
                       Cancel
+                    </button>
+                  )}
+
+                  {/* Convert to Work Order — same feature gate as the nav item, so a
+                      business without the flag never sees the path exist. Offered
+                      alongside Push to Invoice rather than instead of it: a shop that
+                      bills on completion goes through a work order, one that bills up
+                      front does not. */}
+                  {workOrdersEnabled && !liveQuote.converted_invoice_id && (
+                    <button
+                      onClick={handleConvertToWorkOrder}
+                      disabled={convertingWO}
+                      className="flex items-center gap-2 px-4 py-2.5 border border-white/15 hover:border-white/30 text-white/70 hover:text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                        <polyline points="14 2 14 8 20 8" />
+                        <line x1="8" y1="13" x2="16" y2="13" />
+                        <line x1="8" y1="17" x2="13" y2="17" />
+                      </svg>
+                      {convertingWO ? 'Opening…' : 'Convert to Work Order'}
                     </button>
                   )}
 
@@ -2266,7 +2123,7 @@ function QuoteDetailModal({
 
 // ─── Main component ───────────────────────────────────────────────────────────
 
-export default function QuotesTab({ initialQuoteId, isDetailer = false }: { initialQuoteId?: string; isDetailer?: boolean }) {
+export default function QuotesTab({ initialQuoteId, isDetailer = false, workOrdersEnabled = false }: { initialQuoteId?: string; isDetailer?: boolean; workOrdersEnabled?: boolean }) {
   const [quotes,       setQuotes]       = useState<Quote[]>([])
   const [loading,      setLoading]      = useState(true)
   const [error,        setError]        = useState<string | null>(null)
@@ -2399,6 +2256,7 @@ export default function QuotesTab({ initialQuoteId, isDetailer = false }: { init
               <thead>
                 <tr className="bg-white/5 border-b border-white/10">
                   <th className="text-left px-4 py-3 text-white/40 font-medium whitespace-nowrap">Quote #</th>
+                  <th className="text-left px-4 py-3 text-white/40 font-medium whitespace-nowrap">PO #</th>
                   <th className="text-left px-4 py-3 text-white/40 font-medium whitespace-nowrap">Date</th>
                   <th className="text-left px-4 py-3 text-white/40 font-medium">Customer</th>
                   <th className="text-left px-4 py-3 text-white/40 font-medium">Vehicle</th>
@@ -2430,6 +2288,7 @@ export default function QuotesTab({ initialQuoteId, isDetailer = false }: { init
                       `}
                     >
                       <td className="px-4 py-3 font-mono text-orange text-xs font-medium">{q.quote_number}</td>
+                      <td className="px-4 py-3 text-white/50 text-xs whitespace-nowrap">{q.po_number ?? '—'}</td>
                       <td className="px-4 py-3 text-white/60 whitespace-nowrap">{fmtDate(q.created_at)}</td>
                       <td className="px-4 py-3 text-white">{customerName}</td>
                       <td className="px-4 py-3 text-white/70 whitespace-nowrap">{vehicleLabel}</td>
@@ -2498,6 +2357,7 @@ export default function QuotesTab({ initialQuoteId, isDetailer = false }: { init
           key={`${selected.id}-${modalKey}`}
           quote={selected}
           isDetailer={isDetailer}
+          workOrdersEnabled={workOrdersEnabled}
           onClose={() => setSelected(null)}
           onUpdated={handleQuoteUpdated}
           onDeleted={handleQuoteDeleted}

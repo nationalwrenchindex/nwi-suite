@@ -11,7 +11,7 @@ export default async function PartsPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('business_name, business_type')
+    .select('business_name, business_type, work_orders_enabled')
     .eq('id', user.id)
     .single()
 
@@ -19,7 +19,7 @@ export default async function PartsPage() {
 
   return (
     <div className="min-h-dvh bg-dark flex flex-col">
-      <AppNav businessName={profile.business_name} businessType={profile.business_type ?? undefined} />
+      <AppNav workOrdersEnabled={profile.work_orders_enabled ?? false} businessName={profile.business_name} businessType={profile.business_type ?? undefined} />
       <main className="flex-1 max-w-3xl w-full mx-auto px-4 sm:px-6 py-8">
 
         {/* Page header */}

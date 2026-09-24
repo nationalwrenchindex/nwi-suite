@@ -21,6 +21,7 @@ export type NotificationTrigger =
   | 'booking_confirmation'
   | 'day_before_reminder'
   | 'on_my_way'
+  | 'work_started'
   | 'job_completed'
 
 // Minimal duck-typed DB client (both SSR and JS Supabase clients satisfy this)
@@ -56,6 +57,10 @@ const TRIGGER_TEMPLATE_TYPE: Record<NotificationTrigger, string> = {
   booking_confirmation: 'appointment_confirmation',
   day_before_reminder:  'appointment_reminder',
   on_my_way:            'on_my_way',
+  // Its own type rather than reusing on_my_way: 'on the way' is a travel notice,
+  // and a work order going in_progress means the unit is already in the bay. A shop
+  // that edits one message must not silently change the other.
+  work_started:         'work_started',
   job_completed:        'job_completed',
 }
 
@@ -68,6 +73,8 @@ const FALLBACK_SMS: Record<NotificationTrigger, string> = {
     'Hi {{first_name}}, reminder: your {{service_type}} is tomorrow at {{job_time}}. Reply CONFIRM or call to reschedule. — {{business_name}}',
   on_my_way:
     'Hi {{first_name}}, {{tech_name}} is on the way for your {{service_type}}! See you soon. — {{business_name}}',
+  work_started:
+    'Hi {{first_name}}, we have started work on your {{vehicle}}. We will let you know as soon as it is done. — {{business_name}}',
   job_completed:
     'Your {{service_type}} is complete! Great having you as a customer, {{first_name}}. — {{business_name}} 🔧',
 }
@@ -76,6 +83,7 @@ const FALLBACK_SUBJECT: Record<NotificationTrigger, string> = {
   booking_confirmation: 'Appointment Confirmed — {{business_name}}',
   day_before_reminder:  "Reminder: Your appointment is tomorrow — {{business_name}}",
   on_my_way:            '{{tech_name}} is on the way! — {{business_name}}',
+  work_started:         'Work Started — {{business_name}}',
   job_completed:        'Service Complete — {{business_name}}',
 }
 
@@ -382,4 +390,87 @@ export async function notifyMechanic({
       console.error('[notifyMechanic/email]', e),
     )
   }
+}
+
+// ─── Dispatch without a job ───────────────────────────────────────────────────
+// dispatchNotification() above builds its merge context from a jobs row, which a
+// work order does not have. This is the same send — same notification_templates
+// lookup, same merge resolver, same suppression check, same logging — driven by a
+// context the caller supplies instead.
+//
+// ONE DELIBERATE DIFFERENCE: the job path also requires jobs.sms_consent, the
+// opt-in captured at online booking. A work order has no booking, so there is no
+// such record to consult; the customer handed their number to the shop for this
+// job. Suppression (the explicit do-not-contact flag) is still honoured, which is
+// the same bar api/cron/late-fees texts at.
+export async function dispatchNotificationFor({
+  trigger,
+  supabase,
+  userId,
+  customerId,
+  customer,
+  ctx,
+  channelOverride,
+}: {
+  trigger:          NotificationTrigger
+  supabase:         AnyDB
+  userId:           string
+  customerId:       string | null
+  customer:         { phone?: string | null; email?: string | null } | null
+  ctx:              Partial<MergeContext>
+  channelOverride?: string
+}): Promise<DispatchResult> {
+  const templateType = TRIGGER_TEMPLATE_TYPE[trigger]
+  const { data: rows } = await supabase
+    .from('notification_templates')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('template_type', templateType)
+    .eq('is_active', true)
+    .order('created_at', { ascending: false })
+    .limit(1)
+
+  const tpl = rows?.[0] ?? null
+
+  const channel = (channelOverride ?? tpl?.channel ?? 'sms') as 'sms' | 'email' | 'both'
+  const message = resolve((tpl?.message_content ?? FALLBACK_SMS[trigger]) as string, ctx)
+  const subject = resolve((tpl?.subject ?? FALLBACK_SUBJECT[trigger]) as string, ctx)
+
+  const suppression = await getContactSuppression(supabase, customerId ?? null)
+  const result: DispatchResult = { success: false, channel, message }
+
+  if ((channel === 'sms' || channel === 'both') && !suppression.no_sms) {
+    const phone = customer?.phone
+    if (phone) {
+      const r = await sendSms(phone, message)
+      result.sms = r
+      await log(supabase, {
+        user_id: userId, customer_id: customerId ?? undefined,
+        trigger_type: trigger, channel: 'sms', recipient: phone,
+        message, status: r.success ? 'sent' : 'failed',
+        error: r.error, provider_id: r.sid,
+      })
+    } else {
+      result.sms = { success: false, error: 'No phone number on file for customer' }
+    }
+  }
+
+  if ((channel === 'email' || channel === 'both') && !suppression.no_email) {
+    const email = customer?.email
+    if (email) {
+      const r = await sendEmail(email, subject, message)
+      result.email = r
+      await log(supabase, {
+        user_id: userId, customer_id: customerId ?? undefined,
+        trigger_type: trigger, channel: 'email', recipient: email,
+        message, subject, status: r.success ? 'sent' : 'failed',
+        error: r.error, provider_id: r.id,
+      })
+    } else {
+      result.email = { success: false, error: 'No email address on file for customer' }
+    }
+  }
+
+  result.success = !!(result.sms?.success || result.email?.success)
+  return result
 }

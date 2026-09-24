@@ -22,7 +22,7 @@ export default async function BillingSelectPage({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('full_name, business_name, business_type')
+    .select('full_name, business_name, business_type, work_orders_enabled')
     .eq('id', user.id)
     .single()
 
@@ -30,7 +30,7 @@ export default async function BillingSelectPage({
 
   return (
     <div className="min-h-dvh bg-dark flex flex-col">
-      <AppNav
+      <AppNav workOrdersEnabled={profile.work_orders_enabled ?? false}
         businessName={profile.business_name}
         businessType={profile.business_type ?? undefined}
       />

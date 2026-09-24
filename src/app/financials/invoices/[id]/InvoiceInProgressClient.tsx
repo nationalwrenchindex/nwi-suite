@@ -481,7 +481,8 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
   const router = useRouter()
 
   // Editable state
-  const [jobNotes,        setJobNotes]        = useState(invoice.job_notes ?? '')
+  const [jobNotes,        setJobNotes]        = useState(invoice.job_notes ?? '')
+  const [poNumber,        setPoNumber]        = useState(invoice.po_number ?? '')
   const [shopSupplies,    setShopSupplies]    = useState<ShopSupplyItem[]>(
     Array.isArray(invoice.shop_supplies)    ? invoice.shop_supplies    : []
   )
@@ -635,7 +636,8 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          job_notes:        jobNotes || null,
+          job_notes:        jobNotes || null,
+          po_number:        poNumber || null,
           shop_supplies:    shopSupplies,
           additional_parts: additionalParts,
           additional_labor: additionalLabor,
@@ -669,7 +671,8 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          job_notes:        jobNotes || null,
+          job_notes:        jobNotes || null,
+          po_number:        poNumber || null,
           shop_supplies:    shopSupplies,
           additional_parts: additionalParts,
           additional_labor: additionalLabor,
@@ -1020,6 +1023,19 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
           </div>
         </Section>
       )}
+
+      {/* ── PO number ── */}
+      <Section label="PO Number">
+        <input
+          className="nwi-input text-sm w-full font-mono"
+          placeholder="Customer's purchase order reference"
+          value={poNumber}
+          onChange={e => setPoNumber(e.target.value)}
+        />
+        <p className="text-white/30 text-[11px] mt-1.5">
+          Printed on the customer&apos;s copy and included in the emailed invoice.
+        </p>
+      </Section>
 
       {/* ── SECTION D: Job notes ── */}
       <Section label="Job Notes">

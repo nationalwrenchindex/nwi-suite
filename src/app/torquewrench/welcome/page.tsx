@@ -12,7 +12,7 @@ export default async function TorqueWrenchWelcomePage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('business_name, business_type, foreman_addon_active, torquewrench_addon_active')
+    .select('business_name, business_type, foreman_addon_active, torquewrench_addon_active, work_orders_enabled')
     .eq('id', user.id)
     .single()
 
@@ -20,7 +20,7 @@ export default async function TorqueWrenchWelcomePage() {
 
   return (
     <div className="min-h-dvh bg-dark flex flex-col">
-      <AppNav
+      <AppNav workOrdersEnabled={profile.work_orders_enabled ?? false}
         businessName={profile.business_name}
         businessType={profile.business_type ?? undefined}
         foremanActive={profile.foreman_addon_active ?? false}

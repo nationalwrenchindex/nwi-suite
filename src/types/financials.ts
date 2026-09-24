@@ -132,6 +132,7 @@ export interface Invoice {
   customer_id: string | null
   vehicle_id: string | null
   invoice_number: string
+  po_number: string | null
   invoice_date: string         // YYYY-MM-DD
   due_date: string | null
   line_items: LineItem[]
@@ -227,6 +228,7 @@ export interface Quote {
   id: string
   user_id: string
   quote_number: string
+  po_number: string | null
   status: QuoteStatus
   customer_id: string | null
   vehicle_id: string | null

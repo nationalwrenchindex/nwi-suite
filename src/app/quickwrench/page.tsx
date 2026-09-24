@@ -19,7 +19,7 @@ export default async function QuickWrenchPage({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('full_name, business_name, default_labor_rate, default_parts_markup_percent, default_tax_percent, business_type')
+    .select('full_name, business_name, default_labor_rate, default_parts_markup_percent, default_tax_percent, business_type, work_orders_enabled')
     .eq('id', user.id)
     .single()
 
@@ -40,7 +40,7 @@ export default async function QuickWrenchPage({
 
   return (
     <div className="min-h-dvh bg-dark flex flex-col">
-      <AppNav businessName={profile.business_name} businessType={p.business_type} />
+      <AppNav workOrdersEnabled={profile.work_orders_enabled ?? false} businessName={profile.business_name} businessType={p.business_type} />
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6">
         <div className="mb-6">
           <div className="flex items-center gap-3 mb-1">
@@ -58,6 +58,7 @@ export default async function QuickWrenchPage({
           </p>
         </div>
         <QuickWrenchClient
+          workOrdersEnabled={profile.work_orders_enabled ?? false}
           loadQuoteId={sp.loadQuoteId}
           defaultLaborRate={p.default_labor_rate ?? 125}
           defaultMarkupPct={p.default_parts_markup_percent ?? 20}

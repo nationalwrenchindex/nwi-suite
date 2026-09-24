@@ -86,6 +86,7 @@ export async function POST(request: NextRequest) {
     .insert({
       user_id:         user.id,
       invoice_number:  body.invoice_number,
+      po_number:       (body.po_number as string | null)?.trim() || null,
       invoice_date:    body.invoice_date    ?? today,
       due_date:        body.due_date        ?? null,
       customer_id:     body.customer_id     ?? null,

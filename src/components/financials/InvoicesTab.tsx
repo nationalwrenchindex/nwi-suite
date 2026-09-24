@@ -167,7 +167,8 @@ export default function InvoicesTab() {
 
   // ── New invoice form state ──
   const [form, setForm] = useState(() => ({
-    invoice_number:  genInvoiceNumber(),
+    invoice_number:  genInvoiceNumber(),
+    po_number:       '',
     invoice_date:    today(),
     due_date:        '',
     customer_id:     '',
@@ -244,7 +245,8 @@ export default function InvoicesTab() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          invoice_number:  form.invoice_number,
+          invoice_number:  form.invoice_number,
+          po_number:       form.po_number,
           invoice_date:    form.invoice_date,
           due_date:        form.due_date || null,
           customer_id:     form.customer_id || null,
@@ -264,7 +266,8 @@ export default function InvoicesTab() {
       setInvoices(prev => [json.invoice, ...prev])
       setShowForm(false)
       setForm({
-        invoice_number:  genInvoiceNumber(),
+        invoice_number:  genInvoiceNumber(),
+    po_number:       '',
         invoice_date:    today(),
         due_date:        '',
         customer_id:     '',
@@ -418,6 +421,11 @@ export default function InvoicesTab() {
                 <label className="nwi-label">Due Date</label>
                 <input type="date" className="nwi-input" value={form.due_date}
                   onChange={e => setForm(p => ({ ...p, due_date: e.target.value }))} />
+              </div>
+              <div>
+                <label className="nwi-label">PO #</label>
+                <input className="nwi-input" placeholder="Customer reference" value={form.po_number}
+                  onChange={e => setForm(p => ({ ...p, po_number: e.target.value }))} />
               </div>
             </div>
 
@@ -579,8 +587,8 @@ export default function InvoicesTab() {
       ) : (
         <div className="nwi-card p-0">
           {/* Table header */}
-          <div className="hidden sm:grid grid-cols-[140px_1fr_110px_90px_130px_100px_100px_44px] gap-4 px-5 py-3 border-b border-dark-border">
-            {['Invoice #', 'Customer', 'Date', 'Total', 'Status', 'Payment', 'Paid Date', ''].map(h => (
+          <div className="hidden sm:grid grid-cols-[140px_1fr_100px_110px_90px_130px_100px_100px_44px] gap-4 px-5 py-3 border-b border-dark-border">
+            {['Invoice #', 'Customer', 'PO #', 'Date', 'Total', 'Status', 'Payment', 'Paid Date', ''].map(h => (
               <span key={h} className="text-white/30 text-xs uppercase tracking-widest">{h}</span>
             ))}
           </div>
@@ -599,7 +607,7 @@ export default function InvoicesTab() {
               return (
                 <div key={inv.id}
                   onClick={isNavigable ? () => router.push(`/financials/invoices/${inv.id}`) : undefined}
-                  className={`grid grid-cols-1 sm:grid-cols-[140px_1fr_110px_90px_130px_100px_100px_44px] gap-2 sm:gap-4 px-5 py-4 hover:bg-white/2 transition-colors items-center ${isNavigable ? 'cursor-pointer' : ''}`}>
+                  className={`grid grid-cols-1 sm:grid-cols-[140px_1fr_100px_110px_90px_130px_100px_100px_44px] gap-2 sm:gap-4 px-5 py-4 hover:bg-white/2 transition-colors items-center ${isNavigable ? 'cursor-pointer' : ''}`}>
                   {/* Invoice # */}
                   <div className="flex items-center gap-1.5 min-w-0">
                     <span className={`font-mono text-xs truncate ${
@@ -624,6 +632,8 @@ export default function InvoicesTab() {
                   </div>
                   {/* Customer */}
                   <span className="text-white/60 text-sm truncate">{customerName}</span>
+                  {/* PO # */}
+                  <span className="text-white/40 text-xs font-mono truncate">{inv.po_number ?? '—'}</span>
                   {/* Date */}
                   <span className="text-white/40 text-xs">{fmtDate(inv.invoice_date)}</span>
                   {/* Total */}

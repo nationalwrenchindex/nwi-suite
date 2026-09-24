@@ -107,6 +107,7 @@ export async function PUT(
     customer_name:        string
     customer_phone:       string
     vehicle_id?:          string | null
+    po_number?:           string | null
     jobs?:                unknown[]
     // Detailer model
     service_lines?: Array<{ service_name: string; vehicle_category: string | null; price_cents: number }>
@@ -150,6 +151,9 @@ export async function PUT(
     notes:                body.notes ?? null,
     customer_id:          customerId,
     vehicle_id:           body.vehicle_id ?? null,
+    // Trimmed to null so an emptied field clears the PO rather than storing "",
+    // which would print an empty "PO #" row on the customer's invoice.
+    po_number:            body.po_number?.trim() || null,
   }
   if (body.jobs !== undefined) updatePayload.jobs = body.jobs
   if (isDetailer) {

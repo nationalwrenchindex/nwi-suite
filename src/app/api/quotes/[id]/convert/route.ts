@@ -96,6 +96,10 @@ export async function POST(
     notes:           quote.notes       ?? null,
     // Phase 3 fields
     invoice_status:  'in_progress',
+    // The PO is the customer's own reference. It has to survive the conversion or
+    // the shop has to retype it, and a fleet that cannot match invoice to PO does
+    // not pay it.
+    po_number:       quote.po_number ?? null,
     source_quote_id: quote.id,
     job_notes:       null,
     shop_supplies:   [],

@@ -26,12 +26,14 @@ export default function AppNav({
   businessType,
   foremanActive,
   torquewrenchActive,
+  workOrdersEnabled,
   modules,
 }: {
   businessName?:       string
   businessType?:       string
   foremanActive?:      boolean
   torquewrenchActive?: boolean
+  workOrdersEnabled?:  boolean
   modules?:            string[]
 }) {
   const pathname = usePathname()
@@ -66,6 +68,19 @@ export default function AppNav({
           <rect x="3" y="4" width="18" height="18" rx="2" />
           <line x1="16" y1="2" x2="16" y2="6" /><line x1="8" y1="2" x2="8" y2="6" />
           <line x1="3" y1="10" x2="21" y2="10" />
+        </svg>
+      ),
+    },
+    {
+      href: '/work-orders',
+      label: 'Work Orders',
+      active: pathname.startsWith('/work-orders'),
+      icon: (
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+          <polyline points="14 2 14 8 20 8" />
+          <line x1="8" y1="13" x2="16" y2="13" />
+          <line x1="8" y1="17" x2="13" y2="17" />
         </svg>
       ),
     },
@@ -172,13 +187,22 @@ export default function AppNav({
   const visibleNavItems = navItems.filter(item => {
     if (item.href === '/quickwrench' && businessType === 'detailer') return false
     if (item.href === '/inventory'   && businessType !== 'detailer') return false
+    // Work orders HIDE rather than lock, and default to hidden when the flag was
+    // not passed. A padlock would advertise a feature this business has not been
+    // given; absent is the requirement. Every page that renders AppNav therefore
+    // has to pass workOrdersEnabled or the item disappears for enabled shops too.
+    if (item.href === '/work-orders' && !workOrdersEnabled) return false
     return true
   })
 
   // Determines whether a nav item should render as locked (padlock, no navigation)
   function isLocked(href: string): boolean {
-    if (href === '/foreman')      return !foremanActive
-    if (href === '/torquewrench') return !torquewrenchActive
+    // Explicit false only. These props are optional and most callers never passed
+    // them, so `!undefined` was showing a padlock on Foreman and TorqueWrench to
+    // paying subscribers on every page that omitted them — the dashboard included.
+    // Unknown means 'do not claim locked'; the destination page still gates access.
+    if (href === '/foreman')      return foremanActive === false
+    if (href === '/torquewrench') return torquewrenchActive === false
     // Module-based locking only applies when caller explicitly passes the modules list
     if (!modules) return false
     if (href === '/intel')      return !modules.includes('intel')

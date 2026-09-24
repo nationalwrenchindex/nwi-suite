@@ -12,7 +12,7 @@ export default async function InventoryPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('business_name, business_type')
+    .select('business_name, business_type, work_orders_enabled')
     .eq('id', user.id)
     .single()
 
@@ -21,7 +21,7 @@ export default async function InventoryPage() {
 
   return (
     <div className="min-h-dvh bg-dark flex flex-col">
-      <AppNav businessName={profile.business_name} businessType={profile.business_type} />
+      <AppNav workOrdersEnabled={profile.work_orders_enabled ?? false} businessName={profile.business_name} businessType={profile.business_type} />
       <main className="flex-1 max-w-3xl w-full mx-auto px-4 sm:px-6 py-8">
         <div className="mb-8">
           <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Stock</p>

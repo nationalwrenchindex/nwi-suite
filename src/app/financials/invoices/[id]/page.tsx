@@ -27,7 +27,7 @@ export default async function InvoiceDetailPage({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('full_name, business_name, average_mpg, fuel_type, business_type')
+    .select('full_name, business_name, average_mpg, fuel_type, business_type, work_orders_enabled')
     .eq('id', user.id)
     .single()
 
@@ -54,7 +54,7 @@ export default async function InvoiceDetailPage({
   if (inv.invoice_status === 'in_progress') {
     return (
       <div className="min-h-dvh bg-dark flex flex-col">
-        <AppNav businessName={bizName} businessType={businessType} />
+        <AppNav businessName={bizName} businessType={businessType} workOrdersEnabled={profile.work_orders_enabled ?? false} />
         <main className="flex-1 w-full max-w-4xl mx-auto px-4 sm:px-6 py-6">
           <InvoiceInProgressClient invoice={inv} isDetailer={businessType === 'detailer'} />
         </main>
@@ -66,7 +66,7 @@ export default async function InvoiceDetailPage({
   if (inv.invoice_status === 'awaiting_payment' || inv.invoice_status === 'paid') {
     return (
       <div className="min-h-dvh bg-dark flex flex-col">
-        <AppNav businessName={bizName} businessType={businessType} />
+        <AppNav businessName={bizName} businessType={businessType} workOrdersEnabled={profile.work_orders_enabled ?? false} />
         <main className="flex-1 w-full max-w-4xl mx-auto px-4 sm:px-6 py-6">
           <FinalizedInvoiceClient invoice={inv} bizName={bizName} techName={techName} averageMpg={averageMpg} fuelType={fuelType} isDetailer={businessType === 'detailer'} />
         </main>

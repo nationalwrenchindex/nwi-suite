@@ -53,6 +53,7 @@ export async function PATCH(
   const updates: Record<string, unknown> = {}
 
   if (body.job_notes        !== undefined) updates.job_notes        = body.job_notes        ?? null
+  if (body.po_number        !== undefined) updates.po_number        = (body.po_number as string | null)?.trim() || null
   if (body.shop_supplies    !== undefined) updates.shop_supplies    = body.shop_supplies    ?? []
   if (body.additional_parts !== undefined) updates.additional_parts = body.additional_parts ?? []
   if (body.additional_labor !== undefined) updates.additional_labor = body.additional_labor ?? []

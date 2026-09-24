@@ -12,17 +12,17 @@ export default async function LogoPage() {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('business_name, business_type, business_logo_url')
+    .select('business_name, business_type, business_logo_url, work_orders_enabled')
     .eq('id', user.id)
     .single()
 
   if (profile != null && !profile.business_name?.trim()) redirect('/onboarding')
 
-  const p = profile as { business_name: string; business_type?: string | null; business_logo_url?: string | null }
+  const p = profile as { business_name: string; business_type?: string | null; business_logo_url?: string | null; work_orders_enabled?: boolean | null }
 
   return (
     <div className="min-h-dvh bg-dark flex flex-col">
-      <AppNav businessName={p.business_name} businessType={p.business_type ?? undefined} />
+      <AppNav workOrdersEnabled={p.work_orders_enabled ?? false} businessName={p.business_name} businessType={p.business_type ?? undefined} />
       <main className="flex-1 max-w-2xl w-full mx-auto px-4 sm:px-6 py-8">
         <div className="mb-8">
           <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Settings</p>

@@ -240,6 +240,7 @@ export async function POST(
   }
   const paymentInstructions = (inv.payment_instructions as string | null) ?? ''
   const invoiceNumber       = inv.invoice_number as string
+  const poNumber            = (inv.po_number as string | null) ?? null
 
   if (method === 'sms' && phone) {
     // Offered only to customers without a Garage account, and only when the
@@ -264,6 +265,7 @@ export async function POST(
       `Hi ${customerName},`,
       `Your invoice for service on your ${vehicleLabel} is ready.`,
       `Invoice: ${invoiceNumber}`,
+      ...(poNumber ? [`PO #: ${poNumber}`] : []),
       `Total Due: ${grandTotal}`,
       `View and download your invoice: ${invoiceUrl}`,
       ...(paymentInstructions ? [`Payment Instructions: ${paymentInstructions}`] : []),
@@ -277,6 +279,7 @@ export async function POST(
       `Your invoice for service on your ${vehicleLabel} is ready.`,
       '',
       `Invoice: ${invoiceNumber}`,
+      ...(poNumber ? [`PO #: ${poNumber}`] : []),
       `Total Due: ${grandTotal}`,
       '',
       `View and download your invoice: ${invoiceUrl}`,

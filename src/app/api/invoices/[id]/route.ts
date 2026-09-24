@@ -190,6 +190,7 @@ export async function PATCH(
 
   const updates: Record<string, unknown> = {}
   if ('payment_instructions' in body) updates.payment_instructions = body.payment_instructions ?? null
+  if ('po_number' in body)            updates.po_number            = (body.po_number as string | null)?.trim() || null
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'No valid fields to update.' }, { status: 400 })

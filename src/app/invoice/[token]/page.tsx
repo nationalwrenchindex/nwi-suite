@@ -11,7 +11,7 @@ import type { Metadata } from 'next'
 import type { MultiJobEntry } from '@/types/financials'
 
 const INVOICE_SELECT = `
-  id, invoice_number, invoice_status, public_token,
+  id, invoice_number, po_number, invoice_status, public_token,
   invoice_date, total, subtotal, tax_rate, tax_amount,
   job_category, job_subtype, job_notes, jobs,
   line_items, shop_supplies, additional_parts, additional_labor,
@@ -194,6 +194,11 @@ export default async function PublicInvoicePage(
         <div className="space-y-2">
           <div className="flex items-center gap-3 flex-wrap">
             <p className="text-[#FF6600] font-mono text-base font-semibold">{inv.invoice_number}</p>
+            {inv.po_number && (
+              /* The fleet customer matches payment to their own PO, not our invoice
+                 number, so it sits beside it rather than in the fine print. */
+              <p className="font-mono text-base text-white/60">PO # {inv.po_number}</p>
+            )}
             <span
               className="px-2.5 py-0.5 rounded-full text-xs font-semibold"
               style={isPaid

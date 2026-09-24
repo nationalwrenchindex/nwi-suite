@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
 
 const INVOICE_SELECT = `
-  id, invoice_number, invoice_status, public_token,
+  id, invoice_number, po_number, invoice_status, public_token,
   line_items, subtotal, tax_rate, tax_amount, total,
   service_lines, adjustments, tip_amount_cents,
   payment_instructions, finalized_at, paid_at,

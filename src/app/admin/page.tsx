@@ -3,6 +3,7 @@ import { unstable_cache } from 'next/cache'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import AppNav from '@/components/layout/AppNav'
+import WorkOrdersToggle from './WorkOrdersToggle'
 import CompAccountForm from '@/components/admin/CompAccountForm'
 import CachedDiagnosticsManager, { type CachedEntry } from '@/components/admin/CachedDiagnosticsManager'
 import Link from 'next/link'
@@ -30,6 +31,7 @@ type Profile = {
   full_name: string | null
   email: string | null
   business_type: string | null
+  work_orders_enabled: boolean | null
   created_at: string
 }
 
@@ -69,7 +71,7 @@ const getAdminData = unstable_cache(
     ] = await Promise.all([
       svc
         .from('profiles')
-        .select('id, full_name, email, business_type, created_at')
+        .select('id, full_name, email, business_type, work_orders_enabled, created_at')
         .order('created_at', { ascending: false }),
       svc
         .from('subscriptions')
@@ -347,6 +349,7 @@ export default async function AdminPage() {
                   <th className={th}>Trial End</th>
                   <th className={th}>MRR</th>
                   <th className={th}>Days</th>
+                  <th className={th}>WO</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-dark-border/50">
@@ -389,12 +392,15 @@ export default async function AdminPage() {
                         )}
                       </td>
                       <td className={`${td} text-white/60`}>{daysSince(p.created_at)}d</td>
+                      <td className={td}>
+                        <WorkOrdersToggle userId={p.id} enabled={p.work_orders_enabled ?? false} />
+                      </td>
                     </tr>
                   )
                 })}
                 {nonFounderProfiles.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-4 py-8 text-center text-white/30 text-sm">
+                    <td colSpan={10} className="px-4 py-8 text-center text-white/30 text-sm">
                       No signups yet
                     </td>
                   </tr>

@@ -162,6 +162,10 @@ export async function PUT(request: NextRequest) {
     update.sms_booking_notifications_enabled = !!body.sms_booking_notifications_enabled
   }
 
+  if ('work_orders_enabled' in body) {
+    update.work_orders_enabled = !!body.work_orders_enabled
+  }
+
   if ('bill_consumables_separately' in body) {
     update.bill_consumables_separately = !!body.bill_consumables_separately
   }

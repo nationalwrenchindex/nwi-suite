@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import ShareBookingModal from '@/components/ShareBookingModal'
 import DetailerPricingEditor, { type PricingRow } from '@/components/detailer/DetailerPricingEditor'
 import type { AdjustmentPreset } from '@/types/financials'
@@ -139,6 +140,7 @@ export default function SettingsClient({
   initialTaxPct       = 8.5,
   initialPricingRows       = [],
   initialBillConsumables   = false,
+  initialWorkOrdersEnabled = false,
   initialAdjustmentPresets = [] as AdjustmentPreset[],
   initialPhone             = null,
   initialSmsBookingNotif   = true,
@@ -161,6 +163,7 @@ export default function SettingsClient({
   initialTaxPct?:              number
   initialPricingRows?:         PricingRow[]
   initialBillConsumables?:     boolean
+  initialWorkOrdersEnabled?:   boolean
   initialAdjustmentPresets?:   AdjustmentPreset[]
   initialPhone?:               string | null
   initialSmsBookingNotif?:     boolean
@@ -186,6 +189,9 @@ export default function SettingsClient({
 
   const [billConsumables,      setBillConsumables]      = useState(initialBillConsumables)
   const [savingBillConsumables, setSavingBillConsumables] = useState(false)
+  const router = useRouter()
+  const [workOrdersEnabled,    setWorkOrdersEnabled]    = useState(initialWorkOrdersEnabled)
+  const [savingWorkOrders,     setSavingWorkOrders]     = useState(false)
 
   const [smsNotifEnabled,   setSmsNotifEnabled]   = useState(initialSmsBookingNotif)
   const [savingSmsNotif,    setSavingSmsNotif]    = useState(false)
@@ -280,6 +286,27 @@ export default function SettingsClient({
     setSavingBillConsumables(false)
   }
 
+  // Turning this on makes the Work Orders nav item and its routes appear. The flag is
+  // read server-side wherever AppNav renders, so refresh() is what stops the nav from
+  // looking stuck until the next navigation.
+  async function saveWorkOrdersEnabled(value: boolean) {
+    setSavingWorkOrders(true)
+    try {
+      const res = await fetch('/api/user/profile', {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ work_orders_enabled: value }),
+      })
+      if (res.ok) {
+        setWorkOrdersEnabled(value)
+        setSavedMsg(value ? 'Work orders enabled.' : 'Work orders disabled.')
+        setTimeout(() => setSavedMsg(null), 3000)
+        router.refresh()
+      }
+    } catch { /* silently fail */ }
+    setSavingWorkOrders(false)
+  }
+
   async function saveSmsNotifSetting(value: boolean) {
     setSavingSmsNotif(true)
     try {
@@ -961,6 +988,39 @@ export default function SettingsClient({
           </div>
         </section>
       )}
+
+      {/* ── Work Orders ── */}
+      <section>
+        <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Work Orders</p>
+        <p className="text-white/30 text-xs mb-4">
+          Track a job from authorisation through to invoicing, with parts, labor, photos and a PO number.
+        </p>
+        <div className="rounded-xl border border-[#333] bg-[#222] p-5">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-white text-sm font-medium">Enable work orders</p>
+              <p className="text-white/40 text-xs mt-1">
+                For shops and techs who do fleet or commercial work.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => saveWorkOrdersEnabled(!workOrdersEnabled)}
+              disabled={savingWorkOrders}
+              aria-pressed={workOrdersEnabled}
+              className={`relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 transition-colors duration-200 focus:outline-none disabled:opacity-50 ${
+                workOrdersEnabled ? 'border-[#FF6600] bg-[#FF6600]' : 'border-[#444] bg-[#333]'
+              }`}
+            >
+              <span
+                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform duration-200 ${
+                  workOrdersEnabled ? 'translate-x-5' : 'translate-x-0.5'
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+      </section>
 
       {/* ── Notifications ── */}
       <section>

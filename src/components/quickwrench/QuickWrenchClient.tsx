@@ -1528,6 +1528,7 @@ function QuoteTab({
   initialTaxPct      = 8.5,
   initialCustomerName  = '',
   initialCustomerPhone = '',
+  workOrdersEnabled    = false,
 }: {
   vehicle:               QWVehicle | null
   selectedJobs:          SelectedJob[]
@@ -1547,6 +1548,7 @@ function QuoteTab({
   initialTaxPct?:        number
   initialCustomerName?:  string
   initialCustomerPhone?: string
+  workOrdersEnabled?:    boolean
 }) {
   const [laborRate,     setLaborRate]     = useState(initialLaborRate)
   const [markupPct,     setMarkupPct]     = useState(initialMarkupPct)
@@ -1555,7 +1557,9 @@ function QuoteTab({
   const [customerPhone, setCustomerPhone] = useState(initialCustomerPhone)
   const [saving,        setSaving]        = useState(false)
   const [quoteNumber,   setQuoteNumber]   = useState<string | null>(null)
-  const [quoteId,       setQuoteId]       = useState<string | null>(null)
+  const [quoteId,       setQuoteId]       = useState<string | null>(null)
+  const [woBusy,        setWoBusy]        = useState(false)
+  const [woErr,         setWoErr]         = useState<string | null>(null)
   const [savedHash,     setSavedHash]     = useState('')
   const [sendingSms,    setSendingSms]    = useState(false)
   const [smsSent,       setSmsSent]       = useState(false)
@@ -1961,6 +1965,40 @@ function QuoteTab({
         </div>
       )}
 
+      {/* Convert to Work Order — only once the quote exists, because the work order
+          copies its money from the quote row server-side. Same feature gate as the
+          nav item, so a business without it never sees the path. */}
+      {workOrdersEnabled && isSaved && quoteId && (
+        <button
+          onClick={async () => {
+            setWoBusy(true)
+            try {
+              const res  = await fetch(`/api/quotes/${quoteId}/to-work-order`, { method: 'POST' })
+              const json = await res.json()
+              // 409 carries the existing work order, so a second click lands on it
+              // instead of reporting an error the tech cannot act on.
+              if (!res.ok && !json.work_order_id) throw new Error(json.error ?? 'Could not create work order')
+              window.location.href = `/work-orders/${json.work_order_id}`
+            } catch (e) {
+              setWoErr(e instanceof Error ? e.message : 'Could not create work order')
+              setWoBusy(false)
+            }
+          }}
+          disabled={woBusy}
+          className="flex items-center gap-2 px-5 py-2.5 border border-white/15 hover:border-white/30 text-white/70 hover:text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="8" y1="13" x2="16" y2="13" />
+            <line x1="8" y1="17" x2="13" y2="17" />
+          </svg>
+          {woBusy ? 'Opening…' : 'Convert to Work Order'}
+        </button>
+      )}
+
+      {woErr && <div className="alert-error">{woErr}</div>}
+
       <div className="flex flex-wrap gap-3">
         <button
           onClick={() => save(false, true)}
@@ -2039,11 +2077,13 @@ export default function QuickWrenchClient({
   defaultLaborRate = 125,
   defaultMarkupPct = 20,
   defaultTaxPct    = 8.5,
+  workOrdersEnabled = false,
 }: {
   loadQuoteId?:      string
   defaultLaborRate?: number
   defaultMarkupPct?: number
   defaultTaxPct?:    number
+  workOrdersEnabled?: boolean
 }) {
   const [activeTab,     setActiveTab]     = useState(0)
   const [vehicle,       setVehicle]       = useState<QWVehicle | null>(null)
@@ -2563,6 +2603,7 @@ export default function QuickWrenchClient({
         )}
         {activeTab === 4 && (
           <QuoteTab
+            workOrdersEnabled={workOrdersEnabled}
             vehicle={vehicle}
             selectedJobs={selectedJobs}
             techGuides={techGuides}
