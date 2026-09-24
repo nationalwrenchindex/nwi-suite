@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import { compressImage } from '@/lib/image'
 // Safe from a client component: the module's only server dependency is a type-only
 // import of the Supabase server client, which is erased at build time.
 import { inspectionDateLabel, type InspectionSummary } from '@/lib/hd/inspections'
@@ -81,22 +82,6 @@ function statusLabel(s: string) {
   return s === 'in_progress' ? 'In Progress' : s === 'completed' ? 'Completed' : s === 'invoiced' ? 'Invoiced' : 'Open'
 }
 
-async function compressImage(file: File, maxPx = 1400, quality = 0.82): Promise<Blob> {
-  return new Promise((resolve) => {
-    const img = new Image()
-    const url = URL.createObjectURL(file)
-    img.onload = () => {
-      const scale = Math.min(1, maxPx / Math.max(img.width, img.height))
-      const canvas = document.createElement('canvas')
-      canvas.width  = Math.round(img.width  * scale)
-      canvas.height = Math.round(img.height * scale)
-      canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height)
-      URL.revokeObjectURL(url)
-      canvas.toBlob(blob => resolve(blob ?? file), 'image/jpeg', quality)
-    }
-    img.src = url
-  })
-}
 
 export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, inspections, workOrderId, branding }: Props) {
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos)
@@ -144,7 +129,9 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
 
     setUploading(u => ({ ...u, [category]: true }))
     try {
-      const blob = await compressImage(file)
+      // 1400px / 0.82 are this screen's own values, passed explicitly so sharing the
+      // helper does not quietly change the size or quality of HD job photos.
+      const blob = await compressImage(file, 1400, 0.82)
       const ext  = 'jpg'
       const path = `${workOrderId}/${category}/${Date.now()}.${ext}`
 

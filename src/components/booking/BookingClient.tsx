@@ -6,6 +6,7 @@ import { buildCalendarGrid, monthLabel, toDateStr, formatTime, VEHICLE_CATEGORIE
 // imports — so a client component can render them directly.
 import { BrandHeader, BrandFooter } from '@/components/BrandHeader'
 import { resolveBranding, type Branding } from '@/lib/branding'
+import { compressImage } from '@/lib/image'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -212,32 +213,6 @@ interface PhotoEntry {
   error:     string | null
 }
 
-async function compressImage(file: File): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    const img = new Image()
-    img.onload = () => {
-      const MAX = 1600
-      let { width, height } = img
-      if (width > MAX || height > MAX) {
-        const ratio = Math.min(MAX / width, MAX / height)
-        width  = Math.round(width  * ratio)
-        height = Math.round(height * ratio)
-      }
-      const canvas = document.createElement('canvas')
-      canvas.width  = width
-      canvas.height = height
-      const ctx = canvas.getContext('2d')!
-      ctx.drawImage(img, 0, 0, width, height)
-      canvas.toBlob(
-        blob => blob ? resolve(blob) : reject(new Error('Compression failed')),
-        'image/jpeg',
-        0.75,
-      )
-    }
-    img.onerror = reject
-    img.src = URL.createObjectURL(file)
-  })
-}
 
 async function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
