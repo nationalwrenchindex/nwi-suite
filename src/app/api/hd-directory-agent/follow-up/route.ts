@@ -14,6 +14,20 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 // ─── POST /api/hd-directory-agent/follow-up ──────────────────────────────────
+//
+// SCHEDULE DISABLED 2026-09-24, alongside the invite cron. The route is intact
+// and still answers; only its vercel.json cron entry was removed, so nothing
+// calls it automatically. It can still be triggered by hand with a valid token.
+//
+// To re-enable, put this back in the `crons` array of vercel.json:
+//
+//     { "path": "/api/hd-directory-agent/follow-up", "schedule": "0 14 * * 4" }
+//
+// (0 14 UTC Thursday = 10:00 ET during EDT, 09:00 ET during EST — Vercel crons
+// are UTC and do not shift with daylight saving.) Recorded here because
+// vercel.json is strict JSON: it cannot carry a comment, and Vercel rejects
+// unknown properties, so there is nowhere in that file to leave this note.
+//
 // One — and only one — nudge to HD prospects contacted more than
 // HD_FOLLOW_UP_AFTER_DAYS ago who never replied.
 //

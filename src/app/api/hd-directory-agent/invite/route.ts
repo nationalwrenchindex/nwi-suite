@@ -13,6 +13,20 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 // ─── POST /api/hd-directory-agent/invite ─────────────────────────────────────
+//
+// SCHEDULE DISABLED 2026-09-24. The route is intact and still answers; only its
+// vercel.json cron entry was removed, so nothing calls it automatically. It can
+// still be triggered by hand with a valid agent token.
+//
+// To re-enable, put this back in the `crons` array of vercel.json:
+//
+//     { "path": "/api/hd-directory-agent/invite", "schedule": "0 14 * * *" }
+//
+// (0 14 UTC = 10:00 ET during EDT, 09:00 ET during EST — Vercel crons are UTC
+// and do not shift with daylight saving.) Recorded here because vercel.json is
+// strict JSON: it cannot carry a comment, and Vercel rejects unknown properties,
+// so there is nowhere in that file to leave this note.
+//
 // Sends the permission SMS to the highest-rated pending HD prospects, capped at
 // HD_INVITE_BATCH_SIZE per run (the daily 10am ET cron). Copy is selected per
 // service category — a reefer tech and a towing operator get different pitches.
