@@ -4,7 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import AppNav from '@/components/layout/AppNav'
 import WorkOrderForm from '@/components/work-orders/WorkOrderForm'
 import { WORK_ORDER_SELECT } from '@/app/api/work-orders/list'
-import { STATUS_META, unitLabelFor, type WorkOrder } from '@/types/work-orders'
+import { STATUS_META, unitLabelFor, type WorkOrder, type WorkOrderPhoto } from '@/types/work-orders'
+import type { PhotoWithUrl } from '@/components/work-orders/WorkOrderPhotos'
 
 export const metadata = { title: 'Work Order — National Wrench Index Suite™' }
 
@@ -28,15 +29,35 @@ export default async function WorkOrderDetailPage({
   if (!profile?.business_name) redirect('/onboarding')
   if (profile.work_orders_enabled !== true) redirect('/dashboard')
 
-  const { data } = await supabase
-    .from('work_orders')
-    .select(WORK_ORDER_SELECT)
-    .eq('id', id)
-    .eq('user_id', user.id)
-    .single()
+  const [{ data }, { data: photoRows }] = await Promise.all([
+    supabase
+      .from('work_orders')
+      .select(WORK_ORDER_SELECT)
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .single(),
+    supabase
+      .from('work_order_photos')
+      .select('id, work_order_id, file_url, caption, created_at')
+      .eq('work_order_id', id)
+      .eq('user_id', user.id)
+      .order('created_at', { ascending: true }),
+  ])
 
   if (!data) notFound()
   const wo = data as unknown as WorkOrder
+
+  // The bucket is private, so every photo is displayed through a short-lived signed
+  // URL. Signed here rather than stored, because a stored URL expires and leaves a
+  // permanently broken image on the record.
+  const photos: PhotoWithUrl[] = await Promise.all(
+    ((photoRows ?? []) as WorkOrderPhoto[]).map(async photo => {
+      const { data: signed } = await supabase.storage
+        .from('work-order-photos')
+        .createSignedUrl(photo.file_url, 3600)
+      return { ...photo, signedUrl: signed?.signedUrl ?? null }
+    }),
+  )
   const meta = STATUS_META[wo.status]
 
   return (
@@ -71,6 +92,7 @@ export default async function WorkOrderDetailPage({
 
         <WorkOrderForm
           workOrder={wo}
+          photos={photos}
           defaults={{
             labor_rate:     Number(profile.default_labor_rate ?? 125),
             markup_percent: Number(profile.default_parts_markup_percent ?? 20),

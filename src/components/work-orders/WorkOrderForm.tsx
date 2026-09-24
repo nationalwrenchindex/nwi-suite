@@ -19,6 +19,7 @@ import {
   type WorkOrder, type WorkOrderStatus,
 } from '@/types/work-orders'
 import CustomerUnitPicker from './CustomerUnitPicker'
+import WorkOrderPhotos, { type PhotoWithUrl } from './WorkOrderPhotos'
 
 const fmt = (n: number | null | undefined) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n ?? 0)
@@ -26,9 +27,11 @@ const fmt = (n: number | null | undefined) =>
 export default function WorkOrderForm({
   workOrder,
   defaults,
+  photos = [],
 }: {
   workOrder?: WorkOrder
   defaults:   { labor_rate: number; markup_percent: number; tax_percent: number }
+  photos?:    PhotoWithUrl[]
 }) {
   const router   = useRouter()
   const isNew    = !workOrder
@@ -232,6 +235,20 @@ export default function WorkOrderForm({
           </div>
         </div>
       </section>
+
+      {/* ── Photos ── */}
+      {/* Only once the work order exists: a photo needs a record to belong to,
+          and the storage path is keyed on its id. */}
+      {!isNew && (
+        <section className="nwi-card space-y-3">
+          <p className="text-white/30 text-xs uppercase tracking-widest">Photos</p>
+          <WorkOrderPhotos
+            workOrderId={workOrder!.id}
+            initialPhotos={photos}
+            disabled={isLocked}
+          />
+        </section>
+      )}
 
       {/* ── Tech notes ── */}
       <section className="nwi-card">
