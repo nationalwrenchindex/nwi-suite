@@ -555,7 +555,9 @@ function SendInvoiceModal({
             <p className="text-white font-semibold">
               {invoice.times_sent > 0 ? 'Resend Invoice' : 'Send Invoice'}
             </p>
-            <p className="text-white/40 text-xs mt-0.5">{invoice.invoice_number} · {grandTotal}</p>
+            <p className="text-white/40 text-xs mt-0.5">
+              {invoice.invoice_number}{invoice.po_number ? ` · PO # ${invoice.po_number}` : ''} · {grandTotal}
+            </p>
           </div>
           <button onClick={onClose} className="p-2 text-white/40 hover:text-white rounded-lg hover:bg-white/10 transition-colors">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -947,6 +949,11 @@ export default function FinalizedInvoiceClient({
               </span>
             )}
           </div>
+          {/* The fleet customer matches payment to their own PO, not to our invoice
+              number, so it sits directly under it on every invoice view. */}
+          {invoice.po_number && (
+            <p className="text-white/50 text-sm mt-1 font-mono">PO # {invoice.po_number}</p>
+          )}
           {isFinalized && invoice.finalized_at && (
             <p className="text-success text-sm mt-1 flex items-center gap-1.5">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">

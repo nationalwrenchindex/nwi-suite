@@ -194,11 +194,6 @@ export default async function PublicInvoicePage(
         <div className="space-y-2">
           <div className="flex items-center gap-3 flex-wrap">
             <p className="text-[#FF6600] font-mono text-base font-semibold">{inv.invoice_number}</p>
-            {inv.po_number && (
-              /* The fleet customer matches payment to their own PO, not our invoice
-                 number, so it sits beside it rather than in the fine print. */
-              <p className="font-mono text-base text-white/60">PO # {inv.po_number}</p>
-            )}
             <span
               className="px-2.5 py-0.5 rounded-full text-xs font-semibold"
               style={isPaid
@@ -209,6 +204,11 @@ export default async function PublicInvoicePage(
               {isPaid ? 'Paid' : 'Awaiting Payment'}
             </span>
           </div>
+          {/* Under the invoice number, not in the fine print: a fleet customer
+              matches payment to their own PO, not to our number. */}
+          {inv.po_number && (
+            <p className="font-mono text-sm text-white/60">PO # {inv.po_number}</p>
+          )}
           <h1 className="font-bold text-2xl text-white tracking-tight">Hello, {customerName}</h1>
           <p className="text-white/50 text-sm">{bizName} has sent you an invoice for completed service.</p>
         </div>

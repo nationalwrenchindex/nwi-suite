@@ -718,6 +718,11 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
               In Progress
             </span>
           </div>
+          {/* Live from the field below, so a PO typed here appears under the number
+              immediately rather than only after the next save. */}
+          {poNumber.trim() && (
+            <p className="text-white/50 text-sm mt-1 font-mono">PO # {poNumber.trim()}</p>
+          )}
           <p className="text-white/40 text-sm mt-1">
             Started {invoice.started_at
               ? new Date(invoice.started_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
