@@ -7,6 +7,7 @@ import { LABOR_GUIDE, type LaborGuideItem } from '@/lib/hd/labor-guide'
 import { useDefaultTaxPercent } from '@/lib/hd/use-default-tax-rate'
 import { DEFAULT_HD_PARTS_MARKUP, sellPrice, lineAmount } from '@/lib/hd/parts-pricing'
 import AddressAutofill from '@/components/hd/AddressAutofill'
+import { money } from '@/lib/format'
 
 const ORANGE  = '#FF6600'
 const BLUE    = '#2969B0'
@@ -495,7 +496,7 @@ export default function NewQuotePage() {
   const taxAmount     = taxBase * (form.tax_rate / 100)
   const total         = taxBase + taxAmount
 
-  function fmt(n: number) { return `$${n.toFixed(2)}` }
+  function fmt(n: number) { return `${money(n)}` }
 
   // ── Labor modal helpers ──────────────────────────────────────────────────
 

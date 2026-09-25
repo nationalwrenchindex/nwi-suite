@@ -8,6 +8,7 @@ import { AERIAL_TYPE_LABEL } from '@/lib/hd/aerial/forms'
 import { findInvoicePMChecklists } from '@/lib/hd/pm-report-attachment'
 import { resolveLateFeeSettings, assessLateFee, lateFeeBlockMessage } from '@/lib/hd/late-fee'
 import type { AerialInspectionType } from '@/types/aerial'
+import { money } from '@/lib/format'
 
 const ORANGE = '#FF6600'
 const BLUE   = '#2969B0'
@@ -34,7 +35,7 @@ interface LineItem {
 }
 
 function fmt(n: number | null | undefined) {
-  return `$${(n ?? 0).toFixed(2)}`
+  return `${money((n ?? 0))}`
 }
 
 function fmtDate(s: string | null | undefined) {

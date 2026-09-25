@@ -21,16 +21,15 @@
 
 import type { MonthlyCost } from '@/types/fleet-pro-cost'
 import { NWI_ORANGE } from './brand'
+import { money as sharedMoney } from '@/lib/format'
 
 const DIM  = 'rgba(255,255,255,0.4)'
 const DIM2 = 'rgba(255,255,255,0.55)'
 const RULE = 'rgba(255,255,255,0.08)'
 
-const usd = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-  maximumFractionDigits: 0,
-})
+// Whole-dollar abbreviation was dropped here deliberately: a chart caption that
+// disagrees with the invoice it summarises is the bug this replaced.
+const usd = { format: (n: number) => sharedMoney(n) }
 
 /** 'YYYY-MM' -> 'Jan'. Pinned to midday so the local timezone cannot shift the month. */
 function monthLabel(month: string): string {

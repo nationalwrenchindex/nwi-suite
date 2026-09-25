@@ -11,6 +11,7 @@ import {
   categoryResult,
   initialInspectionData,
 } from '@/lib/hd/dot-categories'
+import { money } from '@/lib/format'
 
 const HD_ORANGE = '#E85D24'
 const HD_BLUE   = '#1A6BAF'
@@ -534,7 +535,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
                 {invoices.map(inv => (
                   <option key={inv.id} value={inv.id}>
                     {(inv.invoice_number ?? 'Invoice')}{inv.customer_name ? ` — ${inv.customer_name}` : ''}
-                    {inv.total != null ? ` ($${Number(inv.total).toFixed(0)})` : ''}
+                    {inv.total != null ? ` (${money(inv.total)})` : ''}
                   </option>
                 ))}
               </select>

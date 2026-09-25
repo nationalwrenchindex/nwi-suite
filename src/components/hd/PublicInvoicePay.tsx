@@ -11,6 +11,7 @@
 
 import type { PublicInvoiceBranding } from '@/lib/hd/invoice-token'
 import { termsDisplay, formatDueDate } from '@/lib/hd/payment-terms'
+import { money } from '@/lib/format'
 
 // The light "document" palette HD invoices use, not the dark HD suite chrome.
 const BG     = '#F4F5F7'
@@ -43,7 +44,7 @@ interface Props {
 }
 
 function fmt(n: number | string | null | undefined) {
-  return `$${Number(n ?? 0).toFixed(2)}`
+  return `${money(Number(n ?? 0))}`
 }
 
 function fmtDate(s: string | null | undefined) {

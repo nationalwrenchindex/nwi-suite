@@ -9,6 +9,7 @@
 // a card ends up saying 'urgent' next to a table row that says 'review'.
 
 import type { FleetProRole } from './fleet-pro'
+import { money } from '@/lib/format'
 
 /** Which of the two rules fired. A unit can trip one, the other, or both. */
 export type ReplacementTrigger = 'cost_ratio' | 'breakdowns'
@@ -224,9 +225,7 @@ export function formatDaysDown(days: number | null): string {
 
 export function formatMoney(n: number | null): string {
   if (n === null) return '—'
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency', currency: 'USD', maximumFractionDigits: 0,
-  }).format(n)
+  return money(n)
 }
 
 /** One line saying why the unit is on the list. Used on the card and in the PDF. */

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FleetProReport } from '@/types/fleet-pro'
 import { FleetProWordmark, NWI_ORANGE } from './brand'
+import { money } from '@/lib/format'
 
 const FP_ORANGE = NWI_ORANGE
 const CARD      = '#111920'
@@ -14,7 +15,7 @@ const BORDER    = '#1e3040'
 const UNASSIGNED_ID = '__unassigned__'
 
 const currency = (n: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
+  money(n)
 
 // ─── Date range presets ───────────────────────────────────────────────────────
 // Quarters are first-class, not a convenience: the county submits its maintenance

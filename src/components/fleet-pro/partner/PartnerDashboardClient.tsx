@@ -10,6 +10,7 @@ import type {
   PartnerPmAlert,
 } from '@/types/fleet-pro-partner'
 import { NWI_ORANGE } from '@/components/fleet-pro/brand'
+import { money as sharedMoney } from '@/lib/format'
 
 const RED   = '#ef4444'
 const GREEN = '#22C55E'
@@ -18,15 +19,13 @@ const FAINT = 'rgba(255,255,255,0.3)'
 
 const CARD  = { background: '#111920', border: '1px solid #1e3040' }
 
-const usd = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-  maximumFractionDigits: 0,
-})
+// The KPI strip used whole dollars for glanceability. It now matches the activity
+// rows and the invoices they come from — one number, one rendering.
+const usd = { format: (n: number) => sharedMoney(n) }
 
 // Activity rows are money-bearing often enough that cents matter on a single line,
 // but the KPI row is a glance — so two formatters rather than one compromise.
-const usdExact = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
+const usdExact = { format: (n: number) => sharedMoney(n) }
 
 function money(n: number | null): string {
   return n === null ? '—' : usd.format(n)

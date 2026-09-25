@@ -4,6 +4,7 @@ import { sendSmsResult } from '@/lib/twilio'
 import { getContactSuppression } from '@/lib/customer-contact'
 import { authorizeCron } from '@/lib/cron-auth'
 import { fetchAllRows } from '@/lib/supabase/fetch-all'
+import { money } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
 
@@ -190,7 +191,7 @@ export async function GET(request: NextRequest) {
       const techName = nameMap.get(inv.user_id as string) ?? 'your mechanic'
       const body =
         `Invoice #${inv.invoice_number} from ${techName} is overdue. ` +
-        `A late fee of $${fee.toFixed(2)} has been applied. ` +
+        `A late fee of ${money(fee)} has been applied. ` +
         `Please remit payment at your earliest convenience. Thank you.`
       const result = await sendSmsResult({ to: inv.customer_phone as string, body })
       if (result.success) smsSent++

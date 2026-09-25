@@ -14,6 +14,7 @@
 
 import { formatDate, formatTime } from './scheduler'
 import { getContactSuppression } from '@/lib/customer-contact'
+import { money } from '@/lib/format'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -239,7 +240,7 @@ async function buildContext(jobId: string, db: AnyDB) {
     tech_name:      profile?.full_name     ?? 'Your Technician',
     vehicle:        v ? [v.year, v.make, v.model].filter(Boolean).join(' ') : '',
     location:       (job.location_address as string | null) ?? '',
-    invoice_total:  invoice ? `$${Number(invoice.total).toFixed(2)}` : '',
+    invoice_total:  invoice ? `${money(Number(invoice.total))}` : '',
     invoice_number: invoice?.invoice_number ?? '',
   }
 

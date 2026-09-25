@@ -14,9 +14,10 @@ import {
   type WorkOrder, type WorkOrderStatus,
 } from '@/types/work-orders'
 import { WORK_ORDER_PAGE_SIZE } from '@/app/api/work-orders/list'
+import { money } from '@/lib/format'
 
 const fmt = (n: number | null | undefined) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n ?? 0)
+  money(n ?? 0)
 
 const fmtDate = (s: string | null | undefined) =>
   s ? new Date(s).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'

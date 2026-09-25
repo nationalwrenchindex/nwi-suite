@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import type { TaxSummary } from '@/types/financials'
+import { money } from '@/lib/format'
 
 type Preset = 'ytd' | 'q1' | 'q2' | 'q3' | 'q4' | 'custom'
 
 function fmt(n: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
+  return money(n)
 }
 function pad2(n: number) { return String(n).padStart(2, '0') }
 

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { PartnerBillingSummary, PartnerSubscriptionRow } from '@/types/fleet-pro-partner'
 import { FleetProWordmark, NWI_ORANGE } from '../brand'
+import { moneyFromCents as money } from '@/lib/format'
 
 const CARD   = '#111920'
 const THEAD  = '#162030'
@@ -14,8 +15,6 @@ const FAINT  = 'rgba(255,255,255,0.25)'
 
 // Cents in, dollars out. The API speaks cents (Stripe's unit); nothing on this page
 // does arithmetic on the result, so the conversion happens once, here.
-const money = (cents: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100)
 
 const LIVE_STATUSES = ['active', 'trialing', 'past_due']
 

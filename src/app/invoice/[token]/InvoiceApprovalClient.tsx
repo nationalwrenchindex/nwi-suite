@@ -1,9 +1,10 @@
 'use client'
 
 import { useState } from 'react'
+import { money } from '@/lib/format'
 
 const fmt = (n: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
+  money(n)
 
 export default function InvoiceApprovalClient({
   token,

@@ -16,6 +16,7 @@ import type {
   PartnerAccountEvent,
   PartnerAccountUnitRow,
 } from '@/components/fleet-pro/partner/AccountDetailClient'
+import { money } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
 
@@ -190,7 +191,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ acc
   }
 
   const woEvents: PartnerAccountEvent[] = woRows.map(r => {
-    const rate  = r.labor_rate == null ? null : `$${num(r.labor_rate).toFixed(2)}/hr`
+    const rate  = r.labor_rate == null ? null : `${money(num(r.labor_rate))}/hr`
     const hours = r.labor_hours == null ? null : `${num(r.labor_hours)} hrs`
     return {
       id:         String(r.id),
@@ -212,7 +213,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ acc
   const invEvents: PartnerAccountEvent[] = invRows.map(r => {
     const labor = r.subtotal_labor == null ? null : `Labor ${num(r.subtotal_labor).toFixed(2)}`
     const parts = r.subtotal_parts == null ? null : `Parts ${num(r.subtotal_parts).toFixed(2)}`
-    const rate  = r.labor_rate == null ? null : `@ $${num(r.labor_rate).toFixed(2)}/hr`
+    const rate  = r.labor_rate == null ? null : `@ ${money(num(r.labor_rate))}/hr`
     return {
       id:         String(r.id),
       kind:       'invoice',

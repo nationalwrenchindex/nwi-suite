@@ -8,6 +8,7 @@ import { createClient } from '@/lib/supabase/server'
 import { hasQuickWrenchAccess } from '@/lib/subscription'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { QuoteSaveRequest } from '@/types/quickwrench'
+import { money } from '@/lib/format'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -360,7 +361,7 @@ export async function POST(req: NextRequest) {
       const bizName      = profile?.business_name ?? 'Your technician'
 
       const fmt = (n: number) =>
-        new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
+        money(n)
 
       const appUrl   = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tools.nationalwrenchindex.com'
       const quoteUrl = publicToken

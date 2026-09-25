@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { WORK_ORDER_PAGE_SIZE, type WorkOrderListRow } from '@/app/api/hd/work-orders/list'
+import { money } from '@/lib/format'
 
 const HD_ORANGE = '#E85D24'
 
@@ -106,7 +107,7 @@ export default function WorkOrderList({
                   </td>
                   <td className="px-4 py-3 text-sm text-white">
                     <Link href={`/hd/work-orders/${wo.id}`} className="block">
-                      {wo.total_amount ? `$${Number(wo.total_amount).toFixed(2)}` : '—'}
+                      {wo.total_amount ? `${money(Number(wo.total_amount))}` : '—'}
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>

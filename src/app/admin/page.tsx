@@ -10,6 +10,7 @@ import Link from 'next/link'
 import { PLANS, TIER_MODULES } from '@/lib/stripe-plans'
 import type { PlanTier } from '@/lib/stripe-plans'
 import { FOREMAN_SUBSCRIBER_CAP } from '@/lib/foreman/config'
+import { moneyFromCents } from '@/lib/format'
 
 const FOUNDER_ID = '4a8c046f-7db3-42bb-8422-fd47efb7678c'
 
@@ -260,7 +261,7 @@ export default async function AdminPage() {
           />
           <StatCard
             label="MRR"
-            value={`$${(mrr / 100).toFixed(0)}`}
+            value={moneyFromCents(mrr)}
             color={mrr > 0 ? 'text-green-400' : 'text-white'}
           />
           <StatCard
@@ -295,7 +296,7 @@ export default async function AdminPage() {
           <div className="bg-dark-card border border-dark-border rounded-xl px-4 py-5">
             <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Foreman MRR</p>
             <p className={`text-2xl font-bold tabular-nums ${foremanCount > 0 ? 'text-green-400' : 'text-white'}`}>
-              ${((foremanCount * 5900) / 100).toFixed(0)}
+              {moneyFromCents(foremanCount * 5900)}
             </p>
             <Link href="/admin/foreman" className="text-orange text-xs hover:underline mt-1 block">
               View details →
@@ -385,7 +386,7 @@ export default async function AdminPage() {
                       <td className={td}>
                         {mrrCents > 0 ? (
                           <span className="text-green-400 font-medium">
-                            ${(mrrCents / 100).toFixed(0)}/mo
+                            {moneyFromCents(mrrCents)}/mo
                           </span>
                         ) : (
                           <span className="text-white/25">—</span>

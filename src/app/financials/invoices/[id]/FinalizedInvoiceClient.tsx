@@ -3,13 +3,14 @@
 import { useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Invoice, MultiJobEntry, ServiceLine, Adjustment, ShopSupplyItem, AdditionalPartItem, AdditionalLaborItem } from '@/types/financials'
+import { money } from '@/lib/format'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tools.nationalwrenchindex.com'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const fmt = (n: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
+  money(n)
 
 function fmtDate(s: string | null | undefined, opts?: Intl.DateTimeFormatOptions) {
   if (!s) return '—'

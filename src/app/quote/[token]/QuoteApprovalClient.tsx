@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { money } from '@/lib/format'
 
 type QuoteStatus = 'draft' | 'sent' | 'approved' | 'declined' | 'converted' | 'expired'
 
@@ -15,7 +16,7 @@ interface Props {
 
 function fmt(n: number | null | undefined): string {
   if (n == null) return '$0.00'
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
+  return money(n)
 }
 
 export default function QuoteApprovalClient({

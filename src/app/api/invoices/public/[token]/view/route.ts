@@ -5,10 +5,11 @@
 
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
+import { money } from '@/lib/format'
 
 function fmtCurrency(n: number | null | undefined): string {
   if (n == null) return '$0.00'
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
+  return money(n)
 }
 
 async function sendSms(to: string, body: string): Promise<void> {

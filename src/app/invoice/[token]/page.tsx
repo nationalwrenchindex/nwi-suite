@@ -9,6 +9,7 @@ import InvoiceViewClient from './InvoiceViewClient'
 import InvoiceApprovalClient from './InvoiceApprovalClient'
 import type { Metadata } from 'next'
 import type { MultiJobEntry } from '@/types/financials'
+import { money } from '@/lib/format'
 
 const INVOICE_SELECT = `
   id, invoice_number, po_number, invoice_status, public_token,
@@ -39,7 +40,7 @@ export async function generateMetadata(
 }
 
 const fmt = (n: number | null | undefined) =>
-  n == null ? '$0.00' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
+  n == null ? '$0.00' : money(n)
 
 function round2(n: number) {
   return Math.round(n * 100) / 100

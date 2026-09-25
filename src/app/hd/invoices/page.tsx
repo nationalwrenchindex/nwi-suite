@@ -11,6 +11,7 @@ import {
   type HDInvoiceListRow,
 } from '@/app/api/hd/invoices/list'
 import InvoiceList from './InvoiceList'
+import { money } from '@/lib/format'
 
 const ORANGE = '#FF6600'
 
@@ -27,7 +28,7 @@ const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
 const OUTSTANDING_STATUSES = new Set(['unpaid', 'sent', 'overdue'])
 
 function fmt(n: number) {
-  return `$${n.toFixed(2)}`
+  return `${money(n)}`
 }
 
 export default async function InvoicesPage({ searchParams }: { searchParams: Promise<{ filter?: string }> }) {

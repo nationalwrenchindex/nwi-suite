@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import type { FinancialsOverview, DayBreakdown, WeekBreakdown } from '@/types/financials'
+import { money } from '@/lib/format'
 
 type Granularity = 'day' | 'week' | 'month' | 'custom'
 
 function fmt(n: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
+  return money(n)
 }
 function fmtPct(n: number) { return `${n.toFixed(1)}%` }
 function pad2(n: number) { return String(n).padStart(2, '0') }

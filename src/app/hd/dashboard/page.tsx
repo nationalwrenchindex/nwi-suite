@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import HDTrialBanner from '@/components/hd/HDTrialBanner'
 import { provisionHdFromCheckoutSession } from '@/lib/hd-provision'
+import { money } from '@/lib/format'
 
 export const metadata = { title: 'Dashboard — NWI HD Suite' }
 
@@ -258,7 +259,7 @@ export default async function HDDashboardPage({
                     {wo.status === 'in_progress' ? 'In Progress' : 'Open'}
                   </span>
                   {wo.total_amount && (
-                    <p className="text-sm font-medium text-white">${Number(wo.total_amount).toFixed(0)}</p>
+                    <p className="text-sm font-medium text-white">{money(wo.total_amount)}</p>
                   )}
                 </div>
               ))}

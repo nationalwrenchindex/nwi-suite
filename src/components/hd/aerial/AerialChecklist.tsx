@@ -15,6 +15,7 @@ import {
   collectDeficiencies, emptyData, hasCriticalDeficiency, overallResult, unansweredCount,
 } from '@/types/aerial'
 import SignaturePad from '@/components/hd/SignaturePad'
+import { money } from '@/lib/format'
 
 interface UnitOption { id: string; unit_number: string | null; manufacturer: string | null; model: string | null; serial_number?: string | null }
 
@@ -241,7 +242,7 @@ export default function AerialChecklist({
             {invoices.map(inv => (
               <option key={inv.id} value={inv.id}>
                 {(inv.invoice_number ?? 'Invoice')}{inv.customer_name ? ` — ${inv.customer_name}` : ''}
-                {inv.total != null ? ` ($${Number(inv.total).toFixed(0)})` : ''}
+                {inv.total != null ? ` (${money(inv.total)})` : ''}
               </option>
             ))}
           </select>

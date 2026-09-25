@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { money } from '@/lib/format'
 
 export const metadata = { title: 'Intel Hub — NWI HD Suite' }
 
@@ -302,7 +303,7 @@ export default async function IntelHubPage({
                         </p>
                         {wo.total_amount && (
                           <p className="text-sm font-semibold" style={{ color: HD_ORANGE }}>
-                            ${Number(wo.total_amount).toFixed(0)}
+                            {money(wo.total_amount)}
                           </p>
                         )}
                       </div>

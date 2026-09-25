@@ -11,9 +11,10 @@
 import { useState } from 'react'
 import type { LineItem } from '@/types/financials'
 import type { EditItem } from './line-items'
+import { money } from '@/lib/format'
 
 const fmt = (n: number | null | undefined) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n ?? 0)
+  money(n ?? 0)
 
 const GRID = 'grid-cols-[1fr_56px_80px_80px_52px]'
 

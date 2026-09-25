@@ -7,13 +7,14 @@ import {
   round2, isLaborItem, fromLineItems, toLineItems, computeTotals,
   type EditItem,
 } from '@/components/shared/line-items'
+import { money } from '@/lib/format'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const fmt = (n: number | null | undefined) =>
   n == null
     ? '—'
-    : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
+    : money(n)
 
 const fmtDate = (s: string | null | undefined) => {
   if (!s) return '—'

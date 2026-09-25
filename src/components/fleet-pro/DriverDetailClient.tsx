@@ -29,6 +29,7 @@ import {
   type Metric,
 } from '@/types/fleet-pro-drivers'
 import { NWI_BLUE, NWI_ORANGE } from './brand'
+import { moneyOrDash as money } from '@/lib/format'
 
 const CARD   = { background: '#111920', border: '1px solid #1e3040' }
 const INPUT  = { background: '#162030', border: '1px solid #1e3040', color: '#fff' }
@@ -45,10 +46,7 @@ function fmtDate(s: string | null): string {
   return isNaN(d.getTime()) ? s : d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
 }
 
-function money(n: number | null): string {
-  if (n == null) return '—'
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
-}
+
 
 function num(n: number | null, digits = 1): string {
   return n == null ? '—' : n.toFixed(digits)

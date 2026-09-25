@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { money } from '@/lib/format'
 
 // ─── Palette (dark, works in both LD and HD QuickWrench) ─────────────────────
 const ORANGE = '#FF6600'
@@ -32,7 +33,7 @@ interface QuoteResult {
 
 type Screen = 'stores' | 'confirm' | 'quote' | 'tracking' | 'coming_soon'
 
-const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`
+const usd = (cents: number) => `${money((cents / 100))}`
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function PartsOnTheWay({

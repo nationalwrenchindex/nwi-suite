@@ -6,6 +6,7 @@ import type {
   CreateCustomerPayload, CreateVehiclePayload, CreateServicePayload,
 } from '@/types/intel'
 import { SERVICE_TYPES } from '@/lib/scheduler'
+import { money } from '@/lib/format'
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
@@ -16,7 +17,7 @@ function fmtDate(d: string) {
 
 function fmtMoney(n: number | null) {
   if (n == null) return null
-  return `$${n.toFixed(2)}`
+  return `${money(n)}`
 }
 
 // ─── Add Customer Form ────────────────────────────────────────────────────────

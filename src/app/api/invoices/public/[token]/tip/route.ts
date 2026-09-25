@@ -4,6 +4,7 @@
 
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
+import { money } from '@/lib/format'
 
 export async function POST(
   req: NextRequest,
@@ -58,10 +59,8 @@ export async function POST(
   const customerName = customer
     ? `${customer.first_name ?? ''} ${customer.last_name ?? ''}`.trim() || 'Customer'
     : 'Customer'
-  const totalFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
-    .format((Number(inv.total) || 0) + tipCents / 100)
-  const tipFmt = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
-    .format(tipCents / 100)
+  const totalFmt = money((Number(inv.total) || 0) + tipCents / 100)
+  const tipFmt = money(tipCents / 100)
 
   void sc.from('notifications').insert({
     user_id: inv.user_id as string,

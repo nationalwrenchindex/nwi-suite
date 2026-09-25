@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { money } from '@/lib/format'
 
 const ORANGE = '#FF6600'
 const BLUE   = '#2969B0'
@@ -30,9 +31,6 @@ interface SendResponse {
 /** Which of the two resend choices the tech picked. */
 type SendMode = 'original' | 'late_fee'
 
-function money(n: number) {
-  return `$${n.toFixed(2)}`
-}
 
 /**
  * "12 Sep, 2:14 PM" — day and time, because the question a tech is asking is

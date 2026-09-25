@@ -6,6 +6,7 @@ import { createServiceClient } from '@/lib/supabase/service'
 import QuoteApprovalClient from './QuoteApprovalClient'
 import type { Metadata } from 'next'
 import type { MultiJobEntry } from '@/types/financials'
+import { money } from '@/lib/format'
 
 const QUOTE_SELECT = `
   id, quote_number, status, public_token,
@@ -72,7 +73,7 @@ export default async function PublicQuotePage(
     : null
 
   const fmt = (n: number | null | undefined) =>
-    n == null ? '$0.00' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
+    n == null ? '$0.00' : money(n)
 
   // Multi-job support: prefer jobs[] if present and non-empty
   const jobs: MultiJobEntry[] = Array.isArray(q.jobs) && q.jobs.length > 0 ? q.jobs : []

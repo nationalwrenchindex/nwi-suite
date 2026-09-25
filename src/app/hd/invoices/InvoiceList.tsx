@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { HD_INVOICE_PAGE_SIZE, type HDInvoiceListRow } from '@/app/api/hd/invoices/list'
 import InvoiceListActions from './InvoiceListActions'
+import { money } from '@/lib/format'
 
 const ORANGE = '#FF6600'
 
@@ -19,7 +20,7 @@ const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
 const GRID_COLS = '160px 1fr 1fr 90px 90px 120px auto'
 
 function fmt(n: number | null) {
-  return `$${(n ?? 0).toFixed(2)}`
+  return `${money((n ?? 0))}`
 }
 
 function fmtDate(s: string | null) {

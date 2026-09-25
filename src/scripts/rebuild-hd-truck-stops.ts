@@ -20,6 +20,7 @@
 import { loadEnvConfig } from '@next/env'
 import { randomBytes } from 'crypto'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { money } from '@/lib/format'
 
 loadEnvConfig(process.cwd())
 
@@ -256,7 +257,7 @@ async function main() {
   console.log('─'.repeat(72))
   console.log(`HD truck-stop rebuild${dryRun ? '  [DRY RUN — nothing written]' : ''}`)
   console.log(`${all.length} awaiting rebuild · processing ${queue.length}`)
-  console.log(`estimated Places cost: $${(queue.length * PLACES_DETAILS_COST_USD).toFixed(2)}`)
+  console.log(`estimated Places cost: ${money((queue.length * PLACES_DETAILS_COST_USD))}`)
   console.log('─'.repeat(72))
   if (queue.length === 0) return
 
@@ -393,7 +394,7 @@ async function main() {
   console.log(`  Enriched (geo/desc):${enriched}`)
   console.log(`  Failed:             ${failed}`)
   console.log(`  No Places result:   ${noPlace}`)
-  console.log(`  Estimated cost:     $${(placesCalls * PLACES_DETAILS_COST_USD).toFixed(2)} (${placesCalls} Places Details calls)`)
+  console.log(`  Estimated cost:     ${money((placesCalls * PLACES_DETAILS_COST_USD))} (${placesCalls} Places Details calls)`)
   console.log('─'.repeat(72))
 }
 

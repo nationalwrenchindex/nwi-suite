@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
 import QuoteDetailActions from './QuoteDetailActions'
+import { money } from '@/lib/format'
 
 const ORANGE = '#FF6600'
 const BLUE   = '#2969B0'
@@ -27,7 +28,7 @@ interface LineItem {
 }
 
 function fmt(n: number | null | undefined) {
-  return `$${(n ?? 0).toFixed(2)}`
+  return `${money((n ?? 0))}`
 }
 
 function fmtDate(s: string | null | undefined) {

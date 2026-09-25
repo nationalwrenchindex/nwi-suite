@@ -3,11 +3,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Invoice, ShopSupplyItem, AdditionalPartItem, AdditionalLaborItem, ServiceLine, Adjustment, AdjustmentPreset } from '@/types/financials'
+import { money } from '@/lib/format'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const fmt = (n: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
+  money(n)
 
 function round2(n: number) {
   return Math.round(n * 100) / 100
@@ -448,7 +449,7 @@ function FinalizeConfirmModal({
             <p className="text-white/60 text-sm mt-1">
               Once finalized, the invoice is locked from further edits. The grand total will be{' '}
               <span className="text-orange font-semibold">
-                {new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(grandTotal)}
+                {money(grandTotal)}
               </span>.
               Only finalize when the job is complete.
             </p>

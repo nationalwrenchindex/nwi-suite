@@ -5,6 +5,7 @@ import Link from 'next/link'
 import type { FleetBranding } from '@/types/fleet-pro-partner'
 import type { FleetProUnitRow, ServiceEvent, ServiceEventKind, PmState } from '@/types/fleet-pro'
 import { NWI_BLUE, NWI_ORANGE } from '../brand'
+import { money as sharedMoney } from '@/lib/format'
 
 // ─── Wire shape ───────────────────────────────────────────────────────────────
 // Lives here rather than in src/types because this is the only surface that speaks
@@ -94,14 +95,11 @@ const PM_STYLE: Record<PmState, { label: string; color: string }> = {
 
 // ─── Formatting ───────────────────────────────────────────────────────────────
 
-const USD = new Intl.NumberFormat('en-US', {
-  style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2,
-})
+const USD = { format: (n: number) => sharedMoney(n) }
 
-// Whole dollars in the KPI strip: six tiles of cents is noise at a glance.
-const USD_WHOLE = new Intl.NumberFormat('en-US', {
-  style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0,
-})
+// The KPI strip used whole dollars as a glanceability trade. Dropped: a tile that
+// rounds to the dollar cannot be reconciled against the invoice behind it.
+const USD_WHOLE = { format: (n: number) => sharedMoney(n) }
 
 function fmtMoney(value: number | null) {
   return value == null ? '—' : USD.format(value)

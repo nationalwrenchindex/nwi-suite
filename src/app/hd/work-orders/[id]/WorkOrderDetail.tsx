@@ -12,6 +12,7 @@ import { inspectionDateLabel, type InspectionSummary } from '@/lib/hd/inspection
 import { BrandHeader } from '@/components/BrandHeader'
 import WorkOrderLineItems from '@/components/hd/WorkOrderLineItems'
 import type { Branding } from '@/lib/branding'
+import { money } from '@/lib/format'
 
 const HD_ORANGE = '#E85D24'
 
@@ -273,7 +274,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
             { label: 'Location', value: wo.location ?? '—' },
             { label: 'Setpoint', value: wo.current_setpoint ?? '—' },
             { label: 'Labor', value: wo.labor_hours ? `${wo.labor_hours}h @ $${wo.labor_rate ?? '—'}/hr` : '—' },
-            { label: 'Total', value: wo.total_amount ? `$${Number(wo.total_amount).toFixed(2)}` : '—' },
+            { label: 'Total', value: wo.total_amount ? `${money(Number(wo.total_amount))}` : '—' },
             { label: 'Serial / VIN', value: wo.unit?.serial_number ?? '—' },
           ].map(({ label, value }) => (
             <div key={label}>

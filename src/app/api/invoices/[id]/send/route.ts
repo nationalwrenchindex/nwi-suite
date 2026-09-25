@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { syncInvoiceToGarage, buildGarageJoinSmsLink, type GarageSyncResult } from '@/lib/garage/link'
 import { garageEmailSection, invoiceHtmlEmail } from '@/lib/garage/email'
+import { money } from '@/lib/format'
 
 const INVOICE_SELECT = `
   *,
@@ -55,7 +56,7 @@ function invoiceServiceDate(inv: Record<string, unknown>): string {
 
 function fmtCurrency(n: number | null | undefined): string {
   if (n == null) return '$0.00'
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
+  return money(n)
 }
 
 async function sendSms(to: string, body: string): Promise<{ success: boolean; error?: string }> {

@@ -9,6 +9,7 @@ import {
   type WorkOrderLine,
   type WorkOrderLineType,
 } from '@/lib/hd/work-order-lines'
+import { money } from '@/lib/format'
 
 // Parts and labor priced on the job itself, instead of first appearing at the
 // invoice form. Self-contained: it fetches and saves its own rows, so the work order
@@ -38,7 +39,7 @@ interface DraftLine {
   markup_percent: string
 }
 
-function fmt(n: number) { return `$${n.toFixed(2)}` }
+function fmt(n: number) { return `${money(n)}` }
 function num(v: string) { const n = parseFloat(v); return Number.isFinite(n) ? n : 0 }
 
 function toDraft(l: WorkOrderLine): DraftLine {

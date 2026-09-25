@@ -7,6 +7,7 @@ import { computeDueDate } from '@/lib/hd/payment-terms'
 import { useDefaultTaxPercent } from '@/lib/hd/use-default-tax-rate'
 import { DEFAULT_HD_PARTS_MARKUP, sellPrice, lineAmount } from '@/lib/hd/parts-pricing'
 import AddressAutofill from '@/components/hd/AddressAutofill'
+import { money } from '@/lib/format'
 
 // Direct-invoice fast path: skip the quote/approval step and bill a trusted
 // customer directly. Mirrors the quote form but posts straight to /api/hd/invoices.
@@ -294,7 +295,7 @@ export default function NewInvoicePage() {
   }
 
   // ── Line items ──
-  function fmt(n: number) { return `$${n.toFixed(2)}` }
+  function fmt(n: number) { return `${money(n)}` }
 
   function addLabor() {
     const description = labor.description.trim()

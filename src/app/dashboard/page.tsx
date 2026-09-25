@@ -9,6 +9,7 @@ import DashboardShareButton from '@/components/dashboard/DashboardShareButton'
 import BookingPageCard from '@/components/dashboard/BookingPageCard'
 import DashboardQuickWrenchCard from '@/components/dashboard/DashboardQuickWrenchCard'
 import InboxBell from '@/components/layout/InboxBell'
+import { money } from '@/lib/format'
 
 export const metadata = { title: 'Dashboard — National Wrench Index Suite\u2122' }
 
@@ -47,10 +48,10 @@ interface TopAlert {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+// Was abbreviated ($1.2M / $5.3k / $562). Dropped: the dashboard is read next to
+// the invoices it totals, and an abbreviation cannot be reconciled against them.
 function fmtCurrency(n: number): string {
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1000)      return `$${(n / 1000).toFixed(1)}k`
-  return `$${n.toFixed(0)}`
+  return money(n)
 }
 
 function fmtDate(dateStr: string): string {

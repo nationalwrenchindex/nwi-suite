@@ -11,6 +11,7 @@ import type {
   Supplier,
   MultiJobEntry,
 } from '@/types/quickwrench'
+import { money } from '@/lib/format'
 
 // ─── Job catalog ──────────────────────────────────────────────────────────────
 
@@ -172,7 +173,7 @@ const JOB_CATEGORIES = [
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const fmt = (n: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
+  money(n)
 
 function jobKey(j: SelectedJob): string {
   return `${j.category}:${j.name}`
@@ -649,7 +650,7 @@ function CustomerEntry({ onCustomerSet }: {
                 <span className="text-white/60 truncate">{q.job_subtype ?? q.quote_number ?? 'Quote'}</span>
                 <span className="text-white/30 whitespace-nowrap">
                   {q.created_at ? new Date(q.created_at).toLocaleDateString() : ''}
-                  {q.grand_total != null ? ` · $${Number(q.grand_total).toFixed(2)}` : ''}
+                  {q.grand_total != null ? ` · ${money(Number(q.grand_total))}` : ''}
                 </span>
               </div>
             ))}

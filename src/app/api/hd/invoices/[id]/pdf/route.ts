@@ -4,6 +4,7 @@ import { checkHDAccess } from '@/lib/hd-access'
 import { termsDisplay, formatDueDate } from '@/lib/hd/payment-terms'
 import { AERIAL_TYPE_LABEL } from '@/lib/hd/aerial/forms'
 import type { AerialInspectionType } from '@/types/aerial'
+import { money } from '@/lib/format'
 
 export const dynamic = 'force-dynamic'
 
@@ -20,7 +21,7 @@ interface LineItem {
 }
 
 function fmt(n: number | null | undefined) {
-  return `$${(n ?? 0).toFixed(2)}`
+  return `${money((n ?? 0))}`
 }
 
 function fmtDate(s: string | null | undefined) {

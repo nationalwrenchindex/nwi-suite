@@ -7,6 +7,7 @@ import type { TrailerSystem } from '@/lib/hd/trailer/types'
 import PartsOnTheWay, { type PartInput } from '@/components/parts-delivery/PartsOnTheWay'
 import PartText from '@/components/parts/PartText'
 import type { PartVendor } from '@/lib/parts/parse-part-numbers'
+import { money } from '@/lib/format'
 
 // Best-effort parse of the Parts Manager result text into structured parts for
 // delivery. Each meaningful line → { name, oem } with any part-number token pulled out.
@@ -5102,7 +5103,7 @@ function absHours(n: number): string {
 }
 
 function absMoney(n: number): string {
-  return `$${n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+  return money(n)
 }
 
 function absAgo(ts: number): string {

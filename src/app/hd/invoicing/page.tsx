@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { fetchAllRows } from '@/lib/supabase/fetch-all'
+import { money } from '@/lib/format'
 
 export const metadata = { title: 'Invoicing — NWI HD Suite' }
 
@@ -104,7 +105,7 @@ export default async function InvoicingPage() {
                   <td className="px-4 py-3 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>{wo.fleet_account?.fleet_name ?? '—'}</td>
                   <td className="px-4 py-3 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>{wo.unit?.unit_number ?? '—'}</td>
                   <td className="px-4 py-3 text-sm font-medium text-white">
-                    {wo.total_amount ? `$${Number(wo.total_amount).toFixed(2)}` : '—'}
+                    {wo.total_amount ? `${money(Number(wo.total_amount))}` : '—'}
                   </td>
                   <td className="px-4 py-3">
                     <span className="text-xs font-medium px-2 py-0.5 rounded-full"

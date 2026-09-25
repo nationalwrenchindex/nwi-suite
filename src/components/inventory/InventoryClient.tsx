@@ -5,11 +5,12 @@ import type { InventoryProduct, ServiceProduct, UsageLogEntry, GlobalProduct } f
 import { PRODUCT_CATEGORIES, PRODUCT_CATEGORY_LABELS } from '@/types/inventory'
 import { DETAILER_SERVICES, DETAILER_SERVICE_SLUGS, type DetailerService } from '@/lib/scheduler'
 import BarcodeScanner, { isBarcodeDetectorSupported } from './BarcodeScanner'
+import { money } from '@/lib/format'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function fmt(cents: number) {
-  return `$${(cents / 100).toFixed(2)}`
+  return `${money((cents / 100))}`
 }
 function costPerUse(p: InventoryProduct) {
   return p.total_uses > 0 ? fmt(Math.round(p.cost_cents / p.total_uses)) : '—'

@@ -9,6 +9,8 @@
 // Pure functions only: no supabase, no fetch, no process.env. Kept importable
 // from anywhere (route handlers, cron jobs, tests) without pulling server deps.
 
+import { money } from '@/lib/format'
+
 /** Hard ceiling for an outbound body: 320 chars, the stated 2-SMS budget.
  *
  *  Twilio bills per SEGMENT, not per message. GSM-7 fits 160 chars in a single
@@ -37,7 +39,7 @@ function toGsmSafe(s: string): string {
 export function formatInvoiceTotal(total: number | string | null | undefined): string {
   const n = typeof total === 'string' ? Number(total) : total
   if (n == null || !Number.isFinite(n)) return '$0.00'
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
+  return money(n)
 }
 
 /** Digits-only phone rendered as (555) 555-5555 so the customer can tap to call

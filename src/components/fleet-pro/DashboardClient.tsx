@@ -10,6 +10,7 @@ import type { RegistrationState } from '@/types/fleet-pro-registration'
 import ReplacementCard from './ReplacementCard'
 import type { ReplacementReport } from '@/types/fleet-pro-replacement'
 import { MPG_DROP_ALERT_PCT, type FuelAlert } from '@/types/fleet-pro-fuel'
+import { money as sharedMoney } from '@/lib/format'
 
 // ─── Wire shape ───────────────────────────────────────────────────────────────
 // PM is hours-based on hd_units for most fleets and date-based only when a manager
@@ -53,11 +54,7 @@ const PM_STYLE: Record<PmState, { label: string; color: string }> = {
 // the server sent rather than approximating it.
 const PM_RANK: Record<PmState, number> = { overdue: 0, due_soon: 1, unscheduled: 2, scheduled: 3 }
 
-const usd = new Intl.NumberFormat('en-US', {
-  style: 'currency',
-  currency: 'USD',
-  maximumFractionDigits: 0,
-})
+const usd = { format: (n: number) => sharedMoney(n) }
 
 function money(n: number | null | undefined): string {
   return n === null || n === undefined ? '—' : usd.format(n)

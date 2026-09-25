@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { money } from '@/lib/format'
 
 const ORANGE = '#FF6600'
 const BLUE   = '#2969B0'
@@ -87,7 +88,7 @@ export default function EditInvoiceForm({ invoice }: { invoice: Record<string, u
     payment_terms:  str(invoice.payment_terms) || 'net30',
   })
   function setField(k: string, v: string | number) { setForm(f => ({ ...f, [k]: v })) }
-  function fmt(n: number) { return `$${n.toFixed(2)}` }
+  function fmt(n: number) { return `${money(n)}` }
 
   // Inline edit of a labor line's hours → recompute amount from the current rate.
   function updateHours(itemId: string, raw: string) {

@@ -20,9 +20,10 @@ import {
 } from '@/types/work-orders'
 import CustomerUnitPicker from './CustomerUnitPicker'
 import WorkOrderPhotos, { type PhotoWithUrl } from './WorkOrderPhotos'
+import { money } from '@/lib/format'
 
 const fmt = (n: number | null | undefined) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n ?? 0)
+  money(n ?? 0)
 
 export default function WorkOrderForm({
   workOrder,
