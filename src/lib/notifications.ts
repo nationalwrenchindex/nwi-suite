@@ -288,6 +288,9 @@ export async function dispatchNotification({
   const { ctx, job, customerId } = await buildContext(jobId, supabase)
 
   if (!job || !ctx) {
+    // Nothing to log against — notification_logs.user_id is NOT NULL and the job
+    // that would have supplied it is the thing that is missing. Console only.
+    console.error(`[NWI/Notify] ${trigger} aborted: job ${jobId} not found or has no customer context`)
     return { success: false, channel: 'none', error: 'Job not found' }
   }
 
@@ -322,38 +325,68 @@ export async function dispatchNotification({
 
   const result: DispatchResult = { success: false, channel, message }
 
-  // ── SMS — only if customer opted in at booking time ──
-  if ((channel === 'sms' || channel === 'both') && smsConsent && !suppression.no_sms) {
-    const phone = c?.phone
-    if (phone) {
-      const r = await sendSms(phone, message)
-      result.sms = r
-      await log(supabase, {
-        user_id: userId, job_id: jobId, customer_id: customerId,
-        trigger_type: trigger, channel: 'sms', recipient: phone,
-        message, status: r.success ? 'sent' : 'failed',
-        error: r.error, provider_id: r.sid,
-      })
-    } else {
-      result.sms = { success: false, error: 'No phone number on file for customer' }
-    }
+  // ── SMS ─────────────────────────────────────────────────────────────────────
+  // Every reason this can decline to send is resolved FIRST and then logged, so a
+  // notification that goes nowhere still leaves a row saying why. Previously the
+  // guards sat in the `if`, so a job without consent produced no send, no log and
+  // no console line — indistinguishable from the feature not existing.
+  const smsReason: string | null =
+    (channel !== 'sms' && channel !== 'both') ? `Template channel is '${channel}' — SMS not requested`
+    : !smsConsent                             ? 'Customer did not consent to SMS (jobs.sms_consent is false)'
+    : suppression.no_sms                      ? 'Customer is flagged do-not-SMS'
+    : !c?.phone                               ? 'No phone number on file for customer'
+    : null
+
+  if (smsReason === null) {
+    const phone = c!.phone as string
+    const r = await sendSms(phone, message)
+    result.sms = r
+    await log(supabase, {
+      user_id: userId, job_id: jobId, customer_id: customerId,
+      trigger_type: trigger, channel: 'sms', recipient: phone,
+      message, status: r.success ? 'sent' : 'failed',
+      error: r.error, provider_id: r.sid,
+    })
+  } else {
+    result.sms = { success: false, error: smsReason }
+    console.warn(`[NWI/Notify] ${trigger} SMS skipped for job ${jobId}: ${smsReason}`)
+    // Logged as 'failed' because notification_logs.status is CHECK-constrained to
+    // ('sent','failed') — a 'skipped' value needs a migration. The reason is the
+    // part that matters and it goes in `error` verbatim.
+    await log(supabase, {
+      user_id: userId, job_id: jobId, customer_id: customerId,
+      trigger_type: trigger, channel: 'sms',
+      recipient: c?.phone ?? '(none on file)',
+      message, status: 'failed', error: smsReason,
+    })
   }
 
-  // ── Email ──
-  if ((channel === 'email' || channel === 'both') && !suppression.no_email) {
-    const email = c?.email
-    if (email) {
-      const r = await sendEmail(email, subject, message)
-      result.email = r
-      await log(supabase, {
-        user_id: userId, job_id: jobId, customer_id: customerId,
-        trigger_type: trigger, channel: 'email', recipient: email,
-        message, subject, status: r.success ? 'sent' : 'failed',
-        error: r.error, provider_id: r.id,
-      })
-    } else {
-      result.email = { success: false, error: 'No email address on file for customer' }
-    }
+  // ── Email ───────────────────────────────────────────────────────────────────
+  const emailReason: string | null =
+    (channel !== 'email' && channel !== 'both') ? `Template channel is '${channel}' — email not requested`
+    : suppression.no_email                      ? 'Customer is flagged do-not-email'
+    : !c?.email                                 ? 'No email address on file for customer'
+    : null
+
+  if (emailReason === null) {
+    const email = c!.email as string
+    const r = await sendEmail(email, subject, message)
+    result.email = r
+    await log(supabase, {
+      user_id: userId, job_id: jobId, customer_id: customerId,
+      trigger_type: trigger, channel: 'email', recipient: email,
+      message, subject, status: r.success ? 'sent' : 'failed',
+      error: r.error, provider_id: r.id,
+    })
+  } else {
+    result.email = { success: false, error: emailReason }
+    console.warn(`[NWI/Notify] ${trigger} email skipped for job ${jobId}: ${emailReason}`)
+    await log(supabase, {
+      user_id: userId, job_id: jobId, customer_id: customerId,
+      trigger_type: trigger, channel: 'email',
+      recipient: c?.email ?? '(none on file)',
+      message, subject, status: 'failed', error: emailReason,
+    })
   }
 
   result.success = !!(result.sms?.success || result.email?.success)

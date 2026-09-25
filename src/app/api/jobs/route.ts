@@ -86,10 +86,33 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'service_type is required' }, { status: 400 })
   }
 
+  // ── SMS consent on a manually-created job ───────────────────────────────────
+  // jobs.sms_consent is NOT NULL DEFAULT false (021), and it is only ever set true
+  // by the public booking form and the Vapi webhook. A job the tech types in kept
+  // the default, and dispatchNotification's SMS branch requires it — so "On My Way"
+  // on a manual job sent nothing, silently.
+  //
+  // The consent that matters here is different in kind from a booking checkbox: the
+  // customer gave the tech their number FOR this job, in person or on the phone.
+  // So a manual job with a reachable number defaults to consenting, while an
+  // explicit sms_consent in the body still wins, and the do-not-SMS suppression
+  // flag still overrides everything downstream.
+  let smsConsent = body.sms_consent === true
+  if (body.sms_consent === undefined && body.customer_id) {
+    const { data: cust } = await supabase
+      .from('customers')
+      .select('phone')
+      .eq('id', body.customer_id as string)
+      .eq('user_id', user.id)
+      .single()
+    smsConsent = !!cust?.phone?.trim()
+  }
+
   const { data, error } = await supabase
     .from('jobs')
     .insert({
       user_id:                    user.id,
+      sms_consent:                smsConsent,
       job_date:                   body.job_date,
       job_time:                   body.job_time   ?? null,
       service_type:               body.service_type,
