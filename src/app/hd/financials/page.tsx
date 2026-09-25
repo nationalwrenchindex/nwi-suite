@@ -21,6 +21,23 @@ function nextDayUTC(date: string): string {
   return d.toISOString().slice(0, 10)
 }
 
+/**
+ * Billed labor hours on one invoice's line items.
+ *
+ * line_items is JSONB, so every field is unknown until checked. Only rows typed
+ * 'labor' count — a parts row carries mobile_hours: 0 but would still be summed by
+ * a looser filter, and a future row type must not silently become labor.
+ */
+function laborHoursOf(lineItems: unknown): number {
+  if (!Array.isArray(lineItems)) return 0
+  return lineItems.reduce<number>((sum, raw) => {
+    const li = raw as { type?: unknown; mobile_hours?: unknown }
+    if (li?.type !== 'labor') return sum
+    const hours = Number(li.mobile_hours ?? 0)
+    return Number.isFinite(hours) ? sum + hours : sum
+  }, 0)
+}
+
 export default async function HDFinancialsPage({
   searchParams,
 }: {
@@ -86,7 +103,7 @@ export default async function HDFinancialsPage({
     // cards from here on.
     supabase
       .from('hd_invoices')
-      .select('id, status, total, tax_amount, created_at')
+      .select('id, status, total, tax_amount, line_items, created_at')
       .eq('user_id', user.id)
       .gte('created_at', periodFrom)
       .lt('created_at',  periodTo),
@@ -151,7 +168,14 @@ export default async function HDFinancialsPage({
   const jobsTotal         = (allWOs ?? []).reduce((s, w) => s + Number(w.total_amount ?? 0), 0)
   const invoicedJobsTotal = (invoicedWOs ?? []).reduce((s, w) => s + Number(w.total_amount ?? 0), 0)
   const closedCount       = (allWOs ?? []).length
-  const avgJobValue       = closedCount > 0 ? jobsTotal / closedCount : 0
+  // The amount INVOICED in the period, tax included — this is the figure that ties to
+  // the invoice list, which is where a shop owner would go to check it.
+  // invoiceRevenue above is the same money with tax taken out, and is left alone.
+  const invoicedTotal     = invoices.reduce((s, i) => s + Number(i.total ?? 0), 0)
+  // Was jobsTotal / closedCount — work orders closed in the period, which counts
+  // unbilled work and misses invoices raised for jobs closed earlier. Now the average
+  // invoice, which is what the tile has always been read as.
+  const avgJobValue       = invoiceCount > 0 ? invoicedTotal / invoiceCount : 0
   const outstandingTotal  = (outstandingWOs ?? []).reduce((s, w) => s + Number(w.total_amount ?? 0), 0)
 
   const byAccount: Record<string, { name: string; revenue: number; count: number }> = {}
@@ -173,9 +197,18 @@ export default async function HDFinancialsPage({
 
   const accountRows = Object.values(byAccount).sort((a, b) => b.revenue - a.revenue).slice(0, 8)
 
-  const totalLaborHours = (invoicedWOs ?? []).reduce((s, w) => {
-    return s + Number(w.labor_hours ?? 0) + Number(w.labor_minutes ?? 0) / 60
-  }, 0)
+  // Labor hours BILLED, read off the invoice labor lines — not clocked time.
+  //
+  // This used to sum hd_work_orders.labor_hours + labor_minutes, which nothing in the
+  // product populates, so the tile read 0.0 beside a Labor Revenue card showing real
+  // money off the same work. Clocked-vs-billed comparison is a different question and
+  // belongs in a Labor Watch view; a revenue tile has no business guessing at it.
+  //
+  // `mobile_hours` is the billed figure: amount = mobile_hours × the invoice's own
+  // labor_rate (INV-2026-0004: 1 + 1.5 + 1 = 3.5h × $135 = $472.50 = subtotal_labor).
+  // `book_hours`, where present, is the flat-rate reference the tech quoted from and
+  // is deliberately ignored — billing it would report hours nobody worked.
+  const totalLaborHours = invoices.reduce((s, inv) => s + laborHoursOf(inv.line_items), 0)
   const laborRevenue = totalLaborHours * hourlyRate
   // Measured against invoicedJobsTotal, not against the invoice revenue above. Both
   // sides of this ratio then come from the same set of work orders; dividing a

@@ -335,16 +335,29 @@ function OverviewTab({ stats }: { stats: OverviewStats }) {
       </div>
 
       {/* ── JOBS ─────────────────────────────────────────────────────────────────
-          Work orders, not invoices. A job can be closed without being billed, and a
-          bill can be raised for a job closed in a previous period, so these numbers
-          are not expected to reconcile with BILLING above — they answer a different
-          question and are grouped separately so nobody reads them as revenue. */}
+          MIXED SOURCES, deliberately, and each tile's sub says which it is:
+
+            Outstanding  — hd_work_orders. Work closed and not yet billed, so it can
+                           only come from the job side.
+            Avg Job      — hd_invoices. The average invoice in the period.
+            Labor Hours  — hd_invoices line items. Hours BILLED.
+
+          Avg Job and Labor Hours used to be work-order figures and both read zero:
+          labor_hours/labor_minutes are never populated, and an average over jobs
+          closed in the period counts unbilled work while missing invoices raised for
+          older jobs. Clocked-vs-billed comparison is a Labor Watch question, not a
+          revenue tile's.
+
+          Outstanding still will not reconcile with BILLING above, and is not meant to. */}
       <div>
         <p className="font-condensed font-bold text-white text-lg tracking-wide mb-3">JOBS</p>
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
           <StatCard label="Outstanding"  value={fmt(stats.outstandingTotal)} color={stats.outstandingTotal > 0 ? 'orange' : 'white'} sub="Completed, not invoiced" />
-          <StatCard label="Avg Job"      value={fmt(stats.avgJobValue)}      color="blue"  sub={`${stats.closedCount} job${stats.closedCount !== 1 ? 's' : ''} closed`} />
-          <StatCard label="Labor Hours"  value={stats.totalLaborHours.toFixed(1)} color="white" sub={`@ $${stats.hourlyRate}/hr`} />
+          <StatCard label="Avg Job"      value={fmt(stats.avgJobValue)}      color="blue"  sub={`${stats.invoiceCount} invoice${stats.invoiceCount !== 1 ? 's' : ''}`} />
+          {/* Hours BILLED on invoice labor lines, not clocked time. The sub no longer
+              quotes the profile rate: each invoice carries its own labor_rate, so the
+              profile rate did not produce these hours and must not be implied. */}
+          <StatCard label="Labor Hours"  value={stats.totalLaborHours.toFixed(1)} color="white" sub={`Billed across ${stats.invoiceCount} invoice${stats.invoiceCount !== 1 ? 's' : ''}`} />
         </div>
       </div>
 
@@ -401,9 +414,14 @@ function OverviewTab({ stats }: { stats: OverviewStats }) {
               </p>
             </div>
             <div className="rounded-lg p-4" style={{ background: 'var(--hd-inner)' }}>
-              {/* Of JOB value, not of invoiced revenue: the hours above come off work
-                  orders, so the denominator has to be those same work orders' totals
-                  or the ratio compares two different populations. */}
+              {/* MISMATCHED POPULATIONS — read this before trusting the number.
+                  The numerator now comes from invoice labor lines (hours billed ×
+                  the profile's current rate) while the denominator is still
+                  invoicedJobsTotal, a work-order figure. The rule this comment used
+                  to state — keep both sides on one population — is no longer met.
+                  Left as-is here because only the two zeroed tiles were in scope;
+                  fixing it means choosing an invoice-derived denominator and, for the
+                  numerator, subtotal_labor rather than hours × profile rate. */}
               <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Labor as % of Job Value</p>
               <p className="font-condensed font-bold text-2xl text-white">{stats.laborPct.toFixed(0)}%</p>
               <div className="mt-2 h-2 rounded-full overflow-hidden" style={{ background: 'var(--hd-border)' }}>
