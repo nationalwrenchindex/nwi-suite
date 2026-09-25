@@ -444,6 +444,9 @@ export async function dispatchNotificationFor({
   customer,
   ctx,
   channelOverride,
+  smsConsent = true,
+  sendSmsVia,
+  logLabel = 'record',
 }: {
   trigger:          NotificationTrigger
   supabase:         AnyDB
@@ -452,6 +455,15 @@ export async function dispatchNotificationFor({
   customer:         { phone?: string | null; email?: string | null } | null
   ctx:              Partial<MergeContext>
   channelOverride?: string
+  /** Defaults true: a caller with no consent column is one where the number was
+   *  given to the tech directly. Pass the column through when there is one. */
+  smsConsent?:      boolean
+  /** Override the SMS transport. The module default sends with
+   *  `From: TWILIO_PHONE_NUMBER`; HD passes lib/twilio's sendSmsResult so its
+   *  traffic goes out through the registered Messaging Service instead. */
+  sendSmsVia?:      (to: string, body: string) => Promise<{ success: boolean; sid?: string; error?: string }>
+  /** Names the record in the console line, since job_id cannot be used here. */
+  logLabel?:        string
 }): Promise<DispatchResult> {
   const templateType = TRIGGER_TEMPLATE_TYPE[trigger]
   const { data: rows } = await supabase
@@ -472,38 +484,61 @@ export async function dispatchNotificationFor({
   const suppression = await getContactSuppression(supabase, customerId ?? null)
   const result: DispatchResult = { success: false, channel, message }
 
-  if ((channel === 'sms' || channel === 'both') && !suppression.no_sms) {
-    const phone = customer?.phone
-    if (phone) {
-      const r = await sendSms(phone, message)
-      result.sms = r
-      await log(supabase, {
-        user_id: userId, customer_id: customerId ?? undefined,
-        trigger_type: trigger, channel: 'sms', recipient: phone,
-        message, status: r.success ? 'sent' : 'failed',
-        error: r.error, provider_id: r.sid,
-      })
-    } else {
-      result.sms = { success: false, error: 'No phone number on file for customer' }
-    }
+  // Same reason-then-log shape as dispatchNotification: nothing declines silently.
+  const smsReason: string | null =
+    (channel !== 'sms' && channel !== 'both') ? `Template channel is '${channel}' — SMS not requested`
+    : !smsConsent                             ? 'Customer did not consent to SMS (sms_consent is false)'
+    : suppression.no_sms                      ? 'Customer is flagged do-not-SMS'
+    : !customer?.phone                        ? 'No phone number on file for customer'
+    : null
+
+  if (smsReason === null) {
+    const phone = customer!.phone as string
+    const r = await (sendSmsVia ?? sendSms)(phone, message)
+    result.sms = r
+    await log(supabase, {
+      user_id: userId, customer_id: customerId ?? undefined,
+      trigger_type: trigger, channel: 'sms', recipient: phone,
+      message, status: r.success ? 'sent' : 'failed',
+      error: r.error, provider_id: r.sid,
+    })
+  } else {
+    result.sms = { success: false, error: smsReason }
+    console.warn(`[NWI/Notify] ${trigger} SMS skipped for ${logLabel}: ${smsReason}`)
+    await log(supabase, {
+      user_id: userId, customer_id: customerId ?? undefined,
+      trigger_type: trigger, channel: 'sms',
+      recipient: customer?.phone ?? '(none on file)',
+      message, status: 'failed', error: smsReason,
+    })
   }
 
-  if ((channel === 'email' || channel === 'both') && !suppression.no_email) {
-    const email = customer?.email
-    if (email) {
-      const r = await sendEmail(email, subject, message)
-      result.email = r
-      await log(supabase, {
-        user_id: userId, customer_id: customerId ?? undefined,
-        trigger_type: trigger, channel: 'email', recipient: email,
-        message, subject, status: r.success ? 'sent' : 'failed',
-        error: r.error, provider_id: r.id,
-      })
-    } else {
-      result.email = { success: false, error: 'No email address on file for customer' }
-    }
-  }
+  const emailReason: string | null =
+    (channel !== 'email' && channel !== 'both') ? `Template channel is '${channel}' — email not requested`
+    : suppression.no_email                      ? 'Customer is flagged do-not-email'
+    : !customer?.email                          ? 'No email address on file for customer'
+    : null
 
+  if (emailReason === null) {
+    const email = customer!.email as string
+    const r = await sendEmail(email, subject, message)
+    result.email = r
+    await log(supabase, {
+      user_id: userId, customer_id: customerId ?? undefined,
+      trigger_type: trigger, channel: 'email', recipient: email,
+      message, subject, status: r.success ? 'sent' : 'failed',
+      error: r.error, provider_id: r.id,
+    })
+  } else {
+    result.email = { success: false, error: emailReason }
+    console.warn(`[NWI/Notify] ${trigger} email skipped for ${logLabel}: ${emailReason}`)
+    await log(supabase, {
+      user_id: userId, customer_id: customerId ?? undefined,
+      trigger_type: trigger, channel: 'email',
+      recipient: customer?.email ?? '(none on file)',
+      message, subject, status: 'failed', error: emailReason,
+    })
+  }
   result.success = !!(result.sms?.success || result.email?.success)
   return result
 }
