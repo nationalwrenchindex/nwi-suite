@@ -14,6 +14,7 @@ import {
   fromLineItems, computeTotals, lineMoneyColumns, validateLines,
   type EditItem,
 } from '@/components/shared/line-items'
+import type { PricingMode } from '@/components/shared/segments'
 import {
   STATUS_META, NEXT_STATUS,
   type WorkOrder, type WorkOrderStatus,
@@ -52,14 +53,48 @@ export default function WorkOrderForm({
   const [poNumber,   setPoNumber]   = useState(workOrder?.po_number ?? '')
   const [techNotes,  setTechNotes]  = useState(workOrder?.tech_notes ?? '')
 
+  // ── Pricing mode ────────────────────────────────────────────────────────────
+  // On a NEW work order the tech chooses before any money exists. Nothing was wrong
+  // with the segments feature except that there was no way in: this form required a
+  // line item, which made every new record parent-priced, which made the segments
+  // guard refuse every one of them.
+  //
+  // Starts null so no choice is assumed. An existing record's mode is resolved by the
+  // detail page — it can see the segments — and arrives as `ownsPricing`.
+  const [mode, setMode] = useState<PricingMode | null>(
+    isNew ? null : (workOrder?.pricing_mode ?? null),
+  )
+  const owns = isNew ? mode === 'single' : ownsPricing
+
   const initialMarkup = workOrder?.parts_markup_percent ?? defaults.markup_percent
   const [items, setItems] = useState<EditItem[]>(
     () => fromLineItems(workOrder?.line_items, initialMarkup),
   )
+  // A new work order starts with NO rates seeded. The defaults land only when the tech
+  // picks "Single job" — pre-filling them meant a segment-priced record still had a
+  // labour rate and a markup sitting on it, waiting to be written.
   const [laborHours, setLaborHours] = useState(workOrder?.labor_hours ?? 0)
-  const [laborRate,  setLaborRate]  = useState(workOrder?.labor_rate  ?? defaults.labor_rate)
-  const [markupPct,  setMarkupPct]  = useState(initialMarkup)
-  const [taxPct,     setTaxPct]     = useState(workOrder?.tax_percent ?? defaults.tax_percent)
+  const [laborRate,  setLaborRate]  = useState(isNew ? 0 : (workOrder?.labor_rate  ?? defaults.labor_rate))
+  const [markupPct,  setMarkupPct]  = useState(isNew ? 0 : initialMarkup)
+  const [taxPct,     setTaxPct]     = useState(isNew ? 0 : (workOrder?.tax_percent ?? defaults.tax_percent))
+
+  /** Seeds the shop's defaults at the moment "Single job" is chosen, and clears them
+   *  again if the tech switches to segments before saving. */
+  function chooseMode(next: PricingMode) {
+    setMode(next)
+    setErr(null)
+    if (next === 'single') {
+      setLaborRate(defaults.labor_rate)
+      setMarkupPct(defaults.markup_percent)
+      setTaxPct(defaults.tax_percent)
+    } else {
+      setItems([])
+      setLaborHours(0)
+      setLaborRate(0)
+      setMarkupPct(0)
+      setTaxPct(0)
+    }
+  }
 
   const [saving,   setSaving]   = useState(false)
   const [busy,     setBusy]     = useState(false)
@@ -87,17 +122,21 @@ export default function WorkOrderForm({
     }
     // Segments own the money on a segment-priced work order. Sending the parent
     // columns anyway is how a record ends up with two totals.
-    return ownsPricing ? { ...base, ...lineMoneyColumns(inputs) } : base
+    // pricing_mode is only ever sent on CREATE. Changing it later goes through the
+    // dedicated PATCH path, which checks that nothing is priced on either side yet.
+    const withMode = isNew && mode ? { ...base, pricing_mode: mode } : base
+    return owns ? { ...withMode, ...lineMoneyColumns(inputs) } : withMode
   }
 
   async function save() {
-    const v = ownsPricing
+    const v = owns
       ? validateLines({ items, laborHours, laborRate, grandTotal: totals.grandTotal })
       : null
     if (v) { setErr(v); return }
     if (!customerId)                    { setErr('Pick or create a customer.'); return }
     if (!vehicleId && !unitLabel.trim()) { setErr('Pick a vehicle or describe the unit.'); return }
     if (!jobDesc.trim())                { setErr('A job description is required.'); return }
+    if (isNew && !mode)                 { setErr('Choose how this job is priced first.'); return }
 
     setErr(null); setSaving(true)
     try {
@@ -202,8 +241,59 @@ export default function WorkOrderForm({
 
       {/* Rendered only when this form owns pricing. A segment-priced work order gets
           its money from SegmentList instead. */}
+      {/* ── How is this job priced? ─────────────────────────────────────────────
+          Asked BEFORE any money is written, and only on a new work order. The choice
+          is what decides the record's shape; inferring it from whether a line item
+          happened to be entered is what left segments with no way in. */}
+      {isNew && (
+        <section className="nwi-card space-y-3">
+          <div>
+            <p className="text-white/30 text-xs uppercase tracking-widest">How is this job priced?</p>
+            <p className="text-white/40 text-xs mt-1">
+              Pick one. You can change it until you enter money on either side.
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => chooseMode('single')}
+              className={`text-left rounded-xl p-4 border transition-colors ${
+                mode === 'single'
+                  ? 'border-orange bg-orange/10'
+                  : 'border-white/10 hover:border-white/25'
+              }`}
+            >
+              <p className="text-white text-sm font-semibold">Single job</p>
+              <p className="text-white/40 text-xs mt-1">
+                One set of parts and labor on the work order. How it has always worked.
+              </p>
+            </button>
+            <button
+              type="button"
+              onClick={() => chooseMode('segments')}
+              className={`text-left rounded-xl p-4 border transition-colors ${
+                mode === 'segments'
+                  ? 'border-orange bg-orange/10'
+                  : 'border-white/10 hover:border-white/25'
+              }`}
+            >
+              <p className="text-white text-sm font-semibold">Multiple jobs</p>
+              <p className="text-white/40 text-xs mt-1">
+                One segment per complaint, each priced and approved on its own. The
+                customer can take the PCM and decline the clutch.
+              </p>
+            </button>
+          </div>
+          {mode === 'segments' && (
+            <p className="text-white/40 text-xs">
+              No parts or labor go on the work order itself. Save it, then add segment 1
+              with its own complaint, cause, correction and lines.
+            </p>
+          )}
+        </section>
+      )}
       {/* ── Parts and labor ── */}
-      {ownsPricing && (
+      {owns && (
       <section className="nwi-card space-y-4">
         <p className="text-white/30 text-xs uppercase tracking-widest">Parts &amp; Labor</p>
 
@@ -280,7 +370,7 @@ export default function WorkOrderForm({
       {/* ── Actions ── */}
       {!isLocked && (
         <div className="flex flex-wrap items-center gap-3">
-          <button onClick={save} disabled={saving} className="btn-primary w-auto px-6 disabled:opacity-50">
+          <button onClick={save} disabled={saving || (isNew && !mode)} className="btn-primary w-auto px-6 disabled:opacity-50">
             {saving ? 'Saving…' : isNew ? 'Create Work Order' : 'Save Changes'}
           </button>
 

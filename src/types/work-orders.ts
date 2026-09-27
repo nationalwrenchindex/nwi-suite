@@ -26,6 +26,11 @@ export interface WorkOrder {
   work_order_number: string
   status:            WorkOrderStatus
 
+  /** How this work order is priced. 'single' = its own Parts & Labor. 'segments' =
+   *  one per complaint, each approved separately. NULL = created before migration 138,
+   *  inferred from whether it has parent line items. */
+  pricing_mode:      'single' | 'segments' | null
+
   customer_id:       string | null
   vehicle_id:        string | null
   /** Free text for anything that is not a vehicles row — "boat trailer", "shop

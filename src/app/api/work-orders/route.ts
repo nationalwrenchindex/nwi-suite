@@ -89,6 +89,12 @@ export async function POST(request: NextRequest) {
     user_id:              user.id,
     work_order_number:    `WO-${year}-${seq}`,
     status:               'open' as const,
+    // The tech's explicit choice, not an inference. 'segments' sends no money keys
+    // at all, so every money column below resolves to NULL — not zero, which would
+    // read as a job priced at nothing rather than one priced in its segments.
+    pricing_mode:         body.pricing_mode === 'single' || body.pricing_mode === 'segments'
+                            ? body.pricing_mode
+                            : null,
     customer_id:          str(body.customer_id),
     vehicle_id:           str(body.vehicle_id),
     unit_label:           str(body.unit_label),

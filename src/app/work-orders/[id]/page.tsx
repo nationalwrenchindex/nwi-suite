@@ -8,7 +8,7 @@ import { STATUS_META, unitLabelFor, type WorkOrder, type WorkOrderPhoto } from '
 import SegmentList from '@/components/shared/SegmentList'
 import { PARENTS } from '@/lib/segments/parent'
 import { SEGMENT_SELECT, shapeSegments } from '@/lib/segments/select'
-import { isParentPriced } from '@/components/shared/segments'
+import { pricingModeOf } from '@/components/shared/segments'
 import type { PhotoWithUrl } from '@/components/work-orders/WorkOrderPhotos'
 
 export const metadata = { title: 'Work Order — National Wrench Index Suite™' }
@@ -70,9 +70,10 @@ export default async function WorkOrderDetailPage({
     .order('sequence', { ascending: true })
 
   const segments = shapeSegments(segRows)
-  // Legacy: priced by its own line items and created before segments. A brand-new
-  // work order has neither, and reads as segment-priced — which is the intent.
-  const parentPriced = isParentPriced(wo.line_items, segments)
+  // The stored mode decides. Only a record created before 138 has none, and that one
+  // is inferred from its parent line items exactly as before — no backfill touches
+  // records that are already invoiced.
+  const parentPriced = pricingModeOf(wo.pricing_mode, wo.line_items, segments) === 'single'
 
   const meta = STATUS_META[wo.status]
 

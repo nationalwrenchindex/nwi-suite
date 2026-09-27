@@ -83,16 +83,29 @@ export async function guardCanAddSegment(
   const { data: parent } = product === 'ld'
     ? await supabase
         .from('work_orders')
-        .select('id, converted_invoice_id, line_items')
+        .select('id, converted_invoice_id, line_items, pricing_mode')
         .eq('id', parentId).eq('user_id', userId).single()
     : await supabase
         .from('hd_work_orders')
-        .select('id, status')
+        .select('id, status, pricing_mode')
         .eq('id', parentId).eq('user_id', userId).single()
 
   if (!parent) return { ok: false, reason: 'Work order not found.' }
 
   const row = parent as unknown as Record<string, unknown>
+
+  // An explicit mode settles it, and this is the door 137 was missing: a work order
+  // created as segment-priced has no segments yet AND no parent lines, so the
+  // parent-lines check below could not tell it apart from a blank legacy record.
+  if (row.pricing_mode === 'single') {
+    return {
+      ok: false,
+      reason: 'This work order is priced as a single job, so it does not use segments. '
+            + 'Start a new work order for split work, or switch this one over before '
+            + 'entering any pricing.',
+    }
+  }
+  if (row.pricing_mode === 'segments') return { ok: true }
 
   const invoiced = product === 'ld'
     ? row.converted_invoice_id != null

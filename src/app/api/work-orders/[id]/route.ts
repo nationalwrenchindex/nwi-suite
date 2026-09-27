@@ -76,6 +76,31 @@ export async function PATCH(
     v === null || v === undefined || v === '' ? null : Number(v)
 
   const updates: Record<string, unknown> = {}
+  // Switching pricing mode is allowed ONLY while the record has money on neither
+  // side. Once either does, the 137 guard owns the decision and moving across is the
+  // separate "convert to segments" action.
+  if ('pricing_mode' in body) {
+    const next = body.pricing_mode === 'single' || body.pricing_mode === 'segments'
+      ? body.pricing_mode
+      : null
+    if (!next) {
+      return NextResponse.json({ error: 'pricing_mode must be "single" or "segments".' }, { status: 400 })
+    }
+    const [{ data: cur }, { count: segCount }] = await Promise.all([
+      supabase.from('work_orders').select('line_items').eq('id', id).eq('user_id', user.id).single(),
+      supabase.from('work_order_segments').select('id', { count: 'exact', head: true })
+        .eq('ld_work_order_id', id).eq('user_id', user.id),
+    ])
+    const hasParent = Array.isArray(cur?.line_items) && cur.line_items.length > 0
+    if (hasParent || (segCount ?? 0) > 0) {
+      return NextResponse.json(
+        { error: 'This work order already has pricing on it, so its mode is fixed. Clear it, or start a new work order.' },
+        { status: 409 },
+      )
+    }
+    updates.pricing_mode = next
+  }
+
   if ('customer_id'          in body) updates.customer_id          = str(body.customer_id)
   if ('vehicle_id'           in body) updates.vehicle_id           = str(body.vehicle_id)
   if ('unit_label'           in body) updates.unit_label           = str(body.unit_label)

@@ -174,6 +174,37 @@ export function workOrderTotal(
   return rollupSegments(segments).authorizedTotal
 }
 
+export type PricingMode = 'single' | 'segments'
+
+/**
+ * Which pricing model a work order is on.
+ *
+ * The stored mode wins. Only a record created before migration 138 has none, and for
+ * those the answer is inferred exactly as it was before: parent line items mean
+ * parent-priced. A brand-new record with neither is 'segments', because that is the
+ * model new work orders use — but the New Work Order form asks the tech outright
+ * rather than letting this default decide for them.
+ */
+export function pricingModeOf(
+  storedMode: string | null | undefined,
+  parentLineItems: unknown,
+  segments: WorkOrderSegment[],
+): PricingMode {
+  if (storedMode === 'single' || storedMode === 'segments') return storedMode
+  if (segments.length > 0) return 'segments'
+  return Array.isArray(parentLineItems) && parentLineItems.length > 0 ? 'single' : 'segments'
+}
+
+/** Can the mode still be changed? Only while NOTHING is priced on either side — once
+ *  either holds money the 137 guard takes over and the choice is fixed. */
+export function canSwitchPricingMode(
+  parentLineItems: unknown,
+  segments: WorkOrderSegment[],
+): boolean {
+  const hasParent = Array.isArray(parentLineItems) && parentLineItems.length > 0
+  return !hasParent && segments.length === 0
+}
+
 /** True when this record is priced by its own parent columns — a legacy work order,
  *  or any work order created before segments were used on it. */
 export function isParentPriced(

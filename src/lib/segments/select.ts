@@ -7,9 +7,15 @@
 
 import type { WorkOrderSegment } from '@/types/segments'
 
+// The !segment_id hint is REQUIRED, not decorative. There are TWO foreign keys between
+// these tables — work_order_segment_options.segment_id -> segments.id, and
+// segments.selected_option_id -> options.id — so an unhinted embed is ambiguous and
+// PostgREST rejects the whole query with PGRST201. Without it every segment route
+// fails, which is exactly how it was found: fabricated test objects never touch this
+// string, and the live query did.
 export const SEGMENT_SELECT = `
   *,
-  options:work_order_segment_options(*)
+  options:work_order_segment_options!segment_id(*)
 `
 
 /** PostgREST returns the embedded options ordered by nothing in particular; sort so
