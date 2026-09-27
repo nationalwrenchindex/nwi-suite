@@ -737,6 +737,21 @@ export default function FinalizedInvoiceClient({
   const markupPct = sq?.parts_markup_percent ?? 0
   const taxRate   = invoice.tax_rate
 
+  // An invoice converted from a work order has no source QUOTE. The work the customer
+  // authorized lives on the invoice's own line_items, already labelled
+  // "Segment N - ..." by the converter. This section rendered only from sq, so a
+  // segmented invoice showed an EMPTY "Original Estimate" -- and a tech looking at a
+  // blank estimate assumes the invoice is broken and won't send it.
+  const ownLines     = Array.isArray(invoice.line_items) ? invoice.line_items : []
+  const showOwnLines = !sq && ownLines.length > 0
+  const hasEstimate  = !!sq || showOwnLines
+  // Named for what it actually is: on a work-order invoice nothing was "estimated",
+  // these are the segments the customer approved.
+  const estimateTitle = sq ? 'Original Estimate' : 'Authorized Work'
+  const estimateTotal = sq?.grand_total != null
+    ? Number(sq.grand_total)
+    : showOwnLines ? Number(invoice.total ?? 0) : null
+
   const invoiceUrl = invoice.public_token
     ? `${APP_URL}/invoice/${invoice.public_token}`
     : ''
@@ -1089,16 +1104,18 @@ export default function FinalizedInvoiceClient({
         )}
       </Section>
 
-      {/* Original estimate (accordion) */}
+      {/* Original estimate / authorized work (accordion). Hidden entirely when there
+          is neither -- an empty accordion is what made this look broken. */}
+      {hasEstimate && (
       <div className="bg-[#222222] border border-white/8 rounded-2xl overflow-hidden">
         <button
           onClick={() => setEstimateOpen(v => !v)}
           className="w-full flex items-center justify-between px-5 py-3 border-b border-white/8 bg-white/[0.02] hover:bg-white/[0.04] transition-colors"
         >
-          <p className="text-white/50 text-xs font-semibold uppercase tracking-widest">Original Estimate</p>
+          <p className="text-white/50 text-xs font-semibold uppercase tracking-widest">{estimateTitle}</p>
           <div className="flex items-center gap-2">
-            {sq?.grand_total != null && (
-              <span className="text-white/60 text-sm font-mono">{fmt(Number(sq.grand_total))}</span>
+            {estimateTotal != null && (
+              <span className="text-white/60 text-sm font-mono">{fmt(estimateTotal)}</span>
             )}
             <svg className={`w-4 h-4 text-white/30 transition-transform ${estimateOpen ? 'rotate-180' : ''}`}
               fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -1171,7 +1188,37 @@ export default function FinalizedInvoiceClient({
             </div>
           </div>
         )}
+
+        {/* Same lines the customer's copy shows, for a work-order invoice. */}
+        {estimateOpen && showOwnLines && (
+          <div className="p-5 space-y-3">
+            <ReadOnlyTable
+              rows={ownLines.map(li => ({
+                label:  li.description,
+                qty:    String(li.quantity),
+                amount: li.total,
+              }))}
+            />
+            <div className="space-y-1.5 border-t border-white/8 pt-3">
+              <div className="flex justify-between text-sm">
+                <span className="text-white/50">Subtotal</span>
+                <span className="text-white">{fmt(Number(invoice.subtotal ?? 0))}</span>
+              </div>
+              {Number(invoice.tax_amount ?? 0) > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/40">Tax</span>
+                  <span className="text-white/60">{fmt(Number(invoice.tax_amount))}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-baseline border-t border-white/8 pt-2 mt-1">
+                <span className="text-white font-medium">Authorized Total</span>
+                <span className="font-condensed font-bold text-orange text-xl">{fmt(Number(invoice.total ?? 0))}</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+      )}
 
       {/* Job notes (read-only) */}
       {invoice.job_notes && (

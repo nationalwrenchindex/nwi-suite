@@ -532,6 +532,21 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
   const markupPct   = sq?.parts_markup_percent ?? 0
   const taxRate     = invoice.tax_rate          // decimal, e.g. 0.0875
 
+  // An invoice converted from a work order has no source QUOTE. The work the customer
+  // authorized lives on the invoice's own line_items, already labelled
+  // "Segment N - ..." by the converter. This section rendered only from sq, so a
+  // segmented invoice showed an EMPTY "Original Estimate" -- and a tech looking at a
+  // blank estimate assumes the invoice is broken and won't send it.
+  const ownLines     = Array.isArray(invoice.line_items) ? invoice.line_items : []
+  const showOwnLines = !sq && ownLines.length > 0
+  const hasEstimate  = !!sq || showOwnLines
+  // Named for what it actually is: on a work-order invoice nothing was "estimated",
+  // these are the segments the customer approved.
+  const estimateTitle = sq ? 'Original Estimate' : 'Authorized Work'
+  const estimateTotal = sq?.grand_total != null
+    ? Number(sq.grand_total)
+    : showOwnLines ? Number(invoice.total ?? 0) : null
+
   // Original quote totals (what was estimated) — mechanic model only
   const quotedPartsSubtotal  = sq
     ? round2(Number(sq.parts_subtotal ?? 0) * (1 + markupPct / 100))
@@ -789,17 +804,20 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
         )}
       </Section>
 
-      {/* ── SECTION C: Original estimate (accordion) ── */}
+      {/* ── SECTION C: Original estimate / authorized work (accordion) ──
+          Hidden entirely when there is neither -- an empty accordion is what made
+          this look broken. */}
+      {hasEstimate && (
       <div className="bg-[#222222] border border-white/8 rounded-2xl overflow-hidden">
         <button
           onClick={() => setEstimateOpen(v => !v)}
           className="w-full flex items-center justify-between px-5 py-3 border-b border-white/8 bg-white/[0.02] hover:bg-white/[0.04] transition-colors"
         >
-          <p className="text-white/50 text-xs font-semibold uppercase tracking-widest">Original Estimate</p>
+          <p className="text-white/50 text-xs font-semibold uppercase tracking-widest">{estimateTitle}</p>
           <div className="flex items-center gap-2">
-            {sq?.grand_total != null && (
+            {estimateTotal != null && (
               <span className="text-white/60 text-sm font-mono">
-                {fmt(Number(sq.grand_total))}
+                {fmt(estimateTotal)}
               </span>
             )}
             <svg
@@ -908,7 +926,52 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
             </div>
           </div>
         )}
+
+        {/* Same lines the customer's copy shows, for a work-order invoice. */}
+        {estimateOpen && showOwnLines && (
+          <div className="p-5 space-y-3">
+            <div className="rounded-xl border border-white/8 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-white/8 bg-white/[0.02]">
+                    <th className="text-left px-4 py-2 text-white/40 font-medium">Description</th>
+                    <th className="text-right px-4 py-2 text-white/40 font-medium">Qty</th>
+                    <th className="text-right px-4 py-2 text-white/40 font-medium">Unit</th>
+                    <th className="text-right px-4 py-2 text-white/40 font-medium">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {ownLines.map((li, i) => (
+                    <tr key={i} className="border-b border-white/5 last:border-0">
+                      <td className="px-4 py-2.5 text-white/70">{li.description}</td>
+                      <td className="px-4 py-2.5 text-white/50 text-right">{li.quantity}</td>
+                      <td className="px-4 py-2.5 text-white/50 text-right">{fmt(li.unit_price)}</td>
+                      <td className="px-4 py-2.5 text-white font-medium text-right">{fmt(li.total)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="space-y-1.5 border-t border-white/8 pt-3">
+              <div className="flex justify-between text-sm">
+                <span className="text-white/50">Subtotal</span>
+                <span className="text-white">{fmt(Number(invoice.subtotal ?? 0))}</span>
+              </div>
+              {Number(invoice.tax_amount ?? 0) > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/40">Tax</span>
+                  <span className="text-white/60">{fmt(Number(invoice.tax_amount))}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-baseline border-t border-white/8 pt-2 mt-1">
+                <span className="text-white font-medium">Authorized Total</span>
+                <span className="font-condensed font-bold text-orange text-xl">{fmt(Number(invoice.total ?? 0))}</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
+      )}
 
       {/* ── SECTION C2: Detailer — Services ── */}
       {isDetailer && (

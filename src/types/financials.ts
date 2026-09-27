@@ -161,7 +161,7 @@ export interface Invoice {
   status: InvoiceStatus
   payment_method: PaymentMethod | null
   paid_at: string | null
-  source: 'manual' | 'quickwrench' | 'quote' | null
+  source: 'manual' | 'quickwrench' | 'quote' | 'work_order' | null
   job_category: string | null
   job_subtype: string | null
   notes: string | null
