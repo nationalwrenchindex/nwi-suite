@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useRouter } from 'next/navigation'
@@ -40,12 +40,41 @@ export default function AppNav({
   const router   = useRouter()
   const navRef   = useRef<HTMLElement>(null)
 
+  // Account menu. Settings and Billing live in here rather than in the scrolling
+  // row: adding Work Orders pushed the row past the width and Settings was clipped
+  // off the right edge, in the DOM but cut at "Set" and unreachable, because the
+  // row hides its scrollbar. Anything that can be pushed off the end is not a
+  // dependable way to reach Settings.
+  const [accountOpen, setAccountOpen] = useState(false)
+  const accountRef = useRef<HTMLDivElement>(null)
+
   // Force iOS Safari to initialise the overflow-x scroll container on mount.
   // Without this, the sticky-header scroll area is unresponsive until the
   // user's first manual tap.
   useEffect(() => {
     if (navRef.current) navRef.current.scrollTo(0, 0)
   }, [])
+
+  // Close the account menu on outside click and on Escape. Without the keyboard
+  // path the menu is a trap for anyone not using a mouse.
+  useEffect(() => {
+    if (!accountOpen) return
+    function onDown(e: MouseEvent) {
+      if (accountRef.current && !accountRef.current.contains(e.target as Node)) setAccountOpen(false)
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setAccountOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
+  }, [accountOpen])
+
+  // A navigation must not leave the menu hanging open over the new page.
+  useEffect(() => { setAccountOpen(false) }, [pathname])
 
   const navItems: NavItem[] = [
     {
@@ -195,6 +224,14 @@ export default function AppNav({
     return true
   })
 
+  // Settings and Billing are the account's own pages rather than places the work
+  // happens, so they sit in a menu at the far right instead of competing with
+  // Dashboard and Financials for room in the row.
+  const ACCOUNT_HREFS = ['/settings', '/billing']
+  const mainNavItems    = visibleNavItems.filter(i => !ACCOUNT_HREFS.includes(i.href))
+  const accountNavItems = visibleNavItems.filter(i =>  ACCOUNT_HREFS.includes(i.href))
+  const accountActive   = accountNavItems.some(i => i.active)
+
   // Determines whether a nav item should render as locked (padlock, no navigation)
   function isLocked(href: string): boolean {
     // Explicit false only. These props are optional and most callers never passed
@@ -223,7 +260,7 @@ export default function AppNav({
         {/* Logo */}
         <Link href="/dashboard" className="flex-shrink-0 flex items-center gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/nwi-logo.png" alt="National Wrench Index Suite™" className="h-14 max-w-[180px] sm:h-12 sm:max-w-[200px] w-auto object-contain block" />
+          <img src="/nwi-logo.png" alt="National Wrench Index Suite™" className="h-14 max-w-[180px] sm:h-12 sm:max-w-[150px] w-auto object-contain block" />
           <span className="hidden md:block font-condensed font-bold text-sm leading-tight whitespace-nowrap">
             <span style={{ color: '#FF6600' }}>National</span>{' '}
             <span style={{ color: '#2969B0' }}>Wrench Index</span>
@@ -232,13 +269,21 @@ export default function AppNav({
         </Link>
 
         {/* Nav items — full remaining width, horizontally scrollable */}
-        <nav ref={navRef} className="flex items-center gap-1 flex-1 overflow-x-auto hide-scrollbar">
-          {visibleNavItems.map((item) => {
+        {/* The row still scrolls -- on a phone it always will -- but the fade on the
+            right edge means overflow now LOOKS like more content instead of looking
+            like a cut-off label. The scrollbar is hidden, so without it there was no
+            way to tell the row could move at all. */}
+        <div className="relative flex-1 min-w-0">
+        <nav ref={navRef} className="flex items-center gap-0.5 sm:gap-1 overflow-x-auto hide-scrollbar">
+          {mainNavItems.map((item) => {
             const isComingSoon = item.href === '#'
             const locked       = isLocked(item.href)
             // Mobile: stacked (icon above label), min 44px touch target
             // Desktop: inline (icon beside label), compact
-            const base = 'flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1.5 px-2 sm:px-3 min-h-[44px] justify-center rounded-lg transition-colors whitespace-nowrap'
+            // Tighter than it was on desktop. With Work Orders added there are nine
+            // modules in this row, and the old px-3/gap-1.5 spacing pushed the last of
+            // them past the edge on a 1280px screen.
+            const base = 'flex flex-col sm:flex-row items-center gap-0.5 sm:gap-1 px-2 min-h-[44px] justify-center rounded-lg transition-colors whitespace-nowrap'
 
             if (isComingSoon) {
               return (
@@ -284,6 +329,59 @@ export default function AppNav({
             )
           })}
         </nav>
+        <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-dark-card to-transparent" />
+        </div>
+
+        {/* Account menu — pinned to the right, never part of the scrolling row. */}
+        <div ref={accountRef} className="relative flex-shrink-0">
+          <button
+            type="button"
+            onClick={() => setAccountOpen(v => !v)}
+            aria-haspopup="menu"
+            aria-expanded={accountOpen}
+            aria-label="Account"
+            className={`flex items-center gap-1 px-2 sm:px-2.5 min-h-[44px] rounded-lg transition-colors ${
+              accountActive || accountOpen
+                ? 'bg-orange/15 text-orange'
+                : 'text-white/50 hover:text-white hover:bg-white/5'
+            }`}
+          >
+            <svg className="w-5 h-5 sm:w-4 sm:h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+            <svg
+              className={`w-3 h-3 transition-transform ${accountOpen ? 'rotate-180' : ''}`}
+              fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+          </button>
+
+          {accountOpen && (
+            <div
+              role="menu"
+              className="absolute right-0 top-full mt-1 w-44 rounded-lg border border-dark-border bg-dark-card shadow-2xl overflow-hidden z-50"
+            >
+              {accountNavItems.map((item) => (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  role="menuitem"
+                  onClick={() => setAccountOpen(false)}
+                  className={`flex items-center gap-2.5 px-3 py-2.5 text-xs font-medium transition-colors ${
+                    item.active
+                      ? 'bg-orange/15 text-orange'
+                      : 'text-white/60 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  <span className="flex [&>svg]:w-4 [&>svg]:h-4">{item.icon}</span>
+                  {item.label}
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </header>
   )
