@@ -58,25 +58,66 @@ function parseSuggestions(text: string): Suggestion[] {
   }
 }
 
+// ─── Instrumentation ──────────────────────────────────────────────────────────
+// DIAGNOSTIC ONLY. Nothing here changes what the route returns; it is here to find
+// out why suggestions appear sometimes and not others.
+//
+// One line per attempt, always, on every exit path, so the quiet failures are as
+// visible as the loud ones. Emitted as JSON after a fixed prefix so the whole
+// history can be pulled with a single search for the prefix.
+//
+// The outcome worth watching is `empty_parse`: the model answered, the call
+// succeeded, the route returned HTTP 200 -- and the array was empty, so the tech
+// saw nothing and had no reason to think anything had failed. `raw` carries the
+// front of the model's actual reply in that case, which is the only way to tell a
+// refusal from prose from malformed JSON.
+//
+// No PII: the complaint and diagnosis are recorded as lengths, not text.
+const LOG_PREFIX = '[labor-suggestions]'
+
+function logAttempt(fields: Record<string, unknown>) {
+  try {
+    console.log(`${LOG_PREFIX} ${JSON.stringify(fields)}`)
+  } catch {
+    // Never let logging break the request it is measuring.
+  }
+}
+
 export async function POST(req: NextRequest) {
+  const startedAt = Date.now()
+  const ms = () => Date.now() - startedAt
+
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (!user) {
+    logAttempt({ outcome: 'unauthorized', reason: 'no session', api_called: false, ms: ms() })
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
 
   const hasAccess = await checkHDAccess(user.id)
-  if (!hasAccess) return NextResponse.json({ error: 'HD subscription required' }, { status: 403 })
+  if (!hasAccess) {
+    logAttempt({ outcome: 'forbidden', reason: 'no HD subscription', user: user.id, api_called: false, ms: ms() })
+    return NextResponse.json({ error: 'HD subscription required' }, { status: 403 })
+  }
 
   if (!isGeminiConfigured()) {
+    // Worth watching: an env var missing on one deployment and present on another
+    // would look exactly like intermittency from the tech's seat.
+    logAttempt({ outcome: 'not_configured', reason: 'GEMINI key absent', user: user.id, api_called: false, ms: ms() })
     return NextResponse.json({ error: 'AI suggestions are not configured' }, { status: 503 })
   }
 
   let body: Record<string, unknown>
-  try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid body' }, { status: 400 }) }
+  try { body = await req.json() } catch {
+    logAttempt({ outcome: 'bad_body', user: user.id, api_called: false, ms: ms() })
+    return NextResponse.json({ error: 'Invalid body' }, { status: 400 })
+  }
 
   const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : '')
   const complaint = str(body.complaint)
   const diagnosis = str(body.diagnosis)
   if (!complaint && !diagnosis) {
+    logAttempt({ outcome: 'no_input', reason: 'complaint and diagnosis both empty', user: user.id, api_called: false, ms: ms() })
     return NextResponse.json({ error: 'complaint or diagnosis is required' }, { status: 400 })
   }
 
@@ -99,12 +140,52 @@ export async function POST(req: NextRequest) {
     lines.join('\n') +
     `\n\nSuggest the labor lines needed. Return ONLY the JSON array.`
 
+  // What the suggestion was asked about, for grouping attempts by vehicle.
+  const vehicle = isTruck
+    ? [str(body.truck_year), str(body.truck_make), str(body.truck_model)].filter(Boolean).join(' ')
+    : [str(body.unit_year), str(body.unit_manufacturer), str(body.unit_model)].filter(Boolean).join(' ')
+
+  const common = {
+    user:           user.id,
+    vehicle:        vehicle || '(none given)',
+    is_truck:       isTruck,
+    has_vin:        !!str(body.vin),
+    complaint_len:  complaint.length,
+    diagnosis_len:  diagnosis.length,
+    // There is NO cache on this route today. Recorded as a constant rather than
+    // omitted, so the logs answer the question instead of leaving it open.
+    cache:          'none (route has no cache)',
+    api_called:     true,
+  }
+
   try {
     const { text } = await generateDiagnostic(userPrompt, SYSTEM_PROMPT)
     const suggestions = parseSuggestions(text)
+
+    if (suggestions.length === 0) {
+      // The quiet one. HTTP 200, empty array, tech sees nothing.
+      logAttempt({
+        ...common,
+        outcome:     'empty_parse',
+        reason:      text.trim().length === 0
+          ? 'model returned an empty response'
+          : 'response did not contain a usable JSON array',
+        raw_len:     text.length,
+        raw:         text.slice(0, 300),
+        suggestions: 0,
+        ms:          ms(),
+      })
+    } else {
+      logAttempt({ ...common, outcome: 'ok', raw_len: text.length, suggestions: suggestions.length, ms: ms() })
+    }
+
     return NextResponse.json({ suggestions })
   } catch (err) {
-    console.error('[hd/labor-suggestions]', err instanceof Error ? err.message : err)
+    const message = err instanceof Error ? err.message : String(err)
+    // Rate limits, timeouts and quota exhaustion all surface here, and any of them
+    // would come and go on their own -- the first thing to rule out.
+    logAttempt({ ...common, outcome: 'api_error', reason: message, ms: ms() })
+    console.error('[hd/labor-suggestions]', message)
     return NextResponse.json({ error: 'AI request failed' }, { status: 502 })
   }
 }
