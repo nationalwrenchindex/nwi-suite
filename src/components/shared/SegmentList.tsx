@@ -95,7 +95,22 @@ export default function SegmentList({
       const d = await res.json()
       if (!res.ok) throw new Error(d.error ?? 'Could not save')
       setSegments(prev => prev.map(x => (x.id === seg.id ? d.segment : x)))
-      setDraftLines(prev => { const n = { ...prev }; delete n[seg.id]; return n })
+      // Drop the draft ONLY if what we just saved is still what is on screen.
+      //
+      // This used to delete unconditionally, and that is why a line row needed two
+      // clicks. Every text field on a segment saves on blur, so clicking "+ Labor"
+      // first blurs whatever the tech was typing in; that save then resolves AFTER
+      // the new row was added and took the row away with it. The second click
+      // "worked" only because focus was no longer in a field, so nothing blurred.
+      //
+      // Identity, not just a key check: the tax field saves WITH line_items, but the
+      // array it sends was captured before the click. Comparing the array we sent
+      // against the current draft keeps any row added while the request was in
+      // flight, whichever field triggered the save.
+      setDraftLines(prev => {
+        if (!('line_items' in patch) || prev[seg.id] !== patch.line_items) return prev
+        const n = { ...prev }; delete n[seg.id]; return n
+      })
       flash(`Segment ${seg.sequence} saved.`)
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Could not save')
