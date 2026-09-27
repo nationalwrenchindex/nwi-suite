@@ -61,6 +61,12 @@ export default async function WorkOrdersPage() {
             </p>
           </div>
           <Link
+            href="/work-orders/follow-ups"
+            className="flex-shrink-0 px-4 py-2.5 rounded-lg border border-white/15 text-white/60 hover:text-white hover:border-white/30 text-sm font-semibold transition-colors"
+          >
+            Follow-Ups
+          </Link>
+          <Link
             href="/work-orders/new"
             className="flex-shrink-0 px-4 py-2.5 rounded-lg bg-orange hover:bg-orange-hover text-white text-sm font-semibold transition-colors"
           >

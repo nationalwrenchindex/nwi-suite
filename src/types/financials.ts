@@ -1,5 +1,21 @@
 // ─── Multi-job (re-exported from quickwrench types for use in financials) ──────
 
+/**
+ * @deprecated Superseded by work order segments (migration 137).
+ *
+ * This was a half-built multi-job model: carried from quotes into invoices.jobs and
+ * rendered as "N Services", but with no per-job status, no complaint/cause/correction,
+ * and nothing ever billed from it — the money has always come from the flat line_items
+ * beside it.
+ *
+ * Segments do the whole job properly: per-item authorize/decline, their own line items
+ * and tax, and only what the customer authorized reaches the invoice. See
+ * src/types/segments and components/shared/segments.
+ *
+ * Left in place ON PURPOSE. Existing quotes and invoices carry this data and keep
+ * rendering it, so nothing breaks and no migration touches billed history. Do not wire
+ * new work to it.
+ */
 export interface MultiJobPart {
   name:       string
   qty:        number
@@ -7,6 +23,7 @@ export interface MultiJobPart {
   unit_price: number
 }
 
+/** @deprecated Superseded by work order segments (137) — see MultiJobPart above. */
 export interface MultiJobEntry {
   id:          string
   category:    string
@@ -188,7 +205,8 @@ export interface Invoice {
   /** Odometer at service, entered on send. Feeds the NWI Garage service record. */
   mileage_at_service: number | null
   // Joined relations
-  // Phase 8: multi-job support
+  /** @deprecated Superseded by work order segments (137). Still read by existing
+   *  quotes; do not write new callers against it. */
   jobs?: MultiJobEntry[]
   // Detailer quote model
   service_lines?: ServiceLine[]

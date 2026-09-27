@@ -5,6 +5,10 @@ import AppNav from '@/components/layout/AppNav'
 import WorkOrderForm from '@/components/work-orders/WorkOrderForm'
 import { WORK_ORDER_SELECT } from '@/app/api/work-orders/list'
 import { STATUS_META, unitLabelFor, type WorkOrder, type WorkOrderPhoto } from '@/types/work-orders'
+import SegmentList from '@/components/shared/SegmentList'
+import { PARENTS } from '@/lib/segments/parent'
+import { SEGMENT_SELECT, shapeSegments } from '@/lib/segments/select'
+import { isParentPriced } from '@/components/shared/segments'
 import type { PhotoWithUrl } from '@/components/work-orders/WorkOrderPhotos'
 
 export const metadata = { title: 'Work Order — National Wrench Index Suite™' }
@@ -58,6 +62,18 @@ export default async function WorkOrderDetailPage({
       return { ...photo, signedUrl: signed?.signedUrl ?? null }
     }),
   )
+  const { data: segRows } = await supabase
+    .from('work_order_segments')
+    .select(SEGMENT_SELECT)
+    .eq(PARENTS.ld.fkColumn, wo.id)
+    .eq('user_id', user.id)
+    .order('sequence', { ascending: true })
+
+  const segments = shapeSegments(segRows)
+  // Legacy: priced by its own line items and created before segments. A brand-new
+  // work order has neither, and reads as segment-priced — which is the intent.
+  const parentPriced = isParentPriced(wo.line_items, segments)
+
   const meta = STATUS_META[wo.status]
 
   return (
@@ -93,12 +109,42 @@ export default async function WorkOrderDetailPage({
         <WorkOrderForm
           workOrder={wo}
           photos={photos}
+          ownsPricing={parentPriced}
           defaults={{
             labor_rate:     Number(profile.default_labor_rate ?? 125),
             markup_percent: Number(profile.default_parts_markup_percent ?? 20),
             tax_percent:    Number(profile.default_tax_percent ?? 8.5),
           }}
         />
+
+        {/* Segment-priced work orders get their money here instead. A legacy
+            parent-priced record never shows this — it is one model or the other, and
+            the segments route refuses to let a record become both. */}
+        {!parentPriced && (
+          <div className="mt-6 space-y-3">
+            <h2 className="font-condensed font-bold text-xl text-white tracking-wide">SEGMENTS</h2>
+            <p className="text-white/40 text-sm">
+              One per complaint. The customer approves or declines each separately, and only
+              what they authorize gets invoiced.
+            </p>
+            <SegmentList
+              apiBase={`/api/work-orders/${wo.id}`}
+              variant="ld"
+              initialSegments={segments}
+              defaultMarkup={Number(profile.default_parts_markup_percent ?? 20)}
+              laborRate={Number(profile.default_labor_rate ?? 125)}
+              defaultTaxPercent={Number(profile.default_tax_percent ?? 8.5)}
+              locked={!!wo.converted_invoice_id}
+            />
+          </div>
+        )}
+
+        {parentPriced && (
+          <p className="mt-4 text-white/30 text-xs">
+            This work order is priced with its own line items, so it does not use segments.
+            Start a new work order to use segments for additional work.
+          </p>
+        )}
       </main>
     </div>
   )

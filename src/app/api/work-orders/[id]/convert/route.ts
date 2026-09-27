@@ -9,6 +9,10 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { hasWorkOrders } from '@/lib/work-orders'
 import { WORK_ORDER_SELECT } from '../../list'
+import { PARENTS } from '@/lib/segments/parent'
+import { SEGMENT_SELECT, shapeSegments } from '@/lib/segments/select'
+import { isBillable } from '@/types/segments'
+import { invoiceFromSegments } from '@/lib/segments/invoice'
 
 export const dynamic = 'force-dynamic'
 
@@ -78,18 +82,51 @@ export async function POST(
   const today = new Date().toISOString().slice(0, 10)
   const now   = new Date().toISOString()
 
+  // ── Segment-priced or parent-priced ─────────────────────────────────────────
+  // A work order is one or the other and never both (the segments route refuses to
+  // mix them). With segments, ONLY authorized and complete ones are billed: a
+  // declined clutch must not appear on the invoice for the PCM, and a segment still
+  // awaiting the customer's OK must not either.
+  const { data: segRows } = await supabase
+    .from('work_order_segments')
+    .select(SEGMENT_SELECT)
+    .eq(PARENTS.ld.fkColumn, id)
+    .eq('user_id', user.id)
+    .order('sequence', { ascending: true })
+
+  const segments = shapeSegments(segRows)
+  const billable = segments.filter(seg => isBillable(seg.status))
+
+  if (segments.length > 0 && billable.length === 0) {
+    return NextResponse.json(
+      { error: 'Nothing on this work order has been authorized yet, so there is nothing to invoice.' },
+      { status: 422 },
+    )
+  }
+
+  const money = segments.length > 0
+    ? invoiceFromSegments(billable)
+    : {
+        // Legacy parent-priced, computed exactly as it was before segments existed.
+        line_items: (wo.line_items ?? []) as unknown[],
+        subtotal:   Number(wo.parts_subtotal ?? 0) * (1 + Number(wo.parts_markup_percent ?? 0) / 100) + Number(wo.labor_subtotal ?? 0),
+        tax_amount: Number(wo.tax_amount ?? 0),
+        tax_rate:   Number(wo.tax_percent ?? 0) / 100,
+        total:      Number(wo.grand_total ?? 0),
+      }
+
   const invoiceInsert = {
     user_id:          user.id,
     invoice_number,
     invoice_date:     today,
     customer_id:      wo.customer_id ?? null,
     vehicle_id:       wo.vehicle_id  ?? null,
-    line_items:       wo.line_items  ?? [],
-    subtotal:         Number(wo.parts_subtotal ?? 0) * (1 + Number(wo.parts_markup_percent ?? 0) / 100) + Number(wo.labor_subtotal ?? 0),
-    tax_rate:         Number(wo.tax_percent ?? 0) / 100,
-    tax_amount:       Number(wo.tax_amount  ?? 0),
+    line_items:       money.line_items,
+    subtotal:         money.subtotal,
+    tax_rate:         money.tax_rate,
+    tax_amount:       money.tax_amount,
     discount_amount:  0,
-    total:            Number(wo.grand_total ?? 0),
+    total:            money.total,
     status:           'draft',
     source:           'work_order',
     // The job description is what the customer authorised; the tech notes are

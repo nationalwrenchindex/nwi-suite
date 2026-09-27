@@ -29,10 +29,16 @@ export default function WorkOrderForm({
   workOrder,
   defaults,
   photos = [],
+  ownsPricing = true,
 }: {
   workOrder?: WorkOrder
   defaults:   { labor_rate: number; markup_percent: number; tax_percent: number }
   photos?:    PhotoWithUrl[]
+  /** False when SEGMENTS price this work order. The form then stops rendering and
+   *  stops WRITING the parent money columns — writing them would put parent line
+   *  items on a segment-priced record, which is exactly what the segments guard
+   *  refuses, and the record would end up carrying two totals. */
+  ownsPricing?: boolean
 }) {
   const router   = useRouter()
   const isNew    = !workOrder
@@ -71,19 +77,23 @@ export default function WorkOrderForm({
   }
 
   function body() {
-    return {
+    const base = {
       customer_id:     customerId,
       vehicle_id:      vehicleId,
       unit_label:      unitLabel,
       job_description: jobDesc,
       po_number:       poNumber,
       tech_notes:      techNotes,
-      ...lineMoneyColumns(inputs),
     }
+    // Segments own the money on a segment-priced work order. Sending the parent
+    // columns anyway is how a record ends up with two totals.
+    return ownsPricing ? { ...base, ...lineMoneyColumns(inputs) } : base
   }
 
   async function save() {
-    const v = validateLines({ items, laborHours, laborRate, grandTotal: totals.grandTotal })
+    const v = ownsPricing
+      ? validateLines({ items, laborHours, laborRate, grandTotal: totals.grandTotal })
+      : null
     if (v) { setErr(v); return }
     if (!customerId)                    { setErr('Pick or create a customer.'); return }
     if (!vehicleId && !unitLabel.trim()) { setErr('Pick a vehicle or describe the unit.'); return }
@@ -190,7 +200,10 @@ export default function WorkOrderForm({
         </div>
       </section>
 
+      {/* Rendered only when this form owns pricing. A segment-priced work order gets
+          its money from SegmentList instead. */}
       {/* ── Parts and labor ── */}
+      {ownsPricing && (
       <section className="nwi-card space-y-4">
         <p className="text-white/30 text-xs uppercase tracking-widest">Parts &amp; Labor</p>
 
@@ -236,6 +249,7 @@ export default function WorkOrderForm({
           </div>
         </div>
       </section>
+      )}
 
       {/* ── Photos ── */}
       {/* Only once the work order exists: a photo needs a record to belong to,
