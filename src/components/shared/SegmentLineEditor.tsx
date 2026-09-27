@@ -29,7 +29,9 @@ const blankLine = (type: WorkOrderLineType, sortOrder: number, defaultMarkup: nu
   description:    '',
   part_number:    null,
   quantity:       type === 'labor' ? 1 : 1,
-  unit_cost:      type === 'part' ? 0 : null,
+  // NULL, not 0. A seeded zero renders as "0" in the input, so typing 45 produced
+  // "045" — and null is also the honest value for a cost nobody has entered yet.
+  unit_cost:      null,
   unit_price:     null,
   markup_percent: type === 'part' ? defaultMarkup : null,
   total:          0,
@@ -143,7 +145,7 @@ export default function SegmentLineEditor({
                 <label className="nwi-label text-[10px]">Rate ($/hr)</label>
                 <input
                   type="number" min={0} step={1} className="nwi-input text-sm"
-                  value={line.unit_price ?? 0} disabled={disabled}
+                  value={line.unit_price ?? ''} disabled={disabled}
                   onChange={e => update(i, { unit_price: Number(e.target.value) || 0 })}
                 />
               </div>
@@ -170,16 +172,16 @@ export default function SegmentLineEditor({
                   <label className="nwi-label text-[10px]">Your cost</label>
                   <input
                     type="number" min={0} step={0.01} className="nwi-input text-sm"
-                    value={line.unit_cost ?? 0} disabled={disabled}
-                    onChange={e => update(i, { unit_cost: Number(e.target.value) || 0 })}
+                    value={line.unit_cost ?? ''} disabled={disabled}
+                    onChange={e => update(i, { unit_cost: e.target.value === '' ? null : Number(e.target.value) })}
                   />
                 </div>
                 <div>
                   <label className="nwi-label text-[10px]">Markup %</label>
                   <input
                     type="number" min={0} step={1} className="nwi-input text-sm"
-                    value={line.markup_percent ?? 0} disabled={disabled}
-                    onChange={e => update(i, { markup_percent: Number(e.target.value) || 0 })}
+                    value={line.markup_percent ?? ''} disabled={disabled}
+                    onChange={e => update(i, { markup_percent: e.target.value === '' ? null : Number(e.target.value) })}
                   />
                 </div>
               </div>
