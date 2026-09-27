@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import AddressAutofill, { type AddressValue } from '@/components/hd/AddressAutofill'
+import { parseAddress } from '@/lib/hd/address-parse'
+import { addressFrom, isAddressEmpty } from '@/lib/address'
 
 const HD_ORANGE = '#E85D24'
 
@@ -17,7 +19,7 @@ interface Unit {
   serial_number: string | null
   fleet_account_id: string | null
 }
-interface FleetAccount { id: string; fleet_name: string }
+interface FleetAccount { id: string; fleet_name: string; address: string | null }
 
 const inputStyle = { background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }
 const inputCls = 'w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/25'
@@ -58,6 +60,18 @@ export default function NewWorkOrderForm({ units, fleetAccounts, presetAccountId
     setCustomerName(a.fleet_name)
     setShowAccts(false)
     if (unitId && !units.some(u => u.id === unitId && u.fleet_account_id === a.id)) setUnitId('')
+
+    // Fill the service address from the account we already have on file, instead of
+    // making the tech retype it. hd_fleet_accounts stores ONE free-text line, so it
+    // goes through the same parser the paste box uses rather than being dumped into
+    // line 1 whole -- dumping it there is the behaviour migration 120 added these
+    // five columns to replace.
+    //
+    // Only fills a blank address: a tech who has already typed one has said something
+    // more specific than the account's default, and this must not overwrite it. What
+    // lands is ordinary editable text, never locked.
+    if (!a.address?.trim()) return
+    setAddress(prev => (isAddressEmpty(addressFrom(prev)) ? addressFrom(parseAddress(a.address ?? '')) : prev))
   }
 
   async function submit(e: React.FormEvent) {

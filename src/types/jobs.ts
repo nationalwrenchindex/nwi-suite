@@ -29,6 +29,13 @@ export interface CustomerSummary {
   last_name: string
   phone: string | null
   email: string | null
+  // Present on /api/customers so a picker can prefill a job's address without a
+  // second request. Optional: not every caller selects them.
+  address_line1?: string | null
+  address_line2?: string | null
+  city?:          string | null
+  state?:         string | null
+  zip?:           string | null
 }
 
 export interface VehicleSummary {

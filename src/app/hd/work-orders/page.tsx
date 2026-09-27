@@ -58,10 +58,11 @@ export default async function WorkOrdersPage({
         .order('id')
         .range(from, to),
     ),
-    fetchAllRows<{ id: string; fleet_name: string }>(
+    fetchAllRows<{ id: string; fleet_name: string; address: string | null }>(
       (from, to) => supabase
         .from('hd_fleet_accounts')
-        .select('id, fleet_name')
+        // address comes along so picking an account can fill the service address.
+        .select('id, fleet_name, address')
         .eq('user_id', user.id)
         .order('fleet_name')
         .order('id')

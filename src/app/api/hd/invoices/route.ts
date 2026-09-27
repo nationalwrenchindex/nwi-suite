@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
 import { logHDCustomer } from '@/lib/hd/customer-logging'
+import { addressFrom } from '@/lib/address'
 import { resolveInvoiceFleetLinks } from '@/lib/fleet-pro/invoice-link'
 import { costingFromLineItems, isMissingCostingColumn } from '@/lib/hd/invoice-costing'
 import { fetchAllRows } from '@/lib/supabase/fetch-all'
@@ -188,6 +189,9 @@ export async function POST(req: NextRequest) {
     customerPhone: typeof body.customer_phone === 'string' ? body.customer_phone : null,
     customerEmail: typeof body.customer_email === 'string' ? body.customer_email : null,
     companyName:   typeof company_name        === 'string' ? company_name        : null,
+    // Carry the address onto the customer so the NEXT document for this customer
+    // prefills it. Without this the prefill has nothing to read.
+    address:       addressFrom(body),
   })
 
   // Persist the link. It was previously resolved here and returned to the client but

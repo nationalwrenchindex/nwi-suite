@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import type { CustomerWithVehicles } from '@/types/jobs'
+import { addressFrom, formatAddressLine } from '@/lib/address'
 import { getServicesByBusinessType } from '@/lib/scheduler'
 
 interface FormState {
@@ -55,19 +56,38 @@ export default function BookJobTab({ onSuccess, businessType }: { onSuccess: () 
   }, [])
 
   function set(field: keyof FormState, value: string) {
-    setForm((prev) => ({
-      ...prev,
-      [field]: value,
-      // Reset vehicle when customer changes
-      ...(field === 'customer_id' ? { vehicle_id: '' } : {}),
-    }))
+    setForm((prev) => {
+      if (field !== 'customer_id') return { ...prev, [field]: value }
+
+      // Picking a customer fills the job address from their record. This field is
+      // a single free-text line (jobs.location_address), so the five columns are
+      // joined into one readable line.
+      //
+      // Anything the tech typed themselves is kept. The address is only replaced
+      // when it is still exactly what we auto-filled for the PREVIOUS customer --
+      // otherwise switching customers would quietly discard a hand-typed address,
+      // which is worse than the retyping this is meant to stop. It stays editable
+      // either way.
+      const nextCust = customers.find((c) => c.id === value) ?? null
+      const prevCust = customers.find((c) => c.id === prev.customer_id) ?? null
+      const prevAuto = prevCust ? formatAddressLine(addressFrom(prevCust)) : ''
+      const typed    = prev.location_address.trim()
+      const keepTyped = typed !== '' && typed !== prevAuto
+
+      return {
+        ...prev,
+        customer_id:      value,
+        vehicle_id:       '',   // reset vehicle when customer changes
+        location_address: keepTyped
+          ? prev.location_address
+          : nextCust ? formatAddressLine(addressFrom(nextCust)) : '',
+      }
+    })
   }
 
   const selectedCustomer = customers.find((c) => c.id === form.customer_id)
   const vehicles         = selectedCustomer?.vehicles ?? []
 
-  // Auto-fill address from customer address if available (customers table has address fields)
-  // For simplicity, we just keep the address field free-form here
 
   function validate(): string | null {
     if (!form.job_date)                    return 'Job date is required.'

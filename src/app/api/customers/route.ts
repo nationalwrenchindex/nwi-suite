@@ -1,8 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 
+// Address is included so a picker can prefill it straight from the list rather than
+// firing a second request per selection. Five short text columns; the list is already
+// paged.
 const CUSTOMER_LIST_SELECT = `
   id, first_name, last_name, phone, email,
+  address_line1, address_line2, city, state, zip,
   vehicles(id)
 `
 

@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
 import { logHDCustomer } from '@/lib/hd/customer-logging'
+import { addressFrom } from '@/lib/address'
 
 export const dynamic = 'force-dynamic'
 
@@ -73,6 +74,9 @@ export async function POST(req: NextRequest) {
     customerPhone: typeof body.customer_phone === 'string' ? body.customer_phone : null,
     customerEmail: typeof body.customer_email === 'string' ? body.customer_email : null,
     companyName:   typeof company_name        === 'string' ? company_name        : null,
+    // Carry the address onto the customer so the NEXT document for this customer
+    // prefills it. Without this the prefill has nothing to read.
+    address:       addressFrom(body),
   })
 
   return NextResponse.json({ quote: data, customer_id }, { status: 201 })
