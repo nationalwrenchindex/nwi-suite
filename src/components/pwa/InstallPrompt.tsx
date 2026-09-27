@@ -1,6 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { usePathname } from 'next/navigation'
+import { isPublicRoute } from '@/lib/public-routes'
 
 // The beforeinstallprompt event is Chromium-only and still not in lib.dom, so it
 // is declared here rather than pulled from a @types package.
@@ -57,10 +59,19 @@ export default function InstallPrompt() {
   const [ios, setIOS] = useState(false)
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null)
 
+  // NEVER on a customer-facing page. This component is mounted in the root layout,
+  // which covers the public approval and payment pages too, so it was offering to
+  // install NWI Suite to the subscriber's customer -- someone who is not an app user
+  // and, on a white-label account, should not be seeing the name NWI at all.
+  const isPublic = isPublicRoute(usePathname())
+
   useEffect(() => {
     setMounted(true)
 
-    if (isStandalone() || readDismissed()) return
+    // Checked inside the effect as well as at render: on iOS the banner is shown
+    // straight from here on mount, with no event to wait for, so a render-only
+    // guard would still have flashed it.
+    if (isPublic || isStandalone() || readDismissed()) return
 
     if (isIOS()) {
       // iOS Safari never fires beforeinstallprompt and has no programmatic
@@ -91,7 +102,7 @@ export default function InstallPrompt() {
       window.removeEventListener('beforeinstallprompt', onBeforeInstallPrompt)
       window.removeEventListener('appinstalled', onInstalled)
     }
-  }, [])
+  }, [isPublic])
 
   async function install() {
     if (!deferred) return
@@ -108,7 +119,7 @@ export default function InstallPrompt() {
     setVisible(false)
   }
 
-  if (!mounted || !visible) return null
+  if (isPublic || !mounted || !visible) return null
 
   return (
     <div
