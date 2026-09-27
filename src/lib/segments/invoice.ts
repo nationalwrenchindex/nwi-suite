@@ -76,3 +76,32 @@ export function invoiceFromSegments(segments: WorkOrderSegment[]): InvoiceMoney 
     total:      round2(total),
   }
 }
+
+/**
+ * The work-done narrative for the invoice's Job Notes, labelled per segment.
+ *
+ * This is customer-visible — /invoice/[token] renders job_notes — so it is built from
+ * `correction` (what was actually done), falling back to `cause` then `complaint` for
+ * a segment the tech has not written up yet. A segment with none of the three is
+ * skipped rather than printing a bare "Segment 2" heading with nothing under it.
+ *
+ * Only BILLABLE segments appear. A declined clutch must not be described on an
+ * invoice the customer is paying for work they did not authorise.
+ *
+ * Returns null when there is nothing to say, so the caller stores NULL rather than an
+ * empty string — the invoice editor treats those differently.
+ */
+export function jobNotesFromSegments(segments: WorkOrderSegment[]): string | null {
+  const blocks: string[] = []
+
+  for (const seg of segments) {
+    const body = seg.correction?.trim() || seg.cause?.trim() || seg.complaint?.trim()
+    if (!body) continue
+    const heading = seg.complaint?.trim()
+      ? `Segment ${seg.sequence} — ${seg.complaint.trim()}`
+      : `Segment ${seg.sequence}`
+    blocks.push(`${heading}\n${body}`)
+  }
+
+  return blocks.length > 0 ? blocks.join('\n\n') : null
+}

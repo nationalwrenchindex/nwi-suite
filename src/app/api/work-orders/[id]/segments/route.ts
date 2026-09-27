@@ -89,13 +89,32 @@ export async function POST(
   const money = priceSegment(lines, Number(body.tax_percent ?? 0))
   const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
 
+  // SEGMENT 1 INHERITS THE JOB DESCRIPTION as its complaint. The tech already typed
+  // what is wrong with the truck when they opened the work order; making them retype
+  // it as segment 1 is the same sentence entered twice.
+  //
+  // Only the FIRST segment, and only when the caller sent nothing: segment 2 is a
+  // different complaint by definition, and an explicit value always wins. Prefilled
+  // server-side so the client cannot hold a different idea of the default — and it
+  // lands as a normal editable value, never a locked one.
+  let complaint = str(body.complaint)
+  if (!complaint && sequence === 1) {
+    const { data: parent } = await supabase
+      .from('work_orders')
+      .select('job_description')
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .single()
+    complaint = str(parent?.job_description)
+  }
+
   const { data, error } = await supabase
     .from('work_order_segments')
     .insert({
       user_id:    user.id,
       [FK]:       id,
       sequence,
-      complaint:  str(body.complaint),
+      complaint,
       cause:      str(body.cause),
       correction: str(body.correction),
       status:     'pending',

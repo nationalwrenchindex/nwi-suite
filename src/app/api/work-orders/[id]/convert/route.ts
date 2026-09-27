@@ -12,7 +12,7 @@ import { WORK_ORDER_SELECT } from '../../list'
 import { PARENTS } from '@/lib/segments/parent'
 import { SEGMENT_SELECT, shapeSegments } from '@/lib/segments/select'
 import { isBillable } from '@/types/segments'
-import { invoiceFromSegments } from '@/lib/segments/invoice'
+import { invoiceFromSegments, jobNotesFromSegments } from '@/lib/segments/invoice'
 
 export const dynamic = 'force-dynamic'
 
@@ -131,12 +131,23 @@ export async function POST(
     source:           'work_order',
     // The job description is what the customer authorised; the tech notes are
     // internal and deliberately not carried onto a document the customer reads.
-    notes:            wo.job_description ?? null,
+    // The job description is what the customer authorised; the tech notes are
+    // internal and deliberately not carried onto a document the customer reads.
+    //
+    // unit_label is appended when there is no vehicle_id: invoices have no free-text
+    // unit field, so an invoice for a "boat trailer" would otherwise name nothing at
+    // all for the customer to recognise.
+    notes:            [wo.job_description, !wo.vehicle_id && wo.unit_label ? `Unit: ${wo.unit_label}` : null]
+                        .filter(Boolean).join(' — ') || null,
     invoice_status:   'in_progress',
     // Everything the work order carried, including the PO the fleet will match the
     // payment against. Retyping it is how invoice and PO stop agreeing.
     po_number:        wo.po_number ?? null,
-    job_notes:        null,
+    // What was DONE, carried from the segments and labelled by segment rather than
+    // retyped. Customer-visible (/invoice/[token] renders job_notes) and fully
+    // editable afterwards — nothing here is locked. Parent-priced work orders have
+    // no segments to describe, so they keep the null they have always had.
+    job_notes:        segments.length > 0 ? jobNotesFromSegments(billable) : null,
     shop_supplies:    [],
     additional_parts: [],
     additional_labor: [],
