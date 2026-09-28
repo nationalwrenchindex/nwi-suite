@@ -20,10 +20,15 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { getFleetBranding } from '@/lib/fleet-pro/partner-access'
 import EntryChooser from '@/components/inspect/EntryChooser'
 import type { PretripUnitInfo } from '@/types/fleet-pro-partner'
+import { publicDocumentMetadata } from '@/lib/public-metadata'
 
 export const dynamic = 'force-dynamic'
 
-export const metadata = { title: 'Unit Inspection & Service' }
+// Was a bare title, which the root layout's template turned into
+// 'Unit Inspection & Service | National Wrench Index™' on a page a DRIVER opens
+// from a QR sticker. absolute escapes the template; noindex keeps a unit-scoped URL
+// out of search results.
+export const metadata = publicDocumentMetadata('Unit Inspection & Service')
 
 // Full-bleed on a phone, and the browser chrome matches the page rather than flashing
 // white over a dark form.

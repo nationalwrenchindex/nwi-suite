@@ -96,7 +96,11 @@ export default function OfflinePage() {
               color: MUTED,
             }}
           >
-            National Wrench Index
+            {/* Was the NWI wordmark. The service worker caches this page, so it can
+                be served to a subscriber's customer on a white-label account -- and
+                a connection error is the worst possible place to introduce a brand
+                they have never heard of. A neutral status label says the same thing. */}
+            No Connection
           </span>
         </div>
 

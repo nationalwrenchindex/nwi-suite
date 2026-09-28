@@ -22,7 +22,7 @@ import {
   type SegmentLine, type WorkOrderSegment,
 } from '@/types/segments'
 
-interface Business { name: string | null; phone: string | null }
+interface Business { name: string | null; phone: string | null; logoUrl?: string | null }
 interface WorkOrderHead {
   work_order_number: string
   po_number:         string | null
@@ -105,8 +105,21 @@ export default function SegmentApprovalClient({
   return (
     <div className="max-w-xl mx-auto px-4 py-8 space-y-6">
 
-      {/* Header */}
+      {/* Header. The subscriber's logo when they have uploaded one, their name in
+          text when they have not -- the fallback is the point, since most never
+          upload anything. */}
       <div className="space-y-1">
+        {business.logoUrl ? (
+          /* eslint-disable-next-line @next/next/no-img-element -- subscriber logos are
+             arbitrary external URLs in a public bucket; next/image would need every
+             host allow-listed. Same reasoning as BrandHeader. */
+          <img
+            src={business.logoUrl}
+            alt={business.name ?? 'Shop logo'}
+            className="h-10 w-auto object-contain mb-2"
+            style={{ maxWidth: 200 }}
+          />
+        ) : null}
         <p className="text-xs uppercase tracking-widest" style={s.faint}>
           {business.name ?? 'Your shop'}
         </p>

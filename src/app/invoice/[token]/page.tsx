@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation'
 import { createServiceClient } from '@/lib/supabase/service'
 import { BrandFooter } from '@/components/BrandHeader'
 import { BRANDING_SELECT, resolveBranding, type BrandingSource } from '@/lib/branding'
+import { publicDocumentMetadata } from '@/lib/public-metadata'
 import InvoiceViewClient from './InvoiceViewClient'
 import InvoiceApprovalClient from './InvoiceApprovalClient'
 import type { Metadata } from 'next'
@@ -34,9 +35,21 @@ export async function generateMetadata(
 ): Promise<Metadata> {
   const { token } = await params
   const sc = createServiceClient()
-  const { data } = await sc.from('invoices').select('invoice_number').eq('public_token', token).single()
+  const { data } = await sc.from('invoices').select('invoice_number, user_id').eq('public_token', token).single()
   const num = data?.invoice_number ?? 'Invoice'
-  return { title: `${num} — National Wrench Index` }
+
+  // The subscriber's business on the tab. Was hard-coded to NWI's name.
+  let businessName: string | null = null
+  if (data?.user_id) {
+    const { data: p } = await sc
+      .from('profiles')
+      .select('business_name, full_name')
+      .eq('id', data.user_id as string)
+      .single()
+    businessName = (p?.business_name as string | null) || (p?.full_name as string | null) || null
+  }
+
+  return publicDocumentMetadata(num, businessName)
 }
 
 const fmt = (n: number | null | undefined) =>

@@ -3,6 +3,7 @@ import { createServiceClient } from '@/lib/supabase/service'
 import BookingClient from '@/components/booking/BookingClient'
 import { getServicesByBusinessType } from '@/lib/scheduler'
 import { BRANDING_SELECT, resolveBranding, type BrandingSource } from '@/lib/branding'
+import { publicPageMetadata } from '@/lib/public-metadata'
 
 type PageProps = {
   params:       Promise<{ techSlug: string }>
@@ -10,6 +11,23 @@ type PageProps = {
 }
 
 export const dynamic = 'force-dynamic'
+
+// This page had no metadata of its own, so it fell all the way back to the root
+// layout's default -- a customer booking with a white-label shop got a tab that
+// said 'National Wrench Index™' and nothing about the shop they were booking.
+//
+// Indexable on purpose, unlike the token documents: this is the one public page a
+// subscriber actively wants found.
+export async function generateMetadata({ params }: PageProps) {
+  const { techSlug } = await params
+  const { data } = await createServiceClient()
+    .from('profiles')
+    .select('business_name, full_name')
+    .eq('slug', techSlug)
+    .single()
+  const name = (data?.business_name as string | null) || (data?.full_name as string | null) || null
+  return publicPageMetadata('Book a Job', name)
+}
 
 export default async function BookingPage({ params, searchParams }: PageProps) {
   const { techSlug } = await params

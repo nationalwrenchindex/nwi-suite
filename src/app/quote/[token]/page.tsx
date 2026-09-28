@@ -7,6 +7,8 @@ import QuoteApprovalClient from './QuoteApprovalClient'
 import type { Metadata } from 'next'
 import type { MultiJobEntry } from '@/types/financials'
 import { money } from '@/lib/format'
+import { BrandFooter } from '@/components/BrandHeader'
+import { publicDocumentMetadata } from '@/lib/public-metadata'
 
 const QUOTE_SELECT = `
   id, quote_number, status, public_token,
@@ -31,9 +33,21 @@ export async function generateMetadata(
 ): Promise<Metadata> {
   const { token } = await params
   const sc = createServiceClient()
-  const { data } = await sc.from('quotes').select('quote_number').eq('public_token', token).single()
+  const { data } = await sc.from('quotes').select('quote_number, user_id').eq('public_token', token).single()
   const num = data?.quote_number ?? 'Quote'
-  return { title: `${num} — National Wrench Index` }
+
+  // The subscriber's business on the tab. Was hard-coded to NWI's name.
+  let businessName: string | null = null
+  if (data?.user_id) {
+    const { data: p } = await sc
+      .from('profiles')
+      .select('business_name, full_name')
+      .eq('id', data.user_id as string)
+      .single()
+    businessName = (p?.business_name as string | null) || (p?.full_name as string | null) || null
+  }
+
+  return publicDocumentMetadata(num, businessName)
 }
 
 export default async function PublicQuotePage(
@@ -350,9 +364,10 @@ export default async function PublicQuotePage(
           </p>
         )}
 
-        <p className="text-center text-white/15 text-xs pb-4">
-          Powered by National Wrench Index
-        </p>
+        {/* Routed through BrandFooter so the attribution that stays on customer
+            documents is defined in ONE place (lib/branding NWI_TRADEMARK_FOOTER).
+            This was a second, hand-written variant of the same line. */}
+        <BrandFooter className="text-center pb-4" />
 
       </div>
     </div>

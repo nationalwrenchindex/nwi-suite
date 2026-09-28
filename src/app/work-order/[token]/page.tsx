@@ -3,6 +3,8 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { PARENTS } from '@/lib/segments/parent'
 import { SEGMENT_SELECT, shapeSegments } from '@/lib/segments/select'
 import SegmentApprovalClient from '@/components/shared/SegmentApprovalClient'
+import { BRANDING_SELECT, resolveBranding, type BrandingSource } from '@/lib/branding'
+import { publicDocumentMetadata } from '@/lib/public-metadata'
 
 // Public. No auth, no AppNav — the token is the credential, same arrangement as
 // /quote/[token] and /invoice/[token]. Read with the service client so no anon policy
@@ -16,10 +18,26 @@ export async function generateMetadata(
   const sc = createServiceClient()
   const { data } = await sc
     .from('work_orders')
-    .select('work_order_number')
+    .select('work_order_number, user_id')
     .eq('public_token', token)
     .single()
-  return { title: data?.work_order_number ? `Approve work — ${data.work_order_number}` : 'Approve work' }
+
+  // The shop's name on the tab, not ours. Two queries rather than an embed: this
+  // runs on a public route and a plain lookup cannot become ambiguous later.
+  let businessName: string | null = null
+  if (data?.user_id) {
+    const { data: p } = await sc
+      .from('profiles')
+      .select('business_name, full_name')
+      .eq('id', data.user_id as string)
+      .single()
+    businessName = (p?.business_name as string | null) || (p?.full_name as string | null) || null
+  }
+
+  return publicDocumentMetadata(
+    data?.work_order_number ? `Approve work — ${data.work_order_number}` : 'Approve work',
+    businessName,
+  )
 }
 
 export default async function PublicWorkOrderPage({
@@ -48,7 +66,11 @@ export default async function PublicWorkOrderPage({
       .eq(PARENTS.ld.fkColumn, wo.id)
       .order('sequence', { ascending: true }),
     sc.from('profiles')
-      .select('business_name, phone')
+      // Through BRANDING_SELECT so this page gets the same logo and the same
+      // full_name fallback every other customer-facing document already had. It
+      // was reading business_name alone, so a subscriber who had uploaded a logo
+      // saw it on their invoice and not on their approval page.
+      .select(BRANDING_SELECT)
       .eq('id', wo.user_id as string)
       .single(),
   ])
@@ -77,10 +99,10 @@ export default async function PublicWorkOrderPage({
           customer_name:     customer ? `${customer.first_name} ${customer.last_name}`.trim() : null,
           vehicle_label:     vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ') : null,
         }}
-        business={{
-          name:  (profile?.business_name as string | null) ?? null,
-          phone: (profile?.phone as string | null) ?? null,
-        }}
+        business={(() => {
+          const b = resolveBranding(profile as BrandingSource | null)
+          return { name: b.name, phone: b.phone, logoUrl: b.logoUrl }
+        })()}
         initialSegments={shapeSegments(segRows)}
       />
     </div>

@@ -23,6 +23,8 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { getInvoiceByToken } from '@/lib/hd/invoice-token'
 import PublicInvoicePay from '@/components/hd/PublicInvoicePay'
 
+import { publicDocumentMetadata } from '@/lib/public-metadata'
+
 export const dynamic = 'force-dynamic'
 
 export async function generateMetadata(
@@ -31,15 +33,12 @@ export async function generateMetadata(
   const { token } = await params
   const result = await getInvoiceByToken(createServiceClient(), token)
 
-  if (!result) return { title: 'Invoice' }
+  if (!result) return publicDocumentMetadata('Invoice')
 
-  // White label: the tab title carries the shop's name, never NWI's.
-  const biz = result.branding.business_name
-  return {
-    title: `${result.invoice.invoice_number}${biz ? ` — ${biz}` : ''}`,
-    // A capability URL must never end up in a search index or in a referrer chain.
-    robots: { index: false, follow: false },
-  }
+  // This page already built a white-label title -- and the root layout's
+  // '%s | National Wrench Index™' template appended NWI to it regardless.
+  // publicDocumentMetadata uses title.absolute, which is what actually escapes it.
+  return publicDocumentMetadata(result.invoice.invoice_number, result.branding.business_name)
 }
 
 // Rendered inline rather than via notFound(). Two reasons: the nearest not-found
