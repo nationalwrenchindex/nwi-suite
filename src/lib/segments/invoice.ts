@@ -13,6 +13,7 @@
 import { round2 } from '@/lib/shared/markup'
 import { sumLines } from '@/lib/shared/work-order-lines'
 import type { WorkOrderSegment } from '@/types/segments'
+import { mergeBreakdowns, parseBreakdown, type TaxBreakdown } from '@/lib/tax'
 
 export interface InvoiceMoney {
   line_items: Array<{ description: string; quantity: number; unit_price: number; total: number }>
@@ -20,6 +21,8 @@ export interface InvoiceMoney {
   tax_amount: number
   tax_rate:   number
   total:      number
+  /** The billed segments' breakdowns combined. Null when none carried one. */
+  tax_breakdown: TaxBreakdown | null
 }
 
 /**
@@ -66,6 +69,10 @@ export function invoiceFromSegments(segments: WorkOrderSegment[]): InvoiceMoney 
   const roundedSubtotal = round2(subtotal)
   const roundedTax      = round2(taxAmount)
 
+  // Each segment recorded its own parts/labor split; the invoice bills them together,
+  // so the customer sees one parts figure and one labor figure rather than four.
+  const tax_breakdown = mergeBreakdowns(segments.map(s => parseBreakdown(s.tax_breakdown)))
+
   return {
     line_items,
     subtotal:   roundedSubtotal,
@@ -74,6 +81,7 @@ export function invoiceFromSegments(segments: WorkOrderSegment[]): InvoiceMoney 
     // zero rate rather than a divide-by-zero NaN reaching a money column.
     tax_rate:   roundedSubtotal > 0 ? round2((roundedTax / roundedSubtotal) * 100) / 100 : 0,
     total:      round2(total),
+    tax_breakdown,
   }
 }
 

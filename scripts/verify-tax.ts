@@ -9,7 +9,7 @@
 
 import fs from 'fs'
 import {
-  computeTax, effectiveRatePercent, taxDisplayRows, parseBreakdown,
+  computeTax, effectiveRatePercent, taxDisplayRows, parseBreakdown, mergeBreakdowns,
   fractionToPercent, type TaxSettings,
 } from '../src/lib/tax'
 
@@ -59,6 +59,7 @@ interface LdInv {
   shop_supplies: Array<{ total: number }> | null
   line_items: Array<{ description: string; total: number }> | null
   tax_breakdown: unknown
+  source: string | null
 }
 
 async function main() {
@@ -134,12 +135,12 @@ async function main() {
   let ld: LdInv[]
   try {
     ld = await get<LdInv>(
-      'invoices?select=invoice_number,subtotal,tax_rate,tax_amount,total,shop_supplies,line_items,tax_breakdown&order=created_at.desc&limit=30',
+      'invoices?select=invoice_number,subtotal,tax_rate,tax_amount,total,shop_supplies,line_items,source,tax_breakdown&order=created_at.desc&limit=30',
     )
   } catch {
     hasBreakdownColumn = false
     ld = await get<LdInv>(
-      'invoices?select=invoice_number,subtotal,tax_rate,tax_amount,total,shop_supplies,line_items&order=created_at.desc&limit=30',
+      'invoices?select=invoice_number,subtotal,tax_rate,tax_amount,total,shop_supplies,line_items,source&order=created_at.desc&limit=30',
     )
   }
   console.log(`
@@ -179,6 +180,74 @@ async function main() {
     ok(r.taxAmount === legacy, 'detailer tax unchanged even with labor tax OFF')
     ok(r.breakdown.services?.taxed === true, 'services bucket is taxed')
     ok(r.breakdown.labor === undefined, 'no labor bucket invented for a detailer')
+  }
+
+
+  console.log('\n' + '='.repeat(78))
+  console.log('5. The labor-name rule, against real LD invoice line_items')
+  console.log('='.repeat(78))
+  // invoices.line_items has no type column, so the LD invoice form splits it with
+  // isLaborItem -- the same rule line-items.ts already uses to round-trip labor. This
+  // runs that rule over REAL stored lines and prints what each one is treated as, so a
+  // line that would be mis-bucketed is visible rather than assumed.
+  const isLaborLine = (d: unknown) => /^labor/i.test(String(d ?? '').trim())
+  let shown = 0
+  for (const i of ld) {
+    const lines = Array.isArray(i.line_items) ? i.line_items : []
+    if (lines.length === 0 || shown >= 4) continue
+    shown++
+    const labor = lines.filter(l => isLaborLine(l.description)).reduce((a, l) => a + num(l.total), 0)
+    const total = lines.reduce((a, l) => a + num(l.total), 0)
+    const parts = Math.round((total - labor) * 100) / 100
+    const rate  = fractionToPercent(i.tax_rate)
+    console.log(`\n  ${i.invoice_number}  rate ${rate}%  (stored tax ${usd(num(i.tax_amount))})`)
+    for (const l of lines) {
+      console.log(`     ${isLaborLine(l.description) ? 'LABOR' : 'parts'}  ${String(l.description).slice(0, 44).padEnd(46)} ${usd(num(l.total))}`)
+    }
+    const on  = computeTax({ parts, labor }, { tax_parts: true, tax_labor: true,  tax_rate_parts: rate, tax_rate_labor: rate })
+    const off = computeTax({ parts, labor }, { tax_parts: true, tax_labor: false, tax_rate_parts: rate, tax_rate_labor: 0 })
+    console.log(`     split: parts ${usd(parts)} / labor ${usd(labor)}`)
+
+    // THE LIMIT OF THE NAME RULE, stated rather than glossed over. The work-order
+    // converter prefixes every description with "Segment N — ", so a labor line reads
+    // as "Segment 1 — diagnose and replace tcm" and /^labor/i never matches it. Such an
+    // invoice splits entirely to parts if this rule is the only thing deciding -- which
+    // is exactly why a converted invoice carries a stored tax_breakdown and every
+    // editor reads THAT in preference to re-deriving from descriptions.
+    if (i.source !== 'manual' && labor === 0) {
+      console.log(`     NOTE: source=${i.source} — the name rule finds no labor in these`)
+      console.log('           descriptions. Its real split comes from the stored')
+      console.log('           breakdown, not from this rule.')
+    }
+    console.log(`     tax with labor ON ${usd(on.taxAmount)}   OFF ${usd(off.taxAmount)}   customer saves ${usd(Math.round((on.taxAmount - off.taxAmount) * 100) / 100)}`)
+    ok(Math.abs((parts + labor) - total) < 0.02, `${i.invoice_number}: the two buckets add back to the line total`)
+    ok(off.taxAmount <= on.taxAmount, `${i.invoice_number}: turning labor tax off never increases tax`)
+  }
+  if (shown === 0) console.log('  No production LD invoice carries line_items.')
+
+  console.log('\n' + '='.repeat(78))
+  console.log('6. Merging segment breakdowns onto one invoice')
+  console.log('='.repeat(78))
+  // A work order bills several authorized segments onto ONE invoice, so the customer
+  // should see one parts figure and one labor figure, not four of each.
+  const segRate = 7.75
+  const segSettings = { tax_parts: true, tax_labor: false, tax_rate_parts: segRate, tax_rate_labor: 0 }
+  const segs = await get<{ sequence: number; parts_subtotal: string | number; labor_subtotal: string | number }>(
+    'work_order_segments?select=sequence,parts_subtotal,labor_subtotal&order=sequence',
+  )
+  const perSegment = segs.map(sg => computeTax({ parts: num(sg.parts_subtotal), labor: num(sg.labor_subtotal) }, segSettings))
+  segs.forEach((sg, idx) => console.log(`  segment ${sg.sequence}: parts ${usd(num(sg.parts_subtotal))} labor ${usd(num(sg.labor_subtotal))} -> tax ${usd(perSegment[idx].taxAmount)}`))
+  const merged = mergeBreakdowns(perSegment.map(r => r.breakdown))
+  if (merged) {
+    for (const r of taxDisplayRows(merged)) {
+      console.log(`  merged ${r.label.padEnd(9)} base ${usd(r.base).padStart(10)}  ${r.text.padEnd(26)} ${usd(r.amount)}`)
+    }
+    const sumOfParts = Math.round(perSegment.reduce((a, r) => a + r.taxAmount, 0) * 100) / 100
+    const mergedTax  = Math.round(((merged.parts?.amount ?? 0) + (merged.labor?.amount ?? 0) + (merged.services?.amount ?? 0)) * 100) / 100
+    ok(sumOfParts === mergedTax, `merged tax ${usd(mergedTax)} equals the sum of the segments ${usd(sumOfParts)}`)
+    ok(merged.labor?.taxed === false, 'merged labor bucket stays untaxed')
+  } else {
+    console.log('  No segments in production to merge.')
   }
 
   console.log('\n' + '='.repeat(78))

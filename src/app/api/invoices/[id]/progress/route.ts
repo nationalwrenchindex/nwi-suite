@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { isMissingTaxBreakdownColumn } from '@/lib/tax'
 import { createClient } from '@/lib/supabase/server'
 
 const INVOICE_SELECT = `
@@ -62,14 +63,31 @@ export async function PATCH(
   if (body.subtotal         !== undefined) updates.subtotal         = Number(body.subtotal)
   if (body.tax_amount       !== undefined) updates.tax_amount       = Number(body.tax_amount)
   if (body.total            !== undefined) updates.total            = Number(body.total)
+  // Written as sent, including an explicit null: a null means "the split could not be
+  // established", and clearing a stale breakdown is the correct outcome then.
+  if (body.tax_breakdown    !== undefined) updates.tax_breakdown    = body.tax_breakdown ?? null
 
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('invoices')
     .update(updates)
     .eq('id', id)
     .eq('user_id', user.id)
     .select(INVOICE_SELECT)
     .single()
+
+  // Migration 140 is applied by hand. A tech saving progress on an invoice must not
+  // lose the save because a display column is not there yet.
+  if (error && isMissingTaxBreakdownColumn(error)) {
+    console.error('[invoices/progress] tax_breakdown missing — run migration 140', error.message)
+    delete updates.tax_breakdown
+    ;({ data, error } = await supabase
+      .from('invoices')
+      .update(updates)
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select(INVOICE_SELECT)
+      .single())
+  }
 
   if (error || !data) {
     console.error('[PATCH /api/invoices/[id]/progress]', error)

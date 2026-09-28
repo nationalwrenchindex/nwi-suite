@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useTaxSettings } from '@/lib/use-tax-settings'
+import { computeTax } from '@/lib/tax'
 import DiagnosticTools, { type DTCJobPayload } from './DiagnosticTools'
 import type {
   QWVehicle,
@@ -1611,6 +1613,7 @@ function QuoteTab({
     return { j, key, desc, laborHrs, jParts, partsRev, laborTotal, subtotal }
   })
 
+  const taxSettings = useTaxSettings()
   const allIncludedParts = selectedJobs.flatMap(j => (partsByJob[jobKey(j)] ?? []).filter(p => p.included))
   const partsCostTotal   = allIncludedParts.reduce((s, p) => s + partCostOf(p) * p.qty, 0) // COGS
   const hasUnpricedParts = allIncludedParts.some(p => !partCosts[p.id] || partCosts[p.id] <= 0)
@@ -1622,7 +1625,14 @@ function QuoteTab({
   const totalLaborHours = jobBreakdowns.reduce((s, b) => s + b.laborHrs,   0) + extraLaborHours
   const totalLaborTotal = jobBreakdowns.reduce((s, b) => s + b.laborTotal, 0) + extraLaborTotal
   const preTax          = totalPartsRev + totalLaborTotal
-  const taxAmount       = preTax * (taxPct / 100)
+
+  // Parts revenue and labor are already tracked separately here, so the split needs
+  // no guessing. Until taxSettings resolves it is null and computeTax is skipped, so
+  // the figure on screen is never briefly wrong in the exempt direction.
+  const tax             = taxSettings
+    ? computeTax({ parts: totalPartsRev, labor: totalLaborTotal }, taxSettings)
+    : null
+  const taxAmount       = tax ? tax.taxAmount : preTax * (taxPct / 100)
   const grandTotal      = preTax + taxAmount
 
   function addExtraLabor() {
@@ -1695,6 +1705,9 @@ function QuoteTab({
           labor_total:    Math.round(totalLaborTotal * 100) / 100,
           markup_percent: markupPct,
           tax_amount:     Math.round(taxAmount * 100) / 100,
+          // What was taxed. Null until the settings fetch resolves, in which case
+          // the server stores nothing and the quote reads as pre-split.
+          tax_breakdown:  tax ? tax.breakdown : null,
           grand_total:    Math.round(grandTotal * 100) / 100,
           customer_name:  customerName,
           customer_phone: customerPhone,

@@ -3,6 +3,8 @@
 // Calls the same Gemini tech-guide system as QuickWrench, with parallel execution.
 
 import { NextResponse } from 'next/server'
+import { computeTax, isMissingTaxBreakdownColumn, withoutTaxBreakdown } from '@/lib/tax'
+import { loadTaxSettings } from '@/lib/tax-settings.server'
 import { createClient } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { hasQuickWrenchAccess } from '@/lib/subscription'
@@ -93,6 +95,10 @@ export async function POST(_req: Request, { params }: RouteContext) {
   const laborRate = pricingProfile?.default_labor_rate            != null ? Number(pricingProfile.default_labor_rate)            : 125
   const markupPct = pricingProfile?.default_parts_markup_percent  != null ? Number(pricingProfile.default_parts_markup_percent)  : 20
   const taxPct    = pricingProfile?.default_tax_percent           != null ? Number(pricingProfile.default_tax_percent)           : 8.5
+
+  // Read separately rather than widening the select above, so the pre-migration-140
+  // fallback lives in one place (loadTaxSettings) instead of being re-derived here.
+  const taxSettings = await loadTaxSettings(supabase, user.id)
 
   // Identify failed/needs_attention items, deduplicate by mapped service name
   const failedItems = ((inspection.items as RawItem[]) ?? []).filter(
@@ -224,8 +230,12 @@ export async function POST(_req: Request, { params }: RouteContext) {
 
   const laborSubtotal = r2(totalHours * laborRate)
   const preTax        = r2(partsRevenue + laborSubtotal)
-  const taxAmount     = r2(preTax * taxPct / 100)
-  const grandTotal    = r2(preTax + taxAmount)
+
+  // partsRevenue is already post-markup, so it is the parts base as the customer
+  // sees it. Labor is hours x rate. Both are known exactly here, so no inference.
+  const tax        = computeTax({ parts: partsRevenue, labor: laborSubtotal }, taxSettings)
+  const taxAmount  = tax.taxAmount
+  const grandTotal = r2(preTax + taxAmount)
 
   const completedDate = new Date().toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
@@ -237,9 +247,7 @@ export async function POST(_req: Request, { params }: RouteContext) {
     ? results[0].serviceName
     : `${results.length} Services`
 
-  const { data: quote, error: quoteErr } = await supabase
-    .from('quotes')
-    .insert({
+  const quoteRow = {
       user_id:              user.id,
       quote_number:         quoteNumber,
       customer_id:          inspection.customer_id ?? null,
@@ -258,14 +266,30 @@ export async function POST(_req: Request, { params }: RouteContext) {
       tax_percent:          taxPct,
       tax_amount:           taxAmount,
       grand_total:          grandTotal,
+      tax_breakdown:        tax.breakdown,
       notes: `Generated from 25-Point Multi-Point Inspection (${completedDate}).${
         usedFallback
           ? ' AI pricing unavailable — please add parts and pricing manually.'
           : ' Pricing provided by AI — review before sending to customer.'
       }`,
-    })
+  }
+
+  let { data: quote, error: quoteErr } = await supabase
+    .from('quotes')
+    .insert(quoteRow)
     .select('id')
     .single()
+
+  // Migration 140 is applied by hand. A quote generated from an inspection must not
+  // be lost because a display column is not there yet.
+  if (quoteErr && isMissingTaxBreakdownColumn(quoteErr)) {
+    console.error('[generate-quote] tax_breakdown missing — run migration 140')
+    ;({ data: quote, error: quoteErr } = await supabase
+      .from('quotes')
+      .insert(withoutTaxBreakdown(quoteRow))
+      .select('id')
+      .single())
+  }
 
   if (quoteErr || !quote) {
     console.error('[POST /api/inspections/[id]/generate-quote]', quoteErr)

@@ -9,13 +9,14 @@ import type { MultiJobEntry } from '@/types/financials'
 import { money } from '@/lib/format'
 import { BrandFooter } from '@/components/BrandHeader'
 import { publicDocumentMetadata } from '@/lib/public-metadata'
+import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
 
 const QUOTE_SELECT = `
   id, quote_number, status, public_token,
   job_category, job_subtype, notes, jobs,
   line_items, labor_hours, labor_rate,
   parts_subtotal, parts_markup_percent, labor_subtotal,
-  tax_percent, tax_amount, grand_total,
+  tax_percent, tax_amount, tax_breakdown, grand_total,
   service_lines, adjustments,
   view_count, viewed_at, times_sent,
   sent_at, approved_at, declined_at, quote_expires_at,
@@ -77,6 +78,10 @@ export default async function PublicQuotePage(
   const isDetailer = p?.business_type   === 'detailer'
 
   const q = quote as AnyQuote
+  // Empty for a quote written before migration 140, which then keeps its single
+  // Tax line -- a quote the customer already received must not start reading
+  // differently.
+  const quoteTaxRows = taxDisplayRows(parseBreakdown(q.tax_breakdown))
 
   const customerName = q.customer
     ? `${q.customer.first_name ?? ''} ${q.customer.last_name ?? ''}`.trim()
@@ -324,7 +329,19 @@ export default async function PublicQuotePage(
               )}
             </>
           )}
-          {q.tax_amount != null && q.tax_amount > 0 && (
+          {/* What was taxed, including what was not, so a customer can see that labor
+              is not taxable instead of wondering why the tax looks low. Quotes written
+              before migration 140 have no breakdown and keep their single Tax line. */}
+          {quoteTaxRows.length > 0 ? (
+            quoteTaxRows.map(r => (
+              <div key={r.category} className="flex justify-between text-sm">
+                <span className="text-white/50">{r.text}</span>
+                <span className={r.taxed ? 'text-white/70' : 'text-white/40'}>
+                  {r.taxed ? fmt(r.amount) : '—'}
+                </span>
+              </div>
+            ))
+          ) : q.tax_amount != null && q.tax_amount > 0 && (
             <div className="flex justify-between text-sm border-t border-white/10 pt-2">
               <span className="text-white/50">Tax{q.tax_percent ? ` (${q.tax_percent}%)` : ''}</span>
               <span className="text-white/70">{fmt(q.tax_amount)}</span>

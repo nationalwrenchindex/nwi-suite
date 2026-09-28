@@ -13,6 +13,7 @@ import { PARENTS } from '@/lib/segments/parent'
 import { SEGMENT_SELECT, shapeSegments } from '@/lib/segments/select'
 import { isBillable } from '@/types/segments'
 import { invoiceFromSegments, jobNotesFromSegments } from '@/lib/segments/invoice'
+import { parseBreakdown } from '@/lib/tax'
 
 export const dynamic = 'force-dynamic'
 
@@ -113,6 +114,9 @@ export async function POST(
         tax_amount: Number(wo.tax_amount ?? 0),
         tax_rate:   Number(wo.tax_percent ?? 0) / 100,
         total:      Number(wo.grand_total ?? 0),
+        // A parent-priced work order carries its own breakdown if it was priced after
+        // migration 140, and null otherwise.
+        tax_breakdown: parseBreakdown((wo as { tax_breakdown?: unknown }).tax_breakdown),
       }
 
   const invoiceInsert = {
@@ -125,6 +129,10 @@ export async function POST(
     subtotal:         money.subtotal,
     tax_rate:         money.tax_rate,
     tax_amount:       money.tax_amount,
+    // Carried forward from the segments rather than recomputed: the customer already
+    // approved these figures, and re-deriving them here is how two screens start
+    // disagreeing about one job.
+    tax_breakdown:    money.tax_breakdown,
     discount_amount:  0,
     total:            money.total,
     status:           'draft',

@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { isMissingTaxBreakdownColumn, withoutTaxBreakdown } from '@/lib/tax'
 import { createClient } from '@/lib/supabase/server'
 
 const INVOICE_SELECT = `
@@ -81,9 +82,7 @@ export async function POST(request: NextRequest) {
 
   const today = new Date().toISOString().slice(0, 10)
 
-  const { data, error } = await supabase
-    .from('invoices')
-    .insert({
+  const invoiceRow = {
       user_id:         user.id,
       invoice_number:  body.invoice_number,
       po_number:       (body.po_number as string | null)?.trim() || null,
@@ -95,6 +94,8 @@ export async function POST(request: NextRequest) {
       subtotal:        Number(body.subtotal        ?? 0),
       tax_rate:        Number(body.tax_rate        ?? 0),
       tax_amount:      Number(body.tax_amount      ?? 0),
+      // What was taxed. Null reads as "no split known", never as "nothing taxed".
+      tax_breakdown:   body.tax_breakdown ?? null,
       discount_amount: Number(body.discount_amount ?? 0),
       total:           Number(body.total),
       status:           body.status          ?? 'draft',
@@ -104,9 +105,24 @@ export async function POST(request: NextRequest) {
       notes:            body.notes           ?? null,
       terms:            body.terms           ?? null,
       invoice_status:   body.invoice_status  ?? 'in_progress',
-    })
+  }
+
+  let { data, error } = await supabase
+    .from('invoices')
+    .insert(invoiceRow)
     .select(INVOICE_SELECT)
     .single()
+
+  // Migration 140 is applied by hand. An invoice a tech just typed must not be lost
+  // because a display column is not there yet -- tax_amount and total are complete.
+  if (error && isMissingTaxBreakdownColumn(error)) {
+    console.error('[POST /api/invoices] tax_breakdown missing — run migration 140', error.message)
+    ;({ data, error } = await supabase
+      .from('invoices')
+      .insert(withoutTaxBreakdown(invoiceRow))
+      .select(INVOICE_SELECT)
+      .single())
+  }
 
   if (error) {
     console.error('[POST /api/invoices]', error)

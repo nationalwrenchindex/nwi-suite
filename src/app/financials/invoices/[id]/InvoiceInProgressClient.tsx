@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { useTaxSettings } from '@/lib/use-tax-settings'
+import { computeTax, parseBreakdown, taxDisplayRows } from '@/lib/tax'
 import { useRouter } from 'next/navigation'
 import type { Invoice, ShopSupplyItem, AdditionalPartItem, AdditionalLaborItem, ServiceLine, Adjustment, AdjustmentPreset } from '@/types/financials'
 import { money } from '@/lib/format'
@@ -528,6 +530,7 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
 
   // ── Derived values ─────────────────────────────────────────────────────────
 
+  const taxSettings = useTaxSettings()
   const sq          = invoice.source_quote
   const markupPct   = sq?.parts_markup_percent ?? 0
   const taxRate     = invoice.tax_rate          // decimal, e.g. 0.0875
@@ -568,7 +571,41 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
   const newSubtotal  = isDetailer
     ? round2(serviceLinesTotal + adjLinesTotal + shopSuppliesTotal + additionalPartsTotal + additionalLaborTotal)
     : round2(originalSubtotal + shopSuppliesTotal + additionalPartsTotal + additionalLaborTotal)
-  const newTaxAmount = round2(newSubtotal * taxRate)
+  // ── Splitting the tax on an in-progress invoice ────────────────────────────
+  // invoice.subtotal is ONE BLENDED NUMBER: parts, markup and labor are already
+  // added together and there is no column that says how much of it was which. So the
+  // baseline split has to come from somewhere it was recorded:
+  //
+  //   1. the invoice's own stored breakdown, if it was written after migration 140
+  //   2. the source quote's parts_subtotal / labor_subtotal, if it came from a quote
+  //
+  // and if neither is available the split is simply unknown. It is only trusted when
+  // the two components actually add back up to the subtotal -- without that check a
+  // stale or partial baseline would silently tax the wrong amounts, which is worse
+  // than not splitting at all.
+  //
+  // Additions are unambiguous: shop supplies and additional parts are parts,
+  // additional labor is labor.
+  const storedTax  = parseBreakdown(invoice.tax_breakdown)
+  const baseParts  = storedTax?.parts?.base ?? (sq ? quotedPartsSubtotal : null)
+  const baseLabor  = storedTax?.labor?.base ?? (sq ? quotedLaborSubtotal : null)
+  const baselineReconciles =
+    baseParts != null && baseLabor != null &&
+    Math.abs((baseParts + baseLabor) - Number(originalSubtotal ?? 0)) < 0.02
+
+  // Detailers are deliberately excluded: their service lines are neither parts nor
+  // separately-stated repair labor, and they keep taxing the whole subtotal.
+  const tax = !isDetailer && baselineReconciles && taxSettings
+    ? computeTax(
+        {
+          parts: (baseParts ?? 0) + shopSuppliesTotal + additionalPartsTotal,
+          labor: (baseLabor ?? 0) + additionalLaborTotal,
+        },
+        taxSettings,
+      )
+    : null
+
+  const newTaxAmount = tax ? tax.taxAmount : round2(newSubtotal * taxRate)
   const grandTotal   = round2(newSubtotal + newTaxAmount)
 
   // ── Shop supply helpers ────────────────────────────────────────────────────
@@ -660,6 +697,10 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
           ...(isDetailer ? { service_lines: serviceLines, adjustments: adjLines } : {}),
           subtotal:         newSubtotal,
           tax_amount:       newTaxAmount,
+          // Null when the split could not be established -- see the derivation above.
+          // A null here means the invoice keeps reading as pre-split rather than
+          // claiming nothing was taxed.
+          tax_breakdown:    tax ? tax.breakdown : null,
           total:            grandTotal,
         }),
       })
@@ -695,6 +736,10 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
           ...(isDetailer ? { service_lines: serviceLines, adjustments: adjLines } : {}),
           subtotal:         newSubtotal,
           tax_amount:       newTaxAmount,
+          // Null when the split could not be established -- see the derivation above.
+          // A null here means the invoice keeps reading as pre-split rather than
+          // claiming nothing was taxed.
+          tax_breakdown:    tax ? tax.breakdown : null,
           total:            grandTotal,
         }),
       })
@@ -1341,6 +1386,13 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
               <span className="text-white/60">{fmt(newTaxAmount)}</span>
             </div>
           )}
+          {/* One row per category when the split is known, including the exempt one. */}
+          {tax && taxDisplayRows(tax.breakdown).map(r => (
+            <div key={r.category} className="flex justify-between text-xs">
+              <span className="text-white/35">{r.text}</span>
+              <span className="text-white/50">{r.taxed ? fmt(r.amount) : '—'}</span>
+            </div>
+          ))}
           <div className="flex justify-between items-baseline border-t border-white/8 pt-3 mt-1">
             <span className="font-condensed font-bold text-white text-lg tracking-wide">GRAND TOTAL</span>
             <span className="font-condensed font-bold text-orange text-4xl">{fmt(grandTotal)}</span>

@@ -146,6 +146,9 @@ export interface QuoteSaveRequest {
   labor_total:   number
   markup_percent: number
   tax_amount:    number
+  /** What was taxed, from src/lib/tax. Null when the settings fetch had not
+   *  resolved, in which case the quote stores no split. */
+  tax_breakdown?: unknown
   grand_total:   number
   customer_name: string
   customer_phone: string

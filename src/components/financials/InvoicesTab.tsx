@@ -1,6 +1,9 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useTaxSettings } from '@/lib/use-tax-settings'
+import { computeTax, taxDisplayRows } from '@/lib/tax'
+import { isLaborItem } from '@/components/shared/line-items'
 import { useRouter } from 'next/navigation'
 import type { Invoice, InvoiceStatus, InvoiceProgressStatus, LineItem, PaymentMethod } from '@/types/financials'
 import { money } from '@/lib/format'
@@ -167,6 +170,7 @@ export default function InvoicesTab() {
   }, [])
 
   // ── New invoice form state ──
+  const taxSettings = useTaxSettings()
   const [form, setForm] = useState(() => ({
     invoice_number:  genInvoiceNumber(),
     po_number:       '',
@@ -183,8 +187,25 @@ export default function InvoicesTab() {
 
   // ── Computed totals ──
   const subtotal = form.line_items.reduce((s, l) => s + l.total, 0)
-  const taxAmt   = round2(subtotal * (form.tax_rate / 100))
-  const total    = round2(Math.max(0, subtotal + taxAmt - form.discount_amount))
+
+  // SPLITTING PARTS FROM LABOR ON A FREE-TYPED INVOICE.
+  // invoices.line_items is {description, quantity, unit_price, total} -- there is no
+  // type column to read. isLaborItem is the convention LD already uses to round-trip
+  // labor in and out of stored line_items (see components/shared/line-items), so it is
+  // the same rule applied here rather than a new one invented for tax.
+  //
+  // Consequence worth knowing: a labor line the tech titles something else -- "Shop
+  // time", "Diag" -- reads as parts and gets taxed as parts. That is the existing
+  // behaviour of every other reader of this column, not a regression, but it is why
+  // the label under the field says to start a labor line with the word Labor.
+  const laborBase = round2(form.line_items.filter(l => isLaborItem(l)).reduce((s, l) => s + l.total, 0))
+  const partsBase = round2(subtotal - laborBase)
+
+  const tax    = taxSettings
+    ? computeTax({ parts: partsBase, labor: laborBase }, taxSettings)
+    : null
+  const taxAmt = tax ? tax.taxAmount : round2(subtotal * (form.tax_rate / 100))
+  const total  = round2(Math.max(0, subtotal + taxAmt - form.discount_amount))
 
   // ── Fetch invoices ──
   const fetchInvoices = useCallback(async (invoiceStatus: string | InvoiceProgressStatus | 'active', source: string) => {
@@ -253,8 +274,11 @@ export default function InvoicesTab() {
           customer_id:     form.customer_id || null,
           line_items:      form.line_items,
           subtotal,
+          // A FRACTION, not a percent. invoices.tax_rate is numeric(6,4) and the only
+          // fraction column in the system; see the header of src/lib/tax.
           tax_rate:        form.tax_rate / 100,
           tax_amount:      taxAmt,
+          tax_breakdown:   tax ? tax.breakdown : null,
           discount_amount: form.discount_amount,
           total,
           status:          form.status,
@@ -518,6 +542,20 @@ export default function InvoicesTab() {
                 <span className="text-white/40 text-xs">%</span>
                 <span className="text-white w-24 text-right">{fmt(taxAmt)}</span>
               </div>
+              {/* What is being taxed, including what is not. Also the only place the
+                  tech is told how a labor line is recognised on this form. */}
+              {tax && taxDisplayRows(tax.breakdown).map(r => (
+                <div key={r.category} className="flex items-center gap-4 text-xs">
+                  <span className="text-white/30 flex-1">{r.text}</span>
+                  <span className="text-white/50 w-24 text-right">{r.taxed ? fmt(r.amount) : '—'}</span>
+                </div>
+              ))}
+              {tax && !tax.breakdown.labor && (
+                <p className="text-white/25 text-[11px] leading-relaxed">
+                  Start a line with the word &ldquo;Labor&rdquo; for it to be treated as
+                  labor for tax. Anything else counts as parts.
+                </p>
+              )}
               <div className="flex items-center gap-4 text-sm">
                 <span className="text-white/40">Discount</span>
                 <input

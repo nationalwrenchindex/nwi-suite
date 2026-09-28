@@ -154,8 +154,13 @@ export interface Invoice {
   due_date: string | null
   line_items: LineItem[]
   subtotal: number
+  /** A FRACTION (0.0775), not a percent -- the only one in the system.
+   *  See the header of src/lib/tax. */
   tax_rate: number
   tax_amount: number
+  /** jsonb, migration 140: what this invoice actually taxed. NULL on anything
+   *  written before that shipped, which must read as "no split known". */
+  tax_breakdown?: unknown
   discount_amount: number
   total: number
   status: InvoiceStatus

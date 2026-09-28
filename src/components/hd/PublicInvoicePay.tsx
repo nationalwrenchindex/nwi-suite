@@ -10,6 +10,7 @@
 // shop is paying for the invoice to look like theirs.
 
 import type { PublicInvoiceBranding } from '@/lib/hd/invoice-token'
+import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
 import { termsDisplay, formatDueDate } from '@/lib/hd/payment-terms'
 import { money } from '@/lib/format'
 
@@ -82,13 +83,23 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
     inv.zip,
   ].filter(Boolean).join(', ')
 
+  // Empty on a pre-140 invoice, which then keeps the single Tax line it was sent with.
+  const payTaxRows = taxDisplayRows(parseBreakdown((inv as { tax_breakdown?: unknown }).tax_breakdown))
+
   const summaryRows = [
     ...(Number(inv.subtotal_labor)  > 0 ? [{ label: 'Labor Subtotal',  val: inv.subtotal_labor  }] : []),
     ...(Number(inv.subtotal_parts)  > 0 ? [{ label: 'Parts Subtotal',  val: inv.subtotal_parts  }] : []),
     ...(Number(inv.diagnostic_fee)  > 0 ? [{ label: 'Diagnostic Fee',  val: inv.diagnostic_fee  }] : []),
     ...(Number(inv.road_call_fee)   > 0 ? [{ label: 'Road Call Fee',   val: inv.road_call_fee   }] : []),
     // tax_rate is stored as a percent (7.5 means 7.5%), not a fraction.
-    ...(Number(inv.tax_amount)      > 0 ? [{ label: `Tax (${inv.tax_rate}%)`, val: inv.tax_amount }] : []),
+    //
+    // When the invoice carries a breakdown, each category becomes its own row --
+    // including an untaxed one, which is how the customer can see that labor was not
+    // taxed rather than having to work it out from a total. Pre-140 invoices have no
+    // breakdown and keep the single Tax line they were sent with.
+    ...(payTaxRows.length > 0
+      ? payTaxRows.map(r => ({ label: r.text, val: r.taxed ? r.amount : 0 }))
+      : Number(inv.tax_amount) > 0 ? [{ label: `Tax (${inv.tax_rate}%)`, val: inv.tax_amount }] : []),
   ]
 
   return (

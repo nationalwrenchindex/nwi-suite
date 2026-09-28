@@ -152,7 +152,7 @@ export async function POST(req: NextRequest) {
   const {
     vehicle, job, jobs, extra_labor,
     parts, parts_total, parts_cost_total, labor_hours, labor_rate, labor_total,
-    markup_percent, tax_amount, grand_total,
+    markup_percent, tax_amount, grand_total, tax_breakdown,
     customer_name, customer_phone,
     send_sms, save_quote,
   } = body
@@ -325,6 +325,10 @@ export async function POST(req: NextRequest) {
           : 0,
         tax_amount:           Math.round(tax_amount * 100) / 100,
         grand_total:          Math.round(grand_total * 100) / 100,
+        // Passed through from the client, which is where the split is known. Null
+        // when the settings fetch had not resolved, and a null reads as pre-split
+        // rather than as "nothing was taxed".
+        tax_breakdown:        tax_breakdown ?? null,
         notes,
         source:               'quickwrench',
         sent_at:              send_sms ? now : null,

@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
 import { termsDisplay, formatDueDate } from '@/lib/hd/payment-terms'
@@ -105,6 +106,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       url:    `${origin}/hd/aerial-inspections/${aerialInspection.id}`,
     },
   ].filter(Boolean) as { title: string; detail: string; url: string }[]
+
+  // Empty on a pre-140 invoice, which keeps the single Tax line it was printed with.
+  const pdfTaxRows = taxDisplayRows(parseBreakdown((inv as { tax_breakdown?: unknown }).tax_breakdown))
 
   const reportsBlock = attachedReports.length ? `
   <div class="notes-box">
@@ -271,7 +275,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       <div class="totals-row"><span>Parts Subtotal</span><span>${fmt(inv.subtotal_parts)}</span></div>
       ${Number(inv.diagnostic_fee) > 0 ? `<div class="totals-row"><span>Diagnostic Fee</span><span>${fmt(inv.diagnostic_fee)}</span></div>` : ''}
       ${Number(inv.road_call_fee) > 0 ? `<div class="totals-row"><span>Road Call Fee</span><span>${fmt(inv.road_call_fee)}</span></div>` : ''}
-      ${Number(inv.tax_amount) > 0 ? `<div class="totals-row divider"><span>Tax (${inv.tax_rate}%)</span><span>${fmt(inv.tax_amount)}</span></div>` : ''}
+      ${pdfTaxRows.length > 0
+        ? pdfTaxRows.map((r, i) => `<div class="totals-row${i === 0 ? ' divider' : ''}"><span>${r.text}</span><span>${r.taxed ? fmt(r.amount) : '—'}</span></div>`).join('')
+        : Number(inv.tax_amount) > 0 ? `<div class="totals-row divider"><span>Tax (${inv.tax_rate}%)</span><span>${fmt(inv.tax_amount)}</span></div>` : ''}
       <div class="totals-row total"><span>TOTAL</span><span>${fmt(inv.total)}</span></div>
     </div>
   </div>

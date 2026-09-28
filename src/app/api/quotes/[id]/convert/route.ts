@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { parseBreakdown } from '@/lib/tax'
 import { createClient } from '@/lib/supabase/server'
 
 const INVOICE_SELECT = `
@@ -89,6 +90,8 @@ export async function POST(
     subtotal:        Number(quote.parts_subtotal ?? 0) * (1 + Number(quote.parts_markup_percent ?? 0) / 100) + Number(quote.labor_subtotal ?? 0),
     tax_rate:        Number(quote.tax_percent ?? 0) / 100,
     tax_amount:      Number(quote.tax_amount   ?? 0),
+    // The customer approved this split on the quote; the invoice bills the same one.
+    tax_breakdown:   parseBreakdown((quote as { tax_breakdown?: unknown }).tax_breakdown),
     discount_amount: 0,
     total:           Number(quote.grand_total  ?? 0),
     status:          'draft',

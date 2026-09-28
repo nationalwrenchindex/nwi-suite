@@ -189,6 +189,38 @@ export function parseBreakdown(value: unknown): TaxBreakdown | null {
 }
 
 /**
+ * Combine several documents' breakdowns into one -- a work order billing four
+ * authorized segments onto a single invoice, for instance.
+ *
+ * Bases and amounts add. The RATE is only carried across when every contributing
+ * bucket agrees on it; a mixed set reports 0 rather than pretending one of them
+ * described the whole invoice. A category is `taxed` if ANY contributor taxed it,
+ * because a customer who was charged tax on some of their parts was charged tax on
+ * parts.
+ *
+ * Returns null when nothing had a breakdown, so the caller stores null and the
+ * document reads as pre-split rather than as "nothing was taxed".
+ */
+export function mergeBreakdowns(parts: Array<TaxBreakdown | null | undefined>): TaxBreakdown | null {
+  const present = parts.filter((b): b is TaxBreakdown => !!b)
+  if (present.length === 0) return null
+
+  const out: TaxBreakdown = { version: 1 }
+  for (const key of TAX_CATEGORY_ORDER) {
+    const buckets = present.map(b => b[key]).filter((b): b is TaxBucket => !!b)
+    if (buckets.length === 0) continue
+    const rates = [...new Set(buckets.filter(b => b.taxed).map(b => b.rate))]
+    out[key] = {
+      base:   round2(buckets.reduce((s, b) => s + b.base, 0)),
+      rate:   rates.length === 1 ? rates[0] : 0,
+      amount: round2(buckets.reduce((s, b) => s + b.amount, 0)),
+      taxed:  buckets.some(b => b.taxed),
+    }
+  }
+  return out
+}
+
+/**
  * True when a write failed only because migration 140 has not been applied yet.
  *
  * Migrations here are applied by hand, and a preview deploy runs against the same

@@ -158,6 +158,13 @@ function buildSplits(inv: QBInvoice): QBSplit[] {
   }
 
   if (num(inv.tax_amount) > 0) {
+    // DELIBERATELY ONE LINE, not split by parts vs labor.
+    //
+    // Sales tax is a single liability account in QuickBooks. Splitting this into two
+    // credits would not give a more accurate book, it would give a wrong one -- and it
+    // would change a file format that an accountant already imports. The parts/labor
+    // split is a customer-facing and reporting concern; /financials tax summary breaks
+    // it out, and this stays the total that has to reconcile to the liability.
     splits.push({ account: ACCT_TAX, description: 'Sales Tax', item: 'Sales Tax', quantity: 1, amount: num(inv.tax_amount) })
   }
 
