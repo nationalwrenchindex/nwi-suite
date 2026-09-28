@@ -11,6 +11,8 @@ import { hasWorkOrders } from '@/lib/work-orders'
 import { PARENTS } from '@/lib/segments/parent'
 import { SEGMENT_SELECT, shapeSegments } from '@/lib/segments/select'
 import { normalizeSegmentLines, priceSegment } from '@/components/shared/segments'
+import { loadTaxSettings } from '@/lib/tax-settings.server'
+import { isMissingTaxBreakdownColumn } from '@/lib/tax'
 
 export const dynamic = 'force-dynamic'
 
@@ -78,7 +80,7 @@ export async function PATCH(
     const taxPct = 'tax_percent' in body
       ? Number(body.tax_percent ?? 0)
       : Number(existing.tax_percent ?? 0)
-    Object.assign(updates, priceSegment(lines, taxPct))
+    Object.assign(updates, priceSegment(lines, taxPct, await loadTaxSettings(supabase, user.id)))
   }
 
   if (Object.keys(updates).length === 0) {

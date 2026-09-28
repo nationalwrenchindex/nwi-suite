@@ -15,6 +15,13 @@
 
 import { useState } from 'react'
 import { money } from '@/lib/format'
+import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
+
+/** Tax rows for one segment; empty when it was priced before migration 140, in
+ *  which case the caller falls back to the single stored tax_amount. */
+function taxRowsFor(seg: { tax_breakdown?: unknown }) {
+  return taxDisplayRows(parseBreakdown(seg.tax_breakdown))
+}
 import { rollupSegments } from './segments'
 import { surfaceFor, type ProductVariant } from './segment-theme'
 import {
@@ -192,7 +199,16 @@ export default function SegmentApprovalClient({
 
             <div className="pt-1 space-y-2" style={{ borderTop: `1px solid ${s.border}` }}>
               <div className="pt-2"><LineSummary lines={lines} variant={variant} /></div>
-              {Number(seg.tax_amount ?? 0) > 0 && (
+              {/* Per-segment tax, broken out when the segment carries a breakdown.
+                  A customer approving a job should see that labor is not taxable. */}
+              {taxRowsFor(seg).length > 0 ? (
+                taxRowsFor(seg).map(r => (
+                  <div key={r.category} className="flex justify-between text-xs">
+                    <span style={s.faint}>{r.text}</span>
+                    <span style={r.taxed ? s.muted : s.faint}>{r.taxed ? money(r.amount) : '—'}</span>
+                  </div>
+                ))
+              ) : Number(seg.tax_amount ?? 0) > 0 && (
                 <div className="flex items-center justify-between text-sm">
                   <span style={s.faint}>Tax</span>
                   <span style={s.muted}>{money(seg.tax_amount)}</span>

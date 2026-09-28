@@ -13,6 +13,7 @@ import {
   type WorkOrderLineInput,
 } from '@/lib/shared/work-order-lines'
 import { round2 } from '@/lib/shared/markup'
+import { computeTax, type TaxBreakdown, type TaxSettings } from '@/lib/tax'
 import {
   isBillable, SEGMENT_STATUSES,
   type SegmentLine, type SegmentRollup, type SegmentStatus, type WorkOrderSegment,
@@ -29,6 +30,8 @@ export interface SegmentMoney {
   tax_percent:          number
   tax_amount:           number
   grand_total:          number
+  /** What was taxed. Null when priced without tax settings -- see priceSegment. */
+  tax_breakdown:        TaxBreakdown | null
 }
 
 /**
@@ -41,7 +44,16 @@ export interface SegmentMoney {
  * re-applying a record-level percentage on top would double-charge it. It is stored
  * only so a reader can see what rate the lines were priced at when they are uniform.
  */
-export function priceSegment(lines: SegmentLine[], taxPercent: number): SegmentMoney {
+export function priceSegment(
+  lines: SegmentLine[],
+  taxPercent: number,
+  /**
+   * The shop's parts/labor tax settings. OPTIONAL: without it this prices exactly
+   * as it always did, one rate over parts plus labor, so a caller that has not been
+   * migrated cannot quietly change a segment the customer already approved.
+   */
+  taxSettings?: TaxSettings | null,
+): SegmentMoney {
   const totals = sumLines(lines)
 
   const laborHours = round2(
@@ -60,9 +72,15 @@ export function priceSegment(lines: SegmentLine[], taxPercent: number): SegmentM
   )]
   const markupPercent = markups.length === 1 ? markups[0] : null
 
-  // Tax applies to parts and labour both, matching the LD quote and the HD invoice.
-  const taxable   = totals.parts + totals.labor
-  const taxAmount = round2(taxable * ((taxPercent || 0) / 100))
+  const taxable = totals.parts + totals.labor
+
+  // A segment knows its own parts and labor from the line types, so the split needs
+  // no guessing here. Without settings, tax stays on the whole taxable amount, which
+  // is what every existing segment was priced at.
+  const tax = taxSettings
+    ? computeTax({ parts: totals.parts, labor: totals.labor }, taxSettings)
+    : null
+  const taxAmount = tax ? tax.taxAmount : round2(taxable * ((taxPercent || 0) / 100))
 
   return {
     line_items:           lines,
@@ -74,6 +92,7 @@ export function priceSegment(lines: SegmentLine[], taxPercent: number): SegmentM
     tax_percent:          taxPercent || 0,
     tax_amount:           taxAmount,
     grand_total:          round2(taxable + taxAmount),
+    tax_breakdown:        tax ? tax.breakdown : null,
   }
 }
 

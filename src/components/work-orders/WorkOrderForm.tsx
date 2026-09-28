@@ -8,6 +8,8 @@
 // editor uses, so a work order and the quote it came from agree to the cent.
 
 import { useState } from 'react'
+import { useTaxSettings } from '@/lib/use-tax-settings'
+import { taxDisplayRows } from '@/lib/tax'
 import { useRouter } from 'next/navigation'
 import LineItemEditor from '@/components/shared/LineItemEditor'
 import {
@@ -77,6 +79,7 @@ export default function WorkOrderForm({
   const [laborRate,  setLaborRate]  = useState(isNew ? 0 : (workOrder?.labor_rate  ?? defaults.labor_rate))
   const [markupPct,  setMarkupPct]  = useState(isNew ? 0 : initialMarkup)
   const [taxPct,     setTaxPct]     = useState(isNew ? 0 : (workOrder?.tax_percent ?? defaults.tax_percent))
+  const taxSettings = useTaxSettings()
 
   /** Seeds the shop's defaults at the moment "Single job" is chosen, and clears them
    *  again if the tech switches to segments before saving. */
@@ -101,7 +104,10 @@ export default function WorkOrderForm({
   const [err,      setErr]      = useState<string | null>(null)
   const [msg,      setMsg]      = useState<string | null>(null)
 
-  const inputs = { items, markupPct, laborHours, laborRate, taxPct }
+  // Parts and labor are taxed per the shop's settings. Until the fetch resolves,
+  // taxSettings is null and computeTotals falls back to the old single-rate maths,
+  // so the figures on screen are never momentarily wrong in the exempt direction.
+  const inputs = { items, markupPct, laborHours, laborRate, taxPct, taxSettings }
   const totals = computeTotals(inputs)
   const status = (workOrder?.status ?? 'open') as WorkOrderStatus
   const next   = NEXT_STATUS[status]
@@ -332,7 +338,13 @@ export default function WorkOrderForm({
           <Row label="Parts Base"                    value={fmt(totals.partsBase)} />
           <Row label={`Parts Markup (${markupPct}%)`} value={fmt(totals.markupAmt)} dim />
           {totals.laborSubtotal > 0 && <Row label="Labor" value={fmt(totals.laborSubtotal)} />}
-          <Row label={`Tax (${taxPct}%)`}             value={fmt(totals.taxAmount)} dim />
+          {/* One row per category when the split is known, including the exempt one,
+              so a tech sees "Labor — not taxable" before a customer does. */}
+          {totals.taxBreakdown
+            ? taxDisplayRows(totals.taxBreakdown).map(r => (
+                <Row key={r.category} label={r.text} value={r.taxed ? fmt(r.amount) : '—'} dim />
+              ))
+            : <Row label={`Tax (${taxPct}%)`} value={fmt(totals.taxAmount)} dim />}
           <div className="flex items-center justify-between pt-2">
             <span className="text-white/60 text-sm">Total</span>
             <span className="font-condensed font-bold text-2xl text-orange">{fmt(totals.grandTotal)}</span>

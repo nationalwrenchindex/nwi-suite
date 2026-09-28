@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useTaxSettings } from '@/lib/use-tax-settings'
 import type { Quote, QuoteStatus, LineItem, ServiceLine, Adjustment, AdjustmentPreset } from '@/types/financials'
 import LineItemEditor, { LineItemTable } from '@/components/shared/LineItemEditor'
 import {
@@ -605,8 +606,15 @@ function QuoteDetailModal({
   // Parts + labour maths is shared with work orders (components/shared/line-items).
   // The detailer model bills services and adjustments instead of parts, so it keeps
   // its own subtotal and simply feeds zeroed parts through the same tax step.
+  const taxSettings = useTaxSettings()
   const lineInputs = { items, markupPct, laborHours, laborRate, taxPct }
-  const t                   = computeTotals(isDetailer ? { ...lineInputs, items: [], laborHours: 0, laborRate: 0 } : lineInputs)
+  // DETAILERS ARE DELIBERATELY UNCHANGED: no taxSettings is passed on that branch, so
+  // computeTotals keeps applying one rate to the whole subtotal and a detailer quote
+  // comes out to the same cent it always did. Service lines are not parts and are not
+  // separately-stated repair labor, and that question is not settled here.
+  const t                   = computeTotals(isDetailer
+    ? { ...lineInputs, items: [], laborHours: 0, laborRate: 0 }
+    : { ...lineInputs, taxSettings })
   const partsBase           = t.partsBase
   const markupAmt           = t.markupAmt
   const partsTotal          = t.partsTotal

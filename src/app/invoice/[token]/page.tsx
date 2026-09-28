@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation'
 import { createServiceClient } from '@/lib/supabase/service'
 import { BrandFooter } from '@/components/BrandHeader'
 import { BRANDING_SELECT, resolveBranding, type BrandingSource } from '@/lib/branding'
+import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
 import { publicDocumentMetadata } from '@/lib/public-metadata'
 import InvoiceViewClient from './InvoiceViewClient'
 import InvoiceApprovalClient from './InvoiceApprovalClient'
@@ -107,6 +108,11 @@ export default async function PublicInvoicePage(
   })
 
   const inv = invoice as AnyInvoice
+  // NULL for anything written before migration 140 -- those keep the single Tax line
+  // they were sent with, because an invoice the customer already received must not
+  // start describing itself differently.
+  const taxBreakdown = parseBreakdown(inv.tax_breakdown)
+  const taxRows      = taxDisplayRows(taxBreakdown)
 
   const customerName = inv.customer
     ? `${inv.customer.first_name ?? ''} ${inv.customer.last_name ?? ''}`.trim()
@@ -418,7 +424,25 @@ export default async function PublicInvoicePage(
             <span className="text-white/60">Subtotal</span>
             <span className="text-white">{fmt(displaySubtotal)}</span>
           </div>
-          {displayTaxAmt > 0 && (
+          {/* WHAT WAS TAXED, including what was not.
+              A customer who is not charged tax on labor should be able to see that
+              stated, rather than being left to work out why the tax looks low -- and
+              a separately-stated exemption is the thing that makes it an exemption.
+
+              taxBreakdown is NULL on any invoice written before migration 140. Those
+              fall through to the single Tax line they were sent with: an invoice the
+              customer has already received must not start describing itself
+              differently. */}
+          {taxBreakdown ? (
+            taxRows.map(r => (
+              <div key={r.category} className="flex justify-between text-sm border-t border-white/10 pt-2">
+                <span className="text-white/50">{r.text}</span>
+                <span className={r.taxed ? 'text-white/70' : 'text-white/40'}>
+                  {r.taxed ? fmt(r.amount) : '—'}
+                </span>
+              </div>
+            ))
+          ) : displayTaxAmt > 0 ? (
             <div className="flex justify-between text-sm border-t border-white/10 pt-2">
               <span className="text-white/50">
                 Tax{detailerTaxRate > 0
@@ -427,7 +451,7 @@ export default async function PublicInvoicePage(
               </span>
               <span className="text-white/70">{fmt(displayTaxAmt)}</span>
             </div>
-          )}
+          ) : null}
           <div className="flex justify-between items-baseline border-t border-white/15 pt-3 mt-1">
             <span className="text-white font-bold text-base uppercase tracking-wide">Total Due</span>
             <span className="text-[#FF6600] font-bold text-3xl">{fmt(displayTotal)}</span>

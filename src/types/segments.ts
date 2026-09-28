@@ -64,6 +64,8 @@ export interface SegmentOption {
   tax_percent:          number | null
   tax_amount:           number | null
   grand_total:          number | null
+  /** jsonb, migration 140. NULL on anything priced before that shipped. */
+  tax_breakdown:        unknown
   created_at:           string
   updated_at:           string
 }
@@ -91,6 +93,8 @@ export interface WorkOrderSegment {
   tax_percent:          number | null
   tax_amount:           number | null
   grand_total:          number | null
+  /** jsonb, migration 140. NULL on anything priced before that shipped. */
+  tax_breakdown:        unknown
 
   authorized_at:        string | null
   declined_at:          string | null

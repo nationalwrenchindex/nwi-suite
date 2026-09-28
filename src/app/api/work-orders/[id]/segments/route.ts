@@ -10,6 +10,8 @@ import { hasWorkOrders } from '@/lib/work-orders'
 import { guardCanAddSegment, parentExists, PARENTS } from '@/lib/segments/parent'
 import { SEGMENT_SELECT, shapeSegments } from '@/lib/segments/select'
 import { normalizeSegmentLines, priceSegment, rollupSegments } from '@/components/shared/segments'
+import { loadTaxSettings } from '@/lib/tax-settings.server'
+import { isMissingTaxBreakdownColumn, withoutTaxBreakdown } from '@/lib/tax'
 
 export const dynamic = 'force-dynamic'
 
@@ -86,7 +88,10 @@ export async function POST(
   const sequence = Number(last?.sequence ?? 0) + 1
 
   const lines = normalizeSegmentLines(body.line_items)
-  const money = priceSegment(lines, Number(body.tax_percent ?? 0))
+  // Priced with the shop's parts/labor settings, on the server, so the split the
+  // customer approves is the split that was actually stored.
+  const taxSettings = await loadTaxSettings(supabase, user.id)
+  const money = priceSegment(lines, Number(body.tax_percent ?? 0), taxSettings)
   const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : null)
 
   // SEGMENT 1 INHERITS THE JOB DESCRIPTION as its complaint. The tech already typed
@@ -108,20 +113,33 @@ export async function POST(
     complaint = str(parent?.job_description)
   }
 
-  const { data, error } = await supabase
+  const row = {
+    user_id:    user.id,
+    [FK]:       id,
+    sequence,
+    complaint,
+    cause:      str(body.cause),
+    correction: str(body.correction),
+    status:     'pending' as const,
+    ...money,
+  }
+
+  let { data, error } = await supabase
     .from('work_order_segments')
-    .insert({
-      user_id:    user.id,
-      [FK]:       id,
-      sequence,
-      complaint,
-      cause:      str(body.cause),
-      correction: str(body.correction),
-      status:     'pending',
-      ...money,
-    })
+    .insert(row)
     .select(SEGMENT_SELECT)
     .single()
+
+  // Migration 140 is applied by hand. Retry without the display column rather than
+  // cost the tech the segment they just typed.
+  if (error && isMissingTaxBreakdownColumn(error)) {
+    console.error('[POST segments] tax_breakdown missing — run migration 140', error.message)
+    ;({ data, error } = await supabase
+      .from('work_order_segments')
+      .insert(withoutTaxBreakdown(row))
+      .select(SEGMENT_SELECT)
+      .single())
+  }
 
   if (error || !data) {
     console.error('[POST segments]', error)

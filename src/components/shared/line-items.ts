@@ -12,6 +12,7 @@
 // on every save, compounding a few percent each time the tech opens the record.
 
 import type { LineItem } from '@/types/financials'
+import { computeTax, type TaxBreakdown, type TaxSettings } from '@/lib/tax'
 
 export function round2(n: number): number {
   return Math.round(n * 100) / 100
@@ -40,6 +41,9 @@ export interface LineTotals {
   subtotal:      number
   taxAmount:     number
   grandTotal:    number
+  /** What was taxed, for storing on the document and showing the customer.
+   *  Null when the caller passed no tax settings -- see computeTotals. */
+  taxBreakdown:  TaxBreakdown | null
 }
 
 export interface LineInputs {
@@ -48,6 +52,14 @@ export interface LineInputs {
   laborHours: number
   laborRate:  number
   taxPct:     number
+  /**
+   * The shop's parts/labor tax settings.
+   *
+   * OPTIONAL ON PURPOSE. When omitted, computeTotals behaves exactly as it always
+   * did -- taxPct applied to the whole subtotal -- so a caller that has not been
+   * migrated yet cannot silently change a total. Callers opt in one at a time.
+   */
+  taxSettings?: TaxSettings | null
 }
 
 /** Stored line_items -> editor rows: drops labour, divides the markup back out.
@@ -94,20 +106,39 @@ export function toLineItems({
   ]
 }
 
-/** Tax applies to parts-plus-markup AND labour, matching what the quote has
- *  always done. Only the tax and grand total are rounded, so a long parts list
- *  does not accumulate rounding error line by line. */
+/**
+ * Only the tax and grand total are rounded, so a long parts list does not
+ * accumulate rounding error line by line.
+ *
+ * TAX: parts-plus-markup is the parts base, hours x rate is the labor base, and the
+ * two are taxed according to the shop's settings. Most states tax the first and not
+ * the second. Without taxSettings this falls back to the old behaviour -- one rate
+ * over the combined subtotal -- so an un-migrated caller keeps producing the totals
+ * it always produced.
+ */
 export function computeTotals({
-  items, markupPct, laborHours, laborRate, taxPct,
+  items, markupPct, laborHours, laborRate, taxPct, taxSettings,
 }: LineInputs): LineTotals {
   const partsBase     = items.reduce((s, li) => s + li.quantity * li.unit_price, 0)
   const markupAmt     = partsBase * (markupPct / 100)
   const partsTotal    = partsBase + markupAmt
   const laborSubtotal = (laborHours || 0) * (laborRate || 0)
   const subtotal      = partsTotal + laborSubtotal
-  const taxAmount     = round2(subtotal * ((taxPct || 0) / 100))
-  const grandTotal    = round2(subtotal + taxAmount)
-  return { partsBase, markupAmt, partsTotal, laborSubtotal, subtotal, taxAmount, grandTotal }
+
+  if (!taxSettings) {
+    const taxAmount  = round2(subtotal * ((taxPct || 0) / 100))
+    const grandTotal = round2(subtotal + taxAmount)
+    return { partsBase, markupAmt, partsTotal, laborSubtotal, subtotal, taxAmount, grandTotal, taxBreakdown: null }
+  }
+
+  // The markup rides with parts: it is part of what the customer pays for goods.
+  const tax = computeTax({ parts: partsTotal, labor: laborSubtotal }, taxSettings)
+  return {
+    partsBase, markupAmt, partsTotal, laborSubtotal, subtotal,
+    taxAmount:    tax.taxAmount,
+    grandTotal:   round2(subtotal + tax.taxAmount),
+    taxBreakdown: tax.breakdown,
+  }
 }
 
 /** The quote's own validation rules, unchanged. Returns a message or null. */
