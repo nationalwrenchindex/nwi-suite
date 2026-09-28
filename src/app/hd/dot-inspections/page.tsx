@@ -72,6 +72,15 @@ export default async function DOTInspectionsPage({
             Annual CVSA inspection records — digitally signed and locked.
           </p>
         </div>
+        {/* A page nobody can reach is a page that does not exist -- the same mistake
+            that made work-order segments unreachable. */}
+        <Link
+          href="/hd/inspections/follow-ups"
+          className="px-4 py-2.5 rounded-lg border text-sm font-semibold flex-shrink-0 transition-colors"
+          style={{ borderColor: 'rgba(var(--hd-ink-rgb), 0.15)', color: 'rgba(var(--hd-ink-rgb), 0.6)' }}
+        >
+          Follow-Ups
+        </Link>
         <Link
           href="/hd/dot-inspections/new"
           className="px-4 py-2.5 rounded-lg text-sm font-semibold text-white flex-shrink-0"

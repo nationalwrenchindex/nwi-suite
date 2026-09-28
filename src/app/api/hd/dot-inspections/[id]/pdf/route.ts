@@ -10,6 +10,7 @@
 // gets a 403, including a signed-in mechanic who simply guessed the uuid.
 
 import { NextResponse, type NextRequest } from 'next/server'
+import { splitFailures, type FailedItem } from '@/lib/inspections/out-of-service'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { getFleetProMembership } from '@/lib/fleet-pro/access'
@@ -139,6 +140,18 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const passed     = String(insp.overall_result ?? '').toLowerCase() !== 'fail'
   const inspId     = str(insp.inspection_id) ?? `DOT-${String(insp.id).slice(0, 8).toUpperCase()}`
 
+  // FAILED ITEMS IN THREE GROUPS: out of service, repairs, and — for records written
+  // before migration 141 — the ones with no determination on file at all.
+  const oosSections = INSPECTION_CATEGORIES.map(cat => ({
+    label: cat.label,
+    items: CATEGORY_ITEMS[cat.id] ?? [],
+  }))
+  const failures = splitFailures(
+    oosSections,
+    (si, item) => data[INSPECTION_CATEGORIES[si].id]?.items?.[item.id] as never,
+  )
+  const storedOos = insp.removed_from_service === true
+
   // SIGNATURE HONESTY: the document says signed only when a signature actually
   // exists on the row. An unsigned record prints, and prints as unsigned.
   const signature  = str(insp.signature_data)
@@ -182,7 +195,49 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       </div>`
   }).join('')
 
-  const violationBlock = violations.length ? `
+  /** One failed checkpoint, printed. */
+  const failLine = (f: FailedItem) => `
+      <p class="viol">
+        <strong>${esc(f.label)}</strong>
+        <span class="viol-where">${esc(f.sectionLabel)}</span>
+        ${f.notes ? `<span class="viol-note">Tech note: ${esc(f.notes)}</span>` : ''}
+        ${f.oosNote ? `<span class="viol-note">Reason: ${esc(f.oosNote)}</span>` : ''}
+        ${f.overridden ? '<span class="viol-note">Kept in service by the inspector — this checkpoint normally goes out of service.</span>' : ''}
+      </p>`
+
+  // TWO SECTIONS, never one list. On a DOT annual this is the CVSA distinction: a
+  // cracked frame weld and a missing decal are not the same document.
+  const oosBlock = failures.outOfService.length ? `
+  <div class="box box-oos">
+    <h3>Out of Service — Do Not Operate</h3>
+    ${failures.outOfService.map(failLine).join('')}
+  </div>` : ''
+
+  const repairBlock = failures.repairs.length ? `
+  <div class="box box-repair">
+    <h3>Repairs Needed — Vehicle Remains in Service</h3>
+    ${failures.repairs.map(failLine).join('')}
+  </div>` : ''
+
+  // No determination on file. Printed in its own section rather than under "remains
+  // in service", which would assert a certification nobody signed on a DOT record.
+  const legacyBlock = failures.unassessed.length ? `
+  <div class="box box-fail">
+    <h3>Violations Found — ${failures.unassessed.length}</h3>
+    <p class="muted">Recorded before this form asked whether a defect takes the vehicle out of service. No determination is on file for these items.</p>
+    ${failures.unassessed.map(failLine).join('')}
+  </div>` : ''
+
+  const anyFailure = failures.outOfService.length + failures.repairs.length + failures.unassessed.length
+  const cleanBlock = anyFailure === 0 && !violations.length ? `
+  <div class="box">
+    <h3>Violations</h3>
+    <p class="muted">No violations recorded on this inspection.</p>
+  </div>` : ''
+
+  // A record with violations but no item-level detail to split -- belt and braces for
+  // a payload shape that predates the category item ids.
+  const orphanBlock = anyFailure === 0 && violations.length ? `
   <div class="box box-fail">
     <h3>Violations Found — ${violations.length}</h3>
     ${violations.map(v => `
@@ -190,11 +245,17 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
         <strong>${esc(categoryLabel(String(v.category ?? '')))}</strong>${v.safetyCritical ? ' <span class="critical">&#9888; SAFETY CRITICAL</span>' : ''}<br>
         ${esc(v.label ?? v.item ?? '')}${v.notes ? `<span class="viol-note">${esc(v.notes)}</span>` : ''}
       </p>`).join('')}
-  </div>` : `
-  <div class="box">
-    <h3>Violations</h3>
-    <p class="muted">No violations recorded on this inspection.</p>
-  </div>`
+  </div>` : ''
+
+  const oosBanner = (storedOos || failures.outOfService.length)
+    ? `<div class="removed">VEHICLE OUT OF SERVICE — do not operate until repaired and re-inspected</div>`
+    : failures.unassessed.length || (anyFailure === 0 && violations.length)
+      ? `<div class="unassessed">${(failures.unassessed.length || violations.length)} defect(s) recorded — no out-of-service determination on file</div>`
+      : failures.repairs.length
+        ? `<div class="in-service">IN SERVICE — ${failures.repairs.length} repair${failures.repairs.length === 1 ? '' : 's'} needed, vehicle may be operated</div>`
+        : `<div class="in-service">IN SERVICE</div>`
+
+  const violationBlock = `${oosBanner}${oosBlock}${repairBlock}${legacyBlock}${orphanBlock}${cleanBlock}`
 
   const html = `<!DOCTYPE html>
 <html lang="en">

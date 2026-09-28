@@ -24,7 +24,9 @@ export async function POST(req: NextRequest) {
       location?: string
       carrier_address?: string
       license_plate?: string
-      inspection_data: Record<string, { items: Record<string, { result: string; notes: string }> }>
+      inspection_data: Record<string, { items: Record<string, { result: string; notes: string; outOfService?: boolean | null; oosNote?: string }> }>
+      /** Derived from the items by the form. null = no failed item answered. */
+      removed_from_service?: boolean | null
       signature_data?: string
       customer_name?: string
       unit_manufacturer?: string
@@ -176,6 +178,10 @@ export async function POST(req: NextRequest) {
         inspection_data:       body.inspection_data,
         violations:            violations.length > 0 ? violations : null,
         overall_result:        overallResult,
+        // TRUE / FALSE / NULL, straight through. Null means no failed item answered
+        // the question, and null is not false -- false is a certification.
+        removed_from_service:
+          typeof body.removed_from_service === 'boolean' ? body.removed_from_service : null,
         signature_data:        body.signature_data ?? null,
         customer_name:         body.customer_name ?? null,
         unit_manufacturer:     body.unit_manufacturer ?? null,

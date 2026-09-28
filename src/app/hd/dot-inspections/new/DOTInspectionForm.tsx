@@ -1,6 +1,10 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import OosPrompt from '@/components/inspections/OosPrompt'
+import {
+  oosBlocker, splitFailures, deriveRemovedFromService,
+} from '@/lib/inspections/out-of-service'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -8,6 +12,7 @@ import {
   CATEGORY_ITEMS,
   type InspectionData,
   type SubItemData,
+  type SubItemDef,
   categoryResult,
   initialInspectionData,
 } from '@/lib/hd/dot-categories'
@@ -71,11 +76,14 @@ interface Props {
 // ─── Sub-item row ─────────────────────────────────────────────────────────────
 
 function SubItemRow({
-  label, safetyCritical, state, onChange, even,
+  item, state, onChange, onOos, even,
 }: {
-  label: string; safetyCritical?: boolean; state: SubItemData
-  onChange: (f: 'result' | 'notes', v: string) => void; even: boolean
+  item: SubItemDef; state: SubItemData
+  onChange: (f: 'result' | 'notes', v: string) => void
+  onOos: (patch: { outOfService?: boolean; oosNote?: string }) => void
+  even: boolean
 }) {
+  const { label, safetyCritical } = item
   const isFail = state.result === 'fail'
   return (
     <div style={{ background: isFail ? '#1a0505' : even ? '#0f1820' : 'var(--hd-card)', borderTop: '1px solid var(--hd-border)' }}>
@@ -115,16 +123,27 @@ function SubItemRow({
             style={{ background: '#2d0505', border: '1px solid #EF444440', borderLeft: '3px solid #EF4444' }} />
         </div>
       )}
+      {/* The second decision. On a DOT annual this is the CVSA question: does the
+          defect take the vehicle out of service, or is it a repair to schedule. */}
+      {isFail && (
+        <OosPrompt
+          item={item}
+          outOfService={state.outOfService}
+          oosNote={state.oosNote}
+          onChange={onOos}
+        />
+      )}
     </div>
   )
 }
 
 // ─── Category block ───────────────────────────────────────────────────────────
 
-function CategoryBlock({ num, catId, label, state, onChange }: {
+function CategoryBlock({ num, catId, label, state, onChange, onOos }: {
   num: number; catId: string; label: string
   state: { items: Record<string, SubItemData> }
   onChange: (itemId: string, f: 'result' | 'notes', v: string) => void
+  onOos: (itemId: string, patch: { outOfService?: boolean; oosNote?: string }) => void
 }) {
   const [expanded, setExpanded] = useState(true)
   const items    = CATEGORY_ITEMS[catId] ?? []
@@ -159,9 +178,11 @@ function CategoryBlock({ num, catId, label, state, onChange }: {
         </svg>
       </button>
       {expanded && items.map((item, idx) => (
-        <SubItemRow key={item.id} label={item.label} safetyCritical={item.safetyCritical}
+        <SubItemRow key={item.id} item={item}
           state={state.items[item.id] ?? { result: 'pass', notes: '' }}
-          onChange={(f, v) => onChange(item.id, f, v)} even={idx % 2 === 0} />
+          onChange={(f, v) => onChange(item.id, f, v)}
+          onOos={patch => onOos(item.id, patch)}
+          even={idx % 2 === 0} />
       ))}
     </div>
   )
@@ -304,6 +325,20 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
     }))
   }
 
+  /** Patch the out-of-service determination on one sub-item. */
+  function updateItemOos(
+    catId: string,
+    itemId: string,
+    patch: { outOfService?: boolean; oosNote?: string },
+  ) {
+    setInspData(prev => ({
+      ...prev,
+      [catId]: {
+        items: { ...prev[catId].items, [itemId]: { ...prev[catId].items[itemId], ...patch } },
+      },
+    }))
+  }
+
   const allItems   = Object.values(inspData).flatMap(cat => Object.values(cat.items))
   const passCount  = allItems.filter(i => i.result === 'pass').length
   const failCount  = allItems.filter(i => i.result === 'fail').length
@@ -311,6 +346,27 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
   const answeredCount = passCount + failCount + naCount
   const unansweredCount = allItems.length - answeredCount
   const overallPass = failCount === 0
+
+  // THE TWO PRINTED SECTIONS. INSPECTION_CATEGORIES is the section list and
+  // CATEGORY_ITEMS holds each one's checkpoints, so the shapes are adapted here.
+  const oosSections = INSPECTION_CATEGORIES.map(cat => ({
+    label: cat.label,
+    items: CATEGORY_ITEMS[cat.id] ?? [],
+  }))
+  const failures = splitFailures(
+    oosSections,
+    (si, item) => inspData[INSPECTION_CATEGORIES[si].id]?.items[item.id] as never,
+  )
+  const itemDerivedOos = deriveRemovedFromService(failures)
+
+  // Every FAILED item answers the question with a reason before this can be signed.
+  // A DOT annual is the form that covers brakes, frame welds and coupling devices, so
+  // this is the one where the determination matters most.
+  const oosBlockers = oosSections.flatMap((section, si) =>
+    section.items
+      .map(item => oosBlocker(item, inspData[INSPECTION_CATEGORIES[si].id]?.items[item.id] as never))
+      .filter((b): b is string => b !== null),
+  )
 
   const hasSafetyCriticalFail = INSPECTION_CATEGORIES.some(cat =>
     CATEGORY_ITEMS[cat.id]?.some(item =>
@@ -328,6 +384,8 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
     if (!inspectorName.trim())  { setError('Inspector name is required');  return }
     if (unansweredCount > 0)    { setError(`${unansweredCount} item${unansweredCount !== 1 ? 's' : ''} not yet marked — select Pass, Fail, or N/A for every item before signing.`); return }
     if (!hasSignature)          { setError('Inspector signature is required — sign in the box below'); return }
+    // One at a time: a wall of identical messages helps nobody.
+    if (oosBlockers.length > 0) { setError(oosBlockers[0]); return }
 
     const canvas = document.getElementById('sig-canvas') as HTMLCanvasElement | null
     const signatureData = canvas?.toDataURL('image/png') ?? null
@@ -354,6 +412,9 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
           carrier_address:       carrierAddress || undefined,
           license_plate:         licensePlate || undefined,
           inspection_data:       inspData,
+          // Derived from the ITEMS. NULL when nothing failed, so a clean inspection
+          // stores no position rather than a fabricated "not out of service".
+          removed_from_service:  itemDerivedOos,
           signature_data:        signatureData,
           customer_name:         (selectedAccount?.fleet_name || customerName) || undefined,
           unit_manufacturer:     (selectedUnit?.manufacturer || unitManufacturer) || undefined,
@@ -647,7 +708,8 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
           {INSPECTION_CATEGORIES.map(cat => (
             <CategoryBlock key={cat.id} num={cat.num} catId={cat.id} label={cat.label}
               state={inspData[cat.id]}
-              onChange={(itemId, field, value) => updateItem(cat.id, itemId, field, value)} />
+              onChange={(itemId, field, value) => updateItem(cat.id, itemId, field, value)}
+              onOos={(itemId, patch) => updateItemOos(cat.id, itemId, patch)} />
           ))}
         </div>
 

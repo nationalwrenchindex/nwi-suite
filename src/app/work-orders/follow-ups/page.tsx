@@ -7,6 +7,12 @@ import { PARENTS } from '@/lib/segments/parent'
 
 export const metadata = { title: 'Follow-Ups — National Wrench Index Suite™' }
 
+// Two kinds of deferred work, two lists, cross-linked. A declined segment and an
+// in-service inspection defect are the same commercial idea and wait the same 30
+// days (lib/followups), but they live in different tables with different shapes --
+// see the header of components/inspections/DefectFollowUpList for why they are not
+// one query.
+
 export default async function FollowUpsPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -92,6 +98,13 @@ export default async function FollowUpsPage() {
             Work a customer declined. Known truck, known fault, and they have already seen
             the price — the warmest lead a shop has.
           </p>
+          {/* The sibling list. A page nobody can reach is a page that does not exist. */}
+          <Link
+            href="/inspections/follow-ups"
+            className="inline-block mt-3 text-orange hover:underline text-sm font-semibold"
+          >
+            Inspection defects →
+          </Link>
         </div>
 
         <FollowUpList initialRows={list} />

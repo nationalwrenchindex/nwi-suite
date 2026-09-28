@@ -31,7 +31,7 @@
 -- list lives in application code -- src/lib/hd/dot-categories.ts,
 -- src/lib/hd/aerial/sections.ts, src/lib/hd/equipment/sections/*.ts and the LD
 -- 25-point list -- so the auto-out-of-service marker is a field on those
--- definitions, not a column. 71 of 796 checkpoints carry it.
+-- definitions, not a column. 79 of 796 checkpoints carry it (9.9%).
 
 -- ── 1. LD multi-point item results ────────────────────────────────────────────
 ALTER TABLE public.inspection_items
@@ -67,3 +67,29 @@ CREATE INDEX IF NOT EXISTS inspection_items_oos_idx
 -- honest value, and every unit whose status rests on them reads "needs repair — not
 -- assessed for OOS" rather than having an answer invented for it. New inspections
 -- only, exactly as specified.
+
+-- ── 3. The inspection-level flag, on the three tables that lacked it ───────────
+--
+-- hd_aerial_inspections and hd_equipment_inspections have carried
+-- removed_from_service since migrations 099 and 104. The other three never had it, so
+-- a DOT annual — the form that actually covers brakes, frame welds and coupling
+-- devices — had nowhere to record an out-of-service determination at all.
+--
+-- The Fleet Pro rollups read this column directly. Without it, a DOT inspection could
+-- store a per-item determination in its JSONB payload and no dashboard would ever see
+-- it, which is the bug this whole change exists to fix.
+--
+-- NULLABLE, WITH NO DEFAULT, deliberately. 099 and 104 used DEFAULT FALSE, so their
+-- historical rows read as "answered no" — defensible there, because those forms have
+-- always refused to submit a safety-critical failure without an explicit
+-- confirmation, so false really is an answer. These three have no such history, so a
+-- default of false would fabricate one. NULL means never asked.
+ALTER TABLE public.hd_dot_inspections
+  ADD COLUMN IF NOT EXISTS removed_from_service boolean;
+ALTER TABLE public.hd_pm_checklists
+  ADD COLUMN IF NOT EXISTS removed_from_service boolean;
+ALTER TABLE public.fleet_pro_pretrip_inspections
+  ADD COLUMN IF NOT EXISTS removed_from_service boolean;
+
+COMMENT ON COLUMN public.hd_dot_inspections.removed_from_service IS
+  'TRUE = at least one defect takes the vehicle out of service. FALSE = inspector certified none do. NULL = never asked (pre-141) — never coerce to false.';

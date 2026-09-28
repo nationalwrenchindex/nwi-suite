@@ -85,6 +85,28 @@ async function main() {
   for (const s of form.sections) for (const i of s.items) { total++; if (defaultOosFor(i)) autoCount++ }
   console.log(`  aerial annual: ${autoCount} of ${total} checkpoints default to out of service`)
   ok(autoCount > 0 && autoCount < total / 2, 'autoOos is a minority of checkpoints, not a dumping ground')
+  console.log('\n' + '='.repeat(78))
+  console.log('Follow-up list: what lands on it, from the same real records')
+  console.log('='.repeat(78))
+  // The page runs splitFailures and lists repairs + unassessed. Mirrored here so the
+  // list and the printed document can be shown to agree.
+  let repairCount = 0, unassessedCount = 0, excluded = 0
+  for (const r of rows) {
+    const type = (r.inspection_type ?? 'pre_use') as AerialInspectionType
+    const form = AERIAL_FORMS[type] ?? AERIAL_FORMS.pre_use
+    const secs = (r.inspection_data?.sections ?? {}) as Record<string, { items?: Record<string, unknown> }>
+    const fx = splitFailures(form.sections, (si, item) => secs[form.sections[si].id]?.items?.[item.id] as never)
+    repairCount     += fx.repairs.length
+    unassessedCount += fx.unassessed.length
+    excluded        += fx.outOfService.length
+    for (const d of fx.repairs)    console.log(`  IN SERVICE     ${d.sectionLabel} / ${d.label}`)
+    for (const d of fx.unassessed) console.log(`  NOT ASSESSED   ${d.sectionLabel} / ${d.label}`)
+    for (const d of fx.outOfService) console.log(`  (excluded — out of service, handled now)  ${d.label}`)
+  }
+  console.log(`\n  follow-up rows: ${repairCount} in service + ${unassessedCount} not assessed`)
+  console.log(`  excluded as out of service: ${excluded}`)
+  ok(repairCount + unassessedCount > 0, 'the follow-up list is not empty on production data')
+
 
   console.log(`\n${pass} passed, ${fail} failed`)
   if (fail) process.exitCode = 1
