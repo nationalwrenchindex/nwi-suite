@@ -451,6 +451,15 @@ export interface TaxSummary {
   tax_collected:   number
   ld_tax:          number
   hd_tax:          number
+  // Broken out by what the tax was assessed ON. Only documents written after
+  // migration 140 can be split; older ones land in unsplit_tax rather than being
+  // guessed at, so parts + labor + services + unsplit always equals tax_collected.
+  tax_on_parts:    number
+  tax_on_labor:    number
+  tax_on_services: number
+  unsplit_tax:     number
+  /** Labor billed with no tax charged on it. */
+  untaxed_labor:   number
 }
 
 export interface TaxSummaryResponse {

@@ -178,6 +178,46 @@ export default function TaxSummaryTab() {
             </div>
           </div>
 
+          {/* ── What the tax was charged ON ──
+              The split a sales-tax return actually asks for. Hidden entirely when
+              nothing in the period carries a breakdown, rather than showing three
+              zeroes and implying no tax was charged on parts. */}
+          {(summary.tax_on_parts > 0 || summary.tax_on_labor > 0 ||
+            summary.tax_on_services > 0 || summary.untaxed_labor > 0) && (
+            <div className="nwi-card">
+              <p className="text-white/40 text-xs font-medium uppercase tracking-widest mb-3">
+                Charged On
+              </p>
+              <div className="space-y-1.5 text-sm">
+                {[
+                  ['Tax on parts',    summary.tax_on_parts],
+                  ['Tax on labor',    summary.tax_on_labor],
+                  ['Tax on services', summary.tax_on_services],
+                ].filter(([, v]) => (v as number) > 0).map(([label, v]) => (
+                  <div key={label as string} className="flex justify-between">
+                    <span className="text-white/50">{label as string}</span>
+                    <span className="text-white tabular-nums">{fmt(v as number)}</span>
+                  </div>
+                ))}
+                {summary.unsplit_tax > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-white/40">
+                      Not broken out
+                      <span className="text-white/25"> · invoiced before the parts/labor split</span>
+                    </span>
+                    <span className="text-white/60 tabular-nums">{fmt(summary.unsplit_tax)}</span>
+                  </div>
+                )}
+                {summary.untaxed_labor > 0 && (
+                  <div className="flex justify-between border-t border-white/10 pt-2 mt-1">
+                    <span className="text-white/50">Labor billed with no tax charged</span>
+                    <span className="text-white/70 tabular-nums">{fmt(summary.untaxed_labor)}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* ── Monthly breakdown ── */}
           <div className="nwi-card">
             <div className="flex items-baseline justify-between mb-3">
