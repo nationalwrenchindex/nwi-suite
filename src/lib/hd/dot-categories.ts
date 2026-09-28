@@ -29,11 +29,32 @@ export interface SubItemDef {
   id: string
   label: string
   safetyCritical?: boolean
+  /**
+   * Defaults the out-of-service answer to Yes when this checkpoint fails: brakes,
+   * structural and boom welds, dielectric and insulation, steering, tires below
+   * minimum, ROPS/FOPS and coupling devices.
+   *
+   * DELIBERATELY NOT safetyCritical, which marks 366 of 796 checkpoints -- 74% of a
+   * crane form. Defaulting three of every four fails to "deadline the machine" is the
+   * dumping ground this split exists to avoid. safetyCritical keeps its own job.
+   *
+   * A default, not a lock: the tech can answer No, the note is required either way,
+   * and the record shows the override.
+   */
+  autoOos?: boolean
 }
 
 export interface SubItemData {
   result: ItemResult
   notes: string
+  /**
+   * The out-of-service determination on a FAILED item. undefined/null means the
+   * question was never asked -- a record written before migration 141. Null is not
+   * false: false is a certification a mechanic signed.
+   */
+  outOfService?: boolean | null
+  /** Required whenever outOfService is answered, either way. */
+  oosNote?: string
 }
 
 export interface CategoryData {
@@ -52,29 +73,29 @@ export interface ViolationRecord {
 
 export const CATEGORY_ITEMS: Record<string, SubItemDef[]> = {
   brake_systems: [
-    { id: 'lining_thickness',     label: 'Brake lining thickness — steer axle min 1/4”, others min 1/8”', safetyCritical: true },
-    { id: 'service_brakes',       label: 'Service brakes operate on all wheels required to be equipped', safetyCritical: true },
-    { id: 'parking_brake',        label: 'Parking brake system holds vehicle and operates as required', safetyCritical: true },
+    { id: 'lining_thickness',     label: 'Brake lining thickness — steer axle min 1/4”, others min 1/8”', safetyCritical: true, autoOos: true },
+    { id: 'service_brakes',       label: 'Service brakes operate on all wheels required to be equipped', safetyCritical: true, autoOos: true },
+    { id: 'parking_brake',        label: 'Parking brake system holds vehicle and operates as required', safetyCritical: true, autoOos: true },
     { id: 'tractor_protection',   label: 'Tractor protection valve and emergency (breakaway) system functional' },
     { id: 'drum_rotor',           label: 'Brake drum or rotor condition — no cracks or holes' },
     { id: 'hose_condition',       label: 'Brake hose condition — no chafing, cracks, cuts or abrasions' },
     { id: 'tubing_condition',     label: 'Brake tubing condition — no leaks, proper support' },
     { id: 'chamber_condition',    label: 'Brake chamber condition — no cracks or damage' },
-    { id: 'slack_adjuster',       label: 'Slack adjuster condition and travel within limits', safetyCritical: true },
+    { id: 'slack_adjuster',       label: 'Slack adjuster condition and travel within limits', safetyCritical: true, autoOos: true },
     { id: 'air_leakage',          label: 'Air system leakage — less than 3 PSI per minute single vehicle' },
-    { id: 'pushrod_stroke',       label: 'Pushrod stroke within limits at 90 PSI applied', safetyCritical: true },
+    { id: 'pushrod_stroke',       label: 'Pushrod stroke within limits at 90 PSI applied', safetyCritical: true, autoOos: true },
     { id: 'low_pressure_warning', label: 'Low pressure warning device operational below 60 PSI' },
     { id: 'abs_lamp',             label: 'ABS malfunction lamp functional' },
   ],
   coupling_devices: [
-    { id: 'fifth_wheel',       label: 'Fifth wheel — no cracks, properly mounted, locking jaws closed' },
-    { id: 'pintle_hook',       label: 'Pintle hook — no cracks, properly mounted, latch engaged' },
-    { id: 'drawbar',           label: 'Drawbar — no cracks, properly attached' },
-    { id: 'safety_chains',     label: 'Safety chains or cables — proper condition and attachment' },
+    { id: 'fifth_wheel',       label: 'Fifth wheel — no cracks, properly mounted, locking jaws closed', autoOos: true },
+    { id: 'pintle_hook',       label: 'Pintle hook — no cracks, properly mounted, latch engaged', autoOos: true },
+    { id: 'drawbar',           label: 'Drawbar — no cracks, properly attached', autoOos: true },
+    { id: 'safety_chains',     label: 'Safety chains or cables — proper condition and attachment', autoOos: true },
     { id: 'saddle_mounts',     label: 'Saddle-mounts — properly secured, no missing or damaged fasteners' },
-    { id: 'king_pin',          label: 'King pin — no excessive wear' },
-    { id: 'upper_coupler',     label: 'Upper coupler plate — no cracks or damage' },
-    { id: 'locking_mechanism', label: 'Locking mechanism fully engaged — no visible gap between upper and lower coupler' },
+    { id: 'king_pin',          label: 'King pin — no excessive wear', autoOos: true },
+    { id: 'upper_coupler',     label: 'Upper coupler plate — no cracks or damage', autoOos: true },
+    { id: 'locking_mechanism', label: 'Locking mechanism fully engaged — no visible gap between upper and lower coupler', autoOos: true },
   ],
   exhaust_systems: [
     { id: 'no_leaks_forward', label: 'No leaks forward of or below the cab' },
@@ -110,7 +131,7 @@ export const CATEGORY_ITEMS: Record<string, SubItemDef[]> = {
     { id: 'no_obstruction',   label: "No cargo obscuring driver’s view or access to controls" },
   ],
   steering_mechanisms: [
-    { id: 'steering_lash',    label: 'Steering wheel lash within limits — maximum 2” on 20” wheel', safetyCritical: true },
+    { id: 'steering_lash',    label: 'Steering wheel lash within limits — maximum 2” on 20” wheel', safetyCritical: true, autoOos: true },
     { id: 'column_mounted',   label: 'Steering column properly mounted and secured' },
     { id: 'ps_hoses',         label: 'Power steering hoses — no leaks' },
     { id: 'ps_fluid',         label: 'Power steering fluid level adequate' },
@@ -129,16 +150,16 @@ export const CATEGORY_ITEMS: Record<string, SubItemDef[]> = {
     { id: 'shock_absorbers',   label: 'Shock absorbers properly mounted and not leaking' },
   ],
   frame_assemblies: [
-    { id: 'frame_members',       label: 'Frame members — no cracks, breaks or improper repairs' },
+    { id: 'frame_members',       label: 'Frame members — no cracks, breaks or improper repairs', autoOos: true },
     { id: 'cross_members',       label: 'Cross members — no missing or damaged members' },
-    { id: 'frame_welds',         label: 'Frame welds — no visible cracks' },
+    { id: 'frame_welds',         label: 'Frame welds — no visible cracks', autoOos: true },
     { id: 'body_mounts',         label: 'Body mounts properly secured' },
-    { id: 'structural_integrity',label: 'No frame damage affecting structural integrity' },
+    { id: 'structural_integrity',label: 'No frame damage affecting structural integrity', autoOos: true },
   ],
   tires: [
-    { id: 'steer_tread_depth', label: 'Steer axle tires — minimum 4/32” tread depth', safetyCritical: true },
-    { id: 'other_tread_depth', label: 'All other tires — minimum 2/32” tread depth' },
-    { id: 'cord_ply_exposed',  label: 'No cuts or breaks exposing ply or cord', safetyCritical: true },
+    { id: 'steer_tread_depth', label: 'Steer axle tires — minimum 4/32” tread depth', safetyCritical: true, autoOos: true },
+    { id: 'other_tread_depth', label: 'All other tires — minimum 2/32” tread depth', autoOos: true },
+    { id: 'cord_ply_exposed',  label: 'No cuts or breaks exposing ply or cord', safetyCritical: true, autoOos: true },
     { id: 'bulges_knots',      label: 'No bulges or knots' },
     { id: 'under_inflation',   label: 'No obvious under inflation' },
     { id: 'regrooved',         label: 'No regrooved tires on steer axle' },
@@ -147,7 +168,7 @@ export const CATEGORY_ITEMS: Record<string, SubItemDef[]> = {
     { id: 'matched_size',      label: 'Tires matched in size on same axle' },
   ],
   wheels_rims: [
-    { id: 'cracked_rims',    label: 'No cracked, broken or bent rims or wheels', safetyCritical: true },
+    { id: 'cracked_rims',    label: 'No cracked, broken or bent rims or wheels', safetyCritical: true, autoOos: true },
     { id: 'lug_nuts',        label: 'All lug nuts present and properly torqued' },
     { id: 'studs',           label: 'No missing or damaged studs' },
     { id: 'loose_wheels',    label: 'No loose wheels — check for rust trails' },

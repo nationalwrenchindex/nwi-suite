@@ -29,6 +29,14 @@ export type ItemResult = 'pass' | 'fail' | 'na'
 export interface EquipmentItemState {
   result: ItemResult | ''
   notes:  string
+  /**
+   * The out-of-service determination on a FAILED item. undefined/null means the
+   * question was never asked -- a record written before migration 141. Null is not
+   * false: false is a certification a mechanic signed.
+   */
+  outOfService?: boolean | null
+  /** Required whenever outOfService is answered, either way. */
+  oosNote?: string
 }
 
 export interface EquipmentItem {
@@ -39,6 +47,19 @@ export interface EquipmentItem {
    * removal-from-service determination and fails the whole inspection.
    */
   safetyCritical?: boolean
+  /**
+   * Defaults the out-of-service answer to Yes when this checkpoint fails: brakes,
+   * structural and boom welds, dielectric and insulation, steering, tires below
+   * minimum, ROPS/FOPS and coupling devices.
+   *
+   * DELIBERATELY NOT safetyCritical, which marks 366 of 796 checkpoints -- 74% of a
+   * crane form. Defaulting three of every four fails to "deadline the machine" is the
+   * dumping ground this split exists to avoid. safetyCritical keeps its own job.
+   *
+   * A default, not a lock: the tech can answer No, the note is required either way,
+   * and the record shows the override.
+   */
+  autoOos?: boolean
 }
 
 export interface EquipmentSection {

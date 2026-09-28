@@ -64,10 +64,10 @@ export const CRANE_FREQUENT_SECTIONS: EquipmentSection[] = [
   {
     id: 'brakes_pawls', num: 5, label: 'Brakes, Clutches and Pawls',
     items: [
-      { id: 'load_hoist_brake',   label: 'Load hoist brake holds rated load without drift', safetyCritical: true },
-      { id: 'boom_hoist_brake',   label: 'Boom hoist brake holds boom without drift', safetyCritical: true },
+      { id: 'load_hoist_brake',   label: 'Load hoist brake holds rated load without drift', safetyCritical: true, autoOos: true },
+      { id: 'boom_hoist_brake',   label: 'Boom hoist brake holds boom without drift', safetyCritical: true, autoOos: true },
       { id: 'holding_pawl',       label: 'Boom hoist holding pawl engages and releases correctly', safetyCritical: true },
-      { id: 'swing_brake',        label: 'Swing brake and swing lock functional', safetyCritical: true },
+      { id: 'swing_brake',        label: 'Swing brake and swing lock functional', safetyCritical: true, autoOos: true },
       { id: 'clutch_operation',   label: 'Clutches engage and release without slip or drag', safetyCritical: true },
       { id: 'brake_linings',      label: 'Brake linings and adjustment within service limits' },
     ],
@@ -87,10 +87,10 @@ export const CRANE_FREQUENT_SECTIONS: EquipmentSection[] = [
   {
     id: 'outriggers', num: 7, label: 'Outriggers and Stabilizers',
     items: [
-      { id: 'outriggers_extend',  label: 'Outriggers extend fully and lock at the charted position', safetyCritical: true },
-      { id: 'no_drift',           label: 'Outrigger cylinders hold without drift under load', safetyCritical: true },
-      { id: 'float_pads',         label: 'Outrigger float pads present, undamaged and pinned', safetyCritical: true },
-      { id: 'cribbing_ground',    label: 'Cribbing adequate and supporting ground stable', safetyCritical: true },
+      { id: 'outriggers_extend',  label: 'Outriggers extend fully and lock at the charted position', safetyCritical: true, autoOos: true },
+      { id: 'no_drift',           label: 'Outrigger cylinders hold without drift under load', safetyCritical: true, autoOos: true },
+      { id: 'float_pads',         label: 'Outrigger float pads present, undamaged and pinned', safetyCritical: true, autoOos: true },
+      { id: 'cribbing_ground',    label: 'Cribbing adequate and supporting ground stable', safetyCritical: true, autoOos: true },
       { id: 'beam_condition',     label: 'Outrigger beams and boxes free of cracks or deformation', safetyCritical: true },
       { id: 'tires_load_bearing', label: 'Tires off ground or on-tire chart used as configured', safetyCritical: true },
     ],

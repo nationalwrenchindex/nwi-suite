@@ -60,12 +60,12 @@ export const COMPACTOR_SECTIONS: EquipmentSection[] = [
   {
     id: 'controls', num: 5, label: 'Controls and ROPS',
     items: [
-      { id: 'rops_intact',          label: 'ROPS undamaged, unmodified and mounting fasteners tight', safetyCritical: true },
+      { id: 'rops_intact',          label: 'ROPS undamaged, unmodified and mounting fasteners tight', safetyCritical: true, autoOos: true },
       { id: 'seat_belt',            label: 'Seat belt present, latches and retracts, webbing undamaged', safetyCritical: true },
       { id: 'seat_presence_switch', label: 'Seat presence switch stops propel when operator leaves the seat', safetyCritical: true },
       { id: 'propel_neutral',       label: 'Propel lever returns to neutral and machine comes to a stop', safetyCritical: true },
-      { id: 'steering_response',    label: 'Steering responds smoothly through full articulation both ways', safetyCritical: true },
-      { id: 'brakes_hold',          label: 'Service and parking brakes stop and hold the machine on grade', safetyCritical: true },
+      { id: 'steering_response',    label: 'Steering responds smoothly through full articulation both ways', safetyCritical: true, autoOos: true },
+      { id: 'brakes_hold',          label: 'Service and parking brakes stop and hold the machine on grade', safetyCritical: true, autoOos: true },
       { id: 'alarm_horn_lights',    label: 'Travel / back-up alarm, horn, lights and beacon functional' },
     ],
   },

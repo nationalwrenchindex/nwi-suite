@@ -25,9 +25,9 @@ export const PRE_USE_SECTIONS: AerialSection[] = [
   {
     id: 'structural', num: 2, label: 'Structural Integrity',
     items: [
-      { id: 'no_weld_cracks',     label: 'No cracks in welds or structural members', safetyCritical: true },
-      { id: 'no_bent_members',    label: 'No bent or damaged boom, arms, turntable or chassis', safetyCritical: true },
-      { id: 'no_corrosion',       label: 'No corrosion affecting structural members', safetyCritical: true },
+      { id: 'no_weld_cracks',     label: 'No cracks in welds or structural members', safetyCritical: true, autoOos: true },
+      { id: 'no_bent_members',    label: 'No bent or damaged boom, arms, turntable or chassis', safetyCritical: true, autoOos: true },
+      { id: 'no_corrosion',       label: 'No corrosion affecting structural members', safetyCritical: true, autoOos: true },
       { id: 'decals_legible',     label: 'Safety decals and placards present and legible' },
     ],
   },
@@ -55,7 +55,7 @@ export const PRE_USE_SECTIONS: AerialSection[] = [
   {
     id: 'outriggers', num: 5, label: 'Outriggers and Ground Conditions',
     items: [
-      { id: 'outriggers_deploy',  label: 'Outriggers deploy and lock correctly', safetyCritical: true },
+      { id: 'outriggers_deploy',  label: 'Outriggers deploy and lock correctly', safetyCritical: true, autoOos: true },
       { id: 'ground_stable',      label: 'Ground surface adequate and stable', safetyCritical: true },
       { id: 'clear_overhead',     label: 'Area clear of overhead hazards (power lines, structures)', safetyCritical: true },
       { id: 'clear_ground',       label: 'Area clear of ground hazards (holes, debris, drop-offs)', safetyCritical: true },
@@ -75,7 +75,7 @@ export const PRE_USE_SECTIONS: AerialSection[] = [
     items: [
       { id: 'tires',              label: 'Tires inflated and undamaged', safetyCritical: true },
       { id: 'wheels_rims',        label: 'Wheels and rims intact, lugs tight', safetyCritical: true },
-      { id: 'brakes',             label: 'Brakes functional', safetyCritical: true },
+      { id: 'brakes',             label: 'Brakes functional', safetyCritical: true, autoOos: true },
       { id: 'boom_cradled',       label: 'Boom properly cradled for travel' },
       { id: 'outriggers_stowed',  label: 'Outriggers stowed for travel' },
     ],
@@ -102,8 +102,8 @@ export const FREQUENT_SECTIONS: AerialSection[] = [
       { id: 'hyd_pressure',       label: 'Hydraulic pressure checked against specification', safetyCritical: true },
       { id: 'wear_pads',          label: 'Boom wear pads inspected for wear within tolerance' },
       { id: 'cylinders',          label: 'Cylinders inspected for scoring, drift and seal condition', safetyCritical: true },
-      { id: 'weld_inspection',    label: 'Structural welds inspected', safetyCritical: true },
-      { id: 'electrical_insulation', label: 'Electrical insulation and wiring integrity checked', safetyCritical: true },
+      { id: 'weld_inspection',    label: 'Structural welds inspected', safetyCritical: true, autoOos: true },
+      { id: 'electrical_insulation', label: 'Electrical insulation and wiring integrity checked', safetyCritical: true, autoOos: true },
       { id: 'load_test_documented',  label: 'Load test performed and documented', safetyCritical: true },
     ],
   },

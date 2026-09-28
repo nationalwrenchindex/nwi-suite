@@ -9,6 +9,7 @@
 // authorization_method — and a field edit must never do that as a side effect.
 
 import { NextResponse, type NextRequest } from 'next/server'
+import { FOLLOWUP_DAYS } from '@/lib/followups'
 import { createClient } from '@/lib/supabase/server'
 import { hasWorkOrders } from '@/lib/work-orders'
 import { PARENTS } from '@/lib/segments/parent'
@@ -21,7 +22,6 @@ const FK = PARENTS.ld.fkColumn
 
 /** How long a declined job waits before it shows on the follow-up list. Long enough
  *  that the customer is not chased the same week they said no. */
-const FOLLOWUP_DAYS = 30
 
 export async function POST(
   request: NextRequest,

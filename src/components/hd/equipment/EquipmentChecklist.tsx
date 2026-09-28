@@ -7,9 +7,13 @@
 // AerialChecklist so all three inspection families look and print alike.
 
 import { useMemo, useState } from 'react'
+import OosPrompt from '@/components/inspections/OosPrompt'
+import {
+  oosBlocker, splitFailures, deriveRemovedFromService,
+} from '@/lib/inspections/out-of-service'
 import { useRouter } from 'next/navigation'
 import type {
-  EquipmentFormDef, EquipmentInspectionData, EquipmentItemState, ItemResult,
+  EquipmentFormDef, EquipmentInspectionData, EquipmentItem, EquipmentItemState, ItemResult,
 } from '@/types/equipment'
 import {
   collectDeficiencies, emptyData, hasCriticalDeficiency, overallResult, unansweredCount,
@@ -33,11 +37,14 @@ interface InvoiceOption {
 // ─── One checklist row ────────────────────────────────────────────────────────
 
 function ItemRow({
-  label, safetyCritical, state, onChange, even,
+  item, state, onChange, onOos, even,
 }: {
-  label: string; safetyCritical?: boolean; state: EquipmentItemState
-  onChange: (f: 'result' | 'notes', v: string) => void; even: boolean
+  item: EquipmentItem; state: EquipmentItemState
+  onChange: (f: 'result' | 'notes', v: string) => void
+  onOos: (patch: { outOfService?: boolean; oosNote?: string }) => void
+  even: boolean
 }) {
+  const { label, safetyCritical } = item
   const isFail = state.result === 'fail'
   return (
     <div style={{ background: isFail ? '#1a0505' : even ? '#0f1820' : 'var(--hd-card)', borderTop: '1px solid var(--hd-border)' }}>
@@ -76,6 +83,15 @@ function ItemRow({
             className="w-full px-3 py-1.5 rounded text-xs text-white placeholder-white/20 resize-none"
             style={{ background: '#2d0505', border: '1px solid #EF444440', borderLeft: '3px solid #EF4444' }} />
         </div>
+      )}
+      {/* The second decision. A fail is not a shutdown by itself. */}
+      {isFail && (
+        <OosPrompt
+          item={item}
+          outOfService={state.outOfService}
+          oosNote={state.oosNote}
+          onChange={onOos}
+        />
       )}
     </div>
   )
@@ -120,9 +136,40 @@ export default function EquipmentChecklist({
   const [error,       setError]       = useState<string | null>(null)
 
   const deficiencies = useMemo(() => collectDeficiencies(def, data), [def, data])
+  // The two printed sections, and the inspection-level flag behind them.
+  const failures = useMemo(
+    () => splitFailures(
+      def.sections,
+      (si, item) => data.sections[def.sections[si].id]?.items[item.id] as never,
+    ),
+    [def, data],
+  )
+  const itemDerivedOos = deriveRemovedFromService(failures)
   const critical     = hasCriticalDeficiency(deficiencies)
   const result       = overallResult(deficiencies)
   const unanswered   = unansweredCount(def, data)
+
+  /** Patch the determination fields on one item. */
+  function setItemOos(
+    sectionId: string,
+    itemId: string,
+    patch: { outOfService?: boolean; oosNote?: string },
+  ) {
+    setData(prev => ({
+      sections: {
+        ...prev.sections,
+        [sectionId]: {
+          items: {
+            ...prev.sections[sectionId]?.items,
+            [itemId]: {
+              ...(prev.sections[sectionId]?.items[itemId] ?? { result: '' as const, notes: '' }),
+              ...patch,
+            },
+          },
+        },
+      },
+    }))
+  }
 
   function setItem(sectionId: string, itemId: string, field: 'result' | 'notes', value: string) {
     setData(prev => ({
@@ -155,6 +202,15 @@ export default function EquipmentChecklist({
   if (critical && !removeFromService)
     blockers.push('a safety-critical item failed — removal from service must be confirmed')
 
+  // Every FAILED item has to answer the out-of-service question, with a reason. Only
+  // the first is surfaced: a wall of twelve identical blockers helps nobody.
+  const oosBlockers = def.sections.flatMap(section =>
+    section.items
+      .map(item => oosBlocker(item, data.sections[section.id]?.items[item.id] as never))
+      .filter((b): b is string => b !== null),
+  )
+  if (oosBlockers.length > 0) blockers.push(oosBlockers[0])
+
   async function submit() {
     setSaving(true)
     setError(null)
@@ -185,10 +241,13 @@ export default function EquipmentChecklist({
           load_test_performed: def.requiresLoadTest ? loadTestDone : false,
           load_test_date:      def.requiresLoadTest && loadTestDate ? loadTestDate : null,
           load_test_notes:     def.requiresLoadTest ? (loadTestNotes || null) : null,
-          inspection_data: data,
           deficiencies,
           overall_result:  result,
-          removed_from_service: removeFromService,
+          // Derived from the ITEMS, not asked separately: an inspection is out of
+          // service because something on it is. The existing confirmation checkbox
+          // still gates submission for a safety-critical failure, so both hold.
+          removed_from_service: itemDerivedOos ?? removeFromService,
+          inspection_data: data,
           inspector_name:  inspector,
           inspector_cert_number: certNumber || null,
           signature_data:  signature,
@@ -309,11 +368,11 @@ export default function EquipmentChecklist({
           {section.items.map((item, i) => (
             <ItemRow
               key={item.id}
-              label={item.label}
-              safetyCritical={item.safetyCritical}
+              item={item}
               even={i % 2 === 0}
               state={data.sections[section.id]?.items[item.id] ?? { result: '', notes: '' }}
               onChange={(f, v) => setItem(section.id, item.id, f, v)}
+              onOos={patch => setItemOos(section.id, item.id, patch)}
             />
           ))}
         </div>

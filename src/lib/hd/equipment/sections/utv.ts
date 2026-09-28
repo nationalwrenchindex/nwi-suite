@@ -63,7 +63,7 @@ export const UTV_SECTIONS: EquipmentSection[] = [
       { id: 'pad_thickness',      label: 'Brake pad and rotor thickness above wear limit', safetyCritical: true },
       { id: 'no_fluid_leaks',     label: 'No brake fluid leaks at lines, hoses or calipers', safetyCritical: true },
       { id: 'fluid_level',        label: 'Brake fluid level at or above the minimum mark', safetyCritical: true },
-      { id: 'park_brake_holds',   label: 'Parking brake holds the vehicle on a grade', safetyCritical: true },
+      { id: 'park_brake_holds',   label: 'Parking brake holds the vehicle on a grade', safetyCritical: true, autoOos: true },
     ],
   },
   {
@@ -81,8 +81,8 @@ export const UTV_SECTIONS: EquipmentSection[] = [
   {
     id: 'rops_restraints', num: 7, label: 'ROPS and Seat Belts',
     items: [
-      { id: 'rops_undamaged',     label: 'ROPS cage free of cracks, bends and weld damage', safetyCritical: true },
-      { id: 'rops_fasteners',     label: 'ROPS mounting bolts present and torqued', safetyCritical: true },
+      { id: 'rops_undamaged',     label: 'ROPS cage free of cracks, bends and weld damage', safetyCritical: true, autoOos: true },
+      { id: 'rops_fasteners',     label: 'ROPS mounting bolts present and torqued', safetyCritical: true, autoOos: true },
       { id: 'no_unauth_mods',     label: 'No drilling, cutting or unauthorized modification to ROPS', safetyCritical: true },
       { id: 'belts_latch',        label: 'Seat belts latch, release and retract at every seat', safetyCritical: true },
       { id: 'belt_webbing',       label: 'Belt webbing and anchors free of fraying, cuts and corrosion', safetyCritical: true },

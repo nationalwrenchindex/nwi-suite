@@ -76,9 +76,9 @@ export const TELEHANDLER_SECTIONS: EquipmentSection[] = [
     items: [
       { id: 'stability_indicator', label: 'Longitudinal stability indicator functional and reading in range', safetyCritical: true },
       { id: 'overload_cutout',     label: 'Load moment overload cutout stops aggravating functions', safetyCritical: true },
-      { id: 'service_brakes',      label: 'Service brakes functional', safetyCritical: true },
-      { id: 'parking_brake',       label: 'Parking brake holds machine on grade', safetyCritical: true },
-      { id: 'steering_modes',      label: 'Steering functional in every selectable mode', safetyCritical: true },
+      { id: 'service_brakes',      label: 'Service brakes functional', safetyCritical: true, autoOos: true },
+      { id: 'parking_brake',       label: 'Parking brake holds machine on grade', safetyCritical: true, autoOos: true },
+      { id: 'steering_modes',      label: 'Steering functional in every selectable mode', safetyCritical: true, autoOos: true },
       { id: 'joystick_return',     label: 'Joystick and function controls return to neutral when released', safetyCritical: true },
       { id: 'horn_backup_alarm',   label: 'Horn and travel alarm functional' },
     ],
@@ -86,9 +86,9 @@ export const TELEHANDLER_SECTIONS: EquipmentSection[] = [
   {
     id: 'rops_fops', num: 7, label: 'ROPS/FOPS',
     items: [
-      { id: 'rops_undamaged',      label: 'ROPS structure free of cracks, bends and structural corrosion', safetyCritical: true },
-      { id: 'fops_guard',          label: 'FOPS overhead guard undamaged and securely mounted', safetyCritical: true },
-      { id: 'rops_fasteners',      label: 'ROPS/FOPS mounting fasteners present and torqued', safetyCritical: true },
+      { id: 'rops_undamaged',      label: 'ROPS structure free of cracks, bends and structural corrosion', safetyCritical: true, autoOos: true },
+      { id: 'fops_guard',          label: 'FOPS overhead guard undamaged and securely mounted', safetyCritical: true, autoOos: true },
+      { id: 'rops_fasteners',      label: 'ROPS/FOPS mounting fasteners present and torqued', safetyCritical: true, autoOos: true },
       { id: 'no_modifications',    label: 'No drilling, welding or unauthorized modification of ROPS/FOPS', safetyCritical: true },
       { id: 'seat_belt',           label: 'Seat belt undamaged, latches and retracts', safetyCritical: true },
       { id: 'presence_interlock',  label: 'Operator presence interlock disables functions when seat unoccupied', safetyCritical: true },

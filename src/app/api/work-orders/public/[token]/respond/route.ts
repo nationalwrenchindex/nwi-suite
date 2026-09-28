@@ -11,6 +11,7 @@
 // tier is recorded alongside their approval, which a status-only model cannot express.
 
 import { NextResponse } from 'next/server'
+import { FOLLOWUP_DAYS } from '@/lib/followups'
 import { createServiceClient } from '@/lib/supabase/service'
 import { PARENTS } from '@/lib/segments/parent'
 import { SEGMENT_SELECT, shapeSegments } from '@/lib/segments/select'
@@ -19,7 +20,6 @@ import { rollupSegments } from '@/components/shared/segments'
 export const dynamic = 'force-dynamic'
 
 const FK = PARENTS.ld.fkColumn
-const FOLLOWUP_DAYS = 30
 
 export async function POST(
   req: Request,

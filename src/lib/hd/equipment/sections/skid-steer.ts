@@ -68,7 +68,7 @@ export const SKID_STEER_SECTIONS: EquipmentSection[] = [
       { id: 'seat_belt',          label: 'Seat belt webbing, latch and retractor functional', safetyCritical: true },
       { id: 'operator_presence',  label: 'Operator presence switch disables all functions when the seat is vacated', safetyCritical: true },
       { id: 'controls_neutral',   label: 'Drive, lift and tilt controls move all functions correctly and return to neutral', safetyCritical: true },
-      { id: 'park_brake',         label: 'Parking brake holds the machine on grade and does not slip', safetyCritical: true },
+      { id: 'park_brake',         label: 'Parking brake holds the machine on grade and does not slip', safetyCritical: true, autoOos: true },
       { id: 'backup_alarm',       label: 'Backup alarm and horn audible over ambient noise' },
       { id: 'gauges_warnings',    label: 'Gauges and warning lamps illuminate on key-on and clear on start' },
     ],
@@ -76,8 +76,8 @@ export const SKID_STEER_SECTIONS: EquipmentSection[] = [
   {
     id: 'rops_fops', num: 6, label: 'ROPS/FOPS Certification',
     items: [
-      { id: 'rops_structure',    label: 'ROPS structure free of cracks, bends or damaged welds', safetyCritical: true },
-      { id: 'fops_top_guard',    label: 'FOPS top guard undamaged and securely mounted', safetyCritical: true },
+      { id: 'rops_structure',    label: 'ROPS structure free of cracks, bends or damaged welds', safetyCritical: true, autoOos: true },
+      { id: 'fops_top_guard',    label: 'FOPS top guard undamaged and securely mounted', safetyCritical: true, autoOos: true },
       { id: 'cert_label',        label: 'ROPS/FOPS certification label present and legible', safetyCritical: true },
       { id: 'mounting_hardware', label: 'ROPS mounting bolts present, correct grade and tight', safetyCritical: true },
       { id: 'no_modifications',  label: 'No welding, drilling or field modification of the ROPS structure', safetyCritical: true },

@@ -63,8 +63,8 @@ export const EXCAVATOR_SECTIONS: EquipmentSection[] = [
     items: [
       { id: 'joystick_function',   label: 'Joysticks and travel pedals move all functions correctly and return to neutral', safetyCritical: true },
       { id: 'pilot_lockout',       label: 'Hydraulic pilot control lockout lever disables all functions when raised', safetyCritical: true },
-      { id: 'swing_brake',         label: 'Swing brake holds the house against grade and does not slip', safetyCritical: true },
-      { id: 'travel_park_brake',   label: 'Travel and parking brake hold the machine on grade', safetyCritical: true },
+      { id: 'swing_brake',         label: 'Swing brake holds the house against grade and does not slip', safetyCritical: true, autoOos: true },
+      { id: 'travel_park_brake',   label: 'Travel and parking brake hold the machine on grade', safetyCritical: true, autoOos: true },
       { id: 'travel_alarm',        label: 'Travel alarm and backup alarm audible over ambient noise', safetyCritical: true },
       { id: 'horn',                label: 'Horn functional' },
       { id: 'gauges_warnings',     label: 'Gauges and warning lamps illuminate on key-on and clear on start' },
@@ -73,7 +73,7 @@ export const EXCAVATOR_SECTIONS: EquipmentSection[] = [
   {
     id: 'cab', num: 6, label: 'Cab, Visibility and Mirrors',
     items: [
-      { id: 'rops_fops',           label: 'ROPS/FOPS structure undamaged with all mounting bolts present and tight', safetyCritical: true },
+      { id: 'rops_fops',           label: 'ROPS/FOPS structure undamaged with all mounting bolts present and tight', safetyCritical: true, autoOos: true },
       { id: 'seat_belt',           label: 'Seat belt webbing, latch and retractor functional', safetyCritical: true },
       { id: 'glass_intact',        label: 'Cab glass intact with no cracks obstructing the operator view', safetyCritical: true },
       { id: 'mirrors_cameras',     label: 'Mirrors and rear-view camera present, clean and adjusted' },

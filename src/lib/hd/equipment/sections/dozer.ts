@@ -57,9 +57,9 @@ export const DOZER_SECTIONS: EquipmentSection[] = [
   {
     id: 'rops', num: 5, label: 'ROPS',
     items: [
-      { id: 'rops_undamaged',      label: 'ROPS structure free of cracks, bends and corrosion damage', safetyCritical: true },
-      { id: 'rops_unmodified',     label: 'ROPS not drilled, welded or otherwise modified', safetyCritical: true },
-      { id: 'rops_mounting',       label: 'ROPS mounting bolts present, correct grade and torqued', safetyCritical: true },
+      { id: 'rops_undamaged',      label: 'ROPS structure free of cracks, bends and corrosion damage', safetyCritical: true, autoOos: true },
+      { id: 'rops_unmodified',     label: 'ROPS not drilled, welded or otherwise modified', safetyCritical: true, autoOos: true },
+      { id: 'rops_mounting',       label: 'ROPS mounting bolts present, correct grade and torqued', safetyCritical: true, autoOos: true },
       { id: 'seat_belt',           label: 'Seat belt present, undamaged and latching', safetyCritical: true },
       { id: 'rops_label',          label: 'ROPS certification label present and legible' },
       { id: 'falling_object_guard', label: 'FOPS canopy and screens intact (if equipped)', safetyCritical: true },
@@ -80,9 +80,9 @@ export const DOZER_SECTIONS: EquipmentSection[] = [
     id: 'controls', num: 7, label: 'Controls and Safety Devices',
     items: [
       { id: 'blade_controls',      label: 'Blade lift, tilt and angle controls functional and self-centering', safetyCritical: true },
-      { id: 'steering_control',    label: 'Steering responds in both directions without lag', safetyCritical: true },
-      { id: 'service_brakes',      label: 'Service brakes hold and stop the machine', safetyCritical: true },
-      { id: 'parking_brake',       label: 'Parking brake holds machine on grade', safetyCritical: true },
+      { id: 'steering_control',    label: 'Steering responds in both directions without lag', safetyCritical: true, autoOos: true },
+      { id: 'service_brakes',      label: 'Service brakes hold and stop the machine', safetyCritical: true, autoOos: true },
+      { id: 'parking_brake',       label: 'Parking brake holds machine on grade', safetyCritical: true, autoOos: true },
       { id: 'safety_lockout',      label: 'Hydraulic lockout and neutral start interlock functional', safetyCritical: true },
       { id: 'backup_alarm',        label: 'Backup alarm audible above ambient noise' },
       { id: 'horn_lights',         label: 'Horn, work lights and mirrors functional' },

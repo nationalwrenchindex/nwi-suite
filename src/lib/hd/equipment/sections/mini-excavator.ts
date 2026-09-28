@@ -68,7 +68,7 @@ export const MINI_EXCAVATOR_SECTIONS: EquipmentSection[] = [
       { id: 'lockout_lever',       label: 'Pilot control lockout lever disables all functions when raised', safetyCritical: true },
       { id: 'joystick_function',   label: 'Joysticks operate all functions smoothly and return to neutral', safetyCritical: true },
       { id: 'travel_controls',     label: 'Travel levers and pedals track straight and stop on release', safetyCritical: true },
-      { id: 'swing_brake',         label: 'Swing function smooth and swing brake holds house position', safetyCritical: true },
+      { id: 'swing_brake',         label: 'Swing function smooth and swing brake holds house position', safetyCritical: true, autoOos: true },
       { id: 'blade_boom_swing',    label: 'Blade and boom swing pedals functional and return to neutral', safetyCritical: true },
       { id: 'travel_alarm',        label: 'Travel alarm and beacon functional' },
       { id: 'horn',                label: 'Horn functional' },
@@ -77,7 +77,7 @@ export const MINI_EXCAVATOR_SECTIONS: EquipmentSection[] = [
   {
     id: 'cab', num: 6, label: 'Cab, Visibility and Mirrors',
     items: [
-      { id: 'rops_fops',           label: 'ROPS/FOPS canopy or cab undamaged, unmodified, mount bolts tight', safetyCritical: true },
+      { id: 'rops_fops',           label: 'ROPS/FOPS canopy or cab undamaged, unmodified, mount bolts tight', safetyCritical: true, autoOos: true },
       { id: 'seat_belt',           label: 'Seat belt latches, retracts and webbing undamaged', safetyCritical: true },
       { id: 'seat_secure',         label: 'Operator seat and suspension secure and adjustable' },
       { id: 'glass_doors',         label: 'Glass clean and uncracked, door and window latches hold' },

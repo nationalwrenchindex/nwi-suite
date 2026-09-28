@@ -28,7 +28,7 @@ export const BACKHOE_SECTIONS: EquipmentSection[] = [
   {
     id: 'loader', num: 2, label: 'Front Loader — Bucket and Arms',
     items: [
-      { id: 'no_arm_cracks',      label: 'No cracks in loader arm welds, cross-tube or tower mounts', safetyCritical: true },
+      { id: 'no_arm_cracks',      label: 'No cracks in loader arm welds, cross-tube or tower mounts', safetyCritical: true, autoOos: true },
       { id: 'no_bent_arms',       label: 'No bent, twisted or gouged loader arms or bucket linkage', safetyCritical: true },
       { id: 'arm_pins_retained',  label: 'Loader arm and linkage pins secure, retained and free of excessive play', safetyCritical: true },
       { id: 'cutting_edge',       label: 'Bucket cutting edge and bolt-on edge secure and within wear limits' },
@@ -39,10 +39,10 @@ export const BACKHOE_SECTIONS: EquipmentSection[] = [
   {
     id: 'backhoe', num: 3, label: 'Rear Backhoe — Boom, Stick and Bucket',
     items: [
-      { id: 'boom_transport_lock', label: 'Boom transport lock engages and holds the boom in the stowed position', safetyCritical: true },
-      { id: 'no_boom_cracks',      label: 'No cracks in boom, dipper stick or swing tower welds', safetyCritical: true },
+      { id: 'boom_transport_lock', label: 'Boom transport lock engages and holds the boom in the stowed position', safetyCritical: true, autoOos: true },
+      { id: 'no_boom_cracks',      label: 'No cracks in boom, dipper stick or swing tower welds', safetyCritical: true, autoOos: true },
       { id: 'swing_tower_play',    label: 'Swing tower and king post free of excessive play or elongated bores', safetyCritical: true },
-      { id: 'boom_pins_retained',  label: 'Boom, stick and linkage pins secure with retainers installed', safetyCritical: true },
+      { id: 'boom_pins_retained',  label: 'Boom, stick and linkage pins secure with retainers installed', safetyCritical: true, autoOos: true },
       { id: 'hoe_bucket_teeth',    label: 'Hoe bucket teeth and shanks present and retained' },
       { id: 'thumb_coupler',       label: 'Thumb or quick coupler engages positive lock with safety pin installed', safetyCritical: true },
       { id: 'swing_lock_pin',      label: 'Swing lock pin engages and secures the boom for travel', safetyCritical: true },
@@ -51,12 +51,12 @@ export const BACKHOE_SECTIONS: EquipmentSection[] = [
   {
     id: 'stabilizers', num: 4, label: 'Stabilizers and Outriggers',
     items: [
-      { id: 'stab_deploy',         label: 'Stabilizers deploy and retract fully without binding', safetyCritical: true },
-      { id: 'stab_lock_valves',    label: 'Stabilizer lock valves hold under load with no settling', safetyCritical: true },
-      { id: 'stab_no_drift',       label: 'Stabilizers hold position with no uncommanded drift when parked', safetyCritical: true },
+      { id: 'stab_deploy',         label: 'Stabilizers deploy and retract fully without binding', safetyCritical: true, autoOos: true },
+      { id: 'stab_lock_valves',    label: 'Stabilizer lock valves hold under load with no settling', safetyCritical: true, autoOos: true },
+      { id: 'stab_no_drift',       label: 'Stabilizers hold position with no uncommanded drift when parked', safetyCritical: true, autoOos: true },
       { id: 'stab_pads_flipover',  label: 'Stabilizer pads and flip-over street shoes intact and pinned' },
-      { id: 'stab_no_cracks',      label: 'No cracks in stabilizer legs, boxes or frame mounts', safetyCritical: true },
-      { id: 'stab_transport_lock', label: 'Stabilizer transport locks engage for road travel', safetyCritical: true },
+      { id: 'stab_no_cracks',      label: 'No cracks in stabilizer legs, boxes or frame mounts', safetyCritical: true, autoOos: true },
+      { id: 'stab_transport_lock', label: 'Stabilizer transport locks engage for road travel', safetyCritical: true, autoOos: true },
     ],
   },
   {
@@ -86,8 +86,8 @@ export const BACKHOE_SECTIONS: EquipmentSection[] = [
       { id: 'loader_controls',     label: 'Loader control lever moves all functions correctly and returns to neutral', safetyCritical: true },
       { id: 'hoe_controls',        label: 'Backhoe controls move all functions correctly and return to neutral', safetyCritical: true },
       { id: 'seat_rotation_lock',  label: 'Backhoe seat rotates and locks in both operating positions', safetyCritical: true },
-      { id: 'service_park_brakes', label: 'Service brakes stop the machine, pedals locked for travel, and parking brake holds on grade', safetyCritical: true },
-      { id: 'steering_response',   label: 'Steering responds without excessive free play or wander', safetyCritical: true },
+      { id: 'service_park_brakes', label: 'Service brakes stop the machine, pedals locked for travel, and parking brake holds on grade', safetyCritical: true, autoOos: true },
+      { id: 'steering_response',   label: 'Steering responds without excessive free play or wander', safetyCritical: true, autoOos: true },
       { id: 'differential_lock',   label: 'Differential lock engages and releases correctly', safetyCritical: true },
       { id: 'alarm_horn_lights',   label: 'Backup alarm audible over ambient noise, horn and road lights functional', safetyCritical: true },
     ],
@@ -95,9 +95,9 @@ export const BACKHOE_SECTIONS: EquipmentSection[] = [
   {
     id: 'rops', num: 8, label: 'ROPS',
     items: [
-      { id: 'rops_undamaged',     label: 'ROPS structure free of cracks, bends or weld damage', safetyCritical: true },
-      { id: 'rops_bolts',         label: 'ROPS mounting bolts present, correct grade and torqued', safetyCritical: true },
-      { id: 'rops_no_field_mods', label: 'No drilling, welding or field modification of the ROPS', safetyCritical: true },
+      { id: 'rops_undamaged',     label: 'ROPS structure free of cracks, bends or weld damage', safetyCritical: true, autoOos: true },
+      { id: 'rops_bolts',         label: 'ROPS mounting bolts present, correct grade and torqued', safetyCritical: true, autoOos: true },
+      { id: 'rops_no_field_mods', label: 'No drilling, welding or field modification of the ROPS', safetyCritical: true, autoOos: true },
       { id: 'seat_belt',          label: 'Seat belt webbing, latch and retractor functional', safetyCritical: true },
       { id: 'rops_label',         label: 'ROPS certification label present and legible' },
     ],
