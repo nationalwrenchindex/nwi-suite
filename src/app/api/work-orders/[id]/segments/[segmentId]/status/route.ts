@@ -84,7 +84,24 @@ export async function POST(
   }
 
   if (status === 'declined') {
-    if (!existing.declined_at) updates.declined_at = now
+    // Symmetric with the authorized branch above, and for the same reason: whoever
+    // made the decision owns the attribution, and only the FIRST decision sets it.
+    //
+    // This is what made a shop decline read "Declined by the customer". A segment the
+    // customer approved through the link carries authorization_method 'customer_link'.
+    // When the shop then declined it, authorized_at was cleared but the method was
+    // left behind, and the only reader of that field renders 'customer_link' as
+    // "by the customer" -- so the record said the customer refused work they had in
+    // fact agreed to. The prior authorization is being voided here, so the method
+    // that accompanied it has to be replaced, not kept.
+    //
+    // Guarded on !existing.declined_at so the mistake cannot run the other way: a
+    // customer who declined through the link keeps that attribution even if a tech
+    // re-saves the same status afterwards.
+    if (!existing.declined_at) {
+      updates.declined_at          = now
+      updates.authorization_method = body.method ?? 'tech_manual'
+    }
     updates.authorized_at = null
     // A declined segment is the shop's best follow-up: known truck, known fault, a
     // customer who already said "not today".
