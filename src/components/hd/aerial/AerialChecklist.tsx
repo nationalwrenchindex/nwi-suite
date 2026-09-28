@@ -9,12 +9,16 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import type {
-  AerialFormDef, AerialInspectionData, AerialItemState, ItemResult,
+  AerialFormDef, AerialInspectionData, AerialItem, AerialItemState, ItemResult,
 } from '@/types/aerial'
 import {
   collectDeficiencies, emptyData, hasCriticalDeficiency, overallResult, unansweredCount,
 } from '@/types/aerial'
 import SignaturePad from '@/components/hd/SignaturePad'
+import OosPrompt from '@/components/inspections/OosPrompt'
+import {
+  oosBlocker, splitFailures, deriveRemovedFromService,
+} from '@/lib/inspections/out-of-service'
 import { money } from '@/lib/format'
 
 interface UnitOption { id: string; unit_number: string | null; manufacturer: string | null; model: string | null; serial_number?: string | null }
@@ -22,11 +26,14 @@ interface UnitOption { id: string; unit_number: string | null; manufacturer: str
 // ─── One checklist row ────────────────────────────────────────────────────────
 
 function ItemRow({
-  label, safetyCritical, state, onChange, even,
+  item, state, onChange, onOos, even,
 }: {
-  label: string; safetyCritical?: boolean; state: AerialItemState
-  onChange: (f: 'result' | 'notes', v: string) => void; even: boolean
+  item: AerialItem; state: AerialItemState
+  onChange: (f: 'result' | 'notes', v: string) => void
+  onOos: (patch: { outOfService?: boolean; oosNote?: string }) => void
+  even: boolean
 }) {
+  const { label, safetyCritical } = item
   const isFail = state.result === 'fail'
   return (
     <div style={{ background: isFail ? '#1a0505' : even ? '#0f1820' : 'var(--hd-card)', borderTop: '1px solid var(--hd-border)' }}>
@@ -65,6 +72,15 @@ function ItemRow({
             className="w-full px-3 py-1.5 rounded text-xs text-white placeholder-white/20 resize-none"
             style={{ background: '#2d0505', border: '1px solid #EF444440', borderLeft: '3px solid #EF4444' }} />
         </div>
+      )}
+      {/* The second decision. A fail is not a shutdown by itself. */}
+      {isFail && (
+        <OosPrompt
+          item={item}
+          outOfService={state.outOfService}
+          oosNote={state.oosNote}
+          onChange={onOos}
+        />
       )}
     </div>
   )
@@ -118,9 +134,40 @@ export default function AerialChecklist({
   const [error,       setError]       = useState<string | null>(null)
 
   const deficiencies = useMemo(() => collectDeficiencies(def, data), [def, data])
+  // The two printed sections, and the inspection-level flag derived from them.
+  const failures = useMemo(
+    () => splitFailures(
+      def.sections,
+      (si, item) => data.sections[def.sections[si].id]?.items[item.id] as never,
+    ),
+    [def, data],
+  )
+  const itemDerivedOos = deriveRemovedFromService(failures)
   const critical     = hasCriticalDeficiency(deficiencies)
   const result       = overallResult(deficiencies)
   const unanswered   = unansweredCount(def, data)
+
+  /** Patch the out-of-service determination on one item. */
+  function setItemOos(
+    sectionId: string,
+    itemId: string,
+    patch: { outOfService?: boolean; oosNote?: string },
+  ) {
+    setData(prev => ({
+      sections: {
+        ...prev.sections,
+        [sectionId]: {
+          items: {
+            ...prev.sections[sectionId]?.items,
+            [itemId]: {
+              ...(prev.sections[sectionId]?.items[itemId] ?? { result: '' as const, notes: '' }),
+              ...patch,
+            },
+          },
+        },
+      },
+    }))
+  }
 
   function setItem(sectionId: string, itemId: string, field: 'result' | 'notes', value: string) {
     setData(prev => ({
@@ -153,6 +200,15 @@ export default function AerialChecklist({
   if (critical && !removeFromService)
     blockers.push('a safety-critical item failed — removal from service must be confirmed')
 
+  // Every FAILED item answers the out-of-service question, with a reason. One
+  // blocker at a time: a wall of twelve identical messages helps nobody.
+  const oosBlockers = def.sections.flatMap(section =>
+    section.items
+      .map(item => oosBlocker(item, data.sections[section.id]?.items[item.id] as never))
+      .filter((b): b is string => b !== null),
+  )
+  if (oosBlockers.length > 0) blockers.push(oosBlockers[0])
+
   async function submit() {
     setSaving(true)
     setError(null)
@@ -183,7 +239,9 @@ export default function AerialChecklist({
           inspection_data: data,
           deficiencies,
           overall_result:  result,
-          removed_from_service: removeFromService,
+          // Derived from the ITEMS: an inspection is out of service because
+          // something on it is. The safety-critical confirmation still gates submit.
+          removed_from_service: itemDerivedOos ?? removeFromService,
           inspector_name:  inspector,
           inspector_cert_number: certNumber || null,
           signature_data:  signature,
@@ -304,11 +362,11 @@ export default function AerialChecklist({
           {section.items.map((item, i) => (
             <ItemRow
               key={item.id}
-              label={item.label}
-              safetyCritical={item.safetyCritical}
+              item={item}
               even={i % 2 === 0}
               state={data.sections[section.id]?.items[item.id] ?? { result: '', notes: '' }}
               onChange={(f, v) => setItem(section.id, item.id, f, v)}
+              onOos={patch => setItemOos(section.id, item.id, patch)}
             />
           ))}
         </div>

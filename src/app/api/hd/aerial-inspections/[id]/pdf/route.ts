@@ -9,6 +9,9 @@
 // gets a 403, including a signed-in mechanic who simply guessed the uuid.
 
 import { NextResponse, type NextRequest } from 'next/server'
+import {
+  splitFailures, deriveRemovedFromService, type FailedItem,
+} from '@/lib/inspections/out-of-service'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { getFleetProMembership } from '@/lib/fleet-pro/access'
@@ -138,6 +141,17 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const sections = payload.sections ?? {}
 
   const deficiencies = (Array.isArray(insp.deficiencies) ? insp.deficiencies : []) as Deficiency[]
+
+  // FAILED ITEMS SPLIT IN TWO, which is the whole point of the document. Read from
+  // the item states rather than the flattened deficiencies array, because the
+  // out-of-service determination lives on the item.
+  const failures = splitFailures(
+    form.sections,
+    (si, item) => sections[form.sections[si].id]?.items?.[item.id] as never,
+  )
+  // NULL, not false, when nothing failed or nothing answered: a record written
+  // before migration 141 has no position, and the print-out must not invent one.
+  const itemOos = deriveRemovedFromService(failures)
   const passed       = String(insp.overall_result ?? '').toLowerCase() !== 'fail'
   const removed      = insp.removed_from_service === true
   const inspId       = str(insp.inspection_id) ?? `AER-${String(insp.id).slice(0, 8).toUpperCase()}`
@@ -189,24 +203,65 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       </div>`
   }).join('')
 
-  const deficiencyBlock = deficiencies.length ? `
-  <div class="box box-fail">
-    <h3>Deficiencies Found — ${deficiencies.length}</h3>
-    ${deficiencies.map(d => `
+  /** One failed checkpoint, printed. */
+  const failLine = (f: FailedItem) => `
       <p class="viol">
-        <strong>${esc(d.label ?? d.itemId ?? '')}</strong>${d.safetyCritical ? ' <span class="critical">&#9888; SAFETY CRITICAL</span>' : ''}
-        ${d.notes ? `<span class="viol-note">${esc(d.notes)}</span>` : ''}
-      </p>`).join('')}
-  </div>` : `
+        <strong>${esc(f.label)}</strong>
+        <span class="viol-where">${esc(f.sectionLabel)}</span>
+        ${f.notes ? `<span class="viol-note">Tech note: ${esc(f.notes)}</span>` : ''}
+        ${f.oosNote ? `<span class="viol-note">Reason: ${esc(f.oosNote)}</span>` : ''}
+        ${f.overridden ? '<span class="viol-note">Kept in service by the inspector — this checkpoint normally goes out of service.</span>' : ''}
+      </p>`
+
+  // TWO SECTIONS, never one list. A missing decal and a cracked weld are not the
+  // same document to the person reading it in the yard.
+  const oosBlock = failures.outOfService.length ? `
+  <div class="box box-oos">
+    <h3>Out of Service — Do Not Operate</h3>
+    ${failures.outOfService.map(failLine).join('')}
+  </div>` : ''
+
+  const repairBlock = failures.repairs.length ? `
+  <div class="box box-repair">
+    <h3>Repairs Needed — Unit Remains in Service</h3>
+    ${failures.repairs.map(failLine).join('')}
+  </div>` : ''
+
+  // FAILED BEFORE THE FORM ASKED. These have no out-of-service position, so they go
+  // in their own section rather than under "remains in service" -- that heading is a
+  // certification, and nobody signed it on these records. A historical document has
+  // to read the way it read before this shipped.
+  const legacyBlock = failures.unassessed.length ? `
+  <div class="box box-fail">
+    <h3>Deficiencies Found — ${failures.unassessed.length}</h3>
+    <p class="muted">Recorded before this form asked whether a defect takes the unit out of service. No determination is on file for these items.</p>
+    ${failures.unassessed.map(failLine).join('')}
+  </div>` : ''
+
+  const anyFailure = failures.outOfService.length + failures.repairs.length + failures.unassessed.length
+  const cleanBlock = anyFailure === 0 && !deficiencies.length ? `
   <div class="box">
     <h3>Deficiencies</h3>
     <p class="muted">No deficiencies recorded on this inspection.</p>
-  </div>`
+  </div>` : ''
+
+  const deficiencyBlock = `${oosBlock}${repairBlock}${legacyBlock}${cleanBlock}`
 
   // OSHA 1926.453 takes a critically deficient machine out of service. When that
   // box was ticked the document has to say so at the top, not bury it in a list.
-  const removedBanner = removed ? `
-  <div class="removed">MACHINE REMOVED FROM SERVICE — do not operate until repaired and re-inspected</div>` : ''
+  // Out of service if the flag was ticked OR any item says so. A unit with zero
+  // out-of-service items gets a clean IN SERVICE header instead — that is the answer
+  // the person holding the paper is looking for.
+  const isOos = removed || itemOos === true
+  const removedBanner = isOos
+    ? `<div class="removed">MACHINE REMOVED FROM SERVICE — do not operate until repaired and re-inspected</div>`
+    : failures.unassessed.length
+      // Says what is true: items failed, and no out-of-service call is on file. It
+      // must not print IN SERVICE on the strength of a question nobody answered.
+      ? `<div class="unassessed">${failures.unassessed.length} defect${failures.unassessed.length === 1 ? '' : 's'} recorded — no out-of-service determination on file</div>`
+      : failures.repairs.length
+        ? `<div class="in-service">IN SERVICE — ${failures.repairs.length} repair${failures.repairs.length === 1 ? '' : 's'} needed, unit may be operated</div>`
+        : `<div class="in-service">IN SERVICE</div>`
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -231,6 +286,16 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   .citation { font-size: 11px; color: #888; letter-spacing: 0.5px; text-transform: uppercase; }
   .cadence { font-size: 11px; color: #666; line-height: 1.5; margin-bottom: 16px; }
   .removed { background: #dc2626; color: #fff; font-size: 12px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; padding: 8px 12px; border-radius: 6px; margin-bottom: 16px; }
+  /* A green bar of ink costs money and says nothing a border cannot. Light fill,
+     dark text — these get printed on real paper. */
+  .in-service { background: #f0fdf4; border: 2px solid #16a34a; color: #15803d; font-size: 12px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; padding: 8px 12px; border-radius: 6px; margin-bottom: 16px; }
+  .box-oos { border: 2px solid #dc2626; }
+  .box-oos h3 { background: #fee2e2; color: #991b1b; }
+  .box-repair { border: 2px solid #d97706; }
+  .box-repair h3 { background: #fef3c7; color: #92400e; }
+  .viol-where { display: block; font-size: 9px; color: #777; margin-top: 1px; }
+  /* Grey, not green and not red: the honest colour for "not answered". */
+  .unassessed { background: #f3f4f6; border: 2px solid #9ca3af; color: #374151; font-size: 12px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; padding: 8px 12px; border-radius: 6px; margin-bottom: 16px; }
   .result-strip { display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 6px; margin-bottom: 20px; }
   .result-pass { background: #dcfce7; border: 2px solid #16a34a40; }
   .result-fail { background: #fee2e2; border: 2px solid #dc262640; }

@@ -110,6 +110,21 @@ export function oosBlocker(
   return null
 }
 
+/**
+ * A form's failures, in three groups.
+ *
+ * `unassessed` is the backward-compatibility bucket: a failed checkpoint on a record
+ * written before migration 141, which has no out-of-service position at all. It is
+ * kept separate from `repairs` deliberately -- printing it as "unit remains in
+ * service" would assert a certification nobody made, and a historical record has to
+ * read exactly as it read before this shipped.
+ */
+export interface FailureSplit {
+  outOfService: FailedItem[]
+  repairs:      FailedItem[]
+  unassessed:   FailedItem[]
+}
+
 /** One failed checkpoint, ready to print or list. */
 export interface FailedItem {
   sectionLabel: string
@@ -135,15 +150,17 @@ export interface FailedItem {
 export function splitFailures<TItem extends OosCapableItem>(
   sections: Array<{ label: string; items: TItem[] }>,
   read: (sectionIndex: number, item: TItem) => InspectedItemState | null | undefined,
-): { outOfService: FailedItem[]; repairs: FailedItem[] } {
+): FailureSplit {
   const outOfService: FailedItem[] = []
   const repairs: FailedItem[] = []
+  const unassessed: FailedItem[] = []
 
   sections.forEach((section, si) => {
     for (const item of section.items) {
       const state = read(si, item)
       if (!opensOosQuestion(state?.result)) continue
-      const isOos = itemIsOos(state)
+      const answered = itemOosAnswered(state)
+      const isOos    = itemIsOos(state)
       const row: FailedItem = {
         sectionLabel: section.label,
         itemId:       item.id,
@@ -155,11 +172,16 @@ export function splitFailures<TItem extends OosCapableItem>(
         // answered No is a deliberate call somebody should be able to see.
         overridden:   defaultOosFor(item) && state?.outOfService === false,
       }
-      ;(isOos ? outOfService : repairs).push(row)
+      // A FAILED ITEM THAT WAS NEVER ASKED goes in neither section. Filing it under
+      // "remains in service" would put a certification on the record that nobody
+      // signed, and these are DOT documents. Every pre-141 fail lands here.
+      if (!answered) unassessed.push(row)
+      else if (isOos) outOfService.push(row)
+      else repairs.push(row)
     }
   })
 
-  return { outOfService, repairs }
+  return { outOfService, repairs, unassessed }
 }
 
 /**
@@ -168,11 +190,10 @@ export function splitFailures<TItem extends OosCapableItem>(
  * Returns null when no failed item answered the question, so an inspection that
  * predates the split stores NULL rather than a fabricated false.
  */
-export function deriveRemovedFromService(
-  failures: { outOfService: FailedItem[]; repairs: FailedItem[] },
-): boolean | null {
+export function deriveRemovedFromService(failures: FailureSplit): boolean | null {
   if (failures.outOfService.length > 0) return true
   if (failures.repairs.length > 0) return false
+  // Unassessed fails only, or nothing failed: no position was taken either way.
   return null
 }
 
