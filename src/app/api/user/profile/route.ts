@@ -3,9 +3,15 @@
 
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { taxSettingsFrom } from '@/lib/tax'
 
 // Columns that exist on every deployment.
 const BASE_COLUMNS = 'average_mpg, fuel_type, offer_mpi_on_booking, default_labor_rate, default_parts_markup_percent, default_tax_percent'
+
+// Added by migration 140. Same hand-applied-migration problem as the markup column
+// below: this endpoint prefills every tax field in both products, so it has to keep
+// working in the window between the code deploying and the ALTER TABLE running.
+const TAX_COLUMNS = 'tax_parts, tax_labor, tax_rate_parts, tax_rate_labor'
 
 // True when the error is "this database has not run migration 121 yet". Migrations
 // here are applied by hand in the Supabase console, so a deploy can land before the
@@ -13,13 +19,20 @@ const BASE_COLUMNS = 'average_mpg, fuel_type, offer_mpi_on_booking, default_labo
 // which would take the tax rate and the labor rate down with the markup — and this
 // endpoint prefills every HD and LD form. Mirrors isMissingCostingColumn() in
 // src/lib/hd/invoice-costing.ts, which exists for exactly this window.
-function isMissingHdMarkupColumn(error: unknown): boolean {
+function isMissingColumn(error: unknown, names: string[]): boolean {
   if (!error || typeof error !== 'object') return false
   const message = String((error as { message?: unknown }).message ?? '').toLowerCase()
-  return (
-    message.includes('hd_parts_markup_percent') &&
-    (message.includes('does not exist') || message.includes('could not find') || message.includes('schema cache'))
-  )
+  const isMissing =
+    message.includes('does not exist') || message.includes('could not find') || message.includes('schema cache')
+  return isMissing && names.some(n => message.includes(n))
+}
+
+function isMissingHdMarkupColumn(error: unknown): boolean {
+  return isMissingColumn(error, ['hd_parts_markup_percent'])
+}
+
+function isMissingTaxColumn(error: unknown): boolean {
+  return isMissingColumn(error, ['tax_parts', 'tax_labor', 'tax_rate_parts', 'tax_rate_labor'])
 }
 
 export async function GET() {
@@ -29,13 +42,20 @@ export async function GET() {
 
   let { data, error } = await supabase
     .from('profiles')
-    .select(`${BASE_COLUMNS}, hd_parts_markup_percent`)
+    .select(`${BASE_COLUMNS}, hd_parts_markup_percent, ${TAX_COLUMNS}`)
     .eq('id', user.id)
     .single()
 
-  // Pre-migration fallback: re-read without the new column. The response still
-  // carries hd_parts_markup_percent — as the 30 default below — so the HD forms get
-  // the right markup from the day the code deploys rather than the day the SQL runs.
+  // Pre-migration fallbacks, narrowest first. Selecting a column that does not exist
+  // fails the WHOLE query, which would take the labor rate and the markup down with
+  // it — and this endpoint prefills every HD and LD form.
+  if (error && isMissingTaxColumn(error)) {
+    ({ data, error } = await supabase
+      .from('profiles')
+      .select(`${BASE_COLUMNS}, hd_parts_markup_percent`)
+      .eq('id', user.id)
+      .single())
+  }
   if (error && isMissingHdMarkupColumn(error)) {
     ({ data, error } = await supabase
       .from('profiles')
@@ -60,6 +80,11 @@ export async function GET() {
     // brief's number and DEFAULT_HD_PARTS_MARKUP in src/lib/hd/parts-pricing.ts.
     hd_parts_markup_percent:       data?.hd_parts_markup_percent       ?? 30,
     default_tax_percent:           data?.default_tax_percent           ?? 8.5,
+    // Resolved through the shared helper so the pre-140 fallback is defined in ONE
+    // place: no tax columns means labor stays taxed at default_tax_percent, which is
+    // what the code did before the split existed. Falling back to 'not taxed' would
+    // under-collect, and under-collected tax is money the shop owes itself.
+    ...taxSettingsFrom(data),
   })
 }
 
@@ -137,6 +162,25 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'default_tax_percent must be 0–99' }, { status: 400 })
     }
     update.default_tax_percent = Math.round(n * 100) / 100
+  }
+
+  // ── Tax split (migration 140) ──
+  for (const flag of ['tax_parts', 'tax_labor'] as const) {
+    if (flag in body) {
+      if (typeof body[flag] !== 'boolean') {
+        return NextResponse.json({ error: `${flag} must be true or false` }, { status: 400 })
+      }
+      update[flag] = body[flag]
+    }
+  }
+  for (const rate of ['tax_rate_parts', 'tax_rate_labor'] as const) {
+    if (rate in body) {
+      const n = Number(body[rate])
+      if (isNaN(n) || n < 0 || n > 99) {
+        return NextResponse.json({ error: `${rate} must be 0–99` }, { status: 400 })
+      }
+      update[rate] = Math.round(n * 100) / 100
+    }
   }
 
   if ('phone' in body) {

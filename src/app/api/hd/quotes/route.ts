@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
 import { logHDCustomer } from '@/lib/hd/customer-logging'
+import { isMissingTaxBreakdownColumn, withoutTaxBreakdown } from '@/lib/tax'
 import { addressFrom } from '@/lib/address'
 
 export const dynamic = 'force-dynamic'
@@ -59,11 +60,26 @@ export async function POST(req: NextRequest) {
   const seq = String((count ?? 0) + 1).padStart(4, '0')
   const quote_number = `Q-${year}-${seq}`
 
-  const { data, error } = await supabase
+  const quoteRow = { ...quoteBody, user_id: user.id, quote_number }
+
+  let { data, error } = await supabase
     .from('hd_quotes')
-    .insert({ ...quoteBody, user_id: user.id, quote_number })
+    .insert(quoteRow)
     .select()
     .single()
+
+  // Migration 140 is applied by hand and a preview deploy runs against the same
+  // database, so there is a window where this writes tax_breakdown and the column
+  // does not exist yet. The quote is complete without it -- tax_amount and the total
+  // are already correct -- so retry rather than cost the tech the quote they typed.
+  if (error && isMissingTaxBreakdownColumn(error)) {
+    console.error('[hd/quotes] tax_breakdown missing — run migration 140', error.message)
+    ;({ data, error } = await supabase
+      .from('hd_quotes')
+      .insert(withoutTaxBreakdown(quoteRow))
+      .select()
+      .single())
+  }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 

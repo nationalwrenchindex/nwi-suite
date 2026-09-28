@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
 import { logHDCustomer } from '@/lib/hd/customer-logging'
+import { isMissingTaxBreakdownColumn, withoutTaxBreakdown } from '@/lib/tax'
 import { addressFrom } from '@/lib/address'
 import { resolveInvoiceFleetLinks } from '@/lib/fleet-pro/invoice-link'
 import { costingFromLineItems, isMissingCostingColumn } from '@/lib/hd/invoice-costing'
@@ -161,6 +162,18 @@ export async function POST(req: NextRequest) {
     ;({ data, error } = await supabase
       .from('hd_invoices')
       .insert(baseRow)
+      .select()
+      .single())
+  }
+
+  // Same window, migration 140. tax_breakdown records WHAT was taxed for the
+  // customer copy; the invoice itself, including tax_amount and total, is complete
+  // without it. Losing the invoice over a display field would be the wrong trade.
+  if (error && isMissingTaxBreakdownColumn(error)) {
+    console.error('[hd/invoices] tax_breakdown missing — run migration 140', error.message)
+    ;({ data, error } = await supabase
+      .from('hd_invoices')
+      .insert(withoutTaxBreakdown(insertRow))
       .select()
       .single())
   }

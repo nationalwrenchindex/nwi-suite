@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { LABOR_GUIDE, type LaborGuideItem } from '@/lib/hd/labor-guide'
-import { useDefaultTaxPercent } from '@/lib/hd/use-default-tax-rate'
+import { useTaxSettings } from '@/lib/use-tax-settings'
+import { computeTax, taxDisplayRows } from '@/lib/tax'
 import { DEFAULT_HD_PARTS_MARKUP, sellPrice, lineAmount } from '@/lib/hd/parts-pricing'
 import AddressAutofill from '@/components/hd/AddressAutofill'
 import { money } from '@/lib/format'
@@ -216,16 +217,19 @@ export default function NewQuotePage() {
     complaint: '', diagnosis: '',
     labor_rate: 125, diagnostic_fee: 125, include_diagnostic: true,
     road_call_fee: 0, include_road_call: false,
-    tax_rate: 0, notes: '', valid_until: '',
+    tax_rate: 0, tax_rate_labor: 0, notes: '', valid_until: '',
   })
 
   // Seed the tax rate from the tech's saved default. A converted quote carries its
   // tax_rate onto the invoice, so this is what keeps quote-sourced invoices taxed.
-  const defaultTaxPct = useDefaultTaxPercent()
+  const taxSettings = useTaxSettings()
   useEffect(() => {
-    if (defaultTaxPct == null) return
-    setForm(f => (f.tax_rate === 0 ? { ...f, tax_rate: defaultTaxPct } : f))
-  }, [defaultTaxPct])
+    if (taxSettings == null) return
+    // Prefill BOTH rates, and only while the tech has not typed one.
+    setForm(f => (f.tax_rate === 0
+      ? { ...f, tax_rate: taxSettings.tax_rate_parts, tax_rate_labor: taxSettings.tax_rate_labor }
+      : f))
+  }, [taxSettings])
 
   // Seed the parts markup from the subscriber's saved HD default (migration 121).
   // Deliberately hd_parts_markup_percent and not default_parts_markup_percent: the
@@ -493,7 +497,20 @@ export default function NewQuotePage() {
   const diagFee       = form.include_diagnostic ? form.diagnostic_fee : 0
   const roadFee       = form.include_road_call  ? form.road_call_fee  : 0
   const taxBase       = subtotalLabor + subtotalParts + diagFee + roadFee
-  const taxAmount     = taxBase * (form.tax_rate / 100)
+
+  // THE DIAGNOSTIC FEE AND THE ROAD CALL FEE ARE LABOR. Leaving them on the parts
+  // side would have moved the bug instead of fixing it: a shop in a state that
+  // exempts labor would still have been taxing its own call-out.
+  const tax = computeTax(
+    { parts: subtotalParts, labor: subtotalLabor + diagFee + roadFee },
+    {
+      tax_parts:      taxSettings?.tax_parts ?? true,
+      tax_labor:      taxSettings?.tax_labor ?? true,
+      tax_rate_parts: form.tax_rate,
+      tax_rate_labor: form.tax_rate_labor,
+    },
+  )
+  const taxAmount     = tax.taxAmount
   const total         = taxBase + taxAmount
 
   function fmt(n: number) { return `${money(n)}` }
@@ -751,6 +768,9 @@ export default function NewQuotePage() {
         diagnostic_fee:    parseFloat(diagFee.toFixed(2)),
         road_call_fee:     parseFloat(roadFee.toFixed(2)),
         tax_rate:          form.tax_rate,
+        // What was actually taxed, so the customer copy can say so and no later
+        // reader has to guess the split back out of a blended subtotal.
+        tax_breakdown:     tax.breakdown,
         tax_amount:        parseFloat(taxAmount.toFixed(2)),
         total:             parseFloat(total.toFixed(2)),
         notes:             form.notes || null,
@@ -1229,11 +1249,27 @@ export default function NewQuotePage() {
                   max={30}
                   step={0.1}
                   value={form.tax_rate}
-                  onChange={e => setField('tax_rate', parseFloat(e.target.value) || 0)}
+                  onChange={e => {
+                    const v = parseFloat(e.target.value) || 0
+                    // One rate typed once: carry it to labor while the two still
+                    // match, never over a difference the tech set deliberately.
+                    setForm(f => ({
+                      ...f,
+                      tax_rate: v,
+                      tax_rate_labor: f.tax_rate_labor === f.tax_rate ? v : f.tax_rate_labor,
+                    }))
+                  }}
                   style={{ width: 70, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '4px 8px', fontSize: 13, textAlign: 'right' }}
                 />
                 <span className="text-sm" style={{ color: MUTED }}>{fmt(taxAmount)}</span>
               </div>
+              {/* What is being taxed, including what is NOT. A tech who can see
+                  "Labor - not taxable" catches a wrong setting before a customer does. */}
+              {taxDisplayRows(tax.breakdown).map(r => (
+                <div key={r.category} className="flex justify-between text-xs py-0.5" style={{ color: MUTED }}>
+                  <span>{r.text}</span><span>{fmt(r.amount)}</span>
+                </div>
+              ))}
               <div className="flex justify-between items-center pt-3" style={{ borderTop: `2px solid ${ORANGE}`, marginTop: 4 }}>
                 <span className="font-bold text-base" style={{ color: TEXT }}>TOTAL</span>
                 <span className="font-bold text-2xl" style={{ color: ORANGE }}>{fmt(total)}</span>

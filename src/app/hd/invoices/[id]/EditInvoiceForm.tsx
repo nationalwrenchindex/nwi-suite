@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { money } from '@/lib/format'
+import { computeTax, parseBreakdown, taxDisplayRows } from '@/lib/tax'
 
 const ORANGE = '#FF6600'
 const BLUE   = '#2969B0'
@@ -73,6 +74,13 @@ export default function EditInvoiceForm({ invoice }: { invoice: Record<string, u
     }))
   })
 
+  // What THIS invoice taxed, read off its own stored breakdown rather than off the
+  // shop's current settings. NULL means it predates migration 140, and a pre-140
+  // invoice taxed labor -- so that is the fallback, not "exempt".
+  const storedTax  = parseBreakdown(invoice.tax_breakdown)
+  const taxedParts = storedTax?.parts ? storedTax.parts.taxed : true
+  const taxedLabor = storedTax?.labor ? storedTax.labor.taxed : true
+
   const [form, setForm] = useState({
     customer_name:  str(invoice.customer_name),
     customer_phone: str(invoice.customer_phone),
@@ -84,6 +92,13 @@ export default function EditInvoiceForm({ invoice }: { invoice: Record<string, u
     diagnostic_fee: num(invoice.diagnostic_fee),
     road_call_fee:  num(invoice.road_call_fee),
     tax_rate:       num(invoice.tax_rate),
+    // Seeded from what THIS invoice already taxed, never from the shop's current
+    // settings. Editing an invoice must not quietly re-base its tax: a shop that
+    // turns labor tax off and then opens a sent invoice to fix a typo would
+    // otherwise watch the total drop, which is exactly the "do not alter what was
+    // already sent" rule. A legacy invoice has no stored breakdown, and a legacy
+    // invoice taxed labor, so that is the fallback.
+    tax_rate_labor: storedTax?.labor?.rate ?? num(invoice.tax_rate),
     notes:          str(invoice.notes),
     payment_terms:  str(invoice.payment_terms) || 'net30',
   })
@@ -136,7 +151,18 @@ export default function EditInvoiceForm({ invoice }: { invoice: Record<string, u
   const subtotalLabor = lineItems.filter(i => i.type === 'labor').reduce((s, i) => s + i.amount, 0)
   const subtotalParts = lineItems.filter(i => i.type === 'parts').reduce((s, i) => s + i.amount, 0)
   const taxBase = subtotalLabor + subtotalParts + form.diagnostic_fee + form.road_call_fee
-  const taxAmount = taxBase * (form.tax_rate / 100)
+
+  // Diagnostic and road call fees are LABOR. Same rule as the new-invoice form.
+  const tax = computeTax(
+    { parts: subtotalParts, labor: subtotalLabor + form.diagnostic_fee + form.road_call_fee },
+    {
+      tax_parts:      taxedParts,
+      tax_labor:      taxedLabor,
+      tax_rate_parts: form.tax_rate,
+      tax_rate_labor: form.tax_rate_labor,
+    },
+  )
+  const taxAmount = tax.taxAmount
   const total = taxBase + taxAmount
 
   async function save() {
@@ -158,6 +184,7 @@ export default function EditInvoiceForm({ invoice }: { invoice: Record<string, u
         road_call_fee:  parseFloat(form.road_call_fee.toFixed(2)),
         tax_rate:       form.tax_rate,
         tax_amount:     parseFloat(taxAmount.toFixed(2)),
+        tax_breakdown:  tax.breakdown,
         total:          parseFloat(total.toFixed(2)),
         notes:          form.notes || null,
         payment_terms:  form.payment_terms || 'net30',
@@ -265,10 +292,19 @@ export default function EditInvoiceForm({ invoice }: { invoice: Record<string, u
               ))}
               <div className="flex items-center gap-3 py-2" style={{ borderTop: `1px solid ${BORDER}`, marginTop: 4 }}>
                 <span className="text-sm flex-1" style={{ color: MUTED }}>Tax %</span>
-                <input type="number" min={0} max={30} step={0.1} value={form.tax_rate} onChange={e => setField('tax_rate', parseFloat(e.target.value) || 0)}
+                <input type="number" min={0} max={30} step={0.1} value={form.tax_rate}
+                  onChange={e => {
+                    const v = parseFloat(e.target.value) || 0
+                    setForm(f => ({ ...f, tax_rate: v, tax_rate_labor: f.tax_rate_labor === f.tax_rate ? v : f.tax_rate_labor }))
+                  }}
                   style={{ width: 70, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '4px 8px', fontSize: 13, textAlign: 'right' }} />
                 <span className="text-sm" style={{ color: MUTED }}>{fmt(taxAmount)}</span>
               </div>
+              {taxDisplayRows(tax.breakdown).map(r => (
+                <div key={r.category} className="flex justify-between text-xs py-0.5" style={{ color: MUTED }}>
+                  <span>{r.text}</span><span>{fmt(r.amount)}</span>
+                </div>
+              ))}
               <div className="flex justify-between items-center pt-3" style={{ borderTop: `2px solid ${ORANGE}`, marginTop: 4 }}>
                 <span className="font-bold text-base" style={{ color: TEXT }}>TOTAL</span>
                 <span className="font-bold text-2xl" style={{ color: ORANGE }}>{fmt(total)}</span>

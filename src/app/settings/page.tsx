@@ -146,7 +146,6 @@ export default async function SettingsPage() {
           initialOfferMpi={p.offer_mpi_on_booking ?? false}
           initialLaborRate={p.default_labor_rate ?? 125}
           initialMarkupPct={p.default_parts_markup_percent ?? 20}
-          initialTaxPct={p.default_tax_percent ?? 8.5}
           initialPricingRows={(pricingRows ?? []) as PricingRow[]}
           initialBillConsumables={p.bill_consumables_separately ?? false}
           initialWorkOrdersEnabled={p.work_orders_enabled ?? false}

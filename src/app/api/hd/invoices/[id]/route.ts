@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { isMissingTaxBreakdownColumn } from '@/lib/tax'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
 import { computeDueDate } from '@/lib/hd/payment-terms'
@@ -118,6 +119,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     console.error('[hd/invoices/:id] parts_cost/parts_sell missing — run migration 119', error.message)
     delete update.parts_cost
     delete update.parts_sell
+    ;({ data, error } = await supabase
+      .from('hd_invoices')
+      .update(update)
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select()
+      .single())
+  }
+
+  // And the same again for migration 140. A tech marking an invoice paid must not be
+  // blocked because a display column has not been created yet.
+  if (error && isMissingTaxBreakdownColumn(error)) {
+    console.error('[hd/invoices/:id] tax_breakdown missing — run migration 140', error.message)
+    delete update.tax_breakdown
     ;({ data, error } = await supabase
       .from('hd_invoices')
       .update(update)

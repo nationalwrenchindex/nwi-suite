@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { computeDueDate } from '@/lib/hd/payment-terms'
-import { useDefaultTaxPercent } from '@/lib/hd/use-default-tax-rate'
+import { useTaxSettings } from '@/lib/use-tax-settings'
+import { computeTax, taxDisplayRows } from '@/lib/tax'
 import { DEFAULT_HD_PARTS_MARKUP, sellPrice, lineAmount } from '@/lib/hd/parts-pricing'
 import AddressAutofill from '@/components/hd/AddressAutofill'
 import { money } from '@/lib/format'
@@ -102,18 +103,20 @@ export default function NewInvoicePage() {
     complaint: '', diagnosis: '',
     labor_rate: 125, diagnostic_fee: 125, include_diagnostic: false,
     road_call_fee: 0, include_road_call: false,
-    tax_rate: 0, notes: '',
+    tax_rate: 0, tax_rate_labor: 0, notes: '',
   })
 
   function setField(k: string, v: string | number | boolean) { setForm(f => ({ ...f, [k]: v })) }
 
   // Seed the tax rate from the tech's saved default. Only fills while the field is
   // still untouched at 0, so a rate typed while the fetch was in flight survives.
-  const defaultTaxPct = useDefaultTaxPercent()
+  const taxSettings = useTaxSettings()
   useEffect(() => {
-    if (defaultTaxPct == null) return
-    setForm(f => (f.tax_rate === 0 ? { ...f, tax_rate: defaultTaxPct } : f))
-  }, [defaultTaxPct])
+    if (taxSettings == null) return
+    setForm(f => (f.tax_rate === 0
+      ? { ...f, tax_rate: taxSettings.tax_rate_parts, tax_rate_labor: taxSettings.tax_rate_labor }
+      : f))
+  }, [taxSettings])
 
   // Seed the parts markup from the subscriber's saved HD default (migration 121).
   // Deliberately hd_parts_markup_percent and not default_parts_markup_percent: the
@@ -337,7 +340,18 @@ export default function NewInvoicePage() {
   const diagFee = form.include_diagnostic ? form.diagnostic_fee : 0
   const roadFee = form.include_road_call  ? form.road_call_fee  : 0
   const taxBase = subtotalLabor + subtotalParts + diagFee + roadFee
-  const taxAmount = taxBase * (form.tax_rate / 100)
+
+  // Diagnostic and road call fees follow LABOR, not parts. See lib/tax.ts.
+  const tax = computeTax(
+    { parts: subtotalParts, labor: subtotalLabor + diagFee + roadFee },
+    {
+      tax_parts:      taxSettings?.tax_parts ?? true,
+      tax_labor:      taxSettings?.tax_labor ?? true,
+      tax_rate_parts: form.tax_rate,
+      tax_rate_labor: form.tax_rate_labor,
+    },
+  )
+  const taxAmount = tax.taxAmount
   const total = taxBase + taxAmount
 
   // ── Save ──
@@ -390,6 +404,7 @@ export default function NewInvoicePage() {
         diagnostic_fee:    parseFloat(diagFee.toFixed(2)),
         road_call_fee:     parseFloat(roadFee.toFixed(2)),
         tax_rate:          form.tax_rate,
+        tax_breakdown:     tax.breakdown,
         tax_amount:        parseFloat(taxAmount.toFixed(2)),
         total:             parseFloat(total.toFixed(2)),
         notes:             form.notes || null,
@@ -628,10 +643,19 @@ export default function NewInvoicePage() {
               ))}
               <div className="flex items-center gap-3 py-2" style={{ borderTop: `1px solid ${BORDER}`, marginTop: 4 }}>
                 <span className="text-sm flex-1" style={{ color: MUTED }}>Tax %</span>
-                <input type="number" min={0} max={30} step={0.1} value={form.tax_rate} onChange={e => setField('tax_rate', parseFloat(e.target.value) || 0)}
+                <input type="number" min={0} max={30} step={0.1} value={form.tax_rate}
+                  onChange={e => {
+                    const v = parseFloat(e.target.value) || 0
+                    setForm(f => ({ ...f, tax_rate: v, tax_rate_labor: f.tax_rate_labor === f.tax_rate ? v : f.tax_rate_labor }))
+                  }}
                   style={{ width: 70, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '4px 8px', fontSize: 13, textAlign: 'right' }} />
                 <span className="text-sm" style={{ color: MUTED }}>{fmt(taxAmount)}</span>
               </div>
+              {taxDisplayRows(tax.breakdown).map(r => (
+                <div key={r.category} className="flex justify-between text-xs py-0.5" style={{ color: MUTED }}>
+                  <span>{r.text}</span><span>{fmt(r.amount)}</span>
+                </div>
+              ))}
               <div className="flex justify-between items-center pt-3" style={{ borderTop: `2px solid ${ORANGE}`, marginTop: 4 }}>
                 <span className="font-bold text-base" style={{ color: TEXT }}>TOTAL</span>
                 <span className="font-bold text-2xl" style={{ color: ORANGE }}>{fmt(total)}</span>

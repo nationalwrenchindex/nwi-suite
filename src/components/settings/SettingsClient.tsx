@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
+import TaxSettingsFields from '@/components/settings/TaxSettingsFields'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import ShareBookingModal from '@/components/ShareBookingModal'
@@ -137,7 +138,7 @@ export default function SettingsClient({
   initialOfferMpi     = false,
   initialLaborRate    = 125,
   initialMarkupPct    = 20,
-  initialTaxPct       = 8.5,
+
   initialPricingRows       = [],
   initialBillConsumables   = false,
   initialWorkOrdersEnabled = false,
@@ -160,7 +161,7 @@ export default function SettingsClient({
   initialOfferMpi?:            boolean
   initialLaborRate?:           number
   initialMarkupPct?:           number
-  initialTaxPct?:              number
+
   initialPricingRows?:         PricingRow[]
   initialBillConsumables?:     boolean
   initialWorkOrdersEnabled?:   boolean
@@ -200,7 +201,7 @@ export default function SettingsClient({
 
   const [laborRate,     setLaborRate]     = useState(String(initialLaborRate))
   const [markupPct,     setMarkupPct]     = useState(String(initialMarkupPct))
-  const [taxPct,        setTaxPct]        = useState(String(initialTaxPct))
+
   const [savingRates,   setSavingRates]   = useState(false)
 
   const [adjPresets,     setAdjPresets]     = useState<AdjustmentPreset[]>(initialAdjustmentPresets)
@@ -385,17 +386,19 @@ export default function SettingsClient({
     try {
       const lr = parseFloat(laborRate)
       const mp = parseFloat(markupPct)
-      const tp = parseFloat(taxPct)
+
       if (isNaN(lr) || lr < 0) { setSavedMsg('Enter a valid labor rate.'); setTimeout(() => setSavedMsg(null), 3000); setSavingRates(false); return }
       if (isNaN(mp) || mp < 0) { setSavedMsg('Enter a valid markup %.'); setTimeout(() => setSavedMsg(null), 3000); setSavingRates(false); return }
-      if (isNaN(tp) || tp < 0) { setSavedMsg('Enter a valid tax %.'); setTimeout(() => setSavedMsg(null), 3000); setSavingRates(false); return }
+
       const res = await fetch('/api/user/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           default_labor_rate:           lr,
           default_parts_markup_percent: mp,
-          default_tax_percent:          tp,
+          // default_tax_percent is NOT written here any more. Sales tax moved to its
+          // own section below, which writes tax_rate_parts / tax_rate_labor. Two
+          // writers for one rate is how the two drift apart.
         }),
       })
       if (res.ok) {
@@ -822,19 +825,6 @@ export default function SettingsClient({
               onChange={e => setMarkupPct(e.target.value)}
             />
           </div>
-          <div>
-            <label className="nwi-label">Tax Rate (%)</label>
-            <input
-              type="number"
-              min="0"
-              max="99"
-              step="0.1"
-              className="nwi-input text-sm w-full"
-              placeholder="8.5"
-              value={taxPct}
-              onChange={e => setTaxPct(e.target.value)}
-            />
-          </div>
           <button
             onClick={savePricingRates}
             disabled={savingRates}
@@ -843,6 +833,18 @@ export default function SettingsClient({
             {savingRates ? 'Saving…' : 'Save Pricing Defaults'}
           </button>
         </div>
+      </section>
+      )}
+
+      {/* ── Sales Tax ──
+          Its own section rather than a third box inside Pricing Defaults: this is two
+          decisions (what is taxed) plus two rates, and it is the setting most likely
+          to be wrong for a given state. */}
+      {businessType !== 'detailer' && (
+      <section className="nwi-card">
+        <p className="font-condensed font-bold text-white text-lg tracking-wide mb-1">SALES TAX</p>
+        <p className="text-white/40 text-xs mb-4">What you charge tax on, and at what rate.</p>
+        <TaxSettingsFields variant="ld" />
       </section>
       )}
 

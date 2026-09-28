@@ -6,6 +6,7 @@ import HDSettingsForm from '@/components/hd/HDSettingsForm'
 import LateFeeSettingsForm from '@/components/hd/LateFeeSettingsForm'
 import ExportData from '@/components/hd/ExportData'
 import ThemeToggle from '@/components/layout/ThemeToggle'
+import TaxSettingsFields from '@/components/settings/TaxSettingsFields'
 
 export const metadata = { title: 'Settings — NWI HD Suite' }
 
@@ -99,6 +100,19 @@ export default async function HDSettingsPage() {
             initialEpaCert={p?.hd_epa_cert_number ?? null}
             initialLogoUrl={resolveBranding(p).logoUrl}
           />
+        </div>
+
+        {/* Sales tax. The SAME component LD settings mounts, not a copy -- both write
+            the same four profile columns, and a shop that runs both products must not
+            be able to set two different answers to the same question. HD reads it
+            through /api/user/profile like every other pricing default. */}
+        <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
+          <p className="font-condensed font-bold text-white text-lg tracking-wide mb-1">SALES TAX</p>
+          <p className="text-sm mb-4" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+            What you charge tax on, and at what rate. The diagnostic fee and the road
+            call fee follow the labor setting.
+          </p>
+          <TaxSettingsFields variant="hd" />
         </div>
 
         <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>

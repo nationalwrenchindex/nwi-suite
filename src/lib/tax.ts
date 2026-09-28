@@ -188,6 +188,30 @@ export function parseBreakdown(value: unknown): TaxBreakdown | null {
   return found ? out : null
 }
 
+/**
+ * True when a write failed only because migration 140 has not been applied yet.
+ *
+ * Migrations here are applied by hand, and a preview deploy runs against the same
+ * database, so there is a real window where the code writes tax_breakdown and the
+ * column does not exist. An insert that fails costs the tech the invoice they just
+ * typed, which is not a price worth paying for a display field -- every write path
+ * retries without it. Mirrors isMissingCostingColumn() in lib/hd/invoice-costing.ts,
+ * which exists for exactly the same reason.
+ */
+export function isMissingTaxBreakdownColumn(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const m = String((error as { message?: unknown }).message ?? '').toLowerCase()
+  return m.includes('tax_breakdown') &&
+    (m.includes('does not exist') || m.includes('could not find') || m.includes('schema cache'))
+}
+
+/** Drop the column from a row so a write can be retried without it. */
+export function withoutTaxBreakdown<T extends Record<string, unknown>>(row: T): T {
+  const copy = { ...row }
+  delete copy.tax_breakdown
+  return copy
+}
+
 /** Display order and labels, so every surface words it the same way. */
 export const TAX_CATEGORY_LABEL: Record<TaxCategory, string> = {
   parts:    'Parts',
