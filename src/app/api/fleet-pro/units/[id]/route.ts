@@ -7,6 +7,9 @@
 // the twelve-month cost curve.
 
 import { NextResponse, type NextRequest } from 'next/server'
+import {
+  unitInspectionState, hasUnassessedFail, type InspectionStatusInput,
+} from '@/lib/fleet-pro/inspection-status'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { requireFleetProMember } from '@/lib/fleet-pro/access'
@@ -92,9 +95,6 @@ function countOf(value: unknown): number {
   return Array.isArray(value) ? value.length : 0
 }
 
-function isFail(result: unknown): boolean {
-  return String(result ?? '').toLowerCase() === 'fail'
-}
 
 /** Newest first. Undated rows sink to the bottom rather than corrupting the order. */
 function byDateDesc(a: UnitServiceEvent, b: UnitServiceEvent): number {
@@ -233,7 +233,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       .eq('unit_id', unitId).eq('fleet_account_id', fleetId),
 
     svc.from('hd_equipment_inspections')
-      .select('id, inspection_date, equipment_type, overall_result, inspector_name, inspection_id, invoice_id, deficiencies')
+      .select('id, inspection_date, equipment_type, overall_result, inspector_name, inspection_id, invoice_id, deficiencies, removed_from_service')
       .eq('unit_id', unitId).eq('fleet_account_id', fleetId),
 
     svc.from('fleet_pro_pm_schedules')
@@ -369,7 +369,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       kind:       'equipment_inspection',
       date:       dayOf(r.inspection_date) ?? '',
       title:      `Equipment Inspection — ${(r.equipment_type as string | null) ?? 'equipment'}`,
-      detail:     [r.inspector_name as string | null, d > 0 ? `${d} deficienc${d === 1 ? 'y' : 'ies'}` : null].filter(Boolean).join(' · ') || null,
+      detail:     [
+        r.inspector_name as string | null,
+        d > 0 ? `${d} deficienc${d === 1 ? 'y' : 'ies'}` : null,
+        // Aerial already said this on its timeline row; equipment did not, despite
+        // capturing the same flag.
+        r.removed_from_service ? 'Removed from service' : null,
+      ].filter(Boolean).join(' · ') || null,
       status:     null,
       result:     (r.overall_result as string | null) ?? null,
       cost:       null,
@@ -486,7 +492,25 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const inspectionEvents  = [...dotEvents, ...aerialEvents, ...equipEvents]
   const inspectionDates   = inspectionEvents.map(e => e.date).filter(Boolean).sort()
   const lastInspectionDate = inspectionDates.length ? inspectionDates[inspectionDates.length - 1] : null
-  const openInspectionIssue = inspectionEvents.some(e => isFail(e.result))
+  // Three states, from the same helper the two dashboards use, so a unit cannot read
+  // "Out of service" in the list and "Needs repair" on its own page.
+  // Built from the RAW rows, not from inspectionEvents: UnitServiceEvent is the
+  // timeline display shape and has no business carrying a compliance flag.
+  // hd_dot_inspections has no removed_from_service column at all, so those rows
+  // leave it undefined -- "never asked", which the helper treats as distinct from no.
+  const inspectionInputs: InspectionStatusInput[] = [
+    ...dotRows.map(r => ({ result: (r.overall_result as string | null) ?? null })),
+    ...aerialRows.map(r => ({
+      result: (r.overall_result as string | null) ?? null,
+      removedFromService: (r.removed_from_service as boolean | null) ?? null,
+    })),
+    ...equipRows.map(r => ({
+      result: (r.overall_result as string | null) ?? null,
+      removedFromService: (r.removed_from_service as boolean | null) ?? null,
+    })),
+  ]
+  const inspectionState      = unitInspectionState(inspectionInputs)
+  const inspectionUnassessed = hasUnassessedFail(inspectionInputs)
 
   const sched = (pmSchedule ?? null) as Row | null
 
@@ -540,7 +564,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     last_pm_date:         lastPmDate,
     last_pm_type:         lastPmType,
 
-    open_inspection_issue: openInspectionIssue,
+    inspection_state:      inspectionState,
+    inspection_unassessed: inspectionUnassessed,
     last_inspection_date:  lastInspectionDate,
 
     spend_mtd:            showCosts ? spendMtd : null,

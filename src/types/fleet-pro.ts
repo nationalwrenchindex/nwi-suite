@@ -2,6 +2,7 @@
 // Client-safe. No Supabase or Stripe imports here.
 
 import type { MonthlyCost } from './fleet-pro-cost'
+import type { UnitInspectionState } from '@/lib/fleet-pro/inspection-status'
 
 export type FleetProRole   = 'manager' | 'supervisor' | 'viewer'
 export type FleetProStatus = 'invited' | 'active' | 'revoked'
@@ -79,7 +80,17 @@ export interface FleetProUnitRow {
   last_pm_date?:      string | null
   last_pm_type?:      string | null
 
-  open_inspection_issue: boolean      // any inspection with overall_result = 'fail'
+  // THREE STATES, not a boolean. This used to be "any inspection with
+  // overall_result = 'fail'", which made a missing DOT decal read exactly like a
+  // cracked boom weld -- and gave shops a reason to mark things Pass. Derived in
+  // lib/fleet-pro/inspection-status from removed_from_service, which the aerial and
+  // equipment forms were already capturing and every dashboard was ignoring.
+  inspection_state:      UnitInspectionState
+  /** True when this unit has a fail on a record that never answered the
+   *  out-of-service question -- every DOT, PM and pre-trip record written before
+   *  the split shipped. Lets a surface say "not assessed" rather than implying a
+   *  mechanic made a call they were never asked to make. */
+  inspection_unassessed: boolean
   last_inspection_date:  string | null
 
   // Null for viewers — cost is withheld by role, not merely hidden in the UI.
@@ -121,7 +132,10 @@ export interface FleetProDashboard {
   unit_count:       number
   overdue_count:    number
   due_soon_count:   number
-  failed_inspection_count: number
+  // Split, because they are different actions. out_of_service is stop-work;
+  // needs_repair is a work list.
+  out_of_service_count:    number
+  needs_repair_count:      number
   // Expired, missing or expiring within 60 days. Optional so the partner drill-down,
   // which builds its own dashboard shape, is unaffected.
   registration_alert_count?: number

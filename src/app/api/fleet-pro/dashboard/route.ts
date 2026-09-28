@@ -1,4 +1,7 @@
 import { NextResponse } from 'next/server'
+import {
+  unitInspectionState, hasUnassessedFail, type InspectionStatusInput,
+} from '@/lib/fleet-pro/inspection-status'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { requireFleetProMember } from '@/lib/fleet-pro/access'
@@ -58,7 +61,14 @@ interface DashboardUnitRow extends FleetProUnitRow {
 interface RegistrationRecord { unit_id: string; license_plate: string | null; jurisdiction: string | null; expires_on: string | null }
 interface PmRecord         { unit_id: string; interval_days: number | null; next_due_date: string | null }
 interface WorkOrderRecord  { unit_id: string | null; completed_at: string | null; created_at: string | null }
-interface InspectionRecord { unit_id: string | null; inspection_date: string | null; overall_result: string | null }
+interface InspectionRecord {
+  unit_id: string | null
+  inspection_date: string | null
+  overall_result: string | null
+  // Only aerial and equipment carry this column. undefined on a DOT row means the
+  // out-of-service question was never asked, which is NOT the same as 'no'.
+  removed_from_service?: boolean | null
+}
 interface InvoiceRecord    { unit_id: string | null; total: number | null; status: string | null; created_at: string | null }
 
 // Overdue units are what a fleet manager opened this page for, so they sort to the
@@ -140,7 +150,8 @@ export async function GET() {
     unit_count:       0,
     overdue_count:    0,
     due_soon_count:   0,
-    failed_inspection_count: 0,
+    out_of_service_count:    0,
+    needs_repair_count:      0,
     registration_alert_count: 0,
     spend_mtd:        showCost ? 0 : null,
     spend_ytd:        showCost ? 0 : null,
@@ -180,9 +191,21 @@ export async function GET() {
       .order('id', { ascending: true })
       .range(from, to))
 
+  // Two variants, each with its select written out literally. Only aerial and
+  // equipment have removed_from_service -- selecting it on hd_dot_inspections would
+  // fail the whole query. A ternary inside .select() collapses the row type to a
+  // ParserError, so the duplication is what buys working types.
   const fetchInspections = (table: string) => fetchAllRowsForIds<InspectionRecord, string>(unitIds, (ids, from, to) =>
     svc.from(table)
       .select('unit_id, inspection_date, overall_result')
+      .eq('fleet_account_id', fleetId)
+      .in('unit_id', ids)
+      .order('id', { ascending: true })
+      .range(from, to))
+
+  const fetchInspectionsWithOos = (table: string) => fetchAllRowsForIds<InspectionRecord, string>(unitIds, (ids, from, to) =>
+    svc.from(table)
+      .select('unit_id, inspection_date, overall_result, removed_from_service')
       .eq('fleet_account_id', fleetId)
       .in('unit_id', ids)
       .order('id', { ascending: true })
@@ -227,9 +250,9 @@ export async function GET() {
 
     fetchInspections('hd_dot_inspections'),
 
-    fetchInspections('hd_aerial_inspections'),
+    fetchInspectionsWithOos('hd_aerial_inspections'),
 
-    fetchInspections('hd_equipment_inspections'),
+    fetchInspectionsWithOos('hd_equipment_inspections'),
 
     fetchInvoices(),
 
@@ -293,7 +316,10 @@ export async function GET() {
   }
 
   const lastInspectionByUnit = new Map<string, string>()
-  const failedUnits = new Set<string>()
+  // Every inspection per unit, so the rollup can tell an out-of-service finding from
+  // a defect. A Set of "failed units" could not: it threw away which kind of fail it
+  // was, which is exactly how a missing decal came to read like a cracked weld.
+  const inspectionsByUnit = new Map<string, InspectionStatusInput[]>()
   const inspections: InspectionRecord[] = [
     ...dotRows,
     ...aerialRows,
@@ -302,7 +328,9 @@ export async function GET() {
 
   for (const insp of inspections) {
     if (!insp.unit_id) continue
-    if (insp.overall_result === 'fail') failedUnits.add(insp.unit_id)
+    const list = inspectionsByUnit.get(insp.unit_id) ?? []
+    list.push({ result: insp.overall_result, removedFromService: insp.removed_from_service })
+    inspectionsByUnit.set(insp.unit_id, list)
     if (!insp.inspection_date) continue
     const best = later(lastInspectionByUnit.get(insp.unit_id) ?? null, insp.inspection_date)
     if (best) lastInspectionByUnit.set(insp.unit_id, best)
@@ -384,7 +412,8 @@ export async function GET() {
       license_plate:           reg?.license_plate ?? null,
       jurisdiction:            reg?.jurisdiction ?? null,
 
-      open_inspection_issue: failedUnits.has(u.id),
+      inspection_state:      unitInspectionState(inspectionsByUnit.get(u.id) ?? []),
+      inspection_unassessed: hasUnassessedFail(inspectionsByUnit.get(u.id) ?? []),
       last_inspection_date:  lastInspectionByUnit.get(u.id)?.slice(0, 10) ?? null,
 
       spend_mtd: showCost ? mtd : null,
@@ -431,7 +460,10 @@ export async function GET() {
     unit_count:              rows.length,
     overdue_count:           overdueCount,
     due_soon_count:          dueSoonCount,
-    failed_inspection_count: rows.filter(r => r.open_inspection_issue).length,
+    // Counts the units a manager has to act on TODAY. Out of service only -- a unit
+    // with a decal to order is on the repair list, not the stop-work count.
+    out_of_service_count:    rows.filter(r => r.inspection_state === 'out_of_service').length,
+    needs_repair_count:      rows.filter(r => r.inspection_state === 'needs_repair').length,
     registration_alert_count: registrationAlertCount,
     spend_mtd:               showCost ? fleetMtd : null,
     spend_ytd:               showCost ? fleetYtd : null,

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { INSPECTION_STATE_META } from '@/lib/fleet-pro/inspection-status'
 import Link from 'next/link'
 import type { FleetProDashboard, FleetProUnitRow, PmState } from '@/types/fleet-pro'
 import { formatPerMile } from '@/types/fleet-pro-cost'
@@ -214,9 +215,21 @@ function UnitTableRow({ unit, index, showCosts }: { unit: UnitRow; index: number
       <td className="px-4 py-3 text-sm text-white">{nextDue}</td>
       <td className="px-4 py-3 text-sm text-white">{shortDate(unit.last_service_date)}</td>
       <td className="px-4 py-3 text-sm text-white">
-        {unit.open_inspection_issue
-          ? <Pill label="Failed" color={RED} />
-          : <span style={{ color: MUTED }}>{unit.last_inspection_date ? 'Pass' : '—'}</span>}
+        {/* THREE STATES, distinctly. A missing decal must not read like a cracked
+            weld -- that was the whole complaint. "Not assessed" is shown for a fail
+            on a record that predates the out-of-service question, rather than
+            implying a mechanic made a call they were never asked to make. */}
+        {unit.inspection_state === 'clear'
+          ? <span style={{ color: MUTED }}>{unit.last_inspection_date ? 'Pass' : '—'}</span>
+          : <Pill
+              label={INSPECTION_STATE_META[unit.inspection_state].label}
+              color={INSPECTION_STATE_META[unit.inspection_state].color}
+            />}
+        {unit.inspection_state === 'needs_repair' && unit.inspection_unassessed && (
+          <span className="block text-xs mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
+            not assessed for OOS
+          </span>
+        )}
         {unit.last_inspection_date && (
           <span className="block text-xs mt-1" style={{ color: 'rgba(255,255,255,0.3)' }}>
             {shortDate(unit.last_inspection_date)}
@@ -388,8 +401,12 @@ export default function DashboardClient() {
         {/* Two units, one tile: a fleet's PMs are hours-based unless a manager set a date. */}
         <KpiCard label="Due Soon"     value={String(dashboard.due_soon_count)}
                  color={dashboard.due_soon_count > 0 ? FP_ORANGE : '#ffffff'} sub="Within 200 hrs / 30 days" />
-        <KpiCard label="Failed Insp." value={String(dashboard.failed_inspection_count)}
-                 color={dashboard.failed_inspection_count > 0 ? RED : '#ffffff'} sub="Open issues" />
+        {/* Two tiles, because they are two different actions: one is stop-work, the
+            other is a work list. */}
+        <KpiCard label="Out of Service" value={String(dashboard.out_of_service_count)}
+                 color={dashboard.out_of_service_count > 0 ? RED : '#ffffff'} sub="Do not operate" />
+        <KpiCard label="Needs Repair" value={String(dashboard.needs_repair_count)}
+                 color={dashboard.needs_repair_count > 0 ? FP_ORANGE : '#ffffff'} sub="In service" />
         {showCosts && <KpiCard label="Spend MTD" value={money(dashboard.spend_mtd)} sub="This month" />}
         {showCosts && <KpiCard label="Spend YTD" value={money(dashboard.spend_ytd)} sub="This year" />}
       </div>

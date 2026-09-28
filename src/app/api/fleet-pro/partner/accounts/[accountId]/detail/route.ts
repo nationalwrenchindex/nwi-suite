@@ -6,6 +6,9 @@
 // fleet's own portal must never receive this payload.
 
 import { NextResponse, type NextRequest } from 'next/server'
+import {
+  unitInspectionState, hasUnassessedFail, type InspectionStatusInput,
+} from '@/lib/fleet-pro/inspection-status'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { requirePartner, partnerOwnsAccount, getFleetBranding } from '@/lib/fleet-pro/partner-access'
@@ -129,11 +132,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ acc
       .eq('fleet_account_id', accountId),
 
     svc.from('hd_aerial_inspections')
-      .select('id, unit_id, inspection_date, inspection_type, overall_result, inspector_name, inspection_id')
+      .select('id, unit_id, inspection_date, inspection_type, overall_result, inspector_name, inspection_id, removed_from_service')
       .eq('fleet_account_id', accountId),
 
     svc.from('hd_equipment_inspections')
-      .select('id, unit_id, inspection_date, equipment_type, overall_result')
+      .select('id, unit_id, inspection_date, equipment_type, overall_result, removed_from_service')
       .eq('fleet_account_id', accountId),
 
     svc.from('fleet_pro_pretrip_inspections')
@@ -352,7 +355,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ acc
   // ── per-unit rollups ────────────────────────────────────────────────────────
   const serviceDatesByUnit    = new Map<string, string[]>()
   const inspectionDatesByUnit = new Map<string, string[]>()
-  const failedByUnit          = new Map<string, boolean>()
+  // Every inspection per unit, so a decal can be told from a cracked weld. A
+  // Map<string, boolean> could not: it threw away which kind of fail it was.
+  const inspectionsByUnit     = new Map<string, InspectionStatusInput[]>()
   const defectsByUnit         = new Map<string, number>()
 
   function push(map: Map<string, string[]>, unitId: string | null, date: string) {
@@ -363,10 +368,29 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ acc
   }
 
   for (const e of [...woEvents, ...invEvents]) push(serviceDatesByUnit, e.unit_id, e.date)
+  function pushInspection(unitId: string | null, input: InspectionStatusInput) {
+    if (!unitId) return
+    const list = inspectionsByUnit.get(unitId) ?? []
+    list.push(input)
+    inspectionsByUnit.set(unitId, list)
+  }
+
   for (const e of [...dotEvents, ...aerialEvents, ...equipEvents]) {
     push(inspectionDatesByUnit, e.unit_id, e.date)
-    if (e.unit_id && isFail(e.result)) failedByUnit.set(e.unit_id, true)
   }
+  // Straight off the raw rows: only aerial and equipment have the column, and a DOT
+  // row leaving it undefined is the point -- that question was never asked there.
+  for (const r of dotRows) pushInspection(r.unit_id == null ? null : String(r.unit_id), {
+    result: (r.overall_result as string | null) ?? null,
+  })
+  for (const r of aerialRows) pushInspection(r.unit_id == null ? null : String(r.unit_id), {
+    result: (r.overall_result as string | null) ?? null,
+    removedFromService: (r.removed_from_service as boolean | null) ?? null,
+  })
+  for (const r of equipRows) pushInspection(r.unit_id == null ? null : String(r.unit_id), {
+    result: (r.overall_result as string | null) ?? null,
+    removedFromService: (r.removed_from_service as boolean | null) ?? null,
+  })
 
   // Open defects come from FAILED pre-trips only — a passed pre-trip with a noted
   // item is not something the shop has to answer for. A failed one that carries no
@@ -376,7 +400,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ acc
     const uid = r.unit_id == null ? null : String(r.unit_id)
     if (!uid) continue
     defectsByUnit.set(uid, (defectsByUnit.get(uid) ?? 0) + Math.max(1, countOf(r.defects)))
-    failedByUnit.set(uid, true)
+    // A failed pre-trip is a defect finding. fleet_pro_pretrip_inspections has no
+    // out-of-service column, so it reads as "never asked" rather than as a shutdown.
+    pushInspection(uid, { result: 'fail' })
   }
 
   // Newest completed PM per unit, from hd_pm_checklists. Used only where hd_units
@@ -434,7 +460,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ acc
       last_pm_date:         pm.last_pm_date ?? fallbackPm?.date ?? null,
       last_pm_type:         pm.last_pm_type ?? (pm.last_pm_date ? null : fallbackPm?.type ?? null),
 
-      open_inspection_issue: failedByUnit.get(id) ?? false,
+      inspection_state:      unitInspectionState(inspectionsByUnit.get(id) ?? []),
+      inspection_unassessed: hasUnassessedFail(inspectionsByUnit.get(id) ?? []),
       last_inspection_date:  maxDate(inspectionDatesByUnit.get(id) ?? []),
 
       spend_mtd:            spend.mtd,

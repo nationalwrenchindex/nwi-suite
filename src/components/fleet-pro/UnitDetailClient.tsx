@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
+import { INSPECTION_STATE_META } from '@/lib/fleet-pro/inspection-status'
 import Link from 'next/link'
 import type { FleetProUnitDetail, FleetProUnitRow, ServiceEvent, ServiceEventKind, PmState } from '@/types/fleet-pro'
 import type { MeterReading, UnitMonthCost } from '@/types/fleet-pro-partner'
@@ -377,7 +378,14 @@ export default function UnitDetailClient({ unitId }: { unitId: string }) {
           {unit.unit_number || 'Unit'}
         </h1>
         {unit.status && <Pill text={unit.status} color={ACCENT} />}
-        {unit.open_inspection_issue && <Pill text="Failed inspection" color={RED} />}
+        {unit.inspection_state !== 'clear' && (
+          <Pill
+            text={unit.inspection_state === 'out_of_service'
+              ? 'Out of service — do not operate'
+              : unit.inspection_unassessed ? 'Needs repair — not assessed for OOS' : 'Needs repair'}
+            color={INSPECTION_STATE_META[unit.inspection_state].color}
+          />
+        )}
         {/* Cost-gated, like every other money surface on this page: an invoice IS a
             cost figure, and a viewer who could photograph one would read the total
             off the confirmation screen. Sits before the QR button because filing a

@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { INSPECTION_STATE_META } from '@/lib/fleet-pro/inspection-status'
 import Link from 'next/link'
 import type { FleetBranding } from '@/types/fleet-pro-partner'
 import type { FleetProUnitRow, ServiceEvent, ServiceEventKind, PmState } from '@/types/fleet-pro'
@@ -322,6 +323,14 @@ export default function AccountDetailClient({ accountId }: { accountId: string }
                         {unit.last_inspection_date && (
                           <p className="text-xs mt-0.5" style={{ color: DIM }}>
                             Insp {fmtDate(unit.last_inspection_date)}
+                          </p>
+                        )}
+                        {/* The reseller sees the same three states the fleet owner does,
+                            from the same helper, so the two cannot disagree. */}
+                        {unit.inspection_state !== 'clear' && (
+                          <p className="text-xs mt-0.5 font-semibold"
+                            style={{ color: INSPECTION_STATE_META[unit.inspection_state].color }}>
+                            {INSPECTION_STATE_META[unit.inspection_state].label}
                           </p>
                         )}
                       </td>
