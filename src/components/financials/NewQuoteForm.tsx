@@ -48,6 +48,14 @@ export default function NewQuoteForm({
   const taxSettings = useTaxSettings()
 
   const [customerId, setCustomerId] = useState<string | null>(seed.customerId ?? null)
+  // CustomerUnitPicker hands over the whole customer and every caller was taking the
+  // id and dropping the rest. quotes has no name/phone/email columns -- the id is
+  // what carries them, through the join -- but the EDITOR re-resolves a customer from
+  // the typed name and phone on save, so holding them here means the quote arrives in
+  // the editor already matching its own customer instead of being re-derived.
+  const [customer, setCustomer] = useState<{
+    first_name: string; last_name: string; phone: string | null; email: string | null
+  } | null>(null)
   const [vehicleId,  setVehicleId]  = useState<string | null>(seed.vehicleId ?? null)
   const [unitLabel,  setUnitLabel]  = useState('')
   const [notes,      setNotes]      = useState(seedNotes(seed))
@@ -94,6 +102,9 @@ export default function NewQuoteForm({
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
+          // The ID IS the prefill. quotes has no name/phone/email columns -- those
+          // reach every reader through the customers join, and the editor picks them
+          // up from it. Sending them as well would be three keys the route ignores.
           customer_id: customerId,
           vehicle_id:  vehicleId,
           notes:       notes.trim() || null,
@@ -135,13 +146,27 @@ export default function NewQuoteForm({
       {/* Same picker LD work orders use, so a customer is chosen the same way in both */}
       <CustomerUnitPicker
         customerId={customerId}
-        onCustomerChange={id => setCustomerId(id)}
+        onCustomerChange={(id, c) => {
+          setCustomerId(id)
+          setCustomer(c ? {
+            first_name: c.first_name, last_name: c.last_name, phone: c.phone, email: c.email,
+          } : null)
+        }}
         vehicleId={vehicleId}
         onVehicleChange={setVehicleId}
         unitLabel={unitLabel}
         onUnitLabelChange={setUnitLabel}
         disabled={saving}
       />
+
+      {/* The picker shows name and phone-OR-email; a customer with both never sees
+          their email. Shown in full here because this is the screen where a tech
+          confirms they are quoting the right person. */}
+      {customer && (customer.phone || customer.email) && (
+        <p className="text-white/35 text-xs -mt-2">
+          {[customer.phone, customer.email].filter(Boolean).join('  ·  ')}
+        </p>
+      )}
 
       {/* ── Parts ── */}
       <div className="space-y-2">

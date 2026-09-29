@@ -725,6 +725,9 @@ function QuoteDetailModal({
           notes,
           customer_name:        custName,
           customer_phone:       custPhone,
+          // The quote already knows its customer; sending the id stops the save
+          // re-deriving one and minting a duplicate when the phone is blank.
+          customer_id:          initialQuote.customer_id ?? null,
           vehicle_id:           vehicleId,
           po_number:            poNumber,
           // WHAT WAS TAXED. computeTotals has returned this since the parts/labor
@@ -2236,7 +2239,7 @@ export default function QuotesTab({ initialQuoteId, isDetailer = false, workOrde
     <div className="space-y-4">
       {/* The create panel sits above the list, matching InvoicesTab, so both money
           tabs behave the same way. */}
-      {showForm && (
+      {showForm && !isDetailer && (
         <NewQuoteForm
           defaults={quoteDefaults}
           onCancel={() => setShowForm(false)}
@@ -2252,13 +2255,21 @@ export default function QuotesTab({ initialQuoteId, isDetailer = false, workOrde
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-center">
         {/* Create lives here AND in the empty state, the way HD does it — the empty
-            state is the only place a first-time user looks. */}
-        <button
-          onClick={() => setShowForm(v => !v)}
-          className="order-last ml-auto px-4 py-2 bg-orange hover:bg-orange-hover text-white font-condensed font-bold text-sm rounded-lg transition-colors"
-        >
-          {showForm ? 'Close' : '+ New Quote'}
-        </button>
+            state is the only place a first-time user looks.
+
+            NOT FOR DETAILERS. Their quotes bill through service_lines and
+            adjustments, not parts and labour hours, and the create form is the
+            mechanic model — labour hours, markup, parts rows. Showing it to a
+            detailer is a support call. They keep the job-based flow until the
+            detailing side gets its own pass. */}
+        {!isDetailer && (
+          <button
+            onClick={() => setShowForm(v => !v)}
+            className="order-last ml-auto px-4 py-2 bg-orange hover:bg-orange-hover text-white font-condensed font-bold text-sm rounded-lg transition-colors"
+          >
+            {showForm ? 'Close' : '+ New Quote'}
+          </button>
+        )}
         <select
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value)}
@@ -2318,10 +2329,15 @@ export default function QuotesTab({ initialQuoteId, isDetailer = false, workOrde
           </p>
           {/* Was "Build one in QuickWrench and save as a quote", which was an apology
               for a missing feature rather than an instruction. */}
-          {quotes.length === 0 && (
+          {quotes.length === 0 && !isDetailer && (
             <button onClick={() => setShowForm(true)} className="text-orange text-xs hover:underline">
               Create your first quote →
             </button>
+          )}
+          {quotes.length === 0 && isDetailer && (
+            <p className="text-white/25 text-xs">
+              Quote a detailing job from the scheduler so its services price from your catalog.
+            </p>
           )}
         </div>
       ) : (

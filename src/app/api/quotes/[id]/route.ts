@@ -22,14 +22,21 @@ async function resolveCustomer(
 ): Promise<string | null> {
   if (!name.trim() && !phone.trim()) return null
 
-  if (phone.trim()) {
+  // MATCH ON THE TRAILING TEN DIGITS, not the whole string. An exact match meant
+  // "863-555-0100" and "+18635550100" read as two different people, so this function
+  // minted a SECOND customers row for someone the shop already had. Same
+  // reconciliation logHDCustomer already does for the HD side.
+  const wantDigits = phone.replace(/\D/g, '').slice(-10)
+  if (wantDigits.length === 10) {
     const { data } = await supabase
       .from('customers')
-      .select('id')
+      .select('id, phone')
       .eq('user_id', userId)
-      .eq('phone', phone.trim())
-      .limit(1)
-    if (data && data.length > 0) return data[0].id
+      .not('phone', 'is', null)
+    const hit = (data ?? []).find(
+      c => String(c.phone ?? '').replace(/\D/g, '').slice(-10) === wantDigits,
+    )
+    if (hit) return hit.id
   }
 
   const parts     = name.trim().split(/\s+/)
@@ -109,6 +116,9 @@ export async function PUT(
     customer_phone:       string
     vehicle_id?:          string | null
     po_number?:           string | null
+    /** Preferred over re-resolving from name and phone. See the comment at the
+     *  call site: re-deriving created duplicate customers. */
+    customer_id?:         string | null
     jobs?:                unknown[]
     // Detailer model
     service_lines?: Array<{ service_name: string; vehicle_category: string | null; price_cents: number }>
@@ -142,7 +152,25 @@ export async function PUT(
     ? body.line_items.filter((li) => li.description?.trim() !== 'Service')
     : body.line_items
 
-  const customerId = await resolveCustomer(supabase, user.id, body.customer_name ?? '', body.customer_phone ?? '')
+  // THE QUOTE ALREADY KNOWS ITS CUSTOMER. Re-deriving one from the typed name and
+  // phone on every save is how a quote created against a customer with no phone on
+  // file ended up reassigned to a brand-new duplicate: resolveCustomer could not
+  // match on a blank phone, so it inserted. An explicit customer_id wins, verified
+  // as belonging to this user so an id from a request body cannot reach across
+  // accounts.
+  let customerId: string | null = null
+  if (typeof body.customer_id === 'string' && body.customer_id) {
+    const { data: owned } = await supabase
+      .from('customers')
+      .select('id')
+      .eq('id', body.customer_id)
+      .eq('user_id', user.id)
+      .maybeSingle()
+    customerId = owned?.id ?? null
+  }
+  if (!customerId) {
+    customerId = await resolveCustomer(supabase, user.id, body.customer_name ?? '', body.customer_phone ?? '')
+  }
 
   const updatePayload: Record<string, unknown> = {
     line_items:           safeLineItems,
