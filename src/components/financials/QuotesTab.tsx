@@ -9,6 +9,7 @@ import {
   type EditItem,
 } from '@/components/shared/line-items'
 import { money } from '@/lib/format'
+import NewQuoteForm from './NewQuoteForm'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -726,6 +727,12 @@ function QuoteDetailModal({
           customer_phone:       custPhone,
           vehicle_id:           vehicleId,
           po_number:            poNumber,
+          // WHAT WAS TAXED. computeTotals has returned this since the parts/labor
+          // split shipped and the save was dropping it on the floor, so an LD quote
+          // stored a correct tax_amount with no record of what it applied to — the
+          // public quote page could not say "Labor — not taxable", and a converted
+          // invoice inherited null.
+          tax_breakdown:        t.taxBreakdown,
         }
       }
 
@@ -2141,6 +2148,36 @@ export default function QuotesTab({ initialQuoteId, isDetailer = false, workOrde
   const [search,       setSearch]       = useState('')
   const [selected,     setSelected]     = useState<Quote | null>(null)
   const [modalKey,     setModalKey]     = useState(0)
+  const [showForm,     setShowForm]     = useState(false)
+
+  // The shop's pricing defaults, for a from-scratch quote. Read from the same
+  // endpoint every other form prefills from, so a new quote opens on the same labour
+  // rate, markup and tax the editor would have used. Falls back to the documented
+  // defaults rather than zeros, because a quote priced at 0% markup is silently wrong.
+  const [quoteDefaults, setQuoteDefaults] = useState({
+    labor_rate: 125, markup_percent: 20, tax_percent: 8.5,
+  })
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/user/profile')
+        if (!res.ok) return
+        const j = await res.json()
+        if (cancelled) return
+        setQuoteDefaults({
+          labor_rate:     Number(j.default_labor_rate) || 125,
+          markup_percent: Number(j.default_parts_markup_percent) || 20,
+          // tax_rate_parts is the post-140 home for this; default_tax_percent is the
+          // pre-140 fallback the endpoint still returns.
+          tax_percent:    Number(j.tax_rate_parts ?? j.default_tax_percent) || 0,
+        })
+      } catch {
+        // Keep the fallbacks; a failed prefill must not block creating a quote.
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   const loadQuotes = useCallback(async () => {
     setLoading(true)
@@ -2197,8 +2234,31 @@ export default function QuotesTab({ initialQuoteId, isDetailer = false, workOrde
 
   return (
     <div className="space-y-4">
+      {/* The create panel sits above the list, matching InvoicesTab, so both money
+          tabs behave the same way. */}
+      {showForm && (
+        <NewQuoteForm
+          defaults={quoteDefaults}
+          onCancel={() => setShowForm(false)}
+          onCreated={(q: { id: string; quote_number: string }) => {
+            setShowForm(false)
+            // Straight into the editor for the quote just created, the same landing
+            // the scheduler's Generate Quote button uses.
+            window.location.href = `/financials?tab=quotes&quote=${q.id}`
+          }}
+        />
+      )}
+
       {/* Filters */}
       <div className="flex flex-wrap gap-3 items-center">
+        {/* Create lives here AND in the empty state, the way HD does it — the empty
+            state is the only place a first-time user looks. */}
+        <button
+          onClick={() => setShowForm(v => !v)}
+          className="order-last ml-auto px-4 py-2 bg-orange hover:bg-orange-hover text-white font-condensed font-bold text-sm rounded-lg transition-colors"
+        >
+          {showForm ? 'Close' : '+ New Quote'}
+        </button>
         <select
           value={statusFilter}
           onChange={e => setStatusFilter(e.target.value)}
@@ -2253,9 +2313,16 @@ export default function QuotesTab({ initialQuoteId, isDetailer = false, workOrde
           </svg>
           <p className="text-white/40 text-sm">
             {quotes.length === 0
-              ? 'No quotes yet. Build one in QuickWrench and save as a quote.'
+              ? 'No quotes yet.'
               : 'No quotes match your current filters.'}
           </p>
+          {/* Was "Build one in QuickWrench and save as a quote", which was an apology
+              for a missing feature rather than an instruction. */}
+          {quotes.length === 0 && (
+            <button onClick={() => setShowForm(true)} className="text-orange text-xs hover:underline">
+              Create your first quote →
+            </button>
+          )}
         </div>
       ) : (
         <>

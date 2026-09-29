@@ -2,6 +2,7 @@
 // POST /api/quotes  — create a new draft quote (e.g. from a job)
 
 import { NextResponse, type NextRequest } from 'next/server'
+import { isMissingTaxBreakdownColumn, withoutTaxBreakdown } from '@/lib/tax'
 import { createClient } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -93,6 +94,40 @@ export async function POST(req: NextRequest) {
 
   const { job_id, customer_id, vehicle_id, notes } = body
 
+  // Before this, POST accepted exactly these four fields and hard-coded
+  // line_items: [] — it could only ever mint an empty shell for the editor to fill.
+  // That was fine when the only caller was "Generate Quote" on a scheduled job, and
+  // useless for a from-scratch quote, which knows its lines and its money up front.
+  //
+  // Money is taken as sent rather than recomputed here. The editor and this route
+  // would otherwise be two implementations of one sum, which is exactly the failure
+  // components/shared/line-items exists to prevent. grand_total is sanity-checked
+  // because a negative total is never a rounding artefact.
+  const num = (v: unknown): number | null => {
+    if (v === null || v === undefined) return null
+    const n = Number(v)
+    return Number.isFinite(n) ? n : null
+  }
+  const money: Record<string, unknown> = {}
+  for (const key of [
+    'labor_hours', 'labor_rate', 'parts_subtotal', 'parts_markup_percent',
+    'labor_subtotal', 'tax_percent', 'tax_amount', 'grand_total',
+  ] as const) {
+    const n = num(body[key])
+    if (n !== null) money[key] = n
+  }
+  if (typeof money.grand_total === 'number' && money.grand_total < 0) {
+    return NextResponse.json({ error: 'Grand total cannot be negative.' }, { status: 422 })
+  }
+
+  const lineItems = Array.isArray(body.line_items) ? body.line_items : null
+
+  // What was taxed, so the customer copy can say "Labor — not taxable" and a
+  // converted invoice inherits the split instead of losing it.
+  const taxBreakdown = body.tax_breakdown && typeof body.tax_breakdown === 'object'
+    ? body.tax_breakdown
+    : null
+
   // Check business type; detailers get service catalog pre-population
   const { data: profile } = await supabase
     .from('profiles')
@@ -152,13 +187,19 @@ export async function POST(req: NextRequest) {
     user_id:      user.id,
     quote_number: quoteNumber,
     status:       'draft',
-    source:       'job',
+    // NO LONGER HARD-CODED TO 'job'. A quote typed from nothing is not from a job,
+    // and labelling it that way made the one honest thing on the row a lie. Free text
+    // with no CHECK constraint, and the existing values are quickwrench and job.
+    source:       job_id ? 'job' : 'manual',
     job_id:       job_id      ? String(job_id)      : null,
     customer_id:  customer_id ? String(customer_id) : null,
     vehicle_id:   vehicle_id  ? String(vehicle_id)  : null,
     notes:        notes       ? String(notes)        : null,
-    line_items:   [],
+    line_items:   lineItems ?? [],
+    ...money,
   }
+  if (taxBreakdown) insertData.tax_breakdown = taxBreakdown
+  if (body.po_number) insertData.po_number = String(body.po_number)
 
   if (prePopLaborRate  !== null) insertData.labor_rate           = prePopLaborRate
   if (prePopLaborHours !== null) insertData.labor_hours          = prePopLaborHours
@@ -168,11 +209,22 @@ export async function POST(req: NextRequest) {
     insertData.adjustments   = []
   }
 
-  const { data: quote, error } = await supabase
+  let { data: quote, error } = await supabase
     .from('quotes')
     .insert(insertData)
     .select('*')
     .single()
+
+  // tax_breakdown is a display column; the quote is complete without it. Retry rather
+  // than lose a quote a tech just typed if 140 has not reached this database.
+  if (error && isMissingTaxBreakdownColumn(error)) {
+    console.error('[POST /api/quotes] tax_breakdown missing — run migration 140', error.message)
+    ;({ data: quote, error } = await supabase
+      .from('quotes')
+      .insert(withoutTaxBreakdown(insertData))
+      .select('*')
+      .single())
+  }
 
   if (error) {
     console.error('[POST /api/quotes]', error)

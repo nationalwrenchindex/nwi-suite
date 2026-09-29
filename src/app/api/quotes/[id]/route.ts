@@ -3,6 +3,7 @@
 // DELETE /api/quotes/[id] — hard-delete a Draft quote
 
 import { NextResponse } from 'next/server'
+import { isMissingTaxBreakdownColumn } from '@/lib/tax'
 import { createClient } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -112,6 +113,11 @@ export async function PUT(
     // Detailer model
     service_lines?: Array<{ service_name: string; vehicle_category: string | null; price_cents: number }>
     adjustments?:   Array<{ name: string; price_cents: number }>
+    /** What was taxed. The editor has computed this since the parts/labor split
+     *  shipped and this route was silently dropping it — so an LD quote stored a
+     *  correct tax_amount with no record of WHAT was taxed, the public quote page
+     *  could not say "Labor — not taxable", and a converted invoice inherited null. */
+    tax_breakdown?: unknown
   }
 
   try {
@@ -156,6 +162,9 @@ export async function PUT(
     po_number:            body.po_number?.trim() || null,
   }
   if (body.jobs !== undefined) updatePayload.jobs = body.jobs
+  // Written only when sent, so a caller that does not know about the split cannot
+  // wipe a breakdown that is already on the row.
+  if (body.tax_breakdown !== undefined) updatePayload.tax_breakdown = body.tax_breakdown ?? null
   if (isDetailer) {
     updatePayload.service_lines = (body.service_lines ?? []).filter(
       (sl) => typeof sl.service_name === 'string' && sl.service_name.trim().length > 0
@@ -165,13 +174,26 @@ export async function PUT(
     )
   }
 
-  const { data: updated, error: updateErr } = await supabase
+  let { data: updated, error: updateErr } = await supabase
     .from('quotes')
     .update(updatePayload)
     .eq('id', id)
     .eq('user_id', user.id)
     .select(QUOTE_SELECT)
     .single()
+
+  // A display column must not cost a tech their edit if 140 has not run here.
+  if (updateErr && isMissingTaxBreakdownColumn(updateErr)) {
+    console.error('[PUT /api/quotes/:id] tax_breakdown missing — run migration 140', updateErr.message)
+    delete updatePayload.tax_breakdown
+    ;({ data: updated, error: updateErr } = await supabase
+      .from('quotes')
+      .update(updatePayload)
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select(QUOTE_SELECT)
+      .single())
+  }
 
   if (updateErr || !updated) {
     console.error('[PUT /api/quotes/[id]]', updateErr)
