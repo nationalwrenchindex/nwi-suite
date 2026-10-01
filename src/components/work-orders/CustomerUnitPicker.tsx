@@ -55,6 +55,8 @@ export default function CustomerUnitPicker({
   const [creatingCustomer, setCreatingCustomer] = useState(false)
   const [newCust, setNewCust] = useState({ first_name: '', last_name: '', phone: '', email: '' })
   const [savingCust, setSavingCust] = useState(false)
+  /** Not an error: the create succeeded, it just resolved to a record already held. */
+  const [notice, setNotice] = useState<string | null>(null)
 
   const [creatingVehicle, setCreatingVehicle] = useState(false)
   const [newVeh, setNewVeh] = useState({ year: '', make: '', model: '', vin: '' })
@@ -110,7 +112,13 @@ export default function CustomerUnitPicker({
       const d = await res.json()
       if (!res.ok) throw new Error(d.error ?? 'Could not create customer')
       const c = d.customer as CustomerLite
-      setCustomers(prev => [c, ...prev])
+      // The route may have MATCHED rather than created. Say so: a tech who typed a
+      // name and got silently handed an existing record would otherwise assume the
+      // button failed and press it again, which is how the duplicates happened.
+      if (d.deduped) {
+        setNotice(`Already on file — ${d.message ?? 'matched an existing customer'}.`)
+      }
+      setCustomers(prev => (prev.some(x => x.id === c.id) ? prev : [c, ...prev]))
       onCustomerChange(c.id, c)
       setCreatingCustomer(false)
       setNewCust({ first_name: '', last_name: '', phone: '', email: '' })
@@ -160,6 +168,9 @@ export default function CustomerUnitPicker({
       <div className="space-y-2">
         <label className="nwi-label">Customer</label>
 
+        {notice && (
+          <p className="text-xs" style={{ color: '#f59e0b' }}>{notice}</p>
+        )}
         {selected ? (
           <div className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3">
             <div className="min-w-0">

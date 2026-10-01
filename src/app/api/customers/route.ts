@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { findDuplicateCustomer, DEDUPE_MESSAGE } from '@/lib/customers/dedupe'
 import { createClient } from '@/lib/supabase/server'
 
 // Address is included so a picker can prefill it straight from the list rather than
@@ -62,6 +63,34 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'first_name is required' }, { status: 400 })
   if (!body.last_name || typeof body.last_name !== 'string')
     return NextResponse.json({ error: 'last_name is required' }, { status: 400 })
+
+  // ── Already on file? ──
+  // This route inserted unconditionally, so every "+ New customer" minted a row
+  // whether or not the shop already had that person. Production shows the cost: Josh
+  // Johnston three times at one shop inside 32 minutes, Polk Sherrif three times
+  // inside five. Matching rules are shared with logHDCustomer so the LD and HD paths
+  // cannot disagree about who is the same person.
+  const dup = await findDuplicateCustomer(supabase, user.id, body)
+  if (dup) {
+    const { data: existing } = await supabase
+      .from('customers')
+      .select('*')
+      .eq('id', dup.id)
+      .eq('user_id', user.id)
+      .single()
+    if (existing) {
+      // 200, not 201: nothing was created. The reason is returned so the UI can say
+      // what happened instead of appearing to ignore the button.
+      return NextResponse.json({
+        customer: existing,
+        deduped:  true,
+        reason:   dup.reason,
+        message:  DEDUPE_MESSAGE[dup.reason],
+      })
+    }
+    // The match vanished between the two reads. Fall through and insert rather than
+    // fail a create over a race nobody can see.
+  }
 
   const { data, error } = await supabase
     .from('customers')
