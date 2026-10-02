@@ -51,6 +51,63 @@ const STATE_NAMES: Record<string, string> = {
 // with Florida); "floor" spelled out is fine.
 const UNIT_RE = /\s+(?:(?:suite|ste|apt|apartment|unit|bldg|building|floor|rm|room|dept|department|lot|trlr|trailer)\b\.?|#)\s*\S.*$/i
 
+// Street-type suffixes. The END of a street name is the only reliable place to cut a
+// run-together address, because a city never follows a house number directly --
+// something has to come between them, and in US addresses it is one of these.
+//
+// Deliberately a closed list. A guessed city is worse than an unparsed one: the tech
+// can see and fix text sitting in line 1, but a wrong city on a printed invoice goes
+// out to a customer looking correct.
+const STREET_SUFFIX = new RegExp(
+  '\\b(?:st|street|rd|road|ave|avenue|blvd|boulevard|ln|lane|dr|drive|ct|court|cir|circle'
+  + '|way|pkwy|parkway|ter|terrace|pl|place|hwy|highway|trl|trail|loop|run|pike|row'
+  + '|plz|plaza|sq|square|aly|alley|xing|crossing|bnd|bend|cv|cove|holw|hollow'
+  + '|expy|expressway|fwy|freeway|byp|bypass|ext|extension|spur|cres|crescent)\\b\\.?',
+  'i',
+)
+
+// Unit designators as a standalone matcher, for the run-together case where there is
+// no leading whitespace boundary to rely on.
+const UNIT_WORD = /\b(?:suite|ste|apt|apartment|unit|bldg|building|floor|fl|rm|room|dept|department|lot|trlr|trailer)\b\.?/i
+
+/**
+ * Split "2140 Fiddlers Ct Apt B Winston-Salem" into street and city with no comma to
+ * go on.
+ *
+ * This is the shape that was leaving the city in line 1, and it is common in real
+ * data -- techs type periods or nothing at all rather than commas. Production had
+ * "2140 Fiddlers CT. APT B. Winston-Salem, NC 27107" stored with the city in the
+ * street line AND in the city column.
+ *
+ * Cuts after the LAST street suffix, or after a unit designator and its value if one
+ * appears later. Everything past that is the city. Returns null when no anchor is
+ * found, and the caller then leaves the whole string in line 1.
+ */
+function splitRunTogether(rest: string): { street: string; city: string } | null {
+  const words = rest.split(/\s+/).filter(Boolean)
+  if (words.length < 3) return null
+
+  // Walk from the end so a street name that happens to contain a suffix word
+  // ("Park Place Court") cuts at the real end, not the first one.
+  let cut = -1
+  for (let i = words.length - 2; i >= 1; i--) {
+    if (STREET_SUFFIX.test(words[i])) { cut = i; break }
+  }
+  if (cut === -1) return null
+
+  // A unit designator after the suffix takes its value with it: "Ct Apt B City"
+  // cuts after "B", not after "Ct".
+  for (let i = cut + 1; i < words.length - 1; i++) {
+    if (UNIT_WORD.test(words[i])) { cut = Math.min(i + 1, words.length - 2); break }
+  }
+
+  const street = words.slice(0, cut + 1).join(' ').replace(/[,\s]+$/, '')
+  const city   = words.slice(cut + 1).join(' ').replace(/^[,\s]+/, '')
+  // A city with a digit in it is not a city -- it is more street.
+  if (!street || !city || /\d/.test(city)) return null
+  return { street, city }
+}
+
 const EMPTY: ParsedAddress = {
   address_line1: null, address_line2: null, city: null, state: null, zip: null,
 }
@@ -60,6 +117,16 @@ const EMPTY: ParsedAddress = {
 // the individual fields, which stay visible underneath the single-line input.
 function fallback(raw: string): ParsedAddress {
   return { ...EMPTY, address_line1: raw || null }
+}
+
+/** True for a fragment that is nothing but a state and a ZIP, e.g. "NC 27107". */
+function isStateZipOnly(part: string): boolean {
+  const t = part.trim().replace(/[,\s]+$/, '')
+  if (!t) return true
+  const m = /^([A-Za-z]{2}|[A-Za-z ]+)\s+(\d{5})(-\d{4})?$/.exec(t)
+  if (!m) return false
+  const head = m[1].trim().toUpperCase()
+  return STATE_ABBR.has(head) || STATE_NAMES[head.toLowerCase()] !== undefined
 }
 
 function splitUnit(street: string): [string, string | null] {
@@ -126,9 +193,21 @@ export function parseAddress(input: string): ParsedAddress {
   const segments = rest.split(',').map(p => p.trim()).filter(Boolean)
 
   // No comma left means the street and the city run together ("123 Main St
-  // Wauchula"). There is no safe way to know where one ends, so the city stays
-  // blank and the whole remainder becomes line 1.
+  // Wauchula"), OR there is no street at all ("Winston-Salem, NC 27107").
   if (segments.length < 2) {
+    // A single segment with no digits and no street suffix is a CITY, not a street.
+    // "Winston-Salem, NC 27107" is a real shape -- a yard with no street address --
+    // and putting the city in line 1 made every one of those print wrong.
+    if (!/\d/.test(rest) && !STREET_SUFFIX.test(rest)) {
+      return { ...EMPTY, city: rest, state, zip }
+    }
+    // Otherwise look for the street/city boundary without a comma to help.
+    const split = splitRunTogether(rest)
+    if (split) {
+      const [l1, l2] = splitUnit(split.street)
+      return { address_line1: l1 || null, address_line2: l2, city: split.city, state, zip }
+    }
+    // No anchor found. The text stays where the tech put it.
     const [l1, l2] = splitUnit(rest)
     return { address_line1: l1 || null, address_line2: l2, city: null, state, zip }
   }
@@ -137,16 +216,34 @@ export function parseAddress(input: string): ParsedAddress {
   // A digit in the last segment means it is almost certainly still part of the
   // street (a suite or lot number), not a city name.
   if (/\d/.test(city)) {
+    // Before giving up: the WHOLE remainder may be period-separated with one comma
+    // only before the state, which is exactly how the production record
+    // "2140 Fiddlers CT. APT B. Winston-Salem, NC 27107" was typed. Periods are
+    // normalised to spaces here ONLY for finding the boundary -- the text kept is
+    // the text the tech typed.
+    const flat = rest.replace(/\./g, ' ').replace(/,/g, ' ').replace(/\s+/g, ' ').trim()
+    const split = splitRunTogether(flat)
+    if (split) {
+      const [l1, l2] = splitUnit(split.street)
+      return { address_line1: l1 || null, address_line2: l2, city: split.city, state, zip }
+    }
     const [l1, l2] = splitUnit(rest)
     return { address_line1: l1 || null, address_line2: l2, city: null, state, zip }
   }
 
   const street = segments.slice(0, -1)
   if (street.length >= 2) {
+    // A STATE AND ZIP IS NEVER AN ADDRESS LINE 2. A pasted string that already
+    // contains its own "NC 27107" mid-way (a doubled address, or a record whose
+    // city was previously left in line 1 and then re-pasted) was putting that
+    // fragment into line 2, which then prints on the invoice as a second street
+    // line reading "NC 27107". Dropped rather than kept: the state and zip are
+    // already captured in their own fields, so nothing is lost.
+    const unitParts = street.slice(1).filter(p => !isStateZipOnly(p))
     // The tech already separated the unit with a comma — trust that boundary.
     return {
       address_line1: street[0],
-      address_line2: street.slice(1).join(', '),
+      address_line2: unitParts.length ? unitParts.join(', ') : null,
       city,
       state,
       zip,
