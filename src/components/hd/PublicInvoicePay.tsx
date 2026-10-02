@@ -12,6 +12,14 @@
 import type { PublicInvoiceBranding } from '@/lib/hd/invoice-token'
 import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
 import { termsDisplay, formatDueDate } from '@/lib/hd/payment-terms'
+import {
+  addressLines,
+  serviceUnitLines,
+  documentDisclaimers,
+  epa608Line,
+  feeRows,
+} from '@/lib/invoice-document'
+import { addressFrom } from '@/lib/address'
 import { money } from '@/lib/format'
 
 // The light "document" palette HD invoices use, not the dark HD suite chrome.
@@ -76,12 +84,17 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
   const bizPhone = branding.phone ?? null
   const bizPlace = [branding.city, branding.state].filter(Boolean).join(', ')
 
-  const billToAddress = [
-    inv.address_line1,
-    inv.address_line2,
-    [inv.city, inv.state].filter(Boolean).join(', '),
-    inv.zip,
-  ].filter(Boolean).join(', ')
+  // Two envelope lines rather than one run-together comma string, so a long
+   // street and a city/state/zip do not wrap mid-address on a phone.
+  const billToLines = addressLines(addressFrom(inv))
+
+  // The unit the work was done on. Empty array means the invoice knows nothing
+  // about it, and the block is hidden rather than printing a bare heading.
+  const unitLines = serviceUnitLines(inv)
+
+  // Manufacturer and certification claims, conditional on what this invoice is
+  // actually for. See documentDisclaimers.
+  const disclaimers = documentDisclaimers(inv)
 
   // Empty on a pre-140 invoice, which then keeps the single Tax line it was sent with.
   const payTaxRows = taxDisplayRows(parseBreakdown((inv as { tax_breakdown?: unknown }).tax_breakdown))
@@ -89,8 +102,9 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
   const summaryRows = [
     ...(Number(inv.subtotal_labor)  > 0 ? [{ label: 'Labor Subtotal',  val: inv.subtotal_labor  }] : []),
     ...(Number(inv.subtotal_parts)  > 0 ? [{ label: 'Parts Subtotal',  val: inv.subtotal_parts  }] : []),
-    ...(Number(inv.diagnostic_fee)  > 0 ? [{ label: 'Diagnostic Fee',  val: inv.diagnostic_fee  }] : []),
-    ...(Number(inv.road_call_fee)   > 0 ? [{ label: 'Road Call Fee',   val: inv.road_call_fee   }] : []),
+    // feeRows is the shared rule: a zero fee prints no line at all. See the
+    // migration 057 DEFAULT 125.00 note on it.
+    ...feeRows(inv).map(r => ({ label: r.label, val: r.amount })),
     // tax_rate is stored as a percent (7.5 means 7.5%), not a fraction.
     //
     // When the invoice carries a breakdown, each category becomes its own row --
@@ -126,8 +140,9 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
           )}
           <div className="min-w-0">
             <p className="font-condensed font-bold text-lg tracking-wide truncate" style={{ color: TEXT }}>{bizName}</p>
-            <p className="text-xs" style={{ color: FAINT }}>
-              {[bizPlace, bizPhone].filter(Boolean).join(' · ') || 'Invoice'}
+            {bizPlace && <p className="text-xs" style={{ color: MUTED }}>{bizPlace}</p>}
+            <p className="text-xs" style={{ color: MUTED }}>
+              {[bizPhone, branding.email].filter(Boolean).join(' · ')}
             </p>
           </div>
         </div>
@@ -175,13 +190,27 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
 
           <div className="px-5 sm:px-7 py-5">
 
-            {/* Bill To */}
-            <div className="mb-6 pb-6" style={{ borderBottom: `1px solid ${BORDER}` }}>
-              <h3 className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: FAINT }}>Bill To</h3>
-              <p className="font-semibold text-base" style={{ color: TEXT }}>{inv.customer_name}</p>
-              {billToAddress && <p className="text-sm mt-1" style={{ color: MUTED }}>{billToAddress}</p>}
-              {inv.customer_phone && <p className="text-sm mt-1" style={{ color: MUTED }}>{inv.customer_phone}</p>}
-              {inv.customer_email && <p className="text-sm" style={{ color: MUTED }}>{inv.customer_email}</p>}
+            {/* Bill To + Service Unit. Stacked on a phone, side by side above it. */}
+            <div className="mb-6 pb-6 grid grid-cols-1 sm:grid-cols-2 gap-5" style={{ borderBottom: `1px solid ${BORDER}` }}>
+              <div>
+                <h3 className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: FAINT }}>Bill To</h3>
+                <p className="font-semibold text-base" style={{ color: TEXT }}>{inv.customer_name}</p>
+                {billToLines.map((l, i) => (
+                  <p key={i} className="text-sm mt-0.5" style={{ color: MUTED }}>{l}</p>
+                ))}
+                {inv.customer_phone && <p className="text-sm mt-1" style={{ color: MUTED }}>{inv.customer_phone}</p>}
+                {inv.customer_email && <p className="text-sm" style={{ color: MUTED }}>{inv.customer_email}</p>}
+              </div>
+              {unitLines.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: FAINT }}>Service Unit</h3>
+                  {unitLines.map((l, i) => (
+                    l.label
+                      ? <p key={i} className="text-sm mt-0.5" style={{ color: MUTED }}>{l.label}: {l.value}</p>
+                      : <p key={i} className="font-semibold text-base" style={{ color: TEXT }}>{l.value}</p>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Labor */}
@@ -308,6 +337,36 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
                 Contact {bizName} to arrange payment.
               </p>
             )}
+          </div>
+        )}
+
+        {/* ── HOW TO PAY. The shop's default instructions, in their own bordered
+            block. Without it the customer has an amount and no way to settle it. */}
+        {canPay && branding.default_payment_instructions?.trim() && (
+          <div
+            className="mt-5 px-5 py-4 rounded-xl"
+            style={{ background: CARD, border: `2px solid ${ORANGE}` }}
+          >
+            <h3 className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: FAINT }}>How to Pay</h3>
+            <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: '#374151' }}>
+              {branding.default_payment_instructions.trim()}
+            </p>
+          </div>
+        )}
+
+        {/* ── Certification and manufacturer notices, only where they apply.
+            A refrigeration certification must not appear on an aerial lift
+            inspection, and Thermo King must not be named on a Carrier job. */}
+        {(disclaimers.epa608 || disclaimers.manufacturers.length > 0) && (
+          <div className="mt-5 px-4 text-center space-y-1">
+            {disclaimers.epa608 && (
+              <p className="text-xs leading-relaxed" style={{ color: MUTED }}>
+                {epa608Line(branding.hd_epa_cert_number)}
+              </p>
+            )}
+            {disclaimers.manufacturers.map((l, i) => (
+              <p key={i} className="text-xs leading-relaxed" style={{ color: FAINT }}>{l}</p>
+            ))}
           </div>
         )}
 

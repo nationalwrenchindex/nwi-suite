@@ -1,3 +1,10 @@
+// GET /api/hd/invoices/[id]/pdf — the HD invoice print copy.
+//
+// Self-contained HTML with a print button; this codebase has no PDF library and
+// every "PDF" route works the same way. The customer's on-screen copy is a
+// different template (src/components/hd/PublicInvoicePay.tsx) — shared document
+// rules live in src/lib/invoice-document.ts so the two cannot drift again.
+
 import { NextResponse, type NextRequest } from 'next/server'
 import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
 import { createClient } from '@/lib/supabase/server'
@@ -6,6 +13,26 @@ import { termsDisplay, formatDueDate } from '@/lib/hd/payment-terms'
 import { AERIAL_TYPE_LABEL } from '@/lib/hd/aerial/forms'
 import type { AerialInspectionType } from '@/types/aerial'
 import { money } from '@/lib/format'
+import {
+  SHOP_BLOCK_SELECT,
+  shopBlockFrom,
+  serviceUnitLines,
+  documentDisclaimers,
+  epa608Line,
+  inspectionOutcome,
+  feeRows,
+} from '@/lib/invoice-document'
+
+/** Everything interpolated into the HTML below goes through this first. */
+function esc(v: unknown): string {
+  if (v == null) return ''
+  return String(v)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
 
 export const dynamic = 'force-dynamic'
 
@@ -54,18 +81,21 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const [{ data: profile }, { data: pmChecklist }, { data: dotInspection }, { data: aerialInspection }] = await Promise.all([
     supabase
       .from('profiles')
-      .select('business_name, phone')
+      // Was 'business_name, phone' — and the phone was never even rendered. The
+      // shop's logo, address and email all exist and none of them reached the
+      // printed invoice.
+      .select(`${SHOP_BLOCK_SELECT}, hd_epa_cert_number, default_payment_instructions`)
       .eq('id', user.id)
       .single(),
     supabase
       .from('hd_pm_checklists')
-      .select('id, pm_type, created_at')
+      .select('id, pm_type, created_at, removed_from_service')
       .eq('invoice_id', id)
       .eq('user_id', user.id)
       .maybeSingle(),
     supabase
       .from('hd_dot_inspections')
-      .select('id, inspection_id, overall_result, created_at')
+      .select('id, inspection_id, overall_result, created_at, removed_from_service')
       .eq('invoice_id', id)
       .eq('user_id', user.id)
       .maybeSingle(),
@@ -81,14 +111,23 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const attachedReports = [
     pmChecklist && {
       title:  'PM Checklist',
-      detail: [pmChecklist.pm_type, fmtDate(pmChecklist.created_at)].filter(Boolean).join(' · '),
+      detail: [
+        pmChecklist.pm_type,
+        // A PM checklist has no overall_result column, so only the determination
+        // can be stated — and only when one was recorded.
+        ...inspectionOutcome(null, pmChecklist.removed_from_service),
+        fmtDate(pmChecklist.created_at),
+      ].filter(Boolean).join(' · '),
       url:    `${origin}/hd/pm-checklist/${pmChecklist.id}`,
     },
     dotInspection && {
       title:  'DOT Annual Inspection',
       detail: [
         dotInspection.inspection_id,
-        dotInspection.overall_result ? String(dotInspection.overall_result).toUpperCase() : null,
+        // A bare "FAIL" leaves the customer holding a document that does not say
+        // whether the vehicle may be driven. inspectionOutcome adds the migration
+        // 141 determination, and prints nothing when nobody was asked.
+        ...inspectionOutcome(dotInspection.overall_result, dotInspection.removed_from_service),
         fmtDate(dotInspection.created_at),
       ].filter(Boolean).join(' · '),
       url:    `${origin}/hd/dot-inspections/${dotInspection.id}`,
@@ -97,10 +136,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       title:  `ANSI A92 Aerial Inspection${AERIAL_TYPE_LABEL[aerialInspection.inspection_type as AerialInspectionType] ? ` — ${AERIAL_TYPE_LABEL[aerialInspection.inspection_type as AerialInspectionType]}` : ''}`,
       detail: [
         aerialInspection.inspection_id,
-        aerialInspection.overall_result ? String(aerialInspection.overall_result).toUpperCase() : null,
         // OSHA takes a critically deficient machine out of service — the customer's
         // copy has to say so plainly, not leave it inside the linked report.
-        aerialInspection.removed_from_service ? 'MACHINE REMOVED FROM SERVICE' : null,
+        ...inspectionOutcome(aerialInspection.overall_result, aerialInspection.removed_from_service),
         fmtDate(aerialInspection.inspection_date),
       ].filter(Boolean).join(' · '),
       url:    `${origin}/hd/aerial-inspections/${aerialInspection.id}`,
@@ -125,21 +163,81 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const lineRows = items.map(item => {
     if (item.type === 'labor') {
       return `<tr>
-        <td>${item.description}</td>
+        <td>${esc(item.description)}</td>
         <td>Labor</td>
-        <td>${item.mobile_hours ?? 0} hrs</td>
+        <td>${esc(item.mobile_hours ?? 0)} hrs</td>
         <td>${fmt(inv.labor_rate)}/hr</td>
         <td>${fmt(item.amount)}</td>
       </tr>`
     }
     return `<tr>
-      <td>${item.description}${item.part_number ? `<br><small style="color:#888">${item.part_number}</small>` : ''}</td>
+      <td>${esc(item.description)}${item.part_number ? `<br><small style="color:#666">${esc(item.part_number)}</small>` : ''}</td>
       <td>Parts</td>
-      <td>${item.quantity ?? 1} ea</td>
+      <td>${esc(item.quantity ?? 1)} ea</td>
       <td>${fmt(item.unit_cost)}</td>
       <td>${fmt(item.amount)}</td>
     </tr>`
   }).join('')
+
+  // ── The shop block, the unit block, and what may legally be claimed ─────────
+  const shop = shopBlockFrom(profile)
+  const unitLines = serviceUnitLines(inv as Record<string, unknown>)
+  const disclaimers = documentDisclaimers(inv as Record<string, unknown>)
+  const epaCert = (profile as { hd_epa_cert_number?: string | null } | null)?.hd_epa_cert_number ?? null
+
+  const shopLogo = shop.logoUrl
+    ? `<img src="${esc(shop.logoUrl)}" alt="${esc(shop.name)}" class="brand-logo">`
+    : `<div class="brand-icon">
+        <svg viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 5v3h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+      </div>`
+
+  // The subscriber's name leads, not NWI's. This block used to print the literal
+  // string "NWI HD SUITE" at 20px with the shop relegated to a subtitle, on a
+  // document the shop hands to its own customer.
+  const shopBlockHtml = `
+    <div class="brand">
+      ${shopLogo}
+      <div>
+        <div class="brand-name">${esc(shop.name)}</div>
+        ${shop.addressLines.map(l => `<div class="brand-sub">${esc(l)}</div>`).join('')}
+        ${shop.phone  ? `<div class="brand-sub">${esc(shop.phone)}</div>` : ''}
+        ${shop.email  ? `<div class="brand-sub">${esc(shop.email)}</div>` : ''}
+      </div>
+    </div>`
+
+  // Rendered only when the invoice knows something about the unit. An invoice
+  // auto-created from an aerial inspection knows nothing, and printed a
+  // "Service Unit" heading over blank space.
+  const unitBlockHtml = unitLines.length > 0 ? `
+    <div class="info-box">
+      <h3>Service Unit</h3>
+      ${unitLines.map(l => l.label
+        ? `<p class="label">${esc(l.label)}: ${esc(l.value)}</p>`
+        : `<p><strong>${esc(l.value)}</strong></p>`).join('')}
+    </div>` : ''
+
+  // MANUFACTURER AND CERTIFICATION CLAIMS ARE NOW CONDITIONAL.
+  // This footer used to read "EPA Section 608 certified refrigeration work" on
+  // every invoice the route generated, including a DOT inspection on an
+  // International tractor and an aerial lift inspection. A refrigeration
+  // certification asserted on an aerial inspection is a false statement on a
+  // document the customer keeps.
+  const footerLines = [
+    ...(disclaimers.epa608 ? [epa608Line(epaCert)] : []),
+    ...disclaimers.manufacturers,
+  ]
+  const footerHtml = footerLines.length > 0
+    ? `<div class="footer">${footerLines.map(l => `<p>${esc(l)}</p>`).join('')}</div>`
+    : ''
+
+  // HOW TO PAY. hd_invoices has no payment_instructions column of its own, so
+  // this is the shop's profile default — the same value the LD invoice uses. A
+  // paid or voided invoice does not ask for money.
+  const payInstructions = (profile as { default_payment_instructions?: string | null } | null)
+    ?.default_payment_instructions?.trim() || null
+  const payBlock = payInstructions && inv.status !== 'paid' && inv.status !== 'void'
+    ? `<div class="pay-box"><h3>How to Pay</h3><p>${esc(payInstructions)}</p></div>`
+    : ''
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -152,11 +250,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #1a1a1a; background: #f5f5f5; }
   .page { background: #fff; max-width: 800px; margin: 24px auto; padding: 48px; box-shadow: 0 2px 12px rgba(0,0,0,0.1); }
   .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 36px; border-bottom: 3px solid #FF6600; padding-bottom: 20px; }
-  .brand { display: flex; align-items: center; gap: 12px; }
-  .brand-icon { width: 44px; height: 44px; background: #FF6600; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
-  .brand-icon svg { width: 28px; height: 28px; stroke: white; fill: none; stroke-width: 2; }
-  .brand-name { font-size: 20px; font-weight: 800; letter-spacing: 1px; color: #1a1a1a; }
-  .brand-sub { font-size: 11px; color: #888; margin-top: 2px; }
+  .brand { display: flex; align-items: flex-start; gap: 12px; }
+  .brand-icon { width: 44px; height: 44px; border: 1px solid #e5e7eb; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+  .brand-icon svg { width: 26px; height: 26px; stroke: #FF6600; fill: none; stroke-width: 2; }
+  .brand-logo { height: 54px; max-width: 200px; object-fit: contain; display: block; }
+  .brand-name { font-size: 20px; font-weight: 800; letter-spacing: 0.5px; color: #1a1a1a; }
+  .brand-sub { font-size: 11px; color: #666; margin-top: 2px; line-height: 1.45; }
   .inv-meta { text-align: right; }
   .inv-number { font-size: 22px; font-weight: 700; color: #FF6600; }
   .inv-meta p { font-size: 12px; color: #555; margin-top: 4px; }
@@ -168,15 +267,23 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   .complaint-box { background: #f9f9f9; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px; margin-bottom: 20px; }
   .complaint-box p { font-size: 13px; color: #333; line-height: 1.5; }
   table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
-  thead tr { background: #1a1a1a; color: white; }
-  thead th { padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 600; letter-spacing: 0.5px; }
+  /* PRINT-SAFE. This header was a solid #1a1a1a bar with white text on a page
+     the shop's customer prints on their own paper: a full-width band of black
+     toner per invoice, and on a low-ink printer the labels vanish into it. */
+  thead tr { background: #ffffff; color: #1a1a1a; border-bottom: 2px solid #1a1a1a; }
+  thead th { padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: #555; }
   tbody tr:nth-child(even) { background: #f9f9f9; }
   tbody td { padding: 10px 12px; font-size: 13px; border-bottom: 1px solid #e5e7eb; vertical-align: top; }
   .totals { display: flex; justify-content: flex-end; }
   .totals-box { width: 280px; }
   .totals-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 13px; }
   .totals-row.divider { border-top: 1px solid #e5e7eb; margin-top: 4px; padding-top: 8px; }
-  .totals-row.total { font-size: 18px; font-weight: 700; color: #FF6600; border-top: 2px solid #FF6600; margin-top: 4px; padding-top: 10px; }
+  /* TOTAL DUE is the largest thing on the page — bigger than the invoice number. */
+  .totals-row.total { font-size: 26px; font-weight: 800; color: #FF6600; border-top: 2px solid #FF6600; margin-top: 4px; padding-top: 10px; align-items: baseline; }
+  .totals-row.total span:first-child { font-size: 14px; font-weight: 700; color: #1a1a1a; text-transform: uppercase; letter-spacing: 0.5px; }
+  .pay-box { margin-top: 24px; padding: 16px; border: 2px solid #FF6600; border-radius: 8px; }
+  .pay-box h3 { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #888; margin-bottom: 6px; }
+  .pay-box p { font-size: 13px; color: #333; line-height: 1.55; white-space: pre-wrap; }
   .notes-box { margin-top: 28px; padding: 12px; background: #f9f9f9; border-radius: 6px; border: 1px solid #e5e7eb; }
   .notes-box h3 { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #888; margin-bottom: 6px; }
   .footer { margin-top: 36px; text-align: center; font-size: 11px; color: #aaa; border-top: 1px solid #e5e7eb; padding-top: 16px; }
@@ -190,10 +297,28 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   .due-highlight { color: #b91c1c; font-weight: 700; }
   .no-print { text-align: center; margin-bottom: 24px; }
   .print-btn { background: #FF6600; color: white; border: none; padding: 10px 28px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  /* Single column at phone width, and no horizontal scroll. A customer opening
+     this from a text has a 360px viewport; the two-column grid and the five-column
+     table both overflowed it. */
+  @media (max-width: 640px) {
+    .page { padding: 20px 16px; margin: 0; }
+    .header { flex-direction: column; gap: 14px; }
+    .inv-meta { text-align: left; }
+    .info-grid { grid-template-columns: 1fr; gap: 16px; }
+    .totals { justify-content: stretch; }
+    .totals-box { width: 100%; }
+    /* Type and Rate are derivable from the description and the amount; dropping
+       them is what keeps the remaining columns readable instead of scrolling. */
+    thead th:nth-child(2), tbody td:nth-child(2),
+    thead th:nth-child(4), tbody td:nth-child(4) { display: none; }
+    thead th, tbody td { padding: 8px 6px; font-size: 12px; }
+  }
   @media print {
     body { background: white; }
     .page { margin: 0; padding: 32px; box-shadow: none; max-width: 100%; }
     .no-print { display: none !important; }
+    /* Never let a browser "print backgrounds" setting put a dark fill on paper. */
+    thead tr { background: #ffffff !important; color: #1a1a1a !important; }
   }
 </style>
 </head>
@@ -203,15 +328,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 </div>
 <div class="page">
   <div class="header">
-    <div class="brand">
-      <div class="brand-icon">
-        <svg viewBox="0 0 24 24"><rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 5v3h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-      </div>
-      <div>
-        <div class="brand-name">NWI HD SUITE</div>
-        <div class="brand-sub">${profile?.business_name ?? 'Heavy Duty Service'}</div>
-      </div>
-    </div>
+    ${shopBlockHtml}
     <div class="inv-meta">
       <div class="inv-number">${inv.invoice_number}</div>
       <p>Date: ${fmtDate(inv.created_at)}</p>
@@ -226,32 +343,25 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   <div class="info-grid">
     <div class="info-box">
       <h3>Bill To</h3>
-      <p><strong>${inv.customer_name}</strong></p>
-      ${inv.address_line1 ? `<p>${inv.has_corp_address ? '<span class="label">Billing:</span> ' : ''}${[inv.address_line1, inv.address_line2, [inv.city, inv.state].filter(Boolean).join(', '), inv.zip].filter(Boolean).join(', ')}</p>` : ''}
-      ${inv.has_corp_address && inv.corp_address_line1 ? `<p><span class="label">Service:</span> ${[inv.corp_address_line1, inv.corp_address_line2, [inv.corp_city, inv.corp_state].filter(Boolean).join(', '), inv.corp_zip].filter(Boolean).join(', ')}</p>` : ''}
-      ${inv.customer_phone ? `<p>${inv.customer_phone}</p>` : ''}
-      ${inv.customer_email ? `<p>${inv.customer_email}</p>` : ''}
+      <p><strong>${esc(inv.customer_name)}</strong></p>
+      ${inv.address_line1 ? `<p>${inv.has_corp_address ? '<span class="label">Billing:</span> ' : ''}${esc([inv.address_line1, inv.address_line2, [inv.city, inv.state].filter(Boolean).join(', '), inv.zip].filter(Boolean).join(', '))}</p>` : ''}
+      ${inv.has_corp_address && inv.corp_address_line1 ? `<p><span class="label">Service:</span> ${esc([inv.corp_address_line1, inv.corp_address_line2, [inv.corp_city, inv.corp_state].filter(Boolean).join(', '), inv.corp_zip].filter(Boolean).join(', '))}</p>` : ''}
+      ${inv.customer_phone ? `<p>${esc(inv.customer_phone)}</p>` : ''}
+      ${inv.customer_email ? `<p>${esc(inv.customer_email)}</p>` : ''}
     </div>
-    <div class="info-box">
-      <h3>Service Unit</h3>
-      ${inv.unit_manufacturer || inv.unit_model ? `<p><strong>${[inv.unit_manufacturer, inv.unit_model].filter(Boolean).join(' ')}</strong></p>` : ''}
-      ${inv.unit_serial ? `<p class="label">Serial: ${inv.unit_serial}</p>` : ''}
-      ${inv.unit_year ? `<p class="label">Year: ${inv.unit_year}</p>` : ''}
-      ${inv.truck_make || inv.truck_model ? `<p class="label">Truck: ${[inv.truck_year, inv.truck_make, inv.truck_model].filter(Boolean).join(' ')}</p>` : ''}
-      ${inv.vin ? `<p class="label">VIN: ${inv.vin}</p>` : ''}
-    </div>
+    ${unitBlockHtml}
   </div>
 
   ${inv.complaint ? `
   <div style="margin-bottom:12px">
     <div class="section-label">Complaint</div>
-    <div class="complaint-box"><p>${inv.complaint}</p></div>
+    <div class="complaint-box"><p>${esc(inv.complaint)}</p></div>
   </div>` : ''}
 
   ${inv.diagnosis ? `
   <div style="margin-bottom:20px">
     <div class="section-label">Diagnosis</div>
-    <div class="complaint-box"><p>${inv.diagnosis}</p></div>
+    <div class="complaint-box"><p>${esc(inv.diagnosis)}</p></div>
   </div>` : ''}
 
   <table>
@@ -273,26 +383,25 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     <div class="totals-box">
       <div class="totals-row"><span>Labor Subtotal</span><span>${fmt(inv.subtotal_labor)}</span></div>
       <div class="totals-row"><span>Parts Subtotal</span><span>${fmt(inv.subtotal_parts)}</span></div>
-      ${Number(inv.diagnostic_fee) > 0 ? `<div class="totals-row"><span>Diagnostic Fee</span><span>${fmt(inv.diagnostic_fee)}</span></div>` : ''}
-      ${Number(inv.road_call_fee) > 0 ? `<div class="totals-row"><span>Road Call Fee</span><span>${fmt(inv.road_call_fee)}</span></div>` : ''}
+      ${feeRows(inv as Record<string, unknown>).map(r => `<div class="totals-row"><span>${esc(r.label)}</span><span>${fmt(r.amount)}</span></div>`).join('')}
       ${pdfTaxRows.length > 0
         ? pdfTaxRows.map((r, i) => `<div class="totals-row${i === 0 ? ' divider' : ''}"><span>${r.text}</span><span>${r.taxed ? fmt(r.amount) : '—'}</span></div>`).join('')
         : Number(inv.tax_amount) > 0 ? `<div class="totals-row divider"><span>Tax (${inv.tax_rate}%)</span><span>${fmt(inv.tax_amount)}</span></div>` : ''}
-      <div class="totals-row total"><span>TOTAL</span><span>${fmt(inv.total)}</span></div>
+      <div class="totals-row total"><span>${inv.status === 'paid' ? 'Total Paid' : inv.status === 'void' ? 'Total' : 'Total Due'}</span><span>${fmt(inv.total)}</span></div>
     </div>
   </div>
+
+  ${payBlock}
 
   ${reportsBlock}
 
   ${inv.notes ? `
   <div class="notes-box">
     <h3>Notes</h3>
-    <p style="color:#444;line-height:1.5;font-size:13px">${inv.notes}</p>
+    <p style="color:#444;line-height:1.5;font-size:13px">${esc(inv.notes)}</p>
   </div>` : ''}
 
-  <div class="footer">
-    <p>National Wrench Index HD Suite &bull; EPA Section 608 certified refrigeration work &bull; All work performed by certified technicians</p>
-  </div>
+  ${footerHtml}
 </div>
 <script>
   // No auto-print — user clicks the button

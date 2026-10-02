@@ -22,6 +22,9 @@ function generateToken(): string {
 }
 
 export interface PublicInvoiceBranding {
+  /** The shop's default "how to pay" text. Product-neutral; LD reads the same column. */
+  default_payment_instructions: string | null
+  hd_epa_cert_number:  string | null
   business_name:       string | null
   hd_company_logo_url: string | null
   business_logo_url:   string | null
@@ -40,7 +43,8 @@ export interface PublicInvoiceResult {
   branding: PublicInvoiceBranding
 }
 
-const BRANDING_SELECT = 'business_name, hd_company_logo_url, business_logo_url, phone, email, city, state'
+const BRANDING_SELECT =
+  'business_name, hd_company_logo_url, business_logo_url, phone, email, city, state, default_payment_instructions, hd_epa_cert_number'
 
 /**
  * Return the invoice's public token, creating one if it does not have one yet.
@@ -142,6 +146,8 @@ export async function getInvoiceByToken(
       email:               p.email               ?? null,
       city:                p.city                ?? null,
       state:               p.state               ?? null,
+      default_payment_instructions: p.default_payment_instructions ?? null,
+      hd_epa_cert_number:  p.hd_epa_cert_number   ?? null,
     },
   }
 }
