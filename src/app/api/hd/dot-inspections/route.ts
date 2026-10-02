@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { inspectionInvoiceMoney } from '@/lib/hd/inspection-invoice'
 import { logHDCustomer } from '@/lib/hd/customer-logging'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDStarterAccess } from '@/lib/hd-access'
@@ -109,6 +110,13 @@ export async function POST(req: NextRequest) {
       const hours     = 2.0
       const amount    = Math.round(hours * laborRate * 100) / 100
 
+      // Priced through the shared helper rather than field by field: this is the
+
+      // only place the fees and the tax are decided for an inspection invoice.
+
+      const invoiceMoney = await inspectionInvoiceMoney(supabase, user.id, amount)
+
+
       const laborLine = {
         id: crypto.randomUUID(), type: 'labor',
         description: 'DOT Annual Inspection',
@@ -145,9 +153,11 @@ export async function POST(req: NextRequest) {
           unit_serial:       body.unit_serial ?? null,
           line_items:        [laborLine],
           labor_rate:        laborRate,
-          subtotal_labor:    amount,
-          subtotal_parts:    0,
-          total:             amount,
+          // EXPLICIT, every field. diagnostic_fee is DEFAULT 125.00 on this table, so
+          // omitting it billed the customer a fee that was never charged and never
+          // appeared in the total. Tax was never computed here either. Both come from
+          // one helper now, so the labour follows tax_labor like everything else.
+          ...invoiceMoney,
           status:            'unpaid',
           notes:             `Auto-created from DOT inspection on ${new Date().toISOString().slice(0, 10)}`,
         })
