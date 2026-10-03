@@ -9,6 +9,8 @@
 
 import { useState } from 'react'
 import { useTaxSettings } from '@/lib/use-tax-settings'
+import { useExtrasSettings } from '@/lib/use-extras-settings'
+import { computeExtras, extrasColumns, extrasDisplayRows, totalsWithExtras } from '@/lib/billable-extras'
 import { taxDisplayRows } from '@/lib/tax'
 import { useRouter } from 'next/navigation'
 import LineItemEditor from '@/components/shared/LineItemEditor'
@@ -81,6 +83,13 @@ export default function WorkOrderForm({
   const [taxPct,     setTaxPct]     = useState(isNew ? 0 : (workOrder?.tax_percent ?? defaults.tax_percent))
   const taxSettings = useTaxSettings()
 
+  // ── Billable extras ──
+  // The inputs come off the work order, never recomputed from today's Settings —
+  // the stored amount is what the customer was told.
+  const extras = useExtrasSettings()
+  const [travelHours,  setTravelHours]  = useState(Number(workOrder?.travel_hours  ?? 0))
+  const [mileageMiles, setMileageMiles] = useState(Number(workOrder?.mileage_miles ?? 0))
+
   /** Seeds the shop's defaults at the moment "Single job" is chosen, and clears them
    *  again if the tech switches to segments before saving. */
   function chooseMode(next: PricingMode) {
@@ -109,6 +118,24 @@ export default function WorkOrderForm({
   // so the figures on screen are never momentarily wrong in the exempt direction.
   const inputs = { items, markupPct, laborHours, laborRate, taxPct, taxSettings }
   const totals = computeTotals(inputs)
+
+  // Extras ride on top of the line totals. The shop-supplies base is the parts
+  // subtotal AS IT APPEARS ON THE DOCUMENT — post-markup, the figure the customer
+  // reads — not the shop's raw cost. See computeExtras.
+  const extrasResult = computeExtras(
+    totals.partsTotal,
+    { travelHours, mileageMiles },
+    extras,
+    laborRate,
+  )
+  // Re-taxed with the extras in their own buckets: travel and mileage as labour,
+  // shop supplies as parts. One calculator, src/lib/tax.ts, unchanged.
+  const withExtras = totalsWithExtras(
+    { parts: totals.partsTotal, labor: totals.laborSubtotal },
+    extrasResult,
+    taxSettings ?? null,
+    taxPct,
+  )
   const status = (workOrder?.status ?? 'open') as WorkOrderStatus
   const next   = NEXT_STATUS[status]
 
@@ -131,7 +158,19 @@ export default function WorkOrderForm({
     // pricing_mode is only ever sent on CREATE. Changing it later goes through the
     // dedicated PATCH path, which checks that nothing is priced on either side yet.
     const withMode = isNew && mode ? { ...base, pricing_mode: mode } : base
-    return owns ? { ...withMode, ...lineMoneyColumns(inputs) } : withMode
+    if (!owns) return withMode
+    // lineMoneyColumns owns parts/labour; extrasColumns owns the three extras. The
+    // tax and grand total are overwritten from withExtras because the extras are
+    // inside them — otherwise the stored total would exclude travel the customer
+    // was shown.
+    return {
+      ...withMode,
+      ...lineMoneyColumns(inputs),
+      ...extrasColumns(extrasResult),
+      tax_amount:    withExtras.taxAmount,
+      grand_total:   withExtras.grandTotal,
+      tax_breakdown: withExtras.taxBreakdown,
+    }
   }
 
   async function save() {
@@ -334,10 +373,45 @@ export default function WorkOrderForm({
           </div>
         </div>
 
+        {/* ── Travel and mileage ──
+            Shown only when the shop bills them, so a shop that does not sees
+            nothing at all rather than two inputs it has to ignore. Mileage is
+            typed by hand on purpose: deriving it from addresses needs a distance
+            API and a monthly bill. */}
+        {(extras.billTravel || extras.billMileage) && (
+          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/10">
+            {extras.billTravel && (
+              <div>
+                <label className="nwi-label text-[10px]">Travel Hours</label>
+                <input type="number" min={0} step={0.25} className="nwi-input text-sm"
+                  value={travelHours} disabled={isLocked}
+                  onChange={e => setTravelHours(Number(e.target.value) || 0)} />
+              </div>
+            )}
+            {extras.billMileage && (
+              <div>
+                <label className="nwi-label text-[10px]">Miles Driven</label>
+                <input type="number" min={0} step={1} className="nwi-input text-sm"
+                  value={mileageMiles} disabled={isLocked}
+                  onChange={e => setMileageMiles(Number(e.target.value) || 0)} />
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="space-y-1.5 pt-2 border-t border-white/10">
           <Row label="Parts Base"                    value={fmt(totals.partsBase)} />
           <Row label={`Parts Markup (${markupPct}%)`} value={fmt(totals.markupAmt)} dim />
           {totals.laborSubtotal > 0 && <Row label="Labor" value={fmt(totals.laborSubtotal)} />}
+          {/* A zero extra prints no row — extrasDisplayRows returns none. */}
+          {extrasDisplayRows(extrasResult).map(r => (
+            <Row key={r.key} label={r.detail ? `${r.label} (${r.detail})` : r.label} value={fmt(r.amount)} />
+          ))}
+          {extrasResult.shopSupplies.capped && (
+            <p className="text-[10px] text-white/35">
+              Shop supplies capped at {fmt(extrasResult.shopSupplies.rate ?? 0)}.
+            </p>
+          )}
           {/* One row per category when the split is known, including the exempt one,
               so a tech sees "Labor — not taxable" before a customer does. */}
           {totals.taxBreakdown

@@ -22,6 +22,7 @@ import {
   inspectionOutcome,
   feeRows,
 } from '@/lib/invoice-document'
+import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
 
 /** Everything interpolated into the HTML below goes through this first. */
 function esc(v: unknown): string {
@@ -384,6 +385,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       <div class="totals-row"><span>Labor Subtotal</span><span>${fmt(inv.subtotal_labor)}</span></div>
       <div class="totals-row"><span>Parts Subtotal</span><span>${fmt(inv.subtotal_parts)}</span></div>
       ${feeRows(inv as Record<string, unknown>).map(r => `<div class="totals-row"><span>${esc(r.label)}</span><span>${fmt(r.amount)}</span></div>`).join('')}
+      ${extrasDisplayRows(extrasFromDocument(inv as Record<string, unknown>)).map(r =>
+        `<div class="totals-row"><span>${esc(r.label)}${r.detail ? ` <small style="color:#888">(${esc(r.detail)})</small>` : ''}</span><span>${fmt(r.amount)}</span></div>`,
+      ).join('')}
       ${pdfTaxRows.length > 0
         ? pdfTaxRows.map((r, i) => `<div class="totals-row${i === 0 ? ' divider' : ''}"><span>${r.text}</span><span>${r.taxed ? fmt(r.amount) : '—'}</span></div>`).join('')
         : Number(inv.tax_amount) > 0 ? `<div class="totals-row divider"><span>Tax (${inv.tax_rate}%)</span><span>${fmt(inv.tax_amount)}</span></div>` : ''}

@@ -3,7 +3,9 @@
 
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { missingMigration142Column } from '@/lib/migration-142'
 import { taxSettingsFrom } from '@/lib/tax'
+import { extrasSettingsFrom } from '@/lib/billable-extras'
 
 // Columns that exist on every deployment.
 const BASE_COLUMNS = 'average_mpg, fuel_type, offer_mpi_on_booking, default_labor_rate, default_parts_markup_percent, default_tax_percent'
@@ -12,6 +14,12 @@ const BASE_COLUMNS = 'average_mpg, fuel_type, offer_mpi_on_booking, default_labo
 // below: this endpoint prefills every tax field in both products, so it has to keep
 // working in the window between the code deploying and the ALTER TABLE running.
 const TAX_COLUMNS = 'tax_parts, tax_labor, tax_rate_parts, tax_rate_labor'
+
+// Added by migration 142. Every form that prices a document reads these, so the
+// same hand-applied-migration window applies.
+const EXTRAS_COLUMNS =
+  'bill_travel, travel_rate_per_hour, bill_mileage, mileage_rate_per_mile, ' +
+  'bill_shop_supplies, shop_supplies_percent, shop_supplies_cap'
 
 // True when the error is "this database has not run migration 121 yet". Migrations
 // here are applied by hand in the Supabase console, so a deploy can land before the
@@ -42,13 +50,20 @@ export async function GET() {
 
   let { data, error } = await supabase
     .from('profiles')
-    .select(`${BASE_COLUMNS}, hd_parts_markup_percent, ${TAX_COLUMNS}`)
+    .select(`${BASE_COLUMNS}, hd_parts_markup_percent, ${TAX_COLUMNS}, ${EXTRAS_COLUMNS}`)
     .eq('id', user.id)
     .single()
 
   // Pre-migration fallbacks, narrowest first. Selecting a column that does not exist
   // fails the WHOLE query, which would take the labor rate and the markup down with
   // it — and this endpoint prefills every HD and LD form.
+  if (error && missingMigration142Column(error)) {
+    ({ data, error } = await supabase
+      .from('profiles')
+      .select(`${BASE_COLUMNS}, hd_parts_markup_percent, ${TAX_COLUMNS}`)
+      .eq('id', user.id)
+      .single())
+  }
   if (error && isMissingTaxColumn(error)) {
     ({ data, error } = await supabase
       .from('profiles')
@@ -85,6 +100,9 @@ export async function GET() {
     // what the code did before the split existed. Falling back to 'not taxed' would
     // under-collect, and under-collected tax is money the shop owes itself.
     ...taxSettingsFrom(data),
+    // Billable extras. All off when 142 has not been applied, which is the correct
+    // reading: a shop that has never set these bills none of them.
+    ...extrasSettingsFrom(data as Record<string, unknown> | null),
   })
 }
 
@@ -164,6 +182,44 @@ export async function PUT(request: NextRequest) {
     update.default_tax_percent = Math.round(n * 100) / 100
   }
 
+  // ── Billable extras (migration 142) ──
+  // The three on/off switches.
+  for (const flag of ['bill_travel', 'bill_mileage', 'bill_shop_supplies'] as const) {
+    if (flag in body) {
+      if (typeof body[flag] !== 'boolean') {
+        return NextResponse.json({ error: `${flag} must be true or false` }, { status: 400 })
+      }
+      update[flag] = body[flag]
+    }
+  }
+
+  // The rates. NULL IS A MEANINGFUL VALUE and must survive:
+  //   travel_rate_per_hour  NULL = bill travel at the labour rate, 0 = travel is free
+  //   shop_supplies_cap     NULL = uncapped, 0 = capped at nothing
+  // Coercing either to 0 would silently change what a shop charges.
+  const EXTRA_RATES: Array<[string, number, number]> = [
+    ['travel_rate_per_hour',  0, 9999],
+    ['mileage_rate_per_mile', 0, 99],
+    ['shop_supplies_percent', 0, 100],
+    ['shop_supplies_cap',     0, 99999],
+  ]
+  for (const [key, min, max] of EXTRA_RATES) {
+    if (!(key in body)) continue
+    const raw = body[key]
+    if (raw === null || raw === undefined || raw === '') {
+      update[key] = null
+      continue
+    }
+    const n = Number(raw)
+    if (!Number.isFinite(n) || n < min || n > max) {
+      return NextResponse.json({ error: `${key} must be ${min}–${max}, or null` }, { status: 400 })
+    }
+    // mileage_rate_per_mile is NUMERIC(10,4) — rates are quoted to the tenth of a cent.
+    update[key] = key === 'mileage_rate_per_mile'
+      ? Math.round(n * 10000) / 10000
+      : Math.round(n * 1000) / 1000
+  }
+
   // ── Tax split (migration 140) ──
   for (const flag of ['tax_parts', 'tax_labor'] as const) {
     if (flag in body) {
@@ -219,7 +275,19 @@ export async function PUT(request: NextRequest) {
   }
 
   const { error } = await supabase.from('profiles').update(update).eq('id', user.id)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    // NO SILENT FALLBACK ON A SETTINGS WRITE, matching the hd_parts_markup_percent
+    // note above: a save that returns ok while discarding the number the shop just
+    // typed is how a shop ends up billing a rate it believes it changed. But the
+    // message has to say what to do, not just "column does not exist".
+    const missing = missingMigration142Column(error)
+    if (missing) {
+      return NextResponse.json({
+        error: `Travel, mileage and shop supplies need migration 142 applied first (missing: ${missing}). Your other pricing defaults were not saved either — nothing was changed.`,
+      }, { status: 409 })
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
 
   return NextResponse.json({ ok: true })
 }

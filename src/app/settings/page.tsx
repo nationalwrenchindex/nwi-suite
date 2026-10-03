@@ -21,12 +21,30 @@ export default async function SettingsPage() {
     redirect('/login')
   }
 
+  // Split in two so migration 142 cannot take the whole Settings page down with
+  // it. Selecting a column that does not exist is a 400, and this page is the only
+  // way to fix anything — losing it to an unapplied migration is the worst possible
+  // failure mode, and it is the same bug class as Settings falling off the nav.
+  const PROFILE_BASE =
+    'full_name, business_name, slug, share_sms_template, share_email_subject, share_email_body, ' +
+    'default_payment_instructions, average_mpg, fuel_type, offer_mpi_on_booking, default_labor_rate, ' +
+    'default_parts_markup_percent, default_tax_percent, business_type, bill_consumables_separately, ' +
+    'phone, sms_booking_notifications_enabled, business_logo_url, city, state, work_orders_enabled'
+  const PROFILE_142 =
+    'bill_travel, travel_rate_per_hour, bill_mileage, mileage_rate_per_mile, ' +
+    'bill_shop_supplies, shop_supplies_percent, shop_supplies_cap'
+
   const [{ data: profile }, hasQW, { data: pricingRows }, { data: adjPresets }, { data: listing }] = await Promise.all([
-    supabase
-      .from('profiles')
-      .select('full_name, business_name, slug, share_sms_template, share_email_subject, share_email_body, default_payment_instructions, average_mpg, fuel_type, offer_mpi_on_booking, default_labor_rate, default_parts_markup_percent, default_tax_percent, business_type, bill_consumables_separately, phone, sms_booking_notifications_enabled, business_logo_url, city, state, work_orders_enabled')
-      .eq('id', user.id)
-      .single(),
+    (async () => {
+      const full = await supabase
+        .from('profiles')
+        .select(`${PROFILE_BASE}, ${PROFILE_142}`)
+        .eq('id', user.id)
+        .single()
+      if (!full.error) return full
+      // 142 not applied yet. Everything else on this page still works.
+      return supabase.from('profiles').select(PROFILE_BASE).eq('id', user.id).single()
+    })(),
     hasQuickWrenchAccess(user.id),
     supabase
       .from('detailer_service_pricing')
@@ -75,6 +93,15 @@ export default async function SettingsPage() {
     city?:                               string | null
     state?:                              string | null
     work_orders_enabled?:                boolean | null
+    // Migration 142. Absent until it is applied, which is why every one is
+    // optional and the component defaults them all to off.
+    bill_travel?:                        boolean | null
+    travel_rate_per_hour?:               number | null
+    bill_mileage?:                       boolean | null
+    mileage_rate_per_mile?:              number | null
+    bill_shop_supplies?:                 boolean | null
+    shop_supplies_percent?:              number | null
+    shop_supplies_cap?:                  number | null
   }
 
   return (
@@ -146,6 +173,15 @@ export default async function SettingsPage() {
           initialOfferMpi={p.offer_mpi_on_booking ?? false}
           initialLaborRate={p.default_labor_rate ?? 125}
           initialMarkupPct={p.default_parts_markup_percent ?? 20}
+          initialExtras={{
+            bill_travel:           p.bill_travel ?? false,
+            travel_rate_per_hour:  p.travel_rate_per_hour ?? null,
+            bill_mileage:          p.bill_mileage ?? false,
+            mileage_rate_per_mile: p.mileage_rate_per_mile ?? null,
+            bill_shop_supplies:    p.bill_shop_supplies ?? false,
+            shop_supplies_percent: p.shop_supplies_percent ?? null,
+            shop_supplies_cap:     p.shop_supplies_cap ?? null,
+          }}
           initialPricingRows={(pricingRows ?? []) as PricingRow[]}
           initialBillConsumables={p.bill_consumables_separately ?? false}
           initialWorkOrdersEnabled={p.work_orders_enabled ?? false}

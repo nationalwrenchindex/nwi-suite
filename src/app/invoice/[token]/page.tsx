@@ -29,6 +29,8 @@ import {
   quantityText,
   lineMeta,
 } from '@/lib/invoice-document'
+import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
+import { missingMigration142Column } from '@/lib/migration-142'
 import InvoiceViewClient from './InvoiceViewClient'
 import InvoiceApprovalClient from './InvoiceApprovalClient'
 import type { ReactNode } from 'react'
@@ -36,10 +38,13 @@ import type { Metadata } from 'next'
 import type { MultiJobEntry } from '@/types/financials'
 import { money } from '@/lib/format'
 
-const INVOICE_SELECT = `
+// internal_notes is DELIBERATELY ABSENT and must stay absent. It is the shop-only
+// field added by migration 142 precisely so a tech's notes have somewhere to go that
+// a customer never sees. Selecting it here, even without rendering it, puts it one
+// typo away from a public page.
+const INVOICE_SELECT_BASE = `
   id, invoice_number, po_number, invoice_status, public_token,
   invoice_date, due_date, terms, total, subtotal, tax_rate, tax_amount, tax_breakdown,
-  unit_number,
   job_category, job_subtype, job_notes, jobs,
   line_items, shop_supplies, additional_parts, additional_labor,
   payment_instructions, finalized_at, created_at,
@@ -47,10 +52,23 @@ const INVOICE_SELECT = `
   sent_to_customer_at, paid_at,
   service_lines, adjustments, tip_amount_cents,
   customer:customers(id, first_name, last_name, phone, email, address_line1, address_line2, city, state, zip),
-  vehicle:vehicles(id, year, make, model, vin, unit_number),
   source_quote:quotes!invoices_source_quote_id_fkey(id, quote_number, parts_subtotal, parts_markup_percent, labor_subtotal, labor_hours, labor_rate),
   user_id
 `
+
+// Everything migration 142 adds that this page renders. Split out because selecting
+// a column that does not exist is a 400, and a 400 here lands as notFound() — every
+// customer invoice link in production would read "not available" until the SQL was
+// run by hand. A customer-facing outage is not an acceptable cost for a travel line.
+const INVOICE_SELECT_142 = `
+  unit_number,
+  travel_hours, travel_rate, travel_amount,
+  mileage_miles, mileage_rate, mileage_amount,
+  shop_supplies_percent_applied, shop_supplies_cap_applied, shop_supplies_fee
+`
+
+const VEHICLE_142    = 'vehicle:vehicles(id, year, make, model, vin, unit_number)'
+const VEHICLE_LEGACY = 'vehicle:vehicles(id, year, make, model, vin)'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyInvoice = Record<string, any>
@@ -163,11 +181,24 @@ export default async function PublicInvoicePage(
   const { token } = await params
   const sc = createServiceClient()
 
-  const { data: invoice, error } = await sc
-    .from('invoices')
-    .select(INVOICE_SELECT)
-    .eq('public_token', token)
-    .single()
+  // Cast at the boundary: a select built from a runtime string collapses the row
+  // type to ParserError / GenericStringError, which is the same Supabase behaviour
+  // that forced literal selects elsewhere in this codebase. The shape is asserted
+  // once here rather than at twenty property accesses.
+  const readInvoice = async (cols: string): Promise<{ data: AnyInvoice | null; error: unknown }> => {
+    const r = await sc.from('invoices').select(cols).eq('public_token', token).single()
+    return { data: (r.data as AnyInvoice | null) ?? null, error: r.error }
+  }
+
+  let { data: invoice, error } = await readInvoice(
+    `${INVOICE_SELECT_BASE}, ${INVOICE_SELECT_142}, ${VEHICLE_142}`,
+  )
+  // Migration 142 not applied yet: fall back to the document as it was. The travel,
+  // mileage and shop-supplies lines simply do not render, which is correct — no
+  // existing invoice has any of them.
+  if (error && missingMigration142Column(error)) {
+    ({ data: invoice, error } = await readInvoice(`${INVOICE_SELECT_BASE}, ${VEHICLE_LEGACY}`))
+  }
 
   if (error || !invoice) notFound()
 
@@ -260,6 +291,11 @@ export default async function PublicInvoicePage(
 
   // Payment instructions: invoice-level setting takes priority, fall back to profile default
   const paymentInstructions = inv.payment_instructions || p?.default_payment_instructions || null
+
+  // Travel, mileage and shop supplies as stored on this invoice. extrasFromDocument
+  // reads, it does not recompute — an invoice already sent must keep the figures the
+  // customer was given, whatever Settings says today.
+  const extraRows = extrasDisplayRows(extrasFromDocument(inv))
 
   // Use computed values for display (fall back to stored values for non-detailer)
   const displaySubtotal = detailerSubtotal ?? inv.subtotal
@@ -551,6 +587,23 @@ export default async function PublicInvoicePage(
             {/* ── Totals. TOTAL DUE is the largest thing on the page. ───────── */}
             <div className="flex justify-end">
               <div className="w-full sm:w-80">
+                {/* Travel, mileage and shop supplies — each its own labelled line,
+                    never folded into labor or parts. A zero prints nothing at all:
+                    extrasDisplayRows returns no row for it. Read from the stored
+                    columns, never recomputed, so a sent invoice cannot change. */}
+                {extraRows.map(r => (
+                  <div
+                    key={r.key}
+                    className="flex justify-between py-2 text-sm"
+                    style={{ color: MUTED, borderBottom: `1px solid ${RULE}` }}
+                  >
+                    <span>
+                      {r.label}
+                      {r.detail && <span className="block text-xs" style={{ color: FAINT }}>{r.detail}</span>}
+                    </span>
+                    <span style={{ color: TEXT }}>{fmt(r.amount)}</span>
+                  </div>
+                ))}
                 <div className="flex justify-between py-2 text-sm" style={{ color: MUTED, borderBottom: `1px solid ${RULE}` }}>
                   <span>Subtotal</span>
                   <span style={{ color: TEXT }}>{fmt(displaySubtotal)}</span>

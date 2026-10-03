@@ -120,6 +120,29 @@ function TemplateEditor({
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
+/** The travel / mileage / shop-supplies defaults, as they arrive from profiles. */
+export interface ExtrasDefaults {
+  bill_travel:           boolean
+  travel_rate_per_hour:  number | null
+  bill_mileage:          boolean
+  mileage_rate_per_mile: number | null
+  bill_shop_supplies:    boolean
+  shop_supplies_percent: number | null
+  shop_supplies_cap:     number | null
+}
+
+/** Everything off. A shop that has never set these bills none of them. */
+export const EXTRAS_DEFAULTS: ExtrasDefaults = {
+  bill_travel: false, travel_rate_per_hour: null,
+  bill_mileage: false, mileage_rate_per_mile: null,
+  bill_shop_supplies: false, shop_supplies_percent: null, shop_supplies_cap: null,
+}
+
+/** null/undefined -> '', so a blank input stays distinguishable from a zero. */
+function numStr(v: number | null | undefined): string {
+  return v == null ? '' : String(v)
+}
+
 const BUSINESS_TYPE_LABELS: Record<string, string> = {
   mechanic: 'Mobile Mechanic',
   detailer: 'Mobile Detailer',
@@ -138,6 +161,7 @@ export default function SettingsClient({
   initialOfferMpi     = false,
   initialLaborRate    = 125,
   initialMarkupPct    = 20,
+  initialExtras       = EXTRAS_DEFAULTS,
 
   initialPricingRows       = [],
   initialBillConsumables   = false,
@@ -161,6 +185,7 @@ export default function SettingsClient({
   initialOfferMpi?:            boolean
   initialLaborRate?:           number
   initialMarkupPct?:           number
+  initialExtras?:              ExtrasDefaults
 
   initialPricingRows?:         PricingRow[]
   initialBillConsumables?:     boolean
@@ -201,6 +226,17 @@ export default function SettingsClient({
 
   const [laborRate,     setLaborRate]     = useState(String(initialLaborRate))
   const [markupPct,     setMarkupPct]     = useState(String(initialMarkupPct))
+
+  // Travel, mileage and shop supplies. Strings, not numbers, because '' has to be
+  // distinguishable from 0: a blank travel rate means "bill at the labour rate"
+  // and 0 means "travel is free", and those are different answers.
+  const [billTravel,       setBillTravel]       = useState(initialExtras.bill_travel)
+  const [travelRate,       setTravelRate]       = useState(numStr(initialExtras.travel_rate_per_hour))
+  const [billMileage,      setBillMileage]      = useState(initialExtras.bill_mileage)
+  const [mileageRate,      setMileageRate]      = useState(numStr(initialExtras.mileage_rate_per_mile))
+  const [billShopSupplies, setBillShopSupplies] = useState(initialExtras.bill_shop_supplies)
+  const [shopSuppliesPct,  setShopSuppliesPct]  = useState(numStr(initialExtras.shop_supplies_percent))
+  const [shopSuppliesCap,  setShopSuppliesCap]  = useState(numStr(initialExtras.shop_supplies_cap))
 
   const [savingRates,   setSavingRates]   = useState(false)
 
@@ -287,27 +323,27 @@ export default function SettingsClient({
     setSavingBillConsumables(false)
   }
 
-  // Turning this on makes the Work Orders nav item and its routes appear. The flag is
-  // read server-side wherever AppNav renders, so refresh() is what stops the nav from
-  // looking stuck until the next navigation.
-  async function saveWorkOrdersEnabled(value: boolean) {
-    setSavingWorkOrders(true)
-    try {
-      const res = await fetch('/api/user/profile', {
-        method:  'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ work_orders_enabled: value }),
-      })
-      if (res.ok) {
-        setWorkOrdersEnabled(value)
-        setSavedMsg(value ? 'Work orders enabled.' : 'Work orders disabled.')
-        setTimeout(() => setSavedMsg(null), 3000)
-        router.refresh()
-      }
-    } catch { /* silently fail */ }
-    setSavingWorkOrders(false)
-  }
-
+  // Turning this on makes the Work Orders nav item and its routes appear. The flag is
+  // read server-side wherever AppNav renders, so refresh() is what stops the nav from
+  // looking stuck until the next navigation.
+  async function saveWorkOrdersEnabled(value: boolean) {
+    setSavingWorkOrders(true)
+    try {
+      const res = await fetch('/api/user/profile', {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ work_orders_enabled: value }),
+      })
+      if (res.ok) {
+        setWorkOrdersEnabled(value)
+        setSavedMsg(value ? 'Work orders enabled.' : 'Work orders disabled.')
+        setTimeout(() => setSavedMsg(null), 3000)
+        router.refresh()
+      }
+    } catch { /* silently fail */ }
+    setSavingWorkOrders(false)
+  }
+
   async function saveSmsNotifSetting(value: boolean) {
     setSavingSmsNotif(true)
     try {
@@ -390,6 +426,22 @@ export default function SettingsClient({
       if (isNaN(lr) || lr < 0) { setSavedMsg('Enter a valid labor rate.'); setTimeout(() => setSavedMsg(null), 3000); setSavingRates(false); return }
       if (isNaN(mp) || mp < 0) { setSavedMsg('Enter a valid markup %.'); setTimeout(() => setSavedMsg(null), 3000); setSavingRates(false); return }
 
+      // '' means "not set" and must be sent as null, never coerced to 0.
+      const optNum = (s: string): number | null => {
+        const t = s.trim()
+        if (!t) return null
+        const n = Number(t)
+        return Number.isFinite(n) && n >= 0 ? n : null
+      }
+      if (billMileage && optNum(mileageRate) == null) {
+        setSavedMsg('Enter a mileage rate, or switch mileage billing off.')
+        setTimeout(() => setSavedMsg(null), 4000); setSavingRates(false); return
+      }
+      if (billShopSupplies && optNum(shopSuppliesPct) == null) {
+        setSavedMsg('Enter a shop supplies percentage, or switch it off.')
+        setTimeout(() => setSavedMsg(null), 4000); setSavingRates(false); return
+      }
+
       const res = await fetch('/api/user/profile', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -399,13 +451,30 @@ export default function SettingsClient({
           // default_tax_percent is NOT written here any more. Sales tax moved to its
           // own section below, which writes tax_rate_parts / tax_rate_labor. Two
           // writers for one rate is how the two drift apart.
+          bill_travel:            billTravel,
+          travel_rate_per_hour:   optNum(travelRate),
+          bill_mileage:           billMileage,
+          mileage_rate_per_mile:  optNum(mileageRate),
+          bill_shop_supplies:     billShopSupplies,
+          shop_supplies_percent:  optNum(shopSuppliesPct),
+          shop_supplies_cap:      optNum(shopSuppliesCap),
         }),
       })
       if (res.ok) {
         setSavedMsg('Pricing defaults saved.')
         setTimeout(() => setSavedMsg(null), 3000)
+      } else {
+        // Was a bare `if (res.ok)` with no else: pressing Save on a rejected
+        // request did nothing at all on screen, so a shop could not tell a failed
+        // save from a successful one.
+        const j = await res.json().catch(() => ({}))
+        setSavedMsg((j as { error?: string }).error ?? 'Could not save pricing defaults.')
+        setTimeout(() => setSavedMsg(null), 8000)
       }
-    } catch { /* silently fail */ }
+    } catch {
+      setSavedMsg('Could not reach the server. Nothing was saved.')
+      setTimeout(() => setSavedMsg(null), 6000)
+    }
     setSavingRates(false)
   }
 
@@ -825,6 +894,100 @@ export default function SettingsClient({
               onChange={e => setMarkupPct(e.target.value)}
             />
           </div>
+          {/* ── Travel, mileage and shop supplies ──
+              In this box rather than their own section, because they are the same
+              decision a shop makes once: what do I charge, and at what rate. Each
+              is off by default — a shop that does not bill travel sees zero and
+              nothing prints on the document. */}
+          <div className="pt-2 border-t border-white/10 space-y-4">
+            <p className="text-white/40 text-xs uppercase tracking-widest">Travel, Mileage &amp; Supplies</p>
+
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input type="checkbox" className="mt-0.5" checked={billTravel}
+                onChange={e => setBillTravel(e.target.checked)} />
+              <span className="text-white/80 text-sm">
+                Bill travel time
+                <span className="block text-white/35 text-xs mt-0.5">
+                  Hours × rate, as its own line. Taxed as labor.
+                </span>
+              </span>
+            </label>
+            {billTravel && (
+              <div>
+                <label className="nwi-label">Travel Rate ($/hr)</label>
+                <input
+                  type="number" min="0" max="9999" step="1"
+                  className="nwi-input text-sm w-full"
+                  placeholder={laborRate || '125'}
+                  value={travelRate}
+                  onChange={e => setTravelRate(e.target.value)}
+                />
+                <p className="text-white/30 text-xs mt-1">
+                  Leave blank to bill travel at your labor rate. Enter 0 if travel is free.
+                </p>
+              </div>
+            )}
+
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input type="checkbox" className="mt-0.5" checked={billMileage}
+                onChange={e => setBillMileage(e.target.checked)} />
+              <span className="text-white/80 text-sm">
+                Bill mileage
+                <span className="block text-white/35 text-xs mt-0.5">
+                  Miles × rate, entered by hand. Nothing is calculated from addresses.
+                </span>
+              </span>
+            </label>
+            {billMileage && (
+              <div>
+                <label className="nwi-label">Mileage Rate ($/mile)</label>
+                <input
+                  type="number" min="0" max="99" step="0.0001"
+                  className="nwi-input text-sm w-full"
+                  placeholder="0.70"
+                  value={mileageRate}
+                  onChange={e => setMileageRate(e.target.value)}
+                />
+              </div>
+            )}
+
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input type="checkbox" className="mt-0.5" checked={billShopSupplies}
+                onChange={e => setBillShopSupplies(e.target.checked)} />
+              <span className="text-white/80 text-sm">
+                Bill shop supplies
+                <span className="block text-white/35 text-xs mt-0.5">
+                  A percentage of the parts total only — never labor, travel or mileage.
+                  A labor-only job is charged nothing.
+                </span>
+              </span>
+            </label>
+            {billShopSupplies && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="nwi-label">Shop Supplies (%)</label>
+                  <input
+                    type="number" min="0" max="100" step="0.1"
+                    className="nwi-input text-sm w-full"
+                    placeholder="8"
+                    value={shopSuppliesPct}
+                    onChange={e => setShopSuppliesPct(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className="nwi-label">Cap ($, optional)</label>
+                  <input
+                    type="number" min="0" max="99999" step="1"
+                    className="nwi-input text-sm w-full"
+                    placeholder="No cap"
+                    value={shopSuppliesCap}
+                    onChange={e => setShopSuppliesCap(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
           <button
             onClick={savePricingRates}
             disabled={savingRates}

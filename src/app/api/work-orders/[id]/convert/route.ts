@@ -7,6 +7,7 @@
 
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { writeToleratingMigration142 } from '@/lib/migration-142'
 import { hasWorkOrders } from '@/lib/work-orders'
 import { WORK_ORDER_SELECT } from '../../list'
 import { PARENTS } from '@/lib/segments/parent'
@@ -160,17 +161,47 @@ export async function POST(
     additional_parts: [],
     additional_labor: [],
     started_at:       now,
+
+    // ── The pricing terms, recorded on the invoice itself (migration 142) ──
+    // Previously reachable only through source_quote_id, which a work-order
+    // conversion does not have — so the markup read 0 and gross profit came out
+    // as exactly zero on every invoice billed this way.
+    parts_markup_percent: wo.parts_markup_percent ?? null,
+    parts_subtotal:       wo.parts_subtotal ?? null,
+    labor_subtotal:       wo.labor_subtotal ?? null,
+    labor_hours:          wo.labor_hours ?? null,
+    labor_rate:           wo.labor_rate ?? null,
+
+    unit_number:    wo.unit_number ?? null,
+    // 2c: the tech notes finally have somewhere to go that is NOT customer-facing.
+    // They used to be dropped entirely, because `notes` and `job_notes` both print.
+    internal_notes: wo.tech_notes ?? null,
+
+    // ── Billable extras, carried at the rate that was charged ──
+    // Copied, never recomputed: the customer was shown these figures.
+    travel_hours:                  wo.travel_hours   ?? 0,
+    travel_rate:                   wo.travel_rate    ?? null,
+    travel_amount:                 wo.travel_amount  ?? 0,
+    mileage_miles:                 wo.mileage_miles  ?? 0,
+    mileage_rate:                  wo.mileage_rate   ?? null,
+    mileage_amount:                wo.mileage_amount ?? 0,
+    shop_supplies_percent_applied: wo.shop_supplies_percent_applied ?? null,
+    shop_supplies_cap_applied:     wo.shop_supplies_cap_applied     ?? null,
+    shop_supplies_fee:             wo.shop_supplies_fee             ?? 0,
   }
 
-  const { data: invoice, error: insertErr } = await supabase
-    .from('invoices')
-    .insert(invoiceInsert)
-    .select(INVOICE_SELECT)
-    .single()
+  const { data: invoice, error: insertErr } = await writeToleratingMigration142<
+    Record<string, unknown>,
+    Record<string, unknown>
+  >(
+    invoiceInsert as unknown as Record<string, unknown>,
+    row => supabase.from('invoices').insert(row).select(INVOICE_SELECT).single(),
+  )
 
   if (insertErr || !invoice) {
     console.error('[POST /api/work-orders/[id]/convert] insert invoice', insertErr)
-    return NextResponse.json({ error: insertErr?.message ?? 'Failed to create invoice' }, { status: 500 })
+    const msg = (insertErr as { message?: string } | null)?.message
+    return NextResponse.json({ error: msg ?? 'Failed to create invoice' }, { status: 500 })
   }
 
   // Lock the work order to the invoice. Done after the insert so a failure here

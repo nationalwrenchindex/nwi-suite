@@ -20,6 +20,7 @@ import {
   feeRows,
 } from '@/lib/invoice-document'
 import { addressFrom } from '@/lib/address'
+import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
 import { money } from '@/lib/format'
 
 // The light "document" palette HD invoices use, not the dark HD suite chrome.
@@ -105,6 +106,13 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
     // feeRows is the shared rule: a zero fee prints no line at all. See the
     // migration 057 DEFAULT 125.00 note on it.
     ...feeRows(inv).map(r => ({ label: r.label, val: r.amount })),
+    // Travel, mileage and shop supplies, each as its own labelled line and never
+    // folded into labor or parts. Read from the stored columns, never recomputed.
+    // A zero prints nothing — extrasDisplayRows returns no row for it.
+    ...extrasDisplayRows(extrasFromDocument(inv)).map(r => ({
+      label: r.detail ? `${r.label} (${r.detail})` : r.label,
+      val:   r.amount,
+    })),
     // tax_rate is stored as a percent (7.5 means 7.5%), not a fraction.
     //
     // When the invoice carries a breakdown, each category becomes its own row --

@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { writeToleratingMigration142 } from '@/lib/migration-142'
+import { writeToleratingMigration142, missingMigration142Column } from '@/lib/migration-142'
 
 // ─── GET /api/vehicles?limit=N ────────────────────────────────────────────────
 // Returns recent vehicles across all of the authenticated user's customers
@@ -14,16 +14,24 @@ export async function GET(request: NextRequest) {
   const limit      = Math.min(parseInt(sp.get('limit') ?? '10', 10), 50)
   const customerId = sp.get('customer_id')
 
-  let query = supabase
-    .from('vehicles')
-    .select('id, unit_number, year, make, model, vin, customers!inner(user_id)')
-    .eq('customers.user_id', user.id)
-    .order('created_at', { ascending: false })
-    .limit(limit)
+  // unit_number arrives with migration 142, which is applied by hand. Selecting it
+  // before then is a 400 that takes the WHOLE vehicle picker down — in every form
+  // in both products. So the select degrades instead.
+  const build = (cols: string) => {
+    let q = supabase
+      .from('vehicles')
+      .select(cols)
+      .eq('customers.user_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(limit)
+    if (customerId) q = q.eq('customer_id', customerId)
+    return q
+  }
 
-  if (customerId) query = query.eq('customer_id', customerId)
-
-  const { data, error } = await query
+  let { data, error } = await build('id, unit_number, year, make, model, vin, customers!inner(user_id)')
+  if (error && missingMigration142Column(error)) {
+    ({ data, error } = await build('id, year, make, model, vin, customers!inner(user_id)'))
+  }
 
   if (error) {
     console.error('[GET /api/vehicles]', error)

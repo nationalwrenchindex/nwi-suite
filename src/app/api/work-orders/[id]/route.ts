@@ -7,6 +7,7 @@
 
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { writeToleratingMigration142 } from '@/lib/migration-142'
 import { hasWorkOrders } from '@/lib/work-orders'
 import { WORK_ORDER_SELECT } from '../list'
 
@@ -116,22 +117,38 @@ export async function PATCH(
   if ('tax_percent'          in body) updates.tax_percent          = num(body.tax_percent)
   if ('tax_amount'           in body) updates.tax_amount           = num(body.tax_amount)
   if ('grand_total'          in body) updates.grand_total          = num(body.grand_total)
+  if ('tax_breakdown'        in body) updates.tax_breakdown        = body.tax_breakdown ?? null
+
+  // ── Migration 142 ──
+  for (const k of [
+    'travel_hours', 'travel_rate', 'travel_amount',
+    'mileage_miles', 'mileage_rate', 'mileage_amount',
+    'shop_supplies_percent_applied', 'shop_supplies_cap_applied', 'shop_supplies_fee',
+  ] as const) {
+    if (k in body) updates[k] = num(body[k])
+  }
+  if ('unit_number'    in body) updates.unit_number    = str(body.unit_number)
+  if ('internal_notes' in body) updates.internal_notes = str(body.internal_notes)
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'No valid fields to update.' }, { status: 400 })
   }
 
-  const { data, error } = await supabase
-    .from('work_orders')
-    .update(updates)
-    .eq('id', id)
-    .eq('user_id', user.id)
-    .select(WORK_ORDER_SELECT)
-    .single()
+  const { data, error } = await writeToleratingMigration142<Record<string, unknown>, Record<string, unknown>>(
+    updates,
+    row => supabase
+      .from('work_orders')
+      .update(row)
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select(WORK_ORDER_SELECT)
+      .single(),
+  )
 
   if (error || !data) {
     console.error('[PATCH /api/work-orders/[id]]', error)
-    return NextResponse.json({ error: error?.message ?? 'Failed to save' }, { status: 500 })
+    const msg = (error as { message?: string } | null)?.message
+    return NextResponse.json({ error: msg ?? 'Failed to save' }, { status: 500 })
   }
   return NextResponse.json({ work_order: data })
 }

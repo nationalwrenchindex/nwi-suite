@@ -6,6 +6,7 @@
 
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { writeToleratingMigration142 } from '@/lib/migration-142'
 import { hasWorkOrders } from '@/lib/work-orders'
 import { WORK_ORDER_STATUSES, type WorkOrderStatus } from '@/types/work-orders'
 import { WORK_ORDER_SELECT, WORK_ORDER_PAGE_SIZE } from './list'
@@ -112,17 +113,31 @@ export async function POST(request: NextRequest) {
     tech_notes:           str(body.tech_notes),
     source:               str(body.source) ?? 'manual',
     source_quote_id:      str(body.source_quote_id),
+    // ── Migration 142 ──
+    // The extras carry their rate in force, not just the input, so reopening the
+    // record cannot re-price it from today's Settings.
+    travel_hours:                  num(body.travel_hours),
+    travel_rate:                   num(body.travel_rate),
+    travel_amount:                 num(body.travel_amount),
+    mileage_miles:                 num(body.mileage_miles),
+    mileage_rate:                  num(body.mileage_rate),
+    mileage_amount:                num(body.mileage_amount),
+    shop_supplies_percent_applied: num(body.shop_supplies_percent_applied),
+    shop_supplies_cap_applied:     num(body.shop_supplies_cap_applied),
+    shop_supplies_fee:             num(body.shop_supplies_fee),
+    unit_number:                   str(body.unit_number),
+    internal_notes:                str(body.internal_notes),
   }
 
-  const { data, error } = await supabase
-    .from('work_orders')
-    .insert(insert)
-    .select(WORK_ORDER_SELECT)
-    .single()
+  const { data, error } = await writeToleratingMigration142<Record<string, unknown>, Record<string, unknown>>(
+    insert as unknown as Record<string, unknown>,
+    row => supabase.from('work_orders').insert(row).select(WORK_ORDER_SELECT).single(),
+  )
 
   if (error || !data) {
     console.error('[POST /api/work-orders]', error)
-    return NextResponse.json({ error: error?.message ?? 'Failed to create work order' }, { status: 500 })
+    const msg = (error as { message?: string } | null)?.message
+    return NextResponse.json({ error: msg ?? 'Failed to create work order' }, { status: 500 })
   }
 
   return NextResponse.json({ work_order: data }, { status: 201 })

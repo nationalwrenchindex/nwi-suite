@@ -45,6 +45,24 @@ export interface WorkOrder {
   labor_rate:           number | null
   parts_subtotal:       number | null
   parts_markup_percent: number | null
+
+  // ── Billable extras (migration 142) ──
+  // Each keeps the input, the rate in force, and the amount, so reopening the
+  // record cannot re-price it from today's Settings. Optional because the columns
+  // do not exist until 142 is applied.
+  travel_hours?:                  number | null
+  travel_rate?:                   number | null
+  travel_amount?:                 number | null
+  mileage_miles?:                 number | null
+  mileage_rate?:                  number | null
+  mileage_amount?:                number | null
+  shop_supplies_percent_applied?: number | null
+  shop_supplies_cap_applied?:     number | null
+  shop_supplies_fee?:             number | null
+  /** Shop-only. Never rendered on a customer-facing document. */
+  internal_notes?:                string | null
+  /** The fleet's own identifier for the unit. */
+  unit_number?:                   string | null
   labor_subtotal:       number | null
   tax_percent:          number | null
   tax_amount:           number | null
