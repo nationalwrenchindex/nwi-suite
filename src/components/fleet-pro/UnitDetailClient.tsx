@@ -10,6 +10,7 @@ import { formatPerHour, formatPerMile } from '@/types/fleet-pro-cost'
 import { NWI_BLUE, NWI_ORANGE } from './brand'
 import CostTrendChart from './CostTrendChart'
 import RegistrationSection from './RegistrationSection'
+import PmItemsSection from './PmItemsSection'
 import ScanInvoiceClient from './ScanInvoiceClient'
 
 
@@ -533,6 +534,10 @@ export default function UnitDetailClient({ unitId }: { unitId: string }) {
       )}
 
       {/* ── Registration ────────────────────────────────────────────────────── */}
+      {/* Its own list, above registration and below the general PM figures —
+          a part with a 4-month clock must not hide behind a 2,000-hour service. */}
+      <PmItemsSection unitId={unitId} canEdit={detail.can_edit} />
+
       <RegistrationSection unitId={unitId} canEdit={detail.can_edit} />
 
       {/* ── Meter history ───────────────────────────────────────────────────── */}
