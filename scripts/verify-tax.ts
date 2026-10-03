@@ -70,12 +70,27 @@ async function main() {
   console.log('   (this is what every existing shop keeps doing after migration 140)')
   console.log('='.repeat(78))
 
+  // SCOPED TO PRE-140 INVOICES, and that scoping is the whole point of this check.
+  //
+  // The claim being tested is "a shop that was taxing labour keeps getting the same
+  // number after migration 140" — so it only applies to invoices written BEFORE the
+  // split existed, which are exactly the ones with no stored tax_breakdown.
+  //
+  // An invoice written AFTER it, by a shop that has since turned labour tax OFF,
+  // correctly stores tax_amount 0 and a breakdown saying taxed: false. Asserting
+  // "with labor taxed ON" against that row produced a false alarm — the row is
+  // right and the expectation was stale. A verification script that cries wolf
+  // gets ignored, so it is scoped rather than loosened.
   const hd = await get<HdInv>(
-    'hd_invoices?select=invoice_number,subtotal_labor,subtotal_parts,diagnostic_fee,road_call_fee,tax_rate,tax_amount,total&order=created_at.desc&limit=50',
+    'hd_invoices?select=invoice_number,subtotal_labor,subtotal_parts,diagnostic_fee,road_call_fee,tax_rate,tax_amount,total,tax_breakdown&order=created_at.desc&limit=50',
   )
-  console.log(`\n  ${hd.length} HD invoices from production\n`)
+  const preSplit  = hd.filter(i => !(i as unknown as { tax_breakdown?: unknown }).tax_breakdown)
+  const postSplit = hd.filter(i => Boolean((i as unknown as { tax_breakdown?: unknown }).tax_breakdown))
+  console.log(`\n  ${hd.length} HD invoices from production`)
+  console.log(`  ${preSplit.length} written before migration 140 (no stored breakdown) — checked below`)
+  console.log(`  ${postSplit.length} written after it — checked against their OWN breakdown\n`)
   console.log('    invoice          stored tax   calculated   delta')
-  for (const i of hd) {
+  for (const i of preSplit) {
     const rate = num(i.tax_rate)
     const s: TaxSettings = { tax_parts: true, tax_labor: true, tax_rate_parts: rate, tax_rate_labor: rate }
     // Today's base: labor + parts + diagnostic + road call, all taxed together.
@@ -86,7 +101,27 @@ async function main() {
     const stored = num(i.tax_amount)
     const delta = Math.round((r.taxAmount - stored) * 100) / 100
     console.log(`    ${i.invoice_number.padEnd(16)}${usd(stored).padStart(10)}${usd(r.taxAmount).padStart(13)}${usd(delta).padStart(8)}`)
-    ok(Math.abs(delta) <= 0.01, `${i.invoice_number} reproduced within a cent`)
+    ok(Math.abs(delta) <= 0.01, `${i.invoice_number} (pre-140) reproduced within a cent`)
+  }
+
+  // Post-140 rows prove a different and stronger thing: the stored tax equals the
+  // sum of the stored breakdown's own taxed buckets. That holds whatever the shop's
+  // settings are, and it is what makes the printed split add up to the total.
+  if (postSplit.length > 0) {
+    console.log('\n    POST-140, checked against each row\'s own breakdown:')
+    for (const i of postSplit) {
+      const bd = (i as unknown as { tax_breakdown?: Record<string, { taxed?: boolean; amount?: number }> }).tax_breakdown ?? {}
+      const summed = Object.entries(bd)
+        .filter(([k]) => k !== 'version')
+        .reduce((s, [, v]) => s + (v?.taxed ? Number(v.amount ?? 0) : 0), 0)
+      const stored = num(i.tax_amount)
+      const delta = Math.round((summed - stored) * 100) / 100
+      const untaxed = Object.entries(bd).filter(([k, v]) => k !== 'version' && v?.taxed === false).map(([k]) => k)
+      console.log(`    ${i.invoice_number.padEnd(16)}${usd(stored).padStart(10)}${usd(summed).padStart(13)}${usd(delta).padStart(8)}`
+        + (untaxed.length ? `   (${untaxed.join(', ')} not taxed)` : ''))
+      ok(Math.abs(delta) <= 0.01,
+        `${i.invoice_number} (post-140): stored tax equals the sum of its own taxed buckets`)
+    }
   }
 
   console.log('\n' + '='.repeat(78))
