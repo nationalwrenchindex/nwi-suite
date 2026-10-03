@@ -1,52 +1,79 @@
--- ╔═══════════════════════════════════════════════════════════════════════════╗
--- ║ REQUIRED — repair the mangled em-dash in the seeded PM item                ║
--- ╚═══════════════════════════════════════════════════════════════════════════╝
+-- =============================================================================
+-- REQUIRED - repair the mangled "why" text on the seeded PM item
+-- =============================================================================
 --
 -- NOT RUN BY ME. This is an UPDATE to an existing row.
 --
--- ── WHAT HAPPENED ───────────────────────────────────────────────────────────
+-- PLAIN ASCII ONLY. Every character in this file, including inside the string
+-- literal and inside every WHERE clause, is in the 7-bit ASCII range. That is
+-- not a style choice: this file exists because non-ASCII text did not survive
+-- the trip to the SQL editor, so a repair script written with non-ASCII in it
+-- would be corrupted by the same transport that caused the problem.
 --
--- Migration 144 reached the SQL editor via `cat 144_pm_items.sql | clip`.
--- Windows clip.exe reads stdin in the CONSOLE CODE PAGE (cp437 here), not UTF-8,
--- so the em-dash in the seed text was transliterated before it ever arrived:
+-- -----------------------------------------------------------------------------
+-- WHAT HAPPENED
+-- -----------------------------------------------------------------------------
 --
---   intended : ...starves the engine U+2014 erratic RPM...        (one em-dash)
---   stored   : ...starves the engine U+0393 U+00C7 U+00F6 ...     (three chars)
+-- Migration 144 reached the SQL editor through "cat 144_pm_items.sql | clip".
+-- Windows clip.exe reads stdin in the console code page (cp437 here), not UTF-8,
+-- so the em-dash in the seeded text was transliterated before it ever arrived:
 --
--- Those three code points are the UTF-8 bytes E2 80 94 read as cp437. The SQL ran
--- without error because the mangled text is perfectly valid text.
+--   intended:  ...starves the engine [U+2014] erratic RPM...
+--   stored:    ...starves the engine [U+0393][U+00C7][U+00F6] erratic RPM...
 --
--- ── WHY IT MATTERS ──────────────────────────────────────────────────────────
+-- Those three code points are the UTF-8 bytes E2 80 94 read as cp437. The SQL
+-- ran without error because mangled text is still perfectly valid text.
 --
--- pm_items.why is shown to a TECHNICIAN behind the "Why" button on the unit detail
--- page. It is the only one of the three affected categories that a human reads:
+-- -----------------------------------------------------------------------------
+-- WHY IT MATTERS
+-- -----------------------------------------------------------------------------
 --
---   pm_items.why          1 row,  TECH-VISIBLE   <- this file fixes it
---   column COMMENTs      11 of 318, metadata only, invisible in the product
---   business data         none. invoices, hd_invoices, customers and quotes
---                         were all checked and are clean.
+-- pm_items.why is shown to a TECHNICIAN behind the "Why" button on the unit
+-- detail page. It is the only affected thing a human reads:
 --
--- Three of those eleven comments (shop_profiles.tech_name,
--- shop_jobs.invoice_public_token, customers.contact_prefs_note) belong to older
--- migrations, so this transport problem predates this run. They are cosmetic and
--- are deliberately left alone rather than churned.
+--   pm_items.why       1 row,  TECH-VISIBLE          <- this file fixes it
+--   column COMMENTs    11 of 318, metadata only, invisible in the product
+--   business data      none. invoices, hd_invoices, customers and quotes were
+--                      all checked and are clean.
 --
--- ── THE FIX ─────────────────────────────────────────────────────────────────
+-- Three of those eleven comments belong to older migrations
+-- (shop_profiles.tech_name, shop_jobs.invoice_public_token,
+-- customers.contact_prefs_note), so this transport problem predates this run.
+-- They are cosmetic and are deliberately left alone rather than churned.
 --
--- Rewrites the one string, in ASCII, matching migration 144 as it now stands. Safe
--- to run more than once: it only touches a row whose text still contains the
--- mangled sequence.
+-- -----------------------------------------------------------------------------
+-- HOW A MANGLED ROW IS IDENTIFIED, WITHOUT WRITING NON-ASCII
+-- -----------------------------------------------------------------------------
+--
+-- The obvious test is "why LIKE '%<the bad character>%'", and that is a trap:
+-- the bad character is non-ASCII, so it would be mangled on the way in and the
+-- WHERE clause would match nothing. The script would report success and change
+-- nothing.
+--
+-- Instead this uses octet_length(why) <> length(why). length() counts
+-- CHARACTERS, octet_length() counts BYTES, and they differ only when the string
+-- contains at least one multi-byte character. Correct ASCII text has them equal.
+-- Pure ASCII, no literal needed, and it catches any corruption of this kind
+-- rather than one specific character.
 
 BEGIN;
 
--- Before. Expect one row, with the three-character sequence visible.
+-- -----------------------------------------------------------------------------
+-- 1. BEFORE. Expect exactly one row, with bytes greater than characters.
+-- -----------------------------------------------------------------------------
 SELECT name,
        part_number,
-       position('Γ' in why) AS mojibake_at,
-       substring(why from 1 from 90) AS first_90
+       length(why)       AS characters,
+       octet_length(why) AS bytes,
+       octet_length(why) - length(why) AS extra_bytes,
+       substring(why from 40 for 40)   AS around_the_damage
 FROM   public.pm_items
-WHERE  why LIKE '%Γ%';
+WHERE  octet_length(why) <> length(why);
 
+-- -----------------------------------------------------------------------------
+-- 2. THE REPAIR. ASCII only, matching migration 144 as it now stands.
+--    Safe to run more than once: the WHERE clause stops matching once fixed.
+-- -----------------------------------------------------------------------------
 UPDATE public.pm_items
 SET    why = 'Replace at 4 months maximum. Clogged cartridge starves the engine - erratic '
           || 'RPM, idling problems, and the ETV restricts, dropping cooling capacity. '
@@ -55,18 +82,26 @@ SET    why = 'Replace at 4 months maximum. Clogged cartridge starves the engine 
        updated_at = now()
 WHERE  user_id IS NULL
   AND  part_number = '11-9965'
-  AND  why LIKE '%Γ%';
+  AND  octet_length(why) <> length(why);
 
--- After. Expect: 1 row updated above, and ZERO rows from this.
+-- -----------------------------------------------------------------------------
+-- 3. AFTER. Expect still_mangled = 0.
+-- -----------------------------------------------------------------------------
 SELECT count(*) AS still_mangled
 FROM   public.pm_items
-WHERE  why LIKE '%Γ%' OR why LIKE '%Ç%' OR why LIKE '%ö%';
+WHERE  octet_length(why) <> length(why);
 
--- And the text as a tech will now read it.
-SELECT name, why FROM public.pm_items WHERE part_number = '11-9965';
+-- The text as a technician will now read it. Expect characters = bytes.
+SELECT name,
+       part_number,
+       length(why)       AS characters,
+       octet_length(why) AS bytes,
+       why
+FROM   public.pm_items
+WHERE  part_number = '11-9965';
 
--- If still_mangled is 0 and the text reads correctly:
---   COMMIT;
--- Otherwise:
---   ROLLBACK;
+-- -----------------------------------------------------------------------------
+-- If still_mangled is 0 and the text reads correctly:  COMMIT;
+-- Otherwise:                                           ROLLBACK;
+-- -----------------------------------------------------------------------------
 ROLLBACK;  -- <= change to COMMIT when the checks above look right

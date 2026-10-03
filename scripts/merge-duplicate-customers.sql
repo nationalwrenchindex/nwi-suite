@@ -1,4 +1,4 @@
--- ─── Merge duplicate customers ────────────────────────────────────────────────
+-- --- Merge duplicate customers ------------------------------------------------
 --
 -- ONE-OFF DATA FIX. Deliberately NOT a numbered migration: it names specific rows in
 -- one production database and would be meaningless anywhere else.
@@ -8,7 +8,7 @@
 -- per-shop, so three shops each having Brock Fleeman is three shops with one customer,
 -- not a duplicate. (Production has exactly that, and it stays.)
 --
--- ── TWO THINGS THAT WILL BITE IF THE ORDER CHANGES ───────────────────────────
+-- -- TWO THINGS THAT WILL BITE IF THE ORDER CHANGES ---------------------------
 --
 --   vehicles.customer_id    ON DELETE CASCADE
 --       Deleting a duplicate BEFORE repointing its vehicles DELETES THOSE VEHICLES.
@@ -23,7 +23,7 @@
 
 BEGIN;
 
--- ── The pairs. survivor_id keeps everything; duplicate_id is repointed then deleted ──
+-- -- The pairs. survivor_id keeps everything; duplicate_id is repointed then deleted --
 CREATE TEMP TABLE customer_merge (survivor_id uuid, duplicate_id uuid, label text) ON COMMIT DROP;
 
 INSERT INTO customer_merge (survivor_id, duplicate_id, label) VALUES
@@ -44,7 +44,7 @@ INSERT INTO customer_merge (survivor_id, duplicate_id, label) VALUES
   ('97e52324-4601-45f6-bea7-a794da798112', '7b9fc3f6-6b75-4e1d-8735-da90c8681eb5', 'Polk Sherrif'),
   ('97e52324-4601-45f6-bea7-a794da798112', '7901bb38-c83e-4422-b642-8f595f99da0e', 'Polk Sherrif');
 
--- ── Refuse to run if a pair crosses two shops ─────────────────────────────────
+-- -- Refuse to run if a pair crosses two shops ---------------------------------
 -- A survivor and a duplicate under different user_ids would move one shop's customer
 -- record into another shop's account. That is the one mistake here that cannot be
 -- undone by re-running anything, so it aborts instead.
@@ -61,7 +61,7 @@ BEGIN
   END IF;
 END $$;
 
--- ── What is about to move ─────────────────────────────────────────────────────
+-- -- What is about to move -----------------------------------------------------
 SELECT 'BEFORE' AS phase, m.label, m.duplicate_id,
        (SELECT count(*) FROM public.vehicles          x WHERE x.customer_id = m.duplicate_id) AS vehicles,
        (SELECT count(*) FROM public.jobs              x WHERE x.customer_id = m.duplicate_id) AS jobs,
@@ -74,7 +74,7 @@ SELECT 'BEFORE' AS phase, m.label, m.duplicate_id,
   FROM customer_merge m
  ORDER BY m.label, m.duplicate_id;
 
--- ── Repoint. vehicles FIRST, because of the CASCADE ───────────────────────────
+-- -- Repoint. vehicles FIRST, because of the CASCADE ---------------------------
 UPDATE public.vehicles          v SET customer_id = m.survivor_id FROM customer_merge m WHERE v.customer_id = m.duplicate_id;
 UPDATE public.jobs              j SET customer_id = m.survivor_id FROM customer_merge m WHERE j.customer_id = m.duplicate_id;
 UPDATE public.invoices          i SET customer_id = m.survivor_id FROM customer_merge m WHERE i.customer_id = m.duplicate_id;
@@ -84,7 +84,7 @@ UPDATE public.hd_invoices       h SET customer_id = m.survivor_id FROM customer_
 UPDATE public.inspections       n SET customer_id = m.survivor_id FROM customer_merge m WHERE n.customer_id = m.duplicate_id;
 UPDATE public.notification_logs l SET customer_id = m.survivor_id FROM customer_merge m WHERE l.customer_id = m.duplicate_id;
 
--- ── Fill any gap on the survivor from the row being deleted ───────────────────
+-- -- Fill any gap on the survivor from the row being deleted -------------------
 -- Only where the survivor is NULL, so a duplicate can never overwrite a value somebody
 -- maintained deliberately. All five duplicates here are emptier than their survivor, so
 -- this is expected to change nothing -- it is here so a re-run against other rows does
@@ -104,7 +104,7 @@ FROM customer_merge m
 JOIN public.customers d ON d.id = m.duplicate_id
 WHERE s.id = m.survivor_id;
 
--- ── Nothing may still point at a row about to be deleted ──────────────────────
+-- -- Nothing may still point at a row about to be deleted ----------------------
 DO $$
 DECLARE stragglers int;
 BEGIN
@@ -119,14 +119,14 @@ BEGIN
     (SELECT count(*) FROM public.notification_logs x JOIN customer_merge m ON x.customer_id = m.duplicate_id)
     INTO stragglers;
   IF stragglers > 0 THEN
-    RAISE EXCEPTION 'ABORT: % row(s) still reference a duplicate — the CASCADE on vehicles would destroy data', stragglers;
+    RAISE EXCEPTION 'ABORT: % row(s) still reference a duplicate - the CASCADE on vehicles would destroy data', stragglers;
   END IF;
 END $$;
 
--- ── Delete ────────────────────────────────────────────────────────────────────
+-- -- Delete --------------------------------------------------------------------
 DELETE FROM public.customers c USING customer_merge m WHERE c.id = m.duplicate_id;
 
--- ── What the survivors look like now ──────────────────────────────────────────
+-- -- What the survivors look like now ------------------------------------------
 SELECT 'AFTER' AS phase, c.id, c.first_name, c.last_name, c.phone, c.email,
        (SELECT count(*) FROM public.vehicles    x WHERE x.customer_id = c.id) AS vehicles,
        (SELECT count(*) FROM public.jobs        x WHERE x.customer_id = c.id) AS jobs,
@@ -142,7 +142,7 @@ SELECT 'AFTER' AS phase, c.id, c.first_name, c.last_name, c.phone, c.email,
 COMMIT;
 -- ROLLBACK;  -- if anything looks wrong
 
--- ── ONE THING TO LOOK AT AFTERWARDS, NOT AUTOMATED ───────────────────────────
+-- -- ONE THING TO LOOK AT AFTERWARDS, NOT AUTOMATED ---------------------------
 -- Brock Fleeman's survivor owns one vehicle and the duplicate owned another, so after
 -- the merge he has TWO. They may be the same truck entered twice, or genuinely two
 -- vehicles. Merging vehicles is a different decision with its own cascade (service

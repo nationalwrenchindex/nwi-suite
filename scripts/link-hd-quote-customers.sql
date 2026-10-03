@@ -1,6 +1,6 @@
--- ╔═══════════════════════════════════════════════════════════════════════════╗
--- ║ OPTIONAL — link the 5 existing hd_quotes back to their customers           ║
--- ╚═══════════════════════════════════════════════════════════════════════════╝
+-- +===========================================================================+
+-- | OPTIONAL - link the 5 existing hd_quotes back to their customers           |
+-- +===========================================================================+
 --
 -- BIG RUN THREE item 7c. NOT RUN BY ME. This is an UPDATE to existing rows.
 --
@@ -15,7 +15,7 @@
 --   Q-2026-0003  "test"                 3363363366     -> NO MATCH
 --
 -- 3 of 5 linkable. The two that are not have no customers row with a matching
--- phone, email or name, and are left NULL — guessing a customer onto a quote is
+-- phone, email or name, and are left NULL - guessing a customer onto a quote is
 -- how a quote ends up attached to the wrong person's history.
 --
 -- Note Q-2026-0002 "Darryl Lawson" carries the SAME phone digits as Q-2026-0001
@@ -28,7 +28,7 @@
 
 BEGIN;
 
--- ── 1. By phone (last 10 digits) ────────────────────────────────────────────
+-- -- 1. By phone (last 10 digits) --------------------------------------------
 UPDATE public.hd_quotes q
 SET    customer_id = c.id
 FROM   public.customers c
@@ -38,7 +38,7 @@ WHERE  q.customer_id IS NULL
   AND  right(regexp_replace(COALESCE(q.customer_phone, ''), '\D', '', 'g'), 10)
      = right(regexp_replace(COALESCE(c.phone,            ''), '\D', '', 'g'), 10);
 
--- ── 2. By email, for whatever is still unlinked ──────────────────────────────
+-- -- 2. By email, for whatever is still unlinked ------------------------------
 UPDATE public.hd_quotes q
 SET    customer_id = c.id
 FROM   public.customers c
@@ -46,7 +46,7 @@ WHERE  q.customer_id IS NULL
   AND  c.user_id = q.user_id
   AND  COALESCE(NULLIF(trim(q.customer_email), ''), '~none~') = lower(trim(c.email));
 
--- ── 3. By EXACT name, first/last or company. No fuzzy matching. ──────────────
+-- -- 3. By EXACT name, first/last or company. No fuzzy matching. --------------
 UPDATE public.hd_quotes q
 SET    customer_id = c.id
 FROM   public.customers c
@@ -58,7 +58,7 @@ WHERE  q.customer_id IS NULL
        )
   AND  length(trim(q.customer_name)) > 2;   -- "test" is not a name
 
--- ── Check it before committing ───────────────────────────────────────────────
+-- -- Check it before committing -----------------------------------------------
 -- Expect: 3 linked, 2 still NULL (Q-2026-0002 and Q-2026-0003).
 SELECT quote_number,
        customer_name,
