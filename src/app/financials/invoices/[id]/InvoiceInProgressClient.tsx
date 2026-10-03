@@ -485,6 +485,8 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
 
   // Editable state
   const [jobNotes,        setJobNotes]        = useState(invoice.job_notes ?? '')
+  // Shop-only (migration 142). Nothing customer-facing reads this.
+  const [internalNotes,   setInternalNotes]   = useState(invoice.internal_notes ?? '')
   const [poNumber,        setPoNumber]        = useState(invoice.po_number ?? '')
   const [shopSupplies,    setShopSupplies]    = useState<ShopSupplyItem[]>(
     Array.isArray(invoice.shop_supplies)    ? invoice.shop_supplies    : []
@@ -692,6 +694,7 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
           job_notes:        jobNotes || null,
+          internal_notes:   internalNotes || null,
           po_number:        poNumber || null,
           shop_supplies:    shopSupplies,
           additional_parts: additionalParts,
@@ -731,6 +734,7 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
           job_notes:        jobNotes || null,
+          internal_notes:   internalNotes || null,
           po_number:        poNumber || null,
           shop_supplies:    shopSupplies,
           additional_parts: additionalParts,
@@ -1162,6 +1166,31 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
           value={jobNotes}
           onChange={e => setJobNotes(e.target.value)}
         />
+        {/* Said out loud, because it was not obvious and it is the reason the
+            internal field below exists. */}
+        <p className="text-white/30 text-[11px] mt-1.5">
+          Printed on the customer&apos;s copy under &ldquo;Work Performed&rdquo;.
+        </p>
+      </Section>
+
+      {/* ── SECTION D2: Internal notes (migration 142) ──
+          LD had NOWHERE to put a note the customer does not see: `notes` and
+          `job_notes` both print on /invoice/[token]. That is why the work-order
+          converter could not carry a tech's notes forward — publishing them was
+          the only option available, and silently publishing internal remarks is
+          not a choice a converter should make. Carried automatically now. */}
+      <Section label="Internal Notes">
+        <textarea
+          rows={4}
+          className="nwi-input resize-y text-sm w-full font-mono"
+          placeholder="Shop-only. Parts on order, who to call, what to watch next visit…"
+          value={internalNotes}
+          onChange={e => setInternalNotes(e.target.value)}
+        />
+        <p className="text-white/40 text-[11px] mt-1.5">
+          <strong className="text-white/60">Never shown to the customer.</strong>{' '}
+          Not on the invoice page, not in the PDF, not in the email or the text.
+        </p>
       </Section>
 
       {/* ── SECTION E: Shop supplies ── */}

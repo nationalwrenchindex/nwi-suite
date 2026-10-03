@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { isMissingTaxBreakdownColumn } from '@/lib/tax'
+import { missingMigration142Column, withoutMigration142Columns } from '@/lib/migration-142'
 import { createClient } from '@/lib/supabase/server'
 
 const INVOICE_SELECT = `
@@ -66,6 +67,8 @@ export async function PATCH(
   // Written as sent, including an explicit null: a null means "the split could not be
   // established", and clearing a stale breakdown is the correct outcome then.
   if (body.tax_breakdown    !== undefined) updates.tax_breakdown    = body.tax_breakdown ?? null
+  // Migration 142. Shop-only; nothing customer-facing reads it.
+  if (body.internal_notes   !== undefined) updates.internal_notes   = (body.internal_notes as string | null)?.trim() || null
 
   let { data, error } = await supabase
     .from('invoices')
@@ -83,6 +86,19 @@ export async function PATCH(
     ;({ data, error } = await supabase
       .from('invoices')
       .update(updates)
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select(INVOICE_SELECT)
+      .single())
+  }
+
+  // Same window, migration 142. A tech's internal note is worth less than the rest
+  // of the save, so it is the thing that gets dropped — not the save.
+  if (error && missingMigration142Column(error)) {
+    console.error('[invoices/progress] internal_notes missing — run migration 142', (error as { message?: string }).message)
+    ;({ data, error } = await supabase
+      .from('invoices')
+      .update(withoutMigration142Columns(updates))
       .eq('id', id)
       .eq('user_id', user.id)
       .select(INVOICE_SELECT)

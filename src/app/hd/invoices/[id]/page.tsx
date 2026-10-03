@@ -9,6 +9,8 @@ import { findInvoicePMChecklists } from '@/lib/hd/pm-report-attachment'
 import { resolveLateFeeSettings, assessLateFee, lateFeeBlockMessage } from '@/lib/hd/late-fee'
 import type { AerialInspectionType } from '@/types/aerial'
 import { money } from '@/lib/format'
+import { feeRows } from '@/lib/invoice-document'
+import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
 
 const ORANGE = '#FF6600'
 const BLUE   = '#2969B0'
@@ -322,8 +324,12 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                 {[
                   { label: 'Labor Subtotal', val: inv.subtotal_labor },
                   { label: 'Parts Subtotal', val: inv.subtotal_parts },
-                  ...(Number(inv.diagnostic_fee) > 0 ? [{ label: 'Diagnostic Fee', val: inv.diagnostic_fee }] : []),
-                  ...(Number(inv.road_call_fee) > 0 ? [{ label: 'Road Call Fee', val: inv.road_call_fee }] : []),
+                  // One shared rule for every surface: a zero fee prints no row at
+                  // all. The inline `> 0` checks that were here were correct but
+                  // were the fourth copy of the rule.
+                  ...feeRows(inv as Record<string, unknown>).map(r => ({ label: r.label, val: r.amount })),
+                  ...extrasDisplayRows(extrasFromDocument(inv as Record<string, unknown>))
+                    .map(r => ({ label: r.detail ? `${r.label} (${r.detail})` : r.label, val: r.amount })),
                   ...(Number(inv.tax_amount) > 0 ? [{ label: `Tax (${inv.tax_rate}%)`, val: inv.tax_amount }] : []),
                 ].map(r => (
                   <div key={r.label} className="flex justify-between py-2 text-sm" style={{ color: '#6B7280', borderBottom: '1px solid #F3F4F6' }}>

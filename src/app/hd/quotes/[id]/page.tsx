@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
 import QuoteDetailActions from './QuoteDetailActions'
 import { money } from '@/lib/format'
+import { feeRows } from '@/lib/invoice-document'
+import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
 
 const ORANGE = '#FF6600'
 const BLUE   = '#2969B0'
@@ -156,8 +158,10 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
               {[
                 { label: 'Labor Subtotal', val: q.subtotal_labor },
                 { label: 'Parts Subtotal', val: q.subtotal_parts },
-                ...(Number(q.diagnostic_fee) > 0 ? [{ label: 'Diagnostic Fee', val: q.diagnostic_fee }] : []),
-                ...(Number(q.road_call_fee) > 0 ? [{ label: 'Road Call Fee', val: q.road_call_fee }] : []),
+                // One shared rule: a zero fee prints no row at all. See feeRows.
+                ...feeRows(q as Record<string, unknown>).map(r => ({ label: r.label, val: r.amount })),
+                ...extrasDisplayRows(extrasFromDocument(q as Record<string, unknown>))
+                  .map(r => ({ label: r.detail ? `${r.label} (${r.detail})` : r.label, val: r.amount })),
                 ...(Number(q.tax_amount) > 0 ? [{ label: `Tax (${q.tax_rate}%)`, val: q.tax_amount }] : []),
               ].map(r => (
                 <div key={r.label} className="flex justify-between py-1.5 text-sm" style={{ color: '#6B7280' }}>
