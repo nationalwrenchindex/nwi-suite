@@ -176,6 +176,33 @@ export interface Invoice {
   /** jsonb, migration 140: what this invoice actually taxed. NULL on anything
    *  written before that shipped, which must read as "no split known". */
   tax_breakdown?: unknown
+
+  // ── Migration 142: the terms this invoice was billed under ──
+  // Previously reachable only through source_quote, which a work-order conversion
+  // and a from-scratch invoice do not have — so the markup read 0 and gross profit
+  // came out as exactly zero. Optional because the columns do not exist until 142
+  // is applied; NULL means "not recorded", never 0%.
+  parts_markup_percent?: number | null
+  parts_subtotal?:       number | null
+  parts_cost_total?:     number | null
+  labor_subtotal?:       number | null
+  labor_hours?:          number | null
+  labor_rate?:           number | null
+  /** The fleet's own identifier for the unit. */
+  unit_number?:          string | null
+  /** Shop-only. MUST NOT be rendered on any customer-facing document. */
+  internal_notes?:       string | null
+  // Billable extras, each with the rate in force at entry time.
+  travel_hours?:                  number | null
+  travel_rate?:                   number | null
+  travel_amount?:                 number | null
+  mileage_miles?:                 number | null
+  mileage_rate?:                  number | null
+  mileage_amount?:                number | null
+  shop_supplies_percent_applied?: number | null
+  shop_supplies_cap_applied?:     number | null
+  shop_supplies_fee?:             number | null
+
   discount_amount: number
   total: number
   status: InvoiceStatus

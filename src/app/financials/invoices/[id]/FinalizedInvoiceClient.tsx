@@ -87,9 +87,12 @@ function JobBreakdownRow({ j, idx }: { j: MultiJobEntry; idx: number }) {
 
 function calcJobPnL(invoice: import('@/types/financials').Invoice) {
   const sq        = invoice.source_quote
-  const markupPct = Number(sq?.parts_markup_percent ?? 0)
+  // The invoice's own column first (migration 142); the quote is the fallback for
+  // invoices written before it. A work-order invoice has no source quote, so this
+  // used to read 0 and report parts gross profit of exactly zero.
+  const markupPct = Number(invoice.parts_markup_percent ?? sq?.parts_markup_percent ?? 0)
 
-  const quotedPartsCost        = Number(sq?.parts_subtotal ?? 0)
+  const quotedPartsCost        = Number(invoice.parts_subtotal ?? sq?.parts_subtotal ?? 0)
   const additionalParts        = Array.isArray(invoice.additional_parts) ? invoice.additional_parts : []
   const additionalPartsCost    = additionalParts.reduce((s, p) => s + p.unit_cost * p.qty, 0)
   const totalPartsCost         = round2(quotedPartsCost + additionalPartsCost)
@@ -734,7 +737,7 @@ export default function FinalizedInvoiceClient({
   const sq        = invoice.source_quote
   const vehicle   = invoice.vehicle
   const customer  = invoice.customer
-  const markupPct = sq?.parts_markup_percent ?? 0
+  const markupPct = invoice.parts_markup_percent ?? sq?.parts_markup_percent ?? 0
   const taxRate   = invoice.tax_rate
 
   // An invoice converted from a work order has no source QUOTE. The work the customer

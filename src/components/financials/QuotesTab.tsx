@@ -6,6 +6,7 @@ import type { Quote, QuoteStatus, LineItem, ServiceLine, Adjustment, AdjustmentP
 import LineItemEditor, { LineItemTable } from '@/components/shared/LineItemEditor'
 import {
   round2, isLaborItem, fromLineItems, toLineItems, computeTotals,
+  markupOnReopen, markupLabel,
   type EditItem,
 } from '@/components/shared/line-items'
 import { money } from '@/lib/format'
@@ -471,15 +472,26 @@ function QuoteDetailModal({
   const isLocked = !isDraft
 
   // ── Derive base prices from stored post-markup unit prices ──────────────────
-  const initMarkupPct = initialQuote.parts_markup_percent ?? 0
+  //
+  // THE MARKUP BUG, AND THE WORST VERSION OF IT. These were two different
+  // fallbacks for one number:
+  //
+  //   const initMarkupPct = initialQuote.parts_markup_percent ?? 0    // divide-out
+  //   const [initMarkup]  = useState(... ?? 20)                       // editor state
+  //
+  // So a quote with no recorded markup had its stored prices divided by 1.00 and
+  // multiplied back by 1.20 on save — every part silently up 20%, with nothing on
+  // screen changing. ONE source for both now, and it is never Settings.
+  const storedMarkup  = markupOnReopen(initialQuote.parts_markup_percent)
   // The detailer model carries one synthetic 'Service' row that is not a part, so
   // it is excluded from the parts table rather than shown as a zero-quantity line.
   const [initialItems] = useState<EditItem[]>(() =>
-    fromLineItems(initialQuote.line_items, initMarkupPct, isDetailer ? 'Service' : undefined)
+    fromLineItems(initialQuote.line_items, storedMarkup.percent, isDetailer ? 'Service' : undefined)
   )
   const [initLaborHours] = useState(initialQuote.labor_hours ?? 0)
   const [initLaborRate]  = useState(initialQuote.labor_rate  ?? 125)
-  const [initMarkup]     = useState(initialQuote.parts_markup_percent ?? 20)
+  const [initMarkup]     = useState(storedMarkup.percent)
+  const [markupTouched,  setMarkupTouched] = useState(false)
   const [initTaxPct]     = useState(initialQuote.tax_percent ?? 8.5)
   const [initNotes]      = useState(initialQuote.notes ?? '')
   const [initCustName]   = useState(
@@ -1454,10 +1466,16 @@ function QuoteDetailModal({
                           type="number" min={0} step={1}
                           className="nwi-input pr-7"
                           value={markupPct}
-                          onChange={e => setMarkupPct(Number(e.target.value) || 0)}
+                          onChange={e => { setMarkupPct(Number(e.target.value) || 0); setMarkupTouched(true) }}
                         />
                         <span className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 text-sm">%</span>
                       </div>
+                      {/* Said plainly instead of shown as a number nobody chose. */}
+                      {!storedMarkup.recorded && !markupTouched && (
+                        <p className="text-[10px] mt-1 text-white/40">
+                          {markupLabel(storedMarkup)} on this quote — its prices are billed as stored.
+                        </p>
+                      )}
                     </div>
                   )}
                   <div>
@@ -1599,7 +1617,7 @@ function QuoteDetailModal({
                           <span className="text-white">{fmt(initialQuote.parts_subtotal)}</span>
                         </div>
                       )}
-                      {initialQuote.parts_markup_percent != null && (
+                      {initialQuote.parts_markup_percent != null ? (
                         <div className="flex justify-between text-sm">
                           <span className="text-white/40">Parts Markup ({initialQuote.parts_markup_percent}%)</span>
                           <span className="text-white/60">
@@ -1608,7 +1626,15 @@ function QuoteDetailModal({
                               : '—'}
                           </span>
                         </div>
-                      )}
+                      ) : initialQuote.parts_subtotal != null ? (
+                        /* A sent quote with no recorded markup says so rather than
+                           omitting the row, which previously made it look as though
+                           the parts were sold at cost. */
+                        <div className="flex justify-between text-sm">
+                          <span className="text-white/40">Parts Markup</span>
+                          <span className="text-white/40">{markupLabel(storedMarkup)}</span>
+                        </div>
+                      ) : null}
                       {initialQuote.labor_subtotal != null && (
                         <div className="flex justify-between text-sm">
                           <span className="text-white/60">

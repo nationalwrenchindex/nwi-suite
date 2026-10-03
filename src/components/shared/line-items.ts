@@ -18,6 +18,58 @@ export function round2(n: number): number {
   return Math.round(n * 100) / 100
 }
 
+// ─── THE MARKUP BUG ───────────────────────────────────────────────────────────
+//
+// Both editors did this when opening an EXISTING record:
+//
+//   WorkOrderForm:  workOrder?.parts_markup_percent ?? defaults.markup_percent
+//   QuotesTab:      initialQuote.parts_markup_percent ?? 0     // for the divide-out
+//                   initialQuote.parts_markup_percent ?? 20    // for the editor state
+//
+// When the stored markup is NULL, the first substitutes TODAY'S SETTINGS VALUE and
+// the second uses two different numbers for the same thing. Either way the stored
+// post-markup price is divided by one factor and multiplied back by another, so:
+//
+//   * reopening and saving a document silently re-prices every part on it, and
+//   * changing the shop's markup in Settings changes what every old document with
+//     no recorded markup bills, the next time anyone opens and saves it.
+//
+// In QuotesTab the divide-out used 0 and the editor used 20, so a quote with no
+// recorded markup had every part marked up 20% on save. On a $272.27 radiator job
+// that is $54 appearing out of nothing.
+//
+// THE RULE: a saved price is never recomputed from a current setting. An existing
+// document with no recorded markup is treated as having NO markup — its stored
+// prices are already final — and the UI says "markup not recorded" rather than
+// showing a number nobody chose.
+
+export interface MarkupOnReopen {
+  /** Use this for BOTH the divide-out and the multiply-back. Never Settings. */
+  percent:  number
+  /** False when the document never recorded one. Show the label, not a number. */
+  recorded: boolean
+}
+
+/**
+ * The markup to use when opening an EXISTING document.
+ *
+ * `shopDefault` is deliberately NOT a parameter. There is no argument for which a
+ * current setting is the right answer here, and taking one would invite the bug
+ * straight back in. A NEW document seeds from Settings at its own call site, which
+ * is correct — that is the markup in force at entry time, and it is then stored.
+ */
+export function markupOnReopen(stored: number | null | undefined): MarkupOnReopen {
+  if (stored === null || stored === undefined) return { percent: 0, recorded: false }
+  const n = Number(stored)
+  if (!Number.isFinite(n) || n < 0) return { percent: 0, recorded: false }
+  return { percent: n, recorded: true }
+}
+
+/** How a markup reads on screen. Never "0%" for an unrecorded one. */
+export function markupLabel(m: MarkupOnReopen): string {
+  return m.recorded ? `${m.percent}%` : 'markup not recorded'
+}
+
 /** Labour rides in line_items as a row called "Labor" rather than its own column,
  *  so it has to be filtered back out when the editor loads.
  *

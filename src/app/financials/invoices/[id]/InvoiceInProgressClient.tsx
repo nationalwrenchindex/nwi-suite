@@ -484,7 +484,7 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
   const router = useRouter()
 
   // Editable state
-  const [jobNotes,        setJobNotes]        = useState(invoice.job_notes ?? '')
+  const [jobNotes,        setJobNotes]        = useState(invoice.job_notes ?? '')
   const [poNumber,        setPoNumber]        = useState(invoice.po_number ?? '')
   const [shopSupplies,    setShopSupplies]    = useState<ShopSupplyItem[]>(
     Array.isArray(invoice.shop_supplies)    ? invoice.shop_supplies    : []
@@ -532,7 +532,9 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
 
   const taxSettings = useTaxSettings()
   const sq          = invoice.source_quote
-  const markupPct   = sq?.parts_markup_percent ?? 0
+  // The invoice's own column first (migration 142). A work-order invoice has no
+  // source quote, so this read 0 and the Original Estimate showed parts at cost.
+  const markupPct   = invoice.parts_markup_percent ?? sq?.parts_markup_percent ?? 0
   const taxRate     = invoice.tax_rate          // decimal, e.g. 0.0875
 
   // An invoice converted from a work order has no source QUOTE. The work the customer
@@ -689,7 +691,7 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          job_notes:        jobNotes || null,
+          job_notes:        jobNotes || null,
           po_number:        poNumber || null,
           shop_supplies:    shopSupplies,
           additional_parts: additionalParts,
@@ -728,7 +730,7 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
         method:  'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          job_notes:        jobNotes || null,
+          job_notes:        jobNotes || null,
           po_number:        poNumber || null,
           shop_supplies:    shopSupplies,
           additional_parts: additionalParts,

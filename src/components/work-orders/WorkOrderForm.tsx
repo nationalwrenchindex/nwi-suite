@@ -16,6 +16,7 @@ import { useRouter } from 'next/navigation'
 import LineItemEditor from '@/components/shared/LineItemEditor'
 import {
   fromLineItems, computeTotals, lineMoneyColumns, validateLines,
+  markupOnReopen, markupLabel,
   type EditItem,
 } from '@/components/shared/line-items'
 import type { PricingMode } from '@/components/shared/segments'
@@ -70,16 +71,24 @@ export default function WorkOrderForm({
   )
   const owns = isNew ? mode === 'single' : ownsPricing
 
-  const initialMarkup = workOrder?.parts_markup_percent ?? defaults.markup_percent
+  // THE MARKUP BUG. This was `workOrder?.parts_markup_percent ?? defaults.markup_percent`,
+  // which meant a work order with no recorded markup had its stored prices divided by
+  // TODAY'S Settings value and multiplied back by it on save. See markupOnReopen.
+  //
+  // A NEW work order still seeds from Settings — but through chooseMode(), at the
+  // moment the tech picks "Single job", and it is then stored on the record.
+  const storedMarkup = markupOnReopen(workOrder?.parts_markup_percent)
   const [items, setItems] = useState<EditItem[]>(
-    () => fromLineItems(workOrder?.line_items, initialMarkup),
+    () => fromLineItems(workOrder?.line_items, storedMarkup.percent),
   )
   // A new work order starts with NO rates seeded. The defaults land only when the tech
   // picks "Single job" — pre-filling them meant a segment-priced record still had a
   // labour rate and a markup sitting on it, waiting to be written.
   const [laborHours, setLaborHours] = useState(workOrder?.labor_hours ?? 0)
   const [laborRate,  setLaborRate]  = useState(isNew ? 0 : (workOrder?.labor_rate  ?? defaults.labor_rate))
-  const [markupPct,  setMarkupPct]  = useState(isNew ? 0 : initialMarkup)
+  const [markupPct,  setMarkupPct]  = useState(isNew ? 0 : storedMarkup.percent)
+  /** True until the tech types a markup on a record that never had one recorded. */
+  const [markupTouched, setMarkupTouched] = useState(false)
   const [taxPct,     setTaxPct]     = useState(isNew ? 0 : (workOrder?.tax_percent ?? defaults.tax_percent))
   const taxSettings = useTaxSettings()
 
@@ -363,7 +372,15 @@ export default function WorkOrderForm({
             <label className="nwi-label text-[10px]">Parts Markup %</label>
             <input type="number" min={0} step={1} className="nwi-input text-sm"
               value={markupPct} disabled={isLocked}
-              onChange={e => setMarkupPct(Number(e.target.value) || 0)} />
+              onChange={e => { setMarkupPct(Number(e.target.value) || 0); setMarkupTouched(true) }} />
+            {/* Said plainly rather than shown as 0%. This record predates the markup
+                being stored, so nobody knows what it was — and a 0% that looks like a
+                decision is worse than an admission that it was not recorded. */}
+            {!isNew && !storedMarkup.recorded && !markupTouched && (
+              <p className="text-[10px] mt-0.5 text-white/40">
+                {markupLabel(storedMarkup)} on this work order — its prices are billed as stored.
+              </p>
+            )}
           </div>
           <div>
             <label className="nwi-label text-[10px]">Tax %</label>
@@ -401,7 +418,11 @@ export default function WorkOrderForm({
 
         <div className="space-y-1.5 pt-2 border-t border-white/10">
           <Row label="Parts Base"                    value={fmt(totals.partsBase)} />
-          <Row label={`Parts Markup (${markupPct}%)`} value={fmt(totals.markupAmt)} dim />
+          <Row
+            label={`Parts Markup (${!isNew && !storedMarkup.recorded && !markupTouched ? markupLabel(storedMarkup) : `${markupPct}%`})`}
+            value={fmt(totals.markupAmt)}
+            dim
+          />
           {totals.laborSubtotal > 0 && <Row label="Labor" value={fmt(totals.laborSubtotal)} />}
           {/* A zero extra prints no row — extrasDisplayRows returns none. */}
           {extrasDisplayRows(extrasResult).map(r => (

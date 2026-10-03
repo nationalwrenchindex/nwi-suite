@@ -96,14 +96,29 @@ interface InvoiceForBreakdown {
     parts_markup_percent: number | null
     labor_subtotal: number | null
   } | null
+  /** Migration 142: the invoice's own record of the terms it was billed under. */
+  parts_markup_percent?: number | null
+  parts_subtotal?:       number | null
+  labor_subtotal?:       number | null
+  /** Migration 142: billable extras. Revenue with no cost behind it. */
+  travel_amount?:     number | null
+  mileage_amount?:    number | null
+  shop_supplies_fee?: number | null
 }
 
 function calcBreakdown(inv: InvoiceForBreakdown) {
-  const sq        = inv.source_quote
-  const markupPct = Number(sq?.parts_markup_percent ?? 0)
+  const sq = inv.source_quote
+
+  // THE INVOICE'S OWN COLUMNS FIRST. This used to read only through source_quote,
+  // so an invoice converted from a WORK ORDER — which has no source quote — got
+  // markupPct = 0 and parts_subtotal = 0. The result was parts revenue equal to
+  // parts cost and gross profit of exactly zero on every invoice billed that way.
+  //
+  // The quote remains the fallback for invoices written before migration 142.
+  const markupPct = Number(inv.parts_markup_percent ?? sq?.parts_markup_percent ?? 0)
 
   // Parts
-  const quotedPartsCost        = Number(sq?.parts_subtotal ?? 0)
+  const quotedPartsCost        = Number(inv.parts_subtotal ?? sq?.parts_subtotal ?? 0)
   const additionalParts        = Array.isArray(inv.additional_parts) ? inv.additional_parts : []
   const additionalPartsCost    = additionalParts.reduce((s, p) => s + p.unit_cost * p.qty, 0)
   const totalPartsCost         = r2(quotedPartsCost + additionalPartsCost)
@@ -111,10 +126,12 @@ function calcBreakdown(inv: InvoiceForBreakdown) {
   const additionalPartsRevenue = additionalParts.reduce((s, p) => s + p.total, 0)
   const partsGrossProfit       = r2((quotedPartsRevenue + additionalPartsRevenue) - totalPartsCost)
 
-  // Labor
+  // Labor. Travel time is labour revenue: it is time billed at an hourly rate, and
+  // leaving it out understated labour income on every mobile job.
   const additionalLabor        = Array.isArray(inv.additional_labor) ? inv.additional_labor : []
-  const quotedLaborSubtotal    = Number(sq?.labor_subtotal ?? 0)
-  const laborIncome            = r2(quotedLaborSubtotal + additionalLabor.reduce((s, l) => s + l.subtotal, 0))
+  const quotedLaborSubtotal    = Number(inv.labor_subtotal ?? sq?.labor_subtotal ?? 0)
+  const travelRevenue          = Number(inv.travel_amount ?? 0)
+  const laborIncome            = r2(quotedLaborSubtotal + travelRevenue + additionalLabor.reduce((s, l) => s + l.subtotal, 0))
 
   // Shop supplies (no markup — cost = charged amount)
   const shopSupplies           = Array.isArray(inv.shop_supplies) ? inv.shop_supplies : []
@@ -133,8 +150,24 @@ function calcBreakdown(inv: InvoiceForBreakdown) {
     parts_gross_profit:  partsGrossProfit,
     cogs_total:          cogsTotal,
     net_profit:          netProfit,
+    // ── PROFIT AFTER TRAVEL (item 1c) ──
+    // The two halves finally meet. Travel billed is revenue; fuel burned is cost,
+    // already computed from miles_driven x average_mpg further down this route.
+    // The difference is what a mobile operator has never been able to see: whether
+    // driving to that job paid for itself.
+    //
+    // fuel_cost is only written when the invoice is marked paid AND miles were
+    // entered, so this is NULL rather than 0 when either is missing — a zero would
+    // read as "travel broke even" when the truth is "nobody recorded the miles".
+    travel_revenue:      travelRevenue,
+    mileage_revenue:     Number(inv.mileage_amount ?? 0),
+    shop_supplies_fee:   Number(inv.shop_supplies_fee ?? 0),
   }
 }
+
+// profitAfterTravel lives in src/lib/billable-extras.ts. Next rejects any export
+// from a route file that is not a handler or a route-segment config — the same
+// constraint that put WORK_ORDER_SELECT in its own module.
 
 const INVOICE_SELECT = `
   *,

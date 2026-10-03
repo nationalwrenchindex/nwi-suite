@@ -283,6 +283,34 @@ export function totalsWithExtras(
   }
 }
 
+// ─── Profit after travel ──────────────────────────────────────────────────────
+
+/**
+ * Travel and mileage BILLED, minus the fuel burned getting there.
+ *
+ * THE NUMBER A MOBILE OPERATOR HAS NEVER BEEN ABLE TO SEE. The cost half already
+ * existed — PATCH /api/invoices/[id] computes invoices.fuel_cost from
+ * miles_driven and profiles.average_mpg when an invoice is marked paid. The
+ * revenue half did not exist until now. This is the difference: whether driving
+ * to that job paid for itself.
+ *
+ * RETURNS NULL WHEN THE FUEL COST IS UNKNOWN, which is most invoices — fuel_cost
+ * is only written at payment time and only when the tech entered miles. Returning
+ * 0 would claim travel broke even on a job where nobody measured it, and a
+ * dashboard full of confident zeroes is worse than one that says "not recorded".
+ */
+export function profitAfterTravel(
+  travelRevenue:  number | null | undefined,
+  mileageRevenue: number | null | undefined,
+  fuelCost:       number | null | undefined,
+): number | null {
+  if (fuelCost === null || fuelCost === undefined) return null
+  const billed = Number(travelRevenue ?? 0) + Number(mileageRevenue ?? 0)
+  const cost   = Number(fuelCost)
+  if (!Number.isFinite(billed) || !Number.isFinite(cost)) return null
+  return round2(billed - cost)
+}
+
 // ─── Display ──────────────────────────────────────────────────────────────────
 
 export interface ExtrasDisplayRow {
