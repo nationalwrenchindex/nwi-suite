@@ -1,11 +1,11 @@
--- ╔═══════════════════════════════════════════════════════════════════════════╗
--- ║ 144 — Model-specific PM items: the container for field knowledge           ║
--- ╚═══════════════════════════════════════════════════════════════════════════╝
+-- +===========================================================================+
+-- | 144 - Model-specific PM items: the container for field knowledge           |
+-- +===========================================================================+
 --
 -- BIG RUN THREE, Part 4. STRUCTURE, NOT A ONE-OFF COLUMN. A second item must
--- need no code change and no migration — only a row.
+-- need no code change and no migration - only a row.
 --
--- ── TWO PREMISES IN THE BRIEF ARE WRONG, AND THIS IS WHERE IT MATTERS ───────
+-- -- TWO PREMISES IN THE BRIEF ARE WRONG, AND THIS IS WHERE IT MATTERS -------
 --
 -- 1. `fleet_pro_unit_components` DOES NOT EXIST. PostgREST returns PGRST205 for
 --    it. There is no components table anywhere in this database: the only unit
@@ -30,13 +30,13 @@
 
 BEGIN;
 
--- ─────────────────────────────────────────────────────────────────────────────
--- 1. pm_items — the global reference library
+-- -----------------------------------------------------------------------------
+-- 1. pm_items - the global reference library
 --
 -- user_id IS NULL means a GLOBAL row: field knowledge that applies to everyone's
 -- Thermo King, shipped with the product. A non-null user_id is a shop's own
 -- private item. Both are readable by the shop; only its own are writable.
--- ─────────────────────────────────────────────────────────────────────────────
+-- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.pm_items (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
 
@@ -95,13 +95,13 @@ CREATE UNIQUE INDEX IF NOT EXISTS pm_items_global_name_idx
 CREATE INDEX IF NOT EXISTS pm_items_component_type_idx
   ON public.pm_items (component_type);
 
--- ─────────────────────────────────────────────────────────────────────────────
--- 2. unit_pm_item_status — one row per unit per item
+-- -----------------------------------------------------------------------------
+-- 2. unit_pm_item_status - one row per unit per item
 --
 -- NOTHING IS BACKFILLED. A unit with no row for an item has never had that item
 -- recorded, which must read as "never recorded" and NOT as "due now" or "done".
 -- Those are three different states and only the first one is true.
--- ─────────────────────────────────────────────────────────────────────────────
+-- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.unit_pm_item_status (
   id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id              UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -153,13 +153,13 @@ CREATE INDEX IF NOT EXISTS unit_pm_item_status_due_hours_idx
   ON public.unit_pm_item_status (user_id, next_due_hours)
   WHERE next_due_hours IS NOT NULL;
 
--- ─────────────────────────────────────────────────────────────────────────────
+-- -----------------------------------------------------------------------------
 -- 3. RLS
 --
 -- pm_items: everyone READS the global rows and their own; nobody writes a global
--- row through the API. That is on purpose — field knowledge shipped with the
+-- row through the API. That is on purpose - field knowledge shipped with the
 -- product is not something one subscriber can edit for everyone else.
--- ─────────────────────────────────────────────────────────────────────────────
+-- -----------------------------------------------------------------------------
 ALTER TABLE public.pm_items            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.unit_pm_item_status ENABLE ROW LEVEL SECURITY;
 
@@ -183,20 +183,20 @@ DROP POLICY IF EXISTS unit_pm_item_status_all ON public.unit_pm_item_status;
 CREATE POLICY unit_pm_item_status_all ON public.unit_pm_item_status
   FOR ALL USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
 
--- ─────────────────────────────────────────────────────────────────────────────
--- 4. SEED — exactly one item, as specified
+-- -----------------------------------------------------------------------------
+-- 4. SEED - exactly one item, as specified
 --
 -- A GLOBAL row (user_id NULL): this is field knowledge about Thermo King
 -- equipment, not one shop's preference.
 --
 -- interval_hours IS NULL and interval_rule IS 'months' because that is what the
 -- brief specified. WHETHER IT ALSO CARRIES AN HOURS INTERVAL IS STILL OPEN and
--- is NOT invented here — adding a number nobody confirmed is exactly the kind of
+-- is NOT invented here - adding a number nobody confirmed is exactly the kind of
 -- fabricated field knowledge this table exists to avoid.
 --
 -- Models are C-600 and S-600 ONLY, for the same reason. Which other models it
 -- applies to is the second open question.
--- ─────────────────────────────────────────────────────────────────────────────
+-- -----------------------------------------------------------------------------
 INSERT INTO public.pm_items (
   user_id, name, part_number, component_type, applies_to_models,
   interval_hours, interval_months, warn_months, interval_rule, why, is_critical
@@ -231,20 +231,20 @@ WHERE NOT EXISTS (
 
 COMMIT;
 
--- ╔═══════════════════════════════════════════════════════════════════════════╗
--- ║ THE NULL CONTRACT                                                         ║
--- ╠═══════════════════════════════════════════════════════════════════════════╣
--- ║   last_completed_on  NULL -> "never recorded". NOT "due now", NOT "done".  ║
--- ║   next_due_on        NULL -> no date clock running for this item/unit      ║
--- ║   next_due_hours     NULL -> no hours clock running                        ║
--- ║   interval_hours     NULL -> this item has no hours interval AT ALL, which ║
--- ║                              is different from "its hours interval is 0"   ║
--- ║   applies_to_models  NULL -> applies to every model                        ║
--- ║   component_id       NULL -> tracked per UNIT, which is all that is        ║
--- ║                              possible today                               ║
--- ║                                                                           ║
--- ║ NOTHING IS BACKFILLED. No unit gets a status row from this migration, so   ║
--- ║ every unit reads "never recorded" for the fuel filter until a tech says    ║
--- ║ otherwise. Inventing a last_completed_on would be inventing maintenance    ║
--- ║ history on equipment that carries people's loads.                          ║
--- ╚═══════════════════════════════════════════════════════════════════════════╝
+-- +===========================================================================+
+-- | THE NULL CONTRACT                                                         |
+-- +===========================================================================+
+-- |   last_completed_on  NULL -> "never recorded". NOT "due now", NOT "done".  |
+-- |   next_due_on        NULL -> no date clock running for this item/unit      |
+-- |   next_due_hours     NULL -> no hours clock running                        |
+-- |   interval_hours     NULL -> this item has no hours interval AT ALL, which |
+-- |                              is different from "its hours interval is 0"   |
+-- |   applies_to_models  NULL -> applies to every model                        |
+-- |   component_id       NULL -> tracked per UNIT, which is all that is        |
+-- |                              possible today                               |
+-- |                                                                           |
+-- | NOTHING IS BACKFILLED. No unit gets a status row from this migration, so   |
+-- | every unit reads "never recorded" for the fuel filter until a tech says    |
+-- | otherwise. Inventing a last_completed_on would be inventing maintenance    |
+-- | history on equipment that carries people's loads.                          |
+-- +===========================================================================+

@@ -1,4 +1,4 @@
--- ─── 140. Tax parts and labor separately ──────────────────────────────────────
+-- --- 140. Tax parts and labor separately --------------------------------------
 --
 -- WHY
 -- Tax has always been applied to the whole subtotal. Most states tax parts but not
@@ -7,7 +7,7 @@
 -- across 13 HD invoices, $387.95 more tax was charged than a parts-only base would
 -- have produced. It varies by state, so it has to be per business, not a constant.
 --
--- ── 1. Per-business settings ──────────────────────────────────────────────────
+-- -- 1. Per-business settings --------------------------------------------------
 ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS tax_parts      boolean NOT NULL DEFAULT true,
   ADD COLUMN IF NOT EXISTS tax_labor      boolean NOT NULL DEFAULT false,
@@ -19,7 +19,7 @@ COMMENT ON COLUMN public.profiles.tax_rate_parts IS
 COMMENT ON COLUMN public.profiles.tax_rate_labor IS
   'Percent. Only applied when tax_labor is true.';
 
--- ── 2. Carry the existing rate across, so there is ONE source of truth ────────
+-- -- 2. Carry the existing rate across, so there is ONE source of truth --------
 -- profiles.default_tax_percent (migration 020, percent, default 8.5) is the only
 -- per-business tax rate today. Both new rate columns are seeded from it: parts
 -- because that is the rate that keeps applying, and labor so that a shop which
@@ -30,7 +30,7 @@ UPDATE public.profiles
  WHERE tax_rate_parts = 0
    AND tax_rate_labor = 0;
 
--- ── 3. EXISTING BUSINESSES KEEP TODAY'S BEHAVIOUR ─────────────────────────────
+-- -- 3. EXISTING BUSINESSES KEEP TODAY'S BEHAVIOUR -----------------------------
 -- The column default is false, which is the right default for a NEW signup. But
 -- flipping every existing business to false would silently stop them charging tax
 -- on labor, and not every state exempts it -- North Carolina, where most of these
@@ -51,7 +51,7 @@ UPDATE public.profiles
 -- it in the same migration would break the running production build. It becomes
 -- dead once this ships and can be removed in a later migration.
 
--- ── 4. What each document actually taxed ──────────────────────────────────────
+-- -- 4. What each document actually taxed --------------------------------------
 -- The customer's copy has to be able to say WHAT was taxed, not just show a total,
 -- and that cannot be recovered after the fact: LD line_items are
 -- {description, quantity, unit_price, total} with no parts/labor discriminator, and
@@ -78,7 +78,7 @@ ALTER TABLE public.work_order_segment_options  ADD COLUMN IF NOT EXISTS tax_brea
 ALTER TABLE public.hd_quotes                   ADD COLUMN IF NOT EXISTS tax_breakdown jsonb;
 ALTER TABLE public.hd_invoices                 ADD COLUMN IF NOT EXISTS tax_breakdown jsonb;
 
--- ── 5. The services seam ──────────────────────────────────────────────────────
+-- -- 5. The services seam ------------------------------------------------------
 -- Detailer documents bill through service_lines and adjustments, which are neither
 -- parts nor separately-stated repair labor. They keep EXACTLY today's behaviour:
 -- still in the taxable base, still at the shop's existing rate. Nothing is dropped
@@ -95,7 +95,7 @@ ALTER TABLE public.hd_invoices                 ADD COLUMN IF NOT EXISTS tax_brea
 -- checkbox -- it does not need another document migration, and it does not need a
 -- backfill, because the data is already there.
 
--- ── 6. OPTIONAL, NOT RUN BY THIS MIGRATION ────────────────────────────────────
+-- -- 6. OPTIONAL, NOT RUN BY THIS MIGRATION ------------------------------------
 -- Section 3 leaves every existing shop taxing labor exactly as it does today, which
 -- means the Florida shop keeps over-collecting until someone turns it off. That is
 -- one click in Settings once this ships, and it is the shop's own call about its

@@ -1,6 +1,6 @@
--- ╔═══════════════════════════════════════════════════════════════════════════╗
--- ║ 142 — Billable extras, and documents that stand on their own              ║
--- ╚═══════════════════════════════════════════════════════════════════════════╝
+-- +===========================================================================+
+-- | 142 - Billable extras, and documents that stand on their own              |
+-- +===========================================================================+
 --
 -- Batched because every one of these is the same defect: a document does not
 -- record the terms it was priced under, so reopening it re-prices it from
@@ -11,14 +11,14 @@
 -- SAFE TO RUN ON A LIVE DATABASE. Every statement is additive or drops a
 -- DEFAULT. Nothing is backfilled, nothing is dropped, no existing row changes
 -- value. Every new nullable column means "not recorded" on an existing row,
--- which is deliberate and is what the UI must show — see the NULL CONTRACT note
+-- which is deliberate and is what the UI must show - see the NULL CONTRACT note
 -- at the foot of this file.
 --
 -- IDEMPOTENT. Re-running it is a no-op.
 
 BEGIN;
 
--- ─────────────────────────────────────────────────────────────────────────────
+-- -----------------------------------------------------------------------------
 -- 1. PRICING DEFAULTS (profiles)
 --
 -- Travel, mileage and shop supplies join the existing pricing block
@@ -27,9 +27,9 @@ BEGIN;
 --
 -- travel_rate_per_hour is NULLABLE ON PURPOSE: NULL means "bill travel at the
 -- labour rate", which is what most shops do. A number here overrides it. That
--- is why it is not DEFAULT 0 — zero is a real answer meaning "free travel", and
+-- is why it is not DEFAULT 0 - zero is a real answer meaning "free travel", and
 -- it must be distinguishable from "not set".
--- ─────────────────────────────────────────────────────────────────────────────
+-- -----------------------------------------------------------------------------
 ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS bill_travel            BOOLEAN       DEFAULT false,
   ADD COLUMN IF NOT EXISTS travel_rate_per_hour   NUMERIC(10,2),
@@ -48,7 +48,7 @@ COMMENT ON COLUMN public.profiles.shop_supplies_percent IS
 COMMENT ON COLUMN public.profiles.shop_supplies_cap IS
   'Optional dollar cap per document. NULL means uncapped.';
 
--- ─────────────────────────────────────────────────────────────────────────────
+-- -----------------------------------------------------------------------------
 -- 2. BILLABLE EXTRAS, PER DOCUMENT (LD + HD, work order / quote / invoice)
 --
 -- Each extra stores THREE things: the input the tech typed, the rate in force
@@ -62,7 +62,7 @@ COMMENT ON COLUMN public.profiles.shop_supplies_cap IS
 -- a COGS expense row. shop_supplies_fee is the computed percentage-of-parts
 -- charge, which has no cost basis and is margin. Two names because they are two
 -- mechanisms, and collapsing them would double-bill a shop that uses both.
--- ─────────────────────────────────────────────────────────────────────────────
+-- -----------------------------------------------------------------------------
 DO $$
 DECLARE
   t text;
@@ -90,7 +90,7 @@ BEGIN
   END LOOP;
 END $$;
 
--- ─────────────────────────────────────────────────────────────────────────────
+-- -----------------------------------------------------------------------------
 -- 3. UNIT NUMBER (item 1b)
 --
 -- hd_units.unit_number has existed since migration 047 and Fleet Pro reads it
@@ -104,7 +104,7 @@ END $$;
 --
 -- vehicles gets one too. LD has non_vin_identifier and license_plate, neither of
 -- which is a fleet's own unit number.
--- ─────────────────────────────────────────────────────────────────────────────
+-- -----------------------------------------------------------------------------
 DO $$
 DECLARE
   t text;
@@ -113,7 +113,7 @@ BEGIN
     -- Documents
     'work_orders', 'quotes', 'invoices',
     'hd_work_orders', 'hd_quotes', 'hd_invoices',
-    -- Inspection reports. These are customer-facing documents too — a DOT
+    -- Inspection reports. These are customer-facing documents too - a DOT
     -- certificate or an ANSI A92 record goes in the customer's file, and
     -- without the unit number they cannot file it against their own equipment.
     'hd_dot_inspections', 'hd_aerial_inspections',
@@ -132,17 +132,17 @@ END $$;
 COMMENT ON COLUMN public.vehicles.unit_number IS
   'The fleet''s own identifier for this unit (chassis 1, reefer 1R, APU 2APU). Printed FIRST in the unit block; the serial is for warranty.';
 
--- ─────────────────────────────────────────────────────────────────────────────
+-- -----------------------------------------------------------------------------
 -- 4. INTERNAL NOTES (item 2c)
 --
 -- LD had nowhere to put a note that does not reach a customer: `notes` and
 -- `job_notes` both print on /invoice/[token]. That is why the work-order
--- converter was left unable to carry a tech's notes forward — publishing them
+-- converter was left unable to carry a tech's notes forward - publishing them
 -- was the only option available, and that is not a choice a converter should
 -- make silently.
 --
 -- NOTHING customer-facing may ever read this column.
--- ─────────────────────────────────────────────────────────────────────────────
+-- -----------------------------------------------------------------------------
 DO $$
 DECLARE
   t text;
@@ -162,11 +162,11 @@ END $$;
 COMMENT ON COLUMN public.invoices.internal_notes IS
   'Shop-only. MUST NOT be rendered on /invoice/[token], any PDF, any email or any SMS.';
 
--- ─────────────────────────────────────────────────────────────────────────────
+-- -----------------------------------------------------------------------------
 -- 5. THE MARKUP IN FORCE, AND A SELF-CONTAINED INVOICE (items 1a + 2a)
 --
 -- THE MONEY BUG. work_orders and quotes both store parts_markup_percent.
--- `invoices` does not — it has no markup, no parts_subtotal, no labor_subtotal,
+-- `invoices` does not - it has no markup, no parts_subtotal, no labor_subtotal,
 -- no labor_hours and no labor_rate. Every reader that needs them reaches through
 -- invoices.source_quote_id to the quote, and when there is no source quote
 -- (a work-order conversion, or a from-scratch invoice) the markup silently
@@ -176,9 +176,9 @@ COMMENT ON COLUMN public.invoices.internal_notes IS
 -- These columns make the invoice answer for itself.
 --
 -- EVERY ONE IS NULLABLE AND NOTHING IS BACKFILLED. NULL means "not recorded",
--- and the UI must print "markup not recorded" rather than 0% — a stored 0 would
+-- and the UI must print "markup not recorded" rather than 0% - a stored 0 would
 -- be a claim that the shop marked nothing up.
--- ─────────────────────────────────────────────────────────────────────────────
+-- -----------------------------------------------------------------------------
 ALTER TABLE public.invoices
   ADD COLUMN IF NOT EXISTS parts_markup_percent NUMERIC(6,2),
   ADD COLUMN IF NOT EXISTS parts_subtotal       NUMERIC(10,2),
@@ -188,7 +188,7 @@ ALTER TABLE public.invoices
   ADD COLUMN IF NOT EXISTS labor_rate           NUMERIC(10,2);
 
 COMMENT ON COLUMN public.invoices.parts_markup_percent IS
-  'The markup in force when this invoice was created. NULL means not recorded — never display it as 0%.';
+  'The markup in force when this invoice was created. NULL means not recorded - never display it as 0%.';
 
 -- HD prices parts off its own markup (profiles.hd_parts_markup_percent, 30%)
 -- rather than the LD one, so the HD documents need the same record.
@@ -203,7 +203,7 @@ ALTER TABLE public.hd_quotes
 ALTER TABLE public.hd_work_orders
   ADD COLUMN IF NOT EXISTS parts_markup_percent NUMERIC(6,2);
 
--- ─────────────────────────────────────────────────────────────────────────────
+-- -----------------------------------------------------------------------------
 -- 6. THE PHANTOM DIAGNOSTIC FEE (item 2b)
 --
 -- Migration 057 declared `diagnostic_fee DECIMAL(10,2) DEFAULT 125.00`. Four
@@ -212,8 +212,8 @@ ALTER TABLE public.hd_work_orders
 -- it. Three live invoices went out billing a fee nobody charged.
 --
 -- The writers were fixed in 0419a938. This disarms the trap itself. Existing
--- values are untouched — dropping a DEFAULT does not rewrite rows.
--- ─────────────────────────────────────────────────────────────────────────────
+-- values are untouched - dropping a DEFAULT does not rewrite rows.
+-- -----------------------------------------------------------------------------
 ALTER TABLE public.hd_invoices ALTER COLUMN diagnostic_fee DROP DEFAULT;
 ALTER TABLE public.hd_quotes   ALTER COLUMN diagnostic_fee DROP DEFAULT;
 
@@ -222,7 +222,7 @@ ALTER TABLE public.hd_quotes   ALTER COLUMN diagnostic_fee DROP DEFAULT;
 ALTER TABLE public.hd_invoices ALTER COLUMN road_call_fee  SET DEFAULT 0;
 ALTER TABLE public.hd_quotes   ALTER COLUMN road_call_fee  SET DEFAULT 0;
 
--- ─────────────────────────────────────────────────────────────────────────────
+-- -----------------------------------------------------------------------------
 -- 7. hd_quotes.customer_id (item 7c)
 --
 -- hd_invoices got one in migration 118. hd_quotes still stores customer_name,
@@ -232,7 +232,7 @@ ALTER TABLE public.hd_quotes   ALTER COLUMN road_call_fee  SET DEFAULT 0;
 --
 -- ON DELETE SET NULL, matching 118: deleting a customer must not delete the
 -- quote history that justifies the money.
--- ─────────────────────────────────────────────────────────────────────────────
+-- -----------------------------------------------------------------------------
 ALTER TABLE public.hd_quotes
   ADD COLUMN IF NOT EXISTS customer_id UUID REFERENCES public.customers(id) ON DELETE SET NULL;
 
@@ -240,9 +240,9 @@ CREATE INDEX IF NOT EXISTS hd_quotes_customer_id_idx
   ON public.hd_quotes (customer_id)
   WHERE customer_id IS NOT NULL;
 
--- ─────────────────────────────────────────────────────────────────────────────
+-- -----------------------------------------------------------------------------
 -- 8. Lookup indexes for the new linkage
--- ─────────────────────────────────────────────────────────────────────────────
+-- -----------------------------------------------------------------------------
 CREATE INDEX IF NOT EXISTS invoices_unit_number_idx
   ON public.invoices (user_id, unit_number)
   WHERE unit_number IS NOT NULL;
@@ -253,20 +253,20 @@ CREATE INDEX IF NOT EXISTS hd_invoices_unit_number_idx
 
 COMMIT;
 
--- ╔═══════════════════════════════════════════════════════════════════════════╗
--- ║ THE NULL CONTRACT                                                         ║
--- ╠═══════════════════════════════════════════════════════════════════════════╣
--- ║ Every column added here is NULL or 0 on all existing rows, and that is    ║
--- ║ the correct state. It means "this document was written before the field   ║
--- ║ existed", which is different from "the answer is zero":                   ║
--- ║                                                                           ║
--- ║   parts_markup_percent NULL  -> print "markup not recorded", never "0%"   ║
--- ║   unit_number          NULL  -> print nothing, do not fall back to serial ║
--- ║   travel_amount        0     -> print no travel line at all               ║
--- ║   mileage_amount       0     -> print no mileage line at all              ║
--- ║   shop_supplies_fee    0     -> print no shop supplies fee line at all    ║
--- ║   internal_notes       NULL  -> nothing to show, and never customer-facing ║
--- ║                                                                           ║
--- ║ NOTHING IS BACKFILLED. A markup guessed onto a sent invoice would be a    ║
--- ║ claim about money that nobody made.                                       ║
--- ╚═══════════════════════════════════════════════════════════════════════════╝
+-- +===========================================================================+
+-- | THE NULL CONTRACT                                                         |
+-- +===========================================================================+
+-- | Every column added here is NULL or 0 on all existing rows, and that is    |
+-- | the correct state. It means "this document was written before the field   |
+-- | existed", which is different from "the answer is zero":                   |
+-- |                                                                           |
+-- |   parts_markup_percent NULL  -> print "markup not recorded", never "0%"   |
+-- |   unit_number          NULL  -> print nothing, do not fall back to serial |
+-- |   travel_amount        0     -> print no travel line at all               |
+-- |   mileage_amount       0     -> print no mileage line at all              |
+-- |   shop_supplies_fee    0     -> print no shop supplies fee line at all    |
+-- |   internal_notes       NULL  -> nothing to show, and never customer-facing |
+-- |                                                                           |
+-- | NOTHING IS BACKFILLED. A markup guessed onto a sent invoice would be a    |
+-- | claim about money that nobody made.                                       |
+-- +===========================================================================+
