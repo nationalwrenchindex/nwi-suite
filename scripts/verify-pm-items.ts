@@ -288,6 +288,24 @@ async function main() {
       ok(seeded.is_critical === true, 'and it is critical')
       ok((seeded.applies_to_models ?? []).length === 2,
         'two models only — C-600 and S-600, as specified. Which others is the second open question.')
+
+      // ── TRANSPORT CORRUPTION ──
+      // pm_items.why is the only tech-visible STRING this migration inserts, and it
+      // arrived mangled: an em-dash became U+0393 U+00C7 U+00F6, which is UTF-8
+      // E2 80 94 read as cp437 by Windows clip.exe. The SQL ran without error
+      // because mangled text is still valid text, so nothing caught it but a byte
+      // check. This is that byte check.
+      const MOJIBAKE = /[ΓÇöÃÂ]/
+      const why = String(seeded.why ?? '')
+      if (MOJIBAKE.test(why)) {
+        console.log('\n  MANGLED TEXT IN pm_items.why:')
+        for (const s of why.match(/.{0,14}[ΓÇö].{0,14}/g) ?? []) console.log(`    ...${s}...`)
+        console.log('  Fix with scripts/fix-pm-item-encoding.sql')
+      }
+      ok(!MOJIBAKE.test(why),
+        'the "why" text a technician reads is not corrupted by the transport that carried the migration')
+      ok(why.length > 100 && /ETV/.test(why),
+        `and it is the full text, not a truncated one (${why.length} chars)`)
     }
     const statuses = await get('unit_pm_item_status?select=id')
     const n = Array.isArray(statuses.body) ? statuses.body.length : 0

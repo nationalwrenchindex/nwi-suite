@@ -211,7 +211,13 @@ SELECT
   4,
   3,
   'months',
-  'Replace at 4 months maximum. Clogged cartridge starves the engine — erratic RPM, '
+  -- ASCII ONLY, DELIBERATELY. This string is DATA a tech reads, and it has to
+  -- survive every way a migration might reach the database. An em-dash here was
+  -- stored as three cp437 characters when the file was piped through Windows
+  -- clip.exe, which reads stdin in the console code page rather than UTF-8:
+  -- "starves the engine U+2014" became "starves the engine U+0393 U+00C7 U+00F6".
+  -- A hyphen reads the same and cannot be corrupted.
+  'Replace at 4 months maximum. Clogged cartridge starves the engine - erratic RPM, '
     || 'idling problems, and the ETV restricts, dropping cooling capacity. Commonly '
     || 'reported as a no-cool complaint with a temperature differential as poor as '
     || '-4 degrees.',
