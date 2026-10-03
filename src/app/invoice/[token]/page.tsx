@@ -20,6 +20,7 @@ import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
 import { publicDocumentMetadata } from '@/lib/public-metadata'
 import {
   SHOP_BLOCK_SELECT,
+  SHOP_ADDRESS_SELECT_143,
   shopBlockFrom,
   customerBlockFrom,
   ldInvoiceDates,
@@ -31,6 +32,7 @@ import {
 } from '@/lib/invoice-document'
 import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
 import { missingMigration142Column } from '@/lib/migration-142'
+import { termsWithDueDate } from '@/lib/hd/payment-terms'
 import InvoiceViewClient from './InvoiceViewClient'
 import InvoiceApprovalClient from './InvoiceApprovalClient'
 import type { ReactNode } from 'react'
@@ -56,10 +58,13 @@ const INVOICE_SELECT_BASE = `
   user_id
 `
 
-// Everything migration 142 adds that this page renders. Split out because selecting
-// a column that does not exist is a 400, and a 400 here lands as notFound() — every
-// customer invoice link in production would read "not available" until the SQL was
-// run by hand. A customer-facing outage is not an acceptable cost for a travel line.
+// Everything migrations 142 and 143 add that this page renders. Split out because
+// selecting a column that does not exist is a 400, and a 400 here lands as
+// notFound() — every customer invoice link in production would read "not available"
+// until the SQL was run by hand. A customer-facing outage is not an acceptable cost
+// for a travel line or a terms label.
+const INVOICE_SELECT_143 = 'payment_terms'
+
 const INVOICE_SELECT_142 = `
   unit_number,
   travel_hours, travel_rate, travel_amount,
@@ -191,22 +196,34 @@ export default async function PublicInvoicePage(
   }
 
   let { data: invoice, error } = await readInvoice(
-    `${INVOICE_SELECT_BASE}, ${INVOICE_SELECT_142}, ${VEHICLE_142}`,
+    `${INVOICE_SELECT_BASE}, ${INVOICE_SELECT_142}, ${INVOICE_SELECT_143}, ${VEHICLE_142}`,
   )
-  // Migration 142 not applied yet: fall back to the document as it was. The travel,
-  // mileage and shop-supplies lines simply do not render, which is correct — no
-  // existing invoice has any of them.
+  // Migration 142/143 not applied yet: step down, then down again. The travel,
+  // mileage, shop-supplies and terms lines simply do not render, which is correct —
+  // no existing invoice has any of them.
+  if (error) {
+    ({ data: invoice, error } = await readInvoice(
+      `${INVOICE_SELECT_BASE}, ${INVOICE_SELECT_142}, ${VEHICLE_142}`,
+    ))
+  }
   if (error && missingMigration142Column(error)) {
     ({ data: invoice, error } = await readInvoice(`${INVOICE_SELECT_BASE}, ${VEHICLE_LEGACY}`))
   }
 
   if (error || !invoice) notFound()
 
-  const { data: profile } = await sc
-    .from('profiles')
-    .select(`business_type, bill_consumables_separately, default_payment_instructions, ${SHOP_BLOCK_SELECT}`)
-    .eq('id', invoice.user_id)
-    .single()
+  // The 143 street columns are tried first and dropped if the migration has not
+  // been applied — the shop block then prints city and state as it does today,
+  // rather than the whole page failing.
+  // Cast for the same reason as the invoice read above: a runtime-built select
+  // collapses the row type.
+  const readProfile = async (cols: string): Promise<Record<string, unknown> | null> => {
+    const r = await sc.from('profiles').select(cols).eq('id', invoice.user_id).single()
+    return r.error ? null : (r.data as unknown as Record<string, unknown>)
+  }
+  const profile =
+    await readProfile(`business_type, bill_consumables_separately, default_payment_instructions, ${SHOP_BLOCK_SELECT}, ${SHOP_ADDRESS_SELECT_143}`)
+    ?? await readProfile(`business_type, bill_consumables_separately, default_payment_instructions, ${SHOP_BLOCK_SELECT}`)
 
   const p = profile as {
     business_type?: string
@@ -238,7 +255,10 @@ export default async function PublicInvoicePage(
   const customer = customerBlockFrom(inv.customer)
   const dates    = ldInvoiceDates(inv)
   const issuedOn = formatDocDate(dates.issued)
-  const dueOn    = formatDocDate(dates.due)
+  // "Net 7 — due 10/10/2026", or just the terms when no due date is stored.
+  const termsLine = inv.payment_terms || dates.due
+    ? termsWithDueDate(inv.payment_terms as string | null, dates.due)
+    : null
 
   const vehicleLabel = inv.vehicle
     ? [inv.vehicle.year, inv.vehicle.make, inv.vehicle.model].filter(Boolean).join(' ')
@@ -402,15 +422,19 @@ export default async function PublicInvoicePage(
               {issuedOn && (
                 <p><span style={{ color: FAINT }}>Invoice Date:</span> {issuedOn}</p>
               )}
-              {/* A due date is printed only when one is stored. Nothing here
-                  derives "issued + 30 days" — see ldInvoiceDates. */}
-              {dueOn && (
+              {/* TERMS AND DUE DATE IN PLAIN WORDS: "Net 7 — due 10/10/2026".
+                  A due date is printed only when one is STORED. Nothing here
+                  derives "issued + 30 days" — see ldInvoiceDates. An invoice sent
+                  without a due date keeps reading exactly as the customer got it. */}
+              {termsLine && (
                 <p className="font-semibold" style={{ color: TEXT }}>
-                  <span className="font-normal" style={{ color: FAINT }}>Payment Due:</span> {dueOn}
+                  <span className="font-normal" style={{ color: FAINT }}>Terms:</span> {termsLine}
                 </p>
               )}
-              {dates.termsText && (
-                <p><span style={{ color: FAINT }}>Terms:</span> {dates.termsText}</p>
+              {/* The shop's own free-text sentence, where it wrote one. Kept
+                  alongside the structured terms rather than replaced by them. */}
+              {dates.termsText && dates.termsText !== termsLine && (
+                <p className="text-xs" style={{ color: MUTED }}>{dates.termsText}</p>
               )}
               {inv.po_number && (
                 <p className="font-mono text-xs mt-0.5">

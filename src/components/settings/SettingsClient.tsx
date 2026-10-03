@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useCallback } from 'react'
+import { PAYMENT_TERMS, PAYMENT_TERMS_LABEL, DEFAULT_PAYMENT_TERMS } from '@/lib/hd/payment-terms'
 import TaxSettingsFields from '@/components/settings/TaxSettingsFields'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -162,6 +163,8 @@ export default function SettingsClient({
   initialLaborRate    = 125,
   initialMarkupPct    = 20,
   initialExtras       = EXTRAS_DEFAULTS,
+  initialAddress      = {},
+  initialDefaultTerms = DEFAULT_PAYMENT_TERMS,
 
   initialPricingRows       = [],
   initialBillConsumables   = false,
@@ -186,6 +189,8 @@ export default function SettingsClient({
   initialLaborRate?:           number
   initialMarkupPct?:           number
   initialExtras?:              ExtrasDefaults
+  initialAddress?:             { address_line1?: string | null; address_line2?: string | null; zip?: string | null }
+  initialDefaultTerms?:        string
 
   initialPricingRows?:         PricingRow[]
   initialBillConsumables?:     boolean
@@ -248,6 +253,14 @@ export default function SettingsClient({
   const [newPresetVals,  setNewPresetVals]  = useState({ name: '', price_cents: 0 })
   const [savingPresets,  setSavingPresets]  = useState(false)
 
+  // Business address (migration 143). city/state are the SAME columns the public
+  // directory listing uses — it is one business address, not two.
+  const [addr1,         setAddr1]         = useState(initialAddress.address_line1 ?? '')
+  const [addr2,         setAddr2]         = useState(initialAddress.address_line2 ?? '')
+  const [zip,           setZip]           = useState(initialAddress.zip ?? '')
+  const [savingAddress, setSavingAddress] = useState(false)
+  const [defaultTerms,  setDefaultTerms]  = useState<string>(initialDefaultTerms)
+
   const [city,          setCity]          = useState(initialCity)
   const [stateCode,     setStateCode]     = useState(initialState)
   const [listed,        setListed]        = useState(alreadyListed)
@@ -283,10 +296,55 @@ export default function SettingsClient({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ default_payment_instructions: paymentInstr || null }),
       })
-      setSavedMsg('Default payment instructions saved.')
+      // The terms go to the profile route, which owns the structured pricing fields.
+      const res = await fetch('/api/user/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ default_payment_terms: defaultTerms }),
+      })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}))
+        setSavedMsg((j as { error?: string }).error ?? 'Instructions saved, but the terms were not.')
+        setTimeout(() => setSavedMsg(null), 8000)
+        setSavingPaymentInstr(false)
+        return
+      }
+      setSavedMsg('Payment terms and instructions saved.')
       setTimeout(() => setSavedMsg(null), 3000)
-    } catch { /* silently fail */ }
+    } catch {
+      setSavedMsg('Could not reach the server. Nothing was saved.')
+      setTimeout(() => setSavedMsg(null), 6000)
+    }
     setSavingPaymentInstr(false)
+  }
+
+  async function saveBusinessAddress() {
+    setSavingAddress(true)
+    try {
+      const res = await fetch('/api/user/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          address_line1: addr1.trim() || null,
+          address_line2: addr2.trim() || null,
+          city:          city.trim()  || null,
+          state:         stateCode.trim() || null,
+          zip:           zip.trim()   || null,
+        }),
+      })
+      if (res.ok) {
+        setSavedMsg('Business address saved.')
+        setTimeout(() => setSavedMsg(null), 3000)
+      } else {
+        const j = await res.json().catch(() => ({}))
+        setSavedMsg((j as { error?: string }).error ?? 'Could not save the business address.')
+        setTimeout(() => setSavedMsg(null), 8000)
+      }
+    } catch {
+      setSavedMsg('Could not reach the server. Nothing was saved.')
+      setTimeout(() => setSavedMsg(null), 6000)
+    }
+    setSavingAddress(false)
   }
 
   async function saveMpiSetting(value: boolean) {
@@ -712,13 +770,81 @@ export default function SettingsClient({
         </div>
       </section>
 
-      {/* ── Default Payment Instructions ── */}
+      {/* ── Business Address ──
+          profiles had city and state and nothing else, so the shop block on a
+          customer's invoice could print "Winston-Salem, NC" and no more.
+          city and state are the SAME columns the directory listing uses, because
+          it is one business address — editing here changes both, which is right. */}
       <section>
-        <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Default Payment Instructions</p>
+        <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Business Address</p>
+        <p className="text-white/30 text-xs mb-4">
+          Printed at the top of every invoice, quote and work order your customers see.
+        </p>
+        <div className="rounded-xl border border-[#333] bg-[#222] p-5 space-y-4">
+          <div>
+            <label className="nwi-label">Street Address</label>
+            <input className="nwi-input text-sm w-full" placeholder="2140 Fiddlers Ct"
+              value={addr1} onChange={e => setAddr1(e.target.value)} />
+          </div>
+          <div>
+            <label className="nwi-label">Suite / Unit (optional)</label>
+            <input className="nwi-input text-sm w-full" placeholder="Suite B"
+              value={addr2} onChange={e => setAddr2(e.target.value)} />
+          </div>
+          <div className="grid grid-cols-[1fr_72px_110px] gap-3">
+            <div>
+              <label className="nwi-label">City</label>
+              <input className="nwi-input text-sm w-full" placeholder="Winston-Salem"
+                value={city} onChange={e => setCity(e.target.value)} />
+            </div>
+            <div>
+              <label className="nwi-label">State</label>
+              <input className="nwi-input text-sm w-full" maxLength={2} placeholder="NC"
+                value={stateCode}
+                onChange={e => setStateCode(e.target.value.toUpperCase().replace(/[^A-Z]/g, ''))} />
+            </div>
+            <div>
+              <label className="nwi-label">ZIP</label>
+              <input className="nwi-input text-sm w-full" placeholder="27107"
+                value={zip} onChange={e => setZip(e.target.value)} />
+            </div>
+          </div>
+          <button
+            onClick={saveBusinessAddress}
+            disabled={savingAddress}
+            className="px-5 py-2 bg-[#FF6600] hover:bg-[#E55A00] disabled:opacity-50 text-white font-condensed font-bold text-sm rounded-lg transition-colors"
+          >
+            {savingAddress ? 'Saving…' : 'Save Business Address'}
+          </button>
+          <p className="text-white/30 text-[11px]">
+            City and state are shared with your public directory listing.
+          </p>
+        </div>
+      </section>
+
+      {/* ── Default Payment Instructions + Terms ── */}
+      <section>
+        <p className="text-white/40 text-xs uppercase tracking-widest mb-1">Payment Terms &amp; Instructions</p>
         <p className="text-white/30 text-xs mb-4">
           Pre-filled into each invoice when you finalize it. Edit per-invoice in the invoice view.
         </p>
         <div className="rounded-xl border border-[#333] bg-[#222] p-5 space-y-4">
+          {/* The business default. Per-invoice override lives on the invoice. */}
+          <div>
+            <label className="nwi-label">Default Payment Terms</label>
+            <select
+              className="nwi-input text-sm w-full"
+              value={defaultTerms}
+              onChange={e => setDefaultTerms(e.target.value)}
+            >
+              {PAYMENT_TERMS.map(t => (
+                <option key={t} value={t}>{PAYMENT_TERMS_LABEL[t]}</option>
+              ))}
+            </select>
+            <p className="text-white/30 text-[11px] mt-1">
+              Sets the due date on new invoices. Due on receipt is past due the day after you send it.
+            </p>
+          </div>
           <textarea
             rows={6}
             className="nwi-input resize-y text-sm w-full"

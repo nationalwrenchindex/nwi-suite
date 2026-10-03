@@ -11,7 +11,7 @@
 
 import type { PublicInvoiceBranding } from '@/lib/hd/invoice-token'
 import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
-import { termsDisplay, formatDueDate } from '@/lib/hd/payment-terms'
+import { termsDisplay, termsWithDueDate } from '@/lib/hd/payment-terms'
 import {
   addressLines,
   serviceUnitLines,
@@ -187,12 +187,13 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
             <div className="sm:text-right text-sm" style={{ color: MUTED }}>
               <p>Date: {fmtDate(inv.created_at)}</p>
               {inv.work_order_number && <p>Work Order: {inv.work_order_number}</p>}
-              <p>Terms: {termsDisplay(inv.payment_terms)}</p>
-              {inv.due_date && !isPaid && !isVoid && (
-                <p className="font-semibold" style={{ color: inv.status === 'overdue' ? '#b91c1c' : MUTED }}>
-                  Payment Due: {formatDueDate(inv.due_date)}
-                </p>
-              )}
+              {/* "Net 30 — due 10/14/2026", one phrasing on every surface. */}
+              <p className={inv.due_date && !isPaid && !isVoid ? 'font-semibold' : undefined}
+                 style={{ color: inv.due_date && !isPaid && !isVoid && inv.status === 'overdue' ? '#b91c1c' : MUTED }}>
+                Terms: {isPaid || isVoid
+                  ? termsDisplay(inv.payment_terms)
+                  : termsWithDueDate(inv.payment_terms, inv.due_date)}
+              </p>
             </div>
           </div>
 

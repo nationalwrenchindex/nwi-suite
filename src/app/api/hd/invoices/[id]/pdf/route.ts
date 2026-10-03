@@ -9,12 +9,13 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
-import { termsDisplay, formatDueDate } from '@/lib/hd/payment-terms'
+import { termsDisplay, termsWithDueDate } from '@/lib/hd/payment-terms'
 import { AERIAL_TYPE_LABEL } from '@/lib/hd/aerial/forms'
 import type { AerialInspectionType } from '@/types/aerial'
 import { money } from '@/lib/format'
 import {
   SHOP_BLOCK_SELECT,
+  SHOP_ADDRESS_SELECT_143,
   shopBlockFrom,
   serviceUnitLines,
   documentDisclaimers,
@@ -80,14 +81,23 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   // document that references everything performed, so the printed invoice carries
   // the report summary and an absolute link rather than leaving them to hunt.
   const [{ data: profile }, { data: pmChecklist }, { data: dotInspection }, { data: aerialInspection }] = await Promise.all([
-    supabase
-      .from('profiles')
-      // Was 'business_name, phone' — and the phone was never even rendered. The
-      // shop's logo, address and email all exist and none of them reached the
-      // printed invoice.
-      .select(`${SHOP_BLOCK_SELECT}, hd_epa_cert_number, default_payment_instructions`)
-      .eq('id', user.id)
-      .single(),
+    // Was 'business_name, phone' — and the phone was never even rendered. The
+    // shop's logo, address and email all exist and none of them reached the
+    // printed invoice. The 143 street columns are tried and then dropped, so an
+    // unapplied migration costs a street line rather than the whole invoice.
+    (async () => {
+      const full = await supabase
+        .from('profiles')
+        .select(`${SHOP_BLOCK_SELECT}, ${SHOP_ADDRESS_SELECT_143}, hd_epa_cert_number, default_payment_instructions`)
+        .eq('id', user.id)
+        .single()
+      if (!full.error) return full
+      return supabase
+        .from('profiles')
+        .select(`${SHOP_BLOCK_SELECT}, hd_epa_cert_number, default_payment_instructions`)
+        .eq('id', user.id)
+        .single()
+    })(),
     supabase
       .from('hd_pm_checklists')
       .select('id, pm_type, created_at, removed_from_service')
@@ -333,8 +343,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     <div class="inv-meta">
       <div class="inv-number">${inv.invoice_number}</div>
       <p>Date: ${fmtDate(inv.created_at)}</p>
-      <p>Terms: ${termsDisplay(inv.payment_terms)}</p>
-      ${inv.due_date ? `<p${inv.status === 'overdue' ? ' class="due-highlight"' : ''}>Payment Due: ${formatDueDate(inv.due_date)}</p>` : ''}
+      <p${inv.due_date && inv.status === 'overdue' ? ' class="due-highlight"' : ''}>Terms: ${esc(termsWithDueDate(inv.payment_terms, inv.due_date))}</p>
       <p>Status: <span class="status-badge status-${inv.status}">${inv.status}</span></p>
       ${inv.late_fee_applied && Number(inv.late_fee_amount) > 0 ? `<p class="due-highlight">Late Fee: ${fmt(inv.late_fee_amount)}</p>` : ''}
       ${inv.paid_at ? `<p>Paid: ${fmtDate(inv.paid_at)}</p>` : ''}

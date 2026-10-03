@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
 import InvoiceDetailActions from './InvoiceDetailActions'
-import { termsDisplay, formatDueDate } from '@/lib/hd/payment-terms'
+import { termsWithDueDate, formatDueDate } from '@/lib/hd/payment-terms'
 import { AERIAL_TYPE_LABEL } from '@/lib/hd/aerial/forms'
 import { findInvoicePMChecklists } from '@/lib/hd/pm-report-attachment'
 import { resolveLateFeeSettings, assessLateFee, lateFeeBlockMessage } from '@/lib/hd/late-fee'
@@ -179,7 +179,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                 <p className="text-sm" style={{ color: '#6B7280' }}>Work Order: {inv.work_order_number}</p>
               )}
               <p className="text-sm" style={{ color: '#6B7280' }}>Date: {fmtDate(inv.created_at)}</p>
-              <p className="text-sm" style={{ color: '#6B7280' }}>Terms: {termsDisplay(inv.payment_terms)}</p>
+              <p className="text-sm" style={{ color: '#6B7280' }}>Terms: {termsWithDueDate(inv.payment_terms, inv.due_date)}</p>
               {inv.due_date && (
                 <p className="text-sm font-semibold" style={{ color: inv.status === 'overdue' ? '#b91c1c' : '#6B7280' }}>Payment Due: {formatDueDate(inv.due_date)}</p>
               )}

@@ -45,6 +45,15 @@ export interface ShopBlock {
 export const SHOP_BLOCK_SELECT =
   'business_name, full_name, phone, email, business_logo_url, hd_company_logo_url, city, state'
 
+/**
+ * The street columns migration 143 adds. SEPARATE from SHOP_BLOCK_SELECT on
+ * purpose: migrations here are applied by hand, and naming a column that does not
+ * exist fails the WHOLE query. Every caller selects both and falls back to
+ * SHOP_BLOCK_SELECT alone, so a document renders with city and state until the SQL
+ * is run rather than not rendering at all.
+ */
+export const SHOP_ADDRESS_SELECT_143 = 'address_line1, address_line2, zip'
+
 export interface ShopSource extends BrandingSource {
   email?: string | null
   city?:  string | null

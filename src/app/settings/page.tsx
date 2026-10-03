@@ -30,6 +30,8 @@ export default async function SettingsPage() {
     'default_payment_instructions, average_mpg, fuel_type, offer_mpi_on_booking, default_labor_rate, ' +
     'default_parts_markup_percent, default_tax_percent, business_type, bill_consumables_separately, ' +
     'phone, sms_booking_notifications_enabled, business_logo_url, city, state, work_orders_enabled'
+  const PROFILE_143 =
+    'default_payment_terms, address_line1, address_line2, zip'
   const PROFILE_142 =
     'bill_travel, travel_rate_per_hour, bill_mileage, mileage_rate_per_mile, ' +
     'bill_shop_supplies, shop_supplies_percent, shop_supplies_cap'
@@ -38,11 +40,18 @@ export default async function SettingsPage() {
     (async () => {
       const full = await supabase
         .from('profiles')
-        .select(`${PROFILE_BASE}, ${PROFILE_142}`)
+        .select(`${PROFILE_BASE}, ${PROFILE_142}, ${PROFILE_143}`)
         .eq('id', user.id)
         .single()
       if (!full.error) return full
-      // 142 not applied yet. Everything else on this page still works.
+      // 142 or 143 not applied yet. Try 142 alone, then neither. Everything else
+      // on this page keeps working either way.
+      const partial = await supabase
+        .from('profiles')
+        .select(`${PROFILE_BASE}, ${PROFILE_142}`)
+        .eq('id', user.id)
+        .single()
+      if (!partial.error) return partial
       return supabase.from('profiles').select(PROFILE_BASE).eq('id', user.id).single()
     })(),
     hasQuickWrenchAccess(user.id),
@@ -102,6 +111,11 @@ export default async function SettingsPage() {
     bill_shop_supplies?:                 boolean | null
     shop_supplies_percent?:              number | null
     shop_supplies_cap?:                  number | null
+    // Migration 143. Same reason they are optional.
+    default_payment_terms?:              string | null
+    address_line1?:                      string | null
+    address_line2?:                      string | null
+    zip?:                                string | null
   }
 
   return (
@@ -182,6 +196,12 @@ export default async function SettingsPage() {
             shop_supplies_percent: p.shop_supplies_percent ?? null,
             shop_supplies_cap:     p.shop_supplies_cap ?? null,
           }}
+          initialAddress={{
+            address_line1: p.address_line1 ?? null,
+            address_line2: p.address_line2 ?? null,
+            zip:           p.zip ?? null,
+          }}
+          initialDefaultTerms={p.default_payment_terms ?? 'net_7'}
           initialPricingRows={(pricingRows ?? []) as PricingRow[]}
           initialBillConsumables={p.bill_consumables_separately ?? false}
           initialWorkOrdersEnabled={p.work_orders_enabled ?? false}

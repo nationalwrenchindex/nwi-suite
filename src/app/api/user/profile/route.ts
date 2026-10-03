@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { missingMigration142Column } from '@/lib/migration-142'
 import { taxSettingsFrom } from '@/lib/tax'
 import { extrasSettingsFrom } from '@/lib/billable-extras'
+import { normalisePaymentTerms, PAYMENT_TERMS } from '@/lib/hd/payment-terms'
 
 // Columns that exist on every deployment.
 const BASE_COLUMNS = 'average_mpg, fuel_type, offer_mpi_on_booking, default_labor_rate, default_parts_markup_percent, default_tax_percent'
@@ -218,6 +219,38 @@ export async function PUT(request: NextRequest) {
     update[key] = key === 'mileage_rate_per_mile'
       ? Math.round(n * 10000) / 10000
       : Math.round(n * 1000) / 1000
+  }
+
+  // ── Payment terms and the shop's own address (migration 143) ──
+  if ('default_payment_terms' in body) {
+    const t = normalisePaymentTerms(body.default_payment_terms as string | null)
+    // Only the canonical set is accepted as a DEFAULT. Free text is fine on an
+    // individual document — a shop may have written a sentence — but a default has
+    // to produce a due date, and unrecognised text cannot.
+    if (!t || !(PAYMENT_TERMS as readonly string[]).includes(t)) {
+      return NextResponse.json(
+        { error: `default_payment_terms must be one of ${PAYMENT_TERMS.join(', ')}` },
+        { status: 400 },
+      )
+    }
+    update.default_payment_terms = t
+  }
+
+  for (const key of ['address_line1', 'address_line2', 'city', 'state', 'zip'] as const) {
+    if (!(key in body)) continue
+    const raw = body[key]
+    if (raw === null || raw === undefined || (typeof raw === 'string' && !raw.trim())) {
+      update[key] = null
+      continue
+    }
+    if (typeof raw !== 'string') {
+      return NextResponse.json({ error: `${key} must be text` }, { status: 400 })
+    }
+    const v = raw.trim()
+    if (v.length > 200) {
+      return NextResponse.json({ error: `${key} is too long` }, { status: 400 })
+    }
+    update[key] = key === 'state' ? v.toUpperCase() : v
   }
 
   // ── Tax split (migration 140) ──

@@ -192,6 +192,12 @@ export interface Invoice {
   unit_number?:          string | null
   /** Shop-only. MUST NOT be rendered on any customer-facing document. */
   internal_notes?:       string | null
+  /**
+   * Migration 143. due_on_receipt | net_7 | net_15 | net_30.
+   * NULL means "use the shop's default", which is resolved at finalize time.
+   */
+  payment_terms?:        string | null
+  // due_date is already declared above — it has existed since well before 143.
   // Billable extras, each with the rate in force at entry time.
   travel_hours?:                  number | null
   travel_rate?:                   number | null

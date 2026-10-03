@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useTaxSettings } from '@/lib/use-tax-settings'
 import { computeTax, parseBreakdown, taxDisplayRows } from '@/lib/tax'
+import { PAYMENT_TERMS, PAYMENT_TERMS_LABEL } from '@/lib/hd/payment-terms'
 import { useRouter } from 'next/navigation'
 import type { Invoice, ShopSupplyItem, AdditionalPartItem, AdditionalLaborItem, ServiceLine, Adjustment, AdjustmentPreset } from '@/types/financials'
 import { money } from '@/lib/format'
@@ -487,6 +488,11 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
   const [jobNotes,        setJobNotes]        = useState(invoice.job_notes ?? '')
   // Shop-only (migration 142). Nothing customer-facing reads this.
   const [internalNotes,   setInternalNotes]   = useState(invoice.internal_notes ?? '')
+  // '' means "use the business default", resolved at finalize time rather than
+  // baked in here — so changing the default in Settings still affects an invoice
+  // that has not been finalized.
+  const [paymentTerms,    setPaymentTerms]    = useState(invoice.payment_terms ?? '')
+  const [shopDefaultTerms, setShopDefaultTerms] = useState<string>('')
   const [poNumber,        setPoNumber]        = useState(invoice.po_number ?? '')
   const [shopSupplies,    setShopSupplies]    = useState<ShopSupplyItem[]>(
     Array.isArray(invoice.shop_supplies)    ? invoice.shop_supplies    : []
@@ -521,6 +527,14 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
     setToast({ msg, type })
     toastRef.current = setTimeout(() => setToast(null), 3500)
   }
+
+  // The shop's default terms, so the picker's "Use my default" option can name it.
+  useEffect(() => {
+    fetch('/api/user/profile')
+      .then(r => r.json())
+      .then(j => { if (typeof j?.default_payment_terms === 'string') setShopDefaultTerms(j.default_payment_terms) })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (!isDetailer) return
@@ -695,6 +709,7 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
         body:    JSON.stringify({
           job_notes:        jobNotes || null,
           internal_notes:   internalNotes || null,
+          payment_terms:    paymentTerms || null,
           po_number:        poNumber || null,
           shop_supplies:    shopSupplies,
           additional_parts: additionalParts,
@@ -735,6 +750,7 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
         body:    JSON.stringify({
           job_notes:        jobNotes || null,
           internal_notes:   internalNotes || null,
+          payment_terms:    paymentTerms || null,
           po_number:        poNumber || null,
           shop_supplies:    shopSupplies,
           additional_parts: additionalParts,
@@ -1155,6 +1171,28 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
         <p className="text-white/30 text-[11px] mt-1.5">
           Printed on the customer&apos;s copy and included in the emailed invoice.
         </p>
+
+        {/* ── PAYMENT TERMS (migration 143) ──
+            Defaults to the business default from Settings; this is the per-invoice
+            override. The DUE DATE is set when the invoice is finalized, not here —
+            that is the moment it stops being editable and becomes something the
+            customer can be held to. */}
+        <div className="mt-4">
+          <label className="nwi-label">Payment Terms</label>
+          <select
+            className="nwi-input text-sm w-full"
+            value={paymentTerms}
+            onChange={e => setPaymentTerms(e.target.value)}
+          >
+            <option value="">Use my default{shopDefaultTerms ? ` (${PAYMENT_TERMS_LABEL[shopDefaultTerms as keyof typeof PAYMENT_TERMS_LABEL] ?? shopDefaultTerms})` : ''}</option>
+            {PAYMENT_TERMS.map(t => (
+              <option key={t} value={t}>{PAYMENT_TERMS_LABEL[t]}</option>
+            ))}
+          </select>
+          <p className="text-white/30 text-[11px] mt-1.5">
+            The due date is set when you finalize this invoice.
+          </p>
+        </div>
       </Section>
 
       {/* ── SECTION D: Job notes ── */}

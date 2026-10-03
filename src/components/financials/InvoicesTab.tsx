@@ -7,6 +7,7 @@ import { isLaborItem } from '@/components/shared/line-items'
 import { useRouter } from 'next/navigation'
 import type { Invoice, InvoiceStatus, InvoiceProgressStatus, LineItem, PaymentMethod } from '@/types/financials'
 import { money } from '@/lib/format'
+import { daysPastDue } from '@/lib/hd/payment-terms'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -172,7 +173,7 @@ export default function InvoicesTab() {
   // ── New invoice form state ──
   const taxSettings = useTaxSettings()
   const [form, setForm] = useState(() => ({
-    invoice_number:  genInvoiceNumber(),
+    invoice_number:  genInvoiceNumber(),
     po_number:       '',
     invoice_date:    today(),
     due_date:        '',
@@ -267,7 +268,7 @@ export default function InvoicesTab() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          invoice_number:  form.invoice_number,
+          invoice_number:  form.invoice_number,
           po_number:       form.po_number,
           invoice_date:    form.invoice_date,
           due_date:        form.due_date || null,
@@ -291,7 +292,7 @@ export default function InvoicesTab() {
       setInvoices(prev => [json.invoice, ...prev])
       setShowForm(false)
       setForm({
-        invoice_number:  genInvoiceNumber(),
+        invoice_number:  genInvoiceNumber(),
     po_number:       '',
         invoice_date:    today(),
         due_date:        '',
@@ -339,8 +340,53 @@ export default function InvoicesTab() {
     .filter(inv => inv.invoice_status === 'awaiting_payment')
     .reduce((sum, inv) => sum + inv.total, 0)
 
+  // ── PAST DUE (migration 143) ──
+  // Awaiting payment AND past its due date. daysPastDue owns the rule, including
+  // that DUE ON RECEIPT is past due the day after it is sent — such an invoice has
+  // no stored due date, so the clock starts from sent_to_customer_at instead.
+  //
+  // Returns null, not 0, when there is nothing to measure from: an invoice with no
+  // due date that has never been sent is not "due today".
+  const pastDue = invoices
+    .filter(inv => inv.invoice_status === 'awaiting_payment')
+    .map(inv => ({ inv, days: daysPastDue(inv as unknown as Record<string, unknown>) }))
+    .filter((x): x is { inv: typeof x.inv; days: number } => x.days !== null && x.days > 0)
+    .sort((a, b) => b.days - a.days)
+  const totalPastDue = pastDue.reduce((sum, x) => sum + x.inv.total, 0)
+
   return (
     <div className="space-y-4">
+
+      {/* ── PAST DUE ──
+          Above the outstanding card, because it is the one that needs a phone call.
+          Hidden entirely when nothing is past due rather than showing a cheerful
+          zero. */}
+      {pastDue.length > 0 && (
+        <div className="px-5 py-4 bg-danger/10 border border-danger/25 rounded-2xl space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-danger/70 text-xs uppercase tracking-widest">Past Due</p>
+              <p className="font-condensed font-bold text-danger text-2xl leading-none">{fmt(totalPastDue)}</p>
+            </div>
+            <p className="text-danger/60 text-xs">
+              {pastDue.length} invoice{pastDue.length === 1 ? '' : 's'}
+            </p>
+          </div>
+          <div className="space-y-1 pt-1">
+            {pastDue.slice(0, 6).map(({ inv, days }) => (
+              <div key={inv.id} className="flex items-center justify-between gap-3 text-xs">
+                <span className="font-mono text-white/70 truncate">{inv.invoice_number}</span>
+                <span className="text-danger/80 flex-shrink-0">
+                  {days} day{days === 1 ? '' : 's'} past due · {fmt(inv.total)}
+                </span>
+              </div>
+            ))}
+            {pastDue.length > 6 && (
+              <p className="text-white/35 text-xs pt-0.5">and {pastDue.length - 6} more</p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Metric cards */}
       {(totalOutstanding > 0 || (totalCollectedThisMonth != null && totalCollectedThisMonth > 0)) && (
