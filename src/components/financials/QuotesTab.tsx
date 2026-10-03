@@ -14,6 +14,41 @@ import NewQuoteForm from './NewQuoteForm'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * What this quote is FOR, when nobody picked a job category.
+ *
+ * A from-scratch quote has no job_category and no job_subtype, so the list showed
+ * a bare dash — true of 10 of 15 production quotes. The description is sitting in
+ * the line items; this reads it rather than making a shop open the quote to find
+ * out what it was.
+ *
+ * Parts are preferred over labour: "Replacement Engine Radiator" identifies a job
+ * and "Labor" does not. A detailer's quote has no line_items at all, so
+ * service_lines are the fallback after that.
+ *
+ * Returns null — not a dash — so the caller owns the empty case.
+ */
+function firstLineLabel(quote: { line_items?: unknown; service_lines?: unknown }): string | null {
+  const items = Array.isArray(quote.line_items) ? quote.line_items : []
+  const described = items
+    .map(li => String((li as Record<string, unknown>)?.description ?? '').trim())
+    .filter(Boolean)
+  // A parts line names the job; "Labor" on its own does not.
+  const parts  = described.filter(d => !/^labor\b/i.test(d))
+  const chosen = parts[0] ?? described[0] ?? null
+  if (chosen) {
+    const more = described.length - 1
+    return more > 0 ? `${chosen} +${more}` : chosen
+  }
+
+  const services = Array.isArray(quote.service_lines) ? quote.service_lines : []
+  const names = services
+    .map(sl => String((sl as Record<string, unknown>)?.service_name ?? '').trim())
+    .filter(Boolean)
+  if (names.length === 0) return null
+  return names.length > 1 ? `${names[0]} +${names.length - 1}` : names[0]
+}
+
 const fmt = (n: number | null | undefined) =>
   n == null
     ? '—'
@@ -931,9 +966,15 @@ function QuoteDetailModal({
     ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ')
     : '—'
 
+  // A FROM-SCRATCH QUOTE HAS NO job_category OR job_subtype, so this showed a bare
+  // dash — 10 of 15 production quotes do. The work is right there in the line items,
+  // so fall back to the first one that has a description, then to a detailer's
+  // service lines. Only a quote with genuinely nothing on it gets the dash.
   const jobDesc = Array.isArray(initialQuote.jobs) && initialQuote.jobs.length > 1
     ? `${initialQuote.jobs.length} Services`
-    : [initialQuote.job_category, initialQuote.job_subtype].filter(Boolean).join(' / ') || '—'
+    : [initialQuote.job_category, initialQuote.job_subtype].filter(Boolean).join(' / ')
+      || firstLineLabel(initialQuote)
+      || '—'
 
   const timeline: { label: string; ts: string | null; detail?: string }[] = [
     { label: 'Created',   ts: liveQuote.created_at },
@@ -2391,9 +2432,13 @@ export default function QuotesTab({ initialQuoteId, isDetailer = false, workOrde
                   const vehicleLabel = q.vehicle
                     ? [q.vehicle.year, q.vehicle.make, q.vehicle.model].filter(Boolean).join(' ')
                     : '—'
+                  // Falls back to the first line item, then a detailer's services.
+                  // A from-scratch quote has no job category and was showing a dash.
                   const jobDesc = Array.isArray(q.jobs) && q.jobs.length > 1
                     ? `${q.jobs.length} Services`
-                    : [q.job_category, q.job_subtype].filter(Boolean).join(' / ') || '—'
+                    : [q.job_category, q.job_subtype].filter(Boolean).join(' / ')
+                      || firstLineLabel(q)
+                      || '—'
 
                   return (
                     <tr
@@ -2435,7 +2480,9 @@ export default function QuotesTab({ initialQuoteId, isDetailer = false, workOrde
                 : '—'
               const jobDesc = Array.isArray(q.jobs) && q.jobs.length > 1
                 ? `${q.jobs.length} Services`
-                : [q.job_category, q.job_subtype].filter(Boolean).join(' / ') || '—'
+                : [q.job_category, q.job_subtype].filter(Boolean).join(' / ')
+                  || firstLineLabel(q)
+                  || '—'
 
               return (
                 <button

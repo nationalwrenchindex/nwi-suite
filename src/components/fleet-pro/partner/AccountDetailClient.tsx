@@ -248,14 +248,15 @@ export default function AccountDetailClient({ accountId }: { accountId: string }
       <p className="text-sm mb-4" style={{ color: DIM2 }}>
         {account.fleet_name}
         <span style={{ color: DIM }}>
-          {' · '}{account.unit_count} unit{account.unit_count === 1 ? '' : 's'}
+          {/* Pieces of equipment, because that is the billable thing. */}
+          {' · '}{account.unit_count} piece{account.unit_count === 1 ? '' : 's'} of equipment
           {' · '}{account.member_count} portal user{account.member_count === 1 ? '' : 's'}
         </span>
       </p>
 
       {/* ── KPI strip. Cost basis is the partner's whole reason for this page. ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-2">
-        <Stat label="Units"        value={String(account.unit_count)} />
+        <Stat label="Equipment"    value={String(account.unit_count)} />
         <Stat label="Revenue MTD"  value={fmtMoneyWhole(cost_summary.revenue_mtd)} color={accent} />
         <Stat label="Revenue YTD"  value={fmtMoneyWhole(cost_summary.revenue_ytd)} color={accent} />
         <Stat label="Lifetime"     value={fmtMoneyWhole(cost_summary.lifetime_revenue)} />

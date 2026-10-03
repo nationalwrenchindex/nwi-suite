@@ -395,7 +395,9 @@ export default function DashboardClient() {
             sub={fleetCpmSub}
           />
         )}
-        <KpiCard label="Units"        value={String(dashboard.unit_count)} sub={dashboard.fleet_name} />
+        {/* "Equipment", not "Units": this is the figure the fleet is billed on, and
+            a truck with a reefer is two pieces. */}
+        <KpiCard label="Equipment"    value={String(dashboard.unit_count)} sub={dashboard.fleet_name} />
         <KpiCard label="Overdue"      value={String(dashboard.overdue_count)}
                  color={dashboard.overdue_count > 0 ? RED : '#ffffff'} sub="PM past due" />
         {/* Two units, one tile: a fleet's PMs are hours-based unless a manager set a date. */}

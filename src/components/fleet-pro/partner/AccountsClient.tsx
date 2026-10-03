@@ -369,6 +369,13 @@ export default function AccountsClient({ partnerName }: { partnerName: string })
           Every fleet you resell, how it is branded in their portal, and who you have seated on it.
           {rows.length > 0 && ` ${enabledCount} of ${rows.length} billing.`}
         </p>
+        {/* THE LINE THAT STOPS THE ARGUMENT. Billing counts PIECES OF EQUIPMENT,
+            not vehicles, and a reseller needs to be able to explain that to his
+            customer without guessing. */}
+        <p className="text-xs mt-2" style={{ color: 'rgba(255,255,255,0.35)' }}>
+          Equipment is counted per piece, not per vehicle: a truck with a reefer is 2 pieces,
+          a tractor with an APU is 2, a reefer trailer is 2.
+        </p>
       </header>
 
       {/* ── add ───────────────────────────────────────────────────────────── */}
@@ -514,7 +521,9 @@ export default function AccountsClient({ partnerName }: { partnerName: string })
             <table className="w-full min-w-[640px]" style={{ background: CARD }}>
               <thead style={{ background: HEAD }}>
                 <tr>
-                  {['Fleet', 'Brand', 'Units', 'People', 'Fleet Pro', ''].map((h, i) => (
+                  {/* "Equipment", not "Units" — this column is what the account is
+                      billed on, and a truck with a reefer counts as two. */}
+                  {['Fleet', 'Brand', 'Equipment', 'People', 'Fleet Pro', ''].map((h, i) => (
                     <th
                       key={h || `col-${i}`}
                       className="text-left text-xs uppercase tracking-wider font-medium px-4 py-3"
