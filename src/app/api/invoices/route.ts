@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { isMissingTaxBreakdownColumn, withoutTaxBreakdown } from '@/lib/tax'
+import { missingMigration142Column, withoutMigration142Columns } from '@/lib/migration-142'
 import { createClient } from '@/lib/supabase/server'
 
 const INVOICE_SELECT = `
@@ -89,6 +90,12 @@ export async function POST(request: NextRequest) {
       invoice_date:    body.invoice_date    ?? today,
       due_date:        body.due_date        ?? null,
       customer_id:     body.customer_id     ?? null,
+      // vehicle_id WAS NOT ACCEPTED AT ALL, so a dashboard-created invoice could not
+      // be linked to a unit even if the form sent one — which is why Fleet Pro has no
+      // cost history for anything billed this way.
+      vehicle_id:      body.vehicle_id      ?? null,
+      // The fleet's own identifier, carried onto the document (migration 142).
+      unit_number:     body.unit_number     ?? null,
       job_id:          body.job_id          ?? null,
       line_items:      body.line_items,
       subtotal:        Number(body.subtotal        ?? 0),
@@ -120,6 +127,17 @@ export async function POST(request: NextRequest) {
     ;({ data, error } = await supabase
       .from('invoices')
       .insert(withoutTaxBreakdown(invoiceRow))
+      .select(INVOICE_SELECT)
+      .single())
+  }
+
+  // Same window, migration 142 — unit_number. The invoice itself is complete
+  // without it, so it is the field that gets dropped and not the invoice.
+  if (error && missingMigration142Column(error)) {
+    console.error('[POST /api/invoices] unit_number missing — run migration 142', error.message)
+    ;({ data, error } = await supabase
+      .from('invoices')
+      .insert(withoutMigration142Columns(withoutTaxBreakdown(invoiceRow)))
       .select(INVOICE_SELECT)
       .single())
   }

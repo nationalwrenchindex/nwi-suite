@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation'
 import type { Invoice, InvoiceStatus, InvoiceProgressStatus, LineItem, PaymentMethod } from '@/types/financials'
 import { money } from '@/lib/format'
 import { daysPastDue } from '@/lib/hd/payment-terms'
+import CustomerUnitPicker from '@/components/work-orders/CustomerUnitPicker'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -178,6 +179,13 @@ export default function InvoicesTab() {
     invoice_date:    today(),
     due_date:        '',
     customer_id:     '',
+    // The picker hands these over and three forms were throwing them away. Held so
+    // the form can confirm who is being billed, and so vehicle_id can be sent at all.
+    customer_name:   '',
+    customer_phone:  '',
+    customer_email:  '',
+    vehicle_id:      '',
+    unit_number:     '',
     line_items:      [emptyLine()] as LineItem[],
     tax_rate:        0,
     discount_amount: 0,
@@ -273,6 +281,10 @@ export default function InvoicesTab() {
           invoice_date:    form.invoice_date,
           due_date:        form.due_date || null,
           customer_id:     form.customer_id || null,
+          // Sent now, and the route accepts them now. An invoice with no vehicle_id
+          // never reaches that unit's cost history.
+          vehicle_id:      form.vehicle_id || null,
+          unit_number:     form.unit_number.trim() || null,
           line_items:      form.line_items,
           subtotal,
           // A FRACTION, not a percent. invoices.tax_rate is numeric(6,4) and the only
@@ -297,6 +309,11 @@ export default function InvoicesTab() {
         invoice_date:    today(),
         due_date:        '',
         customer_id:     '',
+        customer_name:   '',
+        customer_phone:  '',
+        customer_email:  '',
+        vehicle_id:      '',
+        unit_number:     '',
         line_items:      [emptyLine()],
         tax_rate:        0,
         discount_amount: 0,
@@ -500,14 +517,49 @@ export default function InvoicesTab() {
               </div>
             </div>
 
+            {/* ── CUSTOMER AND UNIT, PICKED (Part 5) ──
+                This was a text input labelled "Customer ID (optional) — UUID from
+                Intel Hub". Nobody pastes a UUID, so both dashboard-created invoices
+                in production have no customer and no vehicle at all — and there was
+                no vehicle field here whatsoever.
+
+                CustomerUnitPicker is the same component the work-order form and the
+                new-quote form use. Searching picks an existing record; the create
+                buttons inside it go through POST /api/customers and /api/vehicles,
+                so a genuinely new customer is created in Intel Hub AND LINKED —
+                which means the next invoice for them prefills. The dedupe on
+                /api/customers means a name typed again matches the existing row
+                rather than making a second one. */}
+            <CustomerUnitPicker
+              customerId={form.customer_id || null}
+              onCustomerChange={(id, c) => setForm(p => ({
+                ...p,
+                customer_id: id ?? '',
+                // The picker hands over the whole customer and three forms were
+                // taking the id and dropping the rest. Held so the form can show who
+                // is being billed without a second lookup.
+                customer_name:  c ? `${c.first_name ?? ''} ${c.last_name ?? ''}`.trim() : '',
+                customer_phone: c?.phone ?? '',
+                customer_email: c?.email ?? '',
+              }))}
+              vehicleId={form.vehicle_id || null}
+              onVehicleChange={id => setForm(p => ({ ...p, vehicle_id: id ?? '' }))}
+              unitLabel={form.unit_number}
+              onUnitLabelChange={s => setForm(p => ({ ...p, unit_number: s }))}
+              disabled={submitting}
+            />
+
+            {/* What the picker resolved, so a tech can see it took. */}
+            {form.customer_id && (form.customer_phone || form.customer_email) && (
+              <p className="text-white/35 text-xs -mt-2">
+                Billing {form.customer_name || 'this customer'}
+                {' · '}
+                {[form.customer_phone, form.customer_email].filter(Boolean).join('  ·  ')}
+              </p>
+            )}
+
             {/* Row 2 */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="nwi-label">Customer ID <span className="normal-case text-white/20">(optional)</span></label>
-                <input className="nwi-input" placeholder="UUID from Intel Hub"
-                  value={form.customer_id}
-                  onChange={e => setForm(p => ({ ...p, customer_id: e.target.value }))} />
-              </div>
               <div>
                 <label className="nwi-label">Status</label>
                 <select className="nwi-input" value={form.status}
