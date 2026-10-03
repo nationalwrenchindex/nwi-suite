@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
 import { logHDCustomer } from '@/lib/hd/customer-logging'
 import { isMissingTaxBreakdownColumn, withoutTaxBreakdown } from '@/lib/tax'
+import { missingMigration142Column, withoutMigration142Columns } from '@/lib/migration-142'
 import { addressFrom } from '@/lib/address'
 import { resolveInvoiceFleetLinks } from '@/lib/fleet-pro/invoice-link'
 import { costingFromLineItems, isMissingCostingColumn } from '@/lib/hd/invoice-costing'
@@ -174,6 +175,19 @@ export async function POST(req: NextRequest) {
     ;({ data, error } = await supabase
       .from('hd_invoices')
       .insert(withoutTaxBreakdown(insertRow))
+      .select()
+      .single())
+  }
+
+  // Same window again, migration 142 — unit_number, internal_notes, the billable
+  // extras and the markup in force. Every one of them is metadata; the money on
+  // this invoice is complete without them, so the invoice saves and the tech is
+  // not told to come back after a migration they cannot run.
+  if (error && missingMigration142Column(error)) {
+    console.error('[hd/invoices] a migration 142 column is missing — run migration 142', error.message)
+    ;({ data, error } = await supabase
+      .from('hd_invoices')
+      .insert(withoutMigration142Columns(withoutTaxBreakdown(insertRow)))
       .select()
       .single())
   }

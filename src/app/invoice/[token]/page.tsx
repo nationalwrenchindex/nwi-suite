@@ -39,6 +39,7 @@ import { money } from '@/lib/format'
 const INVOICE_SELECT = `
   id, invoice_number, po_number, invoice_status, public_token,
   invoice_date, due_date, terms, total, subtotal, tax_rate, tax_amount, tax_breakdown,
+  unit_number,
   job_category, job_subtype, job_notes, jobs,
   line_items, shop_supplies, additional_parts, additional_labor,
   payment_instructions, finalized_at, created_at,
@@ -46,7 +47,7 @@ const INVOICE_SELECT = `
   sent_to_customer_at, paid_at,
   service_lines, adjustments, tip_amount_cents,
   customer:customers(id, first_name, last_name, phone, email, address_line1, address_line2, city, state, zip),
-  vehicle:vehicles(id, year, make, model, vin),
+  vehicle:vehicles(id, year, make, model, vin, unit_number),
   source_quote:quotes!invoices_source_quote_id_fkey(id, quote_number, parts_subtotal, parts_markup_percent, labor_subtotal, labor_hours, labor_rate),
   user_id
 `
@@ -211,6 +212,13 @@ export default async function PublicInvoicePage(
   const vehicleLabel = inv.vehicle
     ? [inv.vehicle.year, inv.vehicle.make, inv.vehicle.model].filter(Boolean).join(' ')
     : null
+
+  // The invoice's own snapshot wins over the live vehicle record: this is billed
+  // history, and it must still read correctly after the unit is renumbered.
+  const unitNumber: string | null =
+    (typeof inv.unit_number === 'string' && inv.unit_number.trim() ? inv.unit_number.trim() : null) ??
+    (typeof inv.vehicle?.unit_number === 'string' && inv.vehicle.unit_number.trim()
+      ? inv.vehicle.unit_number.trim() : null)
 
   const isPaid = inv.invoice_status === 'paid'
 
@@ -389,11 +397,19 @@ export default async function PublicInvoicePage(
               {customer.email && <p className="text-sm" style={{ color: MUTED }}>{customer.email}</p>}
             </div>
 
-            {/* Vehicle */}
-            {vehicleLabel && (
+            {/* Vehicle. The unit number leads, because that is what a fleet
+                customer matches this invoice against in their own records — the
+                VIN is for a title or a warranty claim. Taken from the invoice's
+                own snapshot first, then the vehicle record. */}
+            {(unitNumber || vehicleLabel) && (
               <div>
-                <SectionLabel>Vehicle</SectionLabel>
-                <p className="font-medium text-sm" style={{ color: TEXT }}>{vehicleLabel}</p>
+                <SectionLabel>{unitNumber ? 'Unit' : 'Vehicle'}</SectionLabel>
+                {unitNumber && (
+                  <p className="font-bold text-base" style={{ color: TEXT }}>{unitNumber}</p>
+                )}
+                {vehicleLabel && (
+                  <p className="font-medium text-sm" style={{ color: TEXT }}>{vehicleLabel}</p>
+                )}
                 {inv.vehicle?.vin && (
                   <p className="text-xs font-mono mt-0.5" style={{ color: MUTED }}>VIN: {inv.vehicle.vin}</p>
                 )}

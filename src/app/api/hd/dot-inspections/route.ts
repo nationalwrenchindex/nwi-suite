@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { inspectionInvoiceMoney } from '@/lib/hd/inspection-invoice'
 import { logHDCustomer } from '@/lib/hd/customer-logging'
 import { createClient } from '@/lib/supabase/server'
+import { writeToleratingMigration142 } from '@/lib/migration-142'
 import { checkHDStarterAccess } from '@/lib/hd-access'
 import { CATEGORY_ITEMS, itemLabel } from '@/lib/hd/dot-categories'
 
@@ -30,6 +31,7 @@ export async function POST(req: NextRequest) {
       removed_from_service?: boolean | null
       signature_data?: string
       customer_name?: string
+      unit_number?: string
       unit_manufacturer?: string
       unit_model?: string
       unit_serial?: string
@@ -135,9 +137,8 @@ export async function POST(req: NextRequest) {
         companyName:   null,
       })
 
-      const { data: newInv, error: invErr } = await supabase
-        .from('hd_invoices')
-        .insert({
+      const { data: newInv, error: invErr } = await writeToleratingMigration142<Record<string, unknown>, { id: string }>(
+        {
           user_id:           user.id,
           customer_id:       linkedCustomerId,
           invoice_number:    invoiceNumber,
@@ -148,6 +149,7 @@ export async function POST(req: NextRequest) {
           customer_name:     body.customer_name || 'Fleet Customer',
           customer_phone:    customerPhone,
           customer_email:    customerEmail,
+          unit_number:       body.unit_number ?? null,
           unit_manufacturer: body.unit_manufacturer ?? null,
           unit_model:        body.unit_model ?? null,
           unit_serial:       body.unit_serial ?? null,
@@ -160,10 +162,13 @@ export async function POST(req: NextRequest) {
           ...invoiceMoney,
           status:            'unpaid',
           notes:             `Auto-created from DOT inspection on ${new Date().toISOString().slice(0, 10)}`,
-        })
-        .select('id')
-        .single()
-      if (invErr) { console.error('[dot-inspections] invoice create failed', invErr); invoiceError = invErr.message }
+        },
+        row => supabase.from('hd_invoices').insert(row).select('id').single(),
+      )
+      if (invErr) {
+        console.error('[dot-inspections] invoice create failed', invErr)
+        invoiceError = (invErr as { message?: string }).message ?? 'Invoice creation failed'
+      }
       else linkedInvoiceId = newInv?.id ?? null
     }
 
@@ -171,9 +176,12 @@ export async function POST(req: NextRequest) {
     const suffix      = Math.random().toString(36).substring(2, 8).toUpperCase()
     const inspectionId = `DOT-${dateStr}-${suffix}`
 
-    const { data, error } = await supabase
-      .from('hd_dot_inspections')
-      .insert({
+    // THE RETRY MATTERS MORE HERE THAN ANYWHERE. This insert is a completed DOT
+    // annual inspection — a tech has walked the vehicle and signed it. Failing it
+    // because migration 142 has not been applied yet would throw away the
+    // inspection itself, not a reporting field.
+    const { data, error } = await writeToleratingMigration142<Record<string, unknown>, { id: string; inspection_id: string }>(
+      {
         user_id:               user.id,
         unit_id:               body.unit_id ?? null,
         work_order_id:         body.work_order_id ?? null,
@@ -194,6 +202,7 @@ export async function POST(req: NextRequest) {
           typeof body.removed_from_service === 'boolean' ? body.removed_from_service : null,
         signature_data:        body.signature_data ?? null,
         customer_name:         body.customer_name ?? null,
+        unit_number:           body.unit_number ?? null,
         unit_manufacturer:     body.unit_manufacturer ?? null,
         unit_model:            body.unit_model ?? null,
         unit_serial:           body.unit_serial ?? null,
@@ -201,11 +210,11 @@ export async function POST(req: NextRequest) {
         locked:                true,
         locked_at:             new Date().toISOString(),
         inspection_id:         inspectionId,
-      })
-      .select('id, inspection_id')
-      .single()
+      },
+      row => supabase.from('hd_dot_inspections').insert(row).select('id, inspection_id').single(),
+    )
 
-    if (error) {
+    if (error || !data) {
       console.error('[dot-inspections] Insert error', error)
       return NextResponse.json({ error: 'Failed to save inspection' }, { status: 500 })
     }

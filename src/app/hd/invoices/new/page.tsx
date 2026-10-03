@@ -98,7 +98,7 @@ export default function NewInvoicePage() {
     corp_address_line1: '', corp_address_line2: '', corp_city: '', corp_state: '', corp_zip: '',
     has_corp_address: false,
     payment_terms: 'net30',
-    unit_manufacturer: '', unit_model: '', unit_serial: '', unit_year: '',
+    unit_number: '', unit_manufacturer: '', unit_model: '', unit_serial: '', unit_year: '',
     truck_make: '', truck_model: '', truck_year: '', vin: '',
     complaint: '', diagnosis: '',
     labor_rate: 125, diagnostic_fee: 125, include_diagnostic: false,
@@ -181,6 +181,7 @@ export default function NewInvoicePage() {
       // carries prefilled values. The PM path keeps its original behavior of naming
       // a non-reefer brand in the complaint line instead.
       unit_manufacturer: (woId || isReeferBrand) ? (mfr || f.unit_manufacturer) : f.unit_manufacturer,
+      unit_number:       text('unit_number') || f.unit_number,
       unit_model:        text('unit_model')  || f.unit_model,
       unit_serial:       text('unit_serial') || f.unit_serial,
       unit_year:         text('unit_year')   || f.unit_year,
@@ -221,6 +222,7 @@ export default function NewInvoicePage() {
       localStorage.removeItem('hd_guided_diagnostic_prefill')
       const p = JSON.parse(raw) as {
         complaint?: string; diagnosis?: string; notes?: string
+        unit_number?: string
         unit_manufacturer?: string; unit_model?: string; unit_serial?: string; unit_year?: string
         truck_make?: string; truck_model?: string; truck_year?: string; vin?: string
         labor_rate?: number; include_diagnostic?: boolean; diagnostic_fee?: number
@@ -234,6 +236,7 @@ export default function NewInvoicePage() {
         ...(p.diagnosis ? { diagnosis: p.diagnosis } : {}),
         ...(p.notes     ? { notes:     p.notes     } : {}),
         ...(p.unit_manufacturer ? { unit_manufacturer: p.unit_manufacturer } : {}),
+        ...(p.unit_number ? { unit_number: p.unit_number } : {}),
         ...(p.unit_model  ? { unit_model:  p.unit_model  } : {}),
         ...(p.unit_serial ? { unit_serial: p.unit_serial } : {}),
         ...(p.unit_year   ? { unit_year:   p.unit_year   } : {}),
@@ -387,6 +390,7 @@ export default function NewInvoicePage() {
         corp_state:        form.has_corp_address ? (form.corp_state || null) : null,
         corp_zip:          form.has_corp_address ? (form.corp_zip || null) : null,
         payment_terms:     form.payment_terms || 'net30',
+        unit_number:       form.unit_number || null,
         unit_manufacturer: form.unit_manufacturer || null,
         unit_model:        form.unit_model || null,
         unit_serial:       form.unit_serial || null,
@@ -522,7 +526,13 @@ export default function NewInvoicePage() {
             </div>
           )}
 
+          {/* Unit number first, because it is the identifier the customer files
+              this invoice against. Their convention, not ours — chassis 1,
+              reefer 1R, APU 2APU. */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+            <Field label="Unit #">
+              <input style={inp} value={form.unit_number} onChange={e => setField('unit_number', e.target.value)} placeholder="1R" />
+            </Field>
             <Field label="Manufacturer">
               <select style={inp} value={form.unit_manufacturer} onChange={e => setField('unit_manufacturer', e.target.value)}>
                 <option value="">Select...</option>

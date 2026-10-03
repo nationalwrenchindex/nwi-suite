@@ -26,10 +26,17 @@ export interface VehicleLite {
   make:  string
   model: string
   vin:   string | null
+  /** The fleet's own number for the unit — chassis 1, reefer 1R, APU 2APU. */
+  unit_number?: string | null
 }
 
 export function vehicleLabel(v: VehicleLite): string {
-  return [v.year, v.make, v.model].filter(Boolean).join(' ')
+  // The unit number leads where there is one, because that is how the shop and
+  // the fleet refer to the equipment in conversation.
+  const ymm = [v.year, v.make, v.model].filter(Boolean).join(' ')
+  const no  = v.unit_number?.trim()
+  if (no) return ymm ? `${no} — ${ymm}` : no
+  return ymm
 }
 
 export default function CustomerUnitPicker({
@@ -59,7 +66,7 @@ export default function CustomerUnitPicker({
   const [notice, setNotice] = useState<string | null>(null)
 
   const [creatingVehicle, setCreatingVehicle] = useState(false)
-  const [newVeh, setNewVeh] = useState({ year: '', make: '', model: '', vin: '' })
+  const [newVeh, setNewVeh] = useState({ unit_number: '', year: '', make: '', model: '', vin: '' })
   const [savingVeh, setSavingVeh] = useState(false)
 
   // Free text vs a real vehicles row. Seeded from whichever the record already has
@@ -138,6 +145,7 @@ export default function CustomerUnitPicker({
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
           customer_id: customerId,
+          unit_number: newVeh.unit_number.trim() || null,
           year:  newVeh.year ? Number(newVeh.year) : null,
           make:  newVeh.make.trim(),
           model: newVeh.model.trim(),
@@ -151,7 +159,7 @@ export default function CustomerUnitPicker({
       onVehicleChange(v.id)
       onUnitLabelChange('')
       setCreatingVehicle(false)
-      setNewVeh({ year: '', make: '', model: '', vin: '' })
+      setNewVeh({ unit_number: '', year: '', make: '', model: '', vin: '' })
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Could not add vehicle')
     }
@@ -313,6 +321,12 @@ export default function CustomerUnitPicker({
 
             {creatingVehicle ? (
               <div className="rounded-xl border border-white/10 p-3 space-y-2 bg-white/5">
+                {/* Captured once here, and every future document for this unit
+                    prefills it. Without it a fleet customer cannot match an
+                    invoice to their own equipment list. */}
+                <input className="nwi-input text-sm" placeholder="Unit # (optional) — e.g. 1R"
+                  value={newVeh.unit_number}
+                  onChange={e => setNewVeh(v => ({ ...v, unit_number: e.target.value }))} />
                 <div className="grid grid-cols-3 gap-2">
                   <input className="nwi-input text-sm" placeholder="Year" inputMode="numeric"
                     value={newVeh.year}

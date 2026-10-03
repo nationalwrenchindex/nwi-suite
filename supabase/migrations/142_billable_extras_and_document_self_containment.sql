@@ -110,8 +110,15 @@ DECLARE
   t text;
 BEGIN
   FOR t IN SELECT * FROM unnest(ARRAY[
+    -- Documents
     'work_orders', 'quotes', 'invoices',
     'hd_work_orders', 'hd_quotes', 'hd_invoices',
+    -- Inspection reports. These are customer-facing documents too — a DOT
+    -- certificate or an ANSI A92 record goes in the customer's file, and
+    -- without the unit number they cannot file it against their own equipment.
+    'hd_dot_inspections', 'hd_aerial_inspections',
+    'hd_equipment_inspections', 'hd_pm_checklists',
+    -- The unit record itself, so LD has somewhere to hold it at all.
     'vehicles'
   ]::text[])
   LOOP

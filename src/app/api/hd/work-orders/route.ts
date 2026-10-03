@@ -96,6 +96,7 @@ export async function POST(req: NextRequest) {
       fleet_account_id:         str(body.fleet_account_id),
       customer_name:            customerName,
       customer_phone:           str(body.customer_phone),
+      unit_number:              str(body.unit_number),
       unit_manufacturer:        str(body.unit_manufacturer),
       unit_model:               str(body.unit_model),
       unit_serial:              str(body.unit_serial),

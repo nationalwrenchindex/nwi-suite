@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { writeToleratingMigration142 } from '@/lib/migration-142'
 
 // ─── GET /api/vehicles?limit=N ────────────────────────────────────────────────
 // Returns recent vehicles across all of the authenticated user's customers
@@ -15,7 +16,7 @@ export async function GET(request: NextRequest) {
 
   let query = supabase
     .from('vehicles')
-    .select('id, year, make, model, vin, customers!inner(user_id)')
+    .select('id, unit_number, year, make, model, vin, customers!inner(user_id)')
     .eq('customers.user_id', user.id)
     .order('created_at', { ascending: false })
     .limit(limit)
@@ -63,10 +64,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Customer not found or access denied' }, { status: 404 })
   }
 
-  const { data, error } = await supabase
-    .from('vehicles')
-    .insert({
+  const { data, error } = await writeToleratingMigration142(
+    {
       customer_id:   body.customer_id,
+      // The fleet's own identifier. Captured once here and every future document
+      // for this unit prefills it.
+      unit_number:   body.unit_number   ?? null,
       year:          body.year          ?? null,
       make:          (body.make as string).trim(),
       model:         (body.model as string).trim(),
@@ -78,13 +81,16 @@ export async function POST(request: NextRequest) {
       engine:        body.engine        ?? null,
       transmission:  body.transmission  ?? null,
       notes:         body.notes         ?? null,
-    })
-    .select('*')
-    .single()
+    } as Record<string, unknown>,
+    // Migration 142 is applied by hand; losing a vehicle a tech just typed over a
+    // column that does not exist yet would be the wrong trade.
+    row => supabase.from('vehicles').insert(row).select('*').single(),
+  )
 
   if (error) {
     console.error('[POST /api/vehicles]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    const msg = (error as { message?: string }).message
+    return NextResponse.json({ error: msg ?? 'Could not add vehicle' }, { status: 500 })
   }
 
   return NextResponse.json({ vehicle: data }, { status: 201 })

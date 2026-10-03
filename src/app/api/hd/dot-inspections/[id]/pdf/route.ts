@@ -158,7 +158,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const signedAt   = fmtStamp(insp.locked_at)
 
   const factRows: { label: string; value: string }[] = [
-    { label: 'Unit Number',     value: str(u?.unit_number) ?? str(insp.unit_identifier) ?? '—' },
+    // The live unit record first, then the snapshot taken at inspection time
+    // (migration 142), then the legacy free-text identifier. A report printed
+    // after the unit was deleted still has to name the unit it certified.
+    { label: 'Unit Number',     value: str(u?.unit_number) ?? str(insp.unit_number) ?? str(insp.unit_identifier) ?? '—' },
     { label: 'Make / Model',    value: [str(u?.manufacturer) ?? str(insp.unit_manufacturer), str(u?.model) ?? str(insp.unit_model)].filter(Boolean).join(' ') || '—' },
     { label: 'Serial / VIN',    value: str(u?.serial_number) ?? str(insp.unit_serial) ?? '—' },
     { label: 'Truck / Trailer', value: str(u?.truck_trailer_number) ?? '—' },

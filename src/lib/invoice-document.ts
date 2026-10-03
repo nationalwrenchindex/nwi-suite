@@ -310,8 +310,23 @@ export function serviceUnitLines(inv: Record<string, unknown>): LabelledLine[] {
   const s = (v: unknown) => (typeof v === 'string' ? v.trim() : v == null ? '' : String(v))
   const out: LabelledLine[] = []
 
-  const headline = [s(inv.unit_manufacturer), s(inv.unit_model)].filter(Boolean).join(' ')
-  if (headline) out.push({ label: null, value: headline })
+  // THE UNIT NUMBER COMES FIRST, and it is the headline.
+  //
+  // It is the identifier a shop and a fleet actually use to refer to a piece of
+  // equipment — chassis 1, reefer 1R, APU 2APU. The serial is for a warranty
+  // claim. A document that leads with "Carrier Transicold X2 2500A, Serial
+  // NAV91291602" cannot be filed against a customer's own equipment list, which
+  // is the whole purpose of them keeping it.
+  const unitNo = s(inv.unit_number)
+  const model  = [s(inv.unit_manufacturer), s(inv.unit_model)].filter(Boolean).join(' ')
+
+  if (unitNo) {
+    out.push({ label: 'Unit', value: unitNo })
+    if (model) out.push({ label: null, value: model })
+  } else if (model) {
+    out.push({ label: null, value: model })
+  }
+
   if (s(inv.unit_serial)) out.push({ label: 'Serial',  value: s(inv.unit_serial) })
   if (s(inv.unit_year))   out.push({ label: 'Year',    value: s(inv.unit_year) })
 
@@ -320,6 +335,40 @@ export function serviceUnitLines(inv: Record<string, unknown>): LabelledLine[] {
   if (s(inv.vin)) out.push({ label: 'VIN', value: s(inv.vin) })
 
   return out
+}
+
+/**
+ * The unit fields a document copies off a unit record at creation time.
+ *
+ * ONE PLACE, because there are eleven capture points and unit_number was about
+ * to be added to each of them by hand. Denormalising is the existing convention
+ * and is correct: a document is billed history and must still read properly after
+ * the unit is renumbered, re-serialled or deleted.
+ *
+ * Accepts either an `hd_units` row (unit_number / manufacturer / model /
+ * serial_number / year) or an LD `vehicles` row (unit_number / make / model /
+ * vin / year), because callers on both sides need the same snapshot.
+ */
+export function unitSnapshot(unit: Record<string, unknown> | null | undefined): {
+  unit_number:       string | null
+  unit_manufacturer: string | null
+  unit_model:        string | null
+  unit_serial:       string | null
+  unit_year:         number | null
+} {
+  const u = unit ?? {}
+  const s = (v: unknown): string | null => {
+    const t = typeof v === 'string' ? v.trim() : v == null ? '' : String(v).trim()
+    return t || null
+  }
+  const yr = Number(u.year)
+  return {
+    unit_number:       s(u.unit_number),
+    unit_manufacturer: s(u.manufacturer ?? u.make),
+    unit_model:        s(u.model),
+    unit_serial:       s(u.serial_number ?? u.unit_serial ?? u.vin),
+    unit_year:         Number.isFinite(yr) && yr > 0 ? yr : null,
+  }
 }
 
 // ─── HD: the fee rows in the totals box ───────────────────────────────────────

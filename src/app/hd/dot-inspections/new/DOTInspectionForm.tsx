@@ -417,6 +417,9 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
           removed_from_service:  itemDerivedOos,
           signature_data:        signatureData,
           customer_name:         (selectedAccount?.fleet_name || customerName) || undefined,
+          // The unit record already carried this and the form was dropping it.
+          // It is the identifier the customer files the certificate against.
+          unit_number:           selectedUnit?.unit_number || undefined,
           unit_manufacturer:     (selectedUnit?.manufacturer || unitManufacturer) || undefined,
           unit_model:            (selectedUnit?.model || unitModel) || undefined,
           unit_serial:           (selectedUnit?.serial_number || unitSerial) || undefined,

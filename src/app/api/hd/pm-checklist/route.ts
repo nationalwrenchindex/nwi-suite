@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { checkHDAccess } from '@/lib/hd-access'
 import { sendPmReportEmail } from '@/lib/hd/pm-report-email'
+import { unitSnapshot } from '@/lib/invoice-document'
 
 // Labor hours for an auto-created PM invoice, by PM type. Handles both the checklist
 // codes (dry/3000hr/full_belts_*) and the human labels used elsewhere. Order matters:
@@ -58,7 +59,7 @@ export async function POST(req: NextRequest) {
     let customerName = typeof customer_name === 'string' && customer_name.trim() ? customer_name.trim() : ''
     let customerPhone: string | null = null
     let customerEmail: string | null = null
-    let unitRow: { manufacturer?: string; model?: string; serial_number?: string; year?: number | null } | null = null
+    let unitRow: { unit_number?: string; manufacturer?: string; model?: string; serial_number?: string; year?: number | null } | null = null
     // Fleet Pro: the auto-created invoice needs a structural fleet link or it never
     // reaches the customer's portal. Resolved here because the unit lookup below is
     // the only place the unit's fleet is known.
@@ -83,7 +84,7 @@ export async function POST(req: NextRequest) {
     if (unit_id) {
       const { data: unit } = await svc
         .from('hd_units')
-        .select('manufacturer, model, serial_number, year, fleet_account_id')
+        .select('unit_number, manufacturer, model, serial_number, year, fleet_account_id')
         .eq('id', unit_id)
         .eq('user_id', user.id)
         .single()
@@ -162,10 +163,9 @@ export async function POST(req: NextRequest) {
         customer_name:     customerName,
         customer_phone:    customerPhone,
         customer_email:    customerEmail,
-        unit_manufacturer: unitRow?.manufacturer ?? null,
-        unit_model:        unitRow?.model ?? null,
-        unit_serial:       unitRow?.serial_number ?? null,
-        unit_year:         unitRow?.year != null ? String(unitRow.year) : null,
+        // One snapshot helper rather than a hand-copied block per call site —
+        // unit_number was about to be the fifth field to add in eleven places.
+        ...unitSnapshot(unitRow as Record<string, unknown> | null),
         line_items:        [laborLine],
         labor_rate:        laborRate,
         // EXPLICIT, every field. diagnostic_fee is DEFAULT 125.00 on this table, so
