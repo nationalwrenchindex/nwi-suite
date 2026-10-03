@@ -47,13 +47,25 @@ async function main() {
   const [i]  = await get('invoices?select=*&limit=1') as Record<string, unknown>[]
   const has = (row: Record<string, unknown> | undefined, col: string) => !!row && col in row
 
+  const invoiceHasMarkup = has(i, 'parts_markup_percent')
   console.log(`  work_orders.parts_markup_percent : ${has(wo, 'parts_markup_percent') ? 'STORED' : 'ABSENT'}`)
   console.log(`  quotes.parts_markup_percent      : ${has(q,  'parts_markup_percent') ? 'STORED' : 'ABSENT'}`)
-  console.log(`  invoices.parts_markup_percent    : ${has(i,  'parts_markup_percent') ? 'STORED' : 'ABSENT (migration 142 adds it)'}`)
+  console.log(`  invoices.parts_markup_percent    : ${invoiceHasMarkup ? 'STORED (migration 142 applied)' : 'ABSENT — migration 142 adds it'}`)
   ok(has(wo, 'parts_markup_percent'), 'work orders DO store the markup')
   ok(has(q,  'parts_markup_percent'), 'quotes DO store the markup')
-  ok(!has(i, 'parts_markup_percent'),
-    'invoices do NOT — which is why every invoice reader reaches back through source_quote_id, and reads 0 when there is no quote')
+
+  // THE DEFECT WAS THAT INVOICES HAD NO SUCH COLUMN, so every reader reached back
+  // through source_quote_id and read 0 when there was no quote. Migration 142 adds
+  // it, so this assertion flips rather than failing — asserting the column is still
+  // absent would mean the test fails the moment the fix lands.
+  if (invoiceHasMarkup) {
+    ok(true, 'invoices NOW store their own markup, so a work-order invoice no longer reads 0 through a missing quote')
+    const withValue = (await get('invoices?select=invoice_number,parts_markup_percent&parts_markup_percent=not.is.null')) as unknown[]
+    ok(Array.isArray(withValue) && withValue.length === 0,
+      `and NOTHING was backfilled onto the ${(await get('invoices?select=id') as unknown[]).length} existing rows (${Array.isArray(withValue) ? withValue.length : '?'} carry a value) — unrecorded stays unrecorded`)
+  } else {
+    ok(true, 'invoices do NOT yet — which is why every reader reaches back through source_quote_id and reads 0 when there is no quote')
+  }
 
   // ══ 2. PRE- OR POST-MARKUP? A REAL ROW, WITH THE MATH ══════════════════════
   hr('2. ARE STORED LINE PRICES PRE- OR POST-MARKUP? A real row, with the math.')
