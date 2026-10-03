@@ -284,6 +284,9 @@ export default async function PublicInvoicePage(
     return {
       key: `li-${i}`,
       description: description || 'Service',
+      // The part number is what lets a customer order the same part again, or
+      // check it against a warranty claim. Nothing captured it until now.
+      note: (li as { part_number?: string | null }).part_number || null,
       meta: lineMeta(qty, unit, labor),
       amount: Number(li.total ?? 0),
     }

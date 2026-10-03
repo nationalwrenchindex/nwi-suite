@@ -43,8 +43,8 @@ async function main() {
 
   // ── The lines a tech would type. unit_price is PRE-markup, the editor's convention ──
   const items = [
-    { _id: 'a', description: 'Brake pads, front axle set', quantity: 1, unit_price: 58.40 },
-    { _id: 'b', description: 'Rotor',                      quantity: 2, unit_price: 41.15 },
+    { _id: 'a', description: 'Brake pads, front axle set', quantity: 1, unit_price: 58.40, part_number: 'MKD1363' },
+    { _id: 'b', description: 'Rotor',                      quantity: 2, unit_price: 41.15, part_number: '' },
   ]
   const laborHours = 2.5
   const laborRate  = Number(shop.default_labor_rate) || 125

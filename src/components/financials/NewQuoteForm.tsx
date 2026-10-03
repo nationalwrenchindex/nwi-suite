@@ -25,7 +25,7 @@ import { BLANK_QUOTE_SEED, seedNotes, type QuoteSeed } from '@/types/quote-seed'
 
 let rowSeq = 0
 const blankRow = (): EditItem => ({
-  _id: `new-${rowSeq++}`, description: '', quantity: 1, unit_price: 0,
+  _id: `new-${rowSeq++}`, description: '', quantity: 1, unit_price: 0, part_number: '',
 })
 
 export default function NewQuoteForm({
@@ -64,6 +64,7 @@ export default function NewQuoteForm({
     (seed.lines ?? []).length > 0
       ? (seed.lines ?? []).map((l, i) => ({
           _id: `seed-${i}`, description: l.description, quantity: l.quantity, unit_price: l.unit_price,
+          part_number: l.part_number ?? '',
         }))
       : [blankRow()],
   )
@@ -172,11 +173,18 @@ export default function NewQuoteForm({
       <div className="space-y-2">
         <p className="nwi-label">Parts</p>
         {items.map(row => (
-          <div key={row._id} className="grid grid-cols-[1fr_70px_100px_32px] gap-2 items-center">
+          <div key={row._id} className="grid grid-cols-[1fr_110px_70px_100px_32px] gap-2 items-center">
             <input
               className="nwi-input text-sm" placeholder="Part description"
               value={row.description} disabled={saving}
               onChange={e => update(row._id, { description: e.target.value })}
+            />
+            {/* The part number the customer can order against. Never captured
+                before, which is why nothing useful survived to the invoice. */}
+            <input
+              className="nwi-input text-sm font-mono" placeholder="Part #"
+              value={row.part_number} disabled={saving}
+              onChange={e => update(row._id, { part_number: e.target.value })}
             />
             <input
               type="number" min={0} step={1} className="nwi-input text-sm" placeholder="Qty"

@@ -19,9 +19,15 @@ export function round2(n: number): number {
 }
 
 /** Labour rides in line_items as a row called "Labor" rather than its own column,
- *  so it has to be filtered back out when the editor loads. Matched on the
- *  description because that is the only marker the stored shape has. */
+ *  so it has to be filtered back out when the editor loads.
+ *
+ *  The explicit `type` wins where it exists. The description test remains the
+ *  fallback, because every row written before `type` existed is untyped — and it
+ *  is also what mis-classified segment labour ("Segment 2 — replace cat and
+ *  sensors") as parts, which is exactly what `type` is here to end. */
 export function isLaborItem(li: LineItem): boolean {
+  if (li.type === 'labor') return true
+  if (li.type === 'parts') return false
   return /^labor/i.test((li.description ?? '').trim())
 }
 
@@ -31,6 +37,8 @@ export interface EditItem {
   description: string
   quantity:    number
   unit_price:  number
+  /** The manufacturer's part number. Empty string when the tech has not typed one. */
+  part_number: string
 }
 
 export interface LineTotals {
@@ -77,6 +85,7 @@ export function fromLineItems(
       _id:         `li-${i}`,
       description: li.description,
       quantity:    li.quantity,
+      part_number: li.part_number ?? '',
       unit_price:  markupPct > 0
         ? round2(li.unit_price / (1 + markupPct / 100))
         : li.unit_price,
@@ -96,12 +105,19 @@ export function toLineItems({
       quantity:    li.quantity,
       unit_price:  round2(li.unit_price * (1 + markup)),
       total:       round2(li.quantity * li.unit_price * (1 + markup)),
+      // Written on every new row from here on, so no reader ever has to guess
+      // again. part_number is omitted rather than stored as '' when empty —
+      // an absent key reads as "not captured", a '' would read as "no part
+      // number exists", and only the first of those is true.
+      type:        'parts' as const,
+      ...(li.part_number?.trim() ? { part_number: li.part_number.trim() } : {}),
     })),
     ...(laborHours > 0 ? [{
       description: 'Labor',
       quantity:    laborHours,
       unit_price:  laborRate,
       total:       round2(laborHours * laborRate),
+      type:        'labor' as const,
     }] : []),
   ]
 }

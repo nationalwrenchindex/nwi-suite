@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { parseBreakdown } from '@/lib/tax'
 import { createClient } from '@/lib/supabase/server'
+import { writeToleratingMigration142 } from '@/lib/migration-142'
 
 const INVOICE_SELECT = `
   *,
@@ -90,6 +91,43 @@ export async function POST(
     subtotal:        Number(quote.parts_subtotal ?? 0) * (1 + Number(quote.parts_markup_percent ?? 0) / 100) + Number(quote.labor_subtotal ?? 0),
     tax_rate:        Number(quote.tax_percent ?? 0) / 100,
     tax_amount:      Number(quote.tax_amount   ?? 0),
+
+    // ── THE PRICING TERMS THE CUSTOMER AGREED TO ────────────────────────────
+    // These six columns had no home on `invoices` until migration 142, so every
+    // reader that needed them reached back through source_quote_id to the quote.
+    // That works until there is no source quote — a work-order conversion or a
+    // from-scratch invoice — at which point the markup silently reads 0 and
+    // calcBreakdown reports parts revenue equal to parts cost.
+    //
+    // Copied, not re-derived. The quote is the agreement; the invoice records
+    // what the agreement was. NULL is preserved as NULL so an unrecorded markup
+    // stays unrecorded rather than becoming a claim of 0%.
+    parts_markup_percent: quote.parts_markup_percent ?? null,
+    parts_subtotal:       quote.parts_subtotal       ?? null,
+    parts_cost_total:     quote.parts_cost_total     ?? null,
+    labor_subtotal:       quote.labor_subtotal       ?? null,
+    labor_hours:          quote.labor_hours          ?? null,
+    labor_rate:           quote.labor_rate           ?? null,
+
+    // The fleet's own identifier for the equipment. Without it a customer
+    // cannot match this invoice to their own records.
+    unit_number:     quote.unit_number ?? null,
+
+    // Shop-only, and it must stay that way: nothing customer-facing reads this.
+    internal_notes:  quote.internal_notes ?? null,
+
+    // ── Billable extras, carried at the rate that was quoted ────────────────
+    // Each one keeps the rate in force on the quote rather than re-pricing from
+    // today's Settings, for the same reason as the markup above.
+    travel_hours:                  quote.travel_hours   ?? 0,
+    travel_rate:                   quote.travel_rate    ?? null,
+    travel_amount:                 quote.travel_amount  ?? 0,
+    mileage_miles:                 quote.mileage_miles  ?? 0,
+    mileage_rate:                  quote.mileage_rate   ?? null,
+    mileage_amount:                quote.mileage_amount ?? 0,
+    shop_supplies_percent_applied: quote.shop_supplies_percent_applied ?? null,
+    shop_supplies_cap_applied:     quote.shop_supplies_cap_applied     ?? null,
+    shop_supplies_fee:             quote.shop_supplies_fee             ?? 0,
     // The customer approved this split on the quote; the invoice bills the same one.
     tax_breakdown:   parseBreakdown((quote as { tax_breakdown?: unknown }).tax_breakdown),
     discount_amount: 0,
@@ -116,15 +154,21 @@ export async function POST(
     adjustments:     Array.isArray(q.adjustments)   ? q.adjustments   : [],
   }
 
-  const { data: newInvoice, error: insertErr } = await supabase
-    .from('invoices')
-    .insert(invoiceInsert)
-    .select(INVOICE_SELECT)
-    .single()
+  // Migration 142 is applied by hand and this code can deploy before it. Without
+  // the retry the converter 500s for every quote until the SQL is run, which
+  // would be a worse outage than the problem it fixes.
+  const { data: newInvoice, error: insertErr } = await writeToleratingMigration142<
+    Record<string, unknown>,
+    { id: string }
+  >(
+    invoiceInsert as unknown as Record<string, unknown>,
+    row => supabase.from('invoices').insert(row).select(INVOICE_SELECT).single(),
+  )
 
   if (insertErr || !newInvoice) {
     console.error('[POST /api/quotes/[id]/convert] insert invoice', insertErr)
-    return NextResponse.json({ error: insertErr?.message ?? 'Failed to create invoice' }, { status: 500 })
+    const msg = (insertErr as { message?: string } | null)?.message
+    return NextResponse.json({ error: msg ?? 'Failed to create invoice' }, { status: 500 })
   }
 
   // Lock the quote: status → 'converted', record converted_invoice_id and converted_at

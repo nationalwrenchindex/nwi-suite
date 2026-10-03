@@ -94,6 +94,21 @@ export interface LineItem {
   quantity: number
   unit_price: number
   total: number
+  /**
+   * JSONB, so no migration was needed for either of these.
+   *
+   * `type` replaces guessing labour from `/^labor/i` on the description. That
+   * guess is why a converted segment line reading "Segment 2 — replace cat and
+   * sensors" at 4 x $95 could not be shown as hours: it is plainly labour and
+   * the stored shape could not prove it. Readers must still fall back to the
+   * description test, because every row written before this is untyped.
+   *
+   * `part_number` is why parts did not survive a quote-to-invoice conversion
+   * with anything a customer could order against. The quote builder never
+   * captured it, so there was nothing to carry.
+   */
+  type?:        'parts' | 'labor'
+  part_number?: string | null
 }
 
 // Detailer quote model (replaces line_items + labor_rate for detailers)

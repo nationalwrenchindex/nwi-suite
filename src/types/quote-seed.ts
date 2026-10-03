@@ -31,6 +31,8 @@ export interface QuoteSeedLine {
    * a post-markup price would be marked up a second time on save.
    */
   unit_price:  number
+  /** The manufacturer's part number, where the source knows one. */
+  part_number?: string | null
 }
 
 export interface QuoteSeed {
