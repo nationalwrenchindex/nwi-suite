@@ -20,6 +20,7 @@ import type {
   PartnerAccountUnitRow,
 } from '@/components/fleet-pro/partner/AccountDetailClient'
 import { money } from '@/lib/format'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 
 export const dynamic = 'force-dynamic'
 
@@ -118,14 +119,27 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ acc
       .select(`id, unit_number, truck_trailer_number, manufacturer, model, serial_number, bm_number, year, unit_type, status, ${PM_UNIT_COLUMNS}`)
       .eq('fleet_account_id', accountId),
 
-    svc.from('hd_work_orders')
-      .select('id, unit_id, work_order_number, service_type, status, total_amount, labor_hours, labor_rate, tech_name, completed_at, created_at')
-      .eq('fleet_account_id', accountId),
+    // PAGED, and this is the read that most needed it. hd_work_orders holds 1,560
+    // rows and this one is scoped to a whole FLEET ACCOUNT rather than a single
+    // unit, so a busy account genuinely can cross 1,000 — at which point the
+    // drill-down would silently drop its oldest work orders and under-report the
+    // account's spend, with a 200 and no error.
+    fetchAllRows<Record<string, unknown>>((from, to) =>
+      svc.from('hd_work_orders')
+        .select('id, unit_id, work_order_number, service_type, status, total_amount, labor_hours, labor_rate, tech_name, completed_at, created_at')
+        .eq('fleet_account_id', accountId)
+        .order('created_at', { ascending: false }).order('id', { ascending: true })
+        .range(from, to),
+    ).then(data => ({ data })),
 
     // hd_invoices has no invoice_date — created_at is the billing date on this table.
-    svc.from('hd_invoices')
-      .select('id, unit_id, invoice_number, total, subtotal_labor, subtotal_parts, labor_rate, status, created_at')
-      .eq('fleet_account_id', accountId),
+    fetchAllRows<Record<string, unknown>>((from, to) =>
+      svc.from('hd_invoices')
+        .select('id, unit_id, invoice_number, total, subtotal_labor, subtotal_parts, labor_rate, status, created_at')
+        .eq('fleet_account_id', accountId)
+        .order('created_at', { ascending: false }).order('id', { ascending: true })
+        .range(from, to),
+    ).then(data => ({ data })),
 
     svc.from('hd_dot_inspections')
       .select('id, unit_id, inspection_date, overall_result, inspector_name, inspection_id')

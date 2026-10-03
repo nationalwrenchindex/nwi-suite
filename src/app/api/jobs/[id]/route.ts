@@ -58,8 +58,16 @@ async function deductInventoryProducts(
 
     const serviceLabel = DETAILER_SERVICE_SLUG_LABELS[m.service_slug as DetailerServiceSlug] ?? m.service_slug
 
-    // Log the usage
-    await supabase
+    // Log the usage.
+    //
+    // THE ERROR IS CHECKED NOW. This was fire-and-forget, and product_usage_log did
+    // not exist in production — so every write silently vanished and nothing
+    // reported it. Migration 145 creates the table; this is what stops the NEXT
+    // failure being invisible.
+    //
+    // Still non-fatal: a usage-log failure must not fail completing a job. The COGS
+    // expense row below is the one that carries the money, and it lands either way.
+    const { error: usageErr } = await supabase
       .from('product_usage_log')
       .insert({
         user_id:              userId,
@@ -69,6 +77,14 @@ async function deductInventoryProducts(
         quantity_used:        qty,
         cost_cents_attributed: cogsCents,
       })
+
+    if (usageErr) {
+      console.error(
+        `[jobs/${jobId}] product_usage_log insert failed (product ${product.id}, ` +
+        `${qty} x ${cogsCents}c) — run migration 145 if the table is missing:`,
+        usageErr.message,
+      )
+    }
 
     // Add COGS expense entry
     if (cogsCents > 0) {

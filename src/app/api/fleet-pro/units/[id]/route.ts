@@ -21,6 +21,7 @@ import type { FleetProUnitDetail, FleetProUnitRow, ServiceEvent, ServiceEventKin
 import { canSeeCostBasis } from '@/types/fleet-pro-partner'
 import type { MeterReading, UnitMonthCost, FleetProViewerKind } from '@/types/fleet-pro-partner'
 import { loadFleetCosts } from '@/lib/fleet-pro/cost'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import type { UnitCostBreakdown } from '@/types/fleet-pro-cost'
 
 export const dynamic = 'force-dynamic'
@@ -210,13 +211,26 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     { data: meterRows },
     { data: serviceEntries },
   ] = await Promise.all([
-    svc.from('hd_work_orders')
-      .select('id, work_order_number, service_type, status, total_amount, tech_name, labor_hours, completed_at, created_at')
-      .eq('unit_id', unitId).eq('fleet_account_id', fleetId),
+    // PAGED. hd_work_orders holds 1,560 rows in production, past the 1,000-row cap.
+    // This particular read is filtered to ONE unit so it is not truncating today —
+    // but it is unbounded, and the first unit to accumulate 1,000 work orders would
+    // silently lose its older history with a 200 and no error. Same columns, same
+    // filters, plus the deterministic order fetchAllRows requires.
+    fetchAllRows<Record<string, unknown>>((from, to) =>
+      svc.from('hd_work_orders')
+        .select('id, work_order_number, service_type, status, total_amount, tech_name, labor_hours, completed_at, created_at')
+        .eq('unit_id', unitId).eq('fleet_account_id', fleetId)
+        .order('created_at', { ascending: false }).order('id', { ascending: true })
+        .range(from, to),
+    ).then(data => ({ data })),
 
-    svc.from('hd_invoices')
-      .select('id, invoice_number, total, status, created_at, complaint, diagnosis')
-      .eq('unit_id', unitId).eq('fleet_account_id', fleetId),
+    fetchAllRows<Record<string, unknown>>((from, to) =>
+      svc.from('hd_invoices')
+        .select('id, invoice_number, total, status, created_at, complaint, diagnosis')
+        .eq('unit_id', unitId).eq('fleet_account_id', fleetId)
+        .order('created_at', { ascending: false }).order('id', { ascending: true })
+        .range(from, to),
+    ).then(data => ({ data })),
 
     // hd_pm_checklists has no fleet_account_id column — the unit ownership check
     // above is what scopes this one to the caller's fleet.
