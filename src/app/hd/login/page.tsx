@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { useCaptcha } from '@/components/auth/CaptchaField'
 
 const HD_ORANGE = '#E85D24'
 
@@ -13,12 +14,19 @@ export default function HDLoginPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError]   = useState<string | null>(null)
 
+  const captcha = useCaptcha()
+
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError(null)
     const supabase = createClient()
-    const { error: err } = await supabase.auth.signInWithPassword({ email, password: pass })
+    const { error: err } = await supabase.auth.signInWithPassword({
+      email, password: pass,
+      options: { captchaToken: captcha.token },
+    })
+    // Single-use token: reset on every path, or a failed login cannot be retried.
+    captcha.reset()
     if (err) {
       setError(err.message)
       setLoading(false)
@@ -70,11 +78,12 @@ export default function HDLoginPage() {
             />
           </div>
           {error && <p className="text-sm text-red-400">{error}</p>}
+          {captcha.field}
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || captcha.pending}
             className="w-full py-3 rounded-xl font-bold text-white text-sm"
-            style={{ background: HD_ORANGE, opacity: loading ? 0.6 : 1 }}
+            style={{ background: HD_ORANGE, opacity: loading || captcha.pending ? 0.6 : 1 }}
           >
             {loading ? 'Signing in…' : 'Sign In'}
           </button>

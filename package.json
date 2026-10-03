@@ -16,6 +16,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.98.0",
     "@google/genai": "^2.13.0",
+    "@marsidev/react-turnstile": "^1.6.1",
     "@sentry/nextjs": "^10.53.1",
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.45.4",

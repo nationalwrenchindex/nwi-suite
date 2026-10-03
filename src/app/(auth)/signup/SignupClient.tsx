@@ -4,6 +4,7 @@ import { Suspense, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { useCaptcha } from '@/components/auth/CaptchaField'
 import { PLANS, SELECTABLE_MODULES, MODULE_LABELS, MODULE_DESCRIPTIONS } from '@/lib/stripe-plans'
 import type { PlanTier, SelectableModule } from '@/lib/stripe-plans'
 import { resolveLdSlug, ldSlugNeedsModulePick, describeSlugResolution } from '@/lib/plan-slugs'
@@ -79,6 +80,7 @@ function SignupForm({ foremanAvailable }: Props) {
   const [selectedModules, setSelectedModules]   = useState<SelectableModule[]>([])
   const [moduleWarningShown, setModuleWarningShown] = useState(false)
   const [loading, setLoading]         = useState(false)
+  const captcha = useCaptcha()
   const [error, setError]             = useState<string | null>(null)
   const [success, setSuccess]         = useState(false)
 
@@ -154,6 +156,7 @@ function SignupForm({ foremanAvailable }: Props) {
       password,
       options: {
         emailRedirectTo: `${window.location.origin}/auth/callback`,
+        captchaToken: captcha.token,
         data: {
           full_name:       fullName,
           profession_type: profession,
@@ -161,6 +164,10 @@ function SignupForm({ foremanAvailable }: Props) {
         },
       },
     })
+
+    // Single-use token: reset on every path. A signup that fails validation must
+    // be retryable without reloading the page.
+    captcha.reset()
 
     if (signUpError) {
       setError(signUpError.message)
@@ -371,7 +378,17 @@ function SignupForm({ foremanAvailable }: Props) {
             </div>
           </div>
 
-          <button type="submit" className="btn-primary mt-2">
+          {/* STEP 1 IS SOMETIMES THE LAST STEP. When a plan is preselected and needs
+              no module picker, handleNextStep calls runSignup() straight from here and
+              step 2 never renders — so without the widget on this form that path
+              would submit with no token and fail once CAPTCHA is on. */}
+          {Boolean(preselected) && !needsModules && captcha.field}
+
+          <button
+            type="submit"
+            disabled={Boolean(preselected) && !needsModules && captcha.pending}
+            className="btn-primary mt-2"
+          >
             {preselected
               ? (needsModules ? 'NEXT — PICK YOUR MODULES' : 'CREATE ACCOUNT & CONTINUE TO PAYMENT')
               : 'NEXT — CHOOSE PLAN'}
@@ -600,6 +617,8 @@ function SignupForm({ foremanAvailable }: Props) {
             </div>
           </div>
 
+          {captcha.field}
+
           <div className="flex gap-3">
             <button
               type="button"
@@ -608,7 +627,7 @@ function SignupForm({ foremanAvailable }: Props) {
             >
               ← Back
             </button>
-            <button type="submit" disabled={loading} className="flex-1 btn-primary">
+            <button type="submit" disabled={loading || captcha.pending} className="flex-1 btn-primary">
               {loading
                 ? 'Creating account…'
                 : plan === 'foreman' || plan === 'elite' || plan === 'quickwrench'

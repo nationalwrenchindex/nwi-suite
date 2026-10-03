@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/client'
+import { useCaptcha } from '@/components/auth/CaptchaField'
 
 export default function ResetPasswordPage() {
   const [email, setEmail]     = useState('')
@@ -10,15 +11,24 @@ export default function ResetPasswordPage() {
   const [error, setError]     = useState<string | null>(null)
   const [sent, setSent]       = useState(false)
 
+  const captcha = useCaptcha()
+
   async function handleReset(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError(null)
 
     const supabase = createClient()
+    // Supabase CAPTCHA covers password reset too, which is exactly why this form
+    // had to be wired before the dashboard toggle — a locked-out user cannot reset
+    // their way back in.
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/auth/callback?next=/update-password`,
+      captchaToken: captcha.token,
     })
+
+    // Single-use token: reset on success and on failure.
+    captcha.reset()
 
     if (error) {
       setError(error.message)
@@ -98,7 +108,9 @@ export default function ResetPasswordPage() {
           />
         </div>
 
-        <button type="submit" disabled={loading} className="btn-primary">
+        {captcha.field}
+
+        <button type="submit" disabled={loading || captcha.pending} className="btn-primary">
           {loading ? 'Sending…' : 'SEND RESET LINK'}
         </button>
       </form>

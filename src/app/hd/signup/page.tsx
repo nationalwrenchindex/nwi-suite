@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { useCaptcha } from '@/components/auth/CaptchaField'
 import { resolveHdSlug, describeSlugResolution } from '@/lib/plan-slugs'
 
 const HD_ORANGE = '#E85D24'
@@ -100,6 +101,7 @@ function HDSignupForm() {
   const [name,    setName]    = useState('')
   const [biz,     setBiz]     = useState('')
   const [loading, setLoading] = useState(false)
+  const captcha = useCaptcha()
   const [error,   setError]   = useState<string | null>(null)
 
   // Promo code state
@@ -166,9 +168,13 @@ function HDSignupForm() {
         email,
         password: pass,
         options: {
+          captchaToken: captcha.token,
           data: { full_name: name, business_name: biz },
         },
       })
+      // Single-use token: reset before anything can throw, so a failed signup is
+      // retryable. Inside the try, because a reset must not mask the real error.
+      captcha.reset()
       if (signupErr) throw signupErr
       if (!data.user) throw new Error('Signup failed — please try again.')
 
@@ -409,11 +415,13 @@ function HDSignupForm() {
 
               {error && <p className="text-sm text-red-400">{error}</p>}
 
+              {captcha.field}
+
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || captcha.pending}
                 className="w-full py-3 rounded-xl font-bold text-white text-sm"
-                style={{ background: HD_ORANGE, opacity: loading ? 0.6 : 1 }}
+                style={{ background: HD_ORANGE, opacity: loading || captcha.pending ? 0.6 : 1 }}
               >
                 {loading ? 'Creating Account…' : 'Start Today'}
               </button>

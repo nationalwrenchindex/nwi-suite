@@ -4,6 +4,7 @@ import { Suspense, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { useCaptcha } from '@/components/auth/CaptchaField'
 
 function LoginForm() {
   const router = useRouter()
@@ -15,6 +16,8 @@ function LoginForm() {
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState<string | null>(null)
 
+  const captcha = useCaptcha()
+
   const urlError = searchParams.get('error')
 
   async function handleLogin(e: React.FormEvent) {
@@ -23,7 +26,18 @@ function LoginForm() {
     setError(null)
 
     const supabase = createClient()
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
+    // captchaToken is undefined when no site key is configured, and Supabase ignores
+    // an undefined one — so this call is byte-identical to what it was until the
+    // dashboard toggle is flipped.
+    const { error } = await supabase.auth.signInWithPassword({
+      email, password,
+      options: { captchaToken: captcha.token },
+    })
+
+    // RESET ON EVERY PATH. The token is single-use and Supabase has consumed it;
+    // without this a failed login cannot be retried, and the second attempt fails
+    // for a reason the user cannot see.
+    captcha.reset()
 
     if (error) {
       setError(error.message)
@@ -104,7 +118,9 @@ function LoginForm() {
           />
         </div>
 
-        <button type="submit" disabled={loading} className="btn-primary mt-2">
+        {captcha.field}
+
+        <button type="submit" disabled={loading || captcha.pending} className="btn-primary mt-2">
           {loading ? 'Signing in…' : 'SIGN IN'}
         </button>
       </form>

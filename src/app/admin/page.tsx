@@ -48,7 +48,12 @@ type Subscription = {
 
 const getAdminData = unstable_cache(
   async (): Promise<{
+    /** Verified accounts only. Unverified ones are in `unverified`. */
     profiles:          Profile[]
+    /** Signed up but never confirmed their email. Off the main list on purpose. */
+    unverified:        Profile[]
+    /** False when the auth admin API could not be read — then `profiles` is everything. */
+    unverifiedKnown:   boolean
     subscriptions:     Subscription[]
     foremanCount:      number
     waitlistCount:     number
@@ -96,8 +101,47 @@ const getAdminData = unstable_cache(
         .select('*', { count: 'exact', head: true })
         .gte('created_at', since(30)),
     ])
+
+    // ── UNVERIFIED ACCOUNTS ARE KEPT OFF THE DASHBOARD (Part 6) ──
+    //
+    // `profiles` has no verification flag — email_confirmed_at lives on auth.users,
+    // which PostgREST cannot read. The service client's admin API can, so the set of
+    // confirmed ids is built here and used to split the list.
+    //
+    // THEY ARE SPLIT OUT, NOT DELETED AND NOT HIDDEN. A real customer whose
+    // confirmation email is still sitting unread would otherwise vanish from the one
+    // screen that could explain why they cannot get in. They leave the main list and
+    // the headline counts, and appear under their own labelled heading.
+    //
+    // PAGED, because listUsers defaults to 50 per page: a 51st subscriber would
+    // otherwise be silently reported as unverified.
+    const confirmedIds = new Set<string>()
+    let unverifiedKnown = true
+    try {
+      for (let page = 1; page <= 40; page++) {
+        const { data, error } = await svc.auth.admin.listUsers({ page, perPage: 200 })
+        if (error) throw error
+        const users = data?.users ?? []
+        for (const u of users) {
+          if (u.email_confirmed_at) confirmedIds.add(u.id)
+        }
+        if (users.length < 200) break
+      }
+    } catch (err) {
+      // If the admin API is unavailable, show EVERY profile rather than wrongly
+      // branding real customers unverified. Loud in the log, honest on screen.
+      console.error('[admin] could not read auth users; verification split disabled:', err)
+      unverifiedKnown = false
+    }
+
+    const all = (profiles ?? []) as Profile[]
+    const verified   = unverifiedKnown ? all.filter(p => confirmedIds.has(p.id)) : all
+    const unverified = unverifiedKnown ? all.filter(p => !confirmedIds.has(p.id)) : []
+
     return {
-      profiles:      (profiles ?? []) as Profile[],
+      profiles:      verified,
+      unverified,
+      unverifiedKnown,
       subscriptions: (subscriptions ?? []) as Subscription[],
       foremanCount:  foremanCount ?? 0,
       waitlistCount: waitlistCount ?? 0,
@@ -195,7 +239,7 @@ export default async function AdminPage() {
   if (!user || user.id !== FOUNDER_ID) return notFound()
 
   const {
-    profiles, subscriptions, foremanCount, waitlistCount,
+    profiles, unverified, unverifiedKnown, subscriptions, foremanCount, waitlistCount,
     garageTotal, garage7d, garage30d,
   } = await getAdminData()
 
@@ -465,6 +509,47 @@ export default async function AdminPage() {
             </table>
           </div>
         </section>
+
+        {/* ── UNVERIFIED ACCOUNTS ──
+            Off the main list and out of every count above, but not deleted and not
+            hidden: a real customer whose confirmation email is still unread would
+            otherwise disappear from the only screen that explains why they cannot
+            get in. Most of these are bots. */}
+        {!unverifiedKnown && (
+          <section className="mb-10">
+            <div className="rounded-xl border border-yellow-500/25 bg-yellow-500/5 px-4 py-3">
+              <p className="text-yellow-400/80 text-sm">
+                Could not read the auth users list, so verification status is unknown and
+                every account is shown above. Check the server log.
+              </p>
+            </div>
+          </section>
+        )}
+
+        {unverifiedKnown && unverified.filter(p => p.id !== FOUNDER_ID).length > 0 && (
+          <section className="mb-10">
+            <h2 className="font-condensed font-bold text-xl text-white tracking-wide mb-1">
+              UNVERIFIED ({unverified.filter(p => p.id !== FOUNDER_ID).length})
+            </h2>
+            <p className="text-white/35 text-xs mb-3">
+              Signed up but never confirmed their email. Excluded from every figure above.
+            </p>
+            <div className="overflow-x-auto rounded-xl border border-dark-border">
+              <table className="w-full text-sm">
+                <tbody>
+                  {unverified.filter(p => p.id !== FOUNDER_ID).map(p => (
+                    <tr key={p.id} className="border-b border-dark-border last:border-0">
+                      <td className="px-4 py-2.5 text-white/70">{p.full_name ?? '—'}</td>
+                      <td className="px-4 py-2.5 text-white/50">{p.email ?? '—'}</td>
+                      <td className="px-4 py-2.5 text-white/40">{fmtDate(p.created_at)}</td>
+                      <td className="px-4 py-2.5 text-white/30">{daysSince(p.created_at)}d ago</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
 
       </main>
     </div>
