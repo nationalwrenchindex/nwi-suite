@@ -95,16 +95,29 @@ function dayLabel(days: number): string {
 /**
  * Resolve one unit's PM standing.
  *
- * Resolution order:
- *   1. An explicit fleet_pro_pm_schedules row with a next_due_date wins — a fleet
- *      manager sat down and set that date, and an override that loses to a derived
- *      figure is not an override.
- *   2. Otherwise hd_units.next_pm_due_hours, the meter-based figure the shop
- *      actually maintains.
- *   3. Only when neither exists is the unit genuinely unscheduled.
+ * ── THE BUG THIS WAS CHANGED TO FIX ─────────────────────────────────────────
  *
- * A unit carrying next_pm_due_hours must NEVER come back 'unscheduled' — that was
- * the bug this file was written to kill.
+ * It used to RETURN EARLY from each branch: a manager-set date won outright, and
+ * otherwise only the hours were considered. Since fleet_pro_pm_schedules is
+ * empty, that meant PM was effectively HOURS-ONLY — so a unit last serviced in
+ * August 2024 reported 'scheduled' and rendered green, because its hours were in
+ * range and nothing ever looked at the calendar.
+ *
+ * DUE IS WHICHEVER COMES FIRST. Both clocks are evaluated and the WORSE state
+ * wins. A unit that has aged out is overdue even if it has barely run.
+ *
+ * ── WHERE THE DATE CLOCK COMES FROM ─────────────────────────────────────────
+ *
+ *   1. fleet_pro_pm_schedules.next_due_date — a manager sat down and set it.
+ *   2. Otherwise last_service_date + interval_days from that same row.
+ *   3. Otherwise hd_units.last_pm_date + interval_days, so a unit with real PM
+ *      history on the HD side gets a calendar reading even with no schedule row.
+ *
+ * With no interval_days anywhere there is no date clock, and the hours decide —
+ * which is the old behaviour, correctly scoped to the case where it is all the
+ * data there is.
+ *
+ * A unit carrying next_pm_due_hours must NEVER come back 'unscheduled'.
  */
 export function computePmStatus(
   unit:     PmUnitInput | null | undefined,
@@ -123,52 +136,69 @@ export function computePmStatus(
     last_pm_type:    lastPmType,
   }
 
-  // ── 1. Manager-set calendar date ────────────────────────────────────────────
-  const nextDueDate = dayOf(schedule?.next_due_date)
-  if (nextDueDate) {
-    const days = daysBetween(nextDueDate, today)
-    if (days !== null) {
-      const state: PmState =
-        days < 0                   ? 'overdue'
-        : days <= PM_DUE_SOON_DAYS ? 'due_soon'
-        : 'scheduled'
-
-      return {
-        ...base,
-        state,
-        source:         'date',
-        next_due_date:  nextDueDate,
-        days_until_due: days,
-        label:          dayLabel(days),
-      }
+  // ── The date clock ──────────────────────────────────────────────────────────
+  const intervalDays = toNum(schedule?.interval_days)
+  let nextDueDate = dayOf(schedule?.next_due_date)
+  if (!nextDueDate && intervalDays !== null && intervalDays > 0 && lastPmDate) {
+    const from = Date.parse(`${lastPmDate}T12:00:00Z`)
+    if (!Number.isNaN(from)) {
+      nextDueDate = new Date(from + intervalDays * 86_400_000).toISOString().slice(0, 10)
     }
   }
+  const days = nextDueDate ? daysBetween(nextDueDate, today) : null
+  const dateState: PmState | null = days === null ? null
+    : days < 0                   ? 'overdue'
+    : days <= PM_DUE_SOON_DAYS   ? 'due_soon'
+    : 'scheduled'
 
-  // ── 2. Meter hours off hd_units ─────────────────────────────────────────────
+  // ── The hours clock ─────────────────────────────────────────────────────────
   const dueHours = toNum(unit?.next_pm_due_hours)
-  if (dueHours !== null) {
-    // A unit with a due-hours target but no meter reading yet has run zero hours,
-    // not unknown hours — the PM is still scheduled, just a long way off.
-    const totalHours = toNum(unit?.total_hours) ?? 0
-    const remaining  = dueHours - totalHours
+  // A unit with a due-hours target but no meter reading yet has run zero hours,
+  // not unknown hours — the PM is still scheduled, just a long way off.
+  const remaining = dueHours === null ? null : dueHours - (toNum(unit?.total_hours) ?? 0)
+  const hoursState: PmState | null = remaining === null ? null
+    : remaining <= 0                   ? 'overdue'
+    : remaining <= PM_DUE_SOON_HOURS   ? 'due_soon'
+    : 'scheduled'
 
-    const state: PmState =
-      remaining <= 0                    ? 'overdue'
-      : remaining <= PM_DUE_SOON_HOURS  ? 'due_soon'
-      : 'scheduled'
-
-    return {
-      ...base,
-      state,
-      source:          'hours',
-      next_due_hours:  dueHours,
-      hours_remaining: remaining,
-      label:           remaining <= 0
-                         ? `${hrs(remaining)} hrs overdue`
-                         : `${hrs(remaining)} hrs remaining`,
-    }
+  // ── Nothing to go on ────────────────────────────────────────────────────────
+  if (dateState === null && hoursState === null) {
+    return { ...base, state: 'unscheduled', source: 'none', label: 'No PM scheduled' }
   }
 
-  // ── 3. Nothing to go on ─────────────────────────────────────────────────────
-  return { ...base, state: 'unscheduled', source: 'none', label: 'No PM scheduled' }
+  // ── Whichever comes first ───────────────────────────────────────────────────
+  const RANK: Record<PmState, number> = { unscheduled: 0, scheduled: 1, due_soon: 2, overdue: 3 }
+  const states: PmState[] = []
+  if (dateState  !== null) states.push(dateState)
+  if (hoursState !== null) states.push(hoursState)
+  const state = states.sort((a, b) => RANK[b] - RANK[a])[0]
+
+  // WHICH clock decided, so the label can say so. "1,233 hrs overdue" and "412
+  // days overdue by date" tell a tech two different things, and before this change
+  // the second one was never shown at all.
+  const byDate  = dateState  === state
+  const byHours = hoursState === state
+  const source: PmSource = byDate && byHours ? 'date' : byDate ? 'date' : 'hours'
+
+  const hoursLabel = remaining === null ? null
+    : remaining <= 0 ? `${hrs(remaining)} hrs overdue` : `${hrs(remaining)} hrs remaining`
+  const dateLabel = days === null ? null : dayLabel(days)
+
+  // When both clocks are in the same state, both are named — a tech reading
+  // "412 days overdue · 1,233 hrs overdue" has no argument left to have.
+  const label = byDate && byHours && dateLabel && hoursLabel
+    ? `${dateLabel} · ${hoursLabel}`
+    : byDate ? (dateLabel ?? hoursLabel ?? 'No PM scheduled')
+             : (hoursLabel ?? dateLabel ?? 'No PM scheduled')
+
+  return {
+    ...base,
+    state,
+    source,
+    next_due_date:   nextDueDate,
+    next_due_hours:  dueHours,
+    hours_remaining: remaining,
+    days_until_due:  days,
+    label,
+  }
 }
