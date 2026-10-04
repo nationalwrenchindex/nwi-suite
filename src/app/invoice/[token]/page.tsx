@@ -26,6 +26,9 @@ import {
   ldInvoiceDates,
   formatDocDate,
   isLaborLine,
+  segmentedLine,
+  groupBySegment,
+  segmentHeading,
   enrichLaborDescription,
   quantityText,
   lineMeta,
@@ -147,12 +150,20 @@ function Panel({ children, className = '' }: { children: ReactNode; className?: 
  * two characters per line. Each row is its own flex block instead, so the
  * description gets the full width and the money stays right-aligned beside it.
  */
+interface DocLine {
+  key: string
+  description: string
+  meta: string | null
+  amount: number
+  note?: string | null
+}
+
 function LineRows({
   label,
   rows,
 }: {
   label: string
-  rows: Array<{ key: string; description: string; meta: string | null; amount: number; note?: string | null }>
+  rows: DocLine[]
 }) {
   if (rows.length === 0) return null
   return (
@@ -160,21 +171,84 @@ function LineRows({
       <SectionLabel>{label}</SectionLabel>
       <div style={{ border: `1px solid ${BORDER}`, borderRadius: 10, overflow: 'hidden', background: CARD }}>
         {rows.map((r, i) => (
-          <div
-            key={r.key}
-            className="flex items-start justify-between gap-3 px-4 py-3"
-            style={{ borderBottom: i === rows.length - 1 ? 'none' : `1px solid ${RULE}` }}
-          >
-            <div className="min-w-0">
-              <p className="text-sm" style={{ color: TEXT }}>{r.description}</p>
-              {r.note && <p className="text-xs font-mono mt-0.5" style={{ color: MUTED }}>{r.note}</p>}
-              {r.meta && <p className="text-xs mt-0.5" style={{ color: FAINT }}>{r.meta}</p>}
-            </div>
-            <span className="text-sm font-semibold flex-shrink-0" style={{ color: TEXT }}>
-              {fmt(r.amount)}
-            </span>
-          </div>
+          <LineRow key={r.key} row={r} last={i === rows.length - 1} />
         ))}
+      </div>
+    </div>
+  )
+}
+
+function LineRow({ row: r, last }: { row: DocLine; last: boolean }) {
+  return (
+    <div
+      className="flex items-start justify-between gap-3 px-4 py-3"
+      style={{ borderBottom: last ? 'none' : `1px solid ${RULE}` }}
+    >
+      <div className="min-w-0">
+        <p className="text-sm" style={{ color: TEXT }}>{r.description}</p>
+        {r.note && <p className="text-xs font-mono mt-0.5" style={{ color: MUTED }}>{r.note}</p>}
+        {r.meta && <p className="text-xs mt-0.5" style={{ color: FAINT }}>{r.meta}</p>}
+      </div>
+      <span className="text-sm font-semibold flex-shrink-0" style={{ color: TEXT }}>
+        {fmt(r.amount)}
+      </span>
+    </div>
+  )
+}
+
+/**
+ * Parts and labour, grouped by the segment each line belonged to.
+ *
+ * A segment heading carries no money of its own. The segment's total is the sum of
+ * the lines printed under it, which the customer can add up themselves - a heading
+ * row showing a total would be a second figure to reconcile, and a zero-value row
+ * on a customer's copy is exactly what we agreed not to print.
+ *
+ * Falls back to the flat list when nothing is segmented, so a parent-priced invoice
+ * is byte-for-byte what it was.
+ */
+function SegmentedLineRows({
+  label,
+  groups,
+}: {
+  label: string
+  groups: Array<{ sequence: number | null; label: string | null; rows: DocLine[] }>
+}) {
+  const total = groups.reduce((n, g) => n + g.rows.length, 0)
+  if (total === 0) return null
+
+  const segmented = groups.some(g => g.sequence !== null)
+  if (!segmented) return <LineRows label={label} rows={groups.flatMap(g => g.rows)} />
+
+  return (
+    <div>
+      <SectionLabel>{label}</SectionLabel>
+      <div style={{ border: `1px solid ${BORDER}`, borderRadius: 10, overflow: 'hidden', background: CARD }}>
+        {groups.map((g, gi) => {
+          const heading = segmentHeading(g)
+          return (
+            <div key={`grp-${g.sequence ?? 'none'}-${gi}`}>
+              {heading && (
+                <p
+                  className="text-xs font-semibold px-4 pt-3 pb-1"
+                  style={{
+                    color: MUTED,
+                    borderTop: gi === 0 ? 'none' : `1px solid ${RULE}`,
+                  }}
+                >
+                  {heading}
+                </p>
+              )}
+              {g.rows.map((r, i) => (
+                <LineRow
+                  key={r.key}
+                  row={r}
+                  last={gi === groups.length - 1 && i === g.rows.length - 1}
+                />
+              ))}
+            </div>
+          )
+        })}
       </div>
     </div>
   )
@@ -345,16 +419,26 @@ export default async function PublicInvoicePage(
           jobNotes:    inv.job_notes,
         })
       : (li.description ?? '').trim()
+    const seg = segmentedLine(li as unknown as Record<string, unknown>)
     return {
       key: `li-${i}`,
-      description: description || 'Service',
+      // segmentedLine strips a legacy "Segment 1 - " prefix, so a line converted
+      // before the segment travelled separately still reads as its own part.
+      description: (labor ? description : seg.description) || description || 'Service',
       // The part number is what lets a customer order the same part again, or
       // check it against a warranty claim. Nothing captured it until now.
       note: (li as { part_number?: string | null }).part_number || null,
       meta: lineMeta(qty, unit, labor),
       amount: Number(li.total ?? 0),
+      sequence: seg.sequence,
+      label: seg.label,
     }
   })
+
+  // Grouped so each part and each labour entry prints under the complaint it was
+  // for. A non-segmented invoice yields one group with sequence null, which renders
+  // exactly as it always has: one "Parts & Labor" block, no heading.
+  const lineGroups = groupBySegment(describedLines, r => ({ sequence: r.sequence, label: r.label }))
 
   return (
     <div style={{ background: BG, minHeight: '100dvh', padding: '16px 12px 40px', color: TEXT }}>
@@ -566,7 +650,7 @@ export default async function PublicInvoicePage(
                 })}
               </div>
             ) : (
-              <LineRows label={'Parts & Labor'} rows={describedLines} />
+              <SegmentedLineRows label={'Parts & Labor'} groups={lineGroups} />
             )}
 
             {/* Additional parts */}

@@ -15,8 +15,43 @@ import { sumLines } from '@/lib/shared/work-order-lines'
 import type { WorkOrderSegment } from '@/types/segments'
 import { mergeBreakdowns, parseBreakdown, type TaxBreakdown } from '@/lib/tax'
 
+/**
+ * One itemised line on the invoice.
+ *
+ * The first four fields are LD's long-standing invoice line shape and every reader
+ * expects them. The rest are additive, so an invoice converted before they existed
+ * still renders: see segmentedLine() in lib/invoice-document.ts.
+ *
+ * WHAT IS DELIBERATELY NOT HERE: unit_cost and markup_percent. A segment line
+ * carries both, and /invoice/[token] ships line_items to the CUSTOMER'S browser.
+ * What the shop paid for the part has no business travelling there, for the same
+ * reason internal_notes does not. The invoice's own parts_markup_percent column
+ * already feeds the shop-side "your cost ... plus 30%" display.
+ */
+export interface InvoiceLine {
+  description: string
+  quantity:    number
+  unit_price:  number
+  total:       number
+  /**
+   * 'parts' | 'labor', in the INVOICE vocabulary.
+   *
+   * Segments store 'part' SINGULAR to match their DB CHECK constraint; invoice lines
+   * use 'parts' PLURAL, which is what isLaborLine() tests. Translated here on purpose
+   * - passing 'part' straight through would make every parts line fall through to
+   * description-sniffing and get described as though nobody knew what it was.
+   */
+  type?:          'parts' | 'labor'
+  /** Lets a customer re-order the part or check it against a warranty claim. */
+  part_number?:   string | null
+  /** The segment this line belonged to, so the document can group under a heading. */
+  segment?:       number
+  /** That segment's complaint, in the customer's own words. */
+  segment_label?: string | null
+}
+
 export interface InvoiceMoney {
-  line_items: Array<{ description: string; quantity: number; unit_price: number; total: number }>
+  line_items: InvoiceLine[]
   subtotal:   number
   tax_amount: number
   tax_rate:   number
@@ -50,13 +85,21 @@ export function invoiceFromSegments(segments: WorkOrderSegment[]): InvoiceMoney 
     for (const l of lines) {
       const qty  = Number(l.quantity ?? 0)
       const unit = Number(l.unit_price ?? 0)
+      const labor = l.type === 'labor'
       line_items.push({
-        // Prefixed so the invoice reads as the job it was: a customer looking at four
-        // parts lines needs to know which complaint each belonged to.
-        description: `Segment ${seg.sequence}${l.description ? ` — ${l.description}` : ''}`,
+        // The line's OWN description. The segment it belonged to travels in `segment`
+        // rather than glued to the front of this text, so the document groups three
+        // parts and two labour entries under one heading instead of printing
+        // "Segment 2 - " five times.
+        description: (l.description ?? '').trim(),
         quantity:    qty,
         unit_price:  unit,
         total:       Number(l.total ?? round2(qty * unit)),
+        type:        labor ? 'labor' : 'parts',
+        // Only a part has one, and an empty string is not a part number.
+        part_number: labor ? null : (l.part_number?.trim() || null),
+        segment:       seg.sequence,
+        segment_label: seg.complaint?.trim() || null,
       })
     }
 

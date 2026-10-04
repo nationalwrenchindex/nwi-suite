@@ -504,3 +504,110 @@ export function inspectionOutcome(
 
   return out
 }
+
+// ─── Segment grouping on a customer's invoice ─────────────────────────────────
+//
+// A segmented work order converts to an invoice whose lines each belonged to one
+// segment. The customer needs to see WHICH complaint each part and each labour
+// entry was for, so the lines group under a segment heading rather than carrying
+// "Segment 2 - " glued onto every description.
+//
+// TWO SHAPES ARRIVE HERE, and both must render:
+//
+//   NEW      the converter records `segment` (the sequence) and `segment_label`
+//            (the complaint) on each line, and `description` is the line's own.
+//   LEGACY   invoices converted before that carry the sequence INSIDE the
+//            description, as "Segment 1 - test part", and no label at all.
+//
+// Legacy rows are parsed rather than rewritten. Stored invoice line_items are
+// billed history; re-deriving them is a migration the shop owner runs knowingly,
+// not something a page does on read.
+
+/** The em-dash, en-dash and hyphen all appear as the separator across versions. */
+const LEGACY_SEGMENT_PREFIX = /^Segment\s+(\d+)\s*(?:[—–-]\s*)?(.*)$/
+
+export interface SegmentedLine {
+  /** Segment sequence, or null when this invoice was never segmented. */
+  sequence: number | null
+  /** The segment's complaint, when the converter recorded one. Null on legacy rows. */
+  label: string | null
+  /** The line's own description, with any legacy "Segment N - " prefix stripped. */
+  description: string
+}
+
+/**
+ * Read the segment a stored invoice line belonged to.
+ *
+ * Returns sequence null for an ordinary non-segmented invoice, which is what makes
+ * this safe to call unconditionally: a parent-priced invoice groups into a single
+ * unlabelled group and renders exactly as it did before.
+ */
+export function segmentedLine(line: Record<string, unknown>): SegmentedLine {
+  const raw = typeof line.description === 'string' ? line.description.trim() : ''
+
+  const explicit = line.segment
+  if (explicit !== null && explicit !== undefined && explicit !== '') {
+    const n = Number(explicit)
+    if (Number.isFinite(n)) {
+      const label = typeof line.segment_label === 'string' && line.segment_label.trim()
+        ? line.segment_label.trim()
+        : null
+      return { sequence: n, label, description: raw }
+    }
+  }
+
+  const m = LEGACY_SEGMENT_PREFIX.exec(raw)
+  if (m) {
+    const n = Number(m[1])
+    // A bare "Segment 3" with nothing after it keeps its text: stripping it would
+    // leave the line with no description at all.
+    const rest = (m[2] ?? '').trim()
+    return { sequence: n, label: null, description: rest || raw }
+  }
+
+  return { sequence: null, label: null, description: raw }
+}
+
+export interface SegmentGroup<T> {
+  sequence: number | null
+  label: string | null
+  rows: T[]
+}
+
+/**
+ * Group lines by the segment they belonged to, preserving the order they arrive in.
+ *
+ * Order is the invoice's own, NOT sorted by sequence: a shop that added segment 3
+ * before segment 2 billed them in that order and the document should not silently
+ * reorder what the customer approved.
+ */
+export function groupBySegment<T>(
+  rows: T[],
+  refOf: (row: T) => { sequence: number | null; label: string | null },
+): Array<SegmentGroup<T>> {
+  const groups: Array<SegmentGroup<T>> = []
+  for (const row of rows) {
+    const { sequence, label } = refOf(row)
+    const last = groups[groups.length - 1]
+    if (last && last.sequence === sequence) {
+      // First non-null label in a group wins; segments carry one label, but a legacy
+      // row mixed in with new ones would otherwise blank it.
+      if (last.label === null && label !== null) last.label = label
+      last.rows.push(row)
+      continue
+    }
+    groups.push({ sequence, label, rows: [row] })
+  }
+  return groups
+}
+
+/**
+ * The heading a group prints, or null when there is nothing to head.
+ *
+ * Null for a non-segmented invoice, so the caller renders its ordinary
+ * "Parts & Labor" label and no document gains an empty heading row.
+ */
+export function segmentHeading(group: { sequence: number | null; label: string | null }): string | null {
+  if (group.sequence === null) return null
+  return group.label ? `Segment ${group.sequence} - ${group.label}` : `Segment ${group.sequence}`
+}
