@@ -624,6 +624,9 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
     : null
 
   const newTaxAmount = tax ? tax.taxAmount : round2(newSubtotal * taxRate)
+  // Computed once: the Running Total needs to know whether a split exists before it
+  // decides whether its total line still has to carry a rate.
+  const taxSplitRows = tax ? taxDisplayRows(tax.breakdown) : []
   const grandTotal   = round2(newSubtotal + newTaxAmount)
 
   // ── Shop supply helpers ────────────────────────────────────────────────────
@@ -1026,7 +1029,13 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
               </div>
               {Number(invoice.tax_amount ?? 0) > 0 && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-white/40">Tax</span>
+                  {/*
+                    Qualified, not deleted. This is the tax on what was AUTHORIZED at
+                    conversion; the Running Total below shows tax on the invoice as it
+                    stands now. They are equal until something is added, which is why
+                    an unqualified "Tax" here read as the same figure printed twice.
+                  */}
+                  <span className="text-white/40">Tax (authorized)</span>
                   <span className="text-white/60">{fmt(Number(invoice.tax_amount))}</span>
                 </div>
               )}
@@ -1449,19 +1458,30 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
             <span className="text-white/50">Subtotal</span>
             <span className="text-white">{fmt(newSubtotal)}</span>
           </div>
-          {newTaxAmount > 0 && (
-            <div className="flex justify-between text-sm">
-              <span className="text-white/40">Tax ({Math.round(taxRate * 10000) / 100}%)</span>
-              <span className="text-white/60">{fmt(newTaxAmount)}</span>
-            </div>
-          )}
-          {/* One row per category when the split is known, including the exempt one. */}
-          {tax && taxDisplayRows(tax.breakdown).map(r => (
+          {/*
+            Tax reads ONCE: the split, then its total.
+
+            It used to print a blended "Tax (7.75%)" line AND the per-category split,
+            which says the same thing twice and gets worse the moment two categories
+            carry different rates - the blended figure would then match neither. When
+            the split is known the rate lives on each split row, so the total above
+            them is just "Tax". With no split there is nothing to break down, so the
+            single line keeps its rate.
+          */}
+          {taxSplitRows.map(r => (
             <div key={r.category} className="flex justify-between text-xs">
               <span className="text-white/35">{r.text}</span>
               <span className="text-white/50">{r.taxed ? fmt(r.amount) : '—'}</span>
             </div>
           ))}
+          {newTaxAmount > 0 && (
+            <div className="flex justify-between text-sm">
+              <span className="text-white/40">
+                {taxSplitRows.length > 0 ? 'Tax' : `Tax (${Math.round(taxRate * 10000) / 100}%)`}
+              </span>
+              <span className="text-white/60">{fmt(newTaxAmount)}</span>
+            </div>
+          )}
           <div className="flex justify-between items-baseline border-t border-white/8 pt-3 mt-1">
             <span className="font-condensed font-bold text-white text-lg tracking-wide">GRAND TOTAL</span>
             <span className="font-condensed font-bold text-orange text-4xl">{fmt(grandTotal)}</span>
