@@ -11,7 +11,8 @@
     "retry-listings": "npx tsx src/scripts/retry-listings.ts",
     "enrich-truck-stops": "npx tsx src/scripts/enrich-truck-stops.ts",
     "delete-bd-hd": "npx tsx src/scripts/delete-bd-hd-listings.ts",
-    "rebuild-trucks": "npx tsx src/scripts/rebuild-hd-truck-stops.ts"
+    "rebuild-trucks": "npx tsx src/scripts/rebuild-hd-truck-stops.ts",
+    "smoke": "tsx scripts/smoke.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.98.0",
