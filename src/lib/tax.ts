@@ -221,6 +221,32 @@ export function mergeBreakdowns(parts: Array<TaxBreakdown | null | undefined>): 
 }
 
 /**
+ * Tax owed according to a breakdown, by SUMMING its buckets.
+ *
+ * Deliberately a sum of already-rounded bucket amounts, NOT a fresh calculation over
+ * the merged bases. Those two disagree by a cent or two, and the difference is not
+ * academic - it is the gap between what a customer APPROVED and what they get billed.
+ *
+ * WO-2026-0011, to the cent:
+ *
+ *   per segment, then summed      seg 1 tax 10.76 + seg 2 tax 0.50  = 11.26  -> 156.66
+ *   per category, bases merged    parts 10.40 -> 0.81, labor -> 10.46 = 11.27 -> 156.67
+ *
+ * The segment figure is the one the customer agreed to on the work order, so it is
+ * the one that wins, and this function is how a reader gets it back out of a stored
+ * breakdown without re-rounding it. Use computeTax() to price something NEW; use this
+ * to total something already agreed.
+ */
+export function breakdownTaxTotal(breakdown: TaxBreakdown | null | undefined): number {
+  if (!breakdown) return 0
+  return round2(
+    (breakdown.parts?.amount    ?? 0) +
+    (breakdown.labor?.amount    ?? 0) +
+    (breakdown.services?.amount ?? 0),
+  )
+}
+
+/**
  * True when a write failed only because migration 140 has not been applied yet.
  *
  * Migrations here are applied by hand, and a preview deploy runs against the same

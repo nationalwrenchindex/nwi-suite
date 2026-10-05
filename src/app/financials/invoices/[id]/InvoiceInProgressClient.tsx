@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useTaxSettings } from '@/lib/use-tax-settings'
-import { computeTax, parseBreakdown, taxDisplayRows } from '@/lib/tax'
+import { computeTax, parseBreakdown, taxDisplayRows, mergeBreakdowns, breakdownTaxTotal } from '@/lib/tax'
 import { PAYMENT_TERMS, PAYMENT_TERMS_LABEL } from '@/lib/hd/payment-terms'
 import { segmentedLine, segmentHeading } from '@/lib/invoice-document'
 import { useRouter } from 'next/navigation'
@@ -621,19 +621,42 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
     baseParts != null && baseLabor != null &&
     Math.abs((baseParts + baseLabor) - Number(originalSubtotal ?? 0)) < 0.02
 
+  // ── THE APPROVED FIGURE IS CARRIED, NOT RE-DERIVED ─────────────────────────
+  //
+  // This used to add the baseline and the additions together and tax the sum, which
+  // re-rounds the baseline and lands a cent or two away from what the customer
+  // approved on the work order. WO-2026-0011 approved 156.66; this screen showed
+  // 156.67. WO-2026-0009 approved 374.85 and showed 374.87. The customer agrees to
+  // one number and gets billed another, which is the kind of discrepancy a fleet
+  // customer's AP department rejects the whole invoice over.
+  //
+  // ONE METHOD NOW, on both documents: tax is rounded per bucket where it is first
+  // agreed, and after that it is SUMMED, never recomputed. The work order rounds each
+  // segment; the invoice carries those figures and prices only what has been ADDED
+  // since. mergeBreakdowns sums already-rounded amounts, which is exactly that rule.
+  const addedParts = round2(shopSuppliesTotal + additionalPartsTotal)
+  const addedLabor = round2(additionalLaborTotal)
+
+  // What was agreed. A work-order invoice has it stored; a quote-sourced one is priced
+  // from the quote's own bases, which is what this screen already did.
+  const approvedBreakdown = storedTax ?? (
+    !isDetailer && baselineReconciles && taxSettings
+      ? computeTax({ parts: baseParts ?? 0, labor: baseLabor ?? 0 }, taxSettings).breakdown
+      : null
+  )
+
+  // Priced fresh, because nobody has agreed to it yet.
+  const addedBreakdown = !isDetailer && taxSettings && (addedParts !== 0 || addedLabor !== 0)
+    ? computeTax({ parts: addedParts, labor: addedLabor }, taxSettings).breakdown
+    : null
+
   // Detailers are deliberately excluded: their service lines are neither parts nor
   // separately-stated repair labor, and they keep taxing the whole subtotal.
   const tax = !isDetailer && baselineReconciles && taxSettings
-    ? computeTax(
-        {
-          parts: (baseParts ?? 0) + shopSuppliesTotal + additionalPartsTotal,
-          labor: (baseLabor ?? 0) + additionalLaborTotal,
-        },
-        taxSettings,
-      )
+    ? { breakdown: mergeBreakdowns([approvedBreakdown, addedBreakdown]) }
     : null
 
-  const newTaxAmount = tax ? tax.taxAmount : round2(newSubtotal * taxRate)
+  const newTaxAmount = tax ? breakdownTaxTotal(tax.breakdown) : round2(newSubtotal * taxRate)
   // Computed once: the Running Total needs to know whether a split exists before it
   // decides whether its total line still has to carry a rate.
   const taxSplitRows = tax ? taxDisplayRows(tax.breakdown) : []
