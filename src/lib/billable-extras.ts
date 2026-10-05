@@ -243,13 +243,96 @@ export function extrasFromDocument(doc: Record<string, unknown> | null | undefin
  *
  * To move it, change ONLY this function. Nothing else needs to know.
  */
-export interface ExtrasTaxBuckets { parts: number; labor: number }
+export interface ExtrasTaxBuckets {
+  /** Shop supplies. It is a goods-like surcharge, so it follows tax_parts. */
+  parts:   number
+  /** Travel time. It is labour performed, so it follows tax_labor. */
+  labor:   number
+  /**
+   * Mileage. NOT TAXED, and not a third tax bucket either.
+   *
+   * THE DECISION, made by the shop owner on 2026-10-05: mileage is reimbursement of
+   * a cost incurred getting to the job, not the sale of goods or labour, so no tax is
+   * assessed on it. It is still part of what the customer pays, so it belongs in the
+   * SUBTOTAL - callers must add this in, and must not pass it to computeTax.
+   *
+   * Kept as its own field rather than being silently dropped: a caller that forgets
+   * it produces a subtotal that is short by the mileage, which is a visible wrong
+   * number rather than a quiet under-collection.
+   */
+  untaxed: number
+}
 
 export function extrasTaxBuckets(e: ExtrasResult): ExtrasTaxBuckets {
   return {
-    parts: e.shopSupplies.amount,
-    labor: e.travel.amount + e.mileage.amount,
+    parts:   e.shopSupplies.amount,
+    labor:   e.travel.amount,
+    untaxed: e.mileage.amount,
   }
+}
+
+/**
+ * The tax a set of extras attracts, rounded PER BUCKET and then summed.
+ *
+ * Per-bucket rounding, never re-derived from a combined base: the customer reads
+ * separately-stated tax lines and they have to add up to what they are asked to pay.
+ * Same rule as computeTax and breakdownTaxTotal.
+ */
+export function extrasTax(
+  e: ExtrasResult,
+  settings: TaxSettings | null,
+): { breakdown: TaxBreakdown | null; taxAmount: number } {
+  if (!settings) return { breakdown: null, taxAmount: 0 }
+  const b = extrasTaxBuckets(e)
+  if (b.parts === 0 && b.labor === 0) return { breakdown: null, taxAmount: 0 }
+  const t = computeTax({ parts: b.parts, labor: b.labor }, settings)
+  return { breakdown: t.breakdown, taxAmount: t.taxAmount }
+}
+
+/**
+ * Everything the extras add to a document: subtotal, tax and total.
+ *
+ * THE INVARIANT THIS EXISTS TO PROTECT: an invoice must never display a charge that
+ * is not inside its total. subtotalDelta is exactly the sum of the three amounts the
+ * document prints, so a caller that adds this to its subtotal cannot state a line it
+ * has not billed. extrasAgree() below is the assertion.
+ */
+export interface ExtrasDelta {
+  subtotalDelta: number
+  taxDelta:      number
+  totalDelta:    number
+  breakdown:     TaxBreakdown | null
+}
+
+export function extrasDelta(e: ExtrasResult, settings: TaxSettings | null): ExtrasDelta {
+  const { breakdown, taxAmount } = extrasTax(e, settings)
+  const subtotalDelta = round2(e.travel.amount + e.mileage.amount + e.shopSupplies.amount)
+  return {
+    subtotalDelta,
+    taxDelta:   taxAmount,
+    totalDelta: round2(subtotalDelta + taxAmount),
+    breakdown,
+  }
+}
+
+/**
+ * STATED equals TOTALLED. Returns null when they agree, or a message when they do not.
+ *
+ * Called at the point an invoice is written, and it is meant to be loud: a document
+ * that prints a travel charge the total does not include is a billing error the
+ * customer finds before the shop does.
+ */
+export function extrasAgree(
+  e: ExtrasResult,
+  subtotalIncludingExtras: number,
+  subtotalExcludingExtras: number,
+): string | null {
+  const stated   = round2(e.travel.amount + e.mileage.amount + e.shopSupplies.amount)
+  const totalled = round2(subtotalIncludingExtras - subtotalExcludingExtras)
+  if (stated === totalled) return null
+  return `extras stated ${stated.toFixed(2)} but only ${totalled.toFixed(2)} reached the subtotal ` +
+    `(travel ${e.travel.amount.toFixed(2)}, mileage ${e.mileage.amount.toFixed(2)}, ` +
+    `supplies ${e.shopSupplies.amount.toFixed(2)})`
 }
 
 /**
@@ -267,7 +350,9 @@ export function totalsWithExtras(
   const b = extrasTaxBuckets(extras)
   const parts = round2(base.parts + b.parts)
   const labor = round2(base.labor + b.labor)
-  const subtotal = round2(parts + labor)
+  // b.untaxed is mileage: in the subtotal, never in a taxed bucket. Leaving it out
+  // here would quietly shorten every total by the mileage charge.
+  const subtotal = round2(parts + labor + b.untaxed)
 
   if (!settings) {
     const taxAmount = round2(subtotal * (fallbackTaxPercent / 100))
