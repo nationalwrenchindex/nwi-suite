@@ -45,6 +45,44 @@ export function billableSegmentPartsBase(
   return round2(parts)
 }
 
+/**
+ * The post-markup parts total of a LINE-ITEM priced parent.
+ *
+ * Prefers the stored line_items, which already carry the marked-up sell price. Falls
+ * back to parts_subtotal x (1 + markup) for a record whose line_items were never
+ * populated - an older work order, or one priced through the money columns alone.
+ * Returns 0 rather than guessing when neither is available: a fee invented from no
+ * parts is worse than no fee.
+ */
+async function lineItemPartsBase(
+  supabase: SupabaseClient,
+  spec:     { table: string; lineItems: { kind: 'column'; name: string } | { kind: 'table'; name: string; fk: string } },
+  parentId: string,
+  userId:   string,
+): Promise<number> {
+  if (spec.lineItems.kind === 'column') {
+    const { data } = await supabase
+      .from(spec.table)
+      .select(`${spec.lineItems.name}, parts_subtotal, parts_markup_percent`)
+      .eq('id', parentId)
+      .eq('user_id', userId)
+      .single()
+    const row = (data ?? {}) as Record<string, unknown>
+    const fromLines = partsBaseFromLines(row[spec.lineItems.name])
+    if (fromLines > 0) return fromLines
+    const base   = Number(row.parts_subtotal ?? 0)
+    const markup = Number(row.parts_markup_percent ?? 0)
+    return base > 0 ? round2(base * (1 + markup / 100)) : 0
+  }
+
+  // HD keeps line items in their own table.
+  const { data } = await supabase
+    .from(spec.lineItems.name)
+    .select('type, total')
+    .eq(spec.lineItems.fk, parentId)
+  return partsBaseFromLines(data)
+}
+
 export interface SyncResult {
   /** True when the parent row was updated. */
   written:   boolean
@@ -91,7 +129,22 @@ export async function syncParentExtras(
       .eq(spec.fkColumn, parentId)
       .eq('user_id', userId)
 
-    const partsBase = billableSegmentPartsBase(segRows)
+    // BOTH PRICING MODES. A work order is segment-priced OR line-item priced, never
+    // both, and the supplies base has to come from whichever one holds the money.
+    //
+    // THE BUG THIS CLOSES: only the segment path had a server-side computer. On a
+    // line-item work order the fee was computed solely in WorkOrderForm, which races
+    // the profile fetch behind useExtrasSettings - and lost. WO-2026-0018 carries
+    // 3.90 of parts and stored a 0.00 fee with a NULL percentage, while the
+    // segment-priced WO-2026-0015 stored 0.77 at 20% from this very function.
+    //
+    // Line totals are already POST-MARKUP - WO-2026-0018's parts line is 3.90 against
+    // a 3.00 base at 30% - which is the figure the customer reads and the base the
+    // trade charges supplies on.
+    const segmented = Array.isArray(segRows) && segRows.length > 0
+    const partsBase = segmented
+      ? billableSegmentPartsBase(segRows)
+      : await lineItemPartsBase(supabase, spec, parentId, userId)
 
     // Travel and mileage come from what the tech entered on the parent; only the
     // supplies base is derived from the segments.

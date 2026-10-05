@@ -7,6 +7,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { writeToleratingMigration142 } from '@/lib/migration-142'
+import { syncParentExtrasQuietly } from '@/lib/segments/parent-extras'
 import { hasWorkOrders } from '@/lib/work-orders'
 import { WORK_ORDER_STATUSES, type WorkOrderStatus } from '@/types/work-orders'
 import { WORK_ORDER_SELECT, WORK_ORDER_PAGE_SIZE } from './list'
@@ -139,6 +140,13 @@ export async function POST(request: NextRequest) {
     const msg = (error as { message?: string } | null)?.message
     return NextResponse.json({ error: msg ?? 'Failed to create work order' }, { status: 500 })
   }
+
+  // Recompute the three extras SERVER-SIDE from this shop's own settings and store
+  // them on the work order. This is what makes a LINE-ITEM priced job get a shop
+  // supplies fee at all: the client form races the profile fetch and loses, which is
+  // why WO-2026-0018 stored 0.00 at a NULL percent while a segment-priced job on the
+  // same account stored 0.77 at 20%. Never allowed to fail this request.
+  if (data?.id) await syncParentExtrasQuietly(supabase, 'ld', String(data.id), user.id)
 
   return NextResponse.json({ work_order: data }, { status: 201 })
 }
