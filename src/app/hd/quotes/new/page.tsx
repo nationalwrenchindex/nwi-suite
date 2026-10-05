@@ -1,6 +1,11 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { useExtrasSettings } from '@/lib/use-extras-settings'
+import { ExtrasInputs } from '@/components/shared/ExtrasFields'
+import {
+  computeExtras, extrasColumns, extrasDisplayRows, extrasDelta, extrasAgree,
+} from '@/lib/billable-extras'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { LABOR_GUIDE, type LaborGuideItem } from '@/lib/hd/labor-guide'
@@ -176,6 +181,11 @@ export default function NewQuotePage() {
   const router = useRouter()
 
   const [saving, setSaving]               = useState(false)
+  // HD gets the same three extras as LD, same tax treatment, same cap. Hours and
+  // miles are the only inputs; the percentage is never a question.
+  const extrasSettings = useExtrasSettings()
+  const [travelHours,  setTravelHours]  = useState(0)
+  const [mileageMiles, setMileageMiles] = useState(0)
   const [toast, setToast]                 = useState('')
   const [customerToast, setCustomerToast] = useState(false)
   const [laborModal, setLaborModal]       = useState(false)
@@ -512,6 +522,32 @@ export default function NewQuotePage() {
   )
   const taxAmount     = tax.taxAmount
   const total         = taxBase + taxAmount
+  const taxedPartsFlag = taxSettings?.tax_parts ?? true
+  const taxedLaborFlag = taxSettings?.tax_labor ?? true
+
+  // ── Billable extras ──────────────────────────────────────────────────────
+  // Supplies is a percentage of the PARTS subtotal only - never labour, and never
+  // the diagnostic or road-call fee, both of which are labour. Travel is taxed as
+  // labour, mileage is not taxed, supplies is taxed as parts. extrasDelta does the
+  // per-bucket rounding; nothing is re-derived from the document total.
+  const extrasResult = computeExtras(
+    subtotalParts,
+    { travelHours, mileageMiles },
+    extrasSettings,
+    Number(form.labor_rate ?? 0),
+  )
+  const extras = extrasDelta(extrasResult, {
+    tax_parts:      taxedPartsFlag,
+    tax_labor:      taxedLaborFlag,
+    tax_rate_parts: form.tax_rate,
+    tax_rate_labor: form.tax_rate_labor,
+  })
+  const subtotalWithExtras = parseFloat((taxBase + extras.subtotalDelta).toFixed(2))
+  const taxWithExtras      = parseFloat((taxAmount + extras.taxDelta).toFixed(2))
+  const totalWithExtras    = parseFloat((total + extras.totalDelta).toFixed(2))
+  // An HD invoice must not display a charge outside its total either.
+  const extrasMismatch = extrasAgree(extrasResult, subtotalWithExtras, taxBase)
+
 
   function fmt(n: number) { return `${money(n)}` }
 
@@ -731,6 +767,8 @@ export default function NewQuotePage() {
   // ── Save ──
   async function save(status: 'draft' | 'sent') {
     if (!form.customer_name.trim()) { setToast('Customer name is required.'); return }
+    // Refuse rather than bill a figure that does not add up. Loud on purpose.
+    if (extrasMismatch) { setToast('Cannot save: ' + extrasMismatch); return }
     setSaving(true)
     try {
       const body = {
@@ -771,8 +809,12 @@ export default function NewQuotePage() {
         // What was actually taxed, so the customer copy can say so and no later
         // reader has to guess the split back out of a blended subtotal.
         tax_breakdown:     tax.breakdown,
-        tax_amount:        parseFloat(taxAmount.toFixed(2)),
-        total:             parseFloat(total.toFixed(2)),
+        // With the extras in. taxWithExtras / totalWithExtras include travel and
+        // supplies tax; mileage adds to the subtotal and attracts none.
+        tax_amount:        taxWithExtras,
+        total:             totalWithExtras,
+        // Computed, stored with the rate in force so a reopen cannot re-price them.
+        ...extrasColumns(extrasResult),
         notes:             form.notes || null,
         valid_until:       form.valid_until || null,
         status,
@@ -1230,12 +1272,30 @@ export default function NewQuotePage() {
 
           {/* Running totals */}
           <div className="flex justify-end mt-6">
+            {/* Hours and miles. Hidden entirely unless the shop bills one of them.
+                Shop supplies has no input - it is a percentage of parts. */}
+            <div style={{ width: 280, marginBottom: 12 }}>
+              <ExtrasInputs
+                settings={extrasSettings}
+                travelHours={travelHours}
+                mileageMiles={mileageMiles}
+                onTravelHours={setTravelHours}
+                onMileageMiles={setMileageMiles}
+                laborRate={Number(form.labor_rate ?? 0)}
+              />
+            </div>
             <div style={{ width: 280 }}>
               {[
                 { label: 'Labor Subtotal', val: subtotalLabor },
                 { label: 'Parts Subtotal', val: subtotalParts },
                 ...(form.include_diagnostic ? [{ label: 'Diagnostic Fee', val: diagFee }] : []),
                 ...(form.include_road_call ? [{ label: 'Road Call Fee', val: roadFee }] : []),
+                // Travel, mileage and shop supplies. extrasDisplayRows returns no row
+                // for a zero amount, so nothing prints for an extra that is not charged.
+                ...extrasDisplayRows(extrasResult).map(r => ({
+                  label: r.detail ? `${r.label} (${r.detail})` : r.label,
+                  val:   r.amount,
+                })),
               ].map(r => (
                 <div key={r.label} className="flex justify-between py-1.5 text-sm" style={{ color: MUTED }}>
                   <span>{r.label}</span><span>{fmt(r.val)}</span>
@@ -1261,7 +1321,7 @@ export default function NewQuotePage() {
                   }}
                   style={{ width: 70, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '4px 8px', fontSize: 13, textAlign: 'right' }}
                 />
-                <span className="text-sm" style={{ color: MUTED }}>{fmt(taxAmount)}</span>
+                <span className="text-sm" style={{ color: MUTED }}>{fmt(taxWithExtras)}</span>
               </div>
               {/* What is being taxed, including what is NOT. A tech who can see
                   "Labor - not taxable" catches a wrong setting before a customer does. */}
@@ -1272,7 +1332,7 @@ export default function NewQuotePage() {
               ))}
               <div className="flex justify-between items-center pt-3" style={{ borderTop: `2px solid ${ORANGE}`, marginTop: 4 }}>
                 <span className="font-bold text-base" style={{ color: TEXT }}>TOTAL</span>
-                <span className="font-bold text-2xl" style={{ color: ORANGE }}>{fmt(total)}</span>
+                <span className="font-bold text-2xl" style={{ color: ORANGE }}>{fmt(totalWithExtras)}</span>
               </div>
             </div>
           </div>

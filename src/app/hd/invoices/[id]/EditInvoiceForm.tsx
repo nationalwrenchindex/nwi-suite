@@ -1,6 +1,11 @@
 'use client'
 
 import { useState } from 'react'
+import { useExtrasSettings } from '@/lib/use-extras-settings'
+import { ExtrasInputs } from '@/components/shared/ExtrasFields'
+import {
+  computeExtras, extrasColumns, extrasDisplayRows, extrasDelta, extrasAgree,
+} from '@/lib/billable-extras'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { money } from '@/lib/format'
@@ -53,6 +58,12 @@ export default function EditInvoiceForm({ invoice }: { invoice: Record<string, u
   const id = String(invoice.id)
 
   const [saving, setSaving] = useState(false)
+  // HD gets the same three extras as LD, with the same tax treatment and the same
+  // cap. Hours and miles are the only inputs; shop supplies is a percentage of parts
+  // and is never a question. HD had four read sites and no producer before this.
+  const extrasSettings = useExtrasSettings()
+  const [travelHours,  setTravelHours]  = useState(Number(invoice.travel_hours ?? 0))
+  const [mileageMiles, setMileageMiles] = useState(Number(invoice.mileage_miles ?? 0))
   const [toast, setToast]   = useState('')
   const [laborModal, setLaborModal] = useState(false)
   const [partsModal, setPartsModal] = useState(false)
@@ -165,9 +176,37 @@ export default function EditInvoiceForm({ invoice }: { invoice: Record<string, u
   )
   const taxAmount = tax.taxAmount
   const total = taxBase + taxAmount
+  const taxedPartsFlag = taxedParts
+  const taxedLaborFlag = taxedLabor
+
+  // ── Billable extras ──────────────────────────────────────────────────────
+  // Supplies is a percentage of the PARTS subtotal only - never labour, never the
+  // diagnostic or road-call fee, which are labour. Travel is taxed as labour,
+  // mileage is not taxed at all, supplies is taxed as parts. extrasDelta does the
+  // per-bucket rounding; nothing is re-derived from the document total.
+  const extrasResult = computeExtras(
+    subtotalParts,
+    { travelHours, mileageMiles },
+    extrasSettings,
+    Number(form.labor_rate ?? 0),
+  )
+  const extras = extrasDelta(extrasResult, {
+    tax_parts:      taxedPartsFlag,
+    tax_labor:      taxedLaborFlag,
+    tax_rate_parts: form.tax_rate,
+    tax_rate_labor: form.tax_rate_labor,
+  })
+  const subtotalWithExtras = parseFloat((taxBase + extras.subtotalDelta).toFixed(2))
+  const taxWithExtras      = parseFloat((taxAmount + extras.taxDelta).toFixed(2))
+  const totalWithExtras    = parseFloat((total + extras.totalDelta).toFixed(2))
+  // An HD invoice must not display a charge outside its total either.
+  const extrasMismatch = extrasAgree(extrasResult, subtotalWithExtras, taxBase)
+
 
   async function save() {
     if (!form.customer_name.trim()) { setToast('Customer name is required.'); return }
+    // Refuse rather than bill a figure that does not add up. Loud on purpose.
+    if (extrasMismatch) { setToast('Cannot save: ' + extrasMismatch); return }
     setSaving(true)
     try {
       const body = {
@@ -185,9 +224,13 @@ export default function EditInvoiceForm({ invoice }: { invoice: Record<string, u
         diagnostic_fee: parseFloat(form.diagnostic_fee.toFixed(2)),
         road_call_fee:  parseFloat(form.road_call_fee.toFixed(2)),
         tax_rate:       form.tax_rate,
-        tax_amount:     parseFloat(taxAmount.toFixed(2)),
+        // With the extras in. taxWithExtras / totalWithExtras include travel and
+        // supplies tax; mileage adds to the subtotal and attracts none.
+        tax_amount:     taxWithExtras,
         tax_breakdown:  tax.breakdown,
-        total:          parseFloat(total.toFixed(2)),
+        total:          totalWithExtras,
+        // Computed, stored with the rate in force so a reopen cannot re-price them.
+        ...extrasColumns(extrasResult),
         notes:          form.notes || null,
         payment_terms:  form.payment_terms || 'net30',
       }
@@ -288,8 +331,28 @@ export default function EditInvoiceForm({ invoice }: { invoice: Record<string, u
           )}
 
           <div className="flex justify-end mt-6">
+            {/* Hours and miles. Hidden entirely unless the shop bills one of them.
+                Shop supplies has no input - it is a percentage of parts. */}
+            <div style={{ width: 280, marginBottom: 12 }}>
+              <ExtrasInputs
+                settings={extrasSettings}
+                travelHours={travelHours}
+                mileageMiles={mileageMiles}
+                onTravelHours={setTravelHours}
+                onMileageMiles={setMileageMiles}
+                laborRate={Number(form.labor_rate ?? 0)}
+              />
+            </div>
             <div style={{ width: 280 }}>
-              {[{ label: 'Labor Subtotal', val: subtotalLabor }, { label: 'Parts Subtotal', val: subtotalParts }].map(r => (
+              {[
+                { label: 'Labor Subtotal', val: subtotalLabor },
+                { label: 'Parts Subtotal', val: subtotalParts },
+                // Travel, mileage and shop supplies. A zero extra prints no row.
+                ...extrasDisplayRows(extrasResult).map(r => ({
+                  label: r.detail ? `${r.label} (${r.detail})` : r.label,
+                  val:   r.amount,
+                })),
+              ].map(r => (
                 <div key={r.label} className="flex justify-between py-1.5 text-sm" style={{ color: MUTED }}><span>{r.label}</span><span>{fmt(r.val)}</span></div>
               ))}
               <div className="flex items-center gap-3 py-2" style={{ borderTop: `1px solid ${BORDER}`, marginTop: 4 }}>
@@ -300,7 +363,7 @@ export default function EditInvoiceForm({ invoice }: { invoice: Record<string, u
                     setForm(f => ({ ...f, tax_rate: v, tax_rate_labor: f.tax_rate_labor === f.tax_rate ? v : f.tax_rate_labor }))
                   }}
                   style={{ width: 70, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '4px 8px', fontSize: 13, textAlign: 'right' }} />
-                <span className="text-sm" style={{ color: MUTED }}>{fmt(taxAmount)}</span>
+                <span className="text-sm" style={{ color: MUTED }}>{fmt(taxWithExtras)}</span>
               </div>
               {taxDisplayRows(tax.breakdown).map(r => (
                 <div key={r.category} className="flex justify-between text-xs py-0.5" style={{ color: MUTED }}>
@@ -309,7 +372,7 @@ export default function EditInvoiceForm({ invoice }: { invoice: Record<string, u
               ))}
               <div className="flex justify-between items-center pt-3" style={{ borderTop: `2px solid ${ORANGE}`, marginTop: 4 }}>
                 <span className="font-bold text-base" style={{ color: TEXT }}>TOTAL</span>
-                <span className="font-bold text-2xl" style={{ color: ORANGE }}>{fmt(total)}</span>
+                <span className="font-bold text-2xl" style={{ color: ORANGE }}>{fmt(totalWithExtras)}</span>
               </div>
             </div>
           </div>
