@@ -1,8 +1,10 @@
 -- +===========================================================================+
 -- | REPAIR - INV-2026-0015 states a charge that is not inside its total        |
+-- | OPTION A SELECTED: correct the invoice up to 150.45                        |
 -- +===========================================================================+
 --
--- NOT RUN BY ME. This UPDATES a finalized invoice that is awaiting payment.
+-- ARMED. This run keeps the repair. The UPDATE is guarded on all four broken
+-- values, so it either does exactly the correction below or it does nothing.
 --
 -- -- WHAT IS WRONG -----------------------------------------------------------
 --
@@ -34,87 +36,74 @@
 -- ones. The code fix makes a recorded percentage win over the live setting, so this
 -- cannot recur - but it does not repair a row already written.
 --
--- -- WHY THIS IS A JUDGEMENT CALL, NOT AN OBVIOUS FIX -------------------------
+-- -- WHY OPTION A IS SAFE HERE, CHECKED NOT ASSUMED ---------------------------
 --
--- This invoice is in awaiting_payment. If the customer has ALREADY BEEN SENT the
--- 149.62 figure, raising it to 150.45 means billing more than they were told. The
--- standing rule here is that anything already sent keeps what it was sent with.
+-- Correcting a bill UPWARDS is only honest if the customer has not been given the
+-- lower figure. Verified read-only against the row before arming this:
 --
--- So decide which you want BEFORE running step 2:
+--   sent_to_customer_at   NULL
+--   times_sent            0
+--   customer_viewed_at    NULL
+--   customer_view_count   0
 --
---   OPTION A - correct the invoice to 150.45. Right when nothing has been sent yet,
---              or the customer has not paid and will accept a corrected bill.
+-- Nothing was sent and nobody has opened the public link, so no one has seen 149.62.
 --
---   OPTION B - keep 149.62 and drop the stated fee to 0.00 instead, so the row stops
---              claiming a charge it is not billing. Right when the customer already
---              has the 149.62 figure. The shop absorbs 0.83.
+-- NOTE: `sent_at` does NOT exist on public.invoices. An earlier draft of this script
+-- selected it and would have failed on that line before reaching the UPDATE. The four
+-- columns above are the real ones.
 --
--- Both leave a self-consistent row. Doing NEITHER leaves an invoice that contradicts
--- itself on paper, which is the one outcome to avoid.
+-- OPTION B, kept for the record and NOT run: had the invoice been sent, the honest
+-- repair would be to keep 149.62 and set shop_supplies_fee to 0 instead, so the row
+-- stops claiming a charge it is not billing, with the shop absorbing the 0.83.
 
 BEGIN;
 
 -- -----------------------------------------------------------------------------
--- STEP 1 - look at it first. Keep this output.
+-- STEP 1 - the row as it stands. Keep this output.
 -- -----------------------------------------------------------------------------
 SELECT invoice_number,
        invoice_status,
-       sent_at,
+       sent_to_customer_at,
+       times_sent,
+       customer_viewed_at,
        subtotal,
        tax_amount,
        total,
        shop_supplies_fee,
        shop_supplies_percent_applied,
-       jsonb_pretty(tax_breakdown) AS tax_breakdown,
        (SELECT sum((l->>'total')::numeric)
           FROM jsonb_array_elements(line_items) l) AS lines_sum
 FROM   public.invoices
 WHERE  invoice_number = 'INV-2026-0015';
 
--- SENT_AT IS THE DECIDING FIELD. If it is not null, the customer has the old figure
--- and OPTION B is the honest choice.
+-- -----------------------------------------------------------------------------
+-- STEP 2 - OPTION A: correct the invoice to 150.45
+--
+-- The four guards are the whole safety of this script. If anything about the row
+-- has changed since it was read, zero rows update and nothing is lost.
+-- -----------------------------------------------------------------------------
+UPDATE public.invoices
+SET    subtotal      = 139.63,
+       tax_amount    = 10.82,
+       total         = 150.45,
+       tax_rate      = 0.0775,
+       -- Rebuilt with the fee inside the parts base, each bucket rounded once:
+       -- parts 4.63 at 7.75% = 0.36, labor 135.00 at 7.75% = 10.46, total 10.82.
+       tax_breakdown = jsonb_build_object(
+         'version', 1,
+         'parts', jsonb_build_object('base', 4.63, 'rate', 7.75, 'taxed', true, 'amount', 0.36),
+         'labor', jsonb_build_object('base', 135,  'rate', 7.75, 'taxed', true, 'amount', 10.46)
+       ),
+       updated_at    = now()
+WHERE  invoice_number = 'INV-2026-0015'
+  AND  subtotal          = 138.86
+  AND  tax_amount        = 10.76
+  AND  total             = 149.62
+  AND  shop_supplies_fee = 0.77;
 
 -- -----------------------------------------------------------------------------
--- STEP 2 - OPTION A: correct the invoice up to 150.45
--- Uncomment this block only if you want the customer billed the full amount.
+-- STEP 3 - confirm. Both flags must read true.
 -- -----------------------------------------------------------------------------
--- UPDATE public.invoices
--- SET    subtotal      = 139.63,
---        tax_amount    = 10.82,
---        total         = 150.45,
---        tax_rate      = 0.0775,
---        tax_breakdown = jsonb_build_object(
---          'version', 1,
---          'parts', jsonb_build_object('base', 4.63, 'rate', 7.75, 'taxed', true, 'amount', 0.36),
---          'labor', jsonb_build_object('base', 135,  'rate', 7.75, 'taxed', true, 'amount', 10.46)
---        ),
---        updated_at    = now()
--- WHERE  invoice_number = 'INV-2026-0015'
---   -- Guards: only touch the row if it is still in the exact broken state described
---   -- above. If anything has changed since, this does nothing and you re-read it.
---   AND  subtotal          = 138.86
---   AND  tax_amount        = 10.76
---   AND  total             = 149.62
---   AND  shop_supplies_fee = 0.77;
-
--- -----------------------------------------------------------------------------
--- STEP 2 - OPTION B: keep 149.62 and stop claiming the fee
--- Uncomment this block only if the customer already has the 149.62 figure.
--- -----------------------------------------------------------------------------
--- UPDATE public.invoices
--- SET    shop_supplies_fee             = 0,
---        shop_supplies_percent_applied = NULL,
---        shop_supplies_cap_applied     = NULL,
---        updated_at                    = now()
--- WHERE  invoice_number = 'INV-2026-0015'
---   AND  subtotal          = 138.86
---   AND  total             = 149.62
---   AND  shop_supplies_fee = 0.77;
-
--- -----------------------------------------------------------------------------
--- STEP 3 - confirm whichever option you ran leaves a consistent row
--- -----------------------------------------------------------------------------
--- states_what_it_bills must be true. That is the whole point of the repair.
 SELECT invoice_number,
        subtotal,
        tax_amount,
@@ -122,6 +111,8 @@ SELECT invoice_number,
        shop_supplies_fee,
        (SELECT sum((l->>'total')::numeric)
           FROM jsonb_array_elements(line_items) l) AS lines_sum,
+       -- The invariant that was broken: the subtotal must contain every charge the
+       -- document states.
        (subtotal = (SELECT sum((l->>'total')::numeric)
                       FROM jsonb_array_elements(line_items) l) + shop_supplies_fee)
                                                    AS states_what_it_bills,
@@ -129,8 +120,7 @@ SELECT invoice_number,
 FROM   public.invoices
 WHERE  invoice_number = 'INV-2026-0015';
 
--- If states_what_it_bills and adds_up are both true:
---   COMMIT;
--- Otherwise:
---   ROLLBACK;
-ROLLBACK;  -- <= change to COMMIT when the checks above look right
+-- Expect: subtotal 139.63, tax_amount 10.82, total 150.45, lines_sum 138.86,
+--         states_what_it_bills TRUE, adds_up TRUE.
+
+COMMIT;   -- ARMED. The guards above mean this commits the correction or nothing.

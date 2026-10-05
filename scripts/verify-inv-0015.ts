@@ -14,7 +14,14 @@
 //      149.62. Two totals, one screen.
 //   3. Finalize PATCHed those recomputed figures over the stored ones and the invoice
 //      moved to awaiting_payment holding them. shop_supplies_fee stayed 0.77, so the
-//      row now STATES a charge that is not inside its own subtotal.
+//      row STATED a charge that was not inside its own subtotal.
+//   4. REPAIRED 2026-10-05 via scripts/repair-inv-2026-0015.sql, Option A - corrected
+//      up to 150.45, which was the honest choice because sent_to_customer_at was NULL,
+//      times_sent 0 and customer_view_count 0, so nobody had seen the lower figure.
+//
+// This script stays because the MECHANISM is what matters, and it still runs: section
+// 2 reproduces the bug from inputs, section 3 proves the fix on the same inputs, and
+// section 1 asserts the invariant on whatever the row currently holds.
 
 import fs from 'fs'
 import {
@@ -92,7 +99,7 @@ async function main() {
   if (!consistent) {
     const short = r2(correctTotal - Number(inv.total))
     console.log('')
-    console.log('  >>> THIS INVOICE IS WRONG IN THE DATABASE RIGHT NOW.')
+    console.log('  >>> THIS INVOICE IS WRONG IN THE DATABASE.')
     console.log(`      It states a ${fee.toFixed(2)} shop supplies charge that is NOT inside its`)
     console.log(`      subtotal, its tax, or its total. invoice_status is "${inv.invoice_status}".`)
     console.log(`      The customer is under-billed by ${short.toFixed(2)}.`)
@@ -122,8 +129,19 @@ async function main() {
   ok(reSub === 138.86,   `reproduces the reported subtotal 138.86 (got ${reSub.toFixed(2)})`)
   ok(reTax === 10.76,    `reproduces the reported tax 10.76 (got ${reTax.toFixed(2)})`)
   ok(reTotal === 149.62, `reproduces the reported total 149.62 (got ${reTotal.toFixed(2)})`)
-  ok(reTotal === Number(inv.total),
-    'and it is exactly what finalize wrote to the database - so this IS the mechanism')
+  // This asserted reTotal === inv.total, i.e. that the DAMAGED figure was still in
+  // the database - which was the proof that the reproduction was the real mechanism.
+  // The row was repaired on 2026-10-05 (Option A, nothing had been sent), so that
+  // assertion had served its purpose and would now fail for the best possible reason.
+  //
+  // What remains worth asserting is the pair: the reproduction still lands on the
+  // figure that WAS written, and the row no longer holds it.
+  ok(reTotal === 149.62,
+    'the reproduction still lands on 149.62, the figure finalize actually wrote')
+  ok(Number(inv.total) !== reTotal,
+    `and the row no longer holds it - repaired to ${Number(inv.total).toFixed(2)}`)
+  ok(Number(inv.total) === correctTotal,
+    `the repair landed on the correct ${correctTotal.toFixed(2)}, not an arbitrary number`)
 
   // ══ 3. THE FIX ON THE SAME INPUTS ══════════════════════════════════════════
   hr('3. With the recorded terms honoured, both blocks agree')
