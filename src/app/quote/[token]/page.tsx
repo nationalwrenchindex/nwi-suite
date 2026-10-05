@@ -10,6 +10,7 @@ import { money } from '@/lib/format'
 import { BrandFooter } from '@/components/BrandHeader'
 import { publicDocumentMetadata } from '@/lib/public-metadata'
 import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
+import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
 
 const QUOTE_SELECT = `
   id, quote_number, status, public_token,
@@ -17,6 +18,9 @@ const QUOTE_SELECT = `
   line_items, labor_hours, labor_rate,
   parts_subtotal, parts_markup_percent, labor_subtotal,
   tax_percent, tax_amount, tax_breakdown, grand_total,
+  travel_hours, travel_rate, travel_amount,
+  mileage_miles, mileage_rate, mileage_amount,
+  shop_supplies_percent_applied, shop_supplies_cap_applied, shop_supplies_fee,
   service_lines, adjustments,
   view_count, viewed_at, times_sent,
   sent_at, approved_at, declined_at, quote_expires_at,
@@ -82,6 +86,14 @@ export default async function PublicQuotePage(
   // Tax line -- a quote the customer already received must not start reading
   // differently.
   const quoteTaxRows = taxDisplayRows(parseBreakdown(q.tax_breakdown))
+
+  // Travel, mileage and shop supplies AS STORED on this quote. Read, never
+  // recomputed: a quote the customer already has must not change because the shop
+  // edited a rate afterwards. A zero extra returns no row, so a quote with no
+  // travel shows no travel line.
+  const quoteExtraRows = extrasDisplayRows(
+    extrasFromDocument(q as unknown as Record<string, unknown>),
+  )
 
   const customerName = q.customer
     ? `${q.customer.first_name ?? ''} ${q.customer.last_name ?? ''}`.trim()
@@ -329,6 +341,18 @@ export default async function PublicQuotePage(
               )}
             </>
           )}
+          {/* Travel, mileage and shop supplies, each on its own labelled line. These
+              are part of what the customer is being asked to approve, so they belong
+              above the tax rather than hidden inside the parts figure. */}
+          {quoteExtraRows.map(r => (
+            <div key={r.key} className="flex justify-between text-sm">
+              <span className="text-white/50">
+                {r.label}
+                {r.detail && <span className="text-white/30 text-xs ml-1.5">{r.detail}</span>}
+              </span>
+              <span className="text-white">{fmt(r.amount)}</span>
+            </div>
+          ))}
           {/* What was taxed, including what was not, so a customer can see that labor
               is not taxable instead of wondering why the tax looks low. Quotes written
               before migration 140 have no breakdown and keep their single Tax line. */}

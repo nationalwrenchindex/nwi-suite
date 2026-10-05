@@ -384,6 +384,59 @@ async function main() {
   ok((list.match(/await refetch\(\)/g) ?? []).length >= 4,
     'all four mutations refetch')
 
+  // ══ 8. THE LD QUOTE SURFACES ═══════════════════════════════════════════════
+  hr('8. The LD quote: editor produces, customer copy displays')
+
+  const tab = fs.readFileSync('src/components/financials/QuotesTab.tsx', 'utf8')
+  ok(tab.includes('computeExtras('), 'QuotesTab computes the extras')
+  ok(tab.includes('...extrasColumns(extrasResult)'), 'and stores the computed columns')
+  ok(tab.includes('extrasMismatch'), 'and refuses to save on a mismatch')
+  ok(tab.includes('round2(grandTotalBase + extras.totalDelta)'),
+    'and its grand total includes them - not a figure that excludes them')
+  ok(tab.includes('isDetailer ? 0 : partsTotal'),
+    'supplies is based on the POST-MARKUP parts total, and detailers are excluded')
+  ok(!/setShopSuppliesPercent|value={shopSuppliesPercent}/.test(tab),
+    'and there is no input for the percentage')
+
+  const pub = fs.readFileSync('src/app/quote/[token]/page.tsx', 'utf8')
+  ok(pub.includes('extrasFromDocument('),
+    'the customer quote page reads the extras AS STORED')
+  ok(!pub.includes('computeExtras('),
+    'and never recomputes them - a quote already sent must not change under the customer')
+  ok(pub.includes('quoteExtraRows.map('), 'rendering each on its own labelled line')
+  for (const col of ['travel_amount', 'mileage_amount', 'shop_supplies_fee']) {
+    ok(pub.includes(col), `and its select pulls ${col}, without which it could not see them`)
+  }
+
+  // ══ 9. NOTHING EXISTING GETS RETOTALLED ════════════════════════════════════
+  hr('9. The mileage-untaxed change cannot move a document already sent')
+
+  // Server-side counts with a filter, NOT a row scan: hd_work_orders holds 1560 rows
+  // and a plain select returns only the first 1000, so a scan would have reported
+  // "0 of 1000" and looked like proof.
+  const countOf = async (path: string) => {
+    const r = await fetch(`${U}/rest/v1/${path}`, {
+      method: 'HEAD',
+      headers: { ...H, Prefer: 'count=exact' },
+    })
+    const cr = r.headers.get('content-range') ?? ''
+    return cr.includes('/') ? Number(cr.split('/')[1]) : NaN
+  }
+
+  let withMileage = 0, totalDocs = 0
+  for (const t of ['invoices', 'quotes', 'work_orders', 'hd_invoices', 'hd_quotes', 'hd_work_orders']) {
+    const all = await countOf(`${t}?select=id`)
+    const mi  = await countOf(`${t}?select=id&mileage_amount=gt.0`)
+    totalDocs += Number.isFinite(all) ? all : 0
+    withMileage += Number.isFinite(mi) ? mi : 0
+    console.log(`  ${t.padEnd(16)} ${String(all).padEnd(6)} rows, ${mi} with mileage`)
+  }
+  console.log(`  ${totalDocs} documents total, ${withMileage} carrying a mileage charge`)
+  ok(withMileage === 0,
+    `no existing document carries a mileage charge (${withMileage}), so nothing can be retotalled by the tax change`)
+  ok(totalDocs > 1000,
+    `and the count is server-side across all ${totalDocs} documents, not a capped 1000-row scan`)
+
   console.log('\n' + '='.repeat(78))
   console.log(`${pass} passed, ${fail} failed`)
   console.log('='.repeat(78))

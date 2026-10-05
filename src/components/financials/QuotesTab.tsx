@@ -1,6 +1,11 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { useExtrasSettings } from '@/lib/use-extras-settings'
+import {
+  computeExtras, extrasColumns, extrasDisplayRows, extrasDelta, extrasAgree,
+} from '@/lib/billable-extras'
+import { ExtrasInputs } from '@/components/shared/ExtrasFields'
 import { useTaxSettings } from '@/lib/use-tax-settings'
 import type { Quote, QuoteStatus, LineItem, ServiceLine, Adjustment, AdjustmentPreset } from '@/types/financials'
 import LineItemEditor, { LineItemTable } from '@/components/shared/LineItemEditor'
@@ -660,6 +665,12 @@ function QuoteDetailModal({
   // computeTotals keeps applying one rate to the whole subtotal and a detailer quote
   // comes out to the same cent it always did. Service lines are not parts and are not
   // separately-stated repair labor, and that question is not settled here.
+  // Hours and miles only. The percentage is never a question - it comes from
+  // Settings and computes itself off the parts total below.
+  const extrasSettings = useExtrasSettings()
+  const [travelHours,  setTravelHours]  = useState(0)
+  const [mileageMiles, setMileageMiles] = useState(0)
+
   const t                   = computeTotals(isDetailer
     ? { ...lineInputs, items: [], laborHours: 0, laborRate: 0 }
     : { ...lineInputs, taxSettings })
@@ -671,7 +682,25 @@ function QuoteDetailModal({
   const adjustmentsSubtotal = isDetailer ? adjustments.reduce((s, a) => s + a.price_cents / 100, 0) : 0
   const subtotal            = isDetailer ? servicesSubtotal + adjustmentsSubtotal : t.subtotal
   const taxAmount           = isDetailer ? round2(subtotal * ((taxPct || 0) / 100)) : t.taxAmount
-  const grandTotal          = isDetailer ? round2(subtotal + taxAmount)             : t.grandTotal
+  const grandTotalBase      = isDetailer ? round2(subtotal + taxAmount)             : t.grandTotal
+
+  // ── Billable extras ──────────────────────────────────────────────────────
+  // Supplies is a percentage of the POST-MARKUP parts total - the figure the
+  // customer reads - so this quote and the invoice it becomes agree. Travel taxes as
+  // labour, mileage is not taxed, supplies taxes as parts. Detailers are excluded
+  // from the percentage fee throughout, so they get no extras here either.
+  const extrasResult = computeExtras(
+    isDetailer ? 0 : partsTotal,
+    { travelHours, mileageMiles },
+    isDetailer ? { ...extrasSettings, billShopSupplies: false } : extrasSettings,
+    laborRate,
+  )
+  const extras     = extrasDelta(extrasResult, isDetailer ? null : taxSettings)
+  const taxWithExtras   = round2(taxAmount + extras.taxDelta)
+  const subtotalWithExtras = round2(subtotal + extras.subtotalDelta)
+  const grandTotal  = round2(grandTotalBase + extras.totalDelta)
+  // A quote must not display a charge outside its total either.
+  const extrasMismatch = extrasAgree(extrasResult, subtotalWithExtras, subtotal)
 
   // ── Prevent accidental navigation when dirty ───────────────────────────────
   useEffect(() => {
@@ -710,6 +739,8 @@ function QuoteDetailModal({
 
   // ── Validation ─────────────────────────────────────────────────────────────
   function validate(): string | null {
+    if (extrasMismatch)
+      return 'Cannot save: ' + extrasMismatch
     if (grandTotal < 0)
       return 'Grand total cannot be negative.'
     if (isDetailer) {
@@ -747,6 +778,8 @@ function QuoteDetailModal({
           tax_percent:          taxPct,
           tax_amount:           round2(taxAmount),
           grand_total:          round2(grandTotal),
+          // Computed, stored with the rate in force so a reopen cannot re-price them.
+          ...extrasColumns(extrasResult),
           notes,
           customer_name:        custName,
           customer_phone:       custPhone,
@@ -769,6 +802,8 @@ function QuoteDetailModal({
           tax_percent:          taxPct,
           tax_amount:           round2(taxAmount),
           grand_total:          round2(grandTotal),
+          // Computed, stored with the rate in force so a reopen cannot re-price them.
+          ...extrasColumns(extrasResult),
           notes,
           customer_name:        custName,
           customer_phone:       custPhone,
@@ -1619,6 +1654,28 @@ function QuoteDetailModal({
                         </div>
                       )}
                     </>
+                  )}
+                  {/* Travel, mileage and shop supplies. A zero extra prints no row. */}
+                  {extrasDisplayRows(extrasResult).map(r => (
+                    <div key={r.key} className="flex justify-between text-sm">
+                      <span className="text-white/60">
+                        {r.label}
+                        {r.detail && <span className="text-white/30 text-xs ml-1.5">{r.detail}</span>}
+                      </span>
+                      <span className="text-white">{fmt(r.amount)}</span>
+                    </div>
+                  ))}
+                  {!isDetailer && (
+                    <div className="pt-2">
+                      <ExtrasInputs
+                        settings={extrasSettings}
+                        travelHours={travelHours}
+                        mileageMiles={mileageMiles}
+                        onTravelHours={setTravelHours}
+                        onMileageMiles={setMileageMiles}
+                        laborRate={laborRate}
+                      />
+                    </div>
                   )}
                   {taxPct > 0 && (
                     <div className="flex justify-between text-sm border-t border-white/10 pt-2.5">
