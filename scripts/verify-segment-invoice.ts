@@ -111,41 +111,88 @@ async function main() {
   ok(Number(parts?.amount) === 4.03, `tax split: parts 4.03 (got ${parts?.amount})`)
   ok(Number(labor?.amount) === 7.36, `tax split: labor 7.36 (got ${labor?.amount})`)
 
-  // ══ 4. THE INVOICE AS STORED TODAY ═════════════════════════════════════════
-  hr('4. INV-2026-0008 as it is stored right now - the legacy shape')
+  // ══ 4. INV-2026-0008 AFTER THE REPAIR ══════════════════════════════════════
+  //
+  // This section used to assert the DEFECT: no part_number, no type, the segment
+  // glued into the description. That was the state on 2026-10-04 and it is what the
+  // report was about. scripts/reitemize-inv-2026-0008.sql was run on 2026-10-05, so
+  // asserting the defect would now fail for the best possible reason.
+  //
+  // Pinning a broken state is how a test dies the moment someone acts on it. So this
+  // asserts the REPAIR instead - and critically, that the repair moved no money.
+  hr('4. INV-2026-0008 after the re-itemize - the data the SQL put back')
 
   const invs = (await get('invoices?select=id,invoice_number,line_items,subtotal,tax_amount,total&invoice_number=eq.INV-2026-0008')).body as Array<{ line_items: Array<Record<string, unknown>>; subtotal: number; tax_amount: number; total: number }>
   ok(invs.length === 1, 'INV-2026-0008 exists')
   if (!invs.length) return
   const stored = invs[0]
 
-  const storedHasPartNumber = stored.line_items.some(l => l.part_number)
-  ok(storedHasPartNumber === false,
-    'the ALREADY-CONVERTED invoice has no part_number - this is the defect, and it is in stored data, not presentation')
-  const storedHasType = stored.line_items.some(l => l.type)
-  ok(storedHasType === false, 'and no line type either')
-  ok(stored.line_items.every(l => /^Segment \d+/.test(String(l.description))),
-    'its descriptions carry the segment prefix inline - the legacy shape')
+  for (const l of stored.line_items) console.log('    ' + JSON.stringify(l))
+
+  ok(stored.line_items.length === 2, `still exactly 2 lines (got ${stored.line_items.length})`)
+  ok(stored.line_items.some(l => l.part_number === '123456'),
+    'the part number 123456 is on the stored invoice - it could only get there by a write')
+  ok(stored.line_items.every(l => l.type === 'parts' || l.type === 'labor'),
+    'every line carries a type in the INVOICE vocabulary')
+  ok(stored.line_items.every(l => l.segment !== undefined),
+    'every line records its segment')
+  ok(stored.line_items.every(l => !/^Segment \d+/.test(String(l.description))),
+    'and no description carries the prefix any more - the segment travels as its own field')
+
+  // THE PART THAT MATTERS MOST: a rewrite of billed history must not move money.
+  ok(Number(stored.subtotal) === 147, `subtotal still 147.00 (got ${stored.subtotal})`)
+  ok(Number(stored.tax_amount) === 11.39, `tax still 11.39 (got ${stored.tax_amount})`)
+  ok(Number(stored.total) === 158.39, `total still 158.39 (got ${stored.total})`)
+  const lineSum = Math.round(stored.line_items.reduce((n, l) => n + Number(l.total ?? 0), 0) * 100) / 100
+  ok(lineSum === Number(stored.subtotal),
+    `and the rebuilt lines still sum to the subtotal (${lineSum} = ${stored.subtotal})`)
 
   // ══ 5. LEGACY ROWS STILL GROUP ═════════════════════════════════════════════
-  hr('5. segmentedLine - the stored legacy rows must still group correctly')
+  //
+  // Against INV-2026-0009, which is genuinely still in the legacy shape: it was
+  // converted before the fix deployed and has not been re-itemized. This capability
+  // cannot be retired - every invoice converted before 2026-10-05 still depends on
+  // it, and most of them will never be rewritten.
+  hr('5. segmentedLine - a REAL legacy invoice must still group correctly')
 
-  for (const l of stored.line_items) {
-    const sl = segmentedLine(l)
-    console.log(`    ${JSON.stringify(l.description)}  ->  seq=${sl.sequence}  desc=${JSON.stringify(sl.description)}`)
+  const legacyInv = (await get('invoices?select=invoice_number,line_items&invoice_number=eq.INV-2026-0009')).body as Array<{ line_items: Array<Record<string, unknown>> }>
+  ok(legacyInv.length === 1, 'INV-2026-0009 exists')
+
+  if (legacyInv.length) {
+    const legacyLines = legacyInv[0].line_items
+    ok(legacyLines.every(l => l.segment === undefined),
+      'it really is the legacy shape - no segment field on any line')
+    ok(legacyLines.every(l => /^Segment \d+/.test(String(l.description))),
+      'and the sequence is inside the description, which is the only place to read it')
+
+    for (const l of legacyLines) {
+      const sl = segmentedLine(l)
+      console.log(`    ${JSON.stringify(l.description)}  ->  seq=${sl.sequence}  desc=${JSON.stringify(sl.description)}`)
+    }
+    const parsed = legacyLines.map(l => segmentedLine(l))
+    ok(parsed.every(p => p.sequence !== null),
+      'every legacy line resolves to a segment from its description prefix')
+    ok(parsed.every(p => p.label === null),
+      'no segment label is invented for a legacy row - the complaint was never stored on the line')
+    const legacyGroups = groupBySegment(parsed, p => ({ sequence: p.sequence, label: p.label }))
+    ok(legacyGroups.length === 2, `it groups into 2 segments (got ${legacyGroups.length})`)
+    ok(segmentHeading(legacyGroups[0]) === 'Segment 1',
+      `headed without a complaint it does not have - got ${JSON.stringify(segmentHeading(legacyGroups[0]))}`)
   }
-  const parsed = stored.line_items.map(l => segmentedLine(l))
-  ok(parsed[0].sequence === 1 && parsed[1].sequence === 2,
-    'both stored lines resolve to their segment from the description prefix')
-  ok(parsed[0].description === 'test part',
-    `the prefix is stripped so the line reads as itself - got ${JSON.stringify(parsed[0].description)}`)
-  ok(parsed.every(p => p.label === null),
-    'no segment label is invented for a legacy row - the complaint was never stored on the line')
 
-  const legacyGroups = groupBySegment(parsed, p => ({ sequence: p.sequence, label: p.label }))
-  ok(legacyGroups.length === 2, `the legacy invoice groups into 2 segments (got ${legacyGroups.length})`)
-  ok(segmentHeading(legacyGroups[0]) === 'Segment 1',
-    `and heads them without a complaint it does not have - got ${JSON.stringify(segmentHeading(legacyGroups[0]))}`)
+  // And the same capability on fixed input, so coverage does not depend on one row in
+  // production surviving. INV-2026-0009 could be re-itemized tomorrow.
+  const synthLegacy = [
+    { description: 'Segment 1 — test part', quantity: 1, unit_price: 52, total: 52 },
+    { description: 'Segment 2 — testing',   quantity: 1, unit_price: 95, total: 95 },
+    { description: 'Segment 3' },
+  ].map(l => segmentedLine(l as unknown as Record<string, unknown>))
+  ok(synthLegacy[0].sequence === 1 && synthLegacy[0].description === 'test part',
+    'em-dash prefix parses and strips')
+  ok(synthLegacy[1].sequence === 2 && synthLegacy[1].description === 'testing',
+    'the second one too')
+  ok(synthLegacy[2].sequence === 3 && synthLegacy[2].description === 'Segment 3',
+    'a bare "Segment 3" keeps its text rather than ending up with no description at all')
 
   // ══ 6. THE CASE FROM THE BRIEF ═════════════════════════════════════════════
   hr('6. "three parts and two labor entries should print five lines under one heading"')
