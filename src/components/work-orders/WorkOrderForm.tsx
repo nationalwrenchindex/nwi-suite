@@ -346,6 +346,46 @@ export default function WorkOrderForm({
           )}
         </section>
       )}
+      {/* ── Travel and mileage ──
+          OUTSIDE the Parts & Labor section on purpose. That section is gated on
+          `owns`, which is false for a SEGMENT-PRICED work order - so these two inputs
+          used to disappear entirely on exactly the jobs most likely to involve a
+          truck roll, and there was nowhere to type travel hours at all.
+
+          Travel is one trip per VISIT, not per complaint, and mileage is the same.
+          Both are properties of the job, which is why they live on the parent row and
+          why they belong here rather than inside the parts block. See
+          lib/segments/parent-extras.ts for the storage side of the same argument.
+
+          Mileage is typed by hand on purpose: deriving it from addresses needs a
+          distance API and a monthly bill. */}
+      {(!extrasLoaded || extras.billTravel || extras.billMileage) && (
+      <section className="nwi-card space-y-3">
+        <p className="text-white/30 text-xs uppercase tracking-widest">Travel &amp; Mileage</p>
+        <div className="grid grid-cols-2 gap-2">
+          {(!extrasLoaded || extras.billTravel) && (
+            <div>
+              <label className="nwi-label text-[10px]">Travel Hours</label>
+              <input type="number" min={0} step={0.25} className="nwi-input text-sm"
+                value={travelHours} disabled={isLocked}
+                onChange={e => setTravelHours(Number(e.target.value) || 0)} />
+            </div>
+          )}
+          {(!extrasLoaded || extras.billMileage) && (
+            <div>
+              <label className="nwi-label text-[10px]">Miles Driven</label>
+              <input type="number" min={0} step={1} className="nwi-input text-sm"
+                value={mileageMiles} disabled={isLocked}
+                onChange={e => setMileageMiles(Number(e.target.value) || 0)} />
+            </div>
+          )}
+        </div>
+        <p className="text-white/35 text-[11px]">
+          The charge computes from the rates in Settings and prints as its own line.
+        </p>
+      </section>
+      )}
+
       {/* ── Parts and labor ── */}
       {owns && (
       <section className="nwi-card space-y-4">
@@ -389,32 +429,6 @@ export default function WorkOrderForm({
               onChange={e => setTaxPct(Number(e.target.value) || 0)} />
           </div>
         </div>
-
-        {/* ── Travel and mileage ──
-            Shown only when the shop bills them, so a shop that does not sees
-            nothing at all rather than two inputs it has to ignore. Mileage is
-            typed by hand on purpose: deriving it from addresses needs a distance
-            API and a monthly bill. */}
-        {(!extrasLoaded || extras.billTravel || extras.billMileage) && (
-          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/10">
-            {(!extrasLoaded || extras.billTravel) && (
-              <div>
-                <label className="nwi-label text-[10px]">Travel Hours</label>
-                <input type="number" min={0} step={0.25} className="nwi-input text-sm"
-                  value={travelHours} disabled={isLocked}
-                  onChange={e => setTravelHours(Number(e.target.value) || 0)} />
-              </div>
-            )}
-            {(!extrasLoaded || extras.billMileage) && (
-              <div>
-                <label className="nwi-label text-[10px]">Miles Driven</label>
-                <input type="number" min={0} step={1} className="nwi-input text-sm"
-                  value={mileageMiles} disabled={isLocked}
-                  onChange={e => setMileageMiles(Number(e.target.value) || 0)} />
-              </div>
-            )}
-          </div>
-        )}
 
         <div className="space-y-1.5 pt-2 border-t border-white/10">
           <Row label="Parts Base"                    value={fmt(totals.partsBase)} />
