@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import type { Invoice, MultiJobEntry, ServiceLine, Adjustment, ShopSupplyItem, AdditionalPartItem, AdditionalLaborItem } from '@/types/financials'
 import { money } from '@/lib/format'
 import { segmentedLine, segmentHeading } from '@/lib/invoice-document'
+import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tools.nationalwrenchindex.com'
 
@@ -808,6 +809,11 @@ export default function FinalizedInvoiceClient({
     ? round2(detailerSubtotal + detailerTax)
     : null
 
+  // Travel, mileage and shop supplies AS STORED. Read, never recomputed: this
+  // invoice is finalized, and re-deriving a fee on a document already sent is the
+  // class of bug the markup work was about. A zero extra returns no row.
+  const finalExtraRows = extrasDisplayRows(extrasFromDocument(invoice as unknown as Record<string, unknown>))
+
   const displaySubtotal = detailerSubtotal ?? invoice.subtotal
   const displayTaxAmt   = detailerTax      ?? invoice.tax_amount
   const displayTotal    = detailerTotal    ?? grandTotal
@@ -1421,7 +1427,9 @@ export default function FinalizedInvoiceClient({
               )}
               {shopSuppliesTotal > 0 && (
                 <div className="flex justify-between text-sm">
-                  <span className="text-white/50">Shop Supplies</span>
+                  {/* Itemised supplies are retired. Invoices that carry them still
+                      show them exactly as sent; new ones get the percentage line. */}
+                  <span className="text-white/50">Shop Supplies (itemised)</span>
                   <span className="text-white">{fmt(shopSuppliesTotal)}</span>
                 </div>
               )}
@@ -1439,6 +1447,16 @@ export default function FinalizedInvoiceClient({
               )}
             </>
           )}
+          {/* Each on its own labelled line, never folded into parts. */}
+          {finalExtraRows.map(r => (
+            <div key={r.key} className="flex justify-between text-sm">
+              <span className="text-white/50">
+                {r.label}
+                {r.detail && <span className="text-white/30 text-xs ml-1.5">{r.detail}</span>}
+              </span>
+              <span className="text-white">{fmt(r.amount)}</span>
+            </div>
+          ))}
           <div className="flex justify-between text-sm border-t border-white/8 pt-2">
             <span className="text-white/50">Subtotal</span>
             <span className="text-white">{fmt(displaySubtotal)}</span>
