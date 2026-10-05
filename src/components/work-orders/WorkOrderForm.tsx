@@ -184,7 +184,7 @@ export default function WorkOrderForm({
 
   async function save() {
     const v = owns
-      ? validateLines({ items, laborHours, laborRate, grandTotal: totals.grandTotal })
+      ? validateLines({ items, laborHours, laborRate, grandTotal: withExtras.grandTotal })
       : null
     if (v) { setErr(v); return }
     if (!customerId)                    { setErr('Pick or create a customer.'); return }
@@ -447,16 +447,25 @@ export default function WorkOrderForm({
               Shop supplies capped at {fmt(extrasResult.shopSupplies.rate ?? 0)}.
             </p>
           )}
+          {/* SUBTOTAL, with the extras inside it. Without this the box jumped from the
+              line items straight to tax and a tech had no figure to check the extras
+              against. */}
+          <Row label="Subtotal" value={fmt(withExtras.subtotal)} />
           {/* One row per category when the split is known, including the exempt one,
-              so a tech sees "Labor — not taxable" before a customer does. */}
-          {totals.taxBreakdown
-            ? taxDisplayRows(totals.taxBreakdown).map(r => (
+              so a tech sees "Labor - not taxable" before a customer does.
+              FROM withExtras, NOT totals: totals taxes the line items alone, so it put
+              7.75% of 390.00 = 30.23 on screen while the stored breakdown had the
+              supplies fee in the parts bucket at 429.00 = 33.25. The work order then
+              disagreed with its own stored row, and the converter's guard refused to
+              bill it - WO-2026-0021 could not be invoiced at all. */}
+          {withExtras.taxBreakdown
+            ? taxDisplayRows(withExtras.taxBreakdown).map(r => (
                 <Row key={r.category} label={r.text} value={r.taxed ? fmt(r.amount) : '—'} dim />
               ))
-            : <Row label={`Tax (${taxPct}%)`} value={fmt(totals.taxAmount)} dim />}
+            : <Row label={`Tax (${taxPct}%)`} value={fmt(withExtras.taxAmount)} dim />}
           <div className="flex items-center justify-between pt-2">
             <span className="text-white/60 text-sm">Total</span>
-            <span className="font-condensed font-bold text-2xl text-orange">{fmt(totals.grandTotal)}</span>
+            <span className="font-condensed font-bold text-2xl text-orange">{fmt(withExtras.grandTotal)}</span>
           </div>
         </div>
       </section>

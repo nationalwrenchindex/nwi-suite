@@ -20,8 +20,11 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { PARENTS, type SegmentProduct } from './parent'
 import {
   computeExtras, extrasColumns, extrasSettingsFrom, EXTRAS_SETTINGS_SELECT,
-  partsBaseFromLines, round2,
+  extrasTaxBuckets, partsBaseFromLines, round2,
 } from '@/lib/billable-extras'
+import {
+  computeTax, taxSettingsFrom, TAX_SETTINGS_SELECT, effectiveRatePercent,
+} from '@/lib/tax'
 import { isBillable, type SegmentStatus } from '@/types/segments'
 
 /**
@@ -81,6 +84,51 @@ async function lineItemPartsBase(
     .select('type, total')
     .eq(spec.lineItems.fk, parentId)
   return partsBaseFromLines(data)
+}
+
+/**
+ * The labour subtotal of a LINE-ITEM priced parent.
+ *
+ * Mirrors lineItemPartsBase: prefers the stored line items, falls back to the
+ * labor_subtotal column, and never guesses from an hourly rate - a work order whose
+ * hours were never entered has no labour, not an assumed one.
+ */
+async function lineItemLaborBase(
+  supabase: SupabaseClient,
+  spec:     { table: string; lineItems: { kind: 'column'; name: string } | { kind: 'table'; name: string; fk: string } },
+  parentId: string,
+  userId:   string,
+): Promise<number> {
+  const sumLabor = (rows: unknown): number => {
+    if (!Array.isArray(rows)) return 0
+    let n = 0
+    for (const raw of rows) {
+      if (!raw || typeof raw !== 'object') continue
+      const l = raw as Record<string, unknown>
+      const isLabor = l.type === 'labor' ||
+        (l.type === undefined && typeof l.description === 'string' && /^labor/i.test(l.description.trim()))
+      if (isLabor) n += Number(l.total ?? 0)
+    }
+    return round2(n)
+  }
+
+  if (spec.lineItems.kind === 'column') {
+    const { data } = await supabase
+      .from(spec.table)
+      .select(`${spec.lineItems.name}, labor_subtotal`)
+      .eq('id', parentId)
+      .eq('user_id', userId)
+      .single()
+    const row = (data ?? {}) as Record<string, unknown>
+    const fromLines = sumLabor(row[spec.lineItems.name])
+    return fromLines > 0 ? fromLines : round2(Number(row.labor_subtotal ?? 0))
+  }
+
+  const { data } = await supabase
+    .from(spec.lineItems.name)
+    .select('type, total')
+    .eq(spec.lineItems.fk, parentId)
+  return sumLabor(data)
 }
 
 export interface SyncResult {
@@ -172,7 +220,54 @@ export async function syncParentExtras(
       Number(p.labor_rate ?? 0),
     )
 
-    const columns = extrasColumns(extras)
+    // ── THE WHOLE MONEY, not just the extras columns ───────────────────────
+    //
+    // WHAT WENT WRONG WHEN THIS ONLY WROTE THE EXTRAS. WO-2026-0021 stored
+    // shop_supplies_fee 39.00 from here while tax_amount 51.16 and grand_total 711.16
+    // came from the form, which had computed them WITHOUT the fee. The row then stated
+    // a charge it did not bill, and the converter's own guard - correctly - refused to
+    // create an invoice from it. Production was blocked by a row this function made
+    // inconsistent.
+    //
+    // So for a LINE-ITEM parent, whose own money columns ARE the billed figures, this
+    // now recomputes subtotal, tax, the breakdown and the total together with the
+    // extras folded in. One computation, server-side, on every write.
+    //
+    // A SEGMENT-PRICED parent is deliberately left alone: its money lives in its
+    // segments, its own subtotal and grand_total are unused, and the converter adds
+    // the parent's extras to the segment money at billing time. Writing a total onto
+    // it here would invent a figure nothing reads.
+    const columns: Record<string, number | null> = { ...extrasColumns(extras) }
+
+    if (!segmented) {
+      const { data: taxProfile } = await supabase
+        .from('profiles')
+        .select(TAX_SETTINGS_SELECT)
+        .eq('id', userId)
+        .single()
+      const taxSettings = taxSettingsFrom(taxProfile)
+
+      const laborBase = await lineItemLaborBase(supabase, spec, parentId, userId)
+      const buckets   = extrasTaxBuckets(extras)
+      // Travel joins labour, supplies joins parts, mileage is taxed nowhere but still
+      // belongs in the subtotal - which is what buckets.untaxed carries.
+      const taxable = computeTax(
+        { parts: round2(partsBase + buckets.parts), labor: round2(laborBase + buckets.labor) },
+        taxSettings,
+      )
+      const subtotal = round2(partsBase + laborBase + extras.travel.amount + extras.mileage.amount + extras.shopSupplies.amount)
+
+      // NOTE: work_orders has NO subtotal column - only parts_subtotal, labor_subtotal
+      // and grand_total. Writing one would fail this entire UPDATE and the sync would
+      // silently store nothing at all. The converter recomputes the subtotal from the
+      // line items, so nothing needs it stored.
+      columns.tax_amount    = taxable.taxAmount
+      columns.grand_total   = round2(subtotal + taxable.taxAmount)
+      columns.tax_percent   = effectiveRatePercent(taxable)
+      // Cast: the breakdown is jsonb, not a number, and this map is otherwise numeric.
+      ;(columns as Record<string, unknown>).tax_breakdown = taxable.breakdown
+    }
+
     const { error } = await supabase
       .from(spec.table)
       .update(columns)

@@ -14,9 +14,9 @@ import { PARENTS } from '@/lib/segments/parent'
 import { SEGMENT_SELECT, shapeSegments } from '@/lib/segments/select'
 import { isBillable } from '@/types/segments'
 import { invoiceFromSegments, jobNotesFromSegments } from '@/lib/segments/invoice'
-import { parseBreakdown, taxSettingsFrom, TAX_SETTINGS_SELECT, mergeBreakdowns, breakdownTaxTotal } from '@/lib/tax'
+import { taxSettingsFrom, TAX_SETTINGS_SELECT, mergeBreakdowns, breakdownTaxTotal, computeTax } from '@/lib/tax'
 import {
-  extrasFromDocument, extrasDelta, extrasAgree, extrasColumns,
+  extrasFromDocument, extrasDelta, extrasAgree, extrasColumns, partsBaseFromLines,
 } from '@/lib/billable-extras'
 
 export const dynamic = 'force-dynamic'
@@ -143,22 +143,55 @@ export async function POST(
   const parentExtras = extrasFromDocument(wo as unknown as Record<string, unknown>)
   const extras       = extrasDelta(parentExtras, taxSettings)
 
-  const segmentMoney = segments.length > 0
+  // The parent's own parts and labour, read off its LINE ITEMS, with tax on those alone
+  // and the extras deliberately excluded - the fold below adds those for both modes.
+  //
+  // Reading the stored tax_amount and grand_total instead is what blocked WO-2026-0021:
+  // the form had written them excluding a 39.00 supplies fee, the sync had stamped the
+  // fee onto the row separately, and nothing could reconcile the two. Computing the base
+  // here removes the dependency on whatever an earlier writer happened to leave behind.
+  // There is also no work_orders.subtotal column to read even if we wanted one.
+  const parentPartsBase = partsBaseFromLines((wo as { line_items?: unknown }).line_items)
+  const parentLaborBase = (() => {
+    const raw = (wo as { line_items?: unknown }).line_items
+    const lines = Array.isArray(raw) ? raw as Array<Record<string, unknown>> : []
+    const n = lines
+      .filter(l => l.type === 'labor' || (l.type === undefined &&
+        typeof l.description === 'string' && /^labor/i.test(l.description.trim())))
+      .reduce((s, l) => s + Number(l.total ?? 0), 0)
+    return n > 0 ? round2(n) : round2(Number(wo.labor_subtotal ?? 0))
+  })()
+  const parentBase = {
+    subtotal: round2(parentPartsBase + parentLaborBase),
+    tax:      computeTax({ parts: parentPartsBase, labor: parentLaborBase }, taxSettings),
+  }
+
+  // WHICH MODE DECIDES WHETHER THE EXTRAS ARE ADDED, and getting this wrong is what
+  // blocked WO-2026-0021.
+  //
+  //   SEGMENT-PRICED  segment money excludes the extras, so they are added here.
+  //   LINE-ITEM       the parent's own columns ALREADY include them - syncParentExtras
+  //                   recomputes subtotal, tax, breakdown and total together on every
+  //                   write - so adding them again would double-charge.
+  const segmented = segments.length > 0
+
+  const segmentMoney = segmented
     ? invoiceFromSegments(billable)
     : {
         // Legacy parent-priced, computed exactly as it was before segments existed.
         line_items: (wo.line_items ?? []) as unknown[],
-        subtotal:   Number(wo.parts_subtotal ?? 0) * (1 + Number(wo.parts_markup_percent ?? 0) / 100) + Number(wo.labor_subtotal ?? 0),
-        tax_amount: Number(wo.tax_amount ?? 0),
-        tax_rate:   Number(wo.tax_percent ?? 0) / 100,
-        total:      Number(wo.grand_total ?? 0),
-        // A parent-priced work order carries its own breakdown if it was priced after
-        // migration 140, and null otherwise.
-        tax_breakdown: parseBreakdown((wo as { tax_breakdown?: unknown }).tax_breakdown),
+        // Computed from parentBase above, NOT read off the row, and without the extras.
+        subtotal:      parentBase.subtotal,
+        tax_amount:    parentBase.tax.taxAmount,
+        tax_rate:      Number(wo.tax_percent ?? 0) / 100,
+        total:         round2(parentBase.subtotal + parentBase.tax.taxAmount),
+        tax_breakdown: parentBase.tax.breakdown,
       }
 
-  // The extras added in. subtotal gains all three amounts, tax gains only the taxed
-  // two, and tax_breakdown gains their buckets so the customer's copy can state them.
+  // ONE FOLD, BOTH MODES. The base never contains the extras, so this is always where
+  // they enter, the breakdown is always complete, and the guards below always have
+  // something real to check. The previous version added them only in some cases and
+  // tried to detect which - that detection is what refused WO-2026-0021.
   const money = {
     ...segmentMoney,
     subtotal:      round2(Number(segmentMoney.subtotal) + extras.subtotalDelta),
@@ -179,6 +212,11 @@ export async function POST(
   // the three figures the document prints; this checks that exactly that much money
   // reached the subtotal. A mismatch means somebody changed one side of the fold
   // above without the other, and the customer would be the one to find it.
+  // Only meaningful when this route ADDED the extras. When the parent already carried
+  // them, segmentMoney.subtotal and money.subtotal are the same figure by construction
+  // and the difference is zero - so asking "did 39.00 of extras reach the subtotal"
+  // would answer no and refuse a correct invoice. That is precisely what blocked
+  // WO-2026-0021.
   const disagreement = extrasAgree(
     parentExtras,
     Number(money.subtotal),
@@ -197,8 +235,23 @@ export async function POST(
   }
 
   // The tax must also add up to its own buckets, for the same reason.
+  // ONLY when the breakdown is COMPLETE. A work order written before migration 140
+  // has tax_breakdown null, so merging it with the extras' buckets yields a breakdown
+  // covering the extras alone - 3.02 against a tax_amount of 54.18 on WO-2026-0021 -
+  // and comparing those blocks a conversion whose arithmetic is correct.
+  //
+  // The breakdown is complete when its bases account for the whole taxable subtotal.
+  // Anything less is a partial record, not a disagreement, and is carried as-is.
   const breakdownTax = breakdownTaxTotal(money.tax_breakdown)
-  if (money.tax_breakdown && Math.abs(breakdownTax - Number(money.tax_amount)) > 0.005) {
+  const bd = money.tax_breakdown
+  const breakdownBases = bd
+    ? round2((bd.parts?.base ?? 0) + (bd.labor?.base ?? 0) + (bd.services?.base ?? 0))
+    : 0
+  // Mileage is in the subtotal and in no bucket, so it is excluded from the comparison.
+  const taxableSubtotal = round2(Number(money.subtotal) - parentExtras.mileage.amount)
+  const breakdownIsComplete = !!bd && Math.abs(breakdownBases - taxableSubtotal) <= 0.02
+
+  if (breakdownIsComplete && Math.abs(breakdownTax - Number(money.tax_amount)) > 0.005) {
     console.error(
       `[convert] REFUSING TO BILL - tax_amount ${money.tax_amount} does not equal its ` +
       `buckets ${breakdownTax}`,
