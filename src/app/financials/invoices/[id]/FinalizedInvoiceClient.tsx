@@ -4,6 +4,7 @@ import { useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Invoice, MultiJobEntry, ServiceLine, Adjustment, ShopSupplyItem, AdditionalPartItem, AdditionalLaborItem } from '@/types/financials'
 import { money } from '@/lib/format'
+import { segmentedLine, segmentHeading } from '@/lib/invoice-document'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tools.nationalwrenchindex.com'
 
@@ -184,7 +185,9 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 // ─── ReadOnlyTable ────────────────────────────────────────────────────────────
 
 function ReadOnlyTable({ rows }: {
-  rows: Array<{ label: string; qty?: string; amount: number; isComp?: boolean }>
+  // `heading` is the segment the line belonged to and `note` its part number. Both
+  // optional, so every existing caller passing {label, qty, amount} is unaffected.
+  rows: Array<{ label: string; qty?: string; amount: number; isComp?: boolean; heading?: string | null; note?: string | null }>
 }) {
   if (rows.length === 0) return null
   return (
@@ -200,7 +203,17 @@ function ReadOnlyTable({ rows }: {
         <tbody>
           {rows.map((r, i) => (
             <tr key={i} className="border-b border-white/5 last:border-0">
-              <td className="px-4 py-2.5 text-white/70">{r.label}</td>
+              <td className="px-4 py-2.5 text-white/70">
+                {r.heading && (
+                  <span className="block text-[10px] uppercase tracking-widest text-white/30">
+                    {r.heading}
+                  </span>
+                )}
+                {r.label}
+                {r.note && (
+                  <span className="block text-[11px] font-mono text-white/35">{r.note}</span>
+                )}
+              </td>
               {rows.some(x => x.qty) && <td className="px-4 py-2.5 text-white/50 text-right">{r.qty ?? ''}</td>}
               <td className="px-4 py-2.5 text-right">
                 {r.isComp
@@ -724,7 +737,17 @@ export default function FinalizedInvoiceClient({
   const [showPaidModal,     setShowPaidModal]      = useState(false)
   const [markingPaid,       setMarkingPaid]        = useState(false)
   const [toast,             setToast]             = useState<{ msg: string; type: 'success' | 'error' | 'warning' } | null>(null)
-  const [estimateOpen,      setEstimateOpen]      = useState(false)
+  // Open by default when the invoice's OWN lines are the only itemization on the
+  // page - the work-order case. Collapsed, a finalized work-order invoice showed
+  // "Authorized Work 156.66" with empty space under it and nothing else listing the
+  // work, which reads as an invoice that lost its line items. This is the view the
+  // shop looks at after finalizing, so it mattered more here than anywhere.
+  // A quote-sourced invoice shows its lines in the quote block and stays collapsed.
+  const [estimateOpen,      setEstimateOpen]      = useState(
+    !invoice.source_quote_id &&
+    Array.isArray(invoice.line_items) &&
+    invoice.line_items.length > 0,
+  )
 
   const toastRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -1195,12 +1218,25 @@ export default function FinalizedInvoiceClient({
         {/* Same lines the customer's copy shows, for a work-order invoice. */}
         {estimateOpen && showOwnLines && (
           <div className="p-5 space-y-3">
+            {/*
+              Read the same way the customer's copy and the in-progress editor do, so
+              all three agree: the legacy "Segment 1 - " prefix stripped, the segment
+              shown as its own heading, the part number under the description, and an
+              untitled line naming its type instead of rendering a blank label beside
+              a dollar figure. INV-2026-0011's first line stores description "".
+            */}
             <ReadOnlyTable
-              rows={ownLines.map(li => ({
-                label:  li.description,
-                qty:    String(li.quantity),
-                amount: li.total,
-              }))}
+              rows={ownLines.map(li => {
+                const row = li as unknown as Record<string, unknown>
+                const seg = segmentedLine(row)
+                return {
+                  label:   seg.description || (row.type === 'labor' ? 'Labor' : 'Parts'),
+                  qty:     String(li.quantity),
+                  amount:  li.total,
+                  heading: segmentHeading(seg),
+                  note:    typeof row.part_number === 'string' ? row.part_number : null,
+                }
+              })}
             />
             <div className="space-y-1.5 border-t border-white/8 pt-3">
               <div className="flex justify-between text-sm">
