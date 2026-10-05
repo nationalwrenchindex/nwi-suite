@@ -616,6 +616,22 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
   // THE PARTS BASE is the parts on THIS document - the approved parts lines plus any
   // parts added since - and deliberately not a taxable base, which would already
   // contain a supplies fee and so charge supplies on supplies.
+  // ── RETIREMENT OF THE ITEMISED SUPPLIES LIST ───────────────────────────────
+  // Detailers keep it; the percentage fee does not apply to them. Everyone else sees
+  // the percentage only. An invoice that ALREADY carries items keeps showing them
+  // read-only, because they are part of what was sent.
+  const legacySupplyItems  = shopSupplies
+  const showSuppliesEditor = isDetailer
+
+  // THE DOUBLE-CHARGE GUARD. If this invoice carries itemised supplies, the percentage
+  // fee is suppressed - the customer has already been charged for supplies once and
+  // must not be charged again when somebody reopens the document. This is what makes
+  // the retirement safe for invoices that already exist rather than only for new ones.
+  const hasLegacySupplies = legacySupplyItems.length > 0 && shopSuppliesTotal > 0
+  const extrasSettingsInForce = hasLegacySupplies
+    ? { ...extrasSettings, billShopSupplies: false }
+    : extrasSettings
+
   const approvedPartsBase = partsBaseFromLines(invoice.line_items)
   const partsOnDocument   = round2(approvedPartsBase + additionalPartsTotal + shopSuppliesTotal)
 
@@ -631,7 +647,7 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
       shopSuppliesPercentOverride: invoice.shop_supplies_percent_applied ?? null,
       shopSuppliesCapOverride:     invoice.shop_supplies_cap_applied ?? null,
     },
-    extrasSettings,
+    extrasSettingsInForce,
     Number(invoice.labor_rate ?? sq?.labor_rate ?? 0),
   )
   const extraRows = extrasDisplayRows(extrasResult)
@@ -1409,7 +1425,21 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
         </p>
       </Section>
 
-      {/* ── SECTION E: Shop supplies ── */}
+      {/* ── SECTION E: Supplies ──
+          RETIRED FOR THE MECHANIC MODEL. Shop supplies is now a percentage of parts
+          computed from Settings and printed in the Running Total. Keeping an item list
+          as well meant a customer could be charged for supplies twice, and nothing
+          prevented it.
+
+          STILL SHOWN FOR DETAILERS, and not as an oversight: the percentage fee
+          explicitly excludes detailers - their service lines are neither parts nor
+          separately-stated labour - so there is no fee to double up against, and this
+          is their only mechanism. Two sent invoices use it for COMPLIMENTARY entries.
+
+          The data is untouched either way. shopSuppliesTotal stays in the subtotal
+          below, so the three invoices that carry items still total exactly what was
+          sent. Nothing is hidden from a document; only the ADD control is gone. */}
+      {showSuppliesEditor ? (
       <Section
         label={isDetailer ? 'Detailing Supplies' : 'Shop Supplies'}
         action={
@@ -1453,6 +1483,33 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
           </div>
         )}
       </Section>
+      ) : legacySupplyItems.length > 0 ? (
+        /* The invoice already carries supply items, so they are shown read-only rather
+           than disappearing from a document that has them. Still in the subtotal. */
+        <Section label="Shop Supplies (retired)">
+          <div className="space-y-1.5">
+            {legacySupplyItems.map(item => (
+              <div key={item.id} className="flex justify-between text-sm">
+                <span className="text-white/60">{item.name?.trim() || 'Supplies'}</span>
+                <span className="text-white">{fmt(Number(item.total ?? 0))}</span>
+              </div>
+            ))}
+          </div>
+          <p className="text-white/40 text-[11px] mt-2.5">
+            Itemised supplies are retired. These stay on this invoice exactly as sent.
+            Shop supplies is now a percentage of parts, set in Settings and shown in the
+            Running Total. Bill a consumable to a customer under{' '}
+            <strong className="text-white/60">Additional Parts</strong> - a can of brake
+            cleaner is a part.
+          </p>
+        </Section>
+      ) : (
+        <p className="text-white/35 text-[11px] px-1">
+          Shop supplies is a percentage of parts, set in Settings and computed into the
+          Running Total. To bill a consumable, add it under{' '}
+          <strong className="text-white/55">Additional Parts</strong>.
+        </p>
+      )}
 
       {/* ── SECTION F: Additional parts / add-ons ── */}
       <Section
