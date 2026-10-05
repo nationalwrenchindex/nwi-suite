@@ -117,16 +117,34 @@ async function main() {
     labor_subtotal: 270,
   }
 
-  const created = await fetch(`${BASE}/api/work-orders`, {
+  // REUSE an unconverted ACCEPTANCE TEST work order if one is lying around. Every
+  // earlier run created a new one and left it, and six accumulated while waiting for a
+  // deployment. A test that litters production a little more each time you run it is a
+  // test people stop running.
+  const existing = await rest(
+    'work_orders?select=id,work_order_number,status,converted_invoice_id' +
+    '&job_description=like.ACCEPTANCE TEST*&converted_invoice_id=is.null' +
+    '&order=work_order_number.desc&limit=1',
+  )
+  const reusable = Array.isArray(existing) ? existing[0] : null
+  if (reusable) {
+    console.log(`  reusing ${reusable.work_order_number} instead of creating another`)
+  }
+
+  const created = reusable ? null : await fetch(`${BASE}/api/work-orders`, {
     method: 'POST',
     headers: { cookie, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
-  const createdJson = await created.json().catch(() => ({}))
-  ok(created.status === 201 || created.status === 200,
-    `POST /api/work-orders -> ${created.status} ${created.ok ? '' : JSON.stringify(createdJson).slice(0, 180)}`)
-  const woId = createdJson.work_order?.id
-  ok(!!woId, `work order created (${createdJson.work_order?.work_order_number ?? 'no number'})`)
+  const createdJson = created ? await created.json().catch(() => ({})) : null
+  if (created) {
+    ok(created.status === 201 || created.status === 200,
+      `POST /api/work-orders -> ${created.status} ${created.ok ? '' : JSON.stringify(createdJson).slice(0, 180)}`)
+  } else {
+    ok(true, 'reused an existing unconverted ACCEPTANCE TEST work order')
+  }
+  const woId = reusable?.id ?? createdJson?.work_order?.id
+  ok(!!woId, `work order ready (${reusable?.work_order_number ?? createdJson?.work_order?.work_order_number ?? 'none'})`)
   if (!woId) return
 
   // The create route ignores a status in the body, so mark it complete explicitly -
