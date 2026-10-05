@@ -130,7 +130,24 @@ async function main() {
   }
 
   hr('8. NOTHING WAS BACKFILLED')
-  const inv = JSON.parse(await (await fetch(`${U}/rest/v1/invoices?select=invoice_number,parts_markup_percent,unit_number,internal_notes,travel_amount,shop_supplies_fee`, { headers: H })).text()) as Record<string, unknown>[]
+  // SCOPED TO ROWS THAT EXISTED WHEN 142 WAS APPLIED, and scoped rather than
+  // loosened. The question this answers is "did the migration write values onto
+  // history", so it can only ever be asked of rows that were already there.
+  //
+  // Counting every invoice made it start failing the moment the shop owner created a
+  // real one: INV-2026-0009/0010/0011 were converted on 2026-10-05 and legitimately
+  // carry a markup and internal notes, because the converter now records them. That
+  // is the FEATURE working. A test that cries wolf gets ignored, and an ignored test
+  // would not catch the thing this is actually guarding - somebody writing a
+  // backfill later and quietly inventing a markup on an invoice already sent.
+  //
+  // The cutoff is when 142 was confirmed applied in production: commit a9dfdf0f,
+  // 2026-10-03T19:32:40Z.
+  const MIGRATION_142_APPLIED_AT = '2026-10-03T19:32:40Z'
+  const allInv = JSON.parse(await (await fetch(`${U}/rest/v1/invoices?select=invoice_number,created_at,parts_markup_percent,unit_number,internal_notes,travel_amount,shop_supplies_fee`, { headers: H })).text()) as Record<string, unknown>[]
+  const inv = allInv.filter(i => String(i.created_at) < MIGRATION_142_APPLIED_AT)
+  const newer = allInv.length - inv.length
+  console.log(`  invoices predating 142: ${inv.length}   created since: ${newer} (not in scope)`)
   const withMarkup = inv.filter(i => i.parts_markup_percent != null)
   const withUnit   = inv.filter(i => i.unit_number != null)
   const withNotes  = inv.filter(i => i.internal_notes != null)
@@ -140,10 +157,13 @@ async function main() {
   console.log(`    unit_number set          : ${withUnit.length}`)
   console.log(`    internal_notes set       : ${withNotes.length}`)
   console.log(`    travel_amount non-zero   : ${withTravel.length}`)
-  ok(withMarkup.length === 0, 'no existing invoice was given a markup — an unrecorded markup stays unrecorded')
-  ok(withUnit.length === 0,   'no existing invoice was given a unit number')
-  ok(withNotes.length === 0,  'no existing invoice was given internal notes')
-  ok(withTravel.length === 0, 'no existing invoice was given travel')
+  ok(withMarkup.length === 0, 'no invoice that predates 142 was given a markup — an unrecorded markup stays unrecorded')
+  ok(withUnit.length === 0,   'nor a unit number')
+  ok(withNotes.length === 0,  'nor internal notes')
+  ok(withTravel.length === 0, 'nor travel')
+  // Guards the guard: if the cutoff ever stops matching rows, the four assertions
+  // above become vacuously true and would pass on an empty set.
+  ok(inv.length > 0, `the pre-142 scope is not empty - ${inv.length} invoice(s) predate the migration`)
 
   const hdq = JSON.parse(await (await fetch(`${U}/rest/v1/hd_quotes?select=quote_number,customer_id`, { headers: H })).text()) as Record<string, unknown>[]
   const linked = hdq.filter(q => q.customer_id != null)

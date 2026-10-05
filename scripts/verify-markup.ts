@@ -60,9 +60,28 @@ async function main() {
   // absent would mean the test fails the moment the fix lands.
   if (invoiceHasMarkup) {
     ok(true, 'invoices NOW store their own markup, so a work-order invoice no longer reads 0 through a missing quote')
-    const withValue = (await get('invoices?select=invoice_number,parts_markup_percent&parts_markup_percent=not.is.null')) as unknown[]
-    ok(Array.isArray(withValue) && withValue.length === 0,
-      `and NOTHING was backfilled onto the ${(await get('invoices?select=id') as unknown[]).length} existing rows (${Array.isArray(withValue) ? withValue.length : '?'} carry a value) — unrecorded stays unrecorded`)
+    // SCOPED TO ROWS THAT EXISTED WHEN 142 WAS APPLIED (commit a9dfdf0f,
+    // 2026-10-03T19:32:40Z). Counting every invoice made this fail as soon as a real
+    // one was created: a work order converted after 142 legitimately records the
+    // markup in force, which is the fix doing its job. What must never happen is a
+    // markup appearing on an invoice that predates the column - that would be a
+    // guessed figure on a document already sent.
+    const MIGRATION_142_APPLIED_AT = '2026-10-03T19:32:40Z'
+    const carrying = (await get(
+      'invoices?select=invoice_number,created_at,parts_markup_percent&parts_markup_percent=not.is.null',
+    )) as Array<{ invoice_number: string; created_at: string }>
+    const older = Array.isArray(carrying) ? carrying.filter(r => r.created_at < MIGRATION_142_APPLIED_AT) : []
+    const newerCount = Array.isArray(carrying) ? carrying.length - older.length : 0
+    console.log(`  invoices carrying a markup: ${Array.isArray(carrying) ? carrying.length : '?'} ` +
+      `(${newerCount} created since 142, which is expected; ${older.length} predating it, which must be 0)`)
+    for (const r of older) console.log(`    BACKFILLED?: ${r.invoice_number} created ${r.created_at}`)
+    ok(older.length === 0,
+      'NOTHING was backfilled onto a row that predates the column — unrecorded stays unrecorded')
+
+    // Guards the guard: this is only meaningful while such rows exist.
+    const preExisting = (await get(`invoices?select=id&created_at=lt.${MIGRATION_142_APPLIED_AT}`)) as unknown[]
+    ok(Array.isArray(preExisting) && preExisting.length > 0,
+      `and there really are pre-142 invoices to check (${Array.isArray(preExisting) ? preExisting.length : '?'})`)
   } else {
     ok(true, 'invoices do NOT yet — which is why every reader reaches back through source_quote_id and reads 0 when there is no quote')
   }
