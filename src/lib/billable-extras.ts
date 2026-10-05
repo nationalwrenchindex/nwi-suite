@@ -99,6 +99,24 @@ export interface ExtrasInput {
   /** Per-document override of the shop's percentage. NULL uses the shop default. */
   shopSuppliesPercentOverride?: number | null
   shopSuppliesCapOverride?:     number | null
+  /**
+   * The rates this document was PRICED AT, read back off the document.
+   *
+   * WHY THESE EXIST, and it is the root cause of a real discrepancy: the shop's
+   * current settings are not the terms a saved document was priced under. A reader
+   * that falls back to current settings will re-price a document the moment those
+   * settings are unavailable - and useExtrasSettings deliberately reports EXTRAS_OFF
+   * until the profile fetch resolves, so "unavailable" happens on EVERY first render.
+   *
+   * INV-2026-0015 is what that looks like: stored subtotal 139.63 including a 0.77
+   * supplies fee, and a screen showing 138.86 because it recomputed with the settings
+   * switched off and silently REMOVED a charge the document already carried.
+   *
+   * A recorded rate also implies the document bills that extra. It cannot have been
+   * priced with a rate it does not charge.
+   */
+  travelRateOverride?:  number | null
+  mileageRateOverride?: number | null
 }
 
 export interface ExtrasLine {
@@ -139,18 +157,25 @@ export function computeExtras(
   laborRate: number,
 ): ExtrasResult {
   // ── Travel: hours x rate. NULL rate falls back to the labour rate. ──
-  const travelHours = Math.max(0, Number(input.travelHours) || 0)
-  const travelRate  = settings.billTravel
-    ? (settings.travelRatePerHour ?? laborRate ?? 0)
+  // A rate recorded ON THE DOCUMENT wins, and implies this document bills travel.
+  const travelHours    = Math.max(0, Number(input.travelHours) || 0)
+  const travelRecorded = input.travelRateOverride != null
+  const billsTravel    = settings.billTravel || travelRecorded
+  const travelRate     = billsTravel
+    ? (input.travelRateOverride ?? settings.travelRatePerHour ?? laborRate ?? 0)
     : null
-  const travelAmount = settings.billTravel && travelHours > 0
+  const travelAmount = billsTravel && travelHours > 0
     ? round2(travelHours * (travelRate ?? 0))
     : 0
 
   // ── Mileage: miles x rate. ──
-  const miles       = Math.max(0, Number(input.mileageMiles) || 0)
-  const mileageRate = settings.billMileage ? (settings.mileageRatePerMile ?? 0) : null
-  const mileageAmount = settings.billMileage && miles > 0
+  const miles           = Math.max(0, Number(input.mileageMiles) || 0)
+  const mileageRecorded = input.mileageRateOverride != null
+  const billsMileage    = settings.billMileage || mileageRecorded
+  const mileageRate     = billsMileage
+    ? (input.mileageRateOverride ?? settings.mileageRatePerMile ?? 0)
+    : null
+  const mileageAmount = billsMileage && miles > 0
     ? round2(miles * (mileageRate ?? 0))
     : 0
 
@@ -159,9 +184,15 @@ export function computeExtras(
   const cap = input.shopSuppliesCapOverride     ?? settings.shopSuppliesCap     ?? null
   const partsBase = Math.max(0, Number(partsSubtotalOnDocument) || 0)
 
+  // A percentage recorded on the document implies it bills supplies - it cannot
+  // have been priced at 20% by a shop that does not charge supplies. Without this,
+  // a transiently-unavailable setting erases a fee the customer was already quoted.
+  const suppliesRecorded = input.shopSuppliesPercentOverride != null
+  const billsSupplies    = settings.billShopSupplies || suppliesRecorded
+
   let suppliesAmount = 0
   let capped = false
-  if (settings.billShopSupplies && pct != null && pct > 0 && partsBase > 0) {
+  if (billsSupplies && pct != null && pct > 0 && partsBase > 0) {
     suppliesAmount = round2(partsBase * (pct / 100))
     if (cap != null && cap >= 0 && suppliesAmount > cap) {
       suppliesAmount = round2(cap)

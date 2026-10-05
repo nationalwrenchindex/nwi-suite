@@ -8,7 +8,7 @@ import { segmentedLine, segmentHeading } from '@/lib/invoice-document'
 import { useExtrasSettings } from '@/lib/use-extras-settings'
 import {
   computeExtras, extrasColumns, extrasDisplayRows, extrasFromDocument,
-  extrasTaxBuckets, partsBaseFromLines,
+  extrasTaxBuckets, partsBaseFromLines, extrasAgree,
 } from '@/lib/billable-extras'
 import { useRouter } from 'next/navigation'
 import type { Invoice, ShopSupplyItem, AdditionalPartItem, AdditionalLaborItem, ServiceLine, Adjustment, AdjustmentPreset } from '@/types/financials'
@@ -644,8 +644,15 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
     {
       travelHours,
       mileageMiles,
+      // THE TERMS THIS INVOICE WAS PRICED UNDER, read back off the document. These
+      // win over the shop's current settings, and critically over the EXTRAS_OFF that
+      // useExtrasSettings reports before the profile fetch resolves. Without them this
+      // screen recomputed every extra as zero on first render and showed a subtotal
+      // 0.77 BELOW the stored one - a charge silently removed from a live invoice.
       shopSuppliesPercentOverride: invoice.shop_supplies_percent_applied ?? null,
       shopSuppliesCapOverride:     invoice.shop_supplies_cap_applied ?? null,
+      travelRateOverride:          invoice.travel_rate  ?? null,
+      mileageRateOverride:         invoice.mileage_rate ?? null,
     },
     extrasSettingsInForce,
     Number(invoice.labor_rate ?? sq?.labor_rate ?? 0),
@@ -707,6 +714,10 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
   // document's stored extras are subtracted first for the same reason as the subtotal -
   // a work-order invoice already carries the work order's extras in its baseline, and
   // adding the recomputed figures without removing those would tax them twice.
+  // Both are needed because the stored figures are the BASELINE the invoice already
+  // carries: invoice.subtotal and the stored tax_breakdown include them. Recomputing
+  // replaces rather than stacks. Now that recorded terms win, the two agree whenever
+  // nothing has been edited, which is what extrasAgree asserts below.
   const storedExtraBuckets = extrasTaxBuckets(storedExtras)
   const extraBuckets       = extrasTaxBuckets(extrasResult)
 
@@ -741,6 +752,21 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
   // decides whether its total line still has to carry a rate.
   const taxSplitRows = tax ? taxDisplayRows(tax.breakdown) : []
   const grandTotal   = round2(newSubtotal + newTaxAmount)
+
+  // ── extrasAgree ON AN IN-PROGRESS INVOICE ──────────────────────────────────
+  // It used to run only at convert and at finalize, which are the two moments nobody
+  // is looking. In progress is the state a tech reads, and it is where INV-2026-0015
+  // showed two different totals on one screen without anything objecting.
+  //
+  // Checked against the running subtotal minus the extras, so it asks the only
+  // question that matters: is every charge this screen PRINTS inside the total it
+  // shows? Surfaced in the UI rather than thrown - a tech mid-edit needs to be told,
+  // not have the page collapse.
+  const runningExtrasMismatch = extrasAgree(
+    extrasResult,
+    newSubtotal,
+    round2(newSubtotal - extrasResult.total),
+  )
 
   // ── Shop supply helpers ────────────────────────────────────────────────────
 
@@ -816,6 +842,13 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
   // ── Finalize invoice ───────────────────────────────────────────────────────
 
   async function handleFinalize() {
+    // Refuse rather than write a total that disagrees with its own printed lines.
+    // This is the check that was missing: it ran at convert and at finalize-time on
+    // the server, but not on the figures this screen was about to send.
+    if (runningExtrasMismatch) {
+      showToast('Cannot finalize: ' + runningExtrasMismatch)
+      return
+    }
     setFinalizing(true)
     try {
       // Save current progress first, then finalize
@@ -1159,6 +1192,20 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
               </table>
             </div>
             <div className="space-y-1.5 border-t border-white/8 pt-3">
+              {/* ITEMIZED, because this block's subtotal already contains them. On
+                  INV-2026-0015 the two lines summed to 138.86 and the subtotal read
+                  139.63, and the missing 0.77 of shop supplies was nowhere on screen.
+                  A charge folded silently into a subtotal is the thing the customer
+                  phones about. Read as stored, never recomputed. */}
+              {extrasDisplayRows(storedExtras).map(r => (
+                <div key={r.key} className="flex justify-between text-sm">
+                  <span className="text-white/50">
+                    {r.label}
+                    {r.detail && <span className="text-white/30 text-xs ml-1.5">{r.detail}</span>}
+                  </span>
+                  <span className="text-white">{fmt(r.amount)}</span>
+                </div>
+              ))}
               <div className="flex justify-between text-sm">
                 <span className="text-white/50">Subtotal</span>
                 <span className="text-white">{fmt(Number(invoice.subtotal ?? 0))}</span>
@@ -1505,9 +1552,13 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
         </Section>
       ) : (
         <p className="text-white/35 text-[11px] px-1">
-          Shop supplies is a percentage of parts, set in Settings and computed into the
-          Running Total. To bill a consumable, add it under{' '}
-          <strong className="text-white/55">Additional Parts</strong>.
+          Shop supplies is {extrasResult.shopSupplies.input > 0
+            ? `${extrasResult.shopSupplies.input}% of parts`
+            : 'a percentage of parts'}, set in Settings. It shows as its own line in the
+          Running Total{extrasResult.shopSupplies.amount > 0
+            ? ` - currently ${fmt(extrasResult.shopSupplies.amount)}.`
+            : ' when there are parts to charge it on.'} To bill a consumable, add it
+          under <strong className="text-white/55">Additional Parts</strong>.
         </p>
       )}
 
@@ -1726,6 +1777,14 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
                 {taxSplitRows.length > 0 ? 'Tax' : `Tax (${Math.round(taxRate * 10000) / 100}%)`}
               </span>
               <span className="text-white/60">{fmt(newTaxAmount)}</span>
+            </div>
+          )}
+          {runningExtrasMismatch && (
+            <div className="rounded-lg px-3 py-2 mt-1" style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.35)' }}>
+              <p className="text-[11px] text-red-300">
+                <strong>This invoice does not add up.</strong> {runningExtrasMismatch}.
+                Do not send it - report this.
+              </p>
             </div>
           )}
           <div className="flex justify-between items-baseline border-t border-white/8 pt-3 mt-1">
