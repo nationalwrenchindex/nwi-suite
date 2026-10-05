@@ -512,15 +512,21 @@ async function main() {
     }
   }
 
-  const server = await ensureServer()
-  const base = `http://127.0.0.1:${server.port}`
+  // PAGECHECK_BASE points this at an already-deployed origin instead of a local dev
+  // server - the Supabase project is the same, so the session cookie works against
+  // production as well. Used to answer "is this change actually deployed" by reading
+  // the authenticated page rather than inferring from a chunk list, which cannot see a
+  // route it does not reference.
+  const external = process.env.PAGECHECK_BASE
+  const server = external ? null : await ensureServer()
+  const base = external ?? `http://127.0.0.1:${server!.port}`
   const rows: Row[] = []
   try {
     for (const route of runnable) {
       rows.push(await fetchRoute(base, route, isPublicRoute(route) ? null : cookie))
     }
   } finally {
-    stopServer(server)
+    if (server) stopServer(server)
   }
 
   table(rows)
