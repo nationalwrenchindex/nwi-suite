@@ -19,6 +19,10 @@ import { useState } from 'react'
 import CustomerUnitPicker from '@/components/work-orders/CustomerUnitPicker'
 import { computeTotals, toLineItems, round2, type EditItem } from '@/components/shared/line-items'
 import { useTaxSettings } from '@/lib/use-tax-settings'
+import { useExtrasSettings } from '@/lib/use-extras-settings'
+import {
+  computeExtras, extrasColumns, extrasDisplayRows, totalsWithExtras,
+} from '@/lib/billable-extras'
 import { taxDisplayRows } from '@/lib/tax'
 import { money } from '@/lib/format'
 import { BLANK_QUOTE_SEED, seedNotes, type QuoteSeed } from '@/types/quote-seed'
@@ -46,6 +50,10 @@ export default function NewQuoteForm({
   onCancel:  () => void
 }) {
   const taxSettings = useTaxSettings()
+  const extrasSettings = useExtrasSettings()
+  // Hours and miles are the only inputs. A percentage is not a question.
+  const [travelHours,  setTravelHours]  = useState(0)
+  const [mileageMiles, setMileageMiles] = useState(0)
 
   const [customerId, setCustomerId] = useState<string | null>(seed.customerId ?? null)
   // CustomerUnitPicker hands over the whole customer and every caller was taking the
@@ -81,6 +89,26 @@ export default function NewQuoteForm({
   // so nothing on screen is ever briefly wrong in the exempt direction.
   const totals = computeTotals({ items, markupPct, laborHours, laborRate, taxPct, taxSettings })
 
+  // ── Billable extras ──
+  // Shop supplies is a percentage of the PARTS TOTAL AS QUOTED - post-markup, the
+  // figure the customer reads - so a quote and the invoice it becomes agree. Travel
+  // and mileage are hours and miles; the amounts compute. None of the three is an
+  // item anybody adds.
+  const extrasResult = computeExtras(
+    totals.partsTotal,
+    { travelHours, mileageMiles },
+    extrasSettings,
+    laborRate,
+  )
+  // Re-taxed with the extras in their own buckets: travel and mileage as labour,
+  // shop supplies as parts. Same call the work order makes.
+  const withExtras = totalsWithExtras(
+    { parts: totals.partsTotal, labor: totals.laborSubtotal },
+    extrasResult,
+    taxSettings,
+    taxPct,
+  )
+
   function update(id: string, patch: Partial<EditItem>) {
     setItems(prev => prev.map(r => (r._id === id ? { ...r, ...patch } : r)))
   }
@@ -92,7 +120,7 @@ export default function NewQuoteForm({
       setError('Add a part or some labour hours before saving.')
       return
     }
-    if (totals.grandTotal < 0) {
+    if (withExtras.grandTotal < 0) {
       setError('Grand total cannot be negative.')
       return
     }
@@ -118,9 +146,11 @@ export default function NewQuoteForm({
           parts_markup_percent: markupPct,
           labor_subtotal:       round2(totals.laborSubtotal),
           tax_percent:          taxPct,
-          tax_amount:           round2(totals.taxAmount),
-          grand_total:          round2(totals.grandTotal),
-          tax_breakdown:        totals.taxBreakdown,
+          // From withExtras, not totals: the extras are part of this quote's money.
+          tax_amount:           round2(withExtras.taxAmount),
+          grand_total:          round2(withExtras.grandTotal),
+          tax_breakdown:        withExtras.taxBreakdown,
+          ...extrasColumns(extrasResult),
         }),
       })
       const json = await res.json()
@@ -248,21 +278,58 @@ export default function NewQuoteForm({
         />
       </div>
 
+      {/* ── Travel and mileage. HOURS AND MILES ONLY. ──
+          Hidden unless the shop bills one of them: an input for something that is
+          not charged invites a tech to type hours that are silently dropped.
+          Shop supplies has no input - it is a percentage of parts. */}
+      {(extrasSettings.billTravel || extrasSettings.billMileage) && (
+        <div className="grid grid-cols-2 gap-3 pt-3 border-t border-white/8">
+          {extrasSettings.billTravel && (
+            <label className="block">
+              <span className="text-white/50 text-xs">Travel hours</span>
+              <input
+                type="number" min="0" step="0.25" inputMode="decimal"
+                className="nwi-input text-sm w-full mt-1"
+                value={travelHours || ''}
+                onChange={e => setTravelHours(Math.max(0, Number(e.target.value) || 0))}
+              />
+            </label>
+          )}
+          {extrasSettings.billMileage && (
+            <label className="block">
+              <span className="text-white/50 text-xs">Miles</span>
+              <input
+                type="number" min="0" step="1" inputMode="decimal"
+                className="nwi-input text-sm w-full mt-1"
+                value={mileageMiles || ''}
+                onChange={e => setMileageMiles(Math.max(0, Number(e.target.value) || 0))}
+              />
+            </label>
+          )}
+        </div>
+      )}
+
       {/* ── Totals, from the shared calculator ── */}
       <div className="space-y-1 pt-3 border-t border-white/8 text-sm">
         <Row label="Parts" value={money(totals.partsTotal)} />
         <Row label={`Labour (${laborHours}h)`} value={money(totals.laborSubtotal)} />
-        <Row label="Subtotal" value={money(totals.subtotal)} />
+        {/* Travel, mileage and shop supplies - computed, each labelled, never folded
+            into parts. A zero extra prints no row, so a labour-only quote shows no
+            shop supplies line at all. */}
+        {extrasDisplayRows(extrasResult).map(r => (
+          <Row key={r.key} label={r.detail ? `${r.label} (${r.detail})` : r.label} value={money(r.amount)} />
+        ))}
+        <Row label="Subtotal" value={money(withExtras.subtotal)} />
         {/* One row per category, including the exempt one — same as every other
             surface since the tax split shipped. */}
-        {totals.taxBreakdown
-          ? taxDisplayRows(totals.taxBreakdown).map(r => (
+        {withExtras.taxBreakdown
+          ? taxDisplayRows(withExtras.taxBreakdown).map(r => (
               <Row key={r.category} label={r.text} value={r.taxed ? money(r.amount) : '—'} dim />
             ))
-          : <Row label={`Tax (${taxPct}%)`} value={money(totals.taxAmount)} dim />}
+          : <Row label={`Tax (${taxPct}%)`} value={money(withExtras.taxAmount)} dim />}
         <div className="flex justify-between items-baseline pt-2 border-t border-white/8">
           <span className="text-white font-medium">Total</span>
-          <span className="font-condensed font-bold text-orange text-2xl">{money(totals.grandTotal)}</span>
+          <span className="font-condensed font-bold text-orange text-2xl">{money(withExtras.grandTotal)}</span>
         </div>
       </div>
 

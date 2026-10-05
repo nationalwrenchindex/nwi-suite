@@ -234,6 +234,73 @@ async function main() {
   const stored = extrasFromDocument({ shop_supplies_fee: 40, travel_amount: 0, mileage_amount: 0 })
   ok(stored.shopSupplies.amount === 40 && stored.total === 40,
     'extrasFromDocument reads a stored fee back for the views that only display')
+  // ══ 9. THE ITEM LIST IS RETIRED, SAFELY ════════════════════════════════════
+  hr('9. Retiring the itemised supplies list')
+
+  const editor = fs.readFileSync('src/app/financials/invoices/[id]/InvoiceInProgressClient.tsx', 'utf8')
+
+  ok(/const showSuppliesEditor = isDetailer/.test(editor),
+    'the add-supplies editor is shown ONLY to detailers')
+  ok(/Additional Parts/.test(editor),
+    'and a note points techs at Additional Parts instead')
+  ok(/legacySupplyItems.length > 0 ?/.test(editor),
+    'an invoice that already carries items still displays them, read-only')
+
+  // THE GUARD that makes the retirement safe on documents that already exist.
+  ok(/billShopSupplies: false/.test(editor),
+    'the percentage fee is SUPPRESSED when an invoice carries itemised supplies')
+  ok(/const hasLegacySupplies = legacySupplyItems.length > 0 && shopSuppliesTotal > 0/.test(editor),
+    'and the condition requires real money, not just an empty item row')
+
+  // The three existing invoices must still total what was sent.
+  ok(editor.includes('shopSuppliesTotal + additionalPartsTotal'),
+    'shopSuppliesTotal is still in the subtotal, so a sent invoice totals exactly as sent')
+
+  // Prove the guard arithmetically: items present means no fee, whatever Settings say.
+  const guarded = computeExtras(500, { travelHours: 0, mileageMiles: 0 },
+    { ...EIGHT, billShopSupplies: false }, 95)
+  ok(guarded.shopSupplies.amount === 0,
+    'with the guard applied, 500.00 of parts yields NO percentage fee - so no customer is charged twice')
+  ok(extrasDisplayRows(guarded).length === 0, 'and no supplies row prints')
+
+  // Detailers: the percentage must not apply to them at all, which is why they keep
+  // the item list. Verified against the two real detailer invoices.
+  const detailerInvs = invs.filter(i =>
+    Array.isArray(i.shop_supplies) && (i.shop_supplies as unknown[]).length > 0 &&
+    Number(i.shop_supplies_fee ?? 0) === 0)
+  ok(detailerInvs.length === withItems.length,
+    `every invoice carrying items has NO percentage fee (${detailerInvs.length} of ${withItems.length})`)
+
+  // ══ 10. QUOTES AND THE FINALIZED VIEW ══════════════════════════════════════
+  hr('10. The quote and the finalized view')
+
+  const quote = fs.readFileSync('src/components/financials/NewQuoteForm.tsx', 'utf8')
+  ok(quote.includes('computeExtras('), 'the quote form computes the extras')
+  ok(quote.includes('totalsWithExtras('), 'and re-taxes through the same helper the work order uses')
+  ok(quote.includes('...extrasColumns(extrasResult)'), 'and stores the computed columns')
+  ok(quote.includes('money(withExtras.grandTotal)'),
+    'the quoted TOTAL includes the extras - not a figure that excludes them')
+  ok(quote.includes('money(withExtras.subtotal)'), 'and so does the subtotal')
+  ok(/withExtras.taxBreakdown/.test(quote), 'and the tax split is taken with the extras in their buckets')
+  ok(quote.includes('if (withExtras.grandTotal < 0)'),
+    'validation checks the total that is actually saved')
+  ok(!/setShopSuppliesPercent|value={shopSuppliesPercent}/.test(quote),
+    'the quote has NO input for the supplies percentage')
+  ok(/setTravelHours|setMileageMiles/.test(quote), 'but it does take hours and miles')
+
+  const finalized = fs.readFileSync('src/app/financials/invoices/[id]/FinalizedInvoiceClient.tsx', 'utf8')
+  ok(finalized.includes('extrasFromDocument('),
+    'the finalized view reads the extras AS STORED')
+  ok(!finalized.includes('computeExtras('),
+    'and never recomputes them - a finalized invoice must not be re-priced')
+  ok(finalized.includes('finalExtraRows.map('), 'rendering each as its own labelled row')
+  ok(finalized.includes('Shop Supplies (itemised)'),
+    'and the retired item list is labelled as such where it still appears')
+
+  // The quote base must be the POST-MARKUP parts figure, matching the invoice.
+  ok(quote.includes('computeExtras(') && quote.includes('totals.partsTotal,'),
+    'the quote bases supplies on partsTotal - post-markup, the figure the customer reads')
+
 
   console.log('\n' + '='.repeat(78))
   console.log(`${pass} passed, ${fail} failed`)
