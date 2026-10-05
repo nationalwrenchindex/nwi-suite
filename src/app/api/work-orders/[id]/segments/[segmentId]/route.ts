@@ -10,6 +10,7 @@ import { createClient } from '@/lib/supabase/server'
 import { hasWorkOrders } from '@/lib/work-orders'
 import { PARENTS } from '@/lib/segments/parent'
 import { SEGMENT_SELECT, shapeSegments } from '@/lib/segments/select'
+import { syncParentExtrasQuietly } from '@/lib/segments/parent-extras'
 import { normalizeSegmentLines, priceSegment } from '@/components/shared/segments'
 import { loadTaxSettings } from '@/lib/tax-settings.server'
 import { isMissingTaxBreakdownColumn } from '@/lib/tax'
@@ -100,6 +101,10 @@ export async function PATCH(
     console.error('[PATCH segment]', error)
     return NextResponse.json({ error: error?.message ?? 'Failed to save' }, { status: 500 })
   }
+  // A segment changed, so the parent's shop supplies fee has a new parts base.
+  // Recomputed and stored on the parent; never allowed to fail this request.
+  await syncParentExtrasQuietly(supabase, 'ld', id, user.id)
+
   return NextResponse.json({ segment: shapeSegments([data])[0] })
 }
 
@@ -143,5 +148,9 @@ export async function DELETE(
     .eq('user_id', user.id)
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  // A segment changed, so the parent's shop supplies fee has a new parts base.
+  // Recomputed and stored on the parent; never allowed to fail this request.
+  await syncParentExtrasQuietly(supabase, 'ld', id, user.id)
+
   return NextResponse.json({ ok: true })
 }

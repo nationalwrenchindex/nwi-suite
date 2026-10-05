@@ -9,6 +9,8 @@ import { createClient } from '@/lib/supabase/server'
 import { hasWorkOrders } from '@/lib/work-orders'
 import { guardCanAddSegment, parentExists, PARENTS } from '@/lib/segments/parent'
 import { SEGMENT_SELECT, shapeSegments } from '@/lib/segments/select'
+import { syncParentExtrasQuietly } from '@/lib/segments/parent-extras'
+import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
 import { normalizeSegmentLines, priceSegment, rollupSegments } from '@/components/shared/segments'
 import { loadTaxSettings } from '@/lib/tax-settings.server'
 import { isMissingTaxBreakdownColumn, withoutTaxBreakdown } from '@/lib/tax'
@@ -45,7 +47,24 @@ export async function GET(
   }
 
   const segments = shapeSegments(data)
-  return NextResponse.json({ segments, rollup: rollupSegments(segments) })
+
+  // The parent's extras, so the segment list can show travel, mileage and the
+  // shop-supplies fee beside the rollup. Read from the PARENT ROW the mutation
+  // routes just synced, not recomputed here: the number on screen is then the same
+  // number that will be billed, by construction rather than by two calculations
+  // agreeing. A missing migration 142 leaves these null and yields no rows.
+  const { data: parentRow } = await supabase
+    .from('work_orders')
+    .select('travel_hours, travel_rate, travel_amount, mileage_miles, mileage_rate, mileage_amount, shop_supplies_percent_applied, shop_supplies_cap_applied, shop_supplies_fee')
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .maybeSingle()
+
+  const extras = extrasDisplayRows(
+    extrasFromDocument((parentRow ?? null) as Record<string, unknown> | null),
+  )
+
+  return NextResponse.json({ segments, rollup: rollupSegments(segments), extras })
 }
 
 export async function POST(
@@ -145,6 +164,10 @@ export async function POST(
     console.error('[POST segments]', error)
     return NextResponse.json({ error: error?.message ?? 'Failed to add segment' }, { status: 500 })
   }
+
+  // A segment changed, so the parent's shop supplies fee has a new parts base.
+  // Recomputed and stored on the parent; never allowed to fail this request.
+  await syncParentExtrasQuietly(supabase, 'ld', id, user.id)
 
   return NextResponse.json({ segment: shapeSegments([data])[0] }, { status: 201 })
 }

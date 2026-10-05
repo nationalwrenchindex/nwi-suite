@@ -8,7 +8,7 @@
 // components/shared/segments, the same module the API and the invoice converter use.
 // A tile that did its own sum is a tile that can disagree with the bill.
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { money } from '@/lib/format'
 import { rollupSegments } from './segments'
 import SegmentLineEditor from './SegmentLineEditor'
@@ -53,6 +53,10 @@ export default function SegmentList({
 }) {
   const s = surfaceFor(variant)
   const [segments, setSegments] = useState(initialSegments)
+  // Travel, mileage and the shop-supplies fee, AS THE SERVER STORED THEM on the
+  // parent. Not computed here: one calculation, one number, so the figure a tech
+  // reads before converting is the figure that gets billed.
+  const [extras, setExtras] = useState<Array<{ key: string; label: string; detail: string | null; amount: number }>>([])
   const [busy,     setBusy]     = useState<string | null>(null)
   const [err,      setErr]      = useState<string | null>(null)
   const [msg,      setMsg]      = useState<string | null>(null)
@@ -77,7 +81,8 @@ export default function SegmentList({
       })
       const d = await res.json()
       if (!res.ok) throw new Error(d.error ?? 'Could not add a segment')
-      setSegments(prev => [...prev, d.segment])
+      // Deliberately NOT a local patch. See refetch().
+      await refetch()
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Could not add a segment')
     }
@@ -94,7 +99,8 @@ export default function SegmentList({
       })
       const d = await res.json()
       if (!res.ok) throw new Error(d.error ?? 'Could not save')
-      setSegments(prev => prev.map(x => (x.id === seg.id ? d.segment : x)))
+      // Deliberately NOT a local patch. See refetch().
+      await refetch()
       // Drop the draft ONLY if what we just saved is still what is on screen.
       //
       // This used to delete unconditionally, and that is why a line row needed two
@@ -118,6 +124,30 @@ export default function SegmentList({
     setBusy(null)
   }
 
+  /**
+   * Re-read everything from the server.
+   *
+   * REPLACES PATCHING LOCAL STATE, and that is the point: a status change moves the
+   * rollup, the lock state of the row, and the parent's shop-supplies fee, and only
+   * the first of those was in the response being patched in. The screen could show
+   * Pending while the database said authorized, which is how a correct converter
+   * came to look like it had billed unauthorized work.
+   */
+  async function refetch() {
+    try {
+      const res = await fetch(`${apiBase}/segments`, { cache: 'no-store' })
+      if (!res.ok) return
+      const d = await res.json()
+      if (Array.isArray(d.segments)) setSegments(d.segments)
+      if (Array.isArray(d.extras))   setExtras(d.extras)
+    } catch {
+      // A failed refetch leaves the last known good state on screen rather than
+      // blanking a list the tech is working from.
+    }
+  }
+
+  useEffect(() => { void refetch() }, [])  // eslint-disable-line react-hooks/exhaustive-deps
+
   async function setStatus(seg: WorkOrderSegment, status: SegmentStatus) {
     setBusy(seg.id); setErr(null)
     try {
@@ -128,7 +158,8 @@ export default function SegmentList({
       })
       const d = await res.json()
       if (!res.ok) throw new Error(d.error ?? 'Could not update status')
-      setSegments(prev => prev.map(x => (x.id === seg.id ? d.segment : x)))
+      // Deliberately NOT a local patch. See refetch().
+      await refetch()
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Could not update status')
     }
@@ -141,7 +172,8 @@ export default function SegmentList({
       const res = await fetch(`${apiBase}/segments/${seg.id}`, { method: 'DELETE' })
       const d = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(d.error ?? 'Could not delete')
-      setSegments(prev => prev.filter(x => x.id !== seg.id))
+      // Deliberately NOT a local patch. See refetch().
+      await refetch()
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Could not delete')
     }
@@ -171,6 +203,27 @@ export default function SegmentList({
     <div className="space-y-4">
       {err && <div className="alert-error">{err}</div>}
       {msg && <div className="alert-success">{msg}</div>}
+
+      {/* Travel, mileage and shop supplies on this job. Computed from the segments'
+          parts and the rates in Settings, stored on the work order, and shown here so
+          nothing is a surprise at conversion. A zero extra prints no row. */}
+      {extras.length > 0 && (
+        <div className="rounded-xl p-4 space-y-1.5" style={s.card}>
+          <p className="text-[10px] uppercase tracking-widest mb-1" style={s.faint}>On This Job</p>
+          {extras.map(r => (
+            <div key={r.key} className="flex justify-between text-sm">
+              <span style={s.muted}>
+                {r.label}
+                {r.detail && <span className="text-xs ml-1.5" style={s.faint}>{r.detail}</span>}
+              </span>
+              <span style={{ color: '#fff' }}>{money(r.amount)}</span>
+            </div>
+          ))}
+          <p className="text-[11px] pt-1" style={s.faint}>
+            Added to the invoice when this work order is converted.
+          </p>
+        </div>
+      )}
 
       {/* ── Rollup ──────────────────────────────────────────────────────────────
           Authorized is the only figure that becomes the bill. Pending is shown beside

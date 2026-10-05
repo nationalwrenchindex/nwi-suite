@@ -14,6 +14,7 @@ import { createClient } from '@/lib/supabase/server'
 import { hasWorkOrders } from '@/lib/work-orders'
 import { PARENTS } from '@/lib/segments/parent'
 import { SEGMENT_SELECT, shapeSegments } from '@/lib/segments/select'
+import { syncParentExtrasQuietly } from '@/lib/segments/parent-extras'
 import { SEGMENT_STATUSES, type SegmentStatus } from '@/types/segments'
 
 export const dynamic = 'force-dynamic'
@@ -131,5 +132,9 @@ export async function POST(
     console.error('[POST segment status]', error)
     return NextResponse.json({ error: error?.message ?? 'Failed to update status' }, { status: 500 })
   }
+  // A segment changed, so the parent's shop supplies fee has a new parts base.
+  // Recomputed and stored on the parent; never allowed to fail this request.
+  await syncParentExtrasQuietly(supabase, 'ld', id, user.id)
+
   return NextResponse.json({ segment: shapeSegments([data])[0] })
 }
