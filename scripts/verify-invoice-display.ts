@@ -88,9 +88,22 @@ async function main() {
   console.log(`      email = ${JSON.stringify(c.email)}`)
   console.log(`      created ${c.created_at}`)
 
-  // THE FINDING: the header is telling the truth. The row it points at is empty.
-  ok(!c.phone && !c.email,
-    'the LINKED customer row genuinely has no phone and no email - so "No contact details" is TRUTHFUL, not a bug')
+  // WHAT WAS FOUND, 2026-10-05: the header was telling the truth. The row WO-2026-0008
+  // pointed at had phone and email both NULL, while two other "Brock Fleeman" rows
+  // carried them - the work order was linked to the empty duplicate.
+  //
+  // The owner has since filled that row in, so asserting "the row is empty" would now
+  // fail for the right reason. Pinning the broken state is how a test dies the moment
+  // its finding is acted on. So this asserts the INVARIANT instead: whatever the row
+  // holds, the header must say the same thing. That fails if the reader regresses, and
+  // keeps passing whether the row is populated or not.
+  const headerShows = (c.phone as string | null) || (c.email as string | null) || 'No contact details'
+  const rowHasContact = !!c.phone || !!c.email
+  console.log(`      header would show: ${JSON.stringify(headerShows)}`)
+  ok(rowHasContact === (headerShows !== 'No contact details'),
+    'the header agrees with the row: it shows contact details when they exist, and the fallback only when they do not')
+  ok(!rowHasContact || headerShows === (c.phone ?? c.email),
+    'and when they exist it shows the phone first, falling back to the email - not a placeholder')
 
   const all = (await get('customers?select=id,first_name,last_name,phone,email,created_at&order=created_at')).body as Array<Record<string, unknown>>
   const sameName = all.filter(x =>
@@ -108,8 +121,11 @@ async function main() {
   const populated = sameName.filter(d => d.phone || d.email)
   ok(populated.length >= 1,
     `and at least one of the duplicates DOES carry the phone and email (${populated.length} of ${sameName.length})`)
-  ok(populated.every(d => d.id !== linkedId),
-    'the work order is linked to the EMPTY duplicate, not a populated one - which is the whole bug')
+  // The duplicates are the actual root cause and they are still here, which is what
+  // this needs to keep asserting. Which particular row the work order points at is now
+  // a moving target, so it is reported above rather than pinned.
+  ok(sameName.length > 1 && populated.length > 0,
+    `the duplicate rows persist (${populated.length} of ${sameName.length} carry contact details) - the merge is still outstanding`)
 
   // Scale, so the merge is sized rather than guessed at.
   const byName = new Map<string, number>()

@@ -91,7 +91,15 @@ export function invoiceFromSegments(segments: WorkOrderSegment[]): InvoiceMoney 
         // rather than glued to the front of this text, so the document groups three
         // parts and two labour entries under one heading instead of printing
         // "Segment 2 - " five times.
-        description: (l.description ?? '').trim(),
+        //
+        // A line the tech left untitled falls back to what it IS, rather than to an
+        // empty string. The old converter hid this: a blank description still produced
+        // "Segment 1", so it always had SOMETHING to print. Now that the prefix is
+        // gone, an empty string would reach the document as a blank row - and a blank
+        // row with money against it is the one thing a customer will phone about.
+        // This states the line's type, which is not invented: it is what the tech
+        // recorded when they chose labor or part.
+        description: (l.description ?? '').trim() || (labor ? 'Labor' : 'Parts'),
         quantity:    qty,
         unit_price:  unit,
         total:       Number(l.total ?? round2(qty * unit)),

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { useTaxSettings } from '@/lib/use-tax-settings'
 import { computeTax, parseBreakdown, taxDisplayRows } from '@/lib/tax'
 import { PAYMENT_TERMS, PAYMENT_TERMS_LABEL } from '@/lib/hd/payment-terms'
+import { segmentedLine, segmentHeading } from '@/lib/invoice-document'
 import { useRouter } from 'next/navigation'
 import type { Invoice, ShopSupplyItem, AdditionalPartItem, AdditionalLaborItem, ServiceLine, Adjustment, AdjustmentPreset } from '@/types/financials'
 import { money } from '@/lib/format'
@@ -517,7 +518,16 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
   const [finalizing,      setFinalizing]      = useState(false)
   const [showFinalizeModal, setShowFinalizeModal] = useState(false)
   const [toast,           setToast]           = useState<{ msg: string; type: 'success' | 'error' } | null>(null)
-  const [estimateOpen,    setEstimateOpen]    = useState(false)
+  // Open by default when the invoice's OWN lines are the only itemization on the page.
+  // A work-order invoice has no source quote, so collapsed it showed "Authorized Work
+  // $156.66" with empty space under it and nothing else on the screen listing the
+  // work - which reads as an invoice that lost its line items. A quote-sourced invoice
+  // shows its lines in the quote block, so that one stays collapsed.
+  const [estimateOpen,    setEstimateOpen]    = useState(
+    !invoice.source_quote_id &&
+    Array.isArray(invoice.line_items) &&
+    invoice.line_items.length > 0,
+  )
   const [showDiagPanel,   setShowDiagPanel]   = useState(false)
 
   const toastRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -1011,14 +1021,33 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
                   </tr>
                 </thead>
                 <tbody>
-                  {ownLines.map((li, i) => (
+                  {ownLines.map((li, i) => {
+                    // Same reading the customer's copy uses, so the two agree: the
+                    // legacy "Segment 1 - " prefix is stripped, the segment is shown
+                    // as its own tag, and an untitled line names its type instead of
+                    // printing a blank cell against a dollar figure.
+                    const seg = segmentedLine(li as unknown as Record<string, unknown>)
+                    const partNo = (li as { part_number?: string | null }).part_number
+                    const heading = segmentHeading(seg)
+                    return (
                     <tr key={i} className="border-b border-white/5 last:border-0">
-                      <td className="px-4 py-2.5 text-white/70">{li.description}</td>
+                      <td className="px-4 py-2.5 text-white/70">
+                        {heading && (
+                          <span className="block text-[10px] uppercase tracking-widest text-white/30">
+                            {heading}
+                          </span>
+                        )}
+                        {seg.description || ((li as { type?: string }).type === 'labor' ? 'Labor' : 'Parts')}
+                        {partNo && (
+                          <span className="block text-[11px] font-mono text-white/35">{partNo}</span>
+                        )}
+                      </td>
                       <td className="px-4 py-2.5 text-white/50 text-right">{li.quantity}</td>
                       <td className="px-4 py-2.5 text-white/50 text-right">{fmt(li.unit_price)}</td>
                       <td className="px-4 py-2.5 text-white font-medium text-right">{fmt(li.total)}</td>
                     </tr>
-                  ))}
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
