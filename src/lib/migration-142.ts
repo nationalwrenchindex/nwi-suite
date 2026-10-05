@@ -1,4 +1,9 @@
-// ─── Surviving a deploy that lands before migration 142 is run ────────────────
+// ─── Surviving a deploy that lands before its migration is run ────────────────
+//
+// Named for 142 because that is where it started; it now covers 146 as well. The
+// column lists are kept SEPARATE per migration, and a retry strips only the group
+// the missing column belongs to - see withoutColumnsForMissing for why that matters
+// the moment two migrations are pending at once.
 //
 // WHY THIS EXISTS. Migrations in this project are applied BY HAND in the Supabase
 // SQL editor, and code deploys independently. So there is always a window where
@@ -40,7 +45,31 @@ export const MIGRATION_142_COLUMNS = [
   'bill_shop_supplies', 'shop_supplies_percent', 'shop_supplies_cap',
 ] as const
 
-type Col = (typeof MIGRATION_142_COLUMNS)[number]
+/**
+ * Columns added by migration 146, tolerated by the same machinery.
+ *
+ * Kept as its own named list rather than appended to the 142 one, so it stays clear
+ * which migration a column is waiting on - the warning below names the file to run,
+ * and naming the wrong one sends you to a migration that is already applied.
+ *
+ * One module rather than a second copy of this pattern: these functions are already
+ * wired into every document write path, and a parallel migration-146.ts would mean
+ * remembering to wrap each call site twice.
+ */
+export const MIGRATION_146_COLUMNS = [
+  'source_work_order_id',
+] as const
+
+const TOLERATED_COLUMNS = [...MIGRATION_142_COLUMNS, ...MIGRATION_146_COLUMNS] as const
+
+/** Which migration a tolerated column belongs to, for the warning message. */
+function migrationFor(col: string): string {
+  return (MIGRATION_146_COLUMNS as readonly string[]).includes(col)
+    ? '146_invoice_source_work_order.sql'
+    : '142_billable_extras_and_document_self_containment.sql'
+}
+
+type Col = (typeof TOLERATED_COLUMNS)[number]
 
 /**
  * Does this error say a column does not exist, and is it one of ours?
@@ -64,15 +93,42 @@ export function missingMigration142Column(error: unknown): Col | null {
 
   // Longest name first, so 'shop_supplies_percent_applied' is not shadowed by
   // 'shop_supplies_percent'.
-  const byLength = [...MIGRATION_142_COLUMNS].sort((a, b) => b.length - a.length)
+  const byLength = [...TOLERATED_COLUMNS].sort((a, b) => b.length - a.length)
   for (const c of byLength) if (text.includes(c)) return c
   return null
 }
 
-/** Strip every migration-142 column from a row so the write can be retried. */
+/**
+ * Strip every migration-142 column from a row so the write can be retried.
+ *
+ * Deliberately 142 ONLY, not every tolerated column. Several call sites invoke this
+ * directly after a missing-column error, and if it also stripped 146's column those
+ * paths would drop metadata for a migration that was never the problem.
+ */
 export function withoutMigration142Columns<T extends Record<string, unknown>>(row: T): T {
   const copy = { ...row }
   for (const c of MIGRATION_142_COLUMNS) delete copy[c]
+  return copy
+}
+
+/**
+ * Strip only the columns belonging to the migration the MISSING column came from.
+ *
+ * This matters as soon as there is more than one pending migration. 146 is not
+ * applied yet while 142 is, so a conversion fails on source_work_order_id - and
+ * stripping everything on that retry would throw away parts_markup_percent,
+ * unit_number, labor_subtotal and the rest, silently downgrading an invoice because
+ * of an unrelated column. One missing migration must only cost its own columns.
+ */
+export function withoutColumnsForMissing<T extends Record<string, unknown>>(
+  row: T,
+  missing: Col,
+): T {
+  const group: readonly string[] = (MIGRATION_146_COLUMNS as readonly string[]).includes(missing)
+    ? MIGRATION_146_COLUMNS
+    : MIGRATION_142_COLUMNS
+  const copy = { ...row }
+  for (const c of group) delete copy[c]
   return copy
 }
 
@@ -97,9 +153,9 @@ export async function writeToleratingMigration142<T extends Record<string, unkno
   if (!missing) return { ...first, degraded: false }
 
   console.warn(
-    `[migration-142] '${missing}' is not in the database yet — retrying the write without ` +
-    `the 142 columns. Apply supabase/migrations/142_billable_extras_and_document_self_containment.sql.`,
+    `[pending-migration] '${missing}' is not in the database yet - retrying the write ` +
+    `without it. Apply supabase/migrations/${migrationFor(missing)}.`,
   )
-  const second = await write(withoutMigration142Columns(row))
+  const second = await write(withoutColumnsForMissing(row, missing))
   return { ...second, degraded: true }
 }

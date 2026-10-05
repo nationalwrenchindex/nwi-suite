@@ -138,6 +138,11 @@ export async function POST(
     total:            money.total,
     status:           'draft',
     source:           'work_order',
+    // The work order this invoice bills (migration 146). work_orders.converted_invoice_id
+    // already records the forward direction; this is the one a reader of an INVOICE
+    // needs, and without it nothing can get from a bill back to the segments that
+    // priced it. Tolerated by writeToleratingMigration142 until 146 is applied.
+    source_work_order_id: wo.id,
     // The job description is what the customer authorised; the tech notes are
     // internal and deliberately not carried onto a document the customer reads.
     // The job description is what the customer authorised; the tech notes are
