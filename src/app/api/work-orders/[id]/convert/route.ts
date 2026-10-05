@@ -14,9 +14,15 @@ import { PARENTS } from '@/lib/segments/parent'
 import { SEGMENT_SELECT, shapeSegments } from '@/lib/segments/select'
 import { isBillable } from '@/types/segments'
 import { invoiceFromSegments, jobNotesFromSegments } from '@/lib/segments/invoice'
-import { parseBreakdown } from '@/lib/tax'
+import { parseBreakdown, taxSettingsFrom, TAX_SETTINGS_SELECT, mergeBreakdowns, breakdownTaxTotal } from '@/lib/tax'
+import {
+  extrasFromDocument, extrasDelta, extrasAgree, extrasColumns,
+} from '@/lib/billable-extras'
 
 export const dynamic = 'force-dynamic'
+
+/** Local, so this route does not depend on a money module for one line. */
+const round2 = (n: number) => Math.round(n * 100) / 100
 
 const INVOICE_SELECT = `
   *,
@@ -44,6 +50,17 @@ export async function POST(
     .single()
 
   if (fetchErr || !wo) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  // The shop's tax settings, needed to tax the parent's extras. Null is tolerated:
+  // taxSettingsFrom falls back to default_tax_percent with labour taxed, which is
+  // what this code did before the split existed. It never falls to a 0% rate,
+  // because under-collected tax is money the shop owes out of its own pocket.
+  const { data: shopProfile } = await supabase
+    .from('profiles')
+    .select(TAX_SETTINGS_SELECT)
+    .eq('id', user.id)
+    .single()
+  const taxSettings = taxSettingsFrom(shopProfile)
 
   // Billing an unfinished job is almost always a misclick, and the customer gets a
   // bill for work still on the lift.
@@ -106,7 +123,27 @@ export async function POST(
     )
   }
 
-  const money = segments.length > 0
+  // ── THE PARENT'S EXTRAS ─────────────────────────────────────────────────────
+  //
+  // THE BUG THIS FIXES: the invoice insert below copies travel_amount, mileage_amount
+  // and shop_supplies_fee off the parent work order, but invoiceFromSegments builds
+  // subtotal and total from SEGMENT money only. So a work order carrying travel
+  // produced an invoice that PRINTED a travel charge and did not BILL it. Nothing
+  // was wrong in production only because every extras column was still zero.
+  //
+  // TAX TREATMENT, as decided on 2026-10-05:
+  //   travel   -> labour bucket, follows tax_labor
+  //   supplies -> parts bucket, follows tax_parts
+  //   mileage  -> NOT TAXED. Reimbursement of a cost, not a sale. Still in the
+  //               subtotal, which is what extrasTaxBuckets().untaxed carries.
+  //
+  // Per-bucket rounding is preserved: extrasDelta rounds each bucket through
+  // computeTax, and mergeBreakdowns SUMS already-rounded amounts rather than
+  // re-deriving one figure from a combined base.
+  const parentExtras = extrasFromDocument(wo as unknown as Record<string, unknown>)
+  const extras       = extrasDelta(parentExtras, taxSettings)
+
+  const segmentMoney = segments.length > 0
     ? invoiceFromSegments(billable)
     : {
         // Legacy parent-priced, computed exactly as it was before segments existed.
@@ -120,6 +157,61 @@ export async function POST(
         tax_breakdown: parseBreakdown((wo as { tax_breakdown?: unknown }).tax_breakdown),
       }
 
+  // The extras added in. subtotal gains all three amounts, tax gains only the taxed
+  // two, and tax_breakdown gains their buckets so the customer's copy can state them.
+  const money = {
+    ...segmentMoney,
+    subtotal:      round2(Number(segmentMoney.subtotal) + extras.subtotalDelta),
+    tax_amount:    round2(Number(segmentMoney.tax_amount) + extras.taxDelta),
+    total:         round2(Number(segmentMoney.total) + extras.totalDelta),
+    tax_breakdown: mergeBreakdowns([segmentMoney.tax_breakdown, extras.breakdown]),
+  }
+
+  // Effective rate, recomputed so the single tax_rate column stays truthful once the
+  // extras are in. Zero taxable means zero rather than a divide-by-zero NaN reaching
+  // a money column.
+  const effectiveRate = money.subtotal > 0
+    ? Math.round((money.tax_amount / money.subtotal) * 10000) / 10000
+    : 0
+
+  // ── THE ASSERTION. Loud on purpose. ────────────────────────────────────────
+  // An invoice must never display a charge that is not inside its total. These are
+  // the three figures the document prints; this checks that exactly that much money
+  // reached the subtotal. A mismatch means somebody changed one side of the fold
+  // above without the other, and the customer would be the one to find it.
+  const disagreement = extrasAgree(
+    parentExtras,
+    Number(money.subtotal),
+    Number(segmentMoney.subtotal),
+  )
+  if (disagreement) {
+    console.error('[convert] REFUSING TO BILL - ' + disagreement)
+    return NextResponse.json(
+      {
+        error: 'This work order could not be billed: its travel, mileage or shop supplies ' +
+               'do not add up to its total. Nothing has been created. Please report this.',
+        detail: disagreement,
+      },
+      { status: 500 },
+    )
+  }
+
+  // The tax must also add up to its own buckets, for the same reason.
+  const breakdownTax = breakdownTaxTotal(money.tax_breakdown)
+  if (money.tax_breakdown && Math.abs(breakdownTax - Number(money.tax_amount)) > 0.005) {
+    console.error(
+      `[convert] REFUSING TO BILL - tax_amount ${money.tax_amount} does not equal its ` +
+      `buckets ${breakdownTax}`,
+    )
+    return NextResponse.json(
+      {
+        error: 'This work order could not be billed: its tax does not match its own ' +
+               'breakdown. Nothing has been created. Please report this.',
+      },
+      { status: 500 },
+    )
+  }
+
   const invoiceInsert = {
     user_id:          user.id,
     invoice_number,
@@ -128,7 +220,9 @@ export async function POST(
     vehicle_id:       wo.vehicle_id  ?? null,
     line_items:       money.line_items,
     subtotal:         money.subtotal,
-    tax_rate:         money.tax_rate,
+    // Recomputed with the extras in, so the single-rate column is not the
+    // segments-only rate applied to a larger subtotal.
+    tax_rate:         effectiveRate,
     tax_amount:       money.tax_amount,
     // Carried forward from the segments rather than recomputed: the customer already
     // approved these figures, and re-deriving them here is how two screens start
