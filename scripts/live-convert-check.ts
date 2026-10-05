@@ -144,31 +144,46 @@ async function main() {
   // THE DEPLOY PROBE. The sync writing a non-zero tax_amount is only possible with the
   // new code, so this is also how we know the push is live rather than guessing from a
   // timer. Poll rather than sleep once: a Vercel build can take a couple of minutes.
-  // IS THE FIX ACTUALLY DEPLOYED? Read the page. The Subtotal row in the work order
-  // totals box exists only in the fix, so its absence means the build has not landed -
-  // which is exactly how a stale deploy was distinguished from a broken fix.
+  // IS THE FIX ACTUALLY DEPLOYED? Ask the SYNC, not the page.
+  //
+  // My first probe looked for the new "Subtotal" row on /work-orders/new. That row sits
+  // inside the owns-gated Parts & Labor section, which does not render until a pricing
+  // mode is chosen - so it is absent whatever is deployed, and the gate could never
+  // pass. It blocked its own test twice before I replaced it.
+  //
+  // The behavioural probe cannot be fooled: PATCH re-runs syncParentExtrasQuietly, and
+  // the OLD sync writes shop_supplies_fee while leaving tax_amount alone. A non-null
+  // tax_amount is only possible with the fix.
+  const nudge = () => fetch(`${BASE}/api/work-orders/${woId}`, {
+    method: 'PATCH',
+    headers: { cookie, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ job_description: `ACCEPTANCE TEST - deploy probe ${new Date().toISOString()}` }),
+  })
+
+  let wo: Record<string, unknown> | undefined
   let deployed = false
-  for (let attempt = 1; attempt <= 20; attempt++) {
-    const page = await fetch(`${BASE}/work-orders/new`, { headers: { cookie } })
-    const html = await page.text()
-    if (html.includes('Subtotal')) { deployed = true; break }
-    console.log(`    attempt ${attempt}: the deployed /work-orders/new has no Subtotal row yet`)
-    await sleep(15000)
+  for (let attempt = 1; attempt <= 16; attempt++) {
+    await nudge()
+    await sleep(attempt === 1 ? 2500 : 15000)
+    wo = (await rest(`work_orders?select=*&id=eq.${woId}`))[0]
+    const t = wo?.tax_amount
+    if (t !== null && t !== undefined && Number(t) !== 0) { deployed = true; break }
+    console.log(`    attempt ${attempt}: the deployed sync wrote fee ${usd(Number(wo?.shop_supplies_fee ?? 0))} but tax ${t === null ? 'null' : usd(Number(t ?? 0))} - old code still live`)
   }
-  ok(deployed, 'the fix is live on the deployed site')
+  ok(deployed, 'the fix is live: the server-side sync wrote a tax amount, which only the new code does')
   if (!deployed) {
     console.log('')
-    console.log('  STOPPING. The push is on master but the deployment has not built it yet,')
-    console.log('  so a conversion attempt now would be testing the OLD code and failing for')
-    console.log('  a reason that has already been fixed. Re-run this script once the')
-    console.log('  deployment finishes.')
+    console.log('  STOPPING. The deployed sync still writes the fee without the tax, so the')
+    console.log('  build has not landed. Converting now would fail for a reason already fixed.')
     return
   }
 
-  // Re-run the sync against the NEW code now that it is live.
+  // Put it back to complete - the nudges above only touched the description, but the
+  // converter requires complete and a status change is a separate endpoint.
   await setStatus()
-  await sleep(2000)
-  const wo = (await rest(`work_orders?select=*&id=eq.${woId}`))[0] as Record<string, unknown>
+  await sleep(1500)
+  wo = (await rest(`work_orders?select=*&id=eq.${woId}`))[0]
+
   if (!wo) { ok(false, 'could not read the work order back'); return }
   console.log(`  stored: fee ${usd(Number(wo.shop_supplies_fee ?? 0))}, tax ${usd(Number(wo.tax_amount ?? 0))}, total ${usd(Number(wo.grand_total ?? 0))}`)
   console.log(`  stored tax_breakdown: ${JSON.stringify(wo.tax_breakdown)}`)
