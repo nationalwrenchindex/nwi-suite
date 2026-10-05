@@ -5,6 +5,11 @@ import { useTaxSettings } from '@/lib/use-tax-settings'
 import { computeTax, parseBreakdown, taxDisplayRows, mergeBreakdowns, breakdownTaxTotal } from '@/lib/tax'
 import { PAYMENT_TERMS, PAYMENT_TERMS_LABEL } from '@/lib/hd/payment-terms'
 import { segmentedLine, segmentHeading } from '@/lib/invoice-document'
+import { useExtrasSettings } from '@/lib/use-extras-settings'
+import {
+  computeExtras, extrasColumns, extrasDisplayRows, extrasFromDocument,
+  extrasTaxBuckets, partsBaseFromLines,
+} from '@/lib/billable-extras'
 import { useRouter } from 'next/navigation'
 import type { Invoice, ShopSupplyItem, AdditionalPartItem, AdditionalLaborItem, ServiceLine, Adjustment, AdjustmentPreset } from '@/types/financials'
 import { money } from '@/lib/format'
@@ -495,6 +500,11 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
   const [paymentTerms,    setPaymentTerms]    = useState(invoice.payment_terms ?? '')
   const [shopDefaultTerms, setShopDefaultTerms] = useState<string>('')
   const [poNumber,        setPoNumber]        = useState(invoice.po_number ?? '')
+  // The ONLY extras inputs. Shop supplies has none on purpose - it is a percentage
+  // from Settings, not a question anybody answers per invoice.
+  const extrasSettings = useExtrasSettings()
+  const [travelHours,  setTravelHours]  = useState(Number(invoice.travel_hours  ?? 0))
+  const [mileageMiles, setMileageMiles] = useState(Number(invoice.mileage_miles ?? 0))
   const [shopSupplies,    setShopSupplies]    = useState<ShopSupplyItem[]>(
     Array.isArray(invoice.shop_supplies)    ? invoice.shop_supplies    : []
   )
@@ -595,10 +605,52 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
   const serviceLinesTotal = isDetailer ? serviceLines.reduce((s, sl) => s + sl.price_cents, 0) / 100 : 0
   const adjLinesTotal     = isDetailer ? adjLines.reduce((s, a) => s + a.price_cents, 0) / 100 : 0
 
+  // ── BILLABLE EXTRAS: computed, never added as items ────────────────────────
+  //
+  // Shop supplies is a PERCENTAGE OF PARTS, not something anybody types in. It is set
+  // once in Settings and after that it computes itself: parts change, the fee changes,
+  // zero parts means no line at all. Travel and mileage are the same once hours or
+  // miles are entered. All three print as their own labelled line rather than being
+  // folded into parts.
+  //
+  // THE PARTS BASE is the parts on THIS document - the approved parts lines plus any
+  // parts added since - and deliberately not a taxable base, which would already
+  // contain a supplies fee and so charge supplies on supplies.
+  const approvedPartsBase = partsBaseFromLines(invoice.line_items)
+  const partsOnDocument   = round2(approvedPartsBase + additionalPartsTotal + shopSuppliesTotal)
+
+  // THE PERCENTAGE IN FORCE: the one stored on the document wins over the current
+  // Settings value, so reopening an invoice cannot re-price it after the shop changes
+  // its rate. Same rule as parts markup. NULL falls through to Settings, which is the
+  // case for every document that predates the column.
+  const extrasResult = computeExtras(
+    partsOnDocument,
+    {
+      travelHours,
+      mileageMiles,
+      shopSuppliesPercentOverride: invoice.shop_supplies_percent_applied ?? null,
+      shopSuppliesCapOverride:     invoice.shop_supplies_cap_applied ?? null,
+    },
+    extrasSettings,
+    Number(invoice.labor_rate ?? sq?.labor_rate ?? 0),
+  )
+  const extraRows = extrasDisplayRows(extrasResult)
+
+  // What the document ALREADY had stored, so recomputing cannot double-charge. A
+  // work-order invoice inherits the work order's extras inside its stored tax
+  // breakdown; those amounts are removed from the approved bases below and the freshly
+  // computed ones added back, which nets to zero change when nothing moved.
+  const storedExtras = extrasFromDocument(invoice as unknown as Record<string, unknown>)
+
   // Running total
   const newSubtotal  = isDetailer
     ? round2(serviceLinesTotal + adjLinesTotal + shopSuppliesTotal + additionalPartsTotal + additionalLaborTotal)
-    : round2(originalSubtotal + shopSuppliesTotal + additionalPartsTotal + additionalLaborTotal)
+    // The extras are part of the subtotal, and the document's STORED extras come out
+    // first so a recompute replaces them rather than stacking on top of them.
+    : round2(
+        originalSubtotal + shopSuppliesTotal + additionalPartsTotal + additionalLaborTotal
+        - storedExtras.total + extrasResult.total,
+      )
   // ── Splitting the tax on an in-progress invoice ────────────────────────────
   // invoice.subtotal is ONE BLENDED NUMBER: parts, markup and labor are already
   // added together and there is no column that says how much of it was which. So the
@@ -634,8 +686,20 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
   // agreed, and after that it is SUMMED, never recomputed. The work order rounds each
   // segment; the invoice carries those figures and prices only what has been ADDED
   // since. mergeBreakdowns sums already-rounded amounts, which is exactly that rule.
-  const addedParts = round2(shopSuppliesTotal + additionalPartsTotal)
-  const addedLabor = round2(additionalLaborTotal)
+  // The extras go in their own tax buckets: travel and mileage follow labour, shop
+  // supplies follows parts, which is how the calculator already classifies them. The
+  // document's stored extras are subtracted first for the same reason as the subtotal -
+  // a work-order invoice already carries the work order's extras in its baseline, and
+  // adding the recomputed figures without removing those would tax them twice.
+  const storedExtraBuckets = extrasTaxBuckets(storedExtras)
+  const extraBuckets       = extrasTaxBuckets(extrasResult)
+
+  const addedParts = round2(
+    shopSuppliesTotal + additionalPartsTotal - storedExtraBuckets.parts + extraBuckets.parts,
+  )
+  const addedLabor = round2(
+    additionalLaborTotal - storedExtraBuckets.labor + extraBuckets.labor,
+  )
 
   // What was agreed. A work-order invoice has it stored; a quote-sourced one is priced
   // from the quote's own bases, which is what this screen already did.
@@ -748,6 +812,8 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
           payment_terms:    paymentTerms || null,
           po_number:        poNumber || null,
           shop_supplies:    shopSupplies,
+          // Computed, stored with the rate in force so a reopen cannot re-price it.
+          ...extrasColumns(extrasResult),
           additional_parts: additionalParts,
           additional_labor: additionalLabor,
           ...(isDetailer ? { service_lines: serviceLines, adjustments: adjLines } : {}),
@@ -789,6 +855,8 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
           payment_terms:    paymentTerms || null,
           po_number:        poNumber || null,
           shop_supplies:    shopSupplies,
+          // Computed, stored with the rate in force so a reopen cannot re-price it.
+          ...extrasColumns(extrasResult),
           additional_parts: additionalParts,
           additional_labor: additionalLabor,
           ...(isDetailer ? { service_lines: serviceLines, adjustments: adjLines } : {}),
@@ -1272,6 +1340,55 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
         </p>
       </Section>
 
+      {/* ── SECTION D1b: Travel and mileage ──
+          HOURS AND MILES ONLY. The amounts are computed from the rates in Settings
+          and appear in the Running Total as their own labelled lines - nobody adds
+          them as items. Shop supplies has no input here at all, deliberately: it is a
+          percentage of parts, so there is nothing for a tech to decide.
+
+          The section is hidden entirely unless the shop bills at least one of them,
+          because an input for something that is not billed invites a tech to type
+          hours that are then silently not charged. See useExtrasSettings. */}
+      {!isDetailer && (extrasSettings.billTravel || extrasSettings.billMileage) && (
+        <Section label="Travel & Mileage">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {extrasSettings.billTravel && (
+              <label className="block">
+                <span className="text-white/50 text-xs">Travel hours</span>
+                <input
+                  type="number" min="0" step="0.25" inputMode="decimal"
+                  className="nwi-input text-sm w-full mt-1"
+                  value={travelHours || ''}
+                  onChange={e => setTravelHours(Math.max(0, Number(e.target.value) || 0))}
+                />
+                <span className="block text-white/35 text-[11px] mt-1">
+                  {fmt(extrasSettings.travelRatePerHour ?? Number(invoice.labor_rate ?? 0))}/hr
+                </span>
+              </label>
+            )}
+            {extrasSettings.billMileage && (
+              <label className="block">
+                <span className="text-white/50 text-xs">Miles</span>
+                <input
+                  type="number" min="0" step="1" inputMode="decimal"
+                  className="nwi-input text-sm w-full mt-1"
+                  value={mileageMiles || ''}
+                  onChange={e => setMileageMiles(Math.max(0, Number(e.target.value) || 0))}
+                />
+                <span className="block text-white/35 text-[11px] mt-1">
+                  {fmt(extrasSettings.mileageRatePerMile ?? 0)}/mi
+                </span>
+              </label>
+            )}
+          </div>
+          <p className="text-white/40 text-[11px] mt-2">
+            Entered as hours and miles. The charge computes into the Running Total.
+            Mileage is manual on purpose - deriving it from addresses needs a distance
+            API and a monthly bill.
+          </p>
+        </Section>
+      )}
+
       {/* ── SECTION D2: Internal notes (migration 142) ──
           LD had NOWHERE to put a note the customer does not see: `notes` and
           `job_notes` both print on /invoice/[token]. That is why the work-order
@@ -1510,6 +1627,26 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
             <span className="text-white/50">Subtotal</span>
             <span className="text-white">{fmt(newSubtotal)}</span>
           </div>
+          {/*
+            Travel, mileage and shop supplies - computed, each on its own labelled
+            line. extrasDisplayRows returns NO row for a zero extra, so a labour-only
+            job shows no shop supplies line at all and a job with no travel shows no
+            travel line. Nobody adds these; they are a percentage and two rates.
+          */}
+          {extraRows.map(r => (
+            <div key={r.key} className="flex justify-between text-sm">
+              <span className="text-white/50">
+                {r.label}
+                {r.detail && <span className="text-white/30 text-xs ml-1.5">{r.detail}</span>}
+              </span>
+              <span className="text-white">{fmt(r.amount)}</span>
+            </div>
+          ))}
+          {extrasResult.shopSupplies.capped && (
+            <p className="text-[11px] text-white/35 -mt-1">
+              Shop supplies capped at {fmt(extrasResult.shopSupplies.rate ?? 0)}.
+            </p>
+          )}
           {/*
             Tax reads ONCE: the split, then its total.
 

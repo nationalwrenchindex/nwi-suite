@@ -364,3 +364,45 @@ export function extrasDisplayRows(e: ExtrasResult): ExtrasDisplayRow[] {
 function trim(n: number): string {
   return String(Math.round(n * 10000) / 10000)
 }
+
+// ─── What counts as "the parts total" for a percentage fee ────────────────────
+
+/**
+ * The parts subtotal of a document's stored line_items, as it appears to the customer.
+ *
+ * Shop supplies is a percentage of PARTS ONLY, so this has to be a clean parts figure:
+ * no labour, and critically no fee. Summing a taxable base instead would include any
+ * supplies fee already on the document and charge supplies on supplies.
+ *
+ * LINE TYPES, newest first:
+ *   type: 'parts' | 'labor'   what the converter and the editors write now
+ *   LEGACY                    no type at all, which is most stored invoices. Falls
+ *                             back to the "starts with the word Labor" convention
+ *                             that every other reader of this column already uses -
+ *                             see isLaborItem in components/shared/line-items.
+ *
+ * The legacy consequence is worth knowing: a labour line titled "Shop time" or "Diag"
+ * reads as parts and so slightly inflates the supplies base. That is the existing
+ * behaviour of every reader of this column rather than something introduced here, and
+ * it is why the field label tells techs to start a labour line with the word Labor.
+ */
+export function partsBaseFromLines(lines: unknown): number {
+  if (!Array.isArray(lines)) return 0
+  let parts = 0
+  for (const raw of lines) {
+    if (!raw || typeof raw !== 'object') continue
+    const l = raw as Record<string, unknown>
+    const total = Number(l.total ?? 0)
+    if (!Number.isFinite(total)) continue
+
+    const type = typeof l.type === 'string' ? l.type : null
+    if (type === 'labor') continue
+    if (type === 'parts') { parts += total; continue }
+
+    // Legacy: no type recorded.
+    const desc = typeof l.description === 'string' ? l.description.trim() : ''
+    if (/^labor\b/i.test(desc)) continue
+    parts += total
+  }
+  return round2(parts)
+}
