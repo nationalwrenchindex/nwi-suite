@@ -735,6 +735,7 @@ export default function FinalizedInvoiceClient({
   const [showFinalizeModal, setShowFinalizeModal] = useState(false)
   const [finalizing,        setFinalizing]        = useState(false)
   const [showSendModal,     setShowSendModal]      = useState(false)
+  const [reopening,         setReopening]          = useState(false)
   const [showPaidModal,     setShowPaidModal]      = useState(false)
   const [markingPaid,       setMarkingPaid]        = useState(false)
   const [toast,             setToast]             = useState<{ msg: string; type: 'success' | 'error' | 'warning' } | null>(null)
@@ -895,6 +896,36 @@ export default function FinalizedInvoiceClient({
       setShowFinalizeModal(false)
     } finally {
       setFinalizing(false)
+    }
+  }
+
+  // ── Reopen ────────────────────────────────────────────────────────────────
+  // A finalized invoice had no way back. Finalizing is one click and a typo in a part
+  // number used to mean the invoice was stuck, so the only recourse was issuing a second
+  // one and explaining the first to the customer.
+  //
+  // The confirmation says what reopening does NOT change, because that is the part
+  // people get wrong: the customer's link keeps working and the due date stands.
+  async function handleReopen() {
+    const BREAK = String.fromCharCode(10) + String.fromCharCode(10)
+    if (!confirm(
+      'Reopen this invoice for editing?' + BREAK +
+      'It goes back to In Progress so you can change it, then finalize again.' + BREAK +
+      'The customer link keeps working and the payment terms and due date stay as they ' +
+      'are - reopening is not a renegotiation.',
+    )) return
+
+    setReopening(true)
+    try {
+      const res = await fetch(`/api/invoices/${invoice.id}/reopen`, { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? 'Could not reopen this invoice.')
+      // Same page, different client - the server decides which to render from the status.
+      router.refresh()
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Could not reopen this invoice.')
+    } finally {
+      setReopening(false)
     }
   }
 
@@ -1690,6 +1721,20 @@ export default function FinalizedInvoiceClient({
             </svg>
             {invoice.times_sent > 0 ? 'Resend Invoice' : 'Send Invoice'}
           </button>
+          {/* NOT shown once paid: the API refuses it, and offering a button that returns
+              an error is worse than not offering one. */}
+          {!isPaid && (
+            <button
+              onClick={handleReopen}
+              disabled={reopening}
+              className="flex items-center gap-2 px-6 py-3 border border-white/20 hover:border-white/35 disabled:opacity-50 text-white/70 hover:text-white font-condensed font-bold text-sm tracking-wide rounded-xl transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 10h10a5 5 0 010 10h-3m-7-10l4-4m-4 4l4 4" />
+              </svg>
+              {reopening ? 'Reopening...' : 'Reopen Invoice'}
+            </button>
+          )}
           <button
             onClick={() => router.push('/financials?tab=invoices')}
             className="px-5 py-3 border border-white/15 hover:border-white/30 text-white/50 hover:text-white text-sm font-medium rounded-xl transition-colors"

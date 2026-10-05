@@ -214,6 +214,7 @@ async function dynamicRoutes(): Promise<Resolved[]> {
 
   const hd = await newest('hd_invoices', 'id,invoice_number')
   const feeInv = (await rest<{ id: string; invoice_number: string; public_token: string | null }>('invoices?select=id,invoice_number,public_token&shop_supplies_fee=gt.0&order=invoice_number.desc&limit=1'))[0]
+  const finalInv = (await rest<{ id: string; invoice_number: string }>('invoices?select=id,invoice_number&invoice_status=eq.awaiting_payment&order=invoice_number.desc&limit=1'))[0]
   out.push(
     hd
       ? { route: `/hd/invoices/${hd.id}`, why: `hd invoice ${hd.invoice_number}` }
@@ -232,6 +233,12 @@ async function dynamicRoutes(): Promise<Resolved[]> {
     feeInv?.public_token
       ? { route: `/invoice/${feeInv.public_token}`, why: `customer copy with a fee ${feeInv.invoice_number}` }
       : { route: null, why: '/invoice/<token>: no fee-carrying invoice with a token' },
+    // A FINALIZED invoice - awaiting_payment, not paid - so the Reopen, Send and
+    // Mark as Paid controls can be asserted on a real row. Paid is excluded on
+    // purpose: Reopen is deliberately absent there.
+    finalInv?.id
+      ? { route: `/financials/invoices/${finalInv.id}`, why: `finalized invoice ${finalInv.invoice_number}` }
+      : { route: null, why: '/financials/invoices/<id>: no awaiting_payment invoice' },
   )
 
   const invTok = await newest('invoices', 'public_token,invoice_number', '&public_token=not.is.null')

@@ -291,6 +291,95 @@ async function main() {
     ok(false, 'a document WITH a fee must be rendered to exercise the in-subtotal column')
   }
 
+  // ══ 4. THE CONTROLS MUST BE ON THE PAGE ════════════════════════════════════
+  //
+  // WHY THIS SECTION EXISTS. A finalized invoice had no way back to editing, and the only
+  // reason anyone noticed was the shop owner hitting it in production. Nothing in the
+  // suite asserted that a document's actions are REACHABLE, so a missing button was
+  // invisible to every check that passed.
+  //
+  // Asserted against RENDERED HTML of real rows, because a control can exist in the
+  // source and still not render - the travel inputs sat inside an owns-gated section and
+  // were absent from exactly the work orders that needed them.
+  hr('4. The action controls, in the rendered HTML of real rows')
+
+  const invRows = await get('invoices?select=id,invoice_number,invoice_status&order=invoice_number') as Array<Record<string, unknown>>
+  const woRows  = await get('work_orders?select=id,work_order_number,status,converted_invoice_id&order=work_order_number') as Array<Record<string, unknown>>
+
+  const htmlForId = (id: string): string | null => {
+    const row = manifest.rows.find(r => r.route.includes(id))
+    if (!row) return null
+    const f = fileFor(row.route)
+    return fs.existsSync(f) ? text(fs.readFileSync(f, 'utf8')) : null
+  }
+  const idFromRoutes = (prefix: string): string[] =>
+    manifest.rows
+      .filter(r => r.route.startsWith(prefix))
+      .map(r => r.route.slice(prefix.length).split(/[/?]/)[0])
+      .filter(x => x.length === 36)
+
+  // ── a work order page offers Create Invoice ──
+  const woIds = idFromRoutes('/work-orders/')
+  ok(woIds.length > 0, 'a work order detail page was fetched')
+  for (const id of woIds.slice(0, 1)) {
+    const row = woRows.find(w => w.id === id)
+    const html = htmlForId(id)
+    ok(!!html, 'HTML captured for work order ' + (row?.work_order_number ?? id))
+    if (html && row) {
+      const already = !!row.converted_invoice_id
+      const offers = /Create Invoice|Convert to Invoice|Invoice This/i.test(html)
+      const points = /View Invoice|Already Invoiced|has been invoiced/i.test(html)
+      console.log('  ' + row.work_order_number + ': status=' + row.status + ', converted=' + already)
+      if (already) {
+        ok(points || offers, 'an already-invoiced work order points at its invoice rather than offering a second one')
+      } else {
+        ok(offers, row.work_order_number + ' offers a Create Invoice control')
+      }
+    }
+  }
+
+  // ── an in-progress invoice offers Finalize ──
+  const invIds = idFromRoutes('/financials/invoices/')
+  const statusOf = (id: string) => String(invRows.find(i => i.id === id)?.invoice_status ?? '')
+  const inProg = invIds.find(id => statusOf(id) === 'in_progress')
+  ok(!!inProg, 'an IN PROGRESS invoice was fetched')
+  if (inProg) {
+    const row = invRows.find(i => i.id === inProg)
+    const html = htmlForId(inProg)
+    ok(!!html, 'HTML captured for ' + row?.invoice_number)
+    if (html) {
+      console.log('  ' + row?.invoice_number + ': status=in_progress')
+      ok(/Finalize/i.test(html), row?.invoice_number + ' (in_progress) offers Finalize')
+      ok(/Save/i.test(html), 'and a save control')
+      ok(!/Reopen Invoice/i.test(html), 'and NOT Reopen - already open, and the API 409s on that')
+    }
+  }
+
+  // ── a finalized invoice offers Reopen, Send and Mark as Paid ──
+  const finalId = invIds.find(id => statusOf(id) === 'awaiting_payment')
+  ok(!!finalId, 'a FINALIZED (awaiting_payment) invoice was fetched - without one the Reopen check cannot run')
+  if (finalId) {
+    const row = invRows.find(i => i.id === finalId)
+    const html = htmlForId(finalId)
+    ok(!!html, 'HTML captured for ' + row?.invoice_number)
+    if (html) {
+      console.log('  ' + row?.invoice_number + ': status=awaiting_payment')
+      ok(/Reopen Invoice/i.test(html), row?.invoice_number + ' (finalized) offers Reopen Invoice')
+      ok(/Mark as Paid/i.test(html), 'and Mark as Paid')
+      ok(/Send Invoice|Resend Invoice/i.test(html), 'and Send or Resend Invoice')
+      ok(!/Finalize Invoice/i.test(html), 'and NOT Finalize - it is already finalized')
+    }
+  }
+
+  // The endpoint has to exist, or the button is decoration.
+  const RP = 'src/app/api/invoices/[id]/reopen/route.ts'
+  ok(fs.existsSync(RP), 'POST /api/invoices/[id]/reopen exists')
+  const reopenSrc = fs.existsSync(RP) ? fs.readFileSync(RP, 'utf8') : ''
+  ok(reopenSrc.includes("invoice_status: 'in_progress'"), 'and it returns the invoice to in_progress')
+  ok(reopenSrc.includes('finalized_at:   null'), 'and clears finalized_at')
+  ok(!reopenSrc.includes('public_token:'), 'and does NOT rotate the public token the customer may hold')
+  ok(reopenSrc.includes("status === 'paid'"), 'and refuses a PAID invoice')
+
   console.log('\n' + '='.repeat(96))
   console.log(`${pass} passed, ${fail} failed`)
   console.log('='.repeat(96))
