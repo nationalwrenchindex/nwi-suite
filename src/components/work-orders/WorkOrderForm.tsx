@@ -9,7 +9,7 @@
 
 import { useState } from 'react'
 import { useTaxSettings } from '@/lib/use-tax-settings'
-import { useExtrasSettings } from '@/lib/use-extras-settings'
+import { useExtrasSettingsState } from '@/lib/use-extras-settings'
 import { computeExtras, extrasColumns, extrasDisplayRows, totalsWithExtras } from '@/lib/billable-extras'
 import { taxDisplayRows } from '@/lib/tax'
 import { useRouter } from 'next/navigation'
@@ -95,7 +95,7 @@ export default function WorkOrderForm({
   // ── Billable extras ──
   // The inputs come off the work order, never recomputed from today's Settings —
   // the stored amount is what the customer was told.
-  const extras = useExtrasSettings()
+  const { settings: extras, loaded: extrasLoaded } = useExtrasSettingsState()
   const [travelHours,  setTravelHours]  = useState(Number(workOrder?.travel_hours  ?? 0))
   const [mileageMiles, setMileageMiles] = useState(Number(workOrder?.mileage_miles ?? 0))
 
@@ -395,9 +395,9 @@ export default function WorkOrderForm({
             nothing at all rather than two inputs it has to ignore. Mileage is
             typed by hand on purpose: deriving it from addresses needs a distance
             API and a monthly bill. */}
-        {(extras.billTravel || extras.billMileage) && (
+        {(!extrasLoaded || extras.billTravel || extras.billMileage) && (
           <div className="grid grid-cols-2 gap-2 pt-2 border-t border-white/10">
-            {extras.billTravel && (
+            {(!extrasLoaded || extras.billTravel) && (
               <div>
                 <label className="nwi-label text-[10px]">Travel Hours</label>
                 <input type="number" min={0} step={0.25} className="nwi-input text-sm"
@@ -405,7 +405,7 @@ export default function WorkOrderForm({
                   onChange={e => setTravelHours(Number(e.target.value) || 0)} />
               </div>
             )}
-            {extras.billMileage && (
+            {(!extrasLoaded || extras.billMileage) && (
               <div>
                 <label className="nwi-label text-[10px]">Miles Driven</label>
                 <input type="number" min={0} step={1} className="nwi-input text-sm"

@@ -19,16 +19,22 @@ function fmt(n: number): string {
 }
 
 /**
- * The two inputs. Renders nothing at all when the shop bills neither.
+ * The two inputs.
  *
- * Hidden rather than disabled: an input for something that is not charged invites a
- * tech to type hours that are then silently dropped. See useExtrasSettings, which
- * returns EXTRAS_OFF until the shop's own answer has arrived for the same reason.
+ * SHOWN WHILE THE SETTINGS ARE STILL LOADING, deliberately. Pass `loaded` from
+ * useExtrasSettingsState. Hiding on first render meant a tech on a slow connection
+ * had nowhere to type hours and no indication why - the fields were simply absent.
+ * An extra field for a moment is a far smaller problem than a missing one.
+ *
+ * Once the answer arrives, an extra the shop does not bill is hidden for the original
+ * reason: an input for something that is not charged invites hours that get dropped.
  */
 export function ExtrasInputs({
-  settings, travelHours, mileageMiles, onTravelHours, onMileageMiles, disabled, laborRate,
+  settings, loaded = true, travelHours, mileageMiles, onTravelHours, onMileageMiles, disabled, laborRate,
 }: {
   settings:       ExtrasSettings
+  /** False until the shop's settings have arrived. Omitted means "known". */
+  loaded?:        boolean
   travelHours:    number
   mileageMiles:   number
   onTravelHours:  (n: number) => void
@@ -37,10 +43,12 @@ export function ExtrasInputs({
   /** Shown as the travel rate when the shop has not set a separate one. */
   laborRate?:     number
 }) {
-  if (!settings.billTravel && !settings.billMileage) return null
+  const showTravel  = !loaded || settings.billTravel
+  const showMileage = !loaded || settings.billMileage
+  if (!showTravel && !showMileage) return null
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-      {settings.billTravel && (
+      {showTravel && (
         <label className="block">
           <span className="text-white/50 text-xs">Travel hours</span>
           <input
@@ -50,11 +58,11 @@ export function ExtrasInputs({
             onChange={e => onTravelHours(Math.max(0, Number(e.target.value) || 0))}
           />
           <span className="block text-white/35 text-[11px] mt-1">
-            {fmt(settings.travelRatePerHour ?? laborRate ?? 0)}/hr
+            {loaded ? `${fmt(settings.travelRatePerHour ?? laborRate ?? 0)}/hr` : 'rate loading...'}
           </span>
         </label>
       )}
-      {settings.billMileage && (
+      {showMileage && (
         <label className="block">
           <span className="text-white/50 text-xs">Miles</span>
           <input
@@ -64,7 +72,7 @@ export function ExtrasInputs({
             onChange={e => onMileageMiles(Math.max(0, Number(e.target.value) || 0))}
           />
           <span className="block text-white/35 text-[11px] mt-1">
-            {fmt(settings.mileageRatePerMile ?? 0)}/mi, not taxed
+            {loaded ? `${fmt(settings.mileageRatePerMile ?? 0)}/mi, not taxed` : 'rate loading...'}
           </span>
         </label>
       )}

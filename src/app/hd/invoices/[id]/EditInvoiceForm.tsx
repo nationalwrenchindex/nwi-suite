@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useExtrasSettings } from '@/lib/use-extras-settings'
+import { useExtrasSettingsState } from '@/lib/use-extras-settings'
 import { ExtrasInputs } from '@/components/shared/ExtrasFields'
 import {
   computeExtras, extrasColumns, extrasDisplayRows, extrasDelta, extrasAgree,
@@ -61,7 +61,7 @@ export default function EditInvoiceForm({ invoice }: { invoice: Record<string, u
   // HD gets the same three extras as LD, with the same tax treatment and the same
   // cap. Hours and miles are the only inputs; shop supplies is a percentage of parts
   // and is never a question. HD had four read sites and no producer before this.
-  const extrasSettings = useExtrasSettings()
+  const { settings: extrasSettings, loaded: extrasLoaded } = useExtrasSettingsState()
   const [travelHours,  setTravelHours]  = useState(Number(invoice.travel_hours ?? 0))
   const [mileageMiles, setMileageMiles] = useState(Number(invoice.mileage_miles ?? 0))
   const [toast, setToast]   = useState('')
@@ -336,6 +336,7 @@ export default function EditInvoiceForm({ invoice }: { invoice: Record<string, u
             <div style={{ width: 280, marginBottom: 12 }}>
               <ExtrasInputs
                 settings={extrasSettings}
+                loaded={extrasLoaded}
                 travelHours={travelHours}
                 mileageMiles={mileageMiles}
                 onTravelHours={setTravelHours}

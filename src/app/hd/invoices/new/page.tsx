@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useExtrasSettings } from '@/lib/use-extras-settings'
+import { useExtrasSettingsState } from '@/lib/use-extras-settings'
 import { ExtrasInputs } from '@/components/shared/ExtrasFields'
 import {
   computeExtras, extrasColumns, extrasDisplayRows, extrasDelta, extrasAgree,
@@ -83,7 +83,7 @@ export default function NewInvoicePage() {
   const [saving, setSaving]       = useState(false)
   // HD gets the same three extras as LD, same tax treatment, same cap. Hours and
   // miles are the only inputs; the percentage is never a question.
-  const extrasSettings = useExtrasSettings()
+  const { settings: extrasSettings, loaded: extrasLoaded } = useExtrasSettingsState()
   const [travelHours,  setTravelHours]  = useState(0)
   const [mileageMiles, setMileageMiles] = useState(0)
   const [toast, setToast]         = useState('')
@@ -687,6 +687,7 @@ export default function NewInvoicePage() {
             <div style={{ width: 280, marginBottom: 12 }}>
               <ExtrasInputs
                 settings={extrasSettings}
+                loaded={extrasLoaded}
                 travelHours={travelHours}
                 mileageMiles={mileageMiles}
                 onTravelHours={setTravelHours}

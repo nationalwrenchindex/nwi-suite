@@ -5,7 +5,7 @@ import { useTaxSettings } from '@/lib/use-tax-settings'
 import { computeTax, parseBreakdown, taxDisplayRows, mergeBreakdowns, breakdownTaxTotal } from '@/lib/tax'
 import { PAYMENT_TERMS, PAYMENT_TERMS_LABEL } from '@/lib/hd/payment-terms'
 import { segmentedLine, segmentHeading } from '@/lib/invoice-document'
-import { useExtrasSettings } from '@/lib/use-extras-settings'
+import { useExtrasSettingsState } from '@/lib/use-extras-settings'
 import {
   computeExtras, extrasColumns, extrasDisplayRows, extrasFromDocument,
   extrasTaxBuckets, partsBaseFromLines, extrasAgree,
@@ -502,7 +502,7 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
   const [poNumber,        setPoNumber]        = useState(invoice.po_number ?? '')
   // The ONLY extras inputs. Shop supplies has none on purpose - it is a percentage
   // from Settings, not a question anybody answers per invoice.
-  const extrasSettings = useExtrasSettings()
+  const { settings: extrasSettings, loaded: extrasLoaded } = useExtrasSettingsState()
   const [travelHours,  setTravelHours]  = useState(Number(invoice.travel_hours  ?? 0))
   const [mileageMiles, setMileageMiles] = useState(Number(invoice.mileage_miles ?? 0))
   const [shopSupplies,    setShopSupplies]    = useState<ShopSupplyItem[]>(
@@ -1412,10 +1412,10 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
           The section is hidden entirely unless the shop bills at least one of them,
           because an input for something that is not billed invites a tech to type
           hours that are then silently not charged. See useExtrasSettings. */}
-      {!isDetailer && (extrasSettings.billTravel || extrasSettings.billMileage) && (
+      {!isDetailer && (!extrasLoaded || extrasSettings.billTravel || extrasSettings.billMileage) && (
         <Section label="Travel & Mileage">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {extrasSettings.billTravel && (
+            {(!extrasLoaded || extrasSettings.billTravel) && (
               <label className="block">
                 <span className="text-white/50 text-xs">Travel hours</span>
                 <input
@@ -1429,7 +1429,7 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
                 </span>
               </label>
             )}
-            {extrasSettings.billMileage && (
+            {(!extrasLoaded || extrasSettings.billMileage) && (
               <label className="block">
                 <span className="text-white/50 text-xs">Miles</span>
                 <input

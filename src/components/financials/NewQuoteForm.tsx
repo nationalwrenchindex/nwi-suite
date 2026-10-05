@@ -19,7 +19,7 @@ import { useState } from 'react'
 import CustomerUnitPicker from '@/components/work-orders/CustomerUnitPicker'
 import { computeTotals, toLineItems, round2, type EditItem } from '@/components/shared/line-items'
 import { useTaxSettings } from '@/lib/use-tax-settings'
-import { useExtrasSettings } from '@/lib/use-extras-settings'
+import { useExtrasSettingsState } from '@/lib/use-extras-settings'
 import {
   computeExtras, extrasColumns, extrasDisplayRows, totalsWithExtras,
 } from '@/lib/billable-extras'
@@ -50,7 +50,7 @@ export default function NewQuoteForm({
   onCancel:  () => void
 }) {
   const taxSettings = useTaxSettings()
-  const extrasSettings = useExtrasSettings()
+  const { settings: extrasSettings, loaded: extrasLoaded } = useExtrasSettingsState()
   // Hours and miles are the only inputs. A percentage is not a question.
   const [travelHours,  setTravelHours]  = useState(0)
   const [mileageMiles, setMileageMiles] = useState(0)
@@ -282,9 +282,9 @@ export default function NewQuoteForm({
           Hidden unless the shop bills one of them: an input for something that is
           not charged invites a tech to type hours that are silently dropped.
           Shop supplies has no input - it is a percentage of parts. */}
-      {(extrasSettings.billTravel || extrasSettings.billMileage) && (
+      {(!extrasLoaded || extrasSettings.billTravel || extrasSettings.billMileage) && (
         <div className="grid grid-cols-2 gap-3 pt-3 border-t border-white/8">
-          {extrasSettings.billTravel && (
+          {(!extrasLoaded || extrasSettings.billTravel) && (
             <label className="block">
               <span className="text-white/50 text-xs">Travel hours</span>
               <input
@@ -295,7 +295,7 @@ export default function NewQuoteForm({
               />
             </label>
           )}
-          {extrasSettings.billMileage && (
+          {(!extrasLoaded || extrasSettings.billMileage) && (
             <label className="block">
               <span className="text-white/50 text-xs">Miles</span>
               <input

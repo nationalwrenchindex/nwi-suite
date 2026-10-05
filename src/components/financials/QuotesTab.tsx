@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useExtrasSettings } from '@/lib/use-extras-settings'
+import { useExtrasSettingsState } from '@/lib/use-extras-settings'
 import {
   computeExtras, extrasColumns, extrasDisplayRows, extrasDelta, extrasAgree,
 } from '@/lib/billable-extras'
@@ -667,7 +667,7 @@ function QuoteDetailModal({
   // separately-stated repair labor, and that question is not settled here.
   // Hours and miles only. The percentage is never a question - it comes from
   // Settings and computes itself off the parts total below.
-  const extrasSettings = useExtrasSettings()
+  const { settings: extrasSettings, loaded: extrasLoaded } = useExtrasSettingsState()
   const [travelHours,  setTravelHours]  = useState(0)
   const [mileageMiles, setMileageMiles] = useState(0)
 
@@ -1669,6 +1669,7 @@ function QuoteDetailModal({
                     <div className="pt-2">
                       <ExtrasInputs
                         settings={extrasSettings}
+                loaded={extrasLoaded}
                         travelHours={travelHours}
                         mileageMiles={mileageMiles}
                         onTravelHours={setTravelHours}
