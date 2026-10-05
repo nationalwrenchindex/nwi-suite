@@ -124,7 +124,13 @@ async function main() {
 
   const aB = extrasTaxBuckets(a)
   ok(aB.parts === a.shopSupplies.amount, 'shop supplies are taxed in the PARTS bucket')
-  ok(aB.labor === a.travel.amount + a.mileage.amount, 'travel AND mileage are taxed in the LABOR bucket')
+  // MILEAGE IS NOT TAXED, decided 2026-10-05. Travel is labour performed; mileage
+  // reimburses a cost incurred getting there. It stays in the subtotal via the
+  // untaxed bucket, which is why that field exists rather than being dropped.
+  ok(aB.labor === a.travel.amount, 'travel alone is taxed in the LABOR bucket')
+  ok(aB.untaxed === a.mileage.amount, 'mileage is in the UNTAXED bucket, not the labour one')
+  ok(aB.labor + aB.parts + aB.untaxed === a.total,
+    'and the three buckets account for every penny of the extras')
   ok(Math.abs(aTot.subtotal - (aPartsTotal + aLabor + a.total)) < 0.005,
     `the subtotal is parts + labour + all three extras (${usd(aTot.subtotal)})`)
   ok(Math.abs(aTot.grandTotal - (aTot.subtotal + aTot.taxAmount)) < 0.005,

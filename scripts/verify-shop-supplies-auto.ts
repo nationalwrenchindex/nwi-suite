@@ -91,13 +91,18 @@ async function main() {
   ok(all.travel.amount === 190, '2 hours travel at 95.00 = 190.00')
   ok(all.mileage.amount === 26, '40 miles at 0.65 = 26.00')
   ok(buckets.parts === 40, `the PARTS bucket gets the supplies fee only (got ${buckets.parts})`)
-  ok(buckets.labor === 216, `the LABOUR bucket gets travel + mileage = 216.00 (got ${buckets.labor})`)
+  // Mileage is NOT taxed (decided 2026-10-05), so the labour bucket is travel only.
+  ok(buckets.labor === 190, `the LABOUR bucket gets travel only = 190.00 (got ${buckets.labor})`)
+  ok(buckets.untaxed === 26, `and mileage sits untaxed = 26.00 (got ${buckets.untaxed})`)
   ok(all.total === 256, 'and the three sum to 256.00')
 
   const settings = { tax_parts: true, tax_labor: true, tax_rate_parts: 7.75, tax_rate_labor: 7.75 }
   const taxed = computeTax({ parts: buckets.parts, labor: buckets.labor }, settings)
   ok(taxed.breakdown.parts?.amount === 3.1, `supplies taxes at 3.10 in the parts bucket (got ${taxed.breakdown.parts?.amount})`)
-  ok(taxed.breakdown.labor?.amount === 16.74, `travel+mileage tax 16.74 in the labour bucket (got ${taxed.breakdown.labor?.amount})`)
+  ok(taxed.breakdown.labor?.amount === 14.73, `travel alone taxes 14.73 in the labour bucket (got ${taxed.breakdown.labor?.amount})`)
+  // Proven, not asserted: taxing the mileage too would give a different figure.
+  ok(computeTax({ parts: buckets.parts, labor: 216 }, settings).breakdown.labor?.amount === 16.74,
+    'taxing mileage as labour would have given 16.74, which is what the decision removed')
 
   // Parts exempt must exempt the supplies fee too, since it IS parts.
   const exemptParts = computeTax({ parts: buckets.parts, labor: buckets.labor }, { ...settings, tax_parts: false })
