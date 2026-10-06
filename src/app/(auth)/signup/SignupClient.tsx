@@ -1,6 +1,8 @@
 'use client'
 
 import { Suspense, useState } from 'react'
+import AcceptTermsCheckbox from '@/components/legal/AcceptTermsCheckbox'
+import { LEGAL_VERSION } from '@/lib/legal'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
@@ -79,6 +81,10 @@ function SignupForm({ foremanAvailable }: Props) {
   const [plan, setPlan]               = useState<SignupPlan>(presetTier ?? 'starter')
   const [selectedModules, setSelectedModules]   = useState<SelectableModule[]>([])
   const [moduleWarningShown, setModuleWarningShown] = useState(false)
+  // The affirmative act. The real refusal is migration 147's trigger, which stops a
+  // profile completing onboarding without a recorded acceptance whatever the browser
+  // sends - a disabled button alone is bypassable from a console.
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [loading, setLoading]         = useState(false)
   const captcha = useCaptcha()
   const [error, setError]             = useState<string | null>(null)
@@ -132,7 +138,27 @@ function SignupForm({ foremanAvailable }: Props) {
     await runSignup()
   }
 
+  // One place, so the signup path and the onboarding path cannot record different
+  // things. A failure here must not fail the signup: the account exists, the box was
+  // checked, and LegalAcceptanceGate will ask again on the next visit.
+  async function recordAcceptance() {
+    try {
+      await fetch('/api/legal/accept', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ accepted: true, version: LEGAL_VERSION }),
+      })
+    } catch {
+      // Network failure. Not fatal, and not silently treated as accepted anywhere -
+      // the columns stay null and the prompt reappears.
+    }
+  }
+
   async function runSignup() {
+    if (!acceptedTerms) {
+      setError('Please accept the Terms of Service and Privacy Policy to create your account.')
+      return
+    }
     setLoading(true)
     setError(null)
 
@@ -158,6 +184,10 @@ function SignupForm({ foremanAvailable }: Props) {
         emailRedirectTo: `${window.location.origin}/auth/callback`,
         captchaToken: captcha.token,
         data: {
+          // Recorded against the profile by /api/legal/accept once a session exists.
+          // Carried here too so the affirmative act is attached to the auth user from
+          // the moment it is created.
+          terms_accepted_version: LEGAL_VERSION,
           full_name:       fullName,
           profession_type: profession,
           plan:            plan === 'foreman' ? null : plan,
@@ -177,6 +207,11 @@ function SignupForm({ foremanAvailable }: Props) {
 
     const { data: { user } } = await supabase.auth.getUser()
     if (user) {
+      // Record the acceptance BEFORE any Stripe redirect, because that redirect leaves
+      // the page and nothing after it runs. If email confirmation is on there is no
+      // session here at all - in that case the acceptance is recorded at first login by
+      // LegalAcceptanceGate or by /onboarding, and the version is already on the auth user.
+      await recordAcceptance()
       try {
         if (plan === 'foreman') {
           const res  = await fetch('/api/stripe/foreman/checkout', { method: 'POST' })
@@ -619,6 +654,12 @@ function SignupForm({ foremanAvailable }: Props) {
 
           {captcha.field}
 
+          <AcceptTermsCheckbox
+            checked={acceptedTerms}
+            onChange={setAcceptedTerms}
+            disabled={loading}
+            className="pt-1"
+          />
           <div className="flex gap-3">
             <button
               type="button"
@@ -627,7 +668,7 @@ function SignupForm({ foremanAvailable }: Props) {
             >
               ← Back
             </button>
-            <button type="submit" disabled={loading || captcha.pending} className="flex-1 btn-primary">
+            <button type="submit" disabled={loading || captcha.pending || !acceptedTerms} className="flex-1 btn-primary">
               {loading
                 ? 'Creating account…'
                 : plan === 'foreman' || plan === 'elite' || plan === 'quickwrench'

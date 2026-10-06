@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useEffect, useState } from 'react'
+import LegalAcceptanceGate from '@/components/legal/LegalAcceptanceGate'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useRouter } from 'next/navigation'
@@ -255,6 +256,10 @@ export default function AppNav({
   }
 
   return (
+    <>
+      {/* Asks accounts that predate the current Terms version to accept. Renders
+          null when there is nothing outstanding, and never blocks the page. */}
+      <LegalAcceptanceGate />
     <header className="border-b border-dark-border bg-dark-card sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center gap-4 h-16 sm:h-14">
         {/* Logo */}
@@ -384,5 +389,6 @@ export default function AppNav({
         </div>
       </div>
     </header>
+    </>
   )
 }

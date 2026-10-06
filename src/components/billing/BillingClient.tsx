@@ -368,6 +368,13 @@ function ActiveSubscriptionView({
             <span className="text-lg leading-none mt-0.5" aria-hidden>🎉</span>
             <div className="flex-1">
               <p className="text-blue-light font-medium text-sm">
+              {/*
+                ToS 8.2 asserts NO FREE TRIALS, and this banner is the UI that would contradict it.
+                Dormant, not deleted: no Stripe price carries trial_period_days and no subscription
+                is trialing, so it never renders today. Re-enabling a trial makes section 8.2 of the
+                published Terms false on the day it ships - update the Terms FIRST.
+                See docs/tos-draft-clauses.md clause 8.
+              */}
                 Free Trial Active — {days} day{days !== 1 ? 's' : ''} remaining
               </p>
               <p className="text-blue-light/60 text-xs mt-0.5">

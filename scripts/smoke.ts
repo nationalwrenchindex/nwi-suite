@@ -22,6 +22,7 @@
 //     says why.
 
 import fs from 'fs'
+import { LEGAL_VERSION } from '../src/lib/legal'
 import { loadEnv, openSession, visibleText } from './lib/smoke-session'
 
 loadEnv()
@@ -544,6 +545,52 @@ async function flowHD(): Promise<void> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// ===========================================================================
+// J  Terms acceptance gate
+//
+// The signup checkbox CANNOT be asserted from rendered HTML: both signup forms sit
+// behind a Suspense boundary with fallback={null} (they read useSearchParams), so the
+// initial HTML of /signup is the page shell and nothing else. Claiming to have seen the
+// box in the HTML would be a lie, so this flow asserts what is actually observable -
+// the server's refusals - and checks the box's presence in source separately, labelled
+// as a source check.
+async function flowJ(): Promise<void> {
+  const J = 'J terms gate'
+
+  const get = await api('GET', '/api/legal/accept')
+  if (record(J, 'acceptance endpoint answers', get.status === 200, `-> ${get.status}`)) {
+    record(J, 'serves the published version', get.json.version === LEGAL_VERSION, String(get.json.version))
+    const acc = (get.json.acceptance ?? {}) as Record<string, unknown>
+    // NOT a pass/fail: whether migration 147 is applied is the user's call, not a defect.
+    console.log(`  note  migration 147: ${acc.unavailable ? 'NOT APPLIED - acceptance cannot be recorded yet' : 'applied'}`)
+  }
+
+  // An unchecked box must be refused by the server, not only by a disabled button.
+  const no = await api('POST', '/api/legal/accept', { accepted: false })
+  record(J, 'refuses accepted:false', no.status === 422, `-> ${no.status}`)
+
+  const empty = await api('POST', '/api/legal/accept', {})
+  record(J, 'refuses an empty body', empty.status === 422, `-> ${empty.status}`)
+
+  // Recording the current version against a page that showed an older one would
+  // manufacture evidence. Refused, and nothing is written.
+  const stale = await api('POST', '/api/legal/accept', { accepted: true, version: '1999-01-01' })
+  record(J, 'refuses a stale version', stale.status === 409, `-> ${stale.status}`)
+
+  // SOURCE CHECK, not a page check - see the note above.
+  for (const [label, file] of [
+    ['LD signup',  'src/app/(auth)/signup/SignupClient.tsx'],
+    ['HD signup',  'src/app/hd/signup/page.tsx'],
+    ['onboarding', 'src/app/onboarding/page.tsx'],
+  ] as const) {
+    const src = fs.existsSync(file) ? fs.readFileSync(file, 'utf8') : ''
+    const hasBox   = src.includes('AcceptTermsCheckbox')
+    const hasGuard = src.includes('acceptedTerms')
+    record(J, `${label} has the acceptance box (source)`, hasBox && hasGuard,
+      hasBox && hasGuard ? 'box + guard' : `box ${hasBox}, guard ${hasGuard}`)
+  }
+}
+
 async function main(): Promise<void> {
   console.log('='.repeat(96))
   console.log(`SMOKE  ${BASE}`)
@@ -590,6 +637,7 @@ async function main(): Promise<void> {
 
     await flowH()
     await flowHD()
+    await flowJ()
   } finally {
     await cleanup()
   }

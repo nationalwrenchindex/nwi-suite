@@ -343,10 +343,10 @@ processor's rules constrain that.
 > not contact your customers on our own behalf. We will not use Your Data to build a
 > competing shop in your market.
 >
-> **7.4 Aggregated and de-identified data.** We may create and use aggregated,
-> de-identified statistics that cannot reasonably be used to identify you, your business or
-> any Subscriber Customer, for the purposes of operating, securing and improving the
-> Service.
+> **7.4 Aggregated and de-identified data.** We may create aggregated, de-identified
+> statistics that cannot reasonably be used to identify you, your business or any
+> Subscriber Customer, and use them **solely internally** to operate, secure and improve
+> the Service. **We will not publish, share or sell them.**
 >
 > **7.5 Export.** You may export Your Data at any time during your subscription, and during
 > the window in clause 6.5.
@@ -356,8 +356,21 @@ processor's rules constrain that.
 > having a lawful basis to collect and share it with us.
 
 **Notes.** 7.3 is the clause a subscriber will actually care about and it is worth keeping
-in plain words. 7.4 is the standard exception; keep it narrow, because a broad version
-undercuts 7.3.
+in plain words.
+
+**7.4 was narrowed to internal use only on 2026-10-06, and the reason matters.** The live
+`/privacy` page says flatly: "We do not share your data with any other third parties. We do
+not sell, rent, or trade personal information to data brokers, advertisers, or any other
+entities." It lists exactly four processors (Stripe, Twilio, Supabase, Anthropic) and never
+mentions aggregated or de-identified data at all.
+
+The original 7.4 permitted *use* without saying anything about disclosure, which was not a
+direct contradiction but became one the moment an aggregate was published — a benchmark, a
+marketing figure, "shops using NWI bill 12% more". Narrowing the clause rather than
+loosening the privacy policy was the smaller change and keeps the plain promise intact.
+
+**If you later want to publish benchmarks, this is the clause to change — and `/privacy`
+needs a matching paragraph in the same release, not afterwards.**
 
 **FLAGGED:**
 

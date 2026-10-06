@@ -66,6 +66,11 @@ export async function checkHDReeferAccess(userId: string): Promise<boolean> {
   if (!data) return false
   if (data.is_comped && data.vertical === 'heavy_duty') return true
 
+  // ToS 8.2 ASSERTS NO FREE TRIALS. This trial machinery is left in place deliberately,
+  // but it is dormant: no Stripe price carries trial_period_days, no subscription is
+  // trialing, and the checkout session sets no trial. Re-enabling a trial makes section
+  // 8.2 of the published Terms FALSE on the day it ships, so the Terms must be updated
+  // FIRST. See docs/tos-draft-clauses.md clause 8.
   // Deliberately excludes 'trialing' — reefer is locked during free trial
   const paidActive = ['active', 'past_due'].includes(data.status ?? '')
   return paidActive && HD_REEFER_TIERS.includes(data.tier ?? '')

@@ -1,3 +1,8 @@
+// ToS 8.2 ASSERTS NO FREE TRIALS. This trial machinery is left in place deliberately,
+// but it is dormant: no Stripe price carries trial_period_days, no subscription is
+// trialing, and the checkout session sets no trial. Re-enabling a trial makes section
+// 8.2 of the published Terms FALSE on the day it ships, so the Terms must be updated
+// FIRST. See docs/tos-draft-clauses.md clause 8.
 // ─── Stripe promo code setup (run once in Stripe dashboard) ──────────────────
 // 1. Coupons → Create coupon:
 //      Name: NWI Free Trial 90 Days
@@ -23,6 +28,8 @@ import { getSubscription } from '@/lib/subscription'
 import { sendFounderAlert } from '@/lib/email-alerts'
 
 const VALID_TIERS: PlanTier[] = ['starter', 'pro', 'full_suite', 'full_suite_plus', 'elite', 'foreman_standalone', 'quickwrench', 'detailer']
+// ToS 8.2 asserts NO FREE TRIALS. Dormant, not deleted: re-enabling a trial makes
+// section 8.2 of the published Terms false, so update the Terms FIRST.
 const NO_TRIAL_TIERS: PlanTier[] = ['elite', 'foreman_standalone']
 
 export async function POST(request: NextRequest) {

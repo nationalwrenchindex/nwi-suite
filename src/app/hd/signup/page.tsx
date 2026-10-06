@@ -5,6 +5,8 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useCaptcha } from '@/components/auth/CaptchaField'
 import { resolveHdSlug, describeSlugResolution } from '@/lib/plan-slugs'
+import AcceptTermsCheckbox from '@/components/legal/AcceptTermsCheckbox'
+import { LEGAL_VERSION } from '@/lib/legal'
 
 const HD_ORANGE = '#E85D24'
 const HD_BLUE   = '#1A6BAF'
@@ -101,6 +103,9 @@ function HDSignupForm() {
   const [name,    setName]    = useState('')
   const [biz,     setBiz]     = useState('')
   const [loading, setLoading] = useState(false)
+  // The affirmative act. See AcceptTermsCheckbox: the box is the courtesy, migration
+  // 147's record is the evidence.
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
   const captcha = useCaptcha()
   const [error,   setError]   = useState<string | null>(null)
 
@@ -160,6 +165,12 @@ function HDSignupForm() {
 
   async function handleSignup(e: React.FormEvent) {
     e.preventDefault()
+    // Refused in the handler, not only by the disabled attribute - that attribute is a
+    // DOM property anyone can clear.
+    if (!acceptedTerms) {
+      setError('Please accept the Terms of Service and Privacy Policy to create your account.')
+      return
+    }
     setLoading(true)
     setError(null)
     try {
@@ -169,7 +180,9 @@ function HDSignupForm() {
         password: pass,
         options: {
           captchaToken: captcha.token,
-          data: { full_name: name, business_name: biz },
+          // terms_accepted_version attaches the affirmative act to the auth user from
+          // the moment it exists; /api/legal/accept writes it onto the profile below.
+          data: { full_name: name, business_name: biz, terms_accepted_version: LEGAL_VERSION },
         },
       })
       // Single-use token: reset before anything can throw, so a failed signup is
@@ -177,6 +190,16 @@ function HDSignupForm() {
       captcha.reset()
       if (signupErr) throw signupErr
       if (!data.user) throw new Error('Signup failed — please try again.')
+
+      // Recorded BEFORE the Stripe redirect, because that redirect leaves the page.
+      // A failure here is not fatal: LegalAcceptanceGate asks again next visit.
+      try {
+        await fetch('/api/legal/accept', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ accepted: true, version: LEGAL_VERSION }),
+        })
+      } catch { /* non-fatal - the columns stay null and the prompt reappears */ }
 
       console.log(describeSlugResolution('hd', requestedPlan, presetPlan))
       const body: Record<string, unknown> = { plan, userId: data.user.id }
@@ -417,11 +440,17 @@ function HDSignupForm() {
 
               {captcha.field}
 
+              <AcceptTermsCheckbox
+                checked={acceptedTerms}
+                onChange={setAcceptedTerms}
+                disabled={loading}
+              />
+
               <button
                 type="submit"
-                disabled={loading || captcha.pending}
+                disabled={loading || captcha.pending || !acceptedTerms}
                 className="w-full py-3 rounded-xl font-bold text-white text-sm"
-                style={{ background: HD_ORANGE, opacity: loading || captcha.pending ? 0.6 : 1 }}
+                style={{ background: HD_ORANGE, opacity: loading || captcha.pending || !acceptedTerms ? 0.6 : 1 }}
               >
                 {loading ? 'Creating Account…' : 'Start Today'}
               </button>

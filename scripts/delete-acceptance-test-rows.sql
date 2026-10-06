@@ -2,7 +2,7 @@
 -- | OPTIONAL - delete the ACCEPTANCE TEST rows I created                       |
 -- +===========================================================================+
 --
--- NOT RUN BY ME. This DELETES rows, which cannot be undone without a restore.
+-- ARMED - it ends in COMMIT. This DELETES rows, which cannot be undone without a restore.
 --
 -- -- WHAT THESE ARE -----------------------------------------------------------
 --
@@ -11,9 +11,21 @@
 -- produced. All of them carry "ACCEPTANCE TEST" in job_description, so nothing real
 -- can match that.
 --
---   WO-2026-0022 .. WO-2026-0027   work orders
---   INV-2026-0020                  the invoice WO-2026-0027 converted into, proving
---                                  the 753.18 figure end to end
+-- VERIFIED against the database immediately before arming this:
+--
+--   WO-2026-0022  open      not converted
+--   WO-2026-0023  open      not converted
+--   WO-2026-0024  complete  not converted
+--   WO-2026-0025  complete  not converted
+--   WO-2026-0026  complete  not converted
+--   WO-2026-0027  complete  converted -> INV-2026-0020, total 753.18
+--
+--   INV-2026-0020  in_progress  753.18   the invoice that proved 753.18 end to end
+--
+-- Six work orders and one invoice. A LIKE pattern is exactly the kind of thing that
+-- quietly matches more than intended, so it was checked both ways: rows matching
+-- ACCEPTANCE anywhere in job_description = 6, which equals the rows matching the
+-- prefix. Nothing real is in range.
 --
 -- The script no longer does this: it reuses an existing unconverted ACCEPTANCE TEST
 -- work order rather than creating another one each run.
@@ -98,8 +110,6 @@ FROM   public.work_orders
 WHERE  job_description IS NULL
    OR  job_description NOT LIKE 'ACCEPTANCE TEST%';
 
--- If both "left" counts are 0 and the untouched count looks right:
---   COMMIT;
--- Otherwise:
---   ROLLBACK;
-ROLLBACK;  -- <= change to COMMIT when the checks above look right
+-- Expect: work_orders_left 0, invoices_left 0, and other_work_orders_untouched showing
+-- every real work order still present.
+COMMIT;   -- ARMED. STEP 3 prints above this, so the counts are visible either way.

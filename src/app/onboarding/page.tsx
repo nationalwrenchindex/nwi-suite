@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import DetailerPricingEditor, { type PricingRow } from '@/components/detailer/DetailerPricingEditor'
+import AcceptTermsCheckbox from '@/components/legal/AcceptTermsCheckbox'
+import { LEGAL_VERSION, isTermsGateViolation } from '@/lib/legal'
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -122,6 +124,30 @@ export default function OnboardingPage() {
   const [hours, setHours] = useState<WorkingHours>(DEFAULT_HOURS)
 
   const [loading, setLoading] = useState(false)
+
+  // Terms acceptance. Onboarding is the moment migration 147's trigger guards, and it
+  // writes the profile DIRECTLY from the browser - so if the acceptance never landed at
+  // signup (email confirmation means there is no session there), this is where it has to
+  // be given. ASKED, not assumed: recording an acceptance nobody was shown would be
+  // fabricated evidence. `null` means not yet known - do not show the box on a guess.
+  const [termsOnRecord, setTermsOnRecord] = useState<boolean | null>(null)
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch('/api/legal/accept', { cache: 'no-store' })
+        if (!res.ok) return
+        const json = await res.json()
+        if (cancelled) return
+        // `unavailable` means migration 147 is not applied: no trigger exists either, so
+        // asking would collect something that cannot be stored.
+        setTermsOnRecord(!!(json.acceptance?.current || json.acceptance?.unavailable))
+      } catch { /* leave it null - the box stays hidden rather than appearing wrongly */ }
+    })()
+    return () => { cancelled = true }
+  }, [])
   const [error, setError]     = useState<string | null>(null)
   const [listingLive, setListingLive] = useState(false)
 
@@ -240,6 +266,28 @@ export default function OnboardingPage() {
       return
     }
 
+    // Record the acceptance BEFORE the profile write, because the trigger reads
+    // terms_accepted_at on the same row in the same statement.
+    if (termsOnRecord === false) {
+      if (!acceptedTerms) {
+        setError('Please accept the Terms of Service and Privacy Policy to finish setup.')
+        setLoading(false)
+        return
+      }
+      const res = await fetch('/api/legal/accept', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ accepted: true, version: LEGAL_VERSION }),
+      })
+      if (!res.ok) {
+        const json = await res.json().catch(() => ({}))
+        setError(json.error ?? 'Could not record your acceptance. Please try again.')
+        setLoading(false)
+        return
+      }
+      setTermsOnRecord(true)
+    }
+
     const { error } = await supabase
       .from('profiles')
       .update({
@@ -256,7 +304,12 @@ export default function OnboardingPage() {
       .eq('id', user.id)
 
     if (error) {
-      setError(error.message)
+      // The trigger refusing is not a server error - it means the acceptance is not on
+      // record, so say that instead of showing a Postgres message.
+      setError(isTermsGateViolation(error)
+        ? 'Please accept the Terms of Service and Privacy Policy to finish setup.'
+        : error.message)
+      if (isTermsGateViolation(error)) setTermsOnRecord(false)
       setLoading(false)
       return
     }
@@ -675,6 +728,15 @@ export default function OnboardingPage() {
               })}
             </div>
 
+            {termsOnRecord === false && (
+              <AcceptTermsCheckbox
+                checked={acceptedTerms}
+                onChange={setAcceptedTerms}
+                disabled={loading}
+                className="mt-8"
+              />
+            )}
+
             <div className="flex gap-3 mt-8">
               <button
                 type="button"
@@ -683,7 +745,7 @@ export default function OnboardingPage() {
               >
                 ← Back
               </button>
-              <button type="submit" disabled={loading} className="flex-1 btn-primary">
+              <button type="submit" disabled={loading || (termsOnRecord === false && !acceptedTerms)} className="flex-1 btn-primary">
                 {loading ? 'Saving…' : 'LAUNCH MY DASHBOARD →'}
               </button>
             </div>
