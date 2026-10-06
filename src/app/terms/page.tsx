@@ -161,10 +161,26 @@ export default function TermsPage() {
               to your account, including booking confirmations, appointment reminders, and service
               notifications.
             </p>
+            {/*
+              REMOVED 2026-10-06: a sentence asserting, as a statement of fact made by us,
+              that "Customers of Subscribers who complete a booking ... consent to receive
+              SMS notifications ... at the time of booking."
+
+              That warranted on our behalf that consent exists, which is the opposite of
+              the allocation this platform needs: the messages leave on OUR 10DLC
+              registration and OUR sending domain, but only the Subscriber knows whether a
+              given person agreed to be messaged. Left in place it would have been the
+              first line a TCPA plaintiff quoted.
+
+              Nothing was put in its place here, deliberately. The replacement is clause 2
+              of docs/tos-draft-clauses.md, which puts the consent warranty, TCPA
+              compliance and an indemnity on the Subscriber - and that is legal text that
+              needs an attorney's sign-off before it goes on a live page, not something to
+              paste in during a cleanup. Until then this section states only facts about
+              opt-out handling, which are true and verifiable.
+            */}
             <p>
-              Customers of Subscribers who complete a booking through a Subscriber&apos;s public booking
-              page consent to receive SMS notifications related to their appointment at the time of
-              booking. All SMS messages sent through the Service include instructions to reply{' '}
+              All SMS messages sent through the Service include instructions to reply{' '}
               <strong className="text-white">STOP</strong> to opt out of further messages. Standard
               message and data rates may apply.
             </p>
