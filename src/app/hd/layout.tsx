@@ -3,6 +3,7 @@ import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
 import HDNav from '@/components/hd/HDNav'
+import LegalAcceptanceGate from '@/components/legal/LegalAcceptanceGate'
 
 // Auth-protected pages handle their own redirect. The layout:
 // - Unauthenticated: bare background (login/signup render without nav)
@@ -45,6 +46,12 @@ export default async function HDLayout({ children }: { children: React.ReactNode
 
   return (
     <div className="min-h-dvh flex flex-col md:flex-row" style={{ background: 'var(--hd-bg)' }}>
+      {/* HD subscribers are existing users too, and HD never passes through
+          /onboarding - so without this mount they would never be asked. Renders
+          null when there is nothing outstanding, and never blocks the page.
+          Placed after the unauthenticated and pay-page returns above, so a
+          customer opening a payment link is never shown our Terms prompt. */}
+      <LegalAcceptanceGate />
       <HDNav businessName={profile?.business_name ?? undefined} />
       <div className="flex-1 min-w-0 flex flex-col">
         {children}
