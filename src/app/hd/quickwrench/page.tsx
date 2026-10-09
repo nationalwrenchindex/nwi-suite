@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useMemo } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { runGaugeDiagnostic, SEVERITY_CONFIG } from '@/lib/hd/gauge-diagnostic'
 import type { TrailerSystem } from '@/lib/hd/trailer/types'
@@ -4412,9 +4413,9 @@ function PartsReferencePanel({ onOpenTrailer }: { onOpenTrailer: (query: string)
           <p className="text-xs mt-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
             That means nobody has recorded a part for it yet - not that no part exists.
           </p>
-          <a href="/parts/find" className="inline-block mt-3 text-xs underline" style={{ color: HD_ORANGE }}>
+          <Link href="/parts/find" className="inline-block mt-3 text-xs underline" style={{ color: HD_ORANGE }}>
             Search the full parts catalog by unit
-          </a>
+          </Link>
         </div>
       )}
 

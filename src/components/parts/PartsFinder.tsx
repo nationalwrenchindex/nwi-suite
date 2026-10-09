@@ -181,7 +181,10 @@ export default function PartsFinder({ mode, lockedUnit, onPick, markupPercent }:
   // search on mount rather than waiting for a click.
   useEffect(() => { if (locked && model.trim()) void run() }, [locked, model, run])
 
-  const results = data?.results ?? []
+  // Memoised rather than `data?.results ?? []`, because that expression returns a NEW
+  // empty array on every render, which changes the identity of the summary memo's
+  // dependency every time and defeats it.
+  const results = useMemo(() => data?.results ?? [], [data])
 
   const summary = useMemo(() => {
     if (!data) return null

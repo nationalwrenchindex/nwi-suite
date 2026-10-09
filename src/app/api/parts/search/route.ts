@@ -28,7 +28,9 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import {
-  canonicalManufacturer, manufacturerMatches, modelMatches, isCatchAllModel,
+  // isCatchAllModel is NOT imported here on purpose: the catch-all exclusion lives
+  // inside modelMatches, so this route cannot apply it inconsistently or forget it.
+  canonicalManufacturer, manufacturerMatches, modelMatches,
   serialApplies, serialLabel, serialSide, fitmentRank, textMatches, typeMatches,
   normalizePartNumber,
 } from '@/lib/parts/search'
