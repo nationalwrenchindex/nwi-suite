@@ -1,76 +1,47 @@
-import { NextResponse, type NextRequest } from 'next/server'
-import { createServiceClient } from '@/lib/supabase/service'
-import { sendAgentSms } from '@/lib/directory-agent/sms'
-import {
-  authorizeAgentRequest,
-  INVITE_BATCH_SIZE,
-  inviteMessage,
-} from '@/lib/directory-agent/config'
+// ===========================================================================
+// directory-agent/invite - PERMANENTLY DISABLED 2026-10-08
+// ===========================================================================
+//
+// WHAT THIS USED TO DO
+//
+// Sent the cold permission SMS to the highest-rated pending LD prospects, 25 per daily cron run.
+//
+// WHY IT IS GONE
+//
+// 32 numbers opted out of this programme between 2026-06-30 and 2026-10-04. One
+// received 36 messages before replying STOP; another 16; one received 8 and then had
+// FOUR MORE SENDS ATTEMPTED AFTER its STOP, which Twilio refused with error 21610.
+//
+// The cause was in the invite route's own design, documented at length in
+// src/lib/directory-agent/sms.ts:
+//
+//   * nothing on the send path ever consulted directory_optouts
+//   * a failed send deliberately left the prospect 'pending' so the DAILY cron would
+//     retry it, with no attempt counter and no cap
+//   * error 21610 ("recipient has unsubscribed") was returned as a generic failure and
+//     therefore retried like a network blip
+//
+// THE BODY OF THIS ROUTE HAS BEEN REMOVED, not commented out. A disabled route whose
+// send loop is still sitting under an early return is one deleted line away from
+// running again. The implementation is in git history if a FUTURE OPT-IN programme
+// ever needs it as a reference - it must not be restored as-is.
+//
+// Its Vercel cron entry has also been removed from vercel.json.
+//
+// Transactional SMS is unaffected: booking confirmations, appointment reminders,
+// invoice and quote sends, and work-order status updates all go through
+// src/lib/twilio.ts and src/lib/notifications.ts to people who gave us their number.
+
+import { coldOutreachDisabled } from '@/lib/directory-agent/disabled'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
 
-// ─── POST /api/directory-agent/invite ────────────────────────────────────────
-// Sends the permission SMS to the highest-rated pending prospects, capped at
-// INVITE_BATCH_SIZE per run (the daily 9am ET cron). Best-rated first so the
-// directory fills with credible shops before the long tail.
-//
-// A prospect is only marked contacted when Twilio accepted the message — a
-// failed send leaves it pending so tomorrow's batch retries it.
-export async function POST(request: NextRequest) {
-  const denied = await authorizeAgentRequest(request)
-  if (denied) return denied
-
-  const supabase = createServiceClient()
-
-  const { data: prospects, error } = await supabase
-    .from('directory_prospects')
-    .select('id, phone, business_name')
-    .eq('status', 'pending')
-    .order('rating', { ascending: false, nullsFirst: false })
-    .limit(INVITE_BATCH_SIZE)
-
-  if (error) {
-    console.error('[directory-agent/invite] load failed:', error.message)
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-  if (!prospects || prospects.length === 0) {
-    return NextResponse.json({ sent: 0, failed: 0 })
-  }
-
-  let sent = 0
-  let failed = 0
-
-  for (const p of prospects) {
-    const businessName = (p.business_name as string) || 'there'
-    const result = await sendAgentSms({
-      to:   p.phone as string,
-      body: inviteMessage(businessName),
-    })
-
-    if (!result.success) {
-      failed++
-      console.error(`[directory-agent/invite] SMS failed for ${p.id}: ${result.error}`)
-      continue
-    }
-
-    const { error: updErr } = await supabase
-      .from('directory_prospects')
-      .update({ status: 'contacted', contacted_at: new Date().toISOString() })
-      .eq('id', p.id)
-
-    if (updErr) {
-      // The text went out — log loudly rather than resend tomorrow.
-      console.error(`[directory-agent/invite] status update failed for ${p.id}:`, updErr.message)
-    }
-    sent++
-  }
-
-  console.log(`[directory-agent/invite] done: sent=${sent} failed=${failed}`)
-  return NextResponse.json({ sent, failed })
+export async function POST() {
+  return coldOutreachDisabled('directory-agent/invite POST')
 }
 
-// Vercel cron issues GET.
-export async function GET(request: NextRequest) {
-  return POST(request)
+// Vercel crons call GET. Kept so a stale cron definition anywhere gets the same 410
+// rather than a 405 that might read as a deployment fault worth fixing.
+export async function GET() {
+  return coldOutreachDisabled('directory-agent/invite GET')
 }

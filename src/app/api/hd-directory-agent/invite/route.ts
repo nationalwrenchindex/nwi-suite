@@ -1,100 +1,47 @@
-import { NextResponse, type NextRequest } from 'next/server'
-import { createServiceClient } from '@/lib/supabase/service'
-import { authorizeAgentRequest } from '@/lib/directory-agent/config'
-import { sendAgentSms } from '@/lib/directory-agent/sms'
-import {
-  HD_FROM_NUMBER,
-  HD_INVITE_BATCH_SIZE,
-  HD_NO_VENUES_FILTER,
-  hdInviteMessage,
-} from '@/lib/hd-directory-agent/config'
+// ===========================================================================
+// hd-directory-agent/invite - PERMANENTLY DISABLED 2026-10-08
+// ===========================================================================
+//
+// WHAT THIS USED TO DO
+//
+// The HD equivalent of the LD invite: cold permission SMS to pending HD prospects.
+//
+// WHY IT IS GONE
+//
+// 32 numbers opted out of this programme between 2026-06-30 and 2026-10-04. One
+// received 36 messages before replying STOP; another 16; one received 8 and then had
+// FOUR MORE SENDS ATTEMPTED AFTER its STOP, which Twilio refused with error 21610.
+//
+// The cause was in the invite route's own design, documented at length in
+// src/lib/directory-agent/sms.ts:
+//
+//   * nothing on the send path ever consulted directory_optouts
+//   * a failed send deliberately left the prospect 'pending' so the DAILY cron would
+//     retry it, with no attempt counter and no cap
+//   * error 21610 ("recipient has unsubscribed") was returned as a generic failure and
+//     therefore retried like a network blip
+//
+// THE BODY OF THIS ROUTE HAS BEEN REMOVED, not commented out. A disabled route whose
+// send loop is still sitting under an early return is one deleted line away from
+// running again. The implementation is in git history if a FUTURE OPT-IN programme
+// ever needs it as a reference - it must not be restored as-is.
+//
+// Its Vercel cron entry has also been removed from vercel.json.
+//
+// Transactional SMS is unaffected: booking confirmations, appointment reminders,
+// invoice and quote sends, and work-order status updates all go through
+// src/lib/twilio.ts and src/lib/notifications.ts to people who gave us their number.
+
+import { coldOutreachDisabled } from '@/lib/directory-agent/disabled'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 60
 
-// ─── POST /api/hd-directory-agent/invite ─────────────────────────────────────
-//
-// SCHEDULE DISABLED 2026-09-24. The route is intact and still answers; only its
-// vercel.json cron entry was removed, so nothing calls it automatically. It can
-// still be triggered by hand with a valid agent token.
-//
-// To re-enable, put this back in the `crons` array of vercel.json:
-//
-//     { "path": "/api/hd-directory-agent/invite", "schedule": "0 14 * * *" }
-//
-// (0 14 UTC = 10:00 ET during EDT, 09:00 ET during EST — Vercel crons are UTC
-// and do not shift with daylight saving.) Recorded here because vercel.json is
-// strict JSON: it cannot carry a comment, and Vercel rejects unknown properties,
-// so there is nowhere in that file to leave this note.
-//
-// Sends the permission SMS to the highest-rated pending HD prospects, capped at
-// HD_INVITE_BATCH_SIZE per run (the daily 10am ET cron). Copy is selected per
-// service category — a reefer tech and a towing operator get different pitches.
-//
-// A prospect is only marked contacted when Twilio accepted the message, so a
-// failed send stays pending for tomorrow's batch.
-export async function POST(request: NextRequest) {
-  const denied = await authorizeAgentRequest(request)
-  if (denied) return denied
-
-  const supabase = createServiceClient()
-  const from     = HD_FROM_NUMBER()
-
-  const { data: prospects, error } = await supabase
-    .from('hd_directory_prospects')
-    .select('id, phone, business_name, service_category')
-    .eq('status', 'pending')
-    // Venues — truck stops, fuel stations, rest areas — are listed directly by
-    // the search route and the bulk import. They are places, not people: there
-    // is nobody to text and nothing to opt into.
-    .or(HD_NO_VENUES_FILTER)
-    .order('rating', { ascending: false, nullsFirst: false })
-    .limit(HD_INVITE_BATCH_SIZE)
-
-  if (error) {
-    console.error('[hd-directory-agent/invite] load failed:', error.message)
-    return NextResponse.json({ error: error.message }, { status: 500 })
-  }
-  if (!prospects || prospects.length === 0) {
-    return NextResponse.json({ sent: 0, failed: 0 })
-  }
-
-  let sent = 0
-  let failed = 0
-
-  for (const p of prospects) {
-    const businessName = (p.business_name as string) || 'there'
-    const category     = (p.service_category as string | null) ?? null
-
-    const result = await sendAgentSms({
-      to:   p.phone as string,
-      body: hdInviteMessage(businessName, category),
-      from,
-    })
-
-    if (!result.success) {
-      failed++
-      console.error(`[hd-directory-agent/invite] SMS failed for ${p.id}: ${result.error}`)
-      continue
-    }
-
-    const { error: updErr } = await supabase
-      .from('hd_directory_prospects')
-      .update({ status: 'contacted', contacted_at: new Date().toISOString() })
-      .eq('id', p.id)
-
-    if (updErr) {
-      // The text went out — log loudly rather than resend tomorrow.
-      console.error(`[hd-directory-agent/invite] status update failed for ${p.id}:`, updErr.message)
-    }
-    sent++
-  }
-
-  console.log(`[hd-directory-agent/invite] done: sent=${sent} failed=${failed}`)
-  return NextResponse.json({ sent, failed })
+export async function POST() {
+  return coldOutreachDisabled('hd-directory-agent/invite POST')
 }
 
-// Vercel cron issues GET.
-export async function GET(request: NextRequest) {
-  return POST(request)
+// Vercel crons call GET. Kept so a stale cron definition anywhere gets the same 410
+// rather than a 405 that might read as a deployment fault worth fixing.
+export async function GET() {
+  return coldOutreachDisabled('hd-directory-agent/invite GET')
 }

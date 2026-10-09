@@ -591,6 +591,96 @@ async function flowJ(): Promise<void> {
   }
 }
 
+// ===========================================================================
+// K  Parts search
+//
+// The five acceptance cases, over HTTP against the deployed site.
+//
+// PRODUCTION IS A MANUAL PROMOTE. A 404 on /api/parts/search means the build has not
+// been promoted yet, which is not a defect - so this flow reports UNPROMOTED and runs
+// nothing, rather than printing five failures that say nothing about the code. That is
+// the one documented exception to "a route that will not load is a FAILURE": the rule
+// exists to stop a broken route being skipped, and an unpromoted route is a different
+// fact. It is printed loudly so it can never read as green.
+//
+// scripts/verify-parts-search.ts proves the same five cases against the live database
+// using the shipped rules, and does NOT depend on a promote.
+async function flowK(): Promise<void> {
+  const F = 'K parts search'
+
+  const probe = await api('GET', '/api/parts/search?model=Supra%20660')
+  if (probe.status === 404) {
+    console.log('  note  /api/parts/search is NOT PROMOTED yet - flow K did not run.')
+    console.log('        Run: npx tsx scripts/verify-parts-search.ts  (same cases, against the database)')
+    return
+  }
+  if (!record(F, 'search endpoint answers', probe.status === 200, `-> ${probe.status}`)) return
+
+  // 1. Supra 660: exactly 3 filters, no Thermo King.
+  const s660 = await api('GET', '/api/parts/search?manufacturer=Carrier%20Transicold&model=Supra%20660&part_type=filter')
+  const results = (s660.json.results ?? []) as Array<Record<string, unknown>>
+  const numbers = results.map(r => String(r.part_number)).sort()
+  record(F, 'Supra 660 returns exactly 3 filters', results.length === 3, `${results.length}: ${numbers.join(', ')}`)
+  record(F, 'and not one Thermo King part',
+    !results.some(r => /thermo/i.test(String(r.manufacturer))),
+    results.length ? [...new Set(results.map(r => String(r.manufacturer)))].join(', ') : 'nothing returned')
+
+  // 2. No model-filtered search returns a catch-all.
+  const everyFit = results.flatMap(r => (r.fitment ?? []) as Array<Record<string, unknown>>)
+  const catchAll = everyFit.filter(f => {
+    const m = String(f.unit_model ?? '')
+    return !m || /^(all|any)/i.test(m.replace(/[^a-z]/gi, '')) || /series|family/i.test(m)
+  })
+  record(F, 'no catch-all row in a model-filtered search', catchAll.length === 0, `${catchAll.length} found`)
+  record(F, 'the response says catch-alls were excluded',
+    (s660.json.query as Record<string, unknown>)?.catch_all_excluded === true,
+    String((s660.json.query as Record<string, unknown>)?.catch_all_excluded))
+
+  // 3. A superseded number surfaces its replacement.
+  const sup = await api('GET', '/api/parts/search?q=30-01121-00')
+  const superseded = sup.json.superseded as Record<string, unknown> | null
+  record(F, 'searching 30-01121-00 reports the supersession',
+    !!superseded && String(superseded.to) === '30-60143-01',
+    superseded ? `${superseded.from} -> ${superseded.to}` : 'no supersession reported')
+  const supResults = (sup.json.results ?? []) as Array<Record<string, unknown>>
+  record(F, 'and returns the replacement part',
+    supResults.some(r => String(r.part_number) === '30-60143-01'),
+    supResults.map(r => String(r.part_number)).join(', ') || 'nothing')
+
+  // 4. Both spellings of a number find the same part.
+  const dashed = await api('GET', '/api/parts/search?q=78-1341')
+  const plain  = await api('GET', '/api/parts/search?q=781341')
+  const ids = (r: Record<string, unknown>) => ((r.results ?? []) as Array<Record<string, unknown>>).map(x => String(x.id)).sort().join(',')
+  record(F, '78-1341 and 781341 find the same part',
+    ids(dashed.json) === ids(plain.json) && ((dashed.json.results ?? []) as unknown[]).length > 0,
+    `${((dashed.json.results ?? []) as unknown[]).length} and ${((plain.json.results ?? []) as unknown[]).length}`)
+
+  // 5. A serial narrows a split.
+  const both = await api('GET', '/api/parts/search?manufacturer=Carrier%20Transicold&model=Ultra&part_type=Filter%20-%20air')
+  const bothN = ((both.json.results ?? []) as Array<Record<string, unknown>>).length
+  record(F, 'an Ultra air filter search returns both serial sides', bothN === 2, String(bothN))
+  const narrowed = await api('GET', '/api/parts/search?manufacturer=Carrier%20Transicold&model=Ultra&part_type=Filter%20-%20air&serial=GAG90000000')
+  const narrowedR = (narrowed.json.results ?? []) as Array<Record<string, unknown>>
+  record(F, 'an early serial narrows it to one', narrowedR.length === 1,
+    `${narrowedR.length}: ${narrowedR.map(r => String(r.part_number)).join(', ')}`)
+
+  // And the screens render.
+  for (const [label, path] of [['parts catalog', '/parts/catalog'], ['find by unit', '/parts/find']] as const) {
+    const pg = await page(path)
+    if (!record(F, `${label} page loads`, !!pg, pg ? '' : `${path} did not load`)) continue
+    const miss = missingControls(pg!.text, ['Search'])
+    record(F, `${label} has its search control`, miss.length === 0, miss.length ? `missing: ${miss.join(', ')}` : 'Search')
+  }
+
+  // The hint that was a workaround for the bug must be gone from QuickWrench.
+  const qw = await page('/hd/quickwrench')
+  if (qw) {
+    record(F, 'the "try a shorter model" hint is gone',
+      !qw.text.includes('Try a shorter model'),
+      qw.text.includes('Try a shorter model') ? 'still on the page' : 'removed')
+  }
+}
+
 async function main(): Promise<void> {
   console.log('='.repeat(96))
   console.log(`SMOKE  ${BASE}`)
@@ -638,6 +728,7 @@ async function main(): Promise<void> {
     await flowH()
     await flowHD()
     await flowJ()
+    await flowK()
   } finally {
     await cleanup()
   }

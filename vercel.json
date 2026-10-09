@@ -28,22 +28,6 @@
       "schedule": "0 9 * * *"
     },
     {
-      "path": "/api/directory-agent/search",
-      "schedule": "0 12 * * 1"
-    },
-    {
-      "path": "/api/directory-agent/invite",
-      "schedule": "0 13 * * *"
-    },
-    {
-      "path": "/api/directory-agent/follow-up",
-      "schedule": "0 14 * * 3"
-    },
-    {
-      "path": "/api/hd-directory-agent/search",
-      "schedule": "0 12 * * 2"
-    },
-    {
       "path": "/api/cron/fleet-pro-pm-alerts",
       "schedule": "0 13 * * *"
     },

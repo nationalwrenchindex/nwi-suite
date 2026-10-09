@@ -23,6 +23,9 @@ export interface Session {
   cookie: string
   email:  string
   userId: string
+  /** The raw user JWT. Needed to talk to PostgREST AS THIS USER, which is the only way
+   *  to observe what RLS actually allows - the service role bypasses it entirely. */
+  accessToken: string
 }
 
 /** Load .env.local the way every script here does. */
@@ -90,7 +93,12 @@ export async function openSession(ownerId: string): Promise<Session> {
   const name  = `sb-${new URL(SUPA).hostname.split('.')[0]}-auth-token`
   const value = 'base64-' + Buffer.from(JSON.stringify(ver)).toString('base64url')
 
-  return { cookie: chunkCookie(name, value).join('; '), email: owner.email, userId: ownerId }
+  return {
+    cookie:      chunkCookie(name, value).join('; '),
+    email:       owner.email,
+    userId:      ownerId,
+    accessToken: ver.access_token as string,
+  }
 }
 
 /** Strip tags so a label split across elements still matches. */

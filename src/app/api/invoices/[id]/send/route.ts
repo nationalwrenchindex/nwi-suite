@@ -59,7 +59,17 @@ function fmtCurrency(n: number | null | undefined): string {
   return money(n)
 }
 
+// GUARDED 2026-10-08. This route had its OWN Twilio call, so disabling the outreach
+// sender did nothing for it. checkSmsAllowed is now the first statement of the local
+// sender: it consults do_not_contact and FAILS CLOSED if it cannot read it.
+// See src/lib/sms/guard.ts.
 async function sendSms(to: string, body: string): Promise<{ success: boolean; error?: string }> {
+  const verdict = await checkSmsAllowed(to)
+  if (!verdict.allowed) {
+    console.error(`[invoice_sent] SMS REFUSED (${verdict.reason}): ${verdict.detail}`)
+    return { success: false, error: `refused:${verdict.reason}` }
+  }
+
   const sid   = process.env.TWILIO_ACCOUNT_SID
   const token = process.env.TWILIO_AUTH_TOKEN
   const from  = process.env.TWILIO_PHONE_NUMBER
@@ -110,6 +120,8 @@ async function sendEmail(to: string, subject: string, text: string, html?: strin
     return { success: false, error: err instanceof Error ? err.message : String(err) }
   }
 }
+
+import { checkSmsAllowed, recordSmsSend } from '@/lib/sms/guard'
 
 export async function POST(
   req: Request,

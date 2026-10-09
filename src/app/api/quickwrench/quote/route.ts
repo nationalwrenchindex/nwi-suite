@@ -113,7 +113,17 @@ async function resolveVehicle(
   return created?.id ?? null
 }
 
+// GUARDED 2026-10-08. This route had its OWN Twilio call, so disabling the outreach
+// sender did nothing for it. checkSmsAllowed is now the first statement of the local
+// sender: it consults do_not_contact and FAILS CLOSED if it cannot read it.
+// See src/lib/sms/guard.ts.
 async function sendSMS(to: string, body: string) {
+  const verdict = await checkSmsAllowed(to)
+  if (!verdict.allowed) {
+    console.error(`[quickwrench_quote] SMS REFUSED (${verdict.reason}): ${verdict.detail}`)
+    return
+  }
+
   const sid   = process.env.TWILIO_ACCOUNT_SID
   const token = process.env.TWILIO_AUTH_TOKEN
   const from  = process.env.TWILIO_PHONE_NUMBER
@@ -133,6 +143,8 @@ async function sendSMS(to: string, body: string) {
 }
 
 // ─── Route handler ────────────────────────────────────────────────────────────
+
+import { checkSmsAllowed, recordSmsSend } from '@/lib/sms/guard'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()

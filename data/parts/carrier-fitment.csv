@@ -1,0 +1,109 @@
+part_number,part_type,manufacturer,model,serial_from,serial_before,note,source,verified
+30-01090-05,Filter - fuel,Carrier Transicold,Ultra,,,,brock-carrier-chart,yes
+30-00323-00,Filter - oil (engine),Carrier Transicold,Ultra,,,,brock-carrier-chart,yes
+30-00450-00,Filter - oil (engine),Carrier Transicold,Ultra,,,bypass built in,brock-carrier-chart,yes
+30-01077-01,Filter - air,Carrier Transicold,Ultra,,GAG90483303,,brock-carrier-chart,yes
+30-00430-00,Filter - air,Carrier Transicold,Ultra,GAG90483303,,,brock-carrier-chart,yes
+30-01090-05,Filter - fuel,Carrier Transicold,Ultra XL,,,,brock-carrier-chart,yes
+30-00323-00,Filter - oil (engine),Carrier Transicold,Ultra XL,,,,brock-carrier-chart,yes
+30-00450-00,Filter - oil (engine),Carrier Transicold,Ultra XL,,,bypass built in,brock-carrier-chart,yes
+30-01077-01,Filter - air,Carrier Transicold,Ultra XL,,GAG90483303,,brock-carrier-chart,yes
+30-00430-00,Filter - air,Carrier Transicold,Ultra XL,GAG90483303,,,brock-carrier-chart,yes
+30-01090-05,Filter - fuel,Carrier Transicold,TM1000,,,1st generation,brock-carrier-chart,yes
+30-00323-00,Filter - oil (engine),Carrier Transicold,TM1000,,,1st generation,brock-carrier-chart,yes
+30-01077-01,Filter - air,Carrier Transicold,TM1000,,,1st generation,brock-carrier-chart,yes
+30-01090-05,Filter - fuel,Carrier Transicold,TM1000,,,2nd generation,brock-carrier-chart,yes
+30-00463-00,Filter - oil (engine),Carrier Transicold,TM1000,,,2nd generation,brock-carrier-chart,yes
+30-00430-23,Filter - air,Carrier Transicold,TM1000,,,2nd generation,brock-carrier-chart,yes
+30-01090-05,Filter - fuel,Carrier Transicold,Ultima 53,,,,brock-carrier-chart,yes
+30-00323-00,Filter - oil (engine),Carrier Transicold,Ultima 53,,,,brock-carrier-chart,yes
+30-01077-01,Filter - air,Carrier Transicold,Ultima 53,,FAR90427529,,brock-carrier-chart,yes
+30-00426-22,Filter - air,Carrier Transicold,Ultima 53,FAR90427529,,,brock-carrier-chart,yes
+30-01090-05,Filter - fuel,Carrier Transicold,Ultra XT,,,,brock-carrier-chart,yes
+30-00450-00,Filter - oil (engine),Carrier Transicold,Ultra XT,,,,brock-carrier-chart,yes
+30-00426-20,Filter - air,Carrier Transicold,Ultra XT,,LAA90946117,,brock-carrier-chart,yes
+30-00471-20,Filter - air,Carrier Transicold,Ultra XT,LAA90946117,,,brock-carrier-chart,yes
+30-01090-05,Filter - fuel,Carrier Transicold,Extra XT,,,,brock-carrier-chart,yes
+30-00450-00,Filter - oil (engine),Carrier Transicold,Extra XT,,,,brock-carrier-chart,yes
+30-00426-20,Filter - air,Carrier Transicold,Extra XT,,LAA90946117,,brock-carrier-chart,yes
+30-00471-20,Filter - air,Carrier Transicold,Extra XT,LAA90946117,,,brock-carrier-chart,yes
+30-01090-05,Filter - fuel,Carrier Transicold,Ultra XTC,,,,brock-carrier-chart,yes
+30-00463-00,Filter - oil (engine),Carrier Transicold,Ultra XTC,,,,brock-carrier-chart,yes
+30-00426-27,Filter - air,Carrier Transicold,Ultra XTC,,LAA90946117,,brock-carrier-chart,yes
+30-00471-20,Filter - air,Carrier Transicold,Ultra XTC,LAA90946117,,,brock-carrier-chart,yes
+30-01090-05,Filter - fuel,Carrier Transicold,Ultima XTC,,,,brock-carrier-chart,yes
+30-00463-00,Filter - oil (engine),Carrier Transicold,Ultima XTC,,,,brock-carrier-chart,yes
+30-00426-27,Filter - air,Carrier Transicold,Ultima XTC,,LAA90946117,,brock-carrier-chart,yes
+30-00471-20,Filter - air,Carrier Transicold,Ultima XTC,LAA90946117,,,brock-carrier-chart,yes
+30-01090-05,Filter - fuel,Carrier Transicold,2100A,,,,brock-carrier-chart,yes
+30-00463-00,Filter - oil (engine),Carrier Transicold,2100A,,,,brock-carrier-chart,yes
+30-00471-20,Filter - air,Carrier Transicold,2100A,,,,brock-carrier-chart,yes
+30-01090-05,Filter - fuel,Carrier Transicold,2500A,,,,brock-carrier-chart,yes
+30-00463-00,Filter - oil (engine),Carrier Transicold,2500A,,,,brock-carrier-chart,yes
+30-00471-20,Filter - air,Carrier Transicold,2500A,,,,brock-carrier-chart,yes
+30-01090-05,Filter - fuel,Carrier Transicold,7300,,,,brock-carrier-chart,yes
+30-00463-00,Filter - oil (engine),Carrier Transicold,7300,,,,brock-carrier-chart,yes
+30-00471-20,Filter - air,Carrier Transicold,7300,,,,brock-carrier-chart,yes
+30-01090-05,Filter - fuel,Carrier Transicold,7500,,,,brock-carrier-chart,yes
+30-00463-00,Filter - oil (engine),Carrier Transicold,7500,,,,brock-carrier-chart,yes
+30-00471-20,Filter - air,Carrier Transicold,7500,,,,brock-carrier-chart,yes
+30-01090-05,Filter - fuel,Carrier Transicold,Vector 6500,,,,brock-carrier-chart,yes
+30-00463-00,Filter - oil (engine),Carrier Transicold,Vector 6500,,,,brock-carrier-chart,yes
+30-00471-20,Filter - air,Carrier Transicold,Vector 6500,,,,brock-carrier-chart,yes
+30-01090-05,Filter - fuel,Carrier Transicold,Vector 6600,,,,brock-carrier-chart,yes
+30-00463-00,Filter - oil (engine),Carrier Transicold,Vector 6600,,,,brock-carrier-chart,yes
+30-00471-20,Filter - air,Carrier Transicold,Vector 6600,,,,brock-carrier-chart,yes
+30-01090-05,Filter - fuel,Carrier Transicold,Vector 8500,,,,brock-carrier-chart,yes
+30-00463-00,Filter - oil (engine),Carrier Transicold,Vector 8500,,,,brock-carrier-chart,yes
+30-00471-20,Filter - air,Carrier Transicold,Vector 8500,,,,brock-carrier-chart,yes
+30-01090-05,Filter - fuel,Carrier Transicold,Vector 8600,,,,brock-carrier-chart,yes
+30-00463-00,Filter - oil (engine),Carrier Transicold,Vector 8600,,,,brock-carrier-chart,yes
+30-00471-20,Filter - air,Carrier Transicold,Vector 8600,,,,brock-carrier-chart,yes
+30-01090-05,Filter - fuel,Carrier Transicold,Supra 550,,,,brock-carrier-chart,yes
+30-60118-00,Filter - oil (engine),Carrier Transicold,Supra 550,,,,brock-carrier-chart,yes
+30-60049-20,Filter - air,Carrier Transicold,Supra 550,,,,brock-carrier-chart,yes
+30-01090-05,Filter - fuel,Carrier Transicold,Supra 650,,,,brock-carrier-chart,yes
+30-60118-00,Filter - oil (engine),Carrier Transicold,Supra 650,,,,brock-carrier-chart,yes
+30-60049-20,Filter - air,Carrier Transicold,Supra 650,,,,brock-carrier-chart,yes
+30-01090-05,Filter - fuel,Carrier Transicold,Supra 750,,,,brock-carrier-chart,yes
+30-60118-00,Filter - oil (engine),Carrier Transicold,Supra 750,,,,brock-carrier-chart,yes
+30-60049-20,Filter - air,Carrier Transicold,Supra 750,,,,brock-carrier-chart,yes
+30-01090-05,Filter - fuel,Carrier Transicold,Supra 850,,,,brock-carrier-chart,yes
+30-60118-00,Filter - oil (engine),Carrier Transicold,Supra 850,,,,brock-carrier-chart,yes
+30-60049-20,Filter - air,Carrier Transicold,Supra 850,,,,brock-carrier-chart,yes
+30-01090-05,Filter - fuel,Carrier Transicold,Supra 560,,,,brock-carrier-chart,yes
+30-60143-01,Filter - oil (engine),Carrier Transicold,Supra 560,,,current number - supersedes 30-01121-00,brock-carrier-chart,yes
+30-60049-20,Filter - air,Carrier Transicold,Supra 560,,,,brock-carrier-chart,yes
+30-01090-05,Filter - fuel,Carrier Transicold,Supra 660,,,,brock-carrier-chart,yes
+30-60143-01,Filter - oil (engine),Carrier Transicold,Supra 660,,,current number - supersedes 30-01121-00,brock-carrier-chart,yes
+30-60049-20,Filter - air,Carrier Transicold,Supra 660,,,,brock-carrier-chart,yes
+30-01090-05,Filter - fuel,Carrier Transicold,Supra 760,,,,brock-carrier-chart,yes
+30-60143-01,Filter - oil (engine),Carrier Transicold,Supra 760,,,current number - supersedes 30-01121-00,brock-carrier-chart,yes
+30-60049-20,Filter - air,Carrier Transicold,Supra 760,,,,brock-carrier-chart,yes
+30-01090-05,Filter - fuel,Carrier Transicold,Supra 860,,,,brock-carrier-chart,yes
+30-60143-01,Filter - oil (engine),Carrier Transicold,Supra 860,,,current number - supersedes 30-01121-00,brock-carrier-chart,yes
+30-60049-20,Filter - air,Carrier Transicold,Supra 860,,,,brock-carrier-chart,yes
+30-01090-05,Filter - fuel,Carrier Transicold,Supra 960,,,,brock-carrier-chart,yes
+30-60143-01,Filter - oil (engine),Carrier Transicold,Supra 960,,,current number - supersedes 30-01121-00,brock-carrier-chart,yes
+30-60049-20,Filter - air,Carrier Transicold,Supra 960,,,,brock-carrier-chart,yes
+30-01090-05,Filter - fuel,Carrier Transicold,Supra 950,,,,brock-carrier-chart,yes
+30-00323-00,Filter - oil (engine),Carrier Transicold,Supra 950,,,,brock-carrier-chart,yes
+30-60049-20,Filter - air,Carrier Transicold,Supra 950,,,,brock-carrier-chart,yes
+30-01090-05,Filter - fuel,Carrier Transicold,Supra 950MT,,,,brock-carrier-chart,yes
+30-00323-00,Filter - oil (engine),Carrier Transicold,Supra 950MT,,,,brock-carrier-chart,yes
+30-60049-20,Filter - air,Carrier Transicold,Supra 950MT,,,,brock-carrier-chart,yes
+30-00302-00,Filter - fuel,Carrier Transicold,Supra S6,,,,brock-carrier-chart,yes
+30-60143-00,Filter - oil (engine),Carrier Transicold,Supra S6,,,,brock-carrier-chart,yes
+30-60049-20,Filter - air,Carrier Transicold,Supra S6,,,,brock-carrier-chart,yes
+30-00302-00,Filter - fuel,Carrier Transicold,Supra S7,,,,brock-carrier-chart,yes
+30-60143-00,Filter - oil (engine),Carrier Transicold,Supra S7,,,,brock-carrier-chart,yes
+30-60049-20,Filter - air,Carrier Transicold,Supra S7,,,,brock-carrier-chart,yes
+30-00302-00,Filter - fuel,Carrier Transicold,Supra S8,,,,brock-carrier-chart,yes
+30-60143-00,Filter - oil (engine),Carrier Transicold,Supra S8,,,,brock-carrier-chart,yes
+30-60049-20,Filter - air,Carrier Transicold,Supra S8,,,,brock-carrier-chart,yes
+30-00302-00,Filter - fuel,Carrier Transicold,Supra S9,,,,brock-carrier-chart,yes
+30-60143-00,Filter - oil (engine),Carrier Transicold,Supra S9,,,,brock-carrier-chart,yes
+30-60049-20,Filter - air,Carrier Transicold,Supra S9,,,,brock-carrier-chart,yes
+30-00302-00,Filter - fuel,Carrier Transicold,Supra S10,,,,brock-carrier-chart,yes
+30-60143-00,Filter - oil (engine),Carrier Transicold,Supra S10,,,,brock-carrier-chart,yes
+30-60049-20,Filter - air,Carrier Transicold,Supra S10,,,,brock-carrier-chart,yes

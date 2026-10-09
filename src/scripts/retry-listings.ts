@@ -101,31 +101,27 @@ const VARIANTS: Variant[] = [
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
+// ===========================================================================
+// sendSms - REMOVED 2026-10-08. This was a SECOND WAY TO SEND.
+// ===========================================================================
+//
+// This script called Twilio directly instead of going through sendAgentSms, so
+// disabling the directory-agent sender did NOT stop it. It is run by hand
+// (npm run retry-listings) and has no cron - but "no scheduler" is not "cannot send".
+//
+// The body is deleted rather than guarded, because a guarded body is one deleted line
+// away from sending again. The Brilliant Directories listing retry in this script is
+// untouched: it writes a listing, not a text message. Running with or without --no-sms
+// now does the same thing.
+//
+// See src/lib/directory-agent/sms.ts for what happened and why.
 async function sendSms(to: string, body: string, from: string): Promise<{ ok: boolean; error?: string }> {
-  const sid   = process.env.TWILIO_ACCOUNT_SID
-  const token = process.env.TWILIO_AUTH_TOKEN
-  if (!sid || !token) return { ok: false, error: 'Twilio credentials not configured' }
-
-  const digits = to.replace(/\D/g, '')
-  const e164   = digits.startsWith('1') ? `+${digits}` : `+1${digits}`
-
-  try {
-    const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
-      method:  'POST',
-      headers: {
-        Authorization:  `Basic ${Buffer.from(`${sid}:${token}`).toString('base64')}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({ From: from, To: e164, Body: body }).toString(),
-    })
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({})) as { message?: string; code?: number }
-      return { ok: false, error: `HTTP ${res.status} code ${data.code}: ${data.message}` }
-    }
-    return { ok: true }
-  } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) }
-  }
+  void body
+  console.error(
+    `[retry-listings] SMS REFUSED: cold outreach is permanently disabled (2026-10-08). ` +
+    `Would have texted ${to.replace(/\d(?=\d{4})/g, '*')} from ${from} - not sent.`,
+  )
+  return { ok: false, error: "Cold outreach is permanently disabled." }
 }
 
 async function main() {

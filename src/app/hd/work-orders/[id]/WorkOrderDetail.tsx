@@ -301,7 +301,18 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
           invoice is the billed document from that point, so editing the source lines
           would put the two out of step with nothing to reconcile them. Reopening the
           work order unlocks them again. */}
-      <WorkOrderLineItems workOrderId={workOrderId} canEdit={status !== 'invoiced'} />
+      {/* The unit is passed down so the parts picker opens filtered to it. Same
+          resolution the invoice handoff uses above: the linked unit record first,
+          falling back to the free-typed fields. */}
+      <WorkOrderLineItems
+        workOrderId={workOrderId}
+        canEdit={status !== 'invoiced'}
+        unit={{
+          manufacturer: wo.unit?.manufacturer  ?? wo.unit_manufacturer ?? null,
+          model:        wo.unit?.model         ?? wo.unit_model        ?? null,
+          serial:       wo.unit?.serial_number ?? wo.unit_serial       ?? null,
+        }}
+      />
 
       {/* Inspections — aerial and DOT records attached to this work order */}
       <div className="rounded-xl overflow-hidden mb-6" style={{ border: '1px solid var(--hd-border)' }}>

@@ -4004,8 +4004,23 @@ function isUniversalFamily(unitFamily: string | null): boolean {
 // modelSpecificity, keeping the exact fits first.
 function matchesUnitModel(unitFamily: string | null, needle: string): boolean {
   if (!needle) return true
-  if (isUniversalFamily(unitFamily)) return true
+
+  // THE CATCH-ALL RULE. A universal row used to PASS a model search, on the reasoning
+  // that "fits every unit" includes this one. That reasoning is what made a Carrier
+  // Supra 660 return twelve parts when the right answer was three: eleven of the twelve
+  // named no model at all, and six were Thermo King parts offered for a Carrier unit.
+  //
+  // "Fits everything" is not an answer to "what fits THIS unit". These rows are real
+  // parts and they are still shown - but only when no model is being searched, which is
+  // where a mechanic browsing by part type will find them.
+  if (isUniversalFamily(unitFamily)) return false
+
   if (!unitFamily) return false
+
+  // Still a SUBSTRING match per entry, unlike the new /api/parts/search which is exact.
+  // Deliberate, because this table's entries embed a prefix - "Precedent S-600,S-600M"
+  // - so a typed "S-600" has to match inside an entry or correct answers are lost.
+  // part_fitment has one model per row, which is why it can afford to be exact.
   const n = normalizeModel(needle)
   return unitFamily.split(',').some(entry => normalizeModel(entry).includes(n))
 }
@@ -4013,6 +4028,31 @@ function matchesUnitModel(unitFamily: string | null, needle: string): boolean {
 // 0 = this row names the model, 1 = it is a universal row riding along.
 function modelSpecificity(unitFamily: string | null): number {
   return isUniversalFamily(unitFamily) ? 1 : 0
+}
+
+// Does this row's make match the one being searched? "Both" matches either.
+//
+// A Carrier unit must never return a Thermo King part. The chips already filter by
+// make, but a typed model with no chip selected used to return both makes - so a Supra
+// search offered TK filters. This is applied whenever a model is typed, using the make
+// the model itself implies, so the mechanic does not have to remember to press a chip.
+function manufacturerAllows(rowMfr: string, wanted: 'TK' | 'Carrier' | null): boolean {
+  if (!wanted) return true
+  if (rowMfr === 'Both') return true
+  return rowMfr === wanted
+}
+
+// Which make a typed model belongs to, when it is unambiguous. Returns null rather than
+// guessing - a model this does not recognise constrains nothing.
+const CARRIER_MODEL = /^(supra|vector|ultra|ultima|solara|maxima|xtc|genx|phoenix|extra|tm1000|2100a|2500a|7300|7500)/i
+const TK_MODEL = /^(sb|slx|spectrum|precedent|super|sentry|magnum|tripac|smx|rd|td|md|kd|bkd|t-?[0-9]|ts-|v-[0-9]|c-600|s-600|s-610|s-700|a500|shz|xmt|nwd)/i
+
+function makeFromModel(model: string): 'TK' | 'Carrier' | null {
+  const m = model.trim()
+  if (!m) return null
+  if (CARRIER_MODEL.test(m)) return 'Carrier'
+  if (TK_MODEL.test(m)) return 'TK'
+  return null
 }
 
 // The Part / Function box searches part_function — that is what "belt" means to a
@@ -4094,9 +4134,20 @@ function PartsReferencePanel({ onOpenTrailer }: { onOpenTrailer: (query: string)
       return true
     })
 
+    // MANUFACTURER CONSTRAINS ABSOLUTELY once a model is typed. A chip overrides it,
+    // because that is an explicit choice; otherwise the make is taken from the model
+    // itself. A Carrier Supra must never return a Thermo King part, and relying on the
+    // mechanic to press a chip first is how six TK parts came back for a Supra 660.
+    const chipMake: 'TK' | 'Carrier' | null =
+      filter === 'TK' ? 'TK' : filter === 'Carrier' ? 'Carrier' : null
+    const impliedMake = chipMake ?? (modelQ ? makeFromModel(modelQ) : null)
+
     // Model AND function: both boxes are optional, either alone still searches, and
-    // together they intersect — "S-600" + "belt" returns S-600 belts, nothing else.
-    const found = byFilter.filter(p => matchesUnitModel(p.unit_family, modelQ) && matchesPartQuery(p, partQ))
+    // together they intersect - "S-600" + "belt" returns S-600 belts, nothing else.
+    const found = byFilter.filter(p =>
+      manufacturerAllows(p.manufacturer, impliedMake) &&
+      matchesUnitModel(p.unit_family, modelQ) &&
+      matchesPartQuery(p, partQ))
 
     // Named-model rows above universal ones, then alphabetically by what the
     // mechanic reads first. Sort a copy — filter already returned a new array.
@@ -4350,11 +4401,21 @@ function PartsReferencePanel({ onOpenTrailer }: { onOpenTrailer: (query: string)
       )}
 
       {/* Trailer hits count as results — "No results" beside a list of them would be a lie */}
+      {/* The old text here told the mechanic to type LESS of the model. That was a
+          workaround for the catch-all leak above, and it taught people to defeat the
+          filter that makes the answer correct. An empty result now says what it means. */}
       {!idle && regularParts.length === 0 && stockingNotes.length === 0 && trailerHits.length === 0 && (
-        <p className="text-sm text-center py-8" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
-          No results. Try a shorter model (&ldquo;S-600&rdquo; rather than &ldquo;Precedent S-600DE&rdquo;)
-          or a broader part description.
-        </p>
+        <div className="text-center py-8">
+          <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.55)' }}>
+            Nothing is recorded for that.
+          </p>
+          <p className="text-xs mt-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+            That means nobody has recorded a part for it yet - not that no part exists.
+          </p>
+          <a href="/parts/find" className="inline-block mt-3 text-xs underline" style={{ color: HD_ORANGE }}>
+            Search the full parts catalog by unit
+          </a>
+        </div>
       )}
 
       {/* Regular parts cards */}

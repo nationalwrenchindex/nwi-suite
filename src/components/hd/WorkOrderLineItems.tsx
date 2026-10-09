@@ -9,6 +9,8 @@ import {
   type WorkOrderLine,
   type WorkOrderLineType,
 } from '@/lib/hd/work-order-lines'
+import AddPartToWorkOrder from '@/components/parts/AddPartToWorkOrder'
+import type { PickedPart } from '@/components/parts/PartsFinder'
 import { money } from '@/lib/format'
 
 // Parts and labor priced on the job itself, instead of first appearing at the
@@ -78,7 +80,16 @@ const inputCls = 'w-full px-2 py-2 rounded-lg text-base sm:text-sm text-white pl
 const inputStyle = { background: HEAD, border: `1px solid ${BORDER}` } as React.CSSProperties
 const thCls = 'px-3 py-2 text-left text-[10px] uppercase tracking-widest font-semibold'
 
-export default function WorkOrderLineItems({ workOrderId, canEdit }: { workOrderId: string; canEdit: boolean }) {
+export default function WorkOrderLineItems({
+  workOrderId,
+  canEdit,
+  unit,
+}: {
+  workOrderId: string
+  canEdit: boolean
+  /** The unit on the job, so the parts picker opens already filtered to it. */
+  unit?: { manufacturer: string | null; model: string | null; serial: string | null }
+}) {
   const [lines, setLines]     = useState<DraftLine[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving]   = useState(false)
@@ -140,6 +151,26 @@ export default function WorkOrderLineItems({ workOrderId, canEdit }: { workOrder
       unit_cost: '',
       unit_price: '',
       markup_percent: type === 'part' ? String(markupDefault) : '',
+    }])
+    setDirty(true)
+  }
+
+  // A part chosen from the catalog becomes an ordinary draft line. The COST goes in
+  // unit_cost and the markup is the work order's own - exactly what addLine does for a
+  // hand-typed part, so the saved row and its arithmetic are identical either way.
+  // Nothing here computes a price.
+  function addPartFromCatalog(part: PickedPart) {
+    setLines(ls => [...ls, {
+      key: crypto.randomUUID(),
+      type: 'part' as WorkOrderLineType,
+      description: part.description,
+      part_number: part.part_number,
+      quantity: String(part.quantity),
+      // Empty, not '0', when no cost is on record. A zero would bill the job as pure
+      // profit on that line; empty makes the tech enter what they paid.
+      unit_cost: part.unit_cost == null ? '' : String(part.unit_cost),
+      unit_price: '',
+      markup_percent: String(markupDefault),
     }])
     setDirty(true)
   }
@@ -238,6 +269,19 @@ export default function WorkOrderLineItems({ workOrderId, canEdit }: { workOrder
           >
             {saving ? 'Saving…' : 'Save Lines'}
           </button>
+        </div>
+      )}
+
+      {/* SCREEN 4: the catalog, already filtered to the unit on this job. Placed with
+          the add buttons because it is an alternative to typing a part number from
+          memory - which is where a wrong part number comes from. */}
+      {canEdit && unit && (
+        <div className="px-5 py-3" style={{ borderBottom: `1px solid ${BORDER}` }}>
+          <AddPartToWorkOrder
+            unit={unit}
+            markupPercent={markupDefault}
+            onAdd={addPartFromCatalog}
+          />
         </div>
       )}
 

@@ -15,6 +15,7 @@
 import { formatDate, formatTime } from './scheduler'
 import { getContactSuppression } from '@/lib/customer-contact'
 import { money } from '@/lib/format'
+import { checkSmsAllowed, recordSmsSend, blockNumber } from '@/lib/sms/guard'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -107,10 +108,21 @@ function resolve(template: string, ctx: Partial<MergeContext>): string {
 
 // ─── Twilio SMS (native fetch — no package required) ─────────────────────────
 
+// GUARDED 2026-10-08. The do_not_contact check is in this function, not in its
+// callers - see src/lib/sms/guard.ts. This is the path booking confirmations and
+// appointment reminders take, so it keeps working for people who gave us their
+// number; it just cannot reach anyone who asked us to stop.
 async function sendSms(
   to: string,
   body: string,
+  kind = 'customer_notification',
 ): Promise<{ success: boolean; sid?: string; error?: string }> {
+  const verdict = await checkSmsAllowed(to)
+  if (!verdict.allowed) {
+    console.error(`[NWI/SMS] REFUSED (${verdict.reason}): ${verdict.detail}`)
+    return { success: false, error: `refused:${verdict.reason}` }
+  }
+
   const sid   = process.env.TWILIO_ACCOUNT_SID
   const token = process.env.TWILIO_AUTH_TOKEN
   const from  = process.env.TWILIO_PHONE_NUMBER
@@ -140,6 +152,12 @@ async function sendSms(
     const data = await res.json() as { sid?: string; message?: string; code?: number }
     if (!res.ok) {
       console.error('[NWI/SMS] Twilio rejected (HTTP', res.status, ', code', data.code, '):', data.message)
+      // 21610 is the carrier saying this number is unsubscribed. Permanent, so block it
+      // rather than letting any caller retry into it.
+      if (String(data.code) === '21610') {
+        await blockNumber(to, 'twilio_21610_unsubscribed',
+          `Twilio refused a ${kind} send with 21610 on ${new Date().toISOString()}.`, 'auto')
+      }
       let userError: string
       if (res.status === 401 || data.code === 20003) {
         userError = 'SMS service authentication failed — check Twilio credentials.'
@@ -150,6 +168,7 @@ async function sendSms(
       }
       return { success: false, error: userError }
     }
+    await recordSmsSend(to, kind, data.sid ?? null)
     return { success: true, sid: data.sid }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
