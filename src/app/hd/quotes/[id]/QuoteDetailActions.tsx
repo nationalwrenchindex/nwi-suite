@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 
 const ORANGE = '#FF6600'
@@ -46,6 +46,223 @@ interface QuoteData {
   notes: string | null
 }
 
+// =============================================================================
+// SEND QUOTE
+// =============================================================================
+//
+// Migration 153 built the customer approval page at /hd/quote/[token] and the endpoint
+// that records the approval and turns the quote into a work order. Nothing in the
+// product could reach any of it: this screen had Convert to Invoice and Delete, so the
+// only route to a quote's approval page was to already know a 32-character token.
+//
+// This is the door. Text it, email it, or copy the link - and each one either delivers
+// or says why, because the route records "sent" only after a channel confirms.
+
+type SendTab = 'sms' | 'email' | 'link'
+
+function SendQuoteModal({
+  quoteId,
+  quote,
+  onClose,
+  onSent,
+}: {
+  quoteId: string
+  quote: QuoteData
+  onClose: () => void
+  onSent: () => void
+}) {
+  const [tab,     setTab]     = useState<SendTab>(quote.customer_phone ? 'sms' : 'email')
+  const [phone,   setPhone]   = useState(quote.customer_phone ?? '')
+  const [email,   setEmail]   = useState(quote.customer_email ?? '')
+  const [url,     setUrl]     = useState('')
+  const [busy,    setBusy]    = useState(false)
+  const [copied,  setCopied]  = useState(false)
+  const [message, setMessage] = useState('')
+  const [failed,  setFailed]  = useState(false)
+
+  // Mint the link on open so the Copy Link tab has something to show and the tech can
+  // always fall back to it. preview: true writes the token and claims nothing - looking
+  // at a link is not sending it.
+  useEffect(() => {
+    let live = true
+    fetch(`/api/hd/quotes/${quoteId}/send`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ method: 'link', preview: true }),
+    })
+      .then(r => r.json())
+      .then(j => {
+        if (!live) return
+        if (j?.url) setUrl(j.url as string)
+        else if (j?.error) { setMessage(j.error as string); setFailed(true) }
+      })
+      .catch(() => {})
+    return () => { live = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  async function send(method: SendTab) {
+    setBusy(true)
+    setMessage('')
+    setFailed(false)
+    try {
+      const res = await fetch(`/api/hd/quotes/${quoteId}/send`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ method, phone, email }),
+      })
+      const json = await res.json()
+      if (json?.url) setUrl(json.url as string)
+
+      if (!res.ok || !json?.sent) {
+        // The quote is intact and its link works. Say what failed and leave the tech
+        // on this screen with the link rather than closing on a silent failure.
+        setMessage(json?.error ?? 'The quote could not be sent.')
+        setFailed(true)
+        return
+      }
+
+      onSent()
+      if (json.warning) {
+        setMessage(json.warning as string)
+        setFailed(false)
+        return
+      }
+      onClose()
+    } catch {
+      setMessage('The quote could not be sent. Check the connection and try again.')
+      setFailed(true)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function copyLink() {
+    if (!url) return
+    navigator.clipboard.writeText(url).catch(() => {})
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2500)
+    // Copying the link IS the delivery - the tech is about to paste it to the customer
+    // - so it records as one. The preview on open did not.
+    await send('link')
+  }
+
+  const tabStyle = (t: SendTab): React.CSSProperties => ({
+    flex: 1,
+    padding: '10px 0',
+    fontSize: 13,
+    fontWeight: 600,
+    borderRadius: 8,
+    border: 'none',
+    cursor: 'pointer',
+    background: tab === t ? ORANGE : '#F3F4F6',
+    color:      tab === t ? '#FFFFFF' : '#6B7280',
+  })
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 60, background: 'rgba(0,0,0,0.45)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20,
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{ background: '#FFFFFF', borderRadius: 14, width: '100%', maxWidth: 460, padding: 24 }}
+      >
+        <div className="flex items-start justify-between mb-1">
+          <h2 className="font-condensed font-bold text-xl" style={{ color: '#1A1A1A' }}>
+            Send {quote.customer_name ? `to ${quote.customer_name}` : 'Quote'}
+          </h2>
+          <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', fontSize: 22, lineHeight: 1, color: '#9CA3AF', cursor: 'pointer' }}>
+            &times;
+          </button>
+        </div>
+        <p className="text-sm mb-4" style={{ color: '#6B7280' }}>
+          They can approve it with one tap, which creates the work order.
+        </p>
+
+        <div className="flex gap-2 mb-4">
+          <button onClick={() => setTab('sms')}   style={tabStyle('sms')}>Text</button>
+          <button onClick={() => setTab('email')} style={tabStyle('email')}>Email</button>
+          <button onClick={() => setTab('link')}  style={tabStyle('link')}>Copy Link</button>
+        </div>
+
+        {tab === 'sms' && (
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#9CA3AF' }}>Mobile Number</label>
+            <input
+              value={phone}
+              onChange={e => setPhone(e.target.value)}
+              inputMode="tel"
+              placeholder="(555) 555-5555"
+              style={{ width: '100%', marginTop: 6, marginBottom: 14, padding: '12px 14px', fontSize: 16, borderRadius: 10, border: '1px solid #E5E7EB' }}
+            />
+            <button
+              onClick={() => send('sms')}
+              disabled={busy || !phone.trim()}
+              style={{ width: '100%', padding: '13px 0', borderRadius: 10, border: 'none', background: ORANGE, color: '#FFFFFF', fontWeight: 700, fontSize: 14, cursor: 'pointer', opacity: busy || !phone.trim() ? 0.5 : 1, minHeight: 44 }}
+            >
+              {busy ? 'Sending...' : 'Text the Quote'}
+            </button>
+          </div>
+        )}
+
+        {tab === 'email' && (
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#9CA3AF' }}>Email Address</label>
+            <input
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              inputMode="email"
+              placeholder="name@company.com"
+              style={{ width: '100%', marginTop: 6, marginBottom: 14, padding: '12px 14px', fontSize: 16, borderRadius: 10, border: '1px solid #E5E7EB' }}
+            />
+            <button
+              onClick={() => send('email')}
+              disabled={busy || !email.trim()}
+              style={{ width: '100%', padding: '13px 0', borderRadius: 10, border: 'none', background: ORANGE, color: '#FFFFFF', fontWeight: 700, fontSize: 14, cursor: 'pointer', opacity: busy || !email.trim() ? 0.5 : 1, minHeight: 44 }}
+            >
+              {busy ? 'Sending...' : 'Email the Quote'}
+            </button>
+          </div>
+        )}
+
+        {tab === 'link' && (
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#9CA3AF' }}>Customer Approval Link</label>
+            <p style={{ marginTop: 6, marginBottom: 14, padding: '12px 14px', borderRadius: 10, border: '1px solid #E5E7EB', background: '#F9FAFB', fontSize: 12, fontFamily: 'monospace', wordBreak: 'break-all', color: '#374151' }}>
+              {url || 'Creating the link...'}
+            </p>
+            <button
+              onClick={copyLink}
+              disabled={busy || !url}
+              style={{ width: '100%', padding: '13px 0', borderRadius: 10, border: 'none', background: copied ? '#16A34A' : '#1A1A1A', color: '#FFFFFF', fontWeight: 700, fontSize: 14, cursor: 'pointer', opacity: busy || !url ? 0.5 : 1, minHeight: 44 }}
+            >
+              {copied ? 'Copied' : 'Copy to Clipboard'}
+            </button>
+          </div>
+        )}
+
+        {message && (
+          <p
+            className="text-sm mt-4"
+            style={{
+              padding: '10px 12px', borderRadius: 8,
+              background: failed ? '#FEE2E2' : '#FEF3C7',
+              color:      failed ? '#B91C1C' : '#92400E',
+            }}
+          >
+            {message}
+            {failed && url ? ' Copy Link still works - send it by hand.' : ''}
+          </p>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function QuoteDetailActions({
   quoteId,
   quoteNumber,
@@ -58,6 +275,7 @@ export default function QuoteDetailActions({
   const router = useRouter()
   const [busy, setBusy] = useState(false)
   const [toast, setToast] = useState('')
+  const [sendOpen, setSendOpen] = useState(false)
 
   async function convertToInvoice() {
     // Converting is meant for an APPROVED quote. Anything else is still an estimate the
@@ -160,6 +378,29 @@ export default function QuoteDetailActions({
       {toast && (
         <span className="text-xs px-3 py-1 rounded-lg" style={{ background: '#FEE2E2', color: '#dc2626' }}>{toast}</span>
       )}
+      {sendOpen && (
+        <SendQuoteModal
+          quoteId={quoteId}
+          quote={quoteData}
+          onClose={() => setSendOpen(false)}
+          // The send changes status draft -> sent, which this screen renders. Refresh
+          // rather than patch local state: the server component is the source of truth
+          // for the badge and for whether Convert to Invoice warns.
+          onSent={() => router.refresh()}
+        />
+      )}
+      <button
+        onClick={() => setSendOpen(true)}
+        disabled={busy}
+        className="flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm text-white disabled:opacity-50"
+        style={{ background: ORANGE, minHeight: 44 }}
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <line x1="22" y1="2" x2="11" y2="13" />
+          <polygon points="22 2 15 22 11 13 2 9 22 2" />
+        </svg>
+        {quoteData.status === 'draft' ? 'Send Quote' : 'Send Again'}
+      </button>
       <button
         onClick={convertToInvoice}
         disabled={busy}

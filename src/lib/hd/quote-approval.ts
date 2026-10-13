@@ -38,6 +38,71 @@ export function generateQuoteToken(): string {
 
 export type ApprovalMethod = 'customer_link' | 'verbal'
 
+/** Absolute URL for a minted quote token. Safe to put in an SMS body. */
+export function publicQuoteUrl(token: string): string {
+  const base = (process.env.NEXT_PUBLIC_APP_URL ?? 'https://tools.nationalwrenchindex.com')
+    .replace(/\/$/, '')
+  return `${base}/hd/quote/${token}`
+}
+
+/**
+ * Return the quote's public token, creating one if it does not have one yet.
+ *
+ * IDEMPOTENT BY DESIGN. Re-sending a quote must not rotate the token: the customer may
+ * have the first message open, and a link that dies between the text and the tap looks
+ * like a dead business. It is also the link the approval is recorded against.
+ *
+ * Scoped by BOTH id and user_id so an id lifted from another subscriber's quote cannot
+ * mint a live public URL onto their row.
+ *
+ * Throws if the quote does not exist or is not owned by userId.
+ */
+export async function mintQuoteToken(quoteId: string, userId: string): Promise<string> {
+  const svc = createServiceClient()
+
+  const { data: existing, error: readErr } = await svc
+    .from('hd_quotes')
+    .select('public_token')
+    .eq('id', quoteId)
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (readErr) throw new Error(`Failed to read quote: ${readErr.message}`)
+  if (!existing) throw new Error('Quote not found')
+
+  const current = (existing.public_token as string | null) ?? null
+  if (current) return current
+
+  const token = generateQuoteToken()
+
+  // .is('public_token', null) makes this a compare-and-set. Two sends firing at once
+  // would otherwise both generate a token and the second would overwrite the first,
+  // invalidating a link that had already gone out.
+  const { data: updated, error: writeErr } = await svc
+    .from('hd_quotes')
+    .update({ public_token: token })
+    .eq('id', quoteId)
+    .eq('user_id', userId)
+    .is('public_token', null)
+    .select('public_token')
+    .maybeSingle()
+
+  if (writeErr) throw new Error(`Failed to mint quote token: ${writeErr.message}`)
+  if (updated?.public_token) return String(updated.public_token)
+
+  // Lost the race: another request minted first, and its token is the live one.
+  const { data: raced } = await svc
+    .from('hd_quotes')
+    .select('public_token')
+    .eq('id', quoteId)
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  const settled = (raced?.public_token as string | null) ?? null
+  if (!settled) throw new Error('Failed to mint quote token')
+  return settled
+}
+
 /**
  * The columns the public approval page is allowed to read.
  *

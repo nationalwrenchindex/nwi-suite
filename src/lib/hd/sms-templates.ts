@@ -146,3 +146,75 @@ export function buildInvoiceEmail(input: InvoiceSmsInput): { subject: string; te
     ].join('\n'),
   }
 }
+
+export interface QuoteSmsInput {
+  businessName:  string | null | undefined
+  businessPhone: string | null | undefined
+  quoteNumber:   string
+  total:         number | string | null | undefined
+  url:           string
+  /** The quote's valid_until, already formatted for a human. Omitted when unset. */
+  validUntil?:   string | null
+}
+
+/**
+ * The quote-ready text.
+ *
+ * Says APPROVE, not "view". The whole point of the link is that the customer can
+ * authorize the work with one tap - a message that only invites them to look at it
+ * gets looked at and then sat on, which is the state the shop is already in.
+ *
+ * Degrades in the same fixed order as buildInvoiceSms so the two things that must
+ * never be lost - the amount and the link - survive every trim:
+ *   1. the expiry note   2. the callback phone   3. nothing else
+ * The STOP line stays, for the same 10DLC reason.
+ */
+export function buildQuoteSms(input: QuoteSmsInput): string {
+  const biz   = normalizeBusinessName(input.businessName)
+  const num   = toGsmSafe(input.quoteNumber || 'quote')
+  const total = formatInvoiceTotal(input.total)
+  const url   = input.url.trim()
+  const phone = formatBusinessPhone(input.businessPhone)
+  const until = input.validUntil ? toGsmSafe(input.validUntil) : ''
+
+  const lead   = `${biz}: Quote ${num} for ${total} is ready. Review and approve: ${url}`
+  const expiry = until ? ` Good through ${until}.` : ''
+  const callMe = phone ? ` Questions? Call ${phone}.` : ''
+  const optOut = ' Reply STOP to opt out.'
+
+  const full = `${lead}${expiry}${callMe}${optOut}`
+  if (full.length <= TWO_SEGMENTS) return full
+
+  const noExpiry = `${lead}${callMe}${optOut}`
+  if (noExpiry.length <= TWO_SEGMENTS) return noExpiry
+
+  return `${lead}${optOut}`
+}
+
+/** Subject + plain-text body for a quote sent by email. Same white-label rule. */
+export function buildQuoteEmail(input: QuoteSmsInput): { subject: string; text: string } {
+  const biz   = normalizeBusinessName(input.businessName)
+  const total = formatInvoiceTotal(input.total)
+  const phone = formatBusinessPhone(input.businessPhone)
+
+  return {
+    subject: `Quote ${input.quoteNumber} from ${biz} - ${total}`,
+    text: [
+      `Your quote from ${biz} is ready for review.`,
+      '',
+      `Quote: ${input.quoteNumber}`,
+      `Total: ${total}`,
+      ...(input.validUntil ? [`Good through: ${input.validUntil}`] : []),
+      '',
+      // One link, and it is the approval page. No second "or just view it" link:
+      // two links is two decisions, and the one that gets the work scheduled is
+      // the approval.
+      `Review and approve: ${input.url}`,
+      '',
+      'Approving tells us to order the parts and schedule the work. If anything',
+      'needs changing, reply to this email or call and we will revise it.',
+      '',
+      phone ? `Questions? Call ${biz} at ${phone}.` : `Questions? Contact ${biz}.`,
+    ].join('\n'),
+  }
+}
