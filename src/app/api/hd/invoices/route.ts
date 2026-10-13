@@ -194,6 +194,33 @@ export async function POST(req: NextRequest) {
       .single())
   }
 
+  // THE MIGRATION-154 GUARD REFUSING A SECOND INVOICE for the same work order.
+  //
+  // 23505 on hd_invoices_one_per_work_order means this work order is already billed. A
+  // 500 would read as a server fault and invite a retry; a 409 carrying the existing
+  // invoice lets the caller send the technician to the bill that already exists.
+  //
+  // This is the guard the route handler did NOT have. WO-2026-1538 was billed twice,
+  // three days apart, for 183.18 and 1286.60, because nothing at the database stopped
+  // it and the only check was client-side.
+  if (error && error.code === '23505' && /one_per_work_order/.test(error.message ?? '')) {
+    const woId = (insertRow as Record<string, unknown>).work_order_id
+    const { data: existing } = await supabase
+      .from('hd_invoices')
+      .select('id, invoice_number, status, total')
+      .eq('work_order_id', woId as string)
+      .limit(1)
+      .maybeSingle()
+    console.error('[hd/invoices] refused a duplicate invoice for work order', woId)
+    return NextResponse.json({
+      error: existing
+        ? `This work order was already billed as ${existing.invoice_number}.`
+        : 'This work order has already been billed.',
+      invoice: existing ?? null,
+      already_invoiced: true,
+    }, { status: 409 })
+  }
+
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   // Billing a work order closes it out. Done here rather than via the status route

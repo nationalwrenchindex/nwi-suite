@@ -90,6 +90,8 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
   const [lightbox, setLightbox] = useState<string | null>(null)
   const [status, setStatus] = useState(wo.status)
   const [reopening, setReopening] = useState(false)
+  const [invoicing, setInvoicing] = useState(false)
+  const [invoiceError, setInvoiceError] = useState<string | null>(null)
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
   const supabase = createClient()
@@ -171,47 +173,71 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
 
   const woLabel = wo.work_order_number ?? `WO-${wo.id.slice(0, 6).toUpperCase()}`
 
-  // Convert this work order into a new invoice. Everything the invoice form needs
-  // rides in the query string — the same approach the inspection buttons below and
-  // the PM-schedule links already use, since there is no GET route for a single
-  // work order. Work orders carry no line items of their own, so the form
-  // synthesizes one labor line from labor_hours × labor_rate.
-  const invoiceHref = (() => {
-    const p = new URLSearchParams()
-    p.set('work_order_id', workOrderId)
-    p.set('work_order_number', woLabel)
+  // CREATE INVOICE, assembled on the server.
+  //
+  // This used to be a Link to /hd/invoices/new carrying the work order in a query
+  // string, from which the form synthesized ONE labor line out of labor_hours x
+  // labor_rate. Every PART line a technician had entered into
+  // hd_work_order_line_items was dropped - visible on the work order, absent from the
+  // bill. The comment that justified it ("Work orders carry no line items of their
+  // own") had been true before migration 120 created that table.
+  //
+  // Now the server reads the real line rows and the work order's RECORDED terms, and
+  // the existing /api/hd/invoices route performs the insert. That is deliberately the
+  // only insert path: it already carries the column-tolerance retries, already deducts
+  // stock through the shared ledger, and already flips this work order to 'invoiced'.
+  async function createInvoice() {
+    setInvoicing(true)
+    setInvoiceError(null)
+    try {
+      const built = await fetch(`/api/hd/work-orders/${workOrderId}/convert`, { cache: 'no-store' })
+      const builtJson = await built.json().catch(() => ({}))
 
-    // A fleet job bills to the fleet; an ad-hoc booking bills to the typed customer.
-    const customer = wo.fleet?.fleet_name ?? wo.customer_name
-    if (customer)             p.set('customer_name', customer)
-    if (wo.fleet?.fleet_name) p.set('company_name', wo.fleet.fleet_name)
+      // Already billed. Send the tech to the invoice that exists rather than letting
+      // them create a second one - WO-2026-1538 was billed twice before this existed.
+      if (built.status === 409 && builtJson.invoice?.id) {
+        window.location.href = `/hd/invoices/${builtJson.invoice.id}`
+        return
+      }
+      if (!built.ok) throw new Error(builtJson.error ?? 'Could not read this work order.')
 
-    // Contact details prefer whatever the fleet account holds, since that is the
-    // billing record; the work order's own phone is only the free-typed booking one.
-    const phone = wo.fleet?.contact_phone ?? wo.customer_phone
-    if (phone)                    p.set('customer_phone', phone)
-    if (wo.fleet?.contact_email)  p.set('customer_email', wo.fleet.contact_email)
-    if (wo.fleet?.address)        p.set('address_line1', wo.fleet.address)
-    // Carries the Intel Hub link through to the invoice.
-    if (wo.fleet?.id)             p.set('fleet_account_id', wo.fleet.id)
+      const source = (builtJson.source ?? {}) as Record<string, unknown>
 
-    // Prefer the linked unit record, falling back to the free-typed unit fields.
-    const mfr    = wo.unit?.manufacturer   ?? wo.unit_manufacturer
-    const model  = wo.unit?.model          ?? wo.unit_model
-    const serial = wo.unit?.serial_number  ?? wo.unit_serial
-    if (mfr)           p.set('unit_manufacturer', mfr)
-    if (model)         p.set('unit_model', model)
-    if (serial)        p.set('unit_serial', serial)
-    if (wo.unit?.year) p.set('unit_year', String(wo.unit.year))
+      // An empty work order would produce an empty invoice. Say so rather than billing
+      // nothing - silently producing a blank bill is the same class of failure as
+      // silently dropping the parts.
+      if (!source.has_lines) {
+        setInvoiceError('This work order has no line items yet. Add the labor and parts on it first, then create the invoice.')
+        return
+      }
 
-    if (wo.labor_rate  != null) p.set('labor_rate',  String(wo.labor_rate))
-    if (wo.labor_hours != null) p.set('labor_hours', String(wo.labor_hours))
-    if (wo.service_type)        p.set('service_type', wo.service_type)
-    if (wo.service_requests)    p.set('complaint', wo.service_requests)
-    if (wo.comments)            p.set('diagnosis', wo.comments)
+      const made = await fetch('/api/hd/invoices', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify(builtJson.invoice_payload),
+      })
+      const madeJson = await made.json().catch(() => ({}))
 
-    return `/hd/invoices/new?${p.toString()}`
-  })()
+      // The migration-154 unique index refusing a second invoice.
+      if (made.status === 409 && madeJson.invoice?.id) {
+        window.location.href = `/hd/invoices/${madeJson.invoice.id}`
+        return
+      }
+      if (!made.ok) throw new Error(madeJson.error ?? 'Could not create the invoice.')
+
+      const id = (madeJson.invoice as Record<string, unknown> | undefined)?.id
+      window.location.href = id ? `/hd/invoices/${String(id)}` : '/hd/invoices'
+    } catch (err) {
+      setInvoiceError(err instanceof Error ? err.message : 'Could not create the invoice.')
+    } finally {
+      setInvoicing(false)
+    }
+  }
+
+  // The old query-string handoff to /hd/invoices/new has been REMOVED, not kept as a
+  // fallback. It was the bug: it carried labor_hours and labor_rate and nothing else,
+  // so the invoice form rebuilt one labor line and every part was lost. Leaving it in
+  // reach would be leaving the broken path one click away.
 
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto">
@@ -248,16 +274,29 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
                 {reopening ? 'Reopening…' : '↩ Reopen Work Order'}
               </button>
             ) : (
-              <Link
-                href={invoiceHref}
-                className="px-3 py-1.5 rounded-lg text-xs font-condensed font-bold tracking-wide"
+              <button
+                type="button"
+                onClick={() => void createInvoice()}
+                disabled={invoicing}
+                className="px-3 py-1.5 rounded-lg text-xs font-condensed font-bold tracking-wide disabled:opacity-50"
                 style={{ background: `${HD_ORANGE}18`, color: HD_ORANGE, border: `1px solid ${HD_ORANGE}55` }}
               >
-                + Create Invoice
-              </Link>
+                {invoicing ? 'Building invoice...' : '+ Create Invoice'}
+              </button>
             )}
           </div>
         </div>
+
+        {/* The failure has to be VISIBLE. setInvoiceError was being set and never
+            rendered, which meant "this work order has no line items yet" - the one
+            message that stops a blank invoice going out - showed the tech nothing at
+            all and the button just stopped looking busy. */}
+        {invoiceError && (
+          <p className="mt-3 text-sm rounded-lg px-3 py-2"
+            style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#EF4444' }}>
+            {invoiceError}
+          </p>
+        )}
         <p className="text-xs mt-1 flex-shrink-0" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
           {new Date(wo.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
         </p>

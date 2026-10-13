@@ -92,6 +92,7 @@ const created = {
   // HD approval flow. Separate buckets because they are different tables, and the
   // work order must be deleted BEFORE the quote it points at.
   hdQuotes: new Set<string>(), hdWorkOrders: new Set<string>(),
+  hdInvoices: new Set<string>(),
 }
 
 async function del(table: string, id: string): Promise<void> {
@@ -135,11 +136,14 @@ async function cleanup(): Promise<void> {
       method: 'DELETE', headers: SVC_H,
     })
   }
+  // Invoices BEFORE work orders: hd_invoices.work_order_id points at them, and the
+  // migration-154 unique index means a stray would block the next run's insert.
+  for (const id of created.hdInvoices)   await del('hd_invoices', id)
   for (const id of created.hdWorkOrders) await del('hd_work_orders', id)
   for (const id of created.hdQuotes)     await del('hd_quotes', id)
 
   console.log(`  removed ${created.invoices.size} invoice(s), ${created.workOrders.size} work order(s), ${created.quotes.size} quote(s)`)
-  console.log(`  removed ${created.hdWorkOrders.size} HD work order(s), ${created.hdQuotes.size} HD quote(s)`)
+  console.log(`  removed ${created.hdInvoices.size} HD invoice(s), ${created.hdWorkOrders.size} HD work order(s), ${created.hdQuotes.size} HD quote(s)`)
 }
 
 // ── the shop's own numbers, so nothing is fabricated ────────────────────────
@@ -873,6 +877,167 @@ async function flowN(): Promise<void> {
   record(F, 'declining created NO work order', dWos.length === 0, `${dWos.length} work orders`)
 }
 
+// ===========================================================================
+// O  HD work order -> invoice
+//
+// The hop that used to lose every part line. The old path was a query string carrying
+// labor_hours and labor_rate, from which the invoice form rebuilt ONE labor line;
+// hd_work_order_line_items was never read.
+//
+// Needs migrations 153 (the work order terms columns) and 154 (the one-invoice guard).
+async function flowO(): Promise<void> {
+  const F = 'O hd wo->invoice'
+
+  // Terms no Settings page holds, so "the invoice carried the work order's terms"
+  // cannot be confused with "it re-read Settings and happened to agree".
+  const WO_RATE = 167.25
+  const WO_TAX = 6.125
+
+  const woBody = {
+    customer_name: `${MARK} wo-to-invoice`,
+    customer_phone: '+15555550177',
+    unit_manufacturer: 'Thermo King',
+    unit_model: 'SB-230',
+    service_type: `${MARK} convert test`,
+    service_requests: `${MARK} - unit will not hold setpoint`,
+    comments: `${MARK} - low charge, leaking schrader`,
+    // POST /api/hd/work-orders REQUIRES scheduled_date and hardcodes status 'open'.
+    scheduled_date: new Date().toISOString().slice(0, 10),
+    scheduled_time: '09:00',
+  }
+
+  // THE TERMS ARE SEEDED DIRECTLY, and that is not a shortcut hiding a missing test -
+  // there is NO product route that puts labor_rate or tax_percent on an HD work order.
+  // The only path that does is quote approval (flow N), and this flow has to run even
+  // when migration 153 is unapplied and flow N cannot. What is under test here is the
+  // CONVERTER, so the work order's terms are arranged state, not the thing being
+  // proven.
+  const TERMS = {
+    status: 'completed',
+    labor_rate: WO_RATE,
+    labor_hours: 3,
+    parts_markup_percent: 35,
+    tax_percent: WO_TAX,
+    tax_amount: 21.4,
+    travel_hours: 1, travel_rate: 110, travel_amount: 110,
+    mileage_miles: 15, mileage_rate: 2, mileage_amount: 30,
+    shop_supplies_percent_applied: 8, shop_supplies_fee: 9.2,
+  }
+
+  const made = await api('POST', '/api/hd/work-orders', woBody)
+  if (made.status === 404) {
+    console.log('  note  /api/hd/work-orders answered 404 - not promoted; flow O did not run.')
+    return
+  }
+  if (!record(F, 'an HD work order can be created', made.status === 201 || made.status === 200,
+    `-> ${made.status}`)) return
+
+  const wo = (made.json.work_order ?? made.json) as Record<string, unknown>
+  const woId = String(wo.id ?? '')
+  if (!woId) { record(F, 'the work order has an id', false, JSON.stringify(made.json).slice(0, 120)); return }
+  created.hdWorkOrders.add(woId)
+
+  // Seed the terms. tax_percent needs migration 153, so a failure here is reported as
+  // the migration being absent rather than as a converter fault.
+  const seeded = await fetch(`${SUPA}/rest/v1/hd_work_orders?id=eq.${woId}`, {
+    method: 'PATCH', headers: SVC_H, body: JSON.stringify(TERMS),
+  })
+  if (!seeded.ok) {
+    const why = (await seeded.text()).slice(0, 120)
+    console.log(`  note  could not seed the work order terms (${seeded.status}) - migration 153 is probably not applied; flow O stopped.`)
+    console.log(`        ${why}`)
+    return
+  }
+  record(F, 'the work order carries terms to convert from', true, `rate ${WO_RATE}, tax ${WO_TAX}`)
+
+  // THE LINES. One labor, two parts - the part lines are the ones that used to vanish.
+  const lines = [
+    { type: 'labor', description: `${MARK} diagnose and recharge`, quantity: 3, unit_price: WO_RATE, total: 501.75 },
+    { type: 'part', description: `${MARK} schrader valve`, part_number: 'ZZ-SCHRADER',
+      quantity: 2, unit_cost: 4, unit_price: 5.4, markup_percent: 35, total: 10.8 },
+    { type: 'part', description: `${MARK} R404a`, part_number: 'ZZ-R404A',
+      quantity: 10, unit_cost: 12, unit_price: 16.2, markup_percent: 35, total: 162 },
+  ]
+  const put = await api('PUT', `/api/hd/work-orders/${woId}/line-items`, { line_items: lines })
+  record(F, 'three line items save on the work order', put.status === 200,
+    `-> ${put.status}, ${((put.json.line_items ?? []) as unknown[]).length} lines`)
+
+  const savedLines = await rest(`hd_work_order_line_items?work_order_id=eq.${woId}&select=id,type`)
+  if (!record(F, 'two PART lines are on the work order',
+    savedLines.filter(l => (l as Record<string, unknown>).type === 'part').length === 2,
+    `${savedLines.length} total`)) return
+
+  // ── the converter ────────────────────────────────────────────────────────
+  const built = await api('GET', `/api/hd/work-orders/${woId}/convert`)
+  if (built.status === 404) {
+    console.log('  note  the HD converter is NOT PROMOTED yet; flow O stopped here.')
+    return
+  }
+  if (!record(F, 'the converter assembles a payload', built.status === 200, `-> ${built.status}`)) return
+
+  const payload = (built.json.invoice_payload ?? {}) as Record<string, unknown>
+  const src = (built.json.source ?? {}) as Record<string, unknown>
+  record(F, 'it reports the work order has lines', src.has_lines === true, `${src.line_count} lines`)
+  record(F, 'it counted BOTH part lines', Number(src.part_lines) === 2, `${src.part_lines}`)
+
+  const payloadLines = (payload.line_items ?? []) as Array<Record<string, unknown>>
+  record(F, 'ALL THREE lines are in the payload - the parts no longer vanish',
+    payloadLines.length === 3, `${payloadLines.length}`)
+  record(F, "part lines are typed 'parts', not 'part'",
+    payloadLines.filter(l => l.type === 'parts').length === 2,
+    payloadLines.map(l => String(l.type)).join(', '))
+  const r404 = payloadLines.find(l => l.part_number === 'ZZ-R404A')
+  record(F, 'the customer price is the MARKED-UP price, not the cost',
+    Number(r404?.unit_cost) === 16.2 && Number(r404?.unit_cost_base) === 12,
+    `unit_cost ${r404?.unit_cost}, base ${r404?.unit_cost_base}`)
+  const laborLine = payloadLines.find(l => l.type === 'labor')
+  record(F, 'labor hours moved to mobile_hours with quantity 0',
+    Number(laborLine?.mobile_hours) === 3 && Number(laborLine?.quantity) === 0,
+    `mobile_hours ${laborLine?.mobile_hours}, quantity ${laborLine?.quantity}`)
+  record(F, "the payload carries the WORK ORDER's rate and tax, not a setting",
+    Number(payload.labor_rate) === WO_RATE && Number(payload.tax_rate) === WO_TAX,
+    `rate ${payload.labor_rate}, tax ${payload.tax_rate}`)
+
+  // ── the insert ───────────────────────────────────────────────────────────
+  const inv = await api('POST', '/api/hd/invoices', payload)
+  if (!record(F, 'the invoice is created', inv.status === 201, `-> ${inv.status}`)) return
+  const invoice = (inv.json.invoice ?? {}) as Record<string, unknown>
+  const invId = String(invoice.id ?? '')
+  created.hdInvoices.add(invId)
+
+  const invRow = (await rest<Record<string, unknown>>(
+    `hd_invoices?id=eq.${invId}&select=invoice_number,line_items,labor_rate,tax_rate,subtotal_labor,subtotal_parts,parts_cost,work_order_id,po_number`))[0]
+  const invLines = (invRow?.line_items ?? []) as Array<Record<string, unknown>>
+  record(F, 'the stored invoice has all three lines', invLines.length === 3, `${invLines.length}`)
+  record(F, 'parts subtotal is 172.80, not 0', Number(invRow?.subtotal_parts) === 172.8,
+    String(invRow?.subtotal_parts))
+  record(F, 'labor subtotal is 501.75', Number(invRow?.subtotal_labor) === 501.75,
+    String(invRow?.subtotal_labor))
+  record(F, 'parts_cost sums the BASE cost, not the sell price',
+    Number(invRow?.parts_cost) === 128, `${invRow?.parts_cost} (2x4 + 10x12 = 128)`)
+  record(F, 'the invoice is linked to the work order', invRow?.work_order_id === woId,
+    String(invRow?.work_order_id))
+
+  // The work order should now be invoiced.
+  const after = (await rest<Record<string, unknown>>(`hd_work_orders?id=eq.${woId}&select=status`))[0]
+  record(F, 'the work order flipped to invoiced', after?.status === 'invoiced', String(after?.status))
+
+  // ── the convert-once guard (migration 154) ───────────────────────────────
+  const second = await api('POST', '/api/hd/invoices', payload)
+  record(F, 'a SECOND invoice for the same work order is REFUSED',
+    second.status === 409, `-> ${second.status}`)
+  record(F, 'and the refusal names the invoice that already exists',
+    typeof second.json.error === 'string' && String(second.json.error).includes('already billed'),
+    String(second.json.error ?? '').slice(0, 70))
+  const count = await rest(`hd_invoices?work_order_id=eq.${woId}&select=id`)
+  record(F, 'STILL exactly one invoice for that work order', count.length === 1, `${count.length}`)
+
+  // And the converter itself refuses to re-assemble.
+  const rebuilt = await api('GET', `/api/hd/work-orders/${woId}/convert`)
+  record(F, 'the converter also reports it as already invoiced',
+    rebuilt.status === 409 && rebuilt.json.already_invoiced === true, `-> ${rebuilt.status}`)
+}
+
 async function main(): Promise<void> {
   console.log('='.repeat(96))
   console.log(`SMOKE  ${BASE}`)
@@ -922,6 +1087,7 @@ async function main(): Promise<void> {
     await flowJ()
     await flowK()
     await flowN()
+    await flowO()
   } finally {
     await cleanup()
   }
