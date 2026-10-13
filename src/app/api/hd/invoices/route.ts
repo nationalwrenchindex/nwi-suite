@@ -10,6 +10,8 @@ import { costingFromLineItems, isMissingCostingColumn } from '@/lib/hd/invoice-c
 import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import { HD_INVOICE_LIST_SELECT, HD_INVOICE_DEFAULT_LIMIT, applyHDInvoiceListFilter } from './list'
 
+import { deductForInvoice, releaseAllocations } from '@/lib/inventory/ledger'
+
 export const dynamic = 'force-dynamic'
 
 // GET /api/hd/invoices?filter=&limit=&offset= — one page of the invoice list.
@@ -235,5 +237,39 @@ export async function POST(req: NextRequest) {
     if (linkError) console.error('[hd/invoices] customer link failed', linkError)
   }
 
-  return NextResponse.json({ invoice: { ...data, customer_id }, customer_id }, { status: 201 })
+  // ---------------------------------------------------------------- STOCK
+  //
+  // THE SAME SHARED FUNCTION THE LD PATH USES. Not a second implementation - two
+  // deductions is how the two products end up disagreeing about what is on the shelf.
+  //
+  // HD has no finalize step: hd_invoices go straight to unpaid/sent/paid, so CREATION
+  // is the committed event here, where LD uses finalize. Both are idempotent through
+  // the same unique index, so an invoice edited later cannot deduct a second time.
+  //
+  // Best-effort after the insert, like the work-order status flip above: a stock
+  // problem must never cost the technician the invoice they just typed.
+  let stock: Awaited<ReturnType<typeof deductForInvoice>> | null = null
+  try {
+    const row = data as Record<string, unknown>
+    stock = await deductForInvoice({
+      userId:      user.id,
+      invoiceKind: 'hd',
+      invoiceId:   String(row.id),
+      invoiceRef:  (row.invoice_number as string | null) ?? null,
+      lineItems:   row.line_items,
+      createdBy:   user.id,
+    })
+    if (typeof body.work_order_id === 'string' && body.work_order_id) {
+      await releaseAllocations(user.id, 'hd', body.work_order_id, 'invoiced')
+    }
+    if (stock.unmatched.length) {
+      console.warn(`[hd/invoices] not in the parts catalog, no stock moved: ${stock.unmatched.join(', ')}`)
+    }
+    if (stock.errors.length) console.error('[hd/invoices] stock errors', stock.errors)
+  } catch (err: unknown) {
+    console.error('[hd/invoices] stock deduction threw, invoice still created:',
+      err instanceof Error ? err.message : String(err))
+  }
+
+  return NextResponse.json({ invoice: { ...data, customer_id }, customer_id, stock }, { status: 201 })
 }

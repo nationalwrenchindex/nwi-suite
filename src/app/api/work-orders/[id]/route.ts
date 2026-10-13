@@ -12,6 +12,8 @@ import { syncParentExtrasQuietly } from '@/lib/segments/parent-extras'
 import { hasWorkOrders } from '@/lib/work-orders'
 import { WORK_ORDER_SELECT } from '../list'
 
+import { allocateForWorkOrder, partLinesFromJson } from '@/lib/inventory/ledger'
+
 export const dynamic = 'force-dynamic'
 
 export async function GET(
@@ -157,6 +159,30 @@ export async function PATCH(
   // why WO-2026-0018 stored 0.00 at a NULL percent while a segment-priced job on the
   // same account stored 0.77 at 20%. Never allowed to fail this request.
   await syncParentExtrasQuietly(supabase, 'ld', id, user.id)
+
+  // ------------------------------------------------------------ ALLOCATE
+  //
+  // A part on an OPEN work order is ALLOCATED, never deducted. on_hand does not move
+  // until the invoice finalizes; available = on_hand - allocated, so the counter can
+  // show the part as committed to a job without pretending it has left the shelf.
+  //
+  // Called on every save, and it SETS the allocation rather than adding to it: a part
+  // taken off the job stops being allocated. Best-effort and never able to fail the
+  // save - a work order that will not save because of a stock problem is the wrong
+  // trade, same reasoning as syncParentExtrasQuietly above.
+  if ('line_items' in body) {
+    try {
+      await allocateForWorkOrder({
+        userId:      user.id,
+        kind:        'ld',
+        workOrderId: id,
+        lines:       partLinesFromJson((data as Record<string, unknown>).line_items),
+      })
+    } catch (err: unknown) {
+      console.error('[PATCH /api/work-orders/[id]] allocation failed, work order still saved:',
+        err instanceof Error ? err.message : String(err))
+    }
+  }
 
   return NextResponse.json({ work_order: data })
 }

@@ -7,6 +7,8 @@ import {
   type WorkOrderLineInput,
 } from '@/lib/hd/work-order-lines'
 
+import { allocateForWorkOrder, partLinesFromRows } from '@/lib/inventory/ledger'
+
 export const dynamic = 'force-dynamic'
 
 // Line items on an HD work order (migration 120).
@@ -18,8 +20,11 @@ export const dynamic = 'force-dynamic'
 // Either half is spelled with the other key optional-undefined so `if (gate.error)`
 // narrows to the client in the success branch without a cast.
 type Gate =
-  | { error: NextResponse; supabase?: undefined }
-  | { error?: undefined; supabase: Awaited<ReturnType<typeof createClient>> }
+  | { error: NextResponse; supabase?: undefined; userId?: undefined }
+  // userId is carried out of the gate because the allocation below needs it and the
+  // gate has already fetched the user. Re-reading it would be a second round trip to
+  // learn something this function just proved.
+  | { error?: undefined; supabase: Awaited<ReturnType<typeof createClient>>; userId: string }
 
 // Shared ownership gate. Returns an authed client scoped to the caller, or a
 // response to hand straight back.
@@ -36,7 +41,7 @@ async function requireOwnedWorkOrder(workOrderId: string): Promise<Gate> {
     .single()
   if (!wo) return { error: NextResponse.json({ error: 'Not found' }, { status: 404 }) }
 
-  return { supabase }
+  return { supabase, userId: user.id }
 }
 
 const SELECT = 'id, work_order_id, type, description, part_number, quantity, unit_cost, unit_price, markup_percent, total, sort_order'
@@ -127,5 +132,27 @@ export async function PUT(
   }
 
   const lines = data ?? []
+
+  // ------------------------------------------------------------ ALLOCATE
+  //
+  // THE SAME SHARED FUNCTION the LD work-order PATCH calls. HD keeps its lines in their
+  // own table rather than a JSONB column, so only the reader differs -
+  // partLinesFromRows instead of partLinesFromJson. Everything past that point is one
+  // implementation, which is what stops the two products disagreeing about what is
+  // committed to a job.
+  //
+  // Allocated, not deducted: on_hand does not move until the invoice exists.
+  try {
+    await allocateForWorkOrder({
+      userId:      gate.userId,
+      kind:        'hd',
+      workOrderId: workOrderId,
+      lines:       partLinesFromRows(lines as unknown as Array<Record<string, unknown>>),
+    })
+  } catch (err: unknown) {
+    console.error('[hd/work-orders/line-items PUT] allocation failed, lines still saved:',
+      err instanceof Error ? err.message : String(err))
+  }
+
   return NextResponse.json({ line_items: lines, totals: sumLines(lines) })
 }

@@ -5,6 +5,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { computeDueDate, DEFAULT_PAYMENT_TERMS, isMissingPaymentTermsColumn } from '@/lib/hd/payment-terms'
+import { deductForInvoice, releaseAllocations } from '@/lib/inventory/ledger'
 
 const INVOICE_SELECT = `
   *,
@@ -140,5 +141,43 @@ export async function POST(
       .eq('transaction_type', 'auto_invoice')
   }
 
-  return NextResponse.json({ invoice: updated })
+  // ---------------------------------------------------------------- STOCK
+  //
+  // FINALIZE IS THE COMMITTED EVENT, so this is where stock leaves the shelf. Not
+  // when a part is added to the work order - work orders get edited and reopened all
+  // week, and deducting on edit would have the counter chasing a moving target.
+  //
+  // Safe to run again. Re-finalizing a reopened invoice hits the unique index
+  // stock_movement_one_use_per_source and writes nothing, which is why the guard is in
+  // the database and not in an if-statement here.
+  //
+  // Deliberately AFTER the invoice is already updated and never able to fail it: an
+  // invoice that will not finalize because of a stock problem is a worse outcome than
+  // a stock count that needs a correction. Problems are logged and returned alongside.
+  let stock: Awaited<ReturnType<typeof deductForInvoice>> | null = null
+  try {
+    stock = await deductForInvoice({
+      userId:      user.id,
+      invoiceKind: 'ld',
+      invoiceId:   id,
+      invoiceRef:  (updated as Record<string, unknown>).invoice_number as string | null,
+      lineItems:   (updated as Record<string, unknown>).line_items,
+      createdBy:   user.id,
+    })
+
+    // The parts are deducted for real now, so holding them allocated as well would
+    // count them twice against available.
+    const woId = (invoice as Record<string, unknown>).source_work_order_id as string | null
+    if (woId) await releaseAllocations(user.id, 'ld', woId, 'invoiced')
+
+    if (stock.unmatched.length) {
+      console.warn(`[finalize] ${id}: not in the parts catalog, no stock moved: ${stock.unmatched.join(', ')}`)
+    }
+    if (stock.errors.length) console.error(`[finalize] ${id}: stock errors`, stock.errors)
+  } catch (err: unknown) {
+    console.error('[finalize] stock deduction threw, invoice still finalized:',
+      err instanceof Error ? err.message : String(err))
+  }
+
+  return NextResponse.json({ invoice: updated, stock })
 }
