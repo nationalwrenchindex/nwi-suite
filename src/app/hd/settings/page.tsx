@@ -15,10 +15,17 @@ export default async function HDSettingsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
 
-  const [{ data: profile }, { data: lateFee }] = await Promise.all([
+  const PROFILE_BASE = 'full_name, email, business_name, phone, hd_labor_rate, hd_tech_name, hd_epa_cert_number, hd_company_logo_url, business_logo_url'
+  // Migration 156. Applied by hand while the code deploys on its own, so there is a
+  // window where these do not exist - and selecting a missing column fails the WHOLE
+  // query, which would blank the labor rate, the tech name and the logo on this screen
+  // rather than just the two fees.
+  const PROFILE_FEES = 'hd_diagnostic_fee, hd_road_call_fee'
+
+  const [profileResult, { data: lateFee }] = await Promise.all([
     supabase
       .from('profiles')
-      .select('full_name, email, business_name, phone, hd_labor_rate, hd_tech_name, hd_epa_cert_number, hd_company_logo_url, business_logo_url')
+      .select(`${PROFILE_BASE}, ${PROFILE_FEES}`)
       .eq('id', user.id)
       .single(),
     supabase
@@ -27,6 +34,18 @@ export default async function HDSettingsPage() {
       .eq('user_id', user.id)
       .maybeSingle(),
   ])
+
+  let profile = profileResult.data as Record<string, unknown> | null
+  let feesAvailable = profile != null && 'hd_diagnostic_fee' in profile
+  if (profileResult.error && /hd_diagnostic_fee|hd_road_call_fee/i.test(profileResult.error.message)) {
+    const retry = await supabase
+      .from('profiles')
+      .select(PROFILE_BASE)
+      .eq('id', user.id)
+      .single()
+    profile = retry.data as Record<string, unknown> | null
+    feesAvailable = false
+  }
 
   const lf = lateFee as {
     fee_type?: 'flat' | 'percentage' | null
@@ -47,7 +66,14 @@ export default async function HDSettingsPage() {
     hd_epa_cert_number?: string | null
     hd_company_logo_url?: string | null
     business_logo_url?:   string | null
+    hd_diagnostic_fee?:   number | null
+    hd_road_call_fee?:    number | null
   } | null
+
+  // NULL means never set, and the field renders EMPTY for it so the form can tell that
+  // apart from a saved 0. `?? 0` here would show every shop a diagnostic fee of zero
+  // and save it on the next edit.
+  const feeString = (v: number | null | undefined) => (v == null ? null : String(v))
 
   return (
     <main className="flex-1 p-6">
@@ -92,13 +118,16 @@ export default async function HDSettingsPage() {
         <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide mb-1">FIELD SETTINGS</p>
           <p className="text-sm mb-4" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
-            Labor rate, technician name, EPA 608 certification, and company logo for printed documents.
+            Labor rate, diagnostic and road call fees, technician name, EPA 608 certification, and company logo for printed documents.
           </p>
           <HDSettingsForm
             initialLaborRate={p?.hd_labor_rate?.toString() ?? null}
             initialTechName={p?.hd_tech_name ?? null}
             initialEpaCert={p?.hd_epa_cert_number ?? null}
             initialLogoUrl={resolveBranding(p).logoUrl}
+            initialDiagnosticFee={feeString(p?.hd_diagnostic_fee)}
+            initialRoadCallFee={feeString(p?.hd_road_call_fee)}
+            feesAvailable={feesAvailable}
           />
         </div>
 

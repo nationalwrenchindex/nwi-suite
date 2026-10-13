@@ -1323,12 +1323,20 @@ export default function HDQuickWrenchPage() {
   // The tech's configured labor rate, so a pushed quote/work order/invoice carries
   // their real rate. Falls back to the same 125 default the destination forms use.
   const [laborRate,            setLaborRate]            = useState(125)
+  // The shop's diagnostic fee (migration 156), when it has set one. null means it has
+  // not, and the fee stays priced at one hour of labor - which is what this screen did
+  // before the setting existed. NOT collapsed to 0: a shop that charges nothing to
+  // diagnose and a shop that never answered are different, and only one of them wants
+  // an hour of labor put on the quote.
+  const [diagnosticFee,        setDiagnosticFee]        = useState<number | null>(null)
   useEffect(() => {
     fetch('/api/hd/settings')
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         const rate = Number(d?.settings?.hd_labor_rate)
         if (Number.isFinite(rate) && rate > 0) setLaborRate(rate)
+        const fee = d?.settings?.hd_diagnostic_fee
+        if (fee !== null && fee !== undefined && Number.isFinite(Number(fee))) setDiagnosticFee(Number(fee))
       })
       .catch(() => {})
   }, [])
@@ -1856,7 +1864,9 @@ export default function HDQuickWrenchPage() {
   // uses — priced the same either way — so the fee never lands twice or not at all.
   function diagFeeFields(dest: WorkflowDest) {
     return dest === 'invoice'
-      ? { labor_rate: laborRate, include_diagnostic: includeDiagFee, diagnostic_fee: laborRate }
+      // The shop's own fee when it has set one; an hour of labor otherwise, which is
+      // what this screen priced it at before there was anywhere to say otherwise.
+      ? { labor_rate: laborRate, include_diagnostic: includeDiagFee, diagnostic_fee: diagnosticFee ?? laborRate }
       : { labor_rate: laborRate }
   }
 

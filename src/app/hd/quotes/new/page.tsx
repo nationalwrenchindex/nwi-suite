@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { LABOR_GUIDE, type LaborGuideItem } from '@/lib/hd/labor-guide'
 import { useTaxSettings } from '@/lib/use-tax-settings'
+import { useHdFeeSettings } from '@/lib/hd/use-fee-settings'
 import { computeTax, taxDisplayRows } from '@/lib/tax'
 import { DEFAULT_HD_PARTS_MARKUP, sellPrice, lineAmount } from '@/lib/hd/parts-pricing'
 import AddressAutofill from '@/components/hd/AddressAutofill'
@@ -229,6 +230,32 @@ export default function NewQuotePage() {
     road_call_fee: 0, include_road_call: false,
     tax_rate: 0, tax_rate_labor: 0, notes: '', valid_until: '',
   })
+
+  // ===========================================================================
+  // THE SHOP'S OWN LABOR RATE AND FEES (migration 156)
+  // ===========================================================================
+  //
+  // This form opened at labor_rate 125, diagnostic_fee 125, road_call_fee 0 for every
+  // shop, and include_diagnostic defaults ON - so $125 of someone else's diagnostic
+  // fee was on the quote before the tech touched anything. There was nowhere to put
+  // the right figure: profiles had hd_labor_rate but no fee columns at all.
+  //
+  // Each field is only seeded while it still holds the fallback it started on, so a
+  // number typed while the fetch was in flight survives. NULL from settings means the
+  // shop never set that fee and the fallback stays - it is NOT read as zero, because a
+  // shop that charges nothing to diagnose and a shop that never answered are different
+  // and only one of them wants $125 put back.
+  const feeSettings = useHdFeeSettings()
+  useEffect(() => {
+    if (!feeSettings.loaded) return
+    setForm(f => {
+      const next = { ...f }
+      if (feeSettings.laborRate     != null && f.labor_rate     === 125) next.labor_rate     = feeSettings.laborRate
+      if (feeSettings.diagnosticFee != null && f.diagnostic_fee === 125) next.diagnostic_fee = feeSettings.diagnosticFee
+      if (feeSettings.roadCallFee   != null && f.road_call_fee  === 0)   next.road_call_fee  = feeSettings.roadCallFee
+      return next
+    })
+  }, [feeSettings])
 
   // Seed the tax rate from the tech's saved default. A converted quote carries its
   // tax_rate onto the invoice, so this is what keeps quote-sourced invoices taxed.

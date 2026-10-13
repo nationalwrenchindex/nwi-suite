@@ -9,10 +9,25 @@ interface Props {
   initialTechName:  string | null
   initialEpaCert:   string | null
   initialLogoUrl:   string | null
+  /** profiles.hd_diagnostic_fee (migration 156). null = never set. */
+  initialDiagnosticFee?: string | null
+  /** profiles.hd_road_call_fee (migration 156). null = never set. */
+  initialRoadCallFee?:   string | null
+  /** False when migration 156 has not been applied, so the fees cannot be saved. */
+  feesAvailable?: boolean
 }
 
-export default function HDSettingsForm({ initialLaborRate, initialTechName, initialEpaCert, initialLogoUrl }: Props) {
+export default function HDSettingsForm({
+  initialLaborRate, initialTechName, initialEpaCert, initialLogoUrl,
+  initialDiagnosticFee = null, initialRoadCallFee = null, feesAvailable = true,
+}: Props) {
   const [laborRate, setLaborRate] = useState(initialLaborRate ?? '')
+  // BLANK IS A REAL STATE and means "I never said", which leaves the forms on their
+  // own fallbacks - 125 for the diagnostic, 0 for the road call. It is NOT the same as
+  // a typed 0, which means the shop charges nothing and must stick rather than having
+  // $125 put back on every quote.
+  const [diagnosticFee, setDiagnosticFee] = useState(initialDiagnosticFee ?? '')
+  const [roadCallFee,   setRoadCallFee]   = useState(initialRoadCallFee   ?? '')
   const [techName,  setTechName]  = useState(initialTechName  ?? '')
   const [epaCert,   setEpaCert]   = useState(initialEpaCert   ?? '')
   const [logoUrl,   setLogoUrl]   = useState(initialLogoUrl   ?? '')
@@ -74,6 +89,13 @@ export default function HDSettingsForm({ initialLaborRate, initialTechName, init
           hd_labor_rate:        laborRate ? Number(laborRate) : null,
           hd_tech_name:         techName  || null,
           hd_epa_cert_number:   epaCert   || null,
+          // trim() rather than a truthiness check: '0' is truthy but '' is not, and
+          // `fee ? Number(fee) : null` would turn a typed 0 into "never set" and put
+          // the $125 fallback back on a shop that charges nothing to diagnose.
+          ...(feesAvailable ? {
+            hd_diagnostic_fee: diagnosticFee.trim() === '' ? null : Number(diagnosticFee),
+            hd_road_call_fee:  roadCallFee.trim()   === '' ? null : Number(roadCallFee),
+          } : {}),
           // Logo intentionally omitted: it is uploaded and deleted through
           // /api/settings/logo, which owns the storage object as well as the
           // column. Writing it here too would let a stale form value clobber a
@@ -110,6 +132,53 @@ export default function HDSettingsForm({ initialLaborRate, initialTechName, init
           style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
         />
       </div>
+
+      {/* The two fees, which every HD quote and invoice used to hardcode at $125 and
+          $0 with nowhere to say otherwise. Both are taxed as labor, which is what the
+          Sales Tax section controls. */}
+      {feesAvailable ? (
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+              Diagnostic Fee ($)
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={diagnosticFee}
+              onChange={e => setDiagnosticFee(e.target.value)}
+              placeholder="125.00"
+              className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20"
+              style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
+            />
+          </div>
+          <div>
+            <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+              Road Call Fee ($)
+            </label>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              value={roadCallFee}
+              onChange={e => setRoadCallFee(e.target.value)}
+              placeholder="0.00"
+              className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20"
+              style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
+            />
+          </div>
+          <p className="col-span-2 text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+            Seeded into new quotes and invoices. Leave blank to keep the old defaults
+            ($125 diagnostic, no road call). Enter 0 if you do not charge one and it
+            sticks. Changing these never reprices a document you already saved.
+          </p>
+        </div>
+      ) : (
+        <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+          Diagnostic and road call fee settings need migration 156.
+        </p>
+      )}
 
       <div>
         <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>

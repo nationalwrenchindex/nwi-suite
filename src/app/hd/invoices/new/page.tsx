@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { computeDueDate } from '@/lib/hd/payment-terms'
 import { useTaxSettings } from '@/lib/use-tax-settings'
+import { useHdFeeSettings } from '@/lib/hd/use-fee-settings'
 import { computeTax, taxDisplayRows } from '@/lib/tax'
 import { DEFAULT_HD_PARTS_MARKUP, sellPrice, lineAmount } from '@/lib/hd/parts-pricing'
 import AddressAutofill from '@/components/hd/AddressAutofill'
@@ -117,6 +118,27 @@ export default function NewInvoicePage() {
   })
 
   function setField(k: string, v: string | number | boolean) { setForm(f => ({ ...f, [k]: v })) }
+
+  // ===========================================================================
+  // THE SHOP'S OWN LABOR RATE AND FEES (migration 156)
+  // ===========================================================================
+  //
+  // Same seeding the quote form does, and it has to match: a quote converts straight
+  // into an invoice, so two forms that seed differently reprice the same job on
+  // conversion. Each field fills only while it still holds the fallback it started on.
+  // NULL from settings means the shop never set that fee, and the fallback stays - it
+  // is not read as zero.
+  const feeSettings = useHdFeeSettings()
+  useEffect(() => {
+    if (!feeSettings.loaded) return
+    setForm(f => {
+      const next = { ...f }
+      if (feeSettings.laborRate     != null && f.labor_rate     === 125) next.labor_rate     = feeSettings.laborRate
+      if (feeSettings.diagnosticFee != null && f.diagnostic_fee === 125) next.diagnostic_fee = feeSettings.diagnosticFee
+      if (feeSettings.roadCallFee   != null && f.road_call_fee  === 0)   next.road_call_fee  = feeSettings.roadCallFee
+      return next
+    })
+  }, [feeSettings])
 
   // Seed the tax rate from the tech's saved default. Only fills while the field is
   // still untouched at 0, so a rate typed while the fetch was in flight survives.
