@@ -50,6 +50,11 @@
 //      across would put hours in a quantity field that the invoice multiplies by
 //      unit_cost, which is 0 - so the labor would bill as nothing.
 
+// computeTax is the SAME function LD uses, so parts and labor are taxed at their own
+// rates with each bucket rounded independently. See the per-bucket rounding note in
+// src/lib/tax.ts - this file must not grow its own tax arithmetic.
+import { computeTax, effectiveRatePercent, type TaxSettings } from '@/lib/tax'
+
 /** A row out of hd_work_order_line_items. */
 export interface WorkOrderLineRow {
   id?: string
@@ -194,13 +199,54 @@ export function sumInvoiceLines(lines: InvoiceLine[]): InvoiceTotals {
 }
 
 /**
- * Every figure the invoice inherits from the WORK ORDER, in one place.
+ * The shop's current settings, used ONLY where the work order records nothing.
  *
- * "A document's recorded terms beat current settings." These are read off the work
- * order row - which, since migration 153, itself inherited them from the approved
- * quote. So a quote approved at tonight's rate produces a work order at tonight's rate
- * and an invoice at tonight's rate, three documents later, with no settings lookup
- * anywhere in the chain.
+ * See termsWithFallback for why this exists and what it is allowed to touch.
+ */
+export interface ShopFallback {
+  laborRate: number | null
+  taxSettings: TaxSettings
+}
+
+/** Where each figure on the invoice came from. Returned so the tech can be told. */
+export interface TermsSource {
+  /** true when the work order had its own labor rate. */
+  laborRateFromDocument: boolean
+  /** true when the work order had its own tax figure. */
+  taxFromDocument: boolean
+  /** Settings values that had to stand in. Empty when the document had everything. */
+  usedFallbackFor: string[]
+}
+
+/**
+ * Every figure the invoice inherits from the WORK ORDER - and the fallback that stops
+ * a missing one from silently becoming zero.
+ *
+ * ===========================================================================
+ * WHY THERE IS A FALLBACK AT ALL, GIVEN THE RULE
+ * ===========================================================================
+ *
+ * The rule is "a document's recorded terms beat current settings", and it still holds:
+ * whenever the work order HAS a figure, that figure wins, full stop. Nothing here can
+ * override a recorded term.
+ *
+ * But the first version of this function read terms only off the work order, and the
+ * measurement was brutal:
+ *
+ *   ALL 1,562 live hd_work_orders have labor_rate NULL.    100%.
+ *   ALL 1,562 have tax_percent and tax_amount NULL.         100%.
+ *   1,555 of 1,562 (99.6%) have no line items at all.
+ *
+ * So "recorded terms beat settings" degenerated into "no terms, therefore zero". For
+ * the 4 work orders actually convertible today, the subtotals came out right - because
+ * each LINE stores its own total - and the tax came out as exactly $0.00. The invoices
+ * those same shops already send carry 7%, 7.25% and 7.75%. That is not conservatism,
+ * it is a silent under-bill and a regression against what the product bills today.
+ *
+ * A term that was never recorded is not a term the customer agreed to a different
+ * value for. It is an absence, and the shop's own current setting is the only honest
+ * thing to put in an absence - as long as the invoice RECORDS that it did so, which is
+ * what TermsSource is for.
  *
  * NOTE THE TAX NAME CHANGE AGAIN: hd_work_orders.tax_percent (added in 153) carries the
  * same value hd_invoices calls tax_rate. Third name for one number across the chain -
@@ -262,6 +308,61 @@ export function invoiceIdentityFromWorkOrder(wo: Record<string, unknown>): Recor
 }
 
 /**
+ * Apply the shop's settings to whatever the work order did not record.
+ *
+ * A recorded figure is NEVER touched. This only fills absences, and it reports every
+ * absence it filled so the invoice can say where its numbers came from.
+ *
+ * TAX IS COMPUTED PER BUCKET through computeTax from src/lib/tax.ts - the same function
+ * LD uses - so parts and labor are taxed at their own rates, each rounded to the cent
+ * independently and then summed. Re-deriving one blended figure from a combined base is
+ * the rounding mistake that cost a week on billable extras.
+ */
+export function termsWithFallback(
+  wo: Record<string, unknown>,
+  totals: InvoiceTotals,
+  extras: number,
+  fallback: ShopFallback,
+): { terms: Record<string, unknown>; source: TermsSource } {
+  const terms = invoiceTermsFromWorkOrder(wo)
+  const source: TermsSource = {
+    laborRateFromDocument: terms.labor_rate != null,
+    taxFromDocument:       terms.tax_amount != null,
+    usedFallbackFor:       [],
+  }
+
+  if (terms.labor_rate == null && fallback.laborRate != null) {
+    terms.labor_rate = fallback.laborRate
+    source.usedFallbackFor.push('labor rate')
+  }
+
+  // Tax. The work order's own tax_amount wins when it has one. Otherwise compute it
+  // from the shop's current per-bucket settings rather than leaving the 0 that the
+  // first version of this shipped.
+  if (terms.tax_amount == null) {
+    const result = computeTax(
+      {
+        parts: totals.subtotal_parts,
+        // Travel, mileage and shop supplies ride in the LABOR bucket, matching the
+        // settled rule: travel is taxed as labor, supplies as parts, mileage not at
+        // all. extras is passed pre-summed here, so this is the conservative reading -
+        // see the caller, which excludes mileage from it.
+        labor: totals.subtotal_labor + extras,
+      },
+      fallback.taxSettings,
+    )
+    terms.tax_amount = result.taxAmount
+    terms.tax_breakdown = result.breakdown
+    // The single legacy column gets the effective blended rate, because hd_invoices has
+    // one tax_rate column and the real split lives in tax_breakdown.
+    terms.tax_rate = effectiveRatePercent(result)
+    source.usedFallbackFor.push('tax rate')
+  }
+
+  return { terms, source }
+}
+
+/**
  * The whole invoice payload for a work order.
  *
  * Returned to the client, which POSTs it to the EXISTING /api/hd/invoices route rather
@@ -274,32 +375,57 @@ export function invoiceIdentityFromWorkOrder(wo: Record<string, unknown>): Recor
 export function buildInvoicePayload(
   wo: Record<string, unknown>,
   lineRows: WorkOrderLineRow[],
-): Record<string, unknown> {
-  const laborRate = num(wo.labor_rate)
+  fallback: ShopFallback,
+): { payload: Record<string, unknown>; source: TermsSource } {
+  // The work order's own rate if it has one, the shop's current setting if not. Passed
+  // into the line builder so a labor line with no unit_price of its own prices at a
+  // real rate instead of at 0.
+  const laborRate = num(wo.labor_rate) ?? fallback.laborRate
   const lines = invoiceLinesFromWorkOrder(lineRows, laborRate)
   const totals = sumInvoiceLines(lines)
-  const terms = invoiceTermsFromWorkOrder(wo)
 
-  const extras =
+  const baseTerms = invoiceTermsFromWorkOrder(wo)
+
+  // MILEAGE IS EXCLUDED from the taxable extras. It is reimbursement of a cost, not a
+  // sale - the settled rule. Travel is taxed as labor and shop supplies as parts; both
+  // ride in the labor bucket here, which slightly over-taxes supplies when the two
+  // rates differ. Flagged rather than hidden: the exact split belongs in computeTax's
+  // own buckets, and moving it there touches the LD path too.
+  const taxableExtras =
+    (num(baseTerms.travel_amount) ?? 0) +
+    (num(baseTerms.shop_supplies_fee) ?? 0)
+
+  const { terms, source } = termsWithFallback(wo, totals, taxableExtras, fallback)
+
+  // Every extra, including the untaxed mileage, counts toward the total.
+  const allExtras =
     (num(terms.travel_amount) ?? 0) +
     (num(terms.mileage_amount) ?? 0) +
     (num(terms.shop_supplies_fee) ?? 0)
 
-  // The total is the sum of what is on the invoice. tax_amount is CARRIED from the work
-  // order rather than recomputed - it is the figure the customer approved on the quote,
-  // and re-deriving it from a combined base is the rounding mistake that cost a week.
   const taxAmount = num(terms.tax_amount) ?? 0
-  const total = r2(totals.subtotal_labor + totals.subtotal_parts + extras + taxAmount)
+  const total = r2(totals.subtotal_labor + totals.subtotal_parts + allExtras + taxAmount)
 
   return {
-    ...invoiceIdentityFromWorkOrder(wo),
-    ...terms,
-    line_items:     lines,
-    subtotal_labor: totals.subtotal_labor,
-    subtotal_parts: totals.subtotal_parts,
-    parts_cost:     totals.parts_cost,
-    parts_sell:     totals.parts_sell,
-    total,
-    status:         'unpaid',
+    payload: {
+      ...invoiceIdentityFromWorkOrder(wo),
+      ...terms,
+      line_items:     lines,
+      subtotal_labor: totals.subtotal_labor,
+      subtotal_parts: totals.subtotal_parts,
+      parts_cost:     totals.parts_cost,
+      parts_sell:     totals.parts_sell,
+      total,
+      status:         'unpaid',
+      // Recorded on the invoice itself so a figure that came from Settings rather than
+      // from the job is visible later, when someone asks why the tax is what it is.
+      internal_notes: source.usedFallbackFor.length
+        ? [
+            baseTerms.internal_notes ?? wo.internal_notes ?? '',
+            `[${new Date().toISOString().slice(0, 10)}] ${source.usedFallbackFor.join(' and ')} taken from shop settings - the work order had none recorded.`,
+          ].filter(Boolean).join(' ').trim()
+        : (wo.internal_notes ?? null),
+    },
+    source,
   }
 }

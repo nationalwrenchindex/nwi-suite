@@ -17,6 +17,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
 import { buildInvoicePayload, type WorkOrderLineRow } from '@/lib/hd/wo-to-invoice'
+import { TAX_SETTINGS_SELECT, taxSettingsFrom } from '@/lib/tax'
 
 export const dynamic = 'force-dynamic'
 
@@ -78,7 +79,70 @@ export async function GET(
   }
 
   const rows = (lineRows ?? []) as unknown as WorkOrderLineRow[]
-  const payload = buildInvoicePayload(row, rows)
+
+  // ===========================================================================
+  // REFUSE AN EMPTY WORK ORDER. SERVER-SIDE.
+  // ===========================================================================
+  //
+  // 1,555 of the 1,562 live work orders (99.6%) have no line items at all, and the
+  // first version of this route happily returned a payload with line_items: [] and
+  // total: 0 for every one of them. The only thing standing between that and a $0.00
+  // invoice was a check in the browser - so any direct caller, any future screen, or
+  // any automation that did not replicate it got no protection whatever.
+  //
+  // A bill for nothing is never the right answer, so the refusal lives here.
+  if (rows.length === 0) {
+    return NextResponse.json({
+      error: 'This work order has no line items, so there is nothing to bill. Add the labor and parts to it first.',
+      reason: 'no_line_items',
+      work_order_number: row.work_order_number ?? null,
+    }, { status: 422 })
+  }
+
+  // ===========================================================================
+  // THE SHOP'S CURRENT SETTINGS, for terms the work order never recorded.
+  // ===========================================================================
+  //
+  // ALL 1,562 live work orders have labor_rate and tax_percent NULL, so without this
+  // the converter produced tax of exactly $0.00 - while the invoices these same shops
+  // already send carry 7%, 7.25% and 7.75%. That is a silent under-bill and a
+  // regression, not caution.
+  //
+  // A recorded term still wins. This only fills an absence, and the invoice records
+  // that it did - see buildInvoicePayload's internal_notes.
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select(`hd_labor_rate, default_labor_rate, ${TAX_SETTINGS_SELECT}`)
+    .eq('id', user.id)
+    .single()
+
+  const prof = (profile ?? {}) as Record<string, unknown>
+  // hd_labor_rate FIRST: HD has its own rate setting, and reading LD's
+  // default_labor_rate would quietly bill an HD job at the light-duty rate. They happen
+  // to match at 135 for this shop, which is exactly how that would go unnoticed.
+  const fallbackRate =
+    prof.hd_labor_rate != null ? Number(prof.hd_labor_rate)
+    : prof.default_labor_rate != null ? Number(prof.default_labor_rate)
+    : null
+
+  const { payload, source: termsSource } = buildInvoicePayload(row, rows, {
+    laborRate: fallbackRate,
+    taxSettings: taxSettingsFrom(prof),
+  })
+
+  // If the work order recorded nothing AND the shop has no setting either, there is no
+  // honest number to bill at. Refuse rather than send a zero.
+  if (!termsSource.laborRateFromDocument && fallbackRate == null) {
+    const laborLines = rows.filter(r => String(r.type ?? '').toLowerCase().startsWith('lab'))
+    const unpriced = laborLines.filter(r => r.unit_price == null && r.total == null)
+    if (unpriced.length > 0) {
+      return NextResponse.json({
+        error: 'This work order has no labor rate, and neither do your settings. Set your HD labor rate in Settings, or price the labor lines directly.',
+        reason: 'no_labor_rate',
+        work_order_number: row.work_order_number ?? null,
+      }, { status: 422 })
+    }
+  }
 
   const partCount  = rows.filter(r => String(r.type ?? '').toLowerCase() === 'part').length
   const laborCount = rows.filter(r => String(r.type ?? '').toLowerCase().startsWith('lab')).length
@@ -90,11 +154,15 @@ export async function GET(
       line_count:        rows.length,
       part_lines:        partCount,
       labor_lines:       laborCount,
-      // Surfaced so the UI can say "this work order has no lines" rather than silently
-      // producing an empty invoice, which is the shape of the bug being fixed.
-      has_lines:         rows.length > 0,
+      has_lines:         true,
       authorized_at:     row.authorized_at ?? null,
       quote_id:          row.quote_id ?? null,
+      // Where the money came from, so the tech can be told rather than guessing.
+      terms_from_document: {
+        labor_rate: termsSource.laborRateFromDocument,
+        tax:        termsSource.taxFromDocument,
+      },
+      used_settings_for: termsSource.usedFallbackFor,
     },
   })
 }

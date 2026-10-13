@@ -203,12 +203,27 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
 
       const source = (builtJson.source ?? {}) as Record<string, unknown>
 
-      // An empty work order would produce an empty invoice. Say so rather than billing
-      // nothing - silently producing a blank bill is the same class of failure as
-      // silently dropping the parts.
-      if (!source.has_lines) {
-        setInvoiceError('This work order has no line items yet. Add the labor and parts on it first, then create the invoice.')
+      // The server now REFUSES an empty work order with 422 rather than returning a
+      // zero payload, so this branch is the belt to that braces. Kept because the
+      // message here is the one the tech reads.
+      if (built.status === 422 || !source.has_lines) {
+        setInvoiceError(String(builtJson.error ?? 'This work order has no line items yet. Add the labor and parts on it first, then create the invoice.'))
         return
+      }
+
+      // If any term came from Settings rather than from the job, say so BEFORE the
+      // invoice is created. All 1,562 existing work orders have no recorded rate or
+      // tax, so for anything not born from an approved quote this is the normal case -
+      // and a tech should know the tax on the bill came from their settings today, not
+      // from something the customer agreed to.
+      const usedSettings = (source.used_settings_for ?? []) as string[]
+      if (Array.isArray(usedSettings) && usedSettings.length > 0) {
+        const ok = window.confirm(
+          `This work order has no ${usedSettings.join(' or ')} recorded.\n\n` +
+          `Your current shop settings will be used instead, and the invoice will note that.\n\n` +
+          `Create the invoice?`,
+        )
+        if (!ok) return
       }
 
       const made = await fetch('/api/hd/invoices', {

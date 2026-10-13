@@ -771,8 +771,24 @@ async function flowN(): Promise<void> {
   // CASE 1: the quote gets a public token.
   const token = quote.public_token as string | null
   if (!record(F, 'a sent quote gets a public token', !!token && String(token).length >= 16,
-    token ? `${String(token).slice(0, 8)}...` : 'NO TOKEN - migration 153 not applied')) {
-    console.log('  note  Apply migration 153, then re-run. The rest of flow N needs the token.')
+    token ? `${String(token).slice(0, 8)}...` : 'NO TOKEN - see the note below')) {
+    // THIS WAS DIAGNOSED WRONG THE FIRST TIME. It said "migration 153 not applied",
+    // which sends the reader to the database - and 153 was already applied. The token
+    // is issued by CODE in the POST route, which lives on an unpromoted branch, so a
+    // missing token means THE DEPLOY IS BEHIND, not the migration.
+    //
+    // Both causes are now checked and named separately, because they need different
+    // actions in different places.
+    let columnExists = true
+    try { await rest('hd_quotes?select=public_token&limit=1') } catch { columnExists = false }
+
+    if (!columnExists) {
+      console.log('  note  hd_quotes.public_token is ABSENT - apply migration 153.')
+    } else {
+      console.log('  note  hd_quotes.public_token EXISTS, so migration 153 IS applied.')
+      console.log('        The token-issuing code is not deployed to this target. Promote it, or')
+      console.log('        point smoke at the preview: PAGECHECK_BASE=<url> npm run smoke')
+    }
     return
   }
 
