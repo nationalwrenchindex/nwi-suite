@@ -126,6 +126,17 @@ async function cleanup(): Promise<void> {
       const wos = await rest<{ id: string }>(`hd_work_orders?select=id&quote_id=eq.${q}`)
       for (const w of wos) created.hdWorkOrders.add(w.id)
     }
+    // ANY invoice raised against a work order this run created, not just the ids the
+    // flows happened to keep. Flow O deliberately tries to bill the same work order
+    // twice; while migration 154's unique index is unapplied that second insert
+    // SUCCEEDS, and its id was never recorded - so a duplicate invoice was left in
+    // production on every run, pointing at a work order that then got deleted.
+    for (const w of created.hdWorkOrders) {
+      const invs = await rest<{ id: string }>(`hd_invoices?select=id&work_order_id=eq.${w}`)
+      for (const i of invs) created.hdInvoices.add(i.id)
+    }
+    const strayInvoices = await rest<{ id: string }>(`hd_invoices?select=id&customer_name=like.${MARK}*`)
+    for (const i of strayInvoices) created.hdInvoices.add(i.id)
   } catch { /* a failed sweep must not mask the real result */ }
 
   // ORDER MATTERS. Line items reference the work order; the work order references the
@@ -1022,7 +1033,17 @@ async function flowO(): Promise<void> {
   created.hdInvoices.add(invId)
 
   const invRow = (await rest<Record<string, unknown>>(
-    `hd_invoices?id=eq.${invId}&select=invoice_number,line_items,labor_rate,tax_rate,subtotal_labor,subtotal_parts,parts_cost,work_order_id,po_number`))[0]
+    `hd_invoices?id=eq.${invId}&select=invoice_number,line_items,labor_rate,tax_rate,subtotal_labor,subtotal_parts,parts_cost,work_order_id`))[0]
+
+  // THE PO IS ASKED FOR SEPARATELY, and that is not squeamishness.
+  // hd_invoices.customer_po_number arrives with migration 157, and selecting a column
+  // that does not exist fails the WHOLE request - which, when it was part of the select
+  // above, threw and took the rest of the suite with it. Flows P and Q never ran.
+  // A missing migration must cost one row in the table, not the run.
+  let poColumn = true
+  try { await rest('hd_invoices?select=customer_po_number&limit=1') } catch { poColumn = false }
+  record(F, 'hd_invoices can store the customer PO', poColumn,
+    poColumn ? 'customer_po_number present' : 'ABSENT - apply migration 157')
   const invLines = (invRow?.line_items ?? []) as Array<Record<string, unknown>>
   record(F, 'the stored invoice has all three lines', invLines.length === 3, `${invLines.length}`)
   record(F, 'parts subtotal is 172.80, not 0', Number(invRow?.subtotal_parts) === 172.8,
@@ -1040,11 +1061,21 @@ async function flowO(): Promise<void> {
 
   // ── the convert-once guard (migration 154) ───────────────────────────────
   const second = await api('POST', '/api/hd/invoices', payload)
+  // Track it before asserting. If the guard is missing this call CREATED a real
+  // invoice, and an untracked one is a duplicate left in production - which is how
+  // WO-2026-1538 got billed twice in the first place.
+  const dupId = String(((second.json.invoice ?? {}) as Record<string, unknown>).id ?? '')
+  if (dupId) created.hdInvoices.add(dupId)
   record(F, 'a SECOND invoice for the same work order is REFUSED',
-    second.status === 409, `-> ${second.status}`)
+    second.status === 409,
+    second.status === 201
+      // Named, because the guard is the INDEX and not an if-statement. A 201 here does
+      // not mean the route lost its check; it means the index is not in the database.
+      ? '-> 201: hd_invoices_one_per_work_order is ABSENT - apply migration 154'
+      : `-> ${second.status}`)
   record(F, 'and the refusal names the invoice that already exists',
     typeof second.json.error === 'string' && String(second.json.error).includes('already billed'),
-    String(second.json.error ?? '').slice(0, 70))
+    String(second.json.error ?? '').slice(0, 70) || 'no refusal to name - see the row above')
   const count = await rest(`hd_invoices?work_order_id=eq.${woId}&select=id`)
   record(F, 'STILL exactly one invoice for that work order', count.length === 1, `${count.length}`)
 
@@ -1052,6 +1083,233 @@ async function flowO(): Promise<void> {
   const rebuilt = await api('GET', `/api/hd/work-orders/${woId}/convert`)
   record(F, 'the converter also reports it as already invoiced',
     rebuilt.status === 409 && rebuilt.json.already_invoiced === true, `-> ${rebuilt.status}`)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P  HD QUOTE SEND
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// The approval page existed and nothing could reach it. This drives the door:
+// the preview mints a link WITHOUT claiming a send, the real send records one, and
+// the link a customer would tap actually renders.
+//
+// The preview assertion is the one that matters most. The LD routes bumped
+// times_sent for merely opening a Copy Link tab, which is how quotes nobody
+// received came to read "sent 3x", and the fix is only real if "asked for a link"
+// and "sent it" stay different states.
+async function flowP(): Promise<void> {
+  const F = 'P hd quote send'
+
+  const made = await api('POST', '/api/hd/quotes', {
+    customer_name: `${MARK} hd send`,
+    customer_phone: '+15555550155',
+    unit_manufacturer: 'Thermo King',
+    unit_model: 'Precedent S-600',
+    complaint: `${MARK} - send path`,
+    status: 'draft',
+    labor_rate: 142,
+    subtotal_labor: 284,
+    subtotal_parts: 0,
+    total: 284,
+    line_items: [
+      { id: 'zz-p1', type: 'labor', description: `${MARK} labor`, mobile_hours: 2, amount: 284 },
+    ],
+  })
+  if (made.status === 404) {
+    console.log('  note  /api/hd/quotes answered 404 - HD quote routes are NOT PROMOTED; flow P did not run.')
+    return
+  }
+  if (!record(F, 'a draft HD quote can be created', made.status === 201, `-> ${made.status}`)) return
+
+  const quote = (made.json.quote ?? {}) as Record<string, unknown>
+  const quoteId = String(quote.id ?? '')
+  created.hdQuotes.add(quoteId)
+
+  // A DRAFT must start with no token. If it already had one the preview assertion
+  // below would pass without the preview having done anything.
+  record(F, 'a draft starts with no public link', !quote.public_token,
+    quote.public_token ? 'already had one' : 'none, as expected')
+
+  // ── the preview: a link, and no claim that anything was sent ─────────────
+  const prev = await api('POST', `/api/hd/quotes/${quoteId}/send`, { method: 'link', preview: true })
+  if (prev.status === 404) {
+    console.log('  note  the HD quote send route is NOT PROMOTED yet; flow P stopped here.')
+    record(F, 'the send route answers', false, '404 - not deployed to this target')
+    return
+  }
+  const prevUrl = String(prev.json.url ?? '')
+  if (!record(F, 'the preview returns an approval link',
+    prev.status === 200 && prevUrl.includes('/hd/quote/'), prevUrl || `-> ${prev.status}`)) return
+
+  const afterPreview = (await rest<Record<string, unknown>>(
+    `hd_quotes?id=eq.${quoteId}&select=status,public_token`))[0]
+  const token = String(afterPreview?.public_token ?? '')
+  record(F, 'the preview PERSISTED the token, so the link is not dead',
+    token.length >= 16 && prevUrl.endsWith(token), token ? `${token.slice(0, 8)}...` : 'NOT SAVED')
+  record(F, 'and the preview did NOT mark the quote sent',
+    afterPreview?.status === 'draft', String(afterPreview?.status))
+
+  // Migration 155 holds the send history. Checked on its own so a missing column is
+  // reported as the migration it is, not as a broken send.
+  let historyColumns = true
+  try { await rest('hd_quotes?select=sent_count,sent_at,last_sent_at&limit=1') } catch { historyColumns = false }
+  record(F, 'hd_quotes has its send-history columns', historyColumns,
+    historyColumns ? 'sent_at, last_sent_at, sent_count' : 'ABSENT - apply migration 155')
+
+  if (historyColumns) {
+    const counted = (await rest<Record<string, unknown>>(
+      `hd_quotes?id=eq.${quoteId}&select=sent_count,sent_at`))[0]
+    record(F, 'the preview did not move the counter',
+      Number(counted?.sent_count ?? 0) === 0 && !counted?.sent_at,
+      `sent_count ${counted?.sent_count}, sent_at ${counted?.sent_at}`)
+  }
+
+  // ── the real send ────────────────────────────────────────────────────────
+  // 'link' deliberately: the tech asked for the link to hand over, which IS a
+  // delivery, and it needs no Twilio or Resend credentials to be a true test.
+  const sent = await api('POST', `/api/hd/quotes/${quoteId}/send`, { method: 'link' })
+  if (!record(F, 'sending the link succeeds', sent.status === 200 && sent.json.sent === true,
+    `-> ${sent.status}, sent ${String(sent.json.sent)}`)) return
+
+  const afterSend = (await rest<Record<string, unknown>>(
+    `hd_quotes?id=eq.${quoteId}&select=status,public_token`))[0]
+  record(F, 'the quote is now sent', afterSend?.status === 'sent', String(afterSend?.status))
+  record(F, 'and the token did NOT rotate', afterSend?.public_token === token,
+    afterSend?.public_token === token ? 'same link' : 'ROTATED - a link already texted would be dead')
+
+  if (historyColumns) {
+    const hist = (await rest<Record<string, unknown>>(
+      `hd_quotes?id=eq.${quoteId}&select=sent_count,sent_at,last_sent_at`))[0]
+    record(F, 'the send recorded itself once',
+      Number(hist?.sent_count) === 1 && !!hist?.sent_at && !!hist?.last_sent_at,
+      `sent_count ${hist?.sent_count}, sent_at ${hist?.sent_at ? 'set' : 'null'}`)
+  }
+
+  // ── the link a customer would tap ────────────────────────────────────────
+  const pub = await fetch(`${BASE}/hd/quote/${token}`, { redirect: 'follow' })
+  const finalPath = new URL(pub.url).pathname
+  record(F, 'the approval page renders from the sent link',
+    pub.ok && finalPath.startsWith('/hd/quote/'),
+    pub.ok ? `-> 200 at ${finalPath}` : `-> ${pub.status} at ${finalPath}`)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Q  HD QUOTE -> WORK ORDER, FROM THE SHOP SIDE
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// The customer's own route is flow N. This is the one the tech uses when the
+// customer said yes on the phone, and the thing under test is that it REFUSES to
+// open a job nobody authorized, then records the verbal approval truthfully when
+// told to.
+async function flowQ(): Promise<void> {
+  const F = 'Q hd quote->wo'
+
+  // Terms no Settings page holds, so "the work order carried the quote's terms"
+  // cannot be confused with "it re-read Settings and happened to agree".
+  //
+  // TWO DECIMALS ON THE TAX, deliberately. The first version of this used 5.375 and
+  // the check failed reading back 5.38 - hd_work_orders.tax_percent stores two
+  // decimal places, so the column cannot hold a third. That was the TEST being wrong
+  // about the app, not the app being wrong: nothing in the product offers a tax rate
+  // with three decimals. Corrected rather than loosened - the value is still one no
+  // Settings page holds, so it still proves the terms travelled.
+  const RATE = 151.75
+  const TAX = 6.37
+
+  const made = await api('POST', '/api/hd/quotes', {
+    customer_name: `${MARK} verbal approval`,
+    customer_phone: '+15555550166',
+    unit_manufacturer: 'Carrier Transicold',
+    unit_model: 'Vector 8600',
+    complaint: `${MARK} - verbal path`,
+    status: 'draft',
+    labor_rate: RATE,
+    labor_hours: 2,
+    tax_rate: TAX,
+    tax_amount: 12.5,
+    subtotal_labor: 303.5,
+    subtotal_parts: 80,
+    total: 396,
+    parts_markup_percent: 30,
+    travel_hours: 1, travel_rate: 105, travel_amount: 105,
+    line_items: [
+      { id: 'zz-q1', type: 'labor', description: `${MARK} labor`, mobile_hours: 2, amount: 303.5 },
+      { id: 'zz-q2', type: 'part', description: `${MARK} belt`, part_number: 'ZZ-BELT',
+        quantity: 1, unit_cost: 61.54, unit_price: 80, amount: 80 },
+    ],
+  })
+  if (made.status === 404) {
+    console.log('  note  /api/hd/quotes answered 404 - not promoted; flow Q did not run.')
+    return
+  }
+  if (!record(F, 'a draft HD quote can be created', made.status === 201, `-> ${made.status}`)) return
+
+  const quote = (made.json.quote ?? {}) as Record<string, unknown>
+  const quoteId = String(quote.id ?? '')
+  created.hdQuotes.add(quoteId)
+
+  // ── it must REFUSE an unapproved quote ──────────────────────────────────
+  const refused = await api('POST', `/api/hd/quotes/${quoteId}/work-order`, {})
+  if (refused.status === 404) {
+    console.log('  note  the HD quote->work order route is NOT PROMOTED yet; flow Q stopped here.')
+    record(F, 'the convert route answers', false, '404 - not deployed to this target')
+    return
+  }
+  record(F, 'converting an UNAPPROVED quote is refused',
+    refused.status === 422 && refused.json.reason === 'not_approved',
+    `-> ${refused.status}, reason ${String(refused.json.reason)}`)
+
+  const none = await rest(`hd_work_orders?quote_id=eq.${quoteId}&select=id`)
+  none.forEach(w => created.hdWorkOrders.add(String((w as Record<string, unknown>).id)))
+  record(F, 'and it created NO work order', none.length === 0, `${none.length}`)
+
+  // ── the verbal approval, then the conversion ─────────────────────────────
+  const PO = 'ZZ-PO-VERBAL-41'
+  const conv = await api('POST', `/api/hd/quotes/${quoteId}/work-order`, {
+    record_verbal_approval: true, po_number: PO, note: `${MARK} dispatcher authorized by phone`,
+  })
+  const woNumber = String((conv.json.work_order as Record<string, unknown> | undefined)?.number ?? '')
+  if (!record(F, 'a recorded verbal approval converts it',
+    conv.status === 200 && !!woNumber, `-> ${conv.status} ${woNumber}`)) return
+
+  const stamped = (await rest<Record<string, unknown>>(
+    `hd_quotes?id=eq.${quoteId}&select=status,approved_at,approval_method,customer_po_number`))[0]
+  record(F, 'the quote is approved', stamped?.status === 'approved', String(stamped?.status))
+  record(F, "the method is recorded as 'verbal', not as a customer tap",
+    stamped?.approval_method === 'verbal', String(stamped?.approval_method))
+  record(F, 'approved_at is stamped', !!stamped?.approved_at, String(stamped?.approved_at))
+  record(F, 'the PO given on the phone is recorded',
+    stamped?.customer_po_number === PO, String(stamped?.customer_po_number))
+
+  const wos = await rest<Record<string, unknown>>(
+    `hd_work_orders?quote_id=eq.${quoteId}&select=id,work_order_number,labor_rate,tax_percent,authorized_at,authorization_method,customer_po_number,travel_amount`)
+  wos.forEach(w => created.hdWorkOrders.add(String(w.id)))
+  if (!record(F, 'exactly ONE work order exists for the quote', wos.length === 1,
+    `${wos.length}${wos.length ? ': ' + wos.map(w => w.work_order_number).join(', ') : ''}`)) return
+  const wo = wos[0]
+
+  record(F, "the work order carries the QUOTE's rate and tax, not a setting",
+    Number(wo.labor_rate) === RATE && Number(wo.tax_percent) === TAX,
+    `rate ${wo.labor_rate}, tax ${wo.tax_percent}`)
+  record(F, 'the travel the customer agreed to travelled with it',
+    Number(wo.travel_amount) === 105, String(wo.travel_amount))
+  record(F, 'the authorization record is the verbal one, with the PO',
+    !!wo.authorized_at && wo.authorization_method === 'verbal' && wo.customer_po_number === PO,
+    `${wo.authorization_method} / ${wo.customer_po_number}`)
+
+  const lines = await rest(`hd_work_order_line_items?work_order_id=eq.${wo.id}&select=id,type`)
+  record(F, 'both quote lines landed on the work order',
+    lines.length === 2 &&
+    lines.filter(l => (l as Record<string, unknown>).type === 'part').length === 1,
+    `${lines.length} lines`)
+
+  // ── convert once, enforced by the index and not by an if-statement ───────
+  const again = await api('POST', `/api/hd/quotes/${quoteId}/work-order`, {})
+  const againNumber = String((again.json.work_order as Record<string, unknown> | undefined)?.number ?? '')
+  record(F, 'converting a second time returns the SAME work order',
+    again.status === 200 && againNumber === woNumber, `${againNumber} vs ${woNumber}`)
+  const still = await rest(`hd_work_orders?quote_id=eq.${quoteId}&select=id`)
+  record(F, 'and there is STILL exactly one', still.length === 1, `${still.length}`)
 }
 
 async function main(): Promise<void> {
@@ -1104,6 +1362,8 @@ async function main(): Promise<void> {
     await flowK()
     await flowN()
     await flowO()
+    await flowP()
+    await flowQ()
   } finally {
     await cleanup()
   }

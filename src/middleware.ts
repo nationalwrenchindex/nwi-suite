@@ -59,10 +59,22 @@ export async function middleware(request: NextRequest) {
     effectivePath.startsWith('/hd/signup') ||
     effectivePath.startsWith('/hd/login')
 
-  // The customer paying an invoice has no account. Kept separate from isHDAuthRoute
-  // on purpose: that set also bounces a SIGNED-IN visitor to /hd/dashboard, which
-  // would stop a subscriber opening their own payment link to check it.
-  const isHDPublicRoute = effectivePath.startsWith('/hd/invoices/pay')
+  // The customer paying an invoice, or approving a quote, has no account. Kept
+  // separate from isHDAuthRoute on purpose: that set also bounces a SIGNED-IN visitor
+  // to /hd/dashboard, which would stop a subscriber opening their own link to check it.
+  //
+  // /hd/quote/<token> WAS MISSING HERE, and that made the whole customer approval path
+  // unreachable. The page itself renders bare and the /hd layout already carves it out,
+  // but the middleware runs first and treated it as protected - so every customer who
+  // tapped the link in their text landed on a login page for software they have never
+  // heard of. Proved by driving the suite against a local build: flow N reported
+  // "the approval page renders without a login -- 200 at /login".
+  //
+  // Production could not have caught it. The token-issuing code is not promoted there,
+  // so the suite never got as far as fetching the page.
+  const isHDPublicRoute =
+    effectivePath.startsWith('/hd/invoices/pay') ||
+    effectivePath.startsWith('/hd/quote/')
 
   const isHDProtected =
     effectivePath.startsWith('/hd/') && !isHDAuthRoute && !isHDPublicRoute
