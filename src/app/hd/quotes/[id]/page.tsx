@@ -6,6 +6,7 @@ import QuoteDetailActions from './QuoteDetailActions'
 import { money } from '@/lib/format'
 import { feeRows } from '@/lib/invoice-document'
 import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
+import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
 
 const ORANGE = '#FF6600'
 const BLUE   = '#2969B0'
@@ -58,6 +59,10 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
 
   const items: LineItem[] = Array.isArray(q.line_items) ? q.line_items : []
   const st = STATUS_STYLE[q.status] ?? STATUS_STYLE.draft
+
+  // Each tax bucket as the quote recorded it. Empty for a quote written before
+  // migration 140, which the single-line fallback in the totals column covers.
+  const taxRows = taxDisplayRows(parseBreakdown(q.tax_breakdown))
 
   return (
     <div style={{ background: '#F4F5F7', minHeight: '100dvh', padding: '24px 20px' }}>
@@ -162,7 +167,25 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
                 ...feeRows(q as Record<string, unknown>).map(r => ({ label: r.label, val: r.amount })),
                 ...extrasDisplayRows(extrasFromDocument(q as Record<string, unknown>))
                   .map(r => ({ label: r.detail ? `${r.label} (${r.detail})` : r.label, val: r.amount })),
-                ...(Number(q.tax_amount) > 0 ? [{ label: `Tax (${q.tax_rate}%)`, val: q.tax_amount }] : []),
+                // ===================================================================
+                // THE TAX, PER BUCKET WHERE THE DOCUMENT RECORDED IT THAT WAY.
+                // ===================================================================
+                //
+                // This printed one line, `Tax (${q.tax_rate}%)`, and tax_rate is the
+                // PARTS rate. On a quote that taxes parts at 7% and labor at 0% - what
+                // the Sales Tax settings exist to express, and what the quote form can
+                // now set per document - that line claimed 7% against a figure taxed
+                // at an effective 4-point-something. The customer can do that division.
+                //
+                // tax_breakdown already carries each bucket's own rate and whether it
+                // was taxed, so the rows are read from it and the amounts shown are the
+                // ones the document stored. Nothing is recomputed here.
+                //
+                // The single line stays as the fallback for a quote saved before
+                // migration 140, which has no breakdown to read.
+                ...(taxRows.length > 0
+                  ? taxRows.filter(r => r.taxed && r.amount > 0).map(r => ({ label: r.text, val: r.amount }))
+                  : Number(q.tax_amount) > 0 ? [{ label: `Tax (${q.tax_rate}%)`, val: q.tax_amount }] : []),
               ].map(r => (
                 <div key={r.label} className="flex justify-between py-1.5 text-sm" style={{ color: '#6B7280' }}>
                   <span>{r.label}</span><span>{fmt(r.val)}</span>

@@ -11,7 +11,7 @@ import Link from 'next/link'
 import { LABOR_GUIDE, type LaborGuideItem } from '@/lib/hd/labor-guide'
 import { useTaxSettings } from '@/lib/use-tax-settings'
 import { useHdFeeSettings } from '@/lib/hd/use-fee-settings'
-import { computeTax, taxDisplayRows } from '@/lib/tax'
+import { computeTax, taxDisplayRows, mergeBreakdowns } from '@/lib/tax'
 import { DEFAULT_HD_PARTS_MARKUP, sellPrice, lineAmount } from '@/lib/hd/parts-pricing'
 import AddressAutofill from '@/components/hd/AddressAutofill'
 import { money } from '@/lib/format'
@@ -835,7 +835,18 @@ export default function NewQuotePage() {
         tax_rate:          form.tax_rate,
         // What was actually taxed, so the customer copy can say so and no later
         // reader has to guess the split back out of a blended subtotal.
-        tax_breakdown:     tax.breakdown,
+        // MERGED, so the stored breakdown sums to the stored tax_amount.
+        //
+        // This stored tax.breakdown alone, which covers parts and labor and NOT the
+        // tax on travel and shop supplies - while tax_amount below is taxWithExtras
+        // and includes it. Any reader totalling the breakdown therefore came up short
+        // of the figure the customer was charged, and the detail screen now prints
+        // those buckets as the tax lines.
+        //
+        // mergeBreakdowns SUMS already-rounded bucket amounts rather than recomputing
+        // over the merged bases - the two disagree by a cent, and the agreed figure
+        // is the one that wins. See breakdownTaxTotal in lib/tax.ts.
+        tax_breakdown:     mergeBreakdowns([tax.breakdown, extras.breakdown]),
         // With the extras in. taxWithExtras / totalWithExtras include travel and
         // supplies tax; mileage adds to the subtotal and attracts none.
         tax_amount:        taxWithExtras,
@@ -1329,27 +1340,64 @@ export default function NewQuotePage() {
                   <span>{r.label}</span><span>{fmt(r.val)}</span>
                 </div>
               ))}
-              <div className="flex items-center gap-3 py-2" style={{ borderTop: `1px solid ${BORDER}`, marginTop: 4 }}>
-                <span className="text-sm flex-1" style={{ color: MUTED }}>Tax %</span>
-                <input
-                  type="number"
-                  min={0}
-                  max={30}
-                  step={0.1}
-                  value={form.tax_rate}
-                  onChange={e => {
-                    const v = parseFloat(e.target.value) || 0
-                    // One rate typed once: carry it to labor while the two still
-                    // match, never over a difference the tech set deliberately.
-                    setForm(f => ({
-                      ...f,
-                      tax_rate: v,
-                      tax_rate_labor: f.tax_rate_labor === f.tax_rate ? v : f.tax_rate_labor,
-                    }))
-                  }}
-                  style={{ width: 70, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '4px 8px', fontSize: 13, textAlign: 'right' }}
-                />
-                <span className="text-sm" style={{ color: MUTED }}>{fmt(taxWithExtras)}</span>
+              {/* ===================================================================
+                  TWO RATES, TWO FIELDS.
+                  ===================================================================
+                  There was one "Tax %" box. It drove the PARTS rate and copied itself
+                  onto the labor rate only while the two still matched, so a shop that
+                  taxes parts at 7% and labor at 0% - which is most of them, and what
+                  the Sales Tax settings exist to express - had no way to see that on
+                  the document and no way to correct it per job. The labor rate was
+                  real, seeded from settings, and invisible.
+
+                  A rate whose category is not taxed is shown as not taxed rather than
+                  as an editable number that changes nothing. Typing 7 into a box that
+                  cannot move the total is worse than having no box. */}
+              <div style={{ borderTop: `1px solid ${BORDER}`, marginTop: 4 }}>
+                <div className="flex items-center gap-3 py-2">
+                  <span className="text-sm flex-1" style={{ color: MUTED }}>Parts Tax %</span>
+                  {taxedPartsFlag ? (
+                    <input
+                      type="number"
+                      min={0}
+                      max={30}
+                      step={0.1}
+                      value={form.tax_rate}
+                      onChange={e => setField('tax_rate', parseFloat(e.target.value) || 0)}
+                      style={{ width: 70, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '4px 8px', fontSize: 13, textAlign: 'right' }}
+                    />
+                  ) : (
+                    <span className="text-xs" style={{ color: MUTED }}>not taxed (Settings)</span>
+                  )}
+                  <span className="text-sm" style={{ color: MUTED, minWidth: 64, textAlign: 'right' }}>
+                    {fmt(tax.breakdown.parts?.amount ?? 0)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 py-2">
+                  <span className="text-sm flex-1" style={{ color: MUTED }}>Labor Tax %</span>
+                  {taxedLaborFlag ? (
+                    <input
+                      type="number"
+                      min={0}
+                      max={30}
+                      step={0.1}
+                      value={form.tax_rate_labor}
+                      onChange={e => setField('tax_rate_labor', parseFloat(e.target.value) || 0)}
+                      style={{ width: 70, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '4px 8px', fontSize: 13, textAlign: 'right' }}
+                    />
+                  ) : (
+                    <span className="text-xs" style={{ color: MUTED }}>not taxed (Settings)</span>
+                  )}
+                  <span className="text-sm" style={{ color: MUTED, minWidth: 64, textAlign: 'right' }}>
+                    {fmt(tax.breakdown.labor?.amount ?? 0)}
+                  </span>
+                </div>
+                {/* The total, which is the two buckets plus the extras' tax. Kept as
+                    its own line so the figures above it visibly add up to it. */}
+                <div className="flex items-center gap-3 py-1.5" style={{ borderTop: `1px solid ${BORDER}` }}>
+                  <span className="text-sm flex-1 font-semibold" style={{ color: MUTED }}>Tax</span>
+                  <span className="text-sm font-semibold" style={{ color: MUTED }}>{fmt(taxWithExtras)}</span>
+                </div>
               </div>
               {/* What is being taxed, including what is NOT. A tech who can see
                   "Labor - not taxable" catches a wrong setting before a customer does. */}

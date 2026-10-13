@@ -11,7 +11,7 @@ import Link from 'next/link'
 import { computeDueDate } from '@/lib/hd/payment-terms'
 import { useTaxSettings } from '@/lib/use-tax-settings'
 import { useHdFeeSettings } from '@/lib/hd/use-fee-settings'
-import { computeTax, taxDisplayRows } from '@/lib/tax'
+import { computeTax, taxDisplayRows, mergeBreakdowns } from '@/lib/tax'
 import { DEFAULT_HD_PARTS_MARKUP, sellPrice, lineAmount } from '@/lib/hd/parts-pricing'
 import AddressAutofill from '@/components/hd/AddressAutofill'
 import { money } from '@/lib/format'
@@ -468,7 +468,18 @@ export default function NewInvoicePage() {
         diagnostic_fee:    parseFloat(diagFee.toFixed(2)),
         road_call_fee:     parseFloat(roadFee.toFixed(2)),
         tax_rate:          form.tax_rate,
-        tax_breakdown:     tax.breakdown,
+        // MERGED, so the stored breakdown sums to the stored tax_amount.
+        //
+        // This stored tax.breakdown alone, which covers parts and labor and NOT the
+        // tax on travel and shop supplies - while tax_amount below is taxWithExtras
+        // and includes it. Any reader totalling the breakdown therefore came up short
+        // of the figure the customer was charged, and the detail screen now prints
+        // those buckets as the tax lines.
+        //
+        // mergeBreakdowns SUMS already-rounded bucket amounts rather than recomputing
+        // over the merged bases - the two disagree by a cent, and the agreed figure
+        // is the one that wins. See breakdownTaxTotal in lib/tax.ts.
+        tax_breakdown:     mergeBreakdowns([tax.breakdown, extras.breakdown]),
         // With the extras in. taxWithExtras / totalWithExtras include travel and
         // supplies tax; mileage adds to the subtotal and attracts none.
         tax_amount:        taxWithExtras,
@@ -734,15 +745,42 @@ export default function NewInvoicePage() {
                   <span>{r.label}</span><span>{fmt(r.val)}</span>
                 </div>
               ))}
-              <div className="flex items-center gap-3 py-2" style={{ borderTop: `1px solid ${BORDER}`, marginTop: 4 }}>
-                <span className="text-sm flex-1" style={{ color: MUTED }}>Tax %</span>
-                <input type="number" min={0} max={30} step={0.1} value={form.tax_rate}
-                  onChange={e => {
-                    const v = parseFloat(e.target.value) || 0
-                    setForm(f => ({ ...f, tax_rate: v, tax_rate_labor: f.tax_rate_labor === f.tax_rate ? v : f.tax_rate_labor }))
-                  }}
-                  style={{ width: 70, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '4px 8px', fontSize: 13, textAlign: 'right' }} />
-                <span className="text-sm" style={{ color: MUTED }}>{fmt(taxWithExtras)}</span>
+              {/* TWO RATES, TWO FIELDS - the same change as the quote form, and it has
+                  to match: a quote converts straight into an invoice, so a split the
+                  quote can show and the invoice cannot is a split the tech loses on
+                  conversion. A category the shop does not tax is shown as not taxed
+                  rather than as an editable number that changes nothing. */}
+              <div style={{ borderTop: `1px solid ${BORDER}`, marginTop: 4 }}>
+                <div className="flex items-center gap-3 py-2">
+                  <span className="text-sm flex-1" style={{ color: MUTED }}>Parts Tax %</span>
+                  {taxedPartsFlag ? (
+                    <input type="number" min={0} max={30} step={0.1} value={form.tax_rate}
+                      onChange={e => setField('tax_rate', parseFloat(e.target.value) || 0)}
+                      style={{ width: 70, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '4px 8px', fontSize: 13, textAlign: 'right' }} />
+                  ) : (
+                    <span className="text-xs" style={{ color: MUTED }}>not taxed (Settings)</span>
+                  )}
+                  <span className="text-sm" style={{ color: MUTED, minWidth: 64, textAlign: 'right' }}>
+                    {fmt(tax.breakdown.parts?.amount ?? 0)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 py-2">
+                  <span className="text-sm flex-1" style={{ color: MUTED }}>Labor Tax %</span>
+                  {taxedLaborFlag ? (
+                    <input type="number" min={0} max={30} step={0.1} value={form.tax_rate_labor}
+                      onChange={e => setField('tax_rate_labor', parseFloat(e.target.value) || 0)}
+                      style={{ width: 70, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '4px 8px', fontSize: 13, textAlign: 'right' }} />
+                  ) : (
+                    <span className="text-xs" style={{ color: MUTED }}>not taxed (Settings)</span>
+                  )}
+                  <span className="text-sm" style={{ color: MUTED, minWidth: 64, textAlign: 'right' }}>
+                    {fmt(tax.breakdown.labor?.amount ?? 0)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 py-1.5" style={{ borderTop: `1px solid ${BORDER}` }}>
+                  <span className="text-sm flex-1 font-semibold" style={{ color: MUTED }}>Tax</span>
+                  <span className="text-sm font-semibold" style={{ color: MUTED }}>{fmt(taxWithExtras)}</span>
+                </div>
               </div>
               {taxDisplayRows(tax.breakdown).map(r => (
                 <div key={r.category} className="flex justify-between text-xs py-0.5" style={{ color: MUTED }}>

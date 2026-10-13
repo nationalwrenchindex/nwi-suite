@@ -11,6 +11,7 @@ import type { AerialInspectionType } from '@/types/aerial'
 import { money } from '@/lib/format'
 import { feeRows } from '@/lib/invoice-document'
 import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
+import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
 
 const ORANGE = '#FF6600'
 const BLUE   = '#2969B0'
@@ -73,6 +74,12 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
 
   const items: LineItem[] = Array.isArray(inv.line_items) ? inv.line_items : []
   const st = STATUS_STYLE[inv.status] ?? STATUS_STYLE.unpaid
+
+  // Each tax bucket as the document recorded it: its own rate, its own amount, and
+  // whether that category was taxed at all. Empty for an invoice written before
+  // migration 140, which has no breakdown - the totals column falls back to the
+  // single Tax line for those.
+  const taxRows = taxDisplayRows(parseBreakdown(inv.tax_breakdown))
 
   // Late fee, computed by the same module the send route charges from
   // (src/lib/hd/late-fee.ts), off the same late_fee_settings row the nightly cron
@@ -330,7 +337,22 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                   ...feeRows(inv as Record<string, unknown>).map(r => ({ label: r.label, val: r.amount })),
                   ...extrasDisplayRows(extrasFromDocument(inv as Record<string, unknown>))
                     .map(r => ({ label: r.detail ? `${r.label} (${r.detail})` : r.label, val: r.amount })),
-                  ...(Number(inv.tax_amount) > 0 ? [{ label: `Tax (${inv.tax_rate}%)`, val: inv.tax_amount }] : []),
+                  // THE TAX, PER BUCKET WHERE THE DOCUMENT RECORDED IT THAT WAY.
+                  //
+                  // This printed one line, `Tax (${inv.tax_rate}%)`, and tax_rate is
+                  // the PARTS rate. On an invoice that taxes parts at 7% and labor at
+                  // 0% - what the Sales Tax settings exist to express, and what the
+                  // invoice form can now set per document - that line claimed 7%
+                  // against a figure taxed at an effective 4-point-something, and the
+                  // customer can do that division.
+                  //
+                  // Read off tax_breakdown, which stores each bucket's own rate and
+                  // whether it was taxed. The amounts are the ones the document saved;
+                  // nothing is recomputed. The single line stays as the fallback for an
+                  // invoice written before migration 140, which has no breakdown.
+                  ...(taxRows.length > 0
+                    ? taxRows.filter(r => r.taxed && r.amount > 0).map(r => ({ label: r.text, val: r.amount }))
+                    : Number(inv.tax_amount) > 0 ? [{ label: `Tax (${inv.tax_rate}%)`, val: inv.tax_amount }] : []),
                 ].map(r => (
                   <div key={r.label} className="flex justify-between py-2 text-sm" style={{ color: '#6B7280', borderBottom: '1px solid #F3F4F6' }}>
                     <span>{r.label}</span><span>{fmt(r.val)}</span>
