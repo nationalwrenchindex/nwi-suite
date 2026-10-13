@@ -187,6 +187,12 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
             <div className="sm:text-right text-sm" style={{ color: MUTED }}>
               <p>Date: {fmtDate(inv.created_at)}</p>
               {inv.work_order_number && <p>Work Order: {inv.work_order_number}</p>}
+              {/* The customer's own PO (migration 157). This is the page their accounts
+                  payable actually opens, and a PO invoice with no PO on it is the one
+                  that gets set aside. */}
+              {inv.customer_po_number && (
+                <p className="font-semibold" style={{ color: '#374151' }}>PO #: {inv.customer_po_number}</p>
+              )}
               {/* "Net 30 — due 10/14/2026", one phrasing on every surface. */}
               <p className={inv.due_date && !isPaid && !isVoid ? 'font-semibold' : undefined}
                  style={{ color: inv.due_date && !isPaid && !isVoid && inv.status === 'overdue' ? '#b91c1c' : MUTED }}>

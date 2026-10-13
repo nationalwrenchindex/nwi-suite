@@ -194,6 +194,32 @@ export async function POST(req: NextRequest) {
       .single())
   }
 
+  // Migration 157: hd_invoices.customer_po_number.
+  //
+  // THIS RETRY IS NOT PRECAUTIONARY. hd_invoices has no PO column at all today -
+  // neither po_number nor customer_po_number, verified with
+  // scripts/probe-hd-invoice-po.ts - and the work-order converter puts the key on
+  // every payload it builds, null or not. Without this, EVERY HD work-order
+  // conversion fails the insert until 157 is applied by hand. Not only the ones
+  // carrying a PO: the key is always there.
+  //
+  // The invoice is complete without it. Every figure is correct; what is lost is the
+  // reference the fleet reconciles against, which they can be told. Losing the
+  // invoice the tech just billed would be the wrong trade.
+  if (error && /customer_po_number/i.test(error.message ?? '')) {
+    console.error('[hd/invoices] customer_po_number missing - run migration 157', error.message)
+    // ONLY the PO is removed. Reusing the 140/142 strippers here would have thrown
+    // away tax_breakdown and the billable-extras columns on a database that has them,
+    // which is every database - a retry must repair the one thing that failed.
+    const { customer_po_number: _dropPo, ...stripped } = insertRow as Record<string, unknown>
+    void _dropPo
+    ;({ data, error } = await supabase
+      .from('hd_invoices')
+      .insert(stripped)
+      .select()
+      .single())
+  }
+
   // THE MIGRATION-154 GUARD REFUSING A SECOND INVOICE for the same work order.
   //
   // 23505 on hd_invoices_one_per_work_order means this work order is already billed. A

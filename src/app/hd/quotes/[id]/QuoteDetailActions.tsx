@@ -42,6 +42,7 @@ interface QuoteData {
   road_call_fee: number
   tax_rate: number
   tax_amount: number
+  customer_po_number: string | null
   total: number
   notes: string | null
 }
@@ -411,6 +412,11 @@ export default function QuoteDetailActions({
         tax_amount:        quoteData.tax_amount,
         total:             quoteData.total,
         notes:             quoteData.notes,
+        // The customer's PO travels onto the bill. Billing directly used to drop it,
+        // so the one document the fleet's accounts payable reads was the one without
+        // the reference they match on. The insert route strips it if migration 157 has
+        // not been applied, so sending it cannot cost the invoice.
+        customer_po_number: quoteData.customer_po_number ?? null,
         status:            'unpaid',
       }
       const res  = await fetch('/api/hd/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })

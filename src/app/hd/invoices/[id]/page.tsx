@@ -185,6 +185,13 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
               {inv.work_order_number && (
                 <p className="text-sm" style={{ color: '#6B7280' }}>Work Order: {inv.work_order_number}</p>
               )}
+              {/* The customer's PO (migration 157), carried from the work order and
+                  before that the approved quote. A fleet that pays on PO does not pay
+                  a bill without one printed on it - this is the field their accounts
+                  payable matches against, and without it the invoice sits. */}
+              {inv.customer_po_number && (
+                <p className="text-sm font-semibold" style={{ color: '#374151' }}>PO #: {inv.customer_po_number}</p>
+              )}
               <p className="text-sm" style={{ color: '#6B7280' }}>Date: {fmtDate(inv.created_at)}</p>
               <p className="text-sm" style={{ color: '#6B7280' }}>Terms: {termsWithDueDate(inv.payment_terms, inv.due_date)}</p>
               {inv.due_date && (

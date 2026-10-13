@@ -303,7 +303,15 @@ export function invoiceIdentityFromWorkOrder(wo: Record<string, unknown>): Recor
     internal_notes:    wo.internal_notes ?? null,
     // The customer's PO, which since migration 153 came off the approved quote. It must
     // reach the invoice or the fleet cannot reconcile what they authorized.
-    po_number:         wo.customer_po_number ?? null,
+    //
+    // customer_po_number, NOT po_number. hd_invoices has NEITHER column until migration
+    // 157 - verified against the live database with scripts/probe-hd-invoice-po.ts -
+    // and the previous pass wrote po_number here, which is LD's name on LD's table. The
+    // key is present on every payload whether there is a PO or not, so that one wrong
+    // name failed the insert for EVERY conversion, not only the ones with a PO. The
+    // name now matches hd_quotes and hd_work_orders, which is the chain it travels, and
+    // the insert route strips it when 157 has not been applied.
+    customer_po_number: wo.customer_po_number ?? null,
   }
 }
 

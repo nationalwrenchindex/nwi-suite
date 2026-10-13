@@ -153,6 +153,21 @@ export async function POST(req: NextRequest) {
       .single())
   }
 
+  // Migration 153 adds hd_quotes.customer_po_number, and the quote form now sends it.
+  // Same hand-applied-migration window as the two retries above: the quote is complete
+  // without the PO - every figure on it is correct - so it saves and loses the PO
+  // rather than costing the tech the quote they just typed.
+  if (error && /customer_po_number/i.test(error.message)) {
+    console.error('[hd/quotes] customer_po_number missing - run migration 153', error.message)
+    const { customer_po_number: _dropPo, ...withoutPo } = quoteRow as Record<string, unknown>
+    void _dropPo
+    ;({ data, error } = await supabase
+      .from('hd_quotes')
+      .insert(withoutPo)
+      .select()
+      .single())
+  }
+
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   // A SENT quote needs a link the customer can open. Issued here rather than as a

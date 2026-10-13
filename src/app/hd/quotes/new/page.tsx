@@ -229,6 +229,9 @@ export default function NewQuotePage() {
     labor_rate: 125, diagnostic_fee: 125, include_diagnostic: true,
     road_call_fee: 0, include_road_call: false,
     tax_rate: 0, tax_rate_labor: 0, notes: '', valid_until: '',
+    // The customer's own PO, when they give one. Travels to the work order and the
+    // invoice; see the field in Notes & Validity.
+    customer_po_number: '',
   })
 
   // ===========================================================================
@@ -855,6 +858,9 @@ export default function NewQuotePage() {
         ...extrasColumns(extrasResult),
         notes:             form.notes || null,
         valid_until:       form.valid_until || null,
+        // Trimmed to null rather than saved as '': a blank PO must read as absent,
+        // because the invoice prints a PO row only when there is one.
+        customer_po_number: form.customer_po_number.trim() || null,
         status,
       }
       const res  = await fetch('/api/hd/quotes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -1437,6 +1443,21 @@ export default function NewQuotePage() {
                 <option value="net30">Net 30 (due in 30 days)</option>
                 <option value="net45">Net 45 (due in 45 days)</option>
               </select>
+            </Field>
+            {/* THE CUSTOMER'S PO NUMBER.
+                Migration 153 added hd_quotes.customer_po_number, and the only thing
+                that could write it was the customer typing it into the approval page.
+                A fleet dispatcher who gives the PO over the phone had nowhere for it
+                to go, and a fleet that pays on PO does not pay an invoice without one
+                - which is a bill that sits unpaid until somebody calls about it.
+                It travels: quote -> work order -> invoice. */}
+            <Field label="Customer PO # (optional)">
+              <input
+                style={inp}
+                value={form.customer_po_number}
+                onChange={e => setField('customer_po_number', e.target.value)}
+                placeholder="PO from the customer, if they have one"
+              />
             </Field>
           </div>
         </div>

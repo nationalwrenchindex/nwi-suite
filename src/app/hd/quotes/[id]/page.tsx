@@ -201,6 +201,11 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
           {/* Meta */}
           <div className="flex flex-wrap gap-6 text-xs" style={{ color: '#9CA3AF', borderTop: '1px solid #E5E7EB', paddingTop: 16 }}>
             <span>Created: {fmtDate(q.created_at)}</span>
+            {/* The customer's PO, whether the tech typed it on the quote or the
+                customer typed it at the approval link. A fleet that pays on PO does
+                not pay a bill without one, so it has to be visible here - it is what
+                the work order and the invoice inherit. */}
+            {q.customer_po_number && <span>PO #: {q.customer_po_number}</span>}
             {q.valid_until && <span>Valid until: {fmtDate(q.valid_until)}</span>}
             {q.notes && <span className="flex-1">Notes: {q.notes}</span>}
           </div>
