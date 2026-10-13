@@ -87,7 +87,12 @@ function missingControls(text: string, controls: string[]): string[] {
 }
 
 // ── cleanup ─────────────────────────────────────────────────────────────────
-const created = { workOrders: new Set<string>(), invoices: new Set<string>(), quotes: new Set<string>() }
+const created = {
+  workOrders: new Set<string>(), invoices: new Set<string>(), quotes: new Set<string>(),
+  // HD approval flow. Separate buckets because they are different tables, and the
+  // work order must be deleted BEFORE the quote it points at.
+  hdQuotes: new Set<string>(), hdWorkOrders: new Set<string>(),
+}
 
 async function del(table: string, id: string): Promise<void> {
   await fetch(`${SUPA}/rest/v1/${table}?id=eq.${id}`, { method: 'DELETE', headers: SVC_H })
@@ -111,7 +116,30 @@ async function cleanup(): Promise<void> {
   for (const id of created.invoices)   await del('invoices', id)
   for (const id of created.workOrders) await del('work_orders', id)
   for (const id of created.quotes)     await del('quotes', id)
+
+  // HD approval flow. Sweep strays from a crashed run first, by the marker name.
+  try {
+    const strays = await rest<{ id: string }>(`hd_quotes?select=id&customer_name=like.${MARK}*`)
+    for (const s of strays) created.hdQuotes.add(s.id)
+    for (const q of created.hdQuotes) {
+      const wos = await rest<{ id: string }>(`hd_work_orders?select=id&quote_id=eq.${q}`)
+      for (const w of wos) created.hdWorkOrders.add(w.id)
+    }
+  } catch { /* a failed sweep must not mask the real result */ }
+
+  // ORDER MATTERS. Line items reference the work order; the work order references the
+  // quote. Deleting the quote first would hit the foreign key - or, worse, succeed via
+  // ON DELETE SET NULL and orphan a work order nobody is looking for.
+  for (const id of created.hdWorkOrders) {
+    await fetch(`${SUPA}/rest/v1/hd_work_order_line_items?work_order_id=eq.${id}`, {
+      method: 'DELETE', headers: SVC_H,
+    })
+  }
+  for (const id of created.hdWorkOrders) await del('hd_work_orders', id)
+  for (const id of created.hdQuotes)     await del('hd_quotes', id)
+
   console.log(`  removed ${created.invoices.size} invoice(s), ${created.workOrders.size} work order(s), ${created.quotes.size} quote(s)`)
+  console.log(`  removed ${created.hdWorkOrders.size} HD work order(s), ${created.hdQuotes.size} HD quote(s)`)
 }
 
 // ── the shop's own numbers, so nothing is fabricated ────────────────────────
@@ -681,6 +709,170 @@ async function flowK(): Promise<void> {
   }
 }
 
+// ===========================================================================
+// N  HD quote approval -> work order
+//
+// Kurt's chain: build a quote, send it, the customer approves it from a link with no
+// login, and it becomes an HD work order with nothing retyped.
+//
+// Needs migration 153. Until it is applied the quote saves with no public_token, and
+// this flow says so and stops rather than printing six failures about a column.
+async function flowN(): Promise<void> {
+  const F = 'N hd approval'
+
+  // A rate that is deliberately NOT the shop's current setting, so case 6 can tell the
+  // difference between "the work order carried the quote's terms" and "the work order
+  // re-read Settings and happened to agree".
+  const QUOTE_RATE = 193.5
+  const QUOTE_TAX = 7.25
+
+  const quoteBody = {
+    customer_name: `${MARK} hd approval`,
+    customer_phone: '+15555550199',
+    unit_manufacturer: 'Carrier Transicold',
+    unit_model: 'Supra 660',
+    unit_serial: 'ZZ-APPROVAL-TEST',
+    complaint: `${MARK} - no cooling`,
+    diagnosis: `${MARK} - failed oil filter`,
+    status: 'sent',
+    labor_rate: QUOTE_RATE,
+    labor_hours: 2,
+    tax_rate: QUOTE_TAX,
+    tax_amount: 10,
+    subtotal_labor: 387,
+    subtotal_parts: 52,
+    total: 449,
+    parts_markup_percent: 30,
+    travel_hours: 1, travel_rate: 95, travel_amount: 95,
+    mileage_miles: 20, mileage_rate: 2, mileage_amount: 40,
+    shop_supplies_percent_applied: 8, shop_supplies_fee: 4.16,
+    line_items: [
+      { id: 'zz-1', type: 'labor', description: `${MARK} labor`, mobile_hours: 2, amount: 387 },
+      { id: 'zz-2', type: 'part',  description: `${MARK} filter`, part_number: '30-60143-01',
+        quantity: 1, unit_cost: 40, unit_price: 52, amount: 52 },
+    ],
+  }
+
+  const made = await api('POST', '/api/hd/quotes', quoteBody)
+  if (made.status === 404) {
+    console.log('  note  /api/hd/quotes answered 404 - HD quote routes are NOT PROMOTED yet; flow N did not run.')
+    return
+  }
+  if (!record(F, 'an HD quote can be created as sent', made.status === 201, `-> ${made.status}`)) return
+
+  const quote = (made.json.quote ?? {}) as Record<string, unknown>
+  const quoteId = String(quote.id ?? '')
+  created.hdQuotes.add(quoteId)
+
+  // CASE 1: the quote gets a public token.
+  const token = quote.public_token as string | null
+  if (!record(F, 'a sent quote gets a public token', !!token && String(token).length >= 16,
+    token ? `${String(token).slice(0, 8)}...` : 'NO TOKEN - migration 153 not applied')) {
+    console.log('  note  Apply migration 153, then re-run. The rest of flow N needs the token.')
+    return
+  }
+
+  // CASE 1b: the page renders with NO login. A bare fetch, no cookie.
+  const pub = await fetch(`${BASE}/hd/quote/${token}`, { redirect: 'follow' })
+  const pubText = pub.ok ? visibleText(await pub.text()) : ''
+  const finalPath = new URL(pub.url).pathname
+  record(F, 'the approval page renders without a login',
+    pub.ok && finalPath.startsWith('/hd/quote/'),
+    pub.ok ? `-> 200 at ${finalPath}` : `-> ${pub.status} at ${finalPath}`)
+  record(F, 'and it shows the quote number and total',
+    pubText.includes(String(quote.quote_number)) && pubText.includes('449.00'),
+    `${quote.quote_number}, 449.00`)
+
+  // CASE 2: approving writes status, approved_at, method and PO.
+  const PO = 'ZZ-PO-7788'
+  const approve = await fetch(`${BASE}/api/hd/quotes/public/${token}/respond`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ decision: 'approve', po_number: PO, note: `${MARK} note` }),
+  })
+  const approveJson = await approve.json().catch(() => ({})) as Record<string, unknown>
+  record(F, 'approving succeeds with no session', approve.ok, `-> ${approve.status}`)
+
+  const stamped = (await rest<Record<string, unknown>>(
+    `hd_quotes?id=eq.${quoteId}&select=status,approved_at,approval_method,customer_po_number,customer_response_note`))[0]
+  record(F, 'status is approved', stamped?.status === 'approved', String(stamped?.status))
+  record(F, 'approved_at is stamped', !!stamped?.approved_at, String(stamped?.approved_at))
+  record(F, 'approval_method is customer_link',
+    stamped?.approval_method === 'customer_link', String(stamped?.approval_method))
+  record(F, 'the customer PO is recorded', stamped?.customer_po_number === PO, String(stamped?.customer_po_number))
+
+  // CASE 3: exactly one work order, with the lines intact.
+  const wos = await rest<Record<string, unknown>>(
+    `hd_work_orders?quote_id=eq.${quoteId}&select=id,work_order_number,labor_rate,tax_percent,authorized_at,authorization_method,customer_po_number,parts_markup_percent,travel_amount,shop_supplies_fee`)
+  wos.forEach(w => created.hdWorkOrders.add(String(w.id)))
+  record(F, 'approval created exactly ONE work order', wos.length === 1,
+    `${wos.length}${wos.length ? ': ' + wos.map(w => w.work_order_number).join(', ') : ''}`)
+  if (wos.length !== 1) return
+  const wo = wos[0]
+
+  const lines = await rest<Record<string, unknown>>(
+    `hd_work_order_line_items?work_order_id=eq.${wo.id}&select=type,description,part_number,quantity,unit_price,total&order=sort_order`)
+  record(F, 'both quote lines landed in hd_work_order_line_items', lines.length === 2,
+    `${lines.length}: ${lines.map(l => l.type).join(', ')}`)
+  const partLine = lines.find(l => l.type === 'part')
+  record(F, 'the PART line carried its number', partLine?.part_number === '30-60143-01',
+    String(partLine?.part_number))
+  const laborLine = lines.find(l => l.type === 'labor')
+  record(F, 'the LABOR line carried hours in quantity', Number(laborLine?.quantity) === 2,
+    `quantity ${laborLine?.quantity}`)
+
+  // CASE 6: the work order carries the QUOTE's recorded terms, not the shop's current
+  // settings. QUOTE_RATE is deliberately not a value any Settings page would hold.
+  record(F, "the work order carries the QUOTE's labor rate, not the setting",
+    Number(wo.labor_rate) === QUOTE_RATE, `${wo.labor_rate} (quote had ${QUOTE_RATE})`)
+  record(F, "and the QUOTE's tax rate", Number(wo.tax_percent) === QUOTE_TAX,
+    `${wo.tax_percent} (quote had ${QUOTE_TAX})`)
+  record(F, 'and the markup, travel and supplies',
+    Number(wo.parts_markup_percent) === 30 && Number(wo.travel_amount) === 95 && Number(wo.shop_supplies_fee) === 4.16,
+    `markup ${wo.parts_markup_percent}, travel ${wo.travel_amount}, supplies ${wo.shop_supplies_fee}`)
+
+  // CASE 5: the approval IS the authorization, stamped onto the work order.
+  record(F, 'the authorization is stamped on the work order',
+    !!wo.authorized_at && wo.authorization_method === 'customer_link' && wo.customer_po_number === PO,
+    `${wo.authorized_at} / ${wo.authorization_method} / ${wo.customer_po_number}`)
+  record(F, 'and authorized_at equals the quote approval time',
+    String(wo.authorized_at) === String(stamped?.approved_at),
+    `${wo.authorized_at} vs ${stamped?.approved_at}`)
+
+  // CASE 4: opening the link twice still yields ONE work order. This is the index.
+  const second = await fetch(`${BASE}/api/hd/quotes/public/${token}/respond`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ decision: 'approve', po_number: 'ZZ-PO-SECOND' }),
+  })
+  record(F, 'a second approval does not error', second.ok, `-> ${second.status}`)
+  const after = await rest<Record<string, unknown>>(`hd_work_orders?quote_id=eq.${quoteId}&select=id,work_order_number`)
+  record(F, 'STILL exactly one work order after clicking twice', after.length === 1,
+    `${after.length}: ${after.map(w => w.work_order_number).join(', ')}`)
+  const linesAfter = await rest(`hd_work_order_line_items?work_order_id=eq.${wo.id}&select=id`)
+  record(F, 'and the lines were not duplicated', linesAfter.length === 2, `${linesAfter.length}`)
+
+  // CASE 7: declining writes declined_at and creates NO work order.
+  const dMade = await api('POST', '/api/hd/quotes', { ...quoteBody, customer_name: `${MARK} hd decline` })
+  if (dMade.status !== 201) { record(F, 'a second quote for the decline case', false, `-> ${dMade.status}`); return }
+  const dQuote = (dMade.json.quote ?? {}) as Record<string, unknown>
+  const dId = String(dQuote.id ?? '')
+  created.hdQuotes.add(dId)
+  const dToken = dQuote.public_token as string | null
+  if (!dToken) { record(F, 'the decline-case quote got a token', false, 'no token'); return }
+
+  const decline = await fetch(`${BASE}/api/hd/quotes/public/${dToken}/respond`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ decision: 'decline', note: `${MARK} too expensive` }),
+  })
+  record(F, 'declining succeeds', decline.ok, `-> ${decline.status}`)
+  const dRow = (await rest<Record<string, unknown>>(
+    `hd_quotes?id=eq.${dId}&select=status,declined_at,approved_at,customer_response_note`))[0]
+  record(F, 'status is declined', dRow?.status === 'declined', String(dRow?.status))
+  record(F, 'declined_at is stamped', !!dRow?.declined_at, String(dRow?.declined_at))
+  record(F, 'approved_at stays null', !dRow?.approved_at, String(dRow?.approved_at))
+  const dWos = await rest(`hd_work_orders?quote_id=eq.${dId}&select=id`)
+  record(F, 'declining created NO work order', dWos.length === 0, `${dWos.length} work orders`)
+}
+
 async function main(): Promise<void> {
   console.log('='.repeat(96))
   console.log(`SMOKE  ${BASE}`)
@@ -729,6 +921,7 @@ async function main(): Promise<void> {
     await flowHD()
     await flowJ()
     await flowK()
+    await flowN()
   } finally {
     await cleanup()
   }

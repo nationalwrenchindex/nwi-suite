@@ -60,11 +60,37 @@ export default function QuoteDetailActions({
   const [toast, setToast] = useState('')
 
   async function convertToInvoice() {
-    // Converting is meant for an approved quote. Anything else is still an estimate
-    // the customer has not agreed to, so make billing it a deliberate choice.
-    if (quoteData.status !== 'approved' && !confirm(
-      `This quote is ${quoteData.status}, not approved.\n\nBill it anyway?`
-    )) return
+    // Converting is meant for an APPROVED quote. Anything else is still an estimate the
+    // customer has not agreed to, so billing it is a deliberate choice.
+    //
+    // THIS DIALOG USED TO FIRE EVERY TIME. Before migration 153 nothing in the codebase
+    // could write 'approved' to hd_quotes - the CHECK allowed it, no code path produced
+    // it - so `status !== 'approved'` was always true and the warning appeared on every
+    // single conversion. A warning that always fires is a warning nobody reads, and it
+    // trained the user to click through the one dialog that was supposed to stop them.
+    //
+    // Now that the customer approval page can actually set it, this fires only when the
+    // quote genuinely has not been approved, and it says which state it IS in and what
+    // to do instead, rather than just naming a status.
+    if (quoteData.status !== 'approved') {
+      const state = {
+        draft:    'still a draft and has not been sent to the customer',
+        sent:     'been sent, but the customer has not approved it yet',
+        declined: 'been DECLINED by the customer',
+      }[quoteData.status as string] ?? `in an unexpected state (${quoteData.status})`
+
+      const advice = quoteData.status === 'draft'
+        ? 'Send it first, and the customer can approve it with one tap.'
+        : quoteData.status === 'sent'
+        ? 'You can wait for them to approve it, or record a verbal approval.'
+        : quoteData.status === 'declined'
+        ? 'Billing a declined quote is almost certainly a mistake.'
+        : 'Check the quote before billing it.'
+
+      if (!confirm(
+        `This quote has ${state}.\n\n${advice}\n\nBill it anyway?`
+      )) return
+    }
 
     setBusy(true)
     try {

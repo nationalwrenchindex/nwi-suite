@@ -6,6 +6,8 @@ import { missingMigration142Column, withoutMigration142Columns } from '@/lib/mig
 import { isMissingTaxBreakdownColumn, withoutTaxBreakdown } from '@/lib/tax'
 import { addressFrom } from '@/lib/address'
 
+import { generateQuoteToken } from '@/lib/hd/quote-approval'
+
 export const dynamic = 'force-dynamic'
 
 /**
@@ -153,5 +155,27 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  return NextResponse.json({ quote: data, customer_id: linkedCustomerId }, { status: 201 })
+  // A SENT quote needs a link the customer can open. Issued here rather than as a
+  // separate step so the share link exists the moment the quote is sent, and the tech
+  // never has to remember a second action.
+  //
+  // Tolerated if migration 153 has not been applied: the quote still saves, it simply
+  // has no public link yet. Losing a quote the tech just typed over a missing column
+  // would be the wrong trade - same reasoning as the costing-column retries above.
+  let quote = data as Record<string, unknown> | null
+  if (quote && quote.status === 'sent' && !quote.public_token) {
+    const { data: tokened, error: tokenErr } = await supabase
+      .from('hd_quotes')
+      .update({ public_token: generateQuoteToken() })
+      .eq('id', quote.id)
+      .select()
+      .single()
+    if (tokenErr) {
+      console.error('[hd/quotes POST] could not issue public_token - run migration 153:', tokenErr.message)
+    } else if (tokened) {
+      quote = tokened as Record<string, unknown>
+    }
+  }
+
+  return NextResponse.json({ quote, customer_id: linkedCustomerId }, { status: 201 })
 }

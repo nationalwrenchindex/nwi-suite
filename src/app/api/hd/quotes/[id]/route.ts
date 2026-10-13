@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
 
+import { generateQuoteToken } from '@/lib/hd/quote-approval'
+
 export const dynamic = 'force-dynamic'
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -42,7 +44,14 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const { data, error } = await supabase
     .from('hd_quotes')
-    .update({ ...body, updated_at: new Date().toISOString() })
+    // Sending a quote issues its customer link, if it does not have one. A quote that
+    // already has a token keeps it, so re-sending does not invalidate a link the
+    // customer may already be looking at.
+    .update({
+      ...body,
+      ...(body.status === 'sent' ? { public_token: body.public_token ?? generateQuoteToken() } : {}),
+      updated_at: new Date().toISOString(),
+    })
     .eq('id', id)
     .eq('user_id', user.id)
     .select()

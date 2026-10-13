@@ -16,7 +16,14 @@ export default async function HDLayout({ children }: { children: React.ReactNode
   // NWI trademark footer, and an LD-only subscriber forwarded the link would be
   // redirected to /hd/signup. Checked before the session so no branch can re-gate it.
   const publicPath = (await headers()).get('x-pathname') ?? ''
-  if (publicPath.startsWith('/hd/invoices/pay')) return <>{children}</>
+  // /hd/quote/<token> is the CUSTOMER'S quote approval page and must render bare for
+  // the same reason the pay page does: the visitor is the subscriber's customer, not a
+  // subscriber. Without this they are redirected to /hd/signup and can never approve
+  // anything - and a signed-in LD-only subscriber opening a forwarded link would be
+  // too. Checked before the session so no branch below can re-gate it.
+  if (publicPath.startsWith('/hd/invoices/pay') || publicPath.startsWith('/hd/quote/')) {
+    return <>{children}</>
+  }
 
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
