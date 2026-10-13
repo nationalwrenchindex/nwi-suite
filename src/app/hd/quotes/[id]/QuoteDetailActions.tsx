@@ -277,6 +277,66 @@ export default function QuoteDetailActions({
   const [toast, setToast] = useState('')
   const [sendOpen, setSendOpen] = useState(false)
 
+  // ===========================================================================
+  // CONVERT TO WORK ORDER
+  // ===========================================================================
+  //
+  // This screen could only bill a quote, which bills a job before anyone has done it:
+  // no parts pulled, no hours recorded, no chance to add the bolt that sheared. The
+  // work order is where the job happens, and last pass's converter turns it into the
+  // invoice afterwards.
+  //
+  // An unapproved quote is NOT converted silently. The route refuses with
+  // 'not_approved' and the tech is asked whether the customer approved it verbally -
+  // which is recorded as 'verbal', with the PO they gave, so an invoice dispute can
+  // tell a tap on a link from a phone call.
+  async function convertToWorkOrder(recordVerbal = false, po?: string, note?: string) {
+    setBusy(true)
+    setToast('')
+    try {
+      const res = await fetch(`/api/hd/quotes/${quoteId}/work-order`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          ...(recordVerbal ? { record_verbal_approval: true } : {}),
+          ...(po   ? { po_number: po } : {}),
+          ...(note ? { note }          : {}),
+        }),
+      })
+      const data = await res.json()
+
+      if (res.status === 422 && data.reason === 'not_approved') {
+        // Asked once, plainly, with what the answer commits them to. The dialog is the
+        // authorization record's only safeguard here - there is no customer tap to
+        // point at - so it names what is being asserted rather than saying "continue?".
+        const who = prompt(
+          `${data.error}\n\n`
+          + 'If the customer approved it verbally, enter their PO number or the name of the person who authorized it. '
+          + 'This is recorded as a verbal approval on the work order.\n\n'
+          + 'Leave blank and press OK to record the verbal approval with no reference, or Cancel to stop.',
+        )
+        if (who === null) return
+        const ref = who.trim()
+        await convertToWorkOrder(true, ref || undefined, ref ? `Verbal approval: ${ref}` : undefined)
+        return
+      }
+
+      if (!res.ok || !data.work_order?.id) {
+        setToast(data.error ?? 'Could not create the work order')
+        return
+      }
+
+      // already_existed is not an error. The quote had a work order - the customer
+      // approved it at the link, or someone clicked twice - so go to the one that
+      // exists rather than reporting a failure for a job that is open.
+      router.push(`/hd/work-orders/${data.work_order.id}`)
+    } catch {
+      setToast('Could not create the work order. Check the connection and try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function convertToInvoice() {
     // Converting is meant for an APPROVED quote. Anything else is still an estimate the
     // customer has not agreed to, so billing it is a deliberate choice.
@@ -402,15 +462,29 @@ export default function QuoteDetailActions({
         {quoteData.status === 'draft' ? 'Send Quote' : 'Send Again'}
       </button>
       <button
-        onClick={convertToInvoice}
+        onClick={() => convertToWorkOrder()}
         disabled={busy}
         className="flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm text-white disabled:opacity-50"
         style={{ background: BLUE, minHeight: 44 }}
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+          <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
+        </svg>
+        Convert to Work Order
+      </button>
+      {/* Secondary on purpose. Billing straight off the quote suits a one-line road
+          call, but for anything with parts the work order is where the job gets
+          recorded - and it is the converter's input. */}
+      <button
+        onClick={convertToInvoice}
+        disabled={busy}
+        className="flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm disabled:opacity-50"
+        style={{ background: '#FFFFFF', color: BLUE, border: `1px solid ${BLUE}`, minHeight: 44 }}
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
           <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
         </svg>
-        Convert to Invoice
+        Bill Directly
       </button>
       <button
         onClick={deleteQuote}
