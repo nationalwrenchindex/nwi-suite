@@ -150,7 +150,7 @@ export async function POST(
     )
   }
 
-  let body: { method: 'sms' | 'email' | 'link'; phone?: string; email?: string; mileage_at_service?: number }
+  let body: { method: 'sms' | 'email' | 'link'; phone?: string; email?: string; mileage_at_service?: number; preview?: boolean }
   try { body = await req.json() } catch {
     return NextResponse.json({ error: 'Invalid request body.' }, { status: 400 })
   }
@@ -183,27 +183,55 @@ export async function POST(
   const invoiceUrl = `${APP_URL}/invoice/${token}`
   const now        = new Date().toISOString()
 
-  const updatePayload: Record<string, unknown> = {
-    public_token:        token,
-    sent_to_customer_at: (inv.sent_to_customer_at as string | null) ?? now,
-    times_sent:          ((inv.times_sent as number | null) ?? 0) + 1,
+  // ===========================================================================
+  // PREVIEW: mint the link, claim nothing.
+  // ===========================================================================
+  //
+  // The Copy Link tab needs a URL before the tech has shared anything. Asking for that
+  // URL is not a send, so it must not set sent_to_customer_at or move times_sent -
+  // that is exactly how the counter got to 3 on invoices nobody ever received.
+  //
+  // The token IS written, because a link that only exists in one HTTP response is not
+  // a link. Returning early also skips the garage sync, which has no business running
+  // because someone opened a tab.
+  if (body.preview === true) {
+    const previewPayload: Record<string, unknown> = { public_token: token }
+    if (mileageAtService != null) previewPayload.mileage_at_service = mileageAtService
+    const { error: previewErr } = await supabase
+      .from('invoices')
+      .update(previewPayload)
+      .eq('id', id)
+      .eq('user_id', user.id)
+    if (previewErr) {
+      console.error('[send invoice] could not mint preview token:', previewErr)
+      return NextResponse.json({ error: 'Could not create the invoice link.' }, { status: 500 })
+    }
+    return NextResponse.json({
+      sent:        false,
+      preview:     true,
+      invoice,
+      invoice_url: invoiceUrl,
+      sms_sent:    false,
+      email_sent:  false,
+    })
   }
-  if (method === 'sms'   && phone) updatePayload.sent_to_phone = phone
-  if (method === 'email' && email) updatePayload.sent_to_email = email
-  if (mileageAtService != null) updatePayload.mileage_at_service = mileageAtService
 
-  const { data: updated, error: updateErr } = await supabase
-    .from('invoices')
-    .update(updatePayload)
-    .eq('id', id)
-    .eq('user_id', user.id)
-    .select(INVOICE_SELECT)
-    .single()
-
-  if (updateErr || !updated) {
-    console.error('[send invoice] update failed:', updateErr)
-    return NextResponse.json({ error: 'Failed to update invoice.' }, { status: 500 })
-  }
+  // ===========================================================================
+  // SEND FIRST, RECORD SECOND. Same fix as the quote send route.
+  // ===========================================================================
+  //
+  // This used to write sent_to_customer_at and bump times_sent BEFORE attempting
+  // delivery, unconditionally. A failed send still produced an invoice that claimed it
+  // had gone out and a counter that had moved. Measured live: several of the owner's
+  // own test invoices carry times_sent of 2 and 3 against his own number with nothing
+  // delivered.
+  //
+  // An invoice that says "sent" and was not is worse than one that says nothing: the
+  // bill ages, nobody chases it, and the tech assumes the customer is ignoring him.
+  //
+  // The public_token is still issued ABOVE this point, deliberately - the link has to
+  // exist for the message to contain it. Issuing a token is not a claim that anything
+  // was delivered; sent_to_customer_at is.
 
   let smsSent   = false
   let emailSent = false
@@ -317,7 +345,86 @@ export async function POST(
     emailError  = r.error
   }
 
+  // A 'link' send is a real outcome: the tech asked for a shareable link, got one, and
+  // will hand it over himself. That is a delivery he performed, so it records like one.
+  const linkIssued = method === 'link'
+
+  // NOTHING DELIVERED. sent_to_customer_at and times_sent are untouched, so the
+  // invoice does not claim to have gone out. The token IS persisted - see below.
+  //
+  // 200 rather than 500: the request was understood, the invoice is intact, and it is
+  // the DELIVERY that failed. That needs its own message, not a server error.
+  if (!smsSent && !emailSent && !linkIssued) {
+    const detail = [smsError, emailError].filter(Boolean).join('; ')
+    console.error(`[send invoice] nothing delivered for invoice ${id}:`, detail || 'no channel attempted')
+
+    // The token and the odometer reading are persisted even on failure, and neither is
+    // a claim of delivery. The token has to exist or the link in the error message -
+    // "copy the link and send it yourself" - would 404, which is how a workaround
+    // becomes a second bug. mileage_at_service is something the tech typed; losing it
+    // because Twilio was down would make him type it again.
+    const failPayload: Record<string, unknown> = { public_token: token }
+    if (mileageAtService != null) failPayload.mileage_at_service = mileageAtService
+    const { error: tokenErr } = await supabase
+      .from('invoices')
+      .update(failPayload)
+      .eq('id', id)
+      .eq('user_id', user.id)
+    if (tokenErr) console.error('[send invoice] could not persist token after failed send:', tokenErr)
+
+    return NextResponse.json({
+      sent:        false,
+      invoice,
+      invoice_url: invoiceUrl,
+      sms_sent:    false,
+      email_sent:  false,
+      garage:      garage.linked ? { linked: true, posted: garage.posted } : { linked: false },
+      ...(smsError   && { sms_error:   smsError }),
+      ...(emailError && { email_error: emailError }),
+      error: detail
+        ? `Could not send the invoice: ${detail}. The invoice is saved and its link works - copy it and send it yourself, or try again.`
+        : 'Nothing was sent: no phone number or email address to send to.',
+    })
+  }
+
+  // A channel confirmed. NOW it is true that this invoice was sent.
+  const updatePayload: Record<string, unknown> = {
+    public_token:        token,
+    sent_to_customer_at: (inv.sent_to_customer_at as string | null) ?? now,
+    times_sent:          ((inv.times_sent as number | null) ?? 0) + 1,
+  }
+  // Only the channel that actually worked is recorded. Writing sent_to_email for a
+  // send that failed is how the record starts lying about where the invoice went.
+  if (smsSent   && phone) updatePayload.sent_to_phone = phone
+  if (emailSent && email) updatePayload.sent_to_email = email
+  if (mileageAtService != null) updatePayload.mileage_at_service = mileageAtService
+
+  const { data: updated, error: updateErr } = await supabase
+    .from('invoices')
+    .update(updatePayload)
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .select(INVOICE_SELECT)
+    .single()
+
+  if (updateErr || !updated) {
+    // The customer HAS the invoice. Failing the request now would tell the tech to send
+    // again, which would send it twice. Report the bookkeeping failure and keep the
+    // delivery true.
+    console.error('[send invoice] delivered but could not record it:', updateErr)
+    return NextResponse.json({
+      sent:        true,
+      invoice,
+      invoice_url: invoiceUrl,
+      sms_sent:    smsSent,
+      email_sent:  emailSent,
+      garage:      garage.linked ? { linked: true, posted: garage.posted } : { linked: false },
+      warning:     'The invoice was sent, but we could not update its record. Do not send it again.',
+    })
+  }
+
   return NextResponse.json({
+    sent:        true,
     invoice:     updated,
     invoice_url: invoiceUrl,
     sms_sent:    smsSent,

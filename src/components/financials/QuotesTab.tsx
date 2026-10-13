@@ -236,21 +236,26 @@ function SendQuoteModal({
   const [generatingQr, setGeneratingQr] = useState(false)
   const [smsWarn,      setSmsWarn]      = useState(false)
 
-  // Pre-load quote URL when switching to link tab if token not yet known
+  // Pre-load quote URL when switching to link tab if token not yet known.
+  // preview: the tech is looking at the link, not sending it. Without this flag the
+  // route marked the quote 'sent' for opening a tab.
   useEffect(() => {
     if (method === 'link' && !quoteUrl) {
-      callSend('link')
+      callSend('link', { preview: true })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [method])
 
-  async function callSend(sendMethod: 'sms' | 'email' | 'link') {
+  async function callSend(
+    sendMethod: 'sms' | 'email' | 'link',
+    opts?: { preview?: boolean },
+  ) {
     setSending(true)
     try {
       const res  = await fetch(`/api/quotes/${quote.id}/send`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ method: sendMethod, phone, email }),
+        body:    JSON.stringify({ method: sendMethod, phone, email, ...(opts?.preview ? { preview: true } : {}) }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Send failed')
@@ -259,7 +264,9 @@ function SendQuoteModal({
 
       if (sendMethod === 'sms' && !json.sms_sent) setSmsWarn(true)
 
-      onSent(json.quote)
+      // A preview hands back the quote untouched, so pushing it into the list would
+      // only overwrite good state with identical state. The real sends update it.
+      if (!json.preview) onSent(json.quote)
       return json
     } finally {
       setSending(false)
@@ -282,8 +289,17 @@ function SendQuoteModal({
   async function handleCopyLink() {
     let url = quoteUrl
     if (!url) {
-      const json = await callSend('link').catch(() => null)
+      // Mint the token first (preview), then record the send below - copying the link
+      // IS the delivery, so it still counts.
+      const json = await callSend('link', { preview: true }).catch(() => null)
       url = json?.quote_url ?? null
+      if (url) {
+        await fetch(`/api/quotes/${quote.id}/send`, {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ method: 'link', phone, email }),
+        }).then(r => r.json()).then(j => { if (j.quote) onSent(j.quote) }).catch(() => {})
+      }
     } else {
       // Still need to mark as sent if this is a first send via link
       await fetch(`/api/quotes/${quote.id}/send`, {
@@ -302,7 +318,8 @@ function SendQuoteModal({
   async function handleGenerateQr() {
     let url = quoteUrl
     if (!url) {
-      const json = await callSend('link').catch(() => null)
+      // Generating a QR code is not handing it to anyone yet - preview only.
+      const json = await callSend('link', { preview: true }).catch(() => null)
       url = json?.quote_url ?? null
     }
     if (!url) return

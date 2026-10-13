@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Invoice, MultiJobEntry, ServiceLine, Adjustment, ShopSupplyItem, AdditionalPartItem, AdditionalLaborItem } from '@/types/financials'
 import { money } from '@/lib/format'
@@ -480,6 +480,30 @@ function SendInvoiceModal({
     invoice.mileage_at_service != null ? String(invoice.mileage_at_service) : '',
   )
 
+  // The public link. Seeded from the invoice's existing token, and minted on open when
+  // there is none - which is every invoice that has not been sent yet.
+  //
+  // Before this, an unsent invoice had no public_token, so invoiceUrl was the empty
+  // string: the Copy Link tab showed a blank box, Copy to Clipboard copied nothing, and
+  // both message previews read "View and download here: ." The mint is a preview call -
+  // it writes the token and nothing else, so opening this modal does not mark the
+  // invoice sent.
+  const [url, setUrl] = useState(invoiceUrl)
+  useEffect(() => {
+    if (url) return
+    let live = true
+    fetch(`/api/invoices/${invoice.id}/send`, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ method: 'link', preview: true }),
+    })
+      .then(r => r.json())
+      .then(j => { if (live && j?.invoice_url) setUrl(j.invoice_url as string) })
+      .catch(() => {})
+    return () => { live = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const customerName = invoice.customer
     ? `${invoice.customer.first_name} ${invoice.customer.last_name}`.trim()
     : 'Customer'
@@ -488,10 +512,10 @@ function SendInvoiceModal({
 
   const smsPreview =
     `Hi ${customerName}, your invoice from ${bizName} is ready. ` +
-    `Total due: ${grandTotal}. View and download here: ${invoiceUrl}. Reply STOP to opt out.`
+    `Total due: ${grandTotal}. View and download here: ${url}. Reply STOP to opt out.`
 
   const emailSubject = `Invoice from ${bizName} — Total Due: ${grandTotal}`
-  const emailBodyPreview = `Hi ${customerName},\n\nYour invoice for service is ready.\n\nTotal Due: ${grandTotal}\n\nView and download your invoice: ${invoiceUrl}\n\n${invoice.payment_instructions ? `Payment Instructions:\n${invoice.payment_instructions}\n\n` : ''}Please contact ${bizName} directly with any questions.\n\nThanks,\n${techName}\n${bizName}`
+  const emailBodyPreview = `Hi ${customerName},\n\nYour invoice for service is ready.\n\nTotal Due: ${grandTotal}\n\nView and download your invoice: ${url}\n\n${invoice.payment_instructions ? `Payment Instructions:\n${invoice.payment_instructions}\n\n` : ''}Please contact ${bizName} directly with any questions.\n\nThanks,\n${techName}\n${bizName}`
 
   async function handleSend(method: SendTab) {
     setLoading(true)
@@ -550,7 +574,7 @@ function SendInvoiceModal({
   }
 
   function copyLink() {
-    navigator.clipboard.writeText(invoiceUrl).catch(() => {})
+    navigator.clipboard.writeText(url).catch(() => {})
     setCopied(true)
     setTimeout(() => setCopied(false), 2500)
   }
@@ -686,7 +710,7 @@ function SendInvoiceModal({
               <div>
                 <p className="text-white/40 text-xs uppercase tracking-widest mb-2">Public Invoice URL</p>
                 <div className="flex items-center gap-2 bg-white/[0.03] border border-white/8 rounded-xl px-4 py-3">
-                  <p className="flex-1 text-white/60 text-xs font-mono break-all">{invoiceUrl}</p>
+                  <p className="flex-1 text-white/60 text-xs font-mono break-all">{url}</p>
                 </div>
               </div>
               <button
