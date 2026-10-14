@@ -33,6 +33,12 @@ async function main() {
     ['hd_invoices',     `select=id&customer_name=like.${MARK}*`],
     ['work_orders',     `select=id&job_description=like.${MARK}*`],
     ['quotes',          `select=id&notes=like.${MARK}*`],
+    // The tables flows S and T arrange directly, and the customers row logHDCustomer
+    // makes for every HD quote the suite saves. Without these the check reported CLEAN
+    // over six smoke customers left in production (found 2026-10-14).
+    ['hd_fleet_accounts', `select=id&fleet_name=like.${MARK}*`],
+    ['hd_units',          `select=id&unit_number=like.ZZ*`],
+    ['customers',         `select=id&or=(first_name.like.${MARK}*,company_name.like.${MARK}*)`],
   ]
 
   let dirty = 0

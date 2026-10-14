@@ -1608,6 +1608,171 @@ async function flowS(): Promise<void> {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// T  THE FLEET LINK, UNIT NUMBER AND PAYMENT TERMS CARRY quote -> wo -> invoice
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Picking a fleet account filled the quote's fields and threw the link away, the
+// quote had no box for the fleet's unit number, the work order's Inspections block
+// said "No unit" under a Unit that named one, and a Net 30 quote became a "Due on
+// receipt" invoice because the convert payload carried no terms and hd_invoices'
+// column DEFAULT stepped in. Migration 158.
+//
+// THE QUOTE BODY IS THE SHAPE THE FORM SENDS (handleSave in
+// src/app/hd/quotes/new/page.tsx), and the labor line is copied key for key from a
+// real row, Q-2026-0008 - not an assumed shape.
+//
+// The fleet account and unit are arranged directly for the reason flow S gives:
+// there is no API route that creates either.
+/**
+ * Saving an HD quote runs logHDCustomer, which creates (or matches, by phone) a
+ * `customers` row - a row this run made and must delete. Taken into the cleanup ONLY
+ * when it carries the marker, so a match against a real customer is never deleted.
+ */
+async function adoptSmokeCustomer(id: unknown): Promise<void> {
+  if (typeof id !== 'string' || !id) return
+  const c = (await rest<Record<string, unknown>>(
+    `customers?id=eq.${id}&select=first_name,company_name`))[0]
+  if (c && (String(c.first_name ?? '').startsWith(MARK) || String(c.company_name ?? '').startsWith(MARK))) {
+    created.customers.add(id)
+  }
+}
+
+async function flowT(): Promise<void> {
+  const F = 'T carry links'
+
+  const fleetName = `${MARK} carry fleet`
+  const acct = await fetch(`${SUPA}/rest/v1/hd_fleet_accounts`, {
+    method: 'POST',
+    headers: { ...SVC_H, Prefer: 'return=representation' },
+    body: JSON.stringify({ user_id: OWNER, fleet_name: fleetName, contact_phone: '+15555550188', address: '9 Yard Rd' }),
+  })
+  const accountId = acct.ok ? String(((await acct.json()) as Record<string, unknown>[])[0]?.id ?? '') : ''
+  if (accountId) created.fleetAccounts.add(accountId)
+  if (!record(F, 'a fleet account is arranged', !!accountId, `-> ${acct.status}`)) return
+
+  const UNIT_NO = 'ZZ-UNIT-T7'
+  const SERIAL  = 'ZZSERIALT007'
+  const unit = await fetch(`${SUPA}/rest/v1/hd_units`, {
+    method: 'POST',
+    headers: { ...SVC_H, Prefer: 'return=representation' },
+    body: JSON.stringify({
+      user_id: OWNER, fleet_account_id: accountId, unit_number: UNIT_NO,
+      manufacturer: 'Thermo King', model: 'S-600', serial_number: SERIAL, status: 'active',
+    }),
+  })
+  const unitId = unit.ok ? String(((await unit.json()) as Record<string, unknown>[])[0]?.id ?? '') : ''
+  if (unitId) created.fleetUnits.add(unitId)
+  if (!record(F, 'a unit is arranged on it', !!unitId, `-> ${unit.status}`)) return
+
+  // The quote form renders the new box. Rendered HTML, not source.
+  const form = await page('/hd/quotes/new')
+  record(F, 'the quote form renders a Unit Number field',
+    !!form && form.text.includes('Unit Number'), !form ? 'page did not load' : form.text.includes('Unit Number') ? 'label renders' : 'label absent')
+
+  // Real labor line, Q-2026-0008, at 1.0 h x $135.
+  const laborLine = {
+    id: 'zz-t1', type: 'labor', amount: 135, quantity: 0, unit_cost: 0, amount_max: 135,
+    book_hours: 0, description: `${MARK} carry labor`, part_number: '', mobile_hours: 1,
+    book_hours_max: 0, recharge_added: false, mobile_hours_max: 1, requires_refrigeration: false,
+  }
+  const quoteBody = (name: string, extra: Record<string, unknown>) => ({
+    company_name: name, customer_name: name, customer_phone: '+15555550188', customer_email: null,
+    customer_id: null, address_line1: '9 Yard Rd', address_line2: null, city: null, state: null, zip: null,
+    has_corp_address: false, payment_terms: 'net30',
+    unit_manufacturer: 'Thermo King', unit_model: 'S-600', unit_year: null,
+    complaint: `${MARK} carry`, diagnosis: `${MARK} carry`,
+    line_items: [laborLine], labor_rate: 135, subtotal_labor: 135, subtotal_parts: 0,
+    diagnostic_fee: 0, road_call_fee: 0, tax_rate: 0, tax_amount: 0, total: 135,
+    notes: null, valid_until: null, customer_po_number: null, status: 'draft',
+    ...extra,
+  })
+
+  // ── LINKED: a fleet account and its unit were picked ─────────────────────
+  // The CUSTOMER name differs from the fleet name on purpose: if they matched, "the
+  // page shows the fleet name" would pass off the customer line with Fleet still "—".
+  const made = await api('POST', '/api/hd/quotes', quoteBody(`${MARK} carry customer`, {
+    fleet_account_id: accountId, unit_id: unitId, unit_number: UNIT_NO, unit_serial: SERIAL,
+  }))
+  const quoteId = String(((made.json.quote ?? {}) as Record<string, unknown>).id ?? '')
+  if (quoteId) created.hdQuotes.add(quoteId)
+  await adoptSmokeCustomer(made.json.customer_id)
+  if (!record(F, 'a linked quote saves', made.status === 201 && !!quoteId, `-> ${made.status} ${String(made.json.error ?? '')}`)) return
+
+  const q = (await rest<Record<string, unknown>>(
+    `hd_quotes?id=eq.${quoteId}&select=fleet_account_id,unit_id,unit_number,payment_terms`))[0] ?? {}
+  record(F, 'the quote STORES the fleet link and unit (158)',
+    q.fleet_account_id === accountId && q.unit_id === unitId,
+    `fleet ${q.fleet_account_id ?? 'null'}, unit ${q.unit_id ?? 'null'}`)
+  record(F, 'the quote stores the unit number', q.unit_number === UNIT_NO, String(q.unit_number))
+
+  const conv = await api('POST', `/api/hd/quotes/${quoteId}/work-order`, {
+    record_verbal_approval: true, note: `${MARK} carry`,
+  })
+  const wos = await rest<Record<string, unknown>>(
+    `hd_work_orders?quote_id=eq.${quoteId}&select=id,fleet_account_id,unit_id,unit_number,payment_terms`)
+  wos.forEach(w => created.hdWorkOrders.add(String(w.id)))
+  if (!record(F, 'the quote converts to one work order', conv.status === 200 && wos.length === 1,
+    `-> ${conv.status}, ${wos.length} wo`)) return
+  const wo = wos[0]
+  record(F, 'the work order carries the fleet link', wo.fleet_account_id === accountId, String(wo.fleet_account_id))
+  record(F, 'the work order carries the unit link', wo.unit_id === unitId, String(wo.unit_id))
+  record(F, 'the work order carries the unit number', wo.unit_number === UNIT_NO, String(wo.unit_number))
+  record(F, 'the work order carries the payment terms', wo.payment_terms === 'net30', String(wo.payment_terms))
+
+  const woPage = await page(`/hd/work-orders/${wo.id}`)
+  if (record(F, 'the linked work order renders', !!woPage, woPage ? 'loaded' : 'did not load')) {
+    record(F, 'Fleet shows the fleet name, not a dash', woPage!.text.includes(fleetName), woPage!.text.includes(fleetName) ? fleetName : 'fleet name absent')
+    record(F, 'the unit number shows beside the unit', woPage!.text.includes(UNIT_NO), woPage!.text.includes(UNIT_NO) ? UNIT_NO : 'unit number absent')
+    record(F, 'no "No unit on this work order" under a linked unit',
+      !woPage!.text.includes('No unit on this work order'),
+      woPage!.text.includes('No unit on this work order') ? 'the note still renders' : 'absent')
+  }
+
+  // ── TO THE INVOICE, the way WorkOrderDetail does it ──────────────────────
+  const built = await api('GET', `/api/hd/work-orders/${wo.id}/convert`)
+  const payload = (built.json.invoice_payload ?? {}) as Record<string, unknown>
+  if (record(F, 'the work order builds an invoice payload', built.status === 200 && !!payload.customer_name,
+    `-> ${built.status} ${String(built.json.error ?? '')}`)) {
+    const inv = await api('POST', '/api/hd/invoices', payload)
+    const invId = String(((inv.json.invoice ?? {}) as Record<string, unknown>).id ?? '')
+    if (invId) created.hdInvoices.add(invId)
+    if (record(F, 'the invoice is created', !!invId, `-> ${inv.status} ${String(inv.json.error ?? '')}`)) {
+      const i = (await rest<Record<string, unknown>>(
+        `hd_invoices?id=eq.${invId}&select=fleet_account_id,unit_id,unit_number,payment_terms`))[0] ?? {}
+      record(F, 'the invoice terms are the QUOTE\'s, not "Due on receipt"', i.payment_terms === 'net30', String(i.payment_terms))
+      record(F, 'the invoice carries the fleet link', i.fleet_account_id === accountId, String(i.fleet_account_id))
+      record(F, 'the invoice carries the unit number', i.unit_number === UNIT_NO, String(i.unit_number))
+      const invPage = await page(`/hd/invoices/${invId}`)
+      record(F, 'the invoice page reads Net 30',
+        !!invPage && invPage.text.includes('Net 30') && !invPage.text.includes('Due on receipt'),
+        !invPage ? 'did not load' : invPage.text.includes('Net 30') && !invPage.text.includes('Due on receipt') ? 'Net 30' : 'terms text wrong')
+    }
+  }
+
+  // ── UNLINKED: the unit typed as text, serial matching no shop unit ───────
+  const typed = await api('POST', '/api/hd/quotes', quoteBody(`${MARK} carry typed`, {
+    unit_serial: 'ZZ-NOMATCH-T7', unit_number: 'ZZ-TYPED-7',
+  }))
+  const typedId = String(((typed.json.quote ?? {}) as Record<string, unknown>).id ?? '')
+  if (typedId) created.hdQuotes.add(typedId)
+  await adoptSmokeCustomer(typed.json.customer_id)
+  if (!record(F, 'a typed-unit quote saves', typed.status === 201 && !!typedId, `-> ${typed.status}`)) return
+  await api('POST', `/api/hd/quotes/${typedId}/work-order`, { record_verbal_approval: true, note: `${MARK} typed` })
+  const tWos = await rest<Record<string, unknown>>(`hd_work_orders?quote_id=eq.${typedId}&select=id,unit_id,fleet_account_id`)
+  tWos.forEach(w => created.hdWorkOrders.add(String(w.id)))
+  if (!record(F, 'the typed quote converts', tWos.length === 1, `${tWos.length} wo`)) return
+  record(F, 'a serial matching no unit links nothing (no guess)',
+    tWos[0].unit_id == null && tWos[0].fleet_account_id == null, `unit ${tWos[0].unit_id}, fleet ${tWos[0].fleet_account_id}`)
+  const tPage = await page(`/hd/work-orders/${tWos[0].id}`)
+  if (record(F, 'the typed work order renders', !!tPage, tPage ? 'loaded' : 'did not load')) {
+    record(F, 'Inspections names the typed unit instead of "No unit"',
+      !tPage!.text.includes('No unit on this work order') && tPage!.text.includes('is not linked to a fleet unit record'),
+      tPage!.text.includes('No unit on this work order') ? '"No unit" still renders under a named unit'
+        : tPage!.text.includes('is not linked to a fleet unit record') ? 'names the unit' : 'new note absent')
+  }
+}
+
 async function main(): Promise<void> {
   console.log('='.repeat(96))
   console.log(`SMOKE  ${BASE}`)
@@ -1662,6 +1827,7 @@ async function main(): Promise<void> {
     await flowQ()
     await flowR()
     await flowS()
+    await flowT()
   } finally {
     await cleanup()
   }
