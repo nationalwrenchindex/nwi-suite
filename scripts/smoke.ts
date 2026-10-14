@@ -813,6 +813,7 @@ async function flowN(): Promise<void> {
   }
 
   const made = await api('POST', '/api/hd/quotes', quoteBody)
+  await adoptSmokeCustomer(made.json.customer_id)
   if (made.status === 404) {
     console.log('  note  /api/hd/quotes answered 404 - HD quote routes are NOT PROMOTED yet; flow N did not run.')
     return
@@ -927,6 +928,7 @@ async function flowN(): Promise<void> {
 
   // CASE 7: declining writes declined_at and creates NO work order.
   const dMade = await api('POST', '/api/hd/quotes', { ...quoteBody, customer_name: `${MARK} hd decline` })
+  await adoptSmokeCustomer(dMade.json.customer_id)
   if (dMade.status !== 201) { record(F, 'a second quote for the decline case', false, `-> ${dMade.status}`); return }
   const dQuote = (dMade.json.quote ?? {}) as Record<string, unknown>
   const dId = String(dQuote.id ?? '')
@@ -1071,6 +1073,7 @@ async function flowO(): Promise<void> {
 
   // ── the insert ───────────────────────────────────────────────────────────
   const inv = await api('POST', '/api/hd/invoices', payload)
+  await adoptSmokeCustomer(inv.json.customer_id)
   if (!record(F, 'the invoice is created', inv.status === 201, `-> ${inv.status}`)) return
   const invoice = (inv.json.invoice ?? {}) as Record<string, unknown>
   const invId = String(invoice.id ?? '')
@@ -1105,6 +1108,7 @@ async function flowO(): Promise<void> {
 
   // ── the convert-once guard (migration 154) ───────────────────────────────
   const second = await api('POST', '/api/hd/invoices', payload)
+  await adoptSmokeCustomer(second.json.customer_id)
   // Track it before asserting. If the guard is missing this call CREATED a real
   // invoice, and an untracked one is a duplicate left in production - which is how
   // WO-2026-1538 got billed twice in the first place.
@@ -1159,6 +1163,7 @@ async function flowP(): Promise<void> {
       { id: 'zz-p1', type: 'labor', description: `${MARK} labor`, mobile_hours: 2, amount: 284 },
     ],
   })
+  await adoptSmokeCustomer(made.json.customer_id)
   if (made.status === 404) {
     console.log('  note  /api/hd/quotes answered 404 - HD quote routes are NOT PROMOTED; flow P did not run.')
     return
@@ -1282,6 +1287,7 @@ async function flowQ(): Promise<void> {
         quantity: 1, unit_cost: 61.54, unit_price: 80, amount: 80 },
     ],
   })
+  await adoptSmokeCustomer(made.json.customer_id)
   if (made.status === 404) {
     console.log('  note  /api/hd/quotes answered 404 - not promoted; flow Q did not run.')
     return
@@ -1414,6 +1420,7 @@ async function flowR(): Promise<void> {
       amount_max: SELL,
     }],
   })
+  await adoptSmokeCustomer(made.json.customer_id)
   if (made.status === 404) {
     console.log('  note  /api/hd/quotes answered 404 - not promoted; flow R did not run.')
     return
@@ -1735,6 +1742,7 @@ async function flowT(): Promise<void> {
   if (record(F, 'the work order builds an invoice payload', built.status === 200 && !!payload.customer_name,
     `-> ${built.status} ${String(built.json.error ?? '')}`)) {
     const inv = await api('POST', '/api/hd/invoices', payload)
+    await adoptSmokeCustomer(inv.json.customer_id)
     const invId = String(((inv.json.invoice ?? {}) as Record<string, unknown>).id ?? '')
     if (invId) created.hdInvoices.add(invId)
     if (record(F, 'the invoice is created', !!invId, `-> ${inv.status} ${String(inv.json.error ?? '')}`)) {
