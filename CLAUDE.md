@@ -1,5 +1,33 @@
 # NWI Suite — working rules
 
+## Deployment - do not re-derive this
+
+- Production is **MANUAL PROMOTE** in Vercel. Pushing to master creates a **PREVIEW**
+  deployment only.
+- Never say "live", "deployed" or "went live" about a push.
+- Never poll tools.nationalwrenchindex.com expecting new code after a push - it 404s
+  until Brock clicks Promote. This cost two days on Oct 6-8 and recurred three times
+  on Oct 13.
+
+## Environment
+
+- **`gh` is NOT installed on this machine.** Do not use it. Brock reads Vercel and
+  GitHub from the dashboard himself.
+- Brock applies migrations **by hand** in the Supabase SQL editor. Claude Code cannot
+  see which are applied - **ask, never assume.**
+
+## Testing
+
+- **Test fixtures must be built from a real row, not an assumed shape.** A wrong
+  fixture passes forever while proving nothing - on Oct 14 a part fixture used a shape
+  the product cannot produce, which is why a doubled markup survived every run of a
+  flow that converted a part line.
+- **Column names mean opposite things in different tables.**
+  - `hd_quotes.line_items`: `unit_cost` is the **SELL** price, `unit_cost_base` is cost.
+  - `hd_work_order_line_items`: `unit_cost` is the **cost**, `unit_price` is the sell.
+
+  This caused the Oct 14 double markup. `wo-to-invoice.ts` documents it; nothing else did.
+
 ## Before reporting any work complete
 
 Run the smoke suite against the deployed site and paste the table.
