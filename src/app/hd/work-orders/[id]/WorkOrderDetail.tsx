@@ -408,9 +408,8 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
             // sitting in unit_manufacturer / unit_model / unit_serial on the row
             // being rendered. Same for an ad-hoc scheduler booking.
             { label: 'Unit', value: unitLabel },
-            // A quote has no fleet account to carry - hd_quotes has no
-            // fleet_account_id and the quote form captures none - so this stays "—"
-            // on a quote-sourced job. That is the truth, not a lost value.
+            // Carried from the quote since migration 158, when the tech picked a fleet
+            // account. A customers-table pick or a typed name has no fleet, so "—".
             { label: 'Fleet', value: wo.fleet?.fleet_name ?? '—' },
             { label: 'Tech', value: wo.tech_name ?? '—' },
             { label: 'Setpoint', value: wo.current_setpoint ?? '—' },
@@ -563,7 +562,13 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
                   `&unit_manufacturer=${encodeURIComponent(wo.unit.manufacturer ?? '')}` +
                   `&unit_model=${encodeURIComponent(wo.unit.model ?? '')}` +
                   `&unit_serial=${encodeURIComponent(wo.unit.serial_number ?? '')}`
-                : '')
+                // No linked unit, but the quote named the machine: hand that over too,
+                // so the form does not open blank on a job that knows its unit.
+                : (wo.unit_manufacturer || wo.unit_model || wo.unit_serial)
+                  ? `&unit_manufacturer=${encodeURIComponent(wo.unit_manufacturer ?? '')}` +
+                    `&unit_model=${encodeURIComponent(wo.unit_model ?? '')}` +
+                    `&unit_serial=${encodeURIComponent(wo.unit_serial ?? '')}`
+                  : '')
             }
             className="px-4 py-2 rounded-lg text-xs font-condensed font-bold tracking-wide transition-colors"
             style={{ background: 'var(--hd-inner)', color: 'rgba(var(--hd-ink-rgb), 0.7)', border: '1px solid var(--hd-border)' }}
@@ -587,9 +592,13 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
           >
             + Start Reefer PM Inspection
           </Link>
+          {/* Same two sources the Unit row in the details block reads. Checking only the
+              joined hd_units row printed "No unit" directly under a Unit that named one. */}
           {!wo.unit && (
             <p className="text-xs self-center" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
-              No unit on this work order — you will select one on the form.
+              {unitLabel !== '—'
+                ? `Unit ${unitLabel} is not linked to a fleet unit record — confirm it on the form.`
+                : 'No unit on this work order — you will select one on the form.'}
             </p>
           )}
         </div>
