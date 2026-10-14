@@ -39,6 +39,7 @@ type WO = {
   unit_manufacturer: string | null
   unit_model: string | null
   unit_serial: string | null
+  unit_number: string | null
   unit: { id: string; unit_number: string; manufacturer: string; model: string; year: number | null; serial_number: string | null } | null
   // hd_work_orders has no customer_email column, so the billing email can only come
   // from the linked fleet account. Same for the address — hd_fleet_accounts stores it
@@ -254,6 +255,35 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
   // so the invoice form rebuilt one labor line and every part was lost. Leaving it in
   // reach would be leaving the broken path one click away.
 
+  // ── The details block's three awkward labels ──────────────────────────────
+  //
+  // Each one printed "—" or something misleading for a work order that came from an
+  // approved quote, which is now a normal way for one to exist.
+
+  // The linked hd_unit when there is one, the quote's free text when there is not.
+  // A quote records the machine as text, so a quote-sourced job has no join to read.
+  const unitLabel = wo.unit
+    ? `${wo.unit.unit_number} — ${wo.unit.manufacturer} ${wo.unit.model}${wo.unit.year ? ` (${wo.unit.year})` : ''}`
+    : [
+        wo.unit_number,
+        [wo.unit_manufacturer, wo.unit_model].filter(Boolean).join(' ') || null,
+      ].filter(Boolean).join(' — ') || '—'
+
+  // Hours and rate are two facts, and the row used to print "—" unless BOTH were
+  // there. A job billing $135/hr with the hours still on the lines should say so.
+  const laborLabel = wo.labor_hours
+    ? `${wo.labor_hours}h @ ${wo.labor_rate != null ? money(Number(wo.labor_rate)) : '—'}/hr`
+    : wo.labor_rate != null
+      ? `${money(Number(wo.labor_rate))}/hr`
+      : '—'
+
+  // Labelled for what it is. This comes off the quote and includes tax, travel,
+  // mileage and fees; the LINE TOTAL in the parts and labor card is parts and labor
+  // only. Calling both of them "Total" made a correct pair of numbers look wrong.
+  const quotedTotalLabel = wo.total_amount != null
+    ? money(Number(wo.total_amount))
+    : '—'
+
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto">
       {/* Subscriber branding — logo when one is uploaded, business name in text
@@ -317,19 +347,41 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
         </p>
       </div>
 
+      {/* ===========================================================================
+          THE DETAILS BLOCK'S LABELS, built where they can be read.
+          =========================================================================== */}
+
       {/* Work Order Info */}
       <div className="rounded-xl p-5 mb-6" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
         <p className="font-condensed font-bold text-white text-sm tracking-widest mb-3">WORK ORDER DETAILS</p>
         <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
           {[
-            { label: 'Unit', value: wo.unit ? `${wo.unit.unit_number} — ${wo.unit.manufacturer} ${wo.unit.model}${wo.unit.year ? ` (${wo.unit.year})` : ''}` : '—' },
+            // THE FLAT COLUMNS ARE A FALLBACK, NOT A DUPLICATE.
+            //
+            // This read only wo.unit, the joined hd_unit row. A work order created
+            // from an approved quote has no linked unit - the quote records the
+            // machine as free text - so Unit and Serial / VIN printed "—" even when
+            // the quote carried a manufacturer, model and serial, and the data was
+            // sitting in unit_manufacturer / unit_model / unit_serial on the row
+            // being rendered. Same for an ad-hoc scheduler booking.
+            { label: 'Unit', value: unitLabel },
+            // A quote has no fleet account to carry - hd_quotes has no
+            // fleet_account_id and the quote form captures none - so this stays "—"
+            // on a quote-sourced job. That is the truth, not a lost value.
             { label: 'Fleet', value: wo.fleet?.fleet_name ?? '—' },
             { label: 'Tech', value: wo.tech_name ?? '—' },
             { label: 'Location', value: wo.location ?? '—' },
             { label: 'Setpoint', value: wo.current_setpoint ?? '—' },
-            { label: 'Labor', value: wo.labor_hours ? `${wo.labor_hours}h @ $${wo.labor_rate ?? '—'}/hr` : '—' },
-            { label: 'Total', value: wo.total_amount ? `${money(Number(wo.total_amount))}` : '—' },
-            { label: 'Serial / VIN', value: wo.unit?.serial_number ?? '—' },
+            // Hours and rate are separate facts. Printing "—" for the whole row when
+            // only the hours were missing hid a rate the job really does bill at.
+            { label: 'Labor', value: laborLabel },
+            // "Total" invited a comparison with the LINE TOTAL below, which counts a
+            // different thing: this figure comes off the quote and includes tax,
+            // travel, mileage and fees, while LINE TOTAL is parts and labor only.
+            // They are not meant to match, and labelling both "Total" made a correct
+            // pair of numbers look like a bug.
+            { label: 'Quoted Total', value: quotedTotalLabel },
+            { label: 'Serial / VIN', value: wo.unit?.serial_number ?? wo.unit_serial ?? '—' },
           ].map(({ label, value }) => (
             <div key={label}>
               <span className="text-xs uppercase tracking-wider block mb-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)', fontSize: 10 }}>{label}</span>

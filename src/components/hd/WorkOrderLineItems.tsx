@@ -503,9 +503,16 @@ export default function WorkOrderLineItems({
               </div>
               {/* The work order's own total_amount is a separate stored figure that
                   predates these rows. It is left untouched on purpose so the
-                  financials pages that read it do not shift under a saved line. */}
+                  financials pages that read it do not shift under a saved line.
+
+                  SAYING WHAT THIS COVERS, because the details block above shows the
+                  Quoted Total and the two do not match. They are not supposed to:
+                  that figure came off the quote and includes tax, travel, mileage and
+                  fees, and this one is parts and labor. Both were labelled as totals,
+                  so a correct pair of numbers read as a billing error. */}
               <p className="text-xs mt-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
-                Carried onto the invoice when you bill this job.
+                Parts and labor only. Tax, travel and fees are added when you bill
+                this job, so this will not match the Quoted Total above.
               </p>
             </div>
           </div>

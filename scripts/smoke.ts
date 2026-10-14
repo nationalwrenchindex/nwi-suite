@@ -787,8 +787,14 @@ async function flowN(): Promise<void> {
     shop_supplies_percent_applied: 8, shop_supplies_fee: 4.16,
     line_items: [
       { id: 'zz-1', type: 'labor', description: `${MARK} labor`, mobile_hours: 2, amount: 387 },
-      { id: 'zz-2', type: 'part',  description: `${MARK} filter`, part_number: '30-60143-01',
-        quantity: 1, unit_cost: 40, unit_price: 52, amount: 52 },
+      // THE SHAPE THE QUOTE FORM WRITES, corrected. This said
+      // `type: 'part', unit_cost: 40, unit_price: 52` - singular type, and the cost
+      // in unit_cost. The form writes `type: 'parts'` with the SELL in unit_cost and
+      // the cost in unit_cost_base (addPartsItem, src/app/hd/quotes/new/page.tsx), so
+      // this fixture described a document the product cannot produce. That is how a
+      // doubled markup got past a flow that converts a part line on every run.
+      { id: 'zz-2', type: 'parts', description: `${MARK} filter`, part_number: '30-60143-01',
+        quantity: 1, unit_cost: 52, unit_cost_base: 40, markup_percent: 30, amount: 52 },
     ],
   }
 
@@ -1336,6 +1342,129 @@ async function flowQ(): Promise<void> {
   record(F, 'and there is STILL exactly one', still.length === 1, `${still.length}`)
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// R  THE MARKUP IS APPLIED ONCE
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// A part quoted at cost 3.00 with 30% markup, sell 3.90, arrived on the work order
+// as cost 3.90 / markup 30 / sell 5.07 - the markup applied twice, because the two
+// tables name the same thing differently:
+//
+//   hd_quotes line_items        unit_cost = the SELL price, unit_cost_base = cost
+//   hd_work_order_line_items    unit_cost = cost,           unit_price     = sell
+//
+// The converter read unit_cost as a cost and wrote it to unit_cost, so the sell
+// price went into the cost column and the work order marked it up again. $5.07 is
+// what the invoice would have billed for a part approved at $3.90.
+//
+// THE FIXTURE IS THE SHAPE THE QUOTE FORM ACTUALLY WRITES - type 'parts', the sell
+// in unit_cost, the cost in unit_cost_base - copied from addPartsItem in
+// src/app/hd/quotes/new/page.tsx. Flow N's older part fixture used type 'part' with
+// unit_cost as a cost, which is not a shape the product produces; a test built on
+// an invented shape cannot catch a bug about the real one.
+async function flowR(): Promise<void> {
+  const F = 'R markup once'
+
+  // The numbers from the report, unchanged, because they are the ones that showed
+  // the bug: 3.00 at 30% is 3.90, and 3.90 at 30% is 5.07.
+  const COST = 3.00
+  const MARKUP = 30
+  const SELL = 3.90
+  const DOUBLED = 5.07
+
+  const made = await api('POST', '/api/hd/quotes', {
+    customer_name: `${MARK} markup once`,
+    customer_phone: '+15555550144',
+    unit_manufacturer: 'Thermo King',
+    unit_model: 'Precedent C-600',
+    unit_serial: 'ZZ-MARKUP-TEST',
+    complaint: `${MARK} - markup applied twice`,
+    status: 'draft',
+    labor_rate: 135,
+    subtotal_labor: 0,
+    subtotal_parts: SELL,
+    parts_markup_percent: MARKUP,
+    tax_rate: 0,
+    tax_amount: 0,
+    total: SELL,
+    line_items: [{
+      id: 'zz-r1',
+      type: 'parts',
+      description: `${MARK} o-ring`,
+      part_number: 'ZZ-ORING-3',
+      quantity: 1,
+      unit_cost: SELL,        // the quote form puts the SELL here
+      unit_cost_base: COST,   // ...and the cost here
+      markup_percent: MARKUP,
+      amount: SELL,
+      amount_max: SELL,
+    }],
+  })
+  if (made.status === 404) {
+    console.log('  note  /api/hd/quotes answered 404 - not promoted; flow R did not run.')
+    return
+  }
+  if (!record(F, 'a quote with a 3.00 part at 30% can be created', made.status === 201, `-> ${made.status}`)) return
+
+  const quote = (made.json.quote ?? {}) as Record<string, unknown>
+  const quoteId = String(quote.id ?? '')
+  created.hdQuotes.add(quoteId)
+  record(F, 'the quote records the sell price it quoted',
+    Number(quote.subtotal_parts) === SELL, `subtotal_parts ${quote.subtotal_parts}`)
+
+  const conv = await api('POST', `/api/hd/quotes/${quoteId}/work-order`, {
+    record_verbal_approval: true, note: `${MARK} markup check`,
+  })
+  if (conv.status === 404) {
+    console.log('  note  the HD quote->work order route is NOT PROMOTED yet; flow R stopped here.')
+    record(F, 'the convert route answers', false, '404 - not deployed to this target')
+    return
+  }
+  const woId = String((conv.json.work_order as Record<string, unknown> | undefined)?.id ?? '')
+  if (!record(F, 'it converts to a work order', conv.status === 200 && !!woId, `-> ${conv.status}`)) return
+  created.hdWorkOrders.add(woId)
+
+  const lines = await rest<Record<string, unknown>>(
+    `hd_work_order_line_items?work_order_id=eq.${woId}&select=type,part_number,quantity,unit_cost,unit_price,markup_percent,total`)
+  const part = lines.find(l => String(l.type) === 'part')
+  if (!record(F, 'the part landed on the work order', !!part, `${lines.length} line(s)`)) return
+
+  // THE FOUR THAT MATTER.
+  record(F, 'the work order cost is the COST, not the sell price',
+    Number(part!.unit_cost) === COST,
+    `unit_cost ${part!.unit_cost}${Number(part!.unit_cost) === SELL ? ' - THE SELL PRICE IS IN THE COST COLUMN' : ''}`)
+  record(F, 'the sell price is the one the customer approved',
+    Number(part!.unit_price) === SELL, `unit_price ${part!.unit_price}`)
+  record(F, 'the markup travelled once',
+    Number(part!.markup_percent) === MARKUP, `markup ${part!.markup_percent}`)
+  record(F, `the line total is ${SELL.toFixed(2)} and NOT ${DOUBLED.toFixed(2)}`,
+    Number(part!.total) === SELL,
+    `total ${part!.total}${Number(part!.total) === DOUBLED ? ' - the markup was applied twice' : ''}`)
+
+  // And the sum has to equal what the customer agreed to, to the cent.
+  const partsTotal = lines
+    .filter(l => String(l.type) === 'part')
+    .reduce((sum, l) => sum + Number(l.total ?? 0), 0)
+  record(F, "the work order's parts total equals the QUOTE's parts subtotal exactly",
+    Math.abs(partsTotal - Number(quote.subtotal_parts)) < 0.005,
+    `${partsTotal.toFixed(2)} vs quote ${Number(quote.subtotal_parts).toFixed(2)}`)
+
+  // The margin figure the job sheet shows is computed off unit_cost, so it was
+  // wrong by exactly the same mistake: 5.07 - 3.90 = 1.17 instead of 0.90.
+  const margin = Number(part!.unit_price) * Number(part!.quantity) - Number(part!.unit_cost) * Number(part!.quantity)
+  record(F, 'the margin the job sheet would show is sell minus cost',
+    Math.abs(margin - (SELL - COST)) < 0.005,
+    `${margin.toFixed(2)} (expected ${(SELL - COST).toFixed(2)})`)
+
+  // The unit identity travels. The report asked for this confirmed; the quote
+  // records the machine as free text and the work order keeps those same columns.
+  const wo = (await rest<Record<string, unknown>>(
+    `hd_work_orders?id=eq.${woId}&select=unit_manufacturer,unit_model,unit_serial`))[0]
+  record(F, 'the unit model and serial carry from the quote',
+    wo?.unit_manufacturer === 'Thermo King' && wo?.unit_model === 'Precedent C-600' && wo?.unit_serial === 'ZZ-MARKUP-TEST',
+    `${wo?.unit_manufacturer} / ${wo?.unit_model} / ${wo?.unit_serial}`)
+}
+
 async function main(): Promise<void> {
   console.log('='.repeat(96))
   console.log(`SMOKE  ${BASE}`)
@@ -1388,6 +1517,7 @@ async function main(): Promise<void> {
     await flowO()
     await flowP()
     await flowQ()
+    await flowR()
   } finally {
     await cleanup()
   }

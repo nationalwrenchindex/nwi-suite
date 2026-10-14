@@ -171,7 +171,19 @@ interface QuoteLine {
   description?: unknown
   part_number?: unknown
   quantity?: unknown
+  /**
+   * THE SELL PRICE. Not the cost.
+   *
+   * On an hd_quotes part line, `unit_cost` is what the CUSTOMER pays - see
+   * addPartsItem in src/app/hd/quotes/new/page.tsx, which writes
+   * `unit_cost: sellPrice(cost, markup)` and keeps the shop's own cost in
+   * `unit_cost_base`. The name is a trap and it has now cost money twice: the
+   * work-order-to-invoice converter documents it at the top of
+   * src/lib/hd/wo-to-invoice.ts, and this module did not know about it at all.
+   */
   unit_cost?: unknown
+  /** What the SHOP paid. This is the cost, despite the other field's name. */
+  unit_cost_base?: unknown
   unit_price?: unknown
   markup_percent?: unknown
   amount?: unknown
@@ -249,11 +261,39 @@ export function workOrderLinesFromQuote(
       continue
     }
 
+    // =========================================================================
+    // THE MARKUP WAS BEING APPLIED TWICE. This is that fix.
+    // =========================================================================
+    //
+    // A part quoted at cost $3.00 with 30% markup, sell $3.90, landed on the work
+    // order as cost 3.90 / markup 30 / sell 5.07 - and $5.07 is what the invoice
+    // would have billed for a part the customer approved at $3.90.
+    //
+    // Because the two sides name the same thing differently:
+    //
+    //   hd_quotes line_items    unit_cost      = the SELL price
+    //                           unit_cost_base = what the shop paid
+    //   hd_work_order_line_items
+    //                           unit_cost      = what the shop paid
+    //                           unit_price     = the SELL price
+    //
+    // This read li.unit_cost and wrote it to unit_cost, so the sell price went into
+    // the cost column; the work order then applied the markup to it a second time.
+    // Nothing recomputed wrongly - the arithmetic was right on a wrong input.
     const quantity = num(li.quantity) ?? 1
-    const unitCost = num(li.unit_cost)
-    const unitPrice = num(li.unit_price)
+    // The sell price as the quote recorded it. unit_price is checked too so a future
+    // line shape that uses the honest name still works.
+    const quotedSell = num(li.unit_cost) ?? num(li.unit_price)
     const markup = num(li.markup_percent)
     const amount = num(li.amount)
+
+    // NULL WHEN THE QUOTE DID NOT RECORD A COST, and deliberately not derived back
+    // out of the sell price. A null cost means "not known", which is exactly what
+    // migration 119 established for parts_cost, and it is also the SAFE value: the
+    // work order only re-prices a part when cost AND markup are both present
+    // (lineTotal in lib/shared/work-order-lines.ts), so a null cost leaves the
+    // recorded sell standing rather than inviting another recomputation.
+    const unitCost = num(li.unit_cost_base)
 
     rows.push({
       type:           'part',
@@ -261,9 +301,14 @@ export function workOrderLinesFromQuote(
       part_number:    partNumber,
       quantity,
       unit_cost:      unitCost,
-      unit_price:     unitPrice,
-      markup_percent: markup,
-      total:          amount ?? (unitPrice != null ? Number((quantity * unitPrice).toFixed(2)) : null),
+      // The price the customer agreed to, copied. Same rule as the labor rate and
+      // the tax: a document's recorded terms beat any recalculation.
+      unit_price:     quotedSell,
+      // Carried only alongside a real cost. Markup with no cost is a percentage of
+      // nothing, and storing it would make the work order's editor think it could
+      // re-price the line.
+      markup_percent: unitCost != null ? markup : null,
+      total:          amount ?? (quotedSell != null ? Number((quantity * quotedSell).toFixed(2)) : null),
       sort_order:     sort++,
     })
   }
@@ -367,6 +412,22 @@ export async function createWorkOrderFromQuote(
 
     // THE RECORDED TERMS.
     ...termsFromQuote(quote),
+  }
+
+  // LABOR HOURS, SUMMED FROM THE LINES WHEN THE QUOTE HAS NO FIGURE OF ITS OWN.
+  //
+  // The HD quote form never writes hd_quotes.labor_hours - the hours live on each
+  // labor line - so termsFromQuote copied a null and the work order screen printed
+  // "Labor —" beside a Parts & Labor total of $405.00. A job with four hundred
+  // dollars of labor on it saying it has no labor reads as a broken screen.
+  //
+  // This is a SUM of hours the quote already recorded, not a re-price: no rate is
+  // touched and no money is derived. A figure the quote did record always wins.
+  if (insertRow.labor_hours == null) {
+    const laborHours = workOrderLinesFromQuote(quote.line_items, num(quote.labor_rate))
+      .filter(l => l.type === 'labor')
+      .reduce((sum, l) => sum + (num(l.quantity) ?? 0), 0)
+    if (laborHours > 0) insertRow.labor_hours = Number(laborHours.toFixed(2))
   }
 
   const { data: wo, error } = await supabase
