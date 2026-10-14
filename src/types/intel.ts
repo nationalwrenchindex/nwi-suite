@@ -159,6 +159,8 @@ export interface VinResult {
 export interface CreateCustomerPayload {
   first_name: string
   last_name: string
+  /** The business on the side of the truck. What an HD customer is known by. */
+  company_name?: string | null
   phone?: string | null
   email?: string | null
   address_line1?: string | null

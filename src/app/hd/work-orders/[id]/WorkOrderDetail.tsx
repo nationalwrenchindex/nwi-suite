@@ -40,6 +40,10 @@ type WO = {
   unit_model: string | null
   unit_serial: string | null
   unit_number: string | null
+  // Loose JSONB shared with the PM checklists, so it is typed as unknown and read
+  // defensively. The converter writes { unit_not_identified: true } into it when an
+  // approved quote carried no serial and no VIN.
+  flagged_items: unknown
   unit: { id: string; unit_number: string; manufacturer: string; model: string; year: number | null; serial_number: string | null } | null
   // hd_work_orders has no customer_email column, so the billing email can only come
   // from the linked fleet account. Same for the address — hd_fleet_accounts stores it
@@ -90,6 +94,36 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
   const [uploading, setUploading] = useState<Record<string, boolean>>({})
   const [lightbox, setLightbox] = useState<string | null>(null)
   const [status, setStatus] = useState(wo.status)
+
+  // Location is the one detail this screen can change. Held locally so a save shows
+  // immediately without a round trip through the server component.
+  const [location, setLocation]               = useState(wo.location ?? '')
+  const [locationDraft, setLocationDraft]     = useState(wo.location ?? '')
+  const [editingLocation, setEditingLocation] = useState(false)
+  const [savingLocation, setSavingLocation]   = useState(false)
+  const [locationError, setLocationError]     = useState<string | null>(null)
+
+  async function saveLocation() {
+    setSavingLocation(true)
+    setLocationError(null)
+    try {
+      const res = await fetch(`/api/hd/work-orders/${wo.id}`, {
+        method:  'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ location: locationDraft }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? 'Could not save the location.')
+      // The server's own answer, trimmed-to-null and capped the way it stores it, so
+      // the screen shows what is in the row rather than what was typed.
+      setLocation((json.work_order?.location as string | null) ?? '')
+      setEditingLocation(false)
+    } catch (err) {
+      setLocationError(err instanceof Error ? err.message : 'Could not save the location.')
+    } finally {
+      setSavingLocation(false)
+    }
+  }
   const [reopening, setReopening] = useState(false)
   const [invoicing, setInvoicing] = useState(false)
   const [invoiceError, setInvoiceError] = useState<string | null>(null)
@@ -284,6 +318,15 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
     ? money(Number(wo.total_amount))
     : '—'
 
+  // Set by the converter when the approved quote had no serial and no VIN. Read
+  // defensively: flagged_items is loose JSONB shared with the PM checklists, so it
+  // can hold shapes this screen knows nothing about.
+  const unitNotIdentified = (() => {
+    const f = wo.flagged_items
+    return !!f && typeof f === 'object' && !Array.isArray(f) &&
+      (f as Record<string, unknown>).unit_not_identified === true
+  })()
+
   return (
     <div className="p-4 sm:p-6 max-w-4xl mx-auto">
       {/* Subscriber branding — logo when one is uploaded, business name in text
@@ -370,7 +413,6 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
             // on a quote-sourced job. That is the truth, not a lost value.
             { label: 'Fleet', value: wo.fleet?.fleet_name ?? '—' },
             { label: 'Tech', value: wo.tech_name ?? '—' },
-            { label: 'Location', value: wo.location ?? '—' },
             { label: 'Setpoint', value: wo.current_setpoint ?? '—' },
             // Hours and rate are separate facts. Printing "—" for the whole row when
             // only the hours were missing hid a rate the job really does bill at.
@@ -388,7 +430,77 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
               <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.85)' }}>{value}</span>
             </div>
           ))}
+
+          {/* ===================================================================
+              LOCATION, EDITABLE.
+              ===================================================================
+              It defaults from the approved quote's address now (the service address
+              where the quote has one), which is what makes editing necessary rather
+              than optional: the unit is often at neither address on file. There was
+              no write path for an HD work order at all before this - only /status
+              and /line-items - so this field was read-only text. */}
+          <div className="col-span-2">
+            <span className="text-xs uppercase tracking-wider block mb-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)', fontSize: 10 }}>
+              Location
+            </span>
+            {editingLocation ? (
+              <div className="flex items-center gap-2">
+                <input
+                  value={locationDraft}
+                  onChange={e => setLocationDraft(e.target.value)}
+                  placeholder="Where the unit is"
+                  autoFocus
+                  className="flex-1 px-2 py-1.5 rounded text-sm"
+                  style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)', color: 'rgba(var(--hd-ink-rgb), 0.9)' }}
+                />
+                <button
+                  type="button"
+                  onClick={saveLocation}
+                  disabled={savingLocation}
+                  className="px-2.5 py-1.5 rounded text-xs font-bold disabled:opacity-40"
+                  style={{ background: HD_ORANGE, color: '#FFFFFF' }}
+                >
+                  {savingLocation ? 'Saving...' : 'Save'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setEditingLocation(false); setLocationDraft(location ?? '') }}
+                  className="px-2 py-1.5 rounded text-xs"
+                  style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)', border: '1px solid var(--hd-border)' }}
+                >
+                  Cancel
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.85)' }}>{location || '—'}</span>
+                {status !== 'invoiced' && (
+                  <button
+                    type="button"
+                    onClick={() => { setLocationDraft(location ?? ''); setEditingLocation(true) }}
+                    className="text-xs font-semibold"
+                    style={{ color: HD_ORANGE, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                  >
+                    {location ? 'edit' : 'add'}
+                  </button>
+                )}
+              </div>
+            )}
+            {locationError && (
+              <p className="text-xs mt-1" style={{ color: '#EF4444' }}>{locationError}</p>
+            )}
+          </div>
         </div>
+
+        {/* THE UNIT WAS NEVER PINNED DOWN. Written by the converter when the approved
+            quote carried no serial and no VIN, so the gap travels with the job
+            instead of being noticed when somebody opens the invoice. */}
+        {unitNotIdentified && (
+          <p className="mt-3 text-xs px-3 py-2 rounded-lg" style={{ background: 'rgba(245,158,11,0.12)', color: '#F59E0B', border: '1px solid rgba(245,158,11,0.3)' }}>
+            Unit not identified - no serial number or VIN was recorded on the quote.
+            Add it to the unit fields when you are on site.
+          </p>
+        )}
         {wo.service_requests && (
           <div className="mt-4 pt-4" style={{ borderTop: '1px solid var(--hd-border)' }}>
             <span className="text-xs uppercase tracking-wider block mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)', fontSize: 10 }}>Service Requests</span>

@@ -21,20 +21,44 @@ export async function GET(req: NextRequest) {
   const limit  = Math.min(Number(sp.get('limit') ?? FLEET_ACCOUNT_PAGE_SIZE), 200)
   const offset = Number(sp.get('offset') ?? 0)
 
+  // ── search ────────────────────────────────────────────────────────────────
+  //
+  // Added so the HD quote form can find a fleet account by name. That form's picker
+  // is labelled "Link Intel Hub Customer" and asked /api/customers, which is the LD
+  // table - so a fleet account entered in HD's own Intel Hub could not be selected on
+  // an HD quote at all. This is the endpoint the picker was missing.
+  //
+  // Commas and parentheses are stripped rather than escaped: PostgREST parses the
+  // or() string itself, where a comma starts a new condition, so "Logistics, LLC"
+  // would otherwise build a filter nobody asked for. They carry no meaning here.
+  const rawSearch = sp.get('search')?.trim() ?? ''
+  const search    = rawSearch.replace(/[(),*]/g, ' ').trim()
+  const matches   = search
+    ? `fleet_name.ilike.%${search}%,contact_name.ilike.%${search}%,contact_phone.ilike.%${search}%,contact_email.ilike.%${search}%`
+    : null
+
+  let rowsQuery = supabase
+    .from('hd_fleet_accounts')
+    .select(FLEET_ACCOUNT_LIST_SELECT)
+    .eq('user_id', user.id)
+  let countQuery = supabase
+    .from('hd_fleet_accounts')
+    .select('id', { count: 'exact', head: true })
+    .eq('user_id', user.id)
+
+  if (matches) {
+    rowsQuery  = rowsQuery.or(matches)
+    countQuery = countQuery.or(matches)
+  }
+
   const [{ data, error }, { count }] = await Promise.all([
-    supabase
-      .from('hd_fleet_accounts')
-      .select(FLEET_ACCOUNT_LIST_SELECT)
-      .eq('user_id', user.id)
+    rowsQuery
       // Two fleets can share a name, and offset paging over a non-deterministic
       // order drops and repeats rows between pages. id breaks every tie.
       .order('fleet_name')
       .order('id')
       .range(offset, offset + limit - 1),
-    supabase
-      .from('hd_fleet_accounts')
-      .select('id', { count: 'exact', head: true })
-      .eq('user_id', user.id),
+    countQuery,
   ])
 
   if (error) {

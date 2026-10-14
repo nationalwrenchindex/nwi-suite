@@ -93,6 +93,13 @@ const created = {
   // work order must be deleted BEFORE the quote it points at.
   hdQuotes: new Set<string>(), hdWorkOrders: new Set<string>(),
   hdInvoices: new Set<string>(),
+  // HD's own Intel Hub: fleet accounts and the units hanging off them. The units go
+  // FIRST, before the account they point at.
+  fleetAccounts: new Set<string>(), fleetUnits: new Set<string>(),
+  // LD customers this run creates on purpose. Note the suite does NOT sweep
+  // customers by marker: logHDCustomer creates one for every HD document, and a
+  // blanket delete would reach rows other flows rely on.
+  customers: new Set<string>(),
 }
 
 async function del(table: string, id: string): Promise<void> {
@@ -153,8 +160,15 @@ async function cleanup(): Promise<void> {
   for (const id of created.hdWorkOrders) await del('hd_work_orders', id)
   for (const id of created.hdQuotes)     await del('hd_quotes', id)
 
+  // HD Intel Hub. Units before accounts: hd_units.fleet_account_id points at them.
+  for (const id of created.fleetUnits)    await del('hd_units', id)
+  for (const id of created.fleetAccounts) await del('hd_fleet_accounts', id)
+  // Customers last: an HD document may still have been pointing at one.
+  for (const id of created.customers)     await del('customers', id)
+
   console.log(`  removed ${created.invoices.size} invoice(s), ${created.workOrders.size} work order(s), ${created.quotes.size} quote(s)`)
   console.log(`  removed ${created.hdInvoices.size} HD invoice(s), ${created.hdWorkOrders.size} HD work order(s), ${created.hdQuotes.size} HD quote(s)`)
+  console.log(`  removed ${created.fleetAccounts.size} fleet account(s), ${created.fleetUnits.size} fleet unit(s), ${created.customers.size} customer(s)`)
 }
 
 // ── the shop's own numbers, so nothing is fabricated ────────────────────────
@@ -1465,6 +1479,135 @@ async function flowR(): Promise<void> {
     `${wo?.unit_manufacturer} / ${wo?.unit_model} / ${wo?.unit_serial}`)
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// S  THE HD QUOTE PICKER SEES HD'S OWN INTEL HUB
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// There are two Intel Hubs and the HD quote form only asked one of them:
+//
+//   /intel      (LD nav)  customers + vehicles
+//   /hd/intel   (HD nav)  hd_fleet_accounts + hd_units
+//
+// The picker is labelled "Link Intel Hub Customer" and called GET /api/customers,
+// the LD table, so a fleet account entered in HD's own Intel Hub could not be
+// selected on an HD quote at all. Live proof at the time: "brock fleeman test" with
+// unit test001 / Thermo King / s-600 existed as an hd_fleet_account and was
+// unreachable from the quote form.
+//
+// Drives the two endpoints the picker now calls, including the unit it carries.
+async function flowS(): Promise<void> {
+  const F = 'S hd intel picker'
+
+  // THE ROWS ARE ARRANGED DIRECTLY, and that is not a shortcut hiding a missing
+  // test. There is NO API route that creates a fleet account or a unit: both are
+  // server actions inside the page files (src/app/hd/fleet-accounts/page.tsx and
+  // fleet-units/page.tsx), which a suite driving HTTP cannot post a form to. What is
+  // under test here is the PICKER'S READ PATH - the two search endpoints the quote
+  // form now calls - so the account and its unit are arranged state, with the same
+  // columns those server actions write. Same reasoning as flow O's seeded terms.
+  const name = `${MARK} fleet picker`
+  const madeAccount = await fetch(`${SUPA}/rest/v1/hd_fleet_accounts`, {
+    method: 'POST',
+    headers: { ...SVC_H, Prefer: 'return=representation' },
+    body: JSON.stringify({
+      user_id:       OWNER,
+      fleet_name:    name,
+      contact_name:  `${MARK} dispatcher`,
+      contact_phone: '+15555550133',
+      address:       '123 Sesame St, Winston-Salem, NC 27103',
+    }),
+  })
+  if (!record(F, 'a fleet account exists to find', madeAccount.ok, `-> ${madeAccount.status}`)) {
+    console.log(`        ${(await madeAccount.text()).slice(0, 140)}`)
+    return
+  }
+  const accountId = String(((await madeAccount.json()) as Record<string, unknown>[])[0]?.id ?? '')
+  if (!record(F, 'the fleet account has an id', !!accountId, accountId || 'none')) return
+  created.fleetAccounts.add(accountId)
+
+  // A unit on it, which is what the picker is supposed to carry onto the quote.
+  const madeUnit = await fetch(`${SUPA}/rest/v1/hd_units`, {
+    method: 'POST',
+    headers: { ...SVC_H, Prefer: 'return=representation' },
+    body: JSON.stringify({
+      user_id:          OWNER,
+      fleet_account_id: accountId,
+      unit_number:      'ZZ-UNIT-1',
+      manufacturer:     'Thermo King',
+      model:            'S-600',
+      serial_number:    'ZZSERIAL0001',
+      status:           'active',
+    }),
+  })
+  const unitId = madeUnit.ok
+    ? String(((await madeUnit.json()) as Record<string, unknown>[])[0]?.id ?? '')
+    : ''
+  if (unitId) created.fleetUnits.add(unitId)
+  record(F, 'a unit exists on that account', madeUnit.ok && !!unitId, `-> ${madeUnit.status}`)
+
+  // ── THE SEARCH THE PICKER RUNS ───────────────────────────────────────────
+  const found = await api('GET', `/api/hd/fleet-accounts?search=${encodeURIComponent('fleet picker')}&limit=8`)
+  if (found.status === 404) {
+    console.log('  note  the fleet-accounts search is NOT PROMOTED yet; flow S stopped here.')
+    record(F, 'the fleet account search answers', false, '404 - not deployed to this target')
+    return
+  }
+  const accounts = (found.json.fleet_accounts ?? []) as Array<Record<string, unknown>>
+  if (!record(F, 'searching by fleet name finds it',
+    found.status === 200 && accounts.some(a => String(a.fleet_name) === name),
+    found.status === 200
+      ? `${accounts.length} hit(s)${accounts.some(a => String(a.fleet_name) === name) ? '' : ' - NOT including it; the search param may be ignored'}`
+      : `-> ${found.status}`)) return
+
+  // Its contact details have to come back, or the picker has nothing to fill with.
+  const hit = accounts.find(a => String(a.fleet_name) === name)!
+  record(F, 'the hit carries the contact and address to fill from',
+    String(hit.contact_phone ?? '') === '+15555550133' && String(hit.address ?? '').includes('Sesame'),
+    `${hit.contact_phone} / ${String(hit.address ?? '').slice(0, 30)}`)
+
+  // ── THE UNIT IT CARRIES ──────────────────────────────────────────────────
+  const units = await api('GET', `/api/hd/fleet-units?fleet_account_id=${accountId}&limit=50`)
+  const unitRows = (units.json.units ?? []) as Array<Record<string, unknown>>
+  record(F, "the account's units load for the quote form",
+    units.status === 200 && unitRows.length === 1,
+    `${unitRows.length} unit(s)`)
+  if (unitRows.length === 1) {
+    const u = unitRows[0]
+    record(F, 'the unit carries manufacturer, model and serial',
+      u.manufacturer === 'Thermo King' && u.model === 'S-600' && u.serial_number === 'ZZSERIAL0001',
+      `${u.manufacturer} / ${u.model} / ${u.serial_number}`)
+  }
+
+  // ── AND THE LD SIDE STILL SEARCHES BY COMPANY ────────────────────────────
+  //
+  // The same picker queries /api/customers too, and company_name was missing from
+  // that search - so a customer known only by the name on the truck could not be
+  // found. Driven through a real customer because this is the field HD documents
+  // populate via logHDCustomer.
+  const company = `${MARK} Hauling Co`
+  const cust = await api('POST', '/api/customers', {
+    first_name: `${MARK}`,
+    last_name:  'picker-company',
+    company_name: company,
+    phone: '+15555550134',
+  })
+  const custId = String(((cust.json.customer ?? {}) as Record<string, unknown>).id ?? '')
+  if (custId) created.customers.add(custId)
+  if (record(F, 'a customer with a company name can be created',
+    (cust.status === 201 || cust.status === 200) && !!custId, `-> ${cust.status}`)) {
+    const byCompany = await api('GET', `/api/customers?search=${encodeURIComponent('Hauling')}&limit=8`)
+    const rows = (byCompany.json.customers ?? []) as Array<Record<string, unknown>>
+    record(F, 'searching the COMPANY name finds the customer',
+      rows.some(r => String(r.id) === custId),
+      rows.some(r => String(r.id) === custId)
+        ? `${rows.length} hit(s)`
+        : 'not found - company_name is not in the search')
+    record(F, 'and the hit returns company_name to display',
+      rows.some(r => String(r.id) === custId && String(r.company_name ?? '') === company),
+      String(rows.find(r => String(r.id) === custId)?.company_name ?? '(absent)'))
+  }
+}
+
 async function main(): Promise<void> {
   console.log('='.repeat(96))
   console.log(`SMOKE  ${BASE}`)
@@ -1518,6 +1661,7 @@ async function main(): Promise<void> {
     await flowP()
     await flowQ()
     await flowR()
+    await flowS()
   } finally {
     await cleanup()
   }

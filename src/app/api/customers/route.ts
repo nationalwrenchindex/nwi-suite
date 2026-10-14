@@ -5,8 +5,11 @@ import { createClient } from '@/lib/supabase/server'
 // Address is included so a picker can prefill it straight from the list rather than
 // firing a second request per selection. Five short text columns; the list is already
 // paged.
+// company_name is returned as well as searched. A fleet customer's identity IS the
+// company, and a picker that cannot display it shows a row with a person's name on it
+// and leaves the tech guessing which "Mike" is the trucking firm.
 const CUSTOMER_LIST_SELECT = `
-  id, first_name, last_name, phone, email,
+  id, first_name, last_name, company_name, phone, email,
   address_line1, address_line2, city, state, zip,
   vehicles(id)
 `
@@ -32,10 +35,25 @@ export async function GET(request: NextRequest) {
     .range(offset, offset + limit - 1)
 
   if (search) {
-    // Search across name, phone, email
-    query = query.or(
-      `first_name.ilike.%${search}%,last_name.ilike.%${search}%,phone.ilike.%${search}%,email.ilike.%${search}%`,
-    )
+    // Search across name, COMPANY, phone, email.
+    //
+    // company_name was missing, and it is the field a heavy-duty customer is known by.
+    // Proved on live data: "National Wrench Index" could not be found by typing
+    // "National", and the fleet customers that did work only worked because the
+    // company had been split across first/last ("SGA" / "Trucking LLC") by
+    // logHDCustomer. A tech typing the name on the side of the truck got nothing.
+    //
+    // COMMAS AND PARENTHESES ARE STRIPPED from the term. PostgREST parses this
+    // or() string itself - a comma starts a new condition and a parenthesis opens a
+    // group - so searching "JRC Logistics, LLC" built a filter that is not the one
+    // anybody intended. Stripping is right rather than escaping: these characters
+    // carry no meaning in a name search.
+    const safe = search.replace(/[(),*]/g, ' ').trim()
+    if (safe) {
+      query = query.or(
+        `first_name.ilike.%${safe}%,last_name.ilike.%${safe}%,company_name.ilike.%${safe}%,phone.ilike.%${safe}%,email.ilike.%${safe}%`,
+      )
+    }
   }
 
   const { data, error } = await query
@@ -98,6 +116,16 @@ export async function POST(request: NextRequest) {
       user_id:      user.id,
       first_name:   (body.first_name as string).trim(),
       last_name:    (body.last_name as string).trim(),
+      // company_name WAS SILENTLY DROPPED HERE. The column has existed since
+      // migration 067 and PUT /api/customers/[id] has always accepted it, but this
+      // insert never did - so the only writer in the whole codebase was
+      // logHDCustomer, as a side effect of saving an HD quote or invoice. A customer
+      // added deliberately through Intel Hub could not carry the name on the side of
+      // the truck, which is the name a heavy-duty customer is known by and the one
+      // the HD quote picker now searches.
+      company_name: typeof body.company_name === 'string' && body.company_name.trim()
+        ? body.company_name.trim()
+        : null,
       phone:        body.phone        ?? null,
       email:        body.email        ?? null,
       address_line1:body.address_line1 ?? null,

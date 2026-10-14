@@ -24,7 +24,7 @@ function fmtMoney(n: number | null) {
 
 function AddCustomerForm({ onCreated }: { onCreated: (c: CustomerListItem) => void }) {
   const blank = {
-    first_name: '', last_name: '', phone: '', email: '',
+    first_name: '', last_name: '', company_name: '', phone: '', email: '',
     address_line1: '', address_line2: '', city: '', state: '', zip: '',
     corp_address_line1: '', corp_address_line2: '', corp_city: '', corp_state: '', corp_zip: '',
     payment_terms: 'net30',
@@ -42,6 +42,9 @@ function AddCustomerForm({ onCreated }: { onCreated: (c: CustomerListItem) => vo
     setLoad(true); setError(null)
     const payload: CreateCustomerPayload = {
       first_name: form.first_name.trim(), last_name: form.last_name.trim(),
+      // The business the work is for. Blank stays null - an empty string here would
+      // make "no company" look like a company with no name in every picker.
+      company_name: form.company_name.trim() || null,
       phone: form.phone || null, email: form.email || null,
       address_line1: form.address_line1 || null, address_line2: form.address_line2 || null,
       city: form.city || null, state: form.state || null, zip: form.zip || null,
@@ -70,6 +73,15 @@ function AddCustomerForm({ onCreated }: { onCreated: (c: CustomerListItem) => vo
       <div className="grid grid-cols-2 gap-3">
         <div><label className="nwi-label">First name *</label><input value={form.first_name} onChange={e => set('first_name', e.target.value)} className="nwi-input" placeholder="Marcus" /></div>
         <div><label className="nwi-label">Last name *</label><input value={form.last_name} onChange={e => set('last_name', e.target.value)} className="nwi-input" placeholder="Rodriguez" /></div>
+      </div>
+      {/* THE COMPANY. customers.company_name has existed since migration 067 and
+          there was nowhere to type it: this form had no field and POST /api/customers
+          dropped the key, so the only writer was logHDCustomer as a side effect of
+          saving an HD document. A heavy-duty customer is known by the name on the
+          truck, and the HD quote picker searches this column. */}
+      <div>
+        <label className="nwi-label">Company</label>
+        <input value={form.company_name} onChange={e => set('company_name', e.target.value)} className="nwi-input" placeholder="Black Horse Trucking LLC (optional)" />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div><label className="nwi-label">Phone</label><input type="tel" value={form.phone} onChange={e => set('phone', e.target.value)} className="nwi-input" placeholder="(555) 867-5309" /></div>

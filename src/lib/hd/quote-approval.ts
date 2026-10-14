@@ -414,6 +414,63 @@ export async function createWorkOrderFromQuote(
     ...termsFromQuote(quote),
   }
 
+  // ===========================================================================
+  // UNIT NOT IDENTIFIED, recorded rather than left silent.
+  // ===========================================================================
+  //
+  // The quote form requires a manufacturer and model but NOT a serial - on the phone
+  // it is often not in hand, and refusing the quote over it would just get the field
+  // filled with a guess. So the job carries a flag instead, and the work order screen
+  // shows it, so "we never pinned down which unit this was" is visible to whoever
+  // picks the job up.
+  //
+  // A TRUCK job with a VIN is identified; a reefer with no serial is not. flagged_items
+  // is JSONB and already on hd_work_orders (migration 047), so this needs no migration.
+  {
+    const hasSerial = String(quote.unit_serial ?? '').trim() !== ''
+    const hasVin    = String(quote.vin ?? '').trim() !== ''
+    if (!hasSerial && !hasVin) {
+      insertRow.flagged_items = {
+        unit_not_identified: true,
+        reason: 'No serial number or VIN was recorded on the approved quote.',
+        flagged_at: new Date().toISOString(),
+      }
+    }
+  }
+
+  // ===========================================================================
+  // LOCATION, defaulted from the address on the quote.
+  // ===========================================================================
+  //
+  // hd_work_orders.location was left null by this converter, so every quote-approved
+  // job reached the schedule with no address on it and the tech had to go back to the
+  // quote to find out where he was going.
+  //
+  // THE SERVICE ADDRESS WINS where the quote has one. has_corp_address on an HD
+  // document means "the billing address and the service address are different", and
+  // the unit is at the service address - sending a tech to a head office because that
+  // is where the invoice goes is the specific mistake worth avoiding here.
+  //
+  // It is only a DEFAULT. The work order screen can edit it, because the unit is
+  // often at neither address on file.
+  if (insertRow.location == null) {
+    const useCorp = Boolean(quote.has_corp_address)
+    const line1 = useCorp ? quote.corp_address_line1 : quote.address_line1
+    const line2 = useCorp ? quote.corp_address_line2 : quote.address_line2
+    const city  = useCorp ? quote.corp_city  : quote.city
+    const state = useCorp ? quote.corp_state : quote.state
+    const zip   = useCorp ? quote.corp_zip   : quote.zip
+    const location = [
+      line1, line2,
+      [city, state].filter(v => String(v ?? '').trim() !== '').join(', '),
+      zip,
+    ]
+      .map(v => String(v ?? '').trim())
+      .filter(v => v !== '')
+      .join(', ')
+    if (location) insertRow.location = location
+  }
+
   // LABOR HOURS, SUMMED FROM THE LINES WHEN THE QUOTE HAS NO FIGURE OF ITS OWN.
   //
   // The HD quote form never writes hd_quotes.labor_hours - the hours live on each

@@ -12,6 +12,7 @@ import { LABOR_GUIDE, type LaborGuideItem } from '@/lib/hd/labor-guide'
 import { useTaxSettings } from '@/lib/use-tax-settings'
 import { useHdFeeSettings } from '@/lib/hd/use-fee-settings'
 import { computeTax, taxDisplayRows, mergeBreakdowns } from '@/lib/tax'
+import { parseAddress } from '@/lib/hd/address-parse'
 import { DEFAULT_HD_PARTS_MARKUP, sellPrice, lineAmount } from '@/lib/hd/parts-pricing'
 import AddressAutofill from '@/components/hd/AddressAutofill'
 import { money } from '@/lib/format'
@@ -82,13 +83,48 @@ interface LibraryItem {
   is_master: boolean
 }
 
-// Intel Hub customer search hit
-interface CustomerHit {
+// ─────────────────────────────────────────────────────────────────────────────
+// THE PICKER SEARCHES BOTH INTEL HUBS
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// There are two, and this form only ever asked one of them:
+//
+//   /intel      (LD nav)  customers + vehicles
+//   /hd/intel   (HD nav)  hd_fleet_accounts + hd_units
+//
+// This picker is labelled "Link Intel Hub Customer" and called GET /api/customers,
+// which is the LD table. A fleet account entered in HD's own Intel Hub - the Intel
+// Hub an HD tech actually opens - could not be selected on an HD quote at all. The
+// ones that did appear were there by accident: logHDCustomer writes a `customers`
+// row every time an HD quote or invoice is SAVED, so customers born of HD paperwork
+// turned up and anything entered deliberately did not.
+//
+// Both sources are searched now and each hit says which it came from.
+type HitSource = 'customer' | 'fleet'
+
+interface PickerHit {
+  source: HitSource
   id: string
-  first_name: string
-  last_name: string
+  /** What the tech reads: a person's name, or the fleet's name. */
+  label: string
+  /** Phone, email, address - whatever identifies it. */
+  sublabel: string
   phone: string | null
   email: string | null
+  /** The company, when the record has one. */
+  company: string | null
+  /** hd_fleet_accounts.address is ONE free-text line, not line1/city/state/zip. */
+  addressLine: string | null
+}
+
+/** One unit on a fleet account, for the "which unit?" step. */
+interface FleetUnitHit {
+  id: string
+  unit_number: string | null
+  manufacturer: string | null
+  model: string | null
+  serial_number: string | null
+  year: number | null
 }
 
 // One Gemini-suggested labor line
@@ -339,8 +375,12 @@ export default function NewQuotePage() {
 
   // ── Intel Hub customer picker ──
   const [customerSearch, setCustomerSearch]       = useState('')
-  const [customerResults, setCustomerResults]     = useState<CustomerHit[]>([])
+  const [customerResults, setCustomerResults]     = useState<PickerHit[]>([])
   const [showCustomerResults, setShowCustomerResults] = useState(false)
+  // Units on a linked fleet account, when there is more than one to choose from.
+  const [fleetUnits, setFleetUnits]               = useState<FleetUnitHit[]>([])
+  // What the link did, said out loud: which account, and whether it filled the unit.
+  const [fleetNote, setFleetNote]                 = useState('')
 
   // ── Gemini labor suggestions ──
   const [suggestLoading, setSuggestLoading]   = useState(false)
@@ -450,32 +490,115 @@ export default function NewQuotePage() {
     setForm(f => ({ ...f, [k]: v }))
   }
 
-  // ── Intel Hub customer picker ──────────────────────────────────────────────
+  // ── Intel Hub picker: BOTH sources, in parallel ───────────────────────────
   useEffect(() => {
     const q = customerSearch.trim()
     if (q.length < 2) { setCustomerResults([]); return }
     const t = setTimeout(async () => {
-      try {
-        const res  = await fetch(`/api/customers?search=${encodeURIComponent(q)}&limit=8`)
-        const data = await res.json()
-        setCustomerResults((data.customers ?? []) as CustomerHit[])
-        setShowCustomerResults(true)
-      } catch { /* ignore */ }
+      const term = encodeURIComponent(q)
+      // Promise.allSettled, not all: HD's fleet endpoint is tier-gated and answers
+      // 403 on a Starter plan. One source being unavailable must not blank the other.
+      const [custRes, fleetRes] = await Promise.allSettled([
+        fetch(`/api/customers?search=${term}&limit=8`),
+        fetch(`/api/hd/fleet-accounts?search=${term}&limit=8`),
+      ])
+
+      const hits: PickerHit[] = []
+
+      if (custRes.status === 'fulfilled' && custRes.value.ok) {
+        try {
+          const data = await custRes.value.json() as {
+            customers?: Array<Record<string, unknown>>
+          }
+          for (const c of data.customers ?? []) {
+            const person = `${c.first_name ?? ''} ${c.last_name ?? ''}`.trim()
+            const company = (c.company_name as string | null) ?? null
+            hits.push({
+              source:  'customer',
+              id:      String(c.id),
+              // The company leads when there is one: a fleet is known by the name on
+              // the truck, not by whoever happened to answer the phone.
+              label:   company || person || '(no name)',
+              sublabel: [company && person ? person : null, c.phone, c.email]
+                .filter(Boolean).join(' - '),
+              phone:   (c.phone as string | null) ?? null,
+              email:   (c.email as string | null) ?? null,
+              company,
+              addressLine: null,
+            })
+          }
+        } catch { /* a malformed page from one source is not a reason to show none */ }
+      }
+
+      if (fleetRes.status === 'fulfilled' && fleetRes.value.ok) {
+        try {
+          const data = await fleetRes.value.json() as {
+            fleet_accounts?: Array<Record<string, unknown>>
+          }
+          for (const a of data.fleet_accounts ?? []) {
+            hits.push({
+              source:  'fleet',
+              id:      String(a.id),
+              label:   String(a.fleet_name ?? '(unnamed fleet)'),
+              sublabel: [a.contact_name, a.contact_phone, a.address]
+                .filter(Boolean).join(' - '),
+              phone:   (a.contact_phone as string | null) ?? null,
+              email:   (a.contact_email as string | null) ?? null,
+              company: String(a.fleet_name ?? '') || null,
+              addressLine: (a.address as string | null) ?? null,
+            })
+          }
+        } catch { /* ditto */ }
+      }
+
+      setCustomerResults(hits)
+      setShowCustomerResults(true)
     }, 300)
     return () => clearTimeout(t)
   }, [customerSearch])
 
-  async function pickCustomer(hit: CustomerHit) {
+  async function pickCustomer(hit: PickerHit) {
     // Immediately fill from the search hit so name/phone/email populate even before the
     // full-record fetch resolves (and even if it fails).
-    const hitName = `${hit.first_name ?? ''} ${hit.last_name ?? ''}`.trim()
     setShowCustomerResults(false)
     setCustomerResults([])
-    setCustomerSearch(hitName)
+    setCustomerSearch(hit.label)
+
+    // ── A FLEET ACCOUNT from HD's Intel Hub ─────────────────────────────────
+    //
+    // customer_id is deliberately NOT set: it is a `customers` foreign key and a
+    // fleet account id is not one. Writing it would hand the quote route an id that
+    // does not resolve, and logHDCustomer will create or match the real customers
+    // row on save anyway.
+    if (hit.source === 'fleet') {
+      const parsed = hit.addressLine ? parseAddress(hit.addressLine) : null
+      setForm(f => ({
+        ...f,
+        customer_id:    '',
+        customer_name:  hit.label,
+        company_name:   hit.company ?? hit.label,
+        customer_phone: hit.phone ?? '',
+        customer_email: hit.email ?? '',
+        // hd_fleet_accounts stores the address as one line. parseAddress is the same
+        // conservative splitter the address field above uses - it leaves a city blank
+        // rather than guess, and every field stays editable underneath.
+        address_line1:  parsed?.address_line1 ?? '',
+        address_line2:  parsed?.address_line2 ?? '',
+        city:           parsed?.city ?? '',
+        state:          parsed?.state ?? '',
+        zip:            parsed?.zip ?? '',
+      }))
+      setFleetNote(hit.addressLine && !parsed?.city
+        ? `Linked ${hit.label}. The address on file is one line - check the city and state.`
+        : `Linked ${hit.label} from HD Intel Hub.`)
+      await loadFleetUnits(hit.id)
+      return
+    }
+
     setForm(f => ({
       ...f,
       customer_id:    hit.id,
-      customer_name:  hitName,
+      customer_name:  hit.label,
       customer_phone: hit.phone ?? '',
       customer_email: hit.email ?? '',
     }))
@@ -487,11 +610,15 @@ export default function NewQuotePage() {
       const data = await res.json()
       const c = data.customer
       if (!c) return
-      const fullName = `${c.first_name ?? hit.first_name ?? ''} ${c.last_name ?? hit.last_name ?? ''}`.trim()
+      const person = `${c.first_name ?? ''} ${c.last_name ?? ''}`.trim()
+      // The company leads, same as in the dropdown, so what the tech picked and what
+      // lands in the field are the same words.
+      const fullName = (c.company_name as string | null) || person || hit.label
       setForm(f => ({
         ...f,
         customer_id:    c.id ?? hit.id,
         customer_name:  fullName || f.customer_name,
+        ...(c.company_name ? { company_name: String(c.company_name) } : {}),
         customer_phone: c.phone ?? hit.phone ?? '',
         customer_email: c.email ?? hit.email ?? '',
         address_line1:  c.address_line1 ?? '',
@@ -512,9 +639,51 @@ export default function NewQuotePage() {
     }
   }
 
+  /**
+   * The units on a fleet account, loaded when one is linked.
+   *
+   * ONE unit fills the machine straight away - that is the whole point of linking a
+   * customer who has one. SEVERAL are offered as a choice rather than guessed,
+   * because picking the wrong reefer puts the wrong serial on a quote the customer
+   * approves. NONE leaves the fields alone and says so.
+   */
+  async function loadFleetUnits(fleetAccountId: string) {
+    setFleetUnits([])
+    try {
+      const res = await fetch(`/api/hd/fleet-units?fleet_account_id=${encodeURIComponent(fleetAccountId)}&limit=50`)
+      if (!res.ok) return
+      const data = await res.json() as { units?: FleetUnitHit[] }
+      const units = data.units ?? []
+      if (units.length === 1) {
+        applyFleetUnit(units[0])
+        setFleetNote(`Linked, and filled the unit from HD Intel Hub.`)
+        return
+      }
+      if (units.length > 1) {
+        setFleetUnits(units)
+        setFleetNote(`${units.length} units on this account - pick the one this quote is for.`)
+      }
+      // Zero units: whatever the link already said stands. The unit fields are
+      // required below, so an unlinked machine cannot slip through silently.
+    } catch { /* the link itself already succeeded; the units are a bonus */ }
+  }
+
+  function applyFleetUnit(u: FleetUnitHit) {
+    setForm(f => ({
+      ...f,
+      unit_manufacturer: u.manufacturer ?? f.unit_manufacturer,
+      unit_model:        u.model ?? f.unit_model,
+      unit_serial:       u.serial_number ?? f.unit_serial,
+      unit_year:         u.year != null ? String(u.year) : f.unit_year,
+    }))
+    setFleetUnits([])
+  }
+
   function clearCustomerLink() {
     setCustomerSearch('')
     setCustomerResults([])
+    setFleetUnits([])
+    setFleetNote('')
     setForm(f => ({
       ...f,
       customer_id: '', address_line1: '', address_line2: '', city: '', state: '', zip: '',
@@ -881,6 +1050,24 @@ export default function NewQuotePage() {
   // ── Save ──
   async function save(status: 'draft' | 'sent') {
     if (!form.customer_name.trim()) { setToast('Customer name is required.'); return }
+
+    // ===========================================================================
+    // THE MACHINE HAS TO BE IDENTIFIED.
+    // ===========================================================================
+    //
+    // Manufacturer and model were both optional, so a reefer quote could be saved,
+    // sent, approved and converted without ever saying what the job was on. That
+    // work order reaches a tech with no machine named on it and reaches an invoice
+    // the customer cannot match to a unit in their yard.
+    //
+    // A TRUCK job is identified by its truck fields instead, so this asks for one or
+    // the other rather than insisting on a reefer that is not there. isTruckUnit is
+    // the same test the labor suggestions already use.
+    if (!isTruckUnit && !(form.unit_manufacturer.trim() && form.unit_model.trim())) {
+      setToast('Unit manufacturer and model are required - or fill in the truck details if this is a truck job.')
+      return
+    }
+
     // Refuse rather than bill a figure that does not add up. Loud on purpose.
     if (extrasMismatch) { setToast('Cannot save: ' + extrasMismatch); return }
     setSaving(true)
@@ -991,7 +1178,7 @@ export default function NewQuotePage() {
                   value={customerSearch}
                   onChange={e => { setCustomerSearch(e.target.value); if (form.customer_id) setField('customer_id', '') }}
                   onFocus={() => { if (customerResults.length) setShowCustomerResults(true) }}
-                  placeholder="Search saved customers by name, phone, or email"
+                  placeholder="Search customers and fleet accounts by name, company, or phone"
                 />
                 {form.customer_id && (
                   <button
@@ -1015,8 +1202,48 @@ export default function NewQuotePage() {
                     className="w-full text-left px-4 py-2.5 hover:bg-gray-50"
                     style={{ borderBottom: `1px solid #F9FAFB` }}
                   >
-                    <p className="text-sm font-medium" style={{ color: TEXT }}>{hit.first_name} {hit.last_name}</p>
-                    <p className="text-xs" style={{ color: MUTED }}>{[hit.phone, hit.email].filter(Boolean).join(' · ') || '—'}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium" style={{ color: TEXT }}>{hit.label}</p>
+                      {/* WHICH Intel Hub this came from. Two customers can have the
+                          same name in the two tables, and a tech choosing between
+                          them needs to know which record he is attaching. */}
+                      <span
+                        className="text-xs px-1.5 py-0.5 rounded font-semibold"
+                        style={hit.source === 'fleet'
+                          ? { background: '#FFF7ED', color: ORANGE }
+                          : { background: '#EBF5FF', color: BLUE }}
+                      >
+                        {hit.source === 'fleet' ? 'Fleet' : 'Customer'}
+                      </span>
+                    </div>
+                    <p className="text-xs" style={{ color: MUTED }}>{hit.sublabel || '—'}</p>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {fleetNote && (
+              <p className="text-xs mt-2" style={{ color: MUTED }}>{fleetNote}</p>
+            )}
+
+            {/* More than one unit on the account. Offered, never guessed - the wrong
+                serial on an approved quote is the wrong machine on the invoice. */}
+            {fleetUnits.length > 1 && (
+              <div className="mt-2" style={{ border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden' }}>
+                {fleetUnits.map(u => (
+                  <button
+                    key={u.id}
+                    type="button"
+                    onClick={() => applyFleetUnit(u)}
+                    className="w-full text-left px-4 py-2.5 hover:bg-gray-50"
+                    style={{ borderBottom: `1px solid #F9FAFB`, background: CARD }}
+                  >
+                    <p className="text-sm font-medium" style={{ color: TEXT }}>
+                      {[u.unit_number, u.manufacturer, u.model].filter(Boolean).join(' / ') || '(unnamed unit)'}
+                    </p>
+                    {u.serial_number && (
+                      <p className="text-xs" style={{ color: MUTED }}>Serial {u.serial_number}</p>
+                    )}
                   </button>
                 ))}
               </div>
@@ -1095,14 +1322,19 @@ export default function NewQuotePage() {
           )}
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
-            <Field label="Manufacturer">
+            {/* REQUIRED unless this is a truck job - a reefer quote with no machine
+                named reaches a tech with nothing to work on and a customer with
+                nothing to match it to. The serial is NOT required: it is often not in
+                hand on the phone, and the work order carries a flag for that instead
+                of the quote refusing to save. */}
+            <Field label={isTruckUnit ? 'Manufacturer' : 'Manufacturer *'}>
               <select style={inp} value={form.unit_manufacturer} onChange={e => setField('unit_manufacturer', e.target.value)}>
                 <option value="">Select...</option>
                 <option>Thermo King</option>
                 <option>Carrier Transicold</option>
               </select>
             </Field>
-            <Field label="Unit Model">
+            <Field label={isTruckUnit ? 'Unit Model' : 'Unit Model *'}>
               <input style={inp} value={form.unit_model} onChange={e => setField('unit_model', e.target.value)} placeholder="e.g. S-600" />
             </Field>
             <Field label="Serial Number">
@@ -1111,6 +1343,14 @@ export default function NewQuotePage() {
             <Field label="Unit Year">
               <input style={inp} value={form.unit_year} onChange={e => setField('unit_year', e.target.value)} placeholder="2018" />
             </Field>
+            {/* Said at the point of entry, not only after conversion. The work order
+                carries the same flag, so this is a heads-up rather than the record. */}
+            {!isTruckUnit && !form.unit_serial.trim() && (
+              <p className="col-span-2 sm:col-span-4 text-xs" style={{ color: '#B45309' }}>
+                No serial number. This will save, and the work order will be flagged
+                &quot;unit not identified&quot; so it is not forgotten.
+              </p>
+            )}
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <Field label="Truck Make">
