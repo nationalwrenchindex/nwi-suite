@@ -132,10 +132,10 @@ function fmtHrs(min: number, max: number, shopOnly = false): string {
   return `${min} to ${max} hrs`
 }
 
-function fmtAmtRange(min: number, max: number): string {
-  if (Math.abs(min - max) < 0.5) return `$${min.toFixed(0)}`
-  return `$${Math.floor(min)} to $${Math.ceil(max)}`
-}
+// fmtAmtRange was here. It rounded to whole dollars - `$${min.toFixed(0)}` turned
+// 202.50 into "$203" - and the labor modal's preview was its only caller, so the one
+// figure a tech checked before adding a line was the one figure that did not match
+// the line. Replaced by laborMath(), which prints the arithmetic at the real cent.
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
@@ -197,12 +197,37 @@ export default function NewQuotePage() {
   const [partsResults, setPartsResults]   = useState<PartResult[]>([])
   const [partsSearching, setPartsSearching] = useState(false)
 
-  // Labor modal state — free-text description + editable hours + personal library
+  // ===========================================================================
+  // LABOR MODAL STATE — ONE BILLABLE NUMBER
+  // ===========================================================================
+  //
+  // This asked for FOUR numbers - book min, book max, mobile min, mobile max - to
+  // answer one question, and a tech on a straightforward job typed the same value
+  // twice in two of them. Only the mobile hours ever billed; book time never entered
+  // the arithmetic. Then the preview printed "Mobile: 1.5 hrs", "Book: 1 hrs flat
+  // rate" and "$203" with nothing saying which number produced the $203.
+  //
+  // Now: ONE field, with book time as reference text beside it.
+  //
+  // laborMobileMin is the billable number. While laborRange is false the single input
+  // writes BOTH min and max, so every figure downstream and every column stored is
+  // identical to what this form produced before - nothing about how labor is stored
+  // has changed.
+  //
+  // BOOK HOURS ARE REFERENCE ONLY and have no input at all now. They are set from the
+  // library or guide item that was picked and are still written to book_hours /
+  // book_hours_max exactly as before. The default is EMPTY, not '1.0': a hand-typed
+  // job has no book time, and inventing 1.0 for it was how the old form made the tech
+  // wonder whether he had billed for both numbers. The line items grid still lets him
+  // type a book figure if he wants one.
   const [laborDesc, setLaborDesc]           = useState('')
-  const [laborBookMin, setLaborBookMin]     = useState('1.0')
-  const [laborBookMax, setLaborBookMax]     = useState('1.0')
+  const [laborBookMin, setLaborBookMin]     = useState('')
+  const [laborBookMax, setLaborBookMax]     = useState('')
   const [laborMobileMin, setLaborMobileMin] = useState('1.5')
   const [laborMobileMax, setLaborMobileMax] = useState('1.5')
+  // False = one number. The range exists for the refrigeration recovery add-on, which
+  // genuinely adds 1.5 to 2.5 hrs, so ticking that switches this on by itself.
+  const [laborRange, setLaborRange]         = useState(false)
   const [laborRecharge, setLaborRecharge]   = useState(false)
   const [saveToLibrary, setSaveToLibrary]   = useState(true)
   const [laborLibrary, setLaborLibrary]     = useState<LibraryItem[]>([])
@@ -226,7 +251,13 @@ export default function NewQuotePage() {
     unit_manufacturer: '', unit_model: '', unit_serial: '', unit_year: '',
     truck_make: '', truck_model: '', truck_year: '', vin: '',
     complaint: '', diagnosis: '',
-    labor_rate: 125, diagnostic_fee: 125, include_diagnostic: true,
+    // include_diagnostic STARTS OFF, and diagnostic_fee starts at 0.
+    //
+    // It used to default ON at $125 - a fee nobody configured, switched on before the
+    // tech touched anything, on every quote. A charge the shop never agreed to should
+    // not be the default. It turns on by itself only once hd_diagnostic_fee is set in
+    // HD Settings, at that value: see the seeding effect below.
+    labor_rate: 125, diagnostic_fee: 0, include_diagnostic: false,
     road_call_fee: 0, include_road_call: false,
     tax_rate: 0, tax_rate_labor: 0, notes: '', valid_until: '',
     // The customer's own PO, when they give one. Travels to the work order and the
@@ -245,17 +276,26 @@ export default function NewQuotePage() {
   //
   // Each field is only seeded while it still holds the fallback it started on, so a
   // number typed while the fetch was in flight survives. NULL from settings means the
-  // shop never set that fee and the fallback stays - it is NOT read as zero, because a
-  // shop that charges nothing to diagnose and a shop that never answered are different
-  // and only one of them wants $125 put back.
+  // shop never set that fee, and nothing is filled in for it - NOT read as zero,
+  // because a shop that charges nothing to diagnose and a shop that never answered are
+  // different, and neither wants $125 put on the quote by default.
+  //
+  // A CONFIGURED DIAGNOSTIC FEE ALSO TICKS THE BOX. That is the whole difference
+  // between the two states: a shop that has said "I charge $150 to diagnose" means it
+  // on every job and should not re-tick it each time, while a shop that has said
+  // nothing gets no charge it never agreed to. The road call fee does NOT auto-tick -
+  // whether a job was a road call is a fact about that job, not a standing policy.
   const feeSettings = useHdFeeSettings()
   useEffect(() => {
     if (!feeSettings.loaded) return
     setForm(f => {
       const next = { ...f }
-      if (feeSettings.laborRate     != null && f.labor_rate     === 125) next.labor_rate     = feeSettings.laborRate
-      if (feeSettings.diagnosticFee != null && f.diagnostic_fee === 125) next.diagnostic_fee = feeSettings.diagnosticFee
-      if (feeSettings.roadCallFee   != null && f.road_call_fee  === 0)   next.road_call_fee  = feeSettings.roadCallFee
+      if (feeSettings.laborRate != null && f.labor_rate === 125) next.labor_rate = feeSettings.laborRate
+      if (feeSettings.diagnosticFee != null && f.diagnostic_fee === 0) {
+        next.diagnostic_fee = feeSettings.diagnosticFee
+        next.include_diagnostic = true
+      }
+      if (feeSettings.roadCallFee != null && f.road_call_fee === 0) next.road_call_fee = feeSettings.roadCallFee
       return next
     })
   }, [feeSettings])
@@ -605,10 +645,16 @@ export default function NewQuotePage() {
   const showLaborResults = laborTerm.length > 0 && (libMatches.length > 0 || guideMatches.length > 0)
 
   function selectLibraryItem(i: LibraryItem) {
-    const book = libNum(i.shop_hours)   ?? 1.0
+    // No `?? 1.0` on the book hours any more. A library item that records no shop
+    // hours has no book time, and saying so is the point - the field beside the
+    // billable number reads "no book time" rather than a 1.0 nobody looked up.
+    const book = libNum(i.shop_hours)
     const mob  = libNum(i.mobile_hours) ?? 1.5
     setLaborDesc(i.description)
-    setLaborBookMin(String(book));  setLaborBookMax(String(book))
+    setLaborBookMin(book == null ? '' : String(book))
+    setLaborBookMax(book == null ? '' : String(book))
+    // A library item holds one mobile figure, so this is a single number, not a range.
+    setLaborRange(false)
     setLaborMobileMin(String(mob)); setLaborMobileMax(String(mob))
     const refrigHrs = libNum(i.refrigeration_hours)
     if (i.requires_refrigeration && refrigHrs && refrigHrs > 0) {
@@ -630,6 +676,10 @@ export default function NewQuotePage() {
     setLaborDesc(item.label)
     setLaborBookMin(String(item.book_min));     setLaborBookMax(String(item.book_max))
     setLaborMobileMin(String(item.mobile_min)); setLaborMobileMax(String(item.mobile_max))
+    // A guide entry CAN be a genuine spread (1.5 to 2.5 on an R&R). Show the range
+    // when it has one, and one field when it does not - the mode follows the data
+    // rather than making the tech notice.
+    setLaborRange(Math.abs(item.mobile_max - item.mobile_min) > 0.01)
     setLaborRefrig(null)
     setLaborRecharge(item.requires_refrigeration)
     setLaborSelectedKey(`guide:${item.label}`)
@@ -638,8 +688,11 @@ export default function NewQuotePage() {
   function closeLaborModal() {
     setLaborModal(false)
     setLaborDesc('')
-    setLaborBookMin('1.0');   setLaborBookMax('1.0')
+    // Empty, not '1.0'. See the state block: book time is reference only now, and a
+    // job nobody looked up has none.
+    setLaborBookMin('');      setLaborBookMax('')
     setLaborMobileMin('1.5'); setLaborMobileMax('1.5')
+    setLaborRange(false)
     setLaborRecharge(false)
     setLaborRefrig(null)
     setSaveToLibrary(true)
@@ -666,11 +719,42 @@ export default function NewQuotePage() {
   const rechargeAddMin  = laborRecharge ? 1.5 : 0
   const rechargeAddMax  = laborRecharge ? 2.5 : 0
   const baseMobileMin   = parseFloat(laborMobileMin) || 0
-  const baseMobileMax   = parseFloat(laborMobileMax) || baseMobileMin
+  // In single-number mode the max IS the min. Reading laborMobileMax here would use a
+  // value the tech cannot see, which is exactly the confusion being removed.
+  const baseMobileMax   = laborRange ? (parseFloat(laborMobileMax) || baseMobileMin) : baseMobileMin
   const totalMobileMin  = baseMobileMin + rechargeAddMin
   const totalMobileMax  = baseMobileMax + rechargeAddMax
   const previewAmtMin   = totalMobileMin * form.labor_rate
   const previewAmtMax   = totalMobileMax * form.labor_rate
+  // True when the two ends differ enough to be worth printing as a spread.
+  const laborIsSpread   = Math.abs(totalMobileMax - totalMobileMin) > 0.01
+
+  // Book time as reference text, or '' when the job has none. Deliberately empty
+  // rather than "book: 0" - a hand-typed job was never looked up in a book, and
+  // printing a zero for it reads as a quoted figure.
+  const bookRefMin = parseFloat(laborBookMin)
+  const bookRefMax = parseFloat(laborBookMax)
+  const bookRefText = Number.isFinite(bookRefMin) && bookRefMin > 0
+    ? (Number.isFinite(bookRefMax) && Math.abs(bookRefMax - bookRefMin) > 0.01
+        ? `book: ${bookRefMin} to ${bookRefMax} hr`
+        : `book: ${bookRefMin} hr`)
+    : ''
+
+  /**
+   * The arithmetic, spelled out: "1.5 hrs x $135.00/hr = $202.50".
+   *
+   * The preview used to print a bare "$203" from fmtAmtRange, which rounded to whole
+   * dollars - so the figure on screen was not the figure on the line, and the tech had
+   * to reverse-engineer which of the four hour fields produced it. money() throughout,
+   * no rounding.
+   */
+  function laborMath(): string {
+    const rate = money(form.labor_rate)
+    if (laborIsSpread) {
+      return `${totalMobileMin} to ${totalMobileMax} hrs x ${rate}/hr = ${money(previewAmtMin)} to ${money(previewAmtMax)}`
+    }
+    return `${totalMobileMin} hrs x ${rate}/hr = ${money(previewAmtMin)}`
+  }
 
   function addLaborItem() {
     const description = laborDesc.trim()
@@ -1160,11 +1244,27 @@ export default function NewQuotePage() {
                   style={{ ...inp, paddingLeft: 24, opacity: form.include_diagnostic ? 1 : 0.4 }}
                   type="number"
                   min={0}
-                  value={form.diagnostic_fee}
+                  // Blank rather than a 0 the tech did not type. A zero in a money
+                  // field reads as "I charge nothing", which is a different claim
+                  // from "nobody has set this".
+                  value={form.diagnostic_fee === 0 ? '' : form.diagnostic_fee}
+                  placeholder="0.00"
                   disabled={!form.include_diagnostic}
                   onChange={e => setField('diagnostic_fee', parseFloat(e.target.value) || 0)}
                 />
               </div>
+              {/* Only while the shop has no configured fee. Once HD Settings holds one
+                  the box ticks itself at that value and this note is wrong, so it goes.
+                  feesAvailable is false when migration 156 has not been applied, and
+                  pointing at a Settings field that cannot save would be worse than
+                  saying nothing. */}
+              {feeSettings.loaded && feeSettings.diagnosticFee == null && (
+                <p className="text-xs mt-1" style={{ color: MUTED }}>
+                  {feeSettings.feesAvailable
+                    ? 'No diagnostic fee set — add one in HD Settings to have it default on.'
+                    : 'No diagnostic fee set.'}
+                </p>
+              )}
             </div>
             <div>
               <label className="flex items-center gap-2 mb-2 cursor-pointer">
@@ -1347,71 +1447,79 @@ export default function NewQuotePage() {
                 </div>
               ))}
               {/* ===================================================================
-                  TWO RATES, TWO FIELDS.
+                  ONE TAX BLOCK. TWO RATES, EACH PRINTED ONCE.
                   ===================================================================
-                  There was one "Tax %" box. It drove the PARTS rate and copied itself
-                  onto the labor rate only while the two still matched, so a shop that
-                  taxes parts at 7% and labor at 0% - which is most of them, and what
-                  the Sales Tax settings exist to express - had no way to see that on
-                  the document and no way to correct it per job. The labor rate was
-                  real, seeded from settings, and invisible.
+                  THIS PRINTED TAX TWICE, in two different formats:
 
-                  A rate whose category is not taxed is shown as not taxed rather than
-                  as an editable number that changes nothing. Typing 7 into a box that
-                  cannot move the total is worse than having no box. */}
+                      Parts Tax %  $0.30 / Labor Tax %  $9.69 / Tax  $9.99
+                      Tax on parts (7.75%)  $0.30 / Tax on labor (7.75%)  $9.69
+
+                  The two-rate editor was added ALONGSIDE the existing taxDisplayRows
+                  summary instead of replacing it, so every figure appeared twice. And
+                  the labels said "Parts Tax %" above a column of dollars.
+
+                  Now one block, worded the way the customer-facing page words it -
+                  "Tax on parts", "Labor - not taxable" - with the percentage appearing
+                  exactly once, as the field that sets it. The parenthetical (7.75%)
+                  that taxDisplayRows produces is deliberately NOT used here: on a form
+                  the rate is editable, so printing it in the label too would be the
+                  same duplication in miniature.
+
+                  Both rows render whether or not the document has that category yet.
+                  taxDisplayRows emits nothing for a category with no base, and keying
+                  the inputs off it would leave a tech with nowhere to type the rate
+                  until after he had added a line. */}
               <div style={{ borderTop: `1px solid ${BORDER}`, marginTop: 4 }}>
-                <div className="flex items-center gap-3 py-2">
-                  <span className="text-sm flex-1" style={{ color: MUTED }}>Parts Tax %</span>
-                  {taxedPartsFlag ? (
-                    <input
-                      type="number"
-                      min={0}
-                      max={30}
-                      step={0.1}
-                      value={form.tax_rate}
-                      onChange={e => setField('tax_rate', parseFloat(e.target.value) || 0)}
-                      style={{ width: 70, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '4px 8px', fontSize: 13, textAlign: 'right' }}
-                    />
-                  ) : (
-                    <span className="text-xs" style={{ color: MUTED }}>not taxed (Settings)</span>
-                  )}
-                  <span className="text-sm" style={{ color: MUTED, minWidth: 64, textAlign: 'right' }}>
-                    {fmt(tax.breakdown.parts?.amount ?? 0)}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3 py-2">
-                  <span className="text-sm flex-1" style={{ color: MUTED }}>Labor Tax %</span>
-                  {taxedLaborFlag ? (
-                    <input
-                      type="number"
-                      min={0}
-                      max={30}
-                      step={0.1}
-                      value={form.tax_rate_labor}
-                      onChange={e => setField('tax_rate_labor', parseFloat(e.target.value) || 0)}
-                      style={{ width: 70, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '4px 8px', fontSize: 13, textAlign: 'right' }}
-                    />
-                  ) : (
-                    <span className="text-xs" style={{ color: MUTED }}>not taxed (Settings)</span>
-                  )}
-                  <span className="text-sm" style={{ color: MUTED, minWidth: 64, textAlign: 'right' }}>
-                    {fmt(tax.breakdown.labor?.amount ?? 0)}
-                  </span>
-                </div>
-                {/* The total, which is the two buckets plus the extras' tax. Kept as
-                    its own line so the figures above it visibly add up to it. */}
+                {([
+                  { key: 'parts', label: 'parts', taxed: taxedPartsFlag, rate: form.tax_rate,       field: 'tax_rate',       amount: tax.breakdown.parts?.amount ?? 0 },
+                  { key: 'labor', label: 'labor', taxed: taxedLaborFlag, rate: form.tax_rate_labor, field: 'tax_rate_labor', amount: tax.breakdown.labor?.amount ?? 0 },
+                ] as const).map(row => (
+                  <div key={row.key} className="flex items-center gap-2 py-2">
+                    <span className="text-sm flex-1" style={{ color: MUTED }}>
+                      {row.taxed
+                        ? `Tax on ${row.label}`
+                        /* Same sentence the customer's copy uses, so a wrong setting
+                           reads the same to the tech as it will to the customer. */
+                        : `${row.label === 'parts' ? 'Parts' : 'Labor'} — not taxable`}
+                    </span>
+                    {row.taxed ? (
+                      <>
+                        <input
+                          type="number"
+                          min={0}
+                          max={30}
+                          step={0.1}
+                          value={row.rate}
+                          onChange={e => setField(row.field, parseFloat(e.target.value) || 0)}
+                          style={{ width: 62, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '4px 8px', fontSize: 13, textAlign: 'right' }}
+                        />
+                        <span className="text-xs" style={{ color: MUTED }}>%</span>
+                      </>
+                    ) : (
+                      <span className="text-xs" style={{ color: MUTED }}>Settings</span>
+                    )}
+                    <span className="text-sm" style={{ color: MUTED, minWidth: 68, textAlign: 'right' }}>
+                      {fmt(row.amount)}
+                    </span>
+                  </div>
+                ))}
+                {/* Anything else the breakdown carries - services are taxed at the
+                    parts rate and have no field of their own, so they print as the
+                    shared helper words them rather than being silently dropped. */}
+                {taxDisplayRows(tax.breakdown)
+                  .filter(r => r.category !== 'parts' && r.category !== 'labor')
+                  .map(r => (
+                    <div key={r.category} className="flex justify-between py-2 text-sm" style={{ color: MUTED }}>
+                      <span>{r.text}</span><span>{fmt(r.amount)}</span>
+                    </div>
+                  ))}
+                {/* The total: the two buckets plus the tax on travel and supplies.
+                    Its own line so the figures above it visibly add up to it. */}
                 <div className="flex items-center gap-3 py-1.5" style={{ borderTop: `1px solid ${BORDER}` }}>
                   <span className="text-sm flex-1 font-semibold" style={{ color: MUTED }}>Tax</span>
                   <span className="text-sm font-semibold" style={{ color: MUTED }}>{fmt(taxWithExtras)}</span>
                 </div>
               </div>
-              {/* What is being taxed, including what is NOT. A tech who can see
-                  "Labor - not taxable" catches a wrong setting before a customer does. */}
-              {taxDisplayRows(tax.breakdown).map(r => (
-                <div key={r.category} className="flex justify-between text-xs py-0.5" style={{ color: MUTED }}>
-                  <span>{r.text}</span><span>{fmt(r.amount)}</span>
-                </div>
-              ))}
               <div className="flex justify-between items-center pt-3" style={{ borderTop: `2px solid ${ORANGE}`, marginTop: 4 }}>
                 <span className="font-bold text-base" style={{ color: TEXT }}>TOTAL</span>
                 <span className="font-bold text-2xl" style={{ color: ORANGE }}>{fmt(totalWithExtras)}</span>
@@ -1595,23 +1703,77 @@ export default function NewQuotePage() {
                 )}
               </div>
 
-              {/* Editable hours — always visible */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#8a9bad' }}>Book Hours (min / max)</label>
-                  <div className="flex items-center gap-2">
-                    <input type="number" min={0} step={0.25} value={laborBookMin} onChange={e => setLaborBookMin(e.target.value)} style={{ ...dInp, textAlign: 'center' }} />
-                    <span style={{ color: '#8a9bad', fontSize: 12 }}>to</span>
-                    <input type="number" min={0} step={0.25} value={laborBookMax} onChange={e => setLaborBookMax(e.target.value)} style={{ ...dInp, textAlign: 'center' }} />
-                  </div>
+              {/* ===================================================================
+                  ONE BILLABLE NUMBER. Book time is reference, not an input.
+                  ===================================================================
+                  Four fields for one question is what was here, and the tech typed
+                  the same value twice in two of them. The hours that bill get one
+                  field; book time sits beside it as text because nothing bills from
+                  it. "+ add a range" is for the jobs that genuinely have a spread. */}
+              <div className="flex flex-col gap-1">
+                <div className="flex items-end justify-between gap-3">
+                  <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#8a9bad' }}>
+                    Hours (billed)
+                  </label>
+                  {/* Hidden while the recharge add-on is on: it forces a range, and
+                      offering to collapse one that cannot collapse is a dead control. */}
+                  {!laborRecharge && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (laborRange) {
+                          // Collapsing keeps the number the tech can SEE - the min -
+                          // and discards the max rather than silently billing it.
+                          setLaborMobileMax(laborMobileMin)
+                          setLaborRange(false)
+                        } else {
+                          setLaborMobileMax(laborMobileMin)
+                          setLaborRange(true)
+                        }
+                      }}
+                      className="text-xs font-semibold"
+                      style={{ color: '#60A5FA', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                    >
+                      {laborRange ? 'use one number' : '+ add a range'}
+                    </button>
+                  )}
                 </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#8a9bad' }}>Mobile Hours (min / max)</label>
-                  <div className="flex items-center gap-2">
-                    <input type="number" min={0} step={0.25} value={laborMobileMin} onChange={e => setLaborMobileMin(e.target.value)} style={{ ...dInp, textAlign: 'center' }} />
-                    <span style={{ color: '#8a9bad', fontSize: 12 }}>to</span>
-                    <input type="number" min={0} step={0.25} value={laborMobileMax} onChange={e => setLaborMobileMax(e.target.value)} style={{ ...dInp, textAlign: 'center' }} />
-                  </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.25}
+                    value={laborMobileMin}
+                    onChange={e => {
+                      const v = e.target.value
+                      setLaborMobileMin(v)
+                      // Single-number mode keeps the two ends together, so the stored
+                      // mobile_hours_max matches what is on screen.
+                      if (!laborRange) setLaborMobileMax(v)
+                    }}
+                    style={{ ...dInp, textAlign: 'center', maxWidth: 110 }}
+                  />
+                  {laborRange && (
+                    <>
+                      <span style={{ color: '#8a9bad', fontSize: 12 }}>to</span>
+                      <input
+                        type="number"
+                        min={0}
+                        step={0.25}
+                        value={laborMobileMax}
+                        onChange={e => setLaborMobileMax(e.target.value)}
+                        style={{ ...dInp, textAlign: 'center', maxWidth: 110 }}
+                      />
+                    </>
+                  )}
+                  <span className="text-xs" style={{ color: '#8a9bad' }}>
+                    hrs
+                    {/* Book time, as reference. Only present when a library or guide
+                        job supplied one - a hand-typed job has none, and the old form
+                        invented 1.0 for it. */}
+                    {bookRefText && <span className="ml-2" style={{ color: '#6b7a8c' }}>{bookRefText}</span>}
+                  </span>
                 </div>
               </div>
 
@@ -1636,7 +1798,13 @@ export default function NewQuotePage() {
                   <input
                     type="checkbox"
                     checked={laborRecharge}
-                    onChange={e => setLaborRecharge(e.target.checked)}
+                    onChange={e => {
+                      setLaborRecharge(e.target.checked)
+                      // The add-on is 1.5 TO 2.5 hrs, so the billable figure stops
+                      // being one number the moment it is ticked. Switching the field
+                      // automatically is the whole reason the range mode exists.
+                      if (e.target.checked) setLaborRange(true)
+                    }}
                     className="mt-0.5 w-4 h-4"
                     style={{ accentColor: BLUE }}
                   />
@@ -1670,27 +1838,37 @@ export default function NewQuotePage() {
                 <span className="text-sm" style={{ color: '#c9d5e0' }}>Save to my labor library</span>
               </label>
 
-              {/* Amount preview */}
+              {/* ===================================================================
+                  THE ARITHMETIC, NOT A BARE TOTAL.
+                  ===================================================================
+                  This printed "Mobile: 1.5 hrs", "Book: 1 hrs flat rate" and "$203"
+                  side by side, with nothing saying which number produced the $203 -
+                  so a tech could not tell whether he had just billed for both. And
+                  $203 was a rounded 202.50, so the preview did not even match the
+                  line it was about to add.
+
+                  One sentence now: hours x rate = amount, at the real cent. */}
               <div className="p-3 rounded-lg" style={{ background: '#132132', border: `1px solid ${D_BORDER}` }}>
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-xs font-medium" style={{ color: '#c9d5e0' }}>
-                      Mobile: {fmtHrs(totalMobileMin, totalMobileMax)}
-                      {laborRecharge && <span className="ml-1">(incl. recharge)</span>}
-                    </p>
-                    <p className="text-xs mt-0.5" style={{ color: '#8a9bad' }}>
-                      Book: {fmtHrs(parseFloat(laborBookMin) || 0, parseFloat(laborBookMax) || (parseFloat(laborBookMin) || 0))} flat rate
-                    </p>
-                    {laborRefrig && (
-                      <p className="text-xs mt-0.5" style={{ color: '#93C5FD' }}>
-                        + Refrigeration Service{laborRefrig.service ? ` ${laborRefrig.service}` : ''} — {laborRefrig.hours} hrs (separate line)
-                      </p>
-                    )}
-                  </div>
-                  <p className="text-lg font-bold shrink-0" style={{ color: ORANGE }}>
-                    {fmtAmtRange(previewAmtMin, previewAmtMax)}
+                <p className="text-sm font-semibold" style={{ color: ORANGE }}>
+                  {laborMath()}
+                </p>
+                {laborRecharge && (
+                  <p className="text-xs mt-1" style={{ color: '#8a9bad' }}>
+                    includes the refrigeration recovery &amp; recharge add-on
+                    ({baseMobileMin} hrs + 1.5 to 2.5)
                   </p>
-                </div>
+                )}
+                {bookRefText && (
+                  <p className="text-xs mt-1" style={{ color: '#6b7a8c' }}>
+                    {bookRefText} — reference only, nothing bills from it
+                  </p>
+                )}
+                {laborRefrig && (
+                  <p className="text-xs mt-1" style={{ color: '#93C5FD' }}>
+                    + Refrigeration Service{laborRefrig.service ? ` ${laborRefrig.service}` : ''} — {laborRefrig.hours} hrs
+                    {' '}&times; {money(form.labor_rate)}/hr = {money(laborRefrig.hours * form.labor_rate)} (separate line)
+                  </p>
+                )}
               </div>
             </div>
 

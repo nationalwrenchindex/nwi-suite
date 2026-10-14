@@ -95,6 +95,9 @@ export default function WorkOrderLineItems({
   const [saving, setSaving]   = useState(false)
   const [dirty, setDirty]     = useState(false)
   const [error, setError]     = useState<string | null>(null)
+  // Confirmation, and what the save did to any empty rows. Separate from `error`
+  // because dropping a blank line is not a failure.
+  const [note, setNote]       = useState<string | null>(null)
   const [markupDefault, setMarkupDefault] = useState(DEFAULT_HD_PARTS_MARKUP)
 
   useEffect(() => {
@@ -139,6 +142,9 @@ export default function WorkOrderLineItems({
   const update = useCallback((key: string, patch: Partial<DraftLine>) => {
     setLines(ls => ls.map(l => (l.key === key ? { ...l, ...patch } : l)))
     setDirty(true)
+    // A "Saved." sitting above rows that have since been edited is a lie about the
+    // current state, so the first keystroke clears it.
+    setNote(null)
   }, [])
 
   function addLine(type: WorkOrderLineType) {
@@ -153,6 +159,7 @@ export default function WorkOrderLineItems({
       markup_percent: type === 'part' ? String(markupDefault) : '',
     }])
     setDirty(true)
+    setNote(null)
   }
 
   // A part chosen from the catalog becomes an ordinary draft line. The COST goes in
@@ -193,11 +200,38 @@ export default function WorkOrderLineItems({
     setDirty(true)
   }
 
+  // ===========================================================================
+  // A BLANK LINE IS NOT A LINE.
+  // ===========================================================================
+  //
+  // "+ Add Labor" appends an empty row for the tech to type into, and an empty row
+  // left alone used to SAVE - landing in the line items as a LAB row at $0.00 that
+  // looks exactly like a bug. Two of them were added by accident in one evening.
+  //
+  // Empty means: nothing identifying it (no description, no part number) AND no money
+  // on it (no cost, no price, zero total). Both halves are required. A line that says
+  // "shop supplies" with no price yet is unfinished work the tech is in the middle of
+  // and must survive a save; a line with a price and no description is someone's
+  // shorthand and is not ours to drop.
+  function isBlank(d: DraftLine): boolean {
+    const hasText  = d.description.trim() !== '' || d.part_number.trim() !== ''
+    const hasMoney = d.unit_cost.trim() !== '' || d.unit_price.trim() !== '' || draftTotal(d) !== 0
+    return !hasText && !hasMoney
+  }
+
+  const blankCount = lines.filter(isBlank).length
+
   async function save() {
     setSaving(true)
     setError(null)
     try {
-      const payload = lines.map(d => ({
+      // Dropped here rather than refusing the save: the tech asked to save the work he
+      // did, and an empty row is not work. Refusing would make him hunt for a row that
+      // shows nothing wrong.
+      const keep = lines.filter(d => !isBlank(d))
+      const dropped = lines.length - keep.length
+
+      const payload = keep.map(d => ({
         type:           d.type,
         description:    d.description,
         part_number:    d.part_number,
@@ -219,6 +253,11 @@ export default function WorkOrderLineItems({
       // differently, are what the card is now showing.
       setLines((json.line_items ?? []).map(toDraft))
       setDirty(false)
+      // Said out loud. A row vanishing on save with no explanation is its own small
+      // mystery, and the tech should know it was the empty one and not his part line.
+      setNote(dropped > 0
+        ? `Saved. ${dropped} empty ${dropped === 1 ? 'line was' : 'lines were'} dropped.`
+        : 'Saved.')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Save failed')
     } finally {
@@ -289,6 +328,22 @@ export default function WorkOrderLineItems({
         {error && (
           <p className="mx-5 mt-4 text-sm px-3 py-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)' }}>
             {error}
+          </p>
+        )}
+
+        {note && !error && (
+          <p className="mx-5 mt-4 text-sm px-3 py-2 rounded-lg" style={{ background: 'rgba(34,197,94,0.12)', color: '#22C55E', border: '1px solid rgba(34,197,94,0.3)' }}>
+            {note}
+          </p>
+        )}
+
+        {/* Before the save, not after. A row the tech can still fill in gets told it
+            needs something rather than being deleted out from under him. */}
+        {blankCount > 0 && (
+          <p className="mx-5 mt-4 text-xs px-3 py-2 rounded-lg" style={{ background: 'rgba(245,158,11,0.12)', color: '#F59E0B', border: '1px solid rgba(245,158,11,0.3)' }}>
+            {blankCount === 1
+              ? 'One line has no description and no price. It will not be saved.'
+              : `${blankCount} lines have no description and no price. They will not be saved.`}
           </p>
         )}
 
@@ -397,7 +452,15 @@ export default function WorkOrderLineItems({
                           />
                         )}
                       </td>
-                      <td className="px-3 py-2 text-right font-semibold text-white">{fmt(draftTotal(d))}</td>
+                      {/* An empty row reads as "needs a description", not $0.00. A
+                          money figure on a line that carries nothing is what made two
+                          blank LAB rows look like a billing bug rather than a row
+                          nobody had filled in yet. */}
+                      {isBlank(d) ? (
+                        <td className="px-3 py-2 text-right text-xs" style={{ color: '#F59E0B' }}>needs a description</td>
+                      ) : (
+                        <td className="px-3 py-2 text-right font-semibold text-white">{fmt(draftTotal(d))}</td>
+                      )}
                       {canEdit && (
                         <td className="px-3 py-2">
                           <div className="flex items-center gap-1">

@@ -745,48 +745,66 @@ export default function NewInvoicePage() {
                   <span>{r.label}</span><span>{fmt(r.val)}</span>
                 </div>
               ))}
-              {/* TWO RATES, TWO FIELDS - the same change as the quote form, and it has
-                  to match: a quote converts straight into an invoice, so a split the
-                  quote can show and the invoice cannot is a split the tech loses on
-                  conversion. A category the shop does not tax is shown as not taxed
-                  rather than as an editable number that changes nothing. */}
+              {/* ONE TAX BLOCK, TWO RATES, EACH PRINTED ONCE - the same change as the
+                  quote form, and it has to match: a quote converts straight into an
+                  invoice, so a tax block the quote states clearly and the invoice
+                  states twice is a discrepancy the customer sees on conversion.
+
+                  This printed every tax figure twice, once as "Parts Tax %  $0.30" and
+                  again as "Tax on parts (7.75%)  $0.30", because the two-rate editor
+                  was added alongside the taxDisplayRows summary instead of replacing
+                  it. The percentage now appears once, as the field that sets it. */}
               <div style={{ borderTop: `1px solid ${BORDER}`, marginTop: 4 }}>
-                <div className="flex items-center gap-3 py-2">
-                  <span className="text-sm flex-1" style={{ color: MUTED }}>Parts Tax %</span>
-                  {taxedPartsFlag ? (
-                    <input type="number" min={0} max={30} step={0.1} value={form.tax_rate}
-                      onChange={e => setField('tax_rate', parseFloat(e.target.value) || 0)}
-                      style={{ width: 70, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '4px 8px', fontSize: 13, textAlign: 'right' }} />
-                  ) : (
-                    <span className="text-xs" style={{ color: MUTED }}>not taxed (Settings)</span>
-                  )}
-                  <span className="text-sm" style={{ color: MUTED, minWidth: 64, textAlign: 'right' }}>
-                    {fmt(tax.breakdown.parts?.amount ?? 0)}
-                  </span>
-                </div>
-                <div className="flex items-center gap-3 py-2">
-                  <span className="text-sm flex-1" style={{ color: MUTED }}>Labor Tax %</span>
-                  {taxedLaborFlag ? (
-                    <input type="number" min={0} max={30} step={0.1} value={form.tax_rate_labor}
-                      onChange={e => setField('tax_rate_labor', parseFloat(e.target.value) || 0)}
-                      style={{ width: 70, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '4px 8px', fontSize: 13, textAlign: 'right' }} />
-                  ) : (
-                    <span className="text-xs" style={{ color: MUTED }}>not taxed (Settings)</span>
-                  )}
-                  <span className="text-sm" style={{ color: MUTED, minWidth: 64, textAlign: 'right' }}>
-                    {fmt(tax.breakdown.labor?.amount ?? 0)}
-                  </span>
-                </div>
+                {([
+                  { key: 'parts', label: 'parts', taxed: taxedPartsFlag, rate: form.tax_rate,       field: 'tax_rate',       amount: tax.breakdown.parts?.amount ?? 0 },
+                  { key: 'labor', label: 'labor', taxed: taxedLaborFlag, rate: form.tax_rate_labor, field: 'tax_rate_labor', amount: tax.breakdown.labor?.amount ?? 0 },
+                ] as const).map(row => (
+                  <div key={row.key} className="flex items-center gap-2 py-2">
+                    <span className="text-sm flex-1" style={{ color: MUTED }}>
+                      {row.taxed
+                        ? `Tax on ${row.label}`
+                        /* Same sentence the customer's copy uses, so a wrong setting
+                           reads the same to the tech as it will to the customer. */
+                        : `${row.label === 'parts' ? 'Parts' : 'Labor'} — not taxable`}
+                    </span>
+                    {row.taxed ? (
+                      <>
+                        <input
+                          type="number"
+                          min={0}
+                          max={30}
+                          step={0.1}
+                          value={row.rate}
+                          onChange={e => setField(row.field, parseFloat(e.target.value) || 0)}
+                          style={{ width: 62, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '4px 8px', fontSize: 13, textAlign: 'right' }}
+                        />
+                        <span className="text-xs" style={{ color: MUTED }}>%</span>
+                      </>
+                    ) : (
+                      <span className="text-xs" style={{ color: MUTED }}>Settings</span>
+                    )}
+                    <span className="text-sm" style={{ color: MUTED, minWidth: 68, textAlign: 'right' }}>
+                      {fmt(row.amount)}
+                    </span>
+                  </div>
+                ))}
+                {/* Anything else the breakdown carries - services are taxed at the
+                    parts rate and have no field of their own, so they print as the
+                    shared helper words them rather than being silently dropped. */}
+                {taxDisplayRows(tax.breakdown)
+                  .filter(r => r.category !== 'parts' && r.category !== 'labor')
+                  .map(r => (
+                    <div key={r.category} className="flex justify-between py-2 text-sm" style={{ color: MUTED }}>
+                      <span>{r.text}</span><span>{fmt(r.amount)}</span>
+                    </div>
+                  ))}
+                {/* The total: the two buckets plus the tax on travel and supplies.
+                    Its own line so the figures above it visibly add up to it. */}
                 <div className="flex items-center gap-3 py-1.5" style={{ borderTop: `1px solid ${BORDER}` }}>
                   <span className="text-sm flex-1 font-semibold" style={{ color: MUTED }}>Tax</span>
                   <span className="text-sm font-semibold" style={{ color: MUTED }}>{fmt(taxWithExtras)}</span>
                 </div>
               </div>
-              {taxDisplayRows(tax.breakdown).map(r => (
-                <div key={r.category} className="flex justify-between text-xs py-0.5" style={{ color: MUTED }}>
-                  <span>{r.text}</span><span>{fmt(r.amount)}</span>
-                </div>
-              ))}
               <div className="flex justify-between items-center pt-3" style={{ borderTop: `2px solid ${ORANGE}`, marginTop: 4 }}>
                 <span className="font-bold text-base" style={{ color: TEXT }}>TOTAL</span>
                 <span className="font-bold text-2xl" style={{ color: ORANGE }}>{fmt(totalWithExtras)}</span>

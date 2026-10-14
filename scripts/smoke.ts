@@ -569,6 +569,30 @@ async function flowHD(): Promise<void> {
     if (!record(F, `${label} loads`, !!pg, pg ? '' : `${path} did not load`)) continue
     const miss = missingControls(pg!.text, ['Travel hours', 'Miles'])
     record(F, `${label} extras inputs`, miss.length === 0, miss.length ? `missing: ${miss.join(', ')}` : 'Travel hours, Miles')
+
+    // ONE TAX BLOCK, NOT TWO.
+    //
+    // Both forms printed every tax figure twice - once as "Parts Tax %  $0.30" and
+    // again as "Tax on parts (7.75%)  $0.30" - because the two-rate editor was added
+    // alongside the taxDisplayRows summary instead of replacing it. "Parts Tax %" was
+    // also a percent label above a column of dollars.
+    //
+    // Asserted against the RENDERED page, both ways round: the kept wording has to be
+    // there and the retired wording has to be gone. Checking only for the absence
+    // would also pass on a form that printed no tax at all.
+    // "Tax on parts" OR "not taxable", because a shop that taxes nothing is a
+    // legitimate configuration and the row states itself either way. Matching only
+    // the taxed wording would make this fail on a correct form belonging to a shop
+    // with tax switched off - the check would be measuring the shop, not the code.
+    // Matched on 'not taxable' rather than the full phrase so an em dash cannot
+    // decide whether the suite is green.
+    const hasKept    = pg!.text.includes('Tax on parts') || pg!.text.includes('not taxable')
+    const hasRetired = pg!.text.includes('Parts Tax %') || pg!.text.includes('Labor Tax %')
+    record(F, `${label} prints the tax block once`,
+      hasKept && !hasRetired,
+      hasRetired ? 'the retired "Parts Tax %" block is still rendering'
+        : hasKept ? 'one block, worded as the customer copy words it'
+        : 'no tax row rendered - this target predates the one-block change')
   }
 
   const hdInv = (await rest('hd_invoices?select=id,invoice_number,total&order=invoice_number.desc&limit=1'))[0]
