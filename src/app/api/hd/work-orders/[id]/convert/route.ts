@@ -48,6 +48,23 @@ export async function GET(
 
   const row = wo as Record<string, unknown>
 
+  // THE QUOTE FILLS WHAT THE WORK ORDER DOES NOT CARRY. A work order made before
+  // migration 158 has no payment_terms column, and none made before this pass has a
+  // fleet link or unit number - but its quote may. A value on the work order always
+  // wins; this only fills an absence, from the document the customer approved.
+  if (row.quote_id && (!row.payment_terms || !row.unit_number || !row.fleet_account_id)) {
+    const { data: q } = await supabase
+      .from('hd_quotes')
+      .select('*')
+      .eq('id', String(row.quote_id))
+      .eq('user_id', user.id)
+      .maybeSingle()
+    const quote = (q ?? {}) as Record<string, unknown>
+    if (!row.payment_terms && quote.payment_terms)       row.payment_terms    = quote.payment_terms
+    if (!row.unit_number && quote.unit_number)           row.unit_number      = quote.unit_number
+    if (!row.fleet_account_id && quote.fleet_account_id) row.fleet_account_id = quote.fleet_account_id
+  }
+
   // Already billed. Hand back the invoice that exists rather than letting the caller
   // create a second one - and the unique index from migration 154 is the guard that
   // makes this more than a courtesy.

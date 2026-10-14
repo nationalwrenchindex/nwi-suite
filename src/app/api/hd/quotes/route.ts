@@ -168,6 +168,19 @@ export async function POST(req: NextRequest) {
       .single())
   }
 
+  // Migration 158 adds hd_quotes.fleet_account_id and unit_id. Same hand-applied
+  // window: the quote saves without the Intel Hub links rather than not saving.
+  if (error && /fleet_account_id|unit_id/i.test(error.message)) {
+    console.error('[hd/quotes] fleet_account_id/unit_id missing - run migration 158', error.message)
+    const { fleet_account_id: _f, unit_id: _u, ...withoutLinks } = quoteRow as Record<string, unknown>
+    void _f; void _u
+    ;({ data, error } = await supabase
+      .from('hd_quotes')
+      .insert(withoutLinks)
+      .select()
+      .single())
+  }
+
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   // A SENT quote needs a link the customer can open. Issued here rather than as a

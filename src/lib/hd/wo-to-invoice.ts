@@ -312,6 +312,12 @@ export function invoiceIdentityFromWorkOrder(wo: Record<string, unknown>): Recor
     // name now matches hd_quotes and hd_work_orders, which is the chain it travels, and
     // the insert route strips it when 157 has not been applied.
     customer_po_number: wo.customer_po_number ?? null,
+    // THE TERMS THE CUSTOMER AGREED TO, from the quote by way of the work order. This
+    // key was absent, so every converted invoice took hd_invoices' column DEFAULT,
+    // 'Due on receipt' (migration 057) - a Net 30 quote became a due-now invoice.
+    // Omitted rather than nulled when there is nothing recorded, so an old work order
+    // converts exactly as it did before.
+    ...(wo.payment_terms ? { payment_terms: wo.payment_terms } : {}),
   }
 }
 

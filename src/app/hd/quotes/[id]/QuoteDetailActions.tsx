@@ -24,6 +24,10 @@ interface QuoteData {
   corp_state: string | null
   corp_zip: string | null
   payment_terms: string | null
+  // Optional: absent on a quote saved before migration 158.
+  fleet_account_id?: string | null
+  unit_id?: string | null
+  unit_number?: string | null
   unit_manufacturer: string | null
   unit_model: string | null
   unit_serial: string | null
@@ -392,6 +396,11 @@ export default function QuoteDetailActions({
         corp_state:         quoteData.has_corp_address ? quoteData.corp_state : null,
         corp_zip:           quoteData.has_corp_address ? quoteData.corp_zip   : null,
         payment_terms:      quoteData.payment_terms ?? 'net30',
+        // The Intel Hub links and the fleet's unit number. hd_invoices has all three
+        // columns; billing straight from the quote dropped them.
+        fleet_account_id:  quoteData.fleet_account_id ?? null,
+        unit_id:           quoteData.unit_id ?? null,
+        unit_number:       quoteData.unit_number ?? null,
         unit_manufacturer: quoteData.unit_manufacturer,
         unit_model:        quoteData.unit_model,
         unit_serial:       quoteData.unit_serial,

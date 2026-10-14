@@ -30,6 +30,7 @@
 // copies figures the quote already computed and stored.
 
 import { createServiceClient } from '@/lib/supabase/service'
+import { isMissingPaymentTermsColumn } from '@/lib/hd/payment-terms'
 
 /** 32 hex characters, the same shape LD's quote token uses. */
 export function generateQuoteToken(): string {
@@ -390,6 +391,13 @@ export async function createWorkOrderFromQuote(
     unit_model:        quote.unit_model ?? null,
     unit_serial:       quote.unit_serial ?? null,
     unit_number:       quote.unit_number ?? null,
+    // The Intel Hub links. hd_quotes gains these in migration 158; a quote saved
+    // before it reads undefined here and carries null, which is what it carried before.
+    fleet_account_id:  quote.fleet_account_id ?? null,
+    unit_id:           quote.unit_id ?? null,
+    // What the customer agreed to pay on. The invoice reads it from here; without it
+    // the invoice fell back to "Due on receipt", a term the quote does not even offer.
+    payment_terms:     quote.payment_terms ?? null,
     address_line1:     quote.address_line1 ?? null,
     address_line2:     quote.address_line2 ?? null,
     city:              quote.city ?? null,
@@ -487,13 +495,52 @@ export async function createWorkOrderFromQuote(
     if (laborHours > 0) insertRow.labor_hours = Number(laborHours.toFixed(2))
   }
 
-  const { data: wo, error } = await supabase
+  // THE UNIT, resolved when the quote did not record which hd_units row it was.
+  //
+  // Quotes saved before migration 158 have no unit_id, and neither does one where the
+  // tech typed the serial rather than picking the unit. A serial that matches EXACTLY
+  // ONE of this shop's units is that unit; zero or several and nothing is guessed.
+  // The fleet comes with it only when the quote did not name one.
+  if (!insertRow.unit_id) {
+    const serial = String(quote.unit_serial ?? '').trim()
+    if (serial) {
+      const { data: matches } = await supabase
+        .from('hd_units')
+        .select('id, fleet_account_id, unit_number')
+        .eq('user_id', userId)
+        .eq('serial_number', serial)
+        .limit(2)
+      if (matches?.length === 1) {
+        const u = matches[0]
+        insertRow.unit_id = u.id
+        if (!insertRow.fleet_account_id) insertRow.fleet_account_id = u.fleet_account_id ?? null
+        if (!insertRow.unit_number)      insertRow.unit_number      = u.unit_number ?? null
+      }
+    }
+  }
+
+  let { data: wo, error } = await supabase
     .from('hd_work_orders')
     .insert(insertRow)
     .select('id, work_order_number')
     .single()
 
-  if (error) {
+  // Migration 158 adds hd_work_orders.payment_terms and is applied by hand. Until it
+  // is, the work order saves without the terms rather than not saving at all; the
+  // invoice converter reads them from the quote in that window.
+  if (error && isMissingPaymentTermsColumn(error)) {
+    console.error('[hd quote->wo] payment_terms missing - run migration 158', error.message)
+    const { payment_terms: _drop, ...withoutTerms } = insertRow
+    void _drop
+    ;({ data: wo, error } = await supabase
+      .from('hd_work_orders')
+      .insert(withoutTerms)
+      .select('id, work_order_number')
+      .single())
+  }
+
+  if (error || !wo) {
+    if (!error) return { ok: false, error: 'work order insert returned no row' }
     if (error.code === UNIQUE_VIOLATION) {
       // Lost the race to a concurrent approval - the customer clicked twice, or
       // forwarded the link. The index did its job; fetch the winner.

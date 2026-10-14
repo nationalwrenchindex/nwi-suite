@@ -96,6 +96,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
               {(q.unit_manufacturer || q.unit_model) && (
                 <p className="font-semibold text-base" style={{ color: '#1A1A1A' }}>{[q.unit_manufacturer, q.unit_model].filter(Boolean).join(' ')}</p>
               )}
+              {q.unit_number && <p className="text-sm mt-1" style={{ color: '#6B7280' }}>Unit #: {q.unit_number}</p>}
               {q.unit_serial && <p className="text-sm mt-1" style={{ color: '#6B7280' }}>Serial: {q.unit_serial}</p>}
               {q.unit_year   && <p className="text-sm" style={{ color: '#6B7280' }}>Year: {q.unit_year}</p>}
               {(q.truck_make || q.truck_model) && (

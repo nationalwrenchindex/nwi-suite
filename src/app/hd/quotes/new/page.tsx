@@ -279,12 +279,15 @@ export default function NewQuotePage() {
     company_name: '',
     customer_name: '', customer_phone: '', customer_email: '',
     customer_id: '',
+    // The HD Intel Hub records this quote is for. Both stay '' for a customers-table
+    // pick or a typed-in customer: there is no fleet account or hd_units row then.
+    fleet_account_id: '', unit_id: '',
     // Billing + optional corporate/service address (auto-filled from Intel Hub).
     address_line1: '', address_line2: '', city: '', state: '', zip: '',
     corp_address_line1: '', corp_address_line2: '', corp_city: '', corp_state: '', corp_zip: '',
     has_corp_address: false,
     payment_terms: 'net30',
-    unit_manufacturer: '', unit_model: '', unit_serial: '', unit_year: '',
+    unit_number: '', unit_manufacturer: '', unit_model: '', unit_serial: '', unit_year: '',
     truck_make: '', truck_model: '', truck_year: '', vin: '',
     complaint: '', diagnosis: '',
     // include_diagnostic STARTS OFF, and diagnostic_fee starts at 0.
@@ -381,6 +384,8 @@ export default function NewQuotePage() {
   const [fleetUnits, setFleetUnits]               = useState<FleetUnitHit[]>([])
   // What the link did, said out loud: which account, and whether it filled the unit.
   const [fleetNote, setFleetNote]                 = useState('')
+  // Which picker source did not answer on the last search, or ''.
+  const [pickerFailure, setPickerFailure]         = useState('')
 
   // ── Gemini labor suggestions ──
   const [suggestLoading, setSuggestLoading]   = useState(false)
@@ -504,6 +509,18 @@ export default function NewQuotePage() {
       ])
 
       const hits: PickerHit[] = []
+      // A source that failed is NAMED, never dropped. A silent half-result reads as
+      // "that fleet does not exist" when it means "fleet accounts did not answer".
+      const failed: string[] = []
+      if (!(custRes.status === 'fulfilled' && custRes.value.ok)) {
+        failed.push(`customers (${custRes.status === 'fulfilled' ? custRes.value.status : 'network error'})`)
+      }
+      if (!(fleetRes.status === 'fulfilled' && fleetRes.value.ok)) {
+        const code = fleetRes.status === 'fulfilled' ? fleetRes.value.status : 0
+        failed.push(code === 403
+          ? 'fleet accounts (not included in this plan)'
+          : `fleet accounts (${code || 'network error'})`)
+      }
 
       if (custRes.status === 'fulfilled' && custRes.value.ok) {
         try {
@@ -551,7 +568,11 @@ export default function NewQuotePage() {
         } catch { /* ditto */ }
       }
 
-      setCustomerResults(hits)
+      // Fleet accounts FIRST. Saving an HD quote writes a customers row with the same
+      // name, so a fleet soon has a Customer twin listed above it - and picking the
+      // twin fills the name and loses the units, which looked like a regression.
+      setCustomerResults([...hits.filter(h => h.source === 'fleet'), ...hits.filter(h => h.source !== 'fleet')])
+      setPickerFailure(failed.length ? `Could not search ${failed.join(' or ')}.` : '')
       setShowCustomerResults(true)
     }, 300)
     return () => clearTimeout(t)
@@ -575,6 +596,10 @@ export default function NewQuotePage() {
       setForm(f => ({
         ...f,
         customer_id:    '',
+        // The link itself. It was thrown away here: the fields filled and the work
+        // order showed Fleet as a dash.
+        fleet_account_id: hit.id,
+        unit_id:          '',
         customer_name:  hit.label,
         company_name:   hit.company ?? hit.label,
         customer_phone: hit.phone ?? '',
@@ -598,6 +623,10 @@ export default function NewQuotePage() {
     setForm(f => ({
       ...f,
       customer_id:    hit.id,
+      // A customers row is not a fleet account; a link left over from an earlier
+      // pick would carry the wrong fleet onto the work order.
+      fleet_account_id: '',
+      unit_id:          '',
       customer_name:  hit.label,
       customer_phone: hit.phone ?? '',
       customer_email: hit.email ?? '',
@@ -671,6 +700,8 @@ export default function NewQuotePage() {
   function applyFleetUnit(u: FleetUnitHit) {
     setForm(f => ({
       ...f,
+      unit_id:           u.id,
+      unit_number:       u.unit_number ?? f.unit_number,
       unit_manufacturer: u.manufacturer ?? f.unit_manufacturer,
       unit_model:        u.model ?? f.unit_model,
       unit_serial:       u.serial_number ?? f.unit_serial,
@@ -686,7 +717,7 @@ export default function NewQuotePage() {
     setFleetNote('')
     setForm(f => ({
       ...f,
-      customer_id: '', address_line1: '', address_line2: '', city: '', state: '', zip: '',
+      customer_id: '', fleet_account_id: '', unit_id: '', address_line1: '', address_line2: '', city: '', state: '', zip: '',
       has_corp_address: false, corp_address_line1: '', corp_address_line2: '', corp_city: '', corp_state: '', corp_zip: '',
     }))
   }
@@ -1078,6 +1109,8 @@ export default function NewQuotePage() {
         customer_phone:    form.customer_phone || null,
         customer_email:    form.customer_email || null,
         customer_id:       form.customer_id || null,
+        fleet_account_id:  form.fleet_account_id || null,
+        unit_id:           form.unit_id || null,
         address_line1:     form.address_line1 || null,
         address_line2:     form.address_line2 || null,
         city:              form.city || null,
@@ -1090,6 +1123,7 @@ export default function NewQuotePage() {
         corp_state:        form.has_corp_address ? (form.corp_state || null) : null,
         corp_zip:          form.has_corp_address ? (form.corp_zip || null) : null,
         payment_terms:     form.payment_terms || 'net30',
+        unit_number:       form.unit_number.trim() || null,
         unit_manufacturer: form.unit_manufacturer || null,
         unit_model:        form.unit_model || null,
         unit_serial:       form.unit_serial || null,
@@ -1222,6 +1256,10 @@ export default function NewQuotePage() {
               </div>
             )}
 
+            {pickerFailure && customerSearch.trim().length >= 2 && (
+              <p className="text-xs mt-2" style={{ color: '#B45309' }}>{pickerFailure}</p>
+            )}
+
             {fleetNote && (
               <p className="text-xs mt-2" style={{ color: MUTED }}>{fleetNote}</p>
             )}
@@ -1327,6 +1365,11 @@ export default function NewQuotePage() {
                 nothing to match it to. The serial is NOT required: it is often not in
                 hand on the phone, and the work order carries a flag for that instead
                 of the quote refusing to save. */}
+            {/* The fleet's own number for the trailer. A tech in a yard reads this off
+                the side of the box, not the serial off the data plate. */}
+            <Field label="Unit Number">
+              <input style={inp} value={form.unit_number} onChange={e => setField('unit_number', e.target.value)} placeholder="e.g. 53169" />
+            </Field>
             <Field label={isTruckUnit ? 'Manufacturer' : 'Manufacturer *'}>
               <select style={inp} value={form.unit_manufacturer} onChange={e => setField('unit_manufacturer', e.target.value)}>
                 <option value="">Select...</option>
@@ -1338,7 +1381,7 @@ export default function NewQuotePage() {
               <input style={inp} value={form.unit_model} onChange={e => setField('unit_model', e.target.value)} placeholder="e.g. S-600" />
             </Field>
             <Field label="Serial Number">
-              <input style={inp} value={form.unit_serial} onChange={e => setField('unit_serial', e.target.value)} placeholder="10-digit serial" />
+              <input style={inp} value={form.unit_serial} onChange={e => setForm(f => ({ ...f, unit_serial: e.target.value, unit_id: '' }))} placeholder="10-digit serial" />
             </Field>
             <Field label="Unit Year">
               <input style={inp} value={form.unit_year} onChange={e => setField('unit_year', e.target.value)} placeholder="2018" />
