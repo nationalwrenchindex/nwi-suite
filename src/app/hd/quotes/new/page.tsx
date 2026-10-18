@@ -9,6 +9,7 @@ import {
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { LABOR_GUIDE, type LaborGuideItem } from '@/lib/hd/labor-guide'
+import { billedHoursFromLibrary } from '@/lib/hd/labor-library'
 import { useTaxSettings } from '@/lib/use-tax-settings'
 import { useHdFeeSettings } from '@/lib/hd/use-fee-settings'
 import { computeTax, taxDisplayRows, mergeBreakdowns } from '@/lib/tax'
@@ -849,13 +850,16 @@ export default function NewQuotePage() {
     // hours has no book time, and saying so is the point - the field beside the
     // billable number reads "no book time" rather than a 1.0 nobody looked up.
     const book = libNum(i.shop_hours)
-    const mob  = libNum(i.mobile_hours) ?? 1.5
+    // BILLED HOURS: the mobile figure, else the book figure, else BLANK - a 0 counts
+    // as missing. The old `?? 1.5` let "test labor"'s mobile 0 straight through and
+    // priced it at $0.00. See billedHoursFromLibrary; addLaborItem refuses a blank.
     setLaborDesc(i.description)
     setLaborBookMin(book == null ? '' : String(book))
     setLaborBookMax(book == null ? '' : String(book))
     // A library item holds one mobile figure, so this is a single number, not a range.
     setLaborRange(false)
-    setLaborMobileMin(String(mob)); setLaborMobileMax(String(mob))
+    const billed = billedHoursFromLibrary(i.mobile_hours, i.shop_hours)
+    setLaborMobileMin(billed); setLaborMobileMax(billed)
     const refrigHrs = libNum(i.refrigeration_hours)
     if (i.requires_refrigeration && refrigHrs && refrigHrs > 0) {
       // Explicit refrigeration service → its own separate line; base mobile stays as-is.
@@ -959,6 +963,11 @@ export default function NewQuotePage() {
   function addLaborItem() {
     const description = laborDesc.trim()
     if (!description) { setToast('Enter a labor description.'); return }
+    // An EMPTY hours field is refused, not read as 0. It is what a library pick with
+    // no hours leaves behind, and adding it would be a $0.00 labor line. A typed 0 is
+    // still allowed on the quote - a no-charge line is a real thing - but it is never
+    // saved to the library (below).
+    if (!laborMobileMin.trim()) { setToast('Enter the billable hours for this job.'); return }
     const bookMin = parseFloat(laborBookMin) || 0
     const bookMax = parseFloat(laborBookMax) || bookMin
     const newLines: LineItem[] = []
@@ -1001,7 +1010,13 @@ export default function NewQuotePage() {
 
     setLineItems(l => [...l, ...newLines])
     // Store the base labor (without the situational recovery add) in the library.
-    if (saveToLibrary) saveLaborToLibrary(description, bookMin, baseMobileMin, laborRecharge || laborRefrig != null)
+    // Never with 0 billable hours: a library entry saved that way pre-fills a $0.00
+    // line every time it is picked. The route refuses it too.
+    if (saveToLibrary && baseMobileMin > 0) {
+      saveLaborToLibrary(description, bookMin, baseMobileMin, laborRecharge || laborRefrig != null)
+    } else if (saveToLibrary) {
+      setToast('Added to the quote. Not saved to your library - it has no billable hours.')
+    }
     closeLaborModal()
   }
 

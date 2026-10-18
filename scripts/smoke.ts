@@ -24,6 +24,7 @@
 import fs from 'fs'
 import { LEGAL_VERSION } from '../src/lib/legal'
 import { invoiceBodyFromQuote } from '../src/lib/hd/quote-to-invoice'
+import { billedHoursFromLibrary } from '../src/lib/hd/labor-library'
 import { loadEnv, openSession, visibleText } from './lib/smoke-session'
 
 loadEnv()
@@ -101,6 +102,8 @@ const created = {
   // customers by marker: logHDCustomer creates one for every HD document, and a
   // blanket delete would reach rows other flows rely on.
   customers: new Set<string>(),
+  // HD labor library entries (hd_repair_items).
+  libraryItems: new Set<string>(),
 }
 
 async function del(table: string, id: string): Promise<void> {
@@ -160,6 +163,13 @@ async function cleanup(): Promise<void> {
   for (const id of created.hdInvoices)   await del('hd_invoices', id)
   for (const id of created.hdWorkOrders) await del('hd_work_orders', id)
   for (const id of created.hdQuotes)     await del('hd_quotes', id)
+
+  // Labor library entries, swept by marker too.
+  try {
+    const strays = await rest<{ id: string }>(`hd_repair_items?select=id&user_id=eq.${OWNER}&description=like.${MARK}*`)
+    for (const s of strays) created.libraryItems.add(s.id)
+  } catch { /* a failed sweep must not mask the real result */ }
+  for (const id of created.libraryItems) await del('hd_repair_items', id)
 
   // HD Intel Hub. Units before accounts: hd_units.fleet_account_id points at them.
   for (const id of created.fleetUnits)    await del('hd_units', id)
@@ -1925,6 +1935,49 @@ async function flowU(): Promise<void> {
   }
 }
 
+// ── V: the labor library never hands over 0 billed hours ─────────────────
+//
+// "test labor" (book 1.5, mobile 0) pre-filled Hours (billed) with 0, and the footer
+// read 0 hrs x $135.00/hr = $0.00. The pre-fill now falls back to book hours and
+// leaves the field blank when there are none; a new entry with 0 billable hours is
+// refused; and re-saving an existing description takes the new hours instead of
+// only bumping its count, so a bad first save can be repaired by using it.
+async function flowV(): Promise<void> {
+  const F = 'V labor library'
+
+  // The pre-fill rule. The first case is the live "test labor" row's own shape.
+  const cases: Array<[number | null, number | null, string]> = [
+    [0, 1.5, '1.5'], [null, 1.5, '1.5'], [2.6, 1.5, '2.6'], [null, null, ''], [0, 0, ''],
+  ]
+  const wrong = cases.filter(([m, b, want]) => billedHoursFromLibrary(m, b) !== want)
+  record(F, 'pre-fill: mobile, else book, else blank - never 0',
+    wrong.length === 0,
+    wrong.length ? wrong.map(([m, b, w]) => `(${m}, ${b}) -> "${billedHoursFromLibrary(m, b)}" want "${w}"`).join('; ') : 'all five shapes')
+
+  const zero = await api('POST', '/api/hd/repair-items', { description: `${MARK} lib zero`, shop_hours: 1.5, mobile_hours: 0, source: 'manual' })
+  const zeroRows = await rest<{ id: string }>(`hd_repair_items?select=id&user_id=eq.${OWNER}&description=eq.${encodeURIComponent(`${MARK} lib zero`)}`)
+  zeroRows.forEach(r => created.libraryItems.add(r.id))
+  record(F, 'a NEW entry with 0 billable hours is refused',
+    zero.status === 400 && zeroRows.length === 0, `-> ${zero.status}, ${zeroRows.length} row(s)`)
+
+  const desc = `${MARK} lib fix`
+  const first = await api('POST', '/api/hd/repair-items', { description: desc, shop_hours: 1.5, mobile_hours: 1, source: 'manual' })
+  const firstId = String(((first.json.item ?? {}) as Record<string, unknown>).id ?? '')
+  if (firstId) created.libraryItems.add(firstId)
+  if (!record(F, 'a new entry with real hours saves', first.status === 201 && !!firstId, `-> ${first.status}`)) return
+
+  const again = await api('POST', '/api/hd/repair-items', { description: desc, shop_hours: 1.5, mobile_hours: 2.25, source: 'manual' })
+  const row = (await rest<Record<string, unknown>>(`hd_repair_items?id=eq.${firstId}&select=mobile_hours,use_count`))[0] ?? {}
+  record(F, 're-saving the description takes the new hours',
+    again.status === 200 && Number(row.mobile_hours) === 2.25 && Number(row.use_count) === 2,
+    `-> ${again.status}, mobile ${row.mobile_hours}, uses ${row.use_count}`)
+
+  const blank = await api('POST', '/api/hd/repair-items', { description: desc, mobile_hours: 0, source: 'manual' })
+  const kept = (await rest<Record<string, unknown>>(`hd_repair_items?id=eq.${firstId}&select=mobile_hours`))[0] ?? {}
+  record(F, 'a 0-hour re-save cannot wipe good hours',
+    blank.status === 200 && Number(kept.mobile_hours) === 2.25, `-> ${blank.status}, mobile ${kept.mobile_hours}`)
+}
+
 async function main(): Promise<void> {
   console.log('='.repeat(96))
   console.log(`SMOKE  ${BASE}`)
@@ -1981,6 +2034,7 @@ async function main(): Promise<void> {
     await flowS()
     await flowT()
     await flowU()
+    await flowV()
   } finally {
     await cleanup()
   }

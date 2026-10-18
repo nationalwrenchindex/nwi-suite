@@ -72,8 +72,16 @@ export async function POST(req: NextRequest) {
 
   const cols = 'id, description, category, applies_to, mobile_hours, shop_hours, requires_refrigeration, refrigeration_service, refrigeration_hours, notes, is_master, use_count, last_used_at, source'
 
+  // Billable hours must be a real number of hours. A 0 or missing figure is what made
+  // "test labor" pre-fill 0 hrs x $135.00 = $0.00 on every pick.
+  const mobileHours = asNum(body.mobile_hours)
+  const shopHours   = asNum(body.shop_hours)
+  const hoursOk     = mobileHours != null && mobileHours > 0
+
   // If this tech already saved an item with the same description (case-insensitive),
-  // bump its use_count / last_used_at instead of creating a duplicate.
+  // bump its use_count / last_used_at instead of creating a duplicate - and take the
+  // hours just used. This only bumped the count before, so a bad first save stuck for
+  // good: re-adding "test labor" with the right hours left the 0 in place.
   const { data: existing } = await supabase
     .from('hd_repair_items')
     .select('id, use_count')
@@ -85,7 +93,13 @@ export async function POST(req: NextRequest) {
   if (existing) {
     const { data: bumped, error: bumpErr } = await supabase
       .from('hd_repair_items')
-      .update({ use_count: (existing.use_count ?? 0) + 1, last_used_at: new Date().toISOString() })
+      .update({
+        use_count: (existing.use_count ?? 0) + 1,
+        last_used_at: new Date().toISOString(),
+        // Hours only when they are real, so a save with none cannot wipe good ones.
+        ...(hoursOk ? { mobile_hours: mobileHours } : {}),
+        ...(hoursOk && shopHours != null && shopHours > 0 ? { shop_hours: shopHours } : {}),
+      })
       .eq('id', existing.id)
       .select(cols)
       .single()
@@ -96,6 +110,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ item: bumped }, { status: 200 })
   }
 
+  if (!hoursOk) {
+    return NextResponse.json({ error: 'billable hours (mobile_hours) must be more than 0' }, { status: 400 })
+  }
+
   const { data, error } = await supabase
     .from('hd_repair_items')
     .insert({
@@ -103,8 +121,8 @@ export async function POST(req: NextRequest) {
       description,
       category:              typeof body.category === 'string' ? body.category : null,
       applies_to,
-      mobile_hours:          asNum(body.mobile_hours),
-      shop_hours:            asNum(body.shop_hours),
+      mobile_hours:          mobileHours,
+      shop_hours:            shopHours,
       requires_refrigeration: body.requires_refrigeration === true,
       refrigeration_service,
       refrigeration_hours:   asNum(body.refrigeration_hours),
