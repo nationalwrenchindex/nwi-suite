@@ -22,6 +22,7 @@ import {
 import { addressFrom } from '@/lib/address'
 import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
 import { money } from '@/lib/format'
+import { shopTimeZone, fmtShopDate } from '@/lib/shop-time'
 
 // The light "document" palette HD invoices use, not the dark HD suite chrome.
 const BG     = '#F4F5F7'
@@ -57,10 +58,6 @@ function fmt(n: number | string | null | undefined) {
   return `${money(Number(n ?? 0))}`
 }
 
-function fmtDate(s: string | null | undefined) {
-  if (!s) return '—'
-  return new Date(s).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-}
 
 // tel: hrefs choke on formatting characters; digits (and a leading +) are all a
 // dialer wants. The visible label keeps whatever the subscriber typed.
@@ -70,6 +67,12 @@ function telHref(phone: string) {
 }
 
 export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
+  // The SHOP's calendar date. Rendered on a UTC server, an invoice made at 11 pm
+  // Eastern printed the next day; branding.state picks the shop's zone, and an explicit
+  // zone also keeps the server and browser renders identical. See shop-time.ts.
+  const shopTz = shopTimeZone(branding.state)
+  const fmtDate = (s: string | null | undefined) => fmtShopDate(s, shopTz)
+
   const items: LineItem[] = Array.isArray(inv.line_items) ? inv.line_items : []
   const labor = items.filter(i => i.type === 'labor')
   const parts = items.filter(i => i.type === 'parts')

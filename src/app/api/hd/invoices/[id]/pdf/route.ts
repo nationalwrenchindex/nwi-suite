@@ -13,6 +13,7 @@ import { termsDisplay, termsWithDueDate } from '@/lib/hd/payment-terms'
 import { AERIAL_TYPE_LABEL } from '@/lib/hd/aerial/forms'
 import type { AerialInspectionType } from '@/types/aerial'
 import { money } from '@/lib/format'
+import { shopTimeZone, fmtShopDate } from '@/lib/shop-time'
 import {
   SHOP_BLOCK_SELECT,
   SHOP_ADDRESS_SELECT_143,
@@ -54,9 +55,9 @@ function fmt(n: number | null | undefined) {
   return `${money((n ?? 0))}`
 }
 
-function fmtDate(s: string | null | undefined) {
-  if (!s) return '—'
-  return new Date(s).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+// The shop's calendar date, not the server's UTC one - see src/lib/shop-time.ts.
+function fmtDate(s: string | null | undefined, tz: string) {
+  return fmtShopDate(s, tz)
 }
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -118,6 +119,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       .maybeSingle(),
   ])
 
+  // profiles.state is in SHOP_BLOCK_SELECT; the zone the printed dates use.
+  const shopTz = shopTimeZone((profile as { state?: string | null } | null)?.state)
+
   const origin = req.nextUrl.origin
   const attachedReports = [
     pmChecklist && {
@@ -127,7 +131,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         // A PM checklist has no overall_result column, so only the determination
         // can be stated — and only when one was recorded.
         ...inspectionOutcome(null, pmChecklist.removed_from_service),
-        fmtDate(pmChecklist.created_at),
+        fmtDate(pmChecklist.created_at, shopTz),
       ].filter(Boolean).join(' · '),
       url:    `${origin}/hd/pm-checklist/${pmChecklist.id}`,
     },
@@ -139,7 +143,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         // whether the vehicle may be driven. inspectionOutcome adds the migration
         // 141 determination, and prints nothing when nobody was asked.
         ...inspectionOutcome(dotInspection.overall_result, dotInspection.removed_from_service),
-        fmtDate(dotInspection.created_at),
+        fmtDate(dotInspection.created_at, shopTz),
       ].filter(Boolean).join(' · '),
       url:    `${origin}/hd/dot-inspections/${dotInspection.id}`,
     },
@@ -150,7 +154,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
         // OSHA takes a critically deficient machine out of service — the customer's
         // copy has to say so plainly, not leave it inside the linked report.
         ...inspectionOutcome(aerialInspection.overall_result, aerialInspection.removed_from_service),
-        fmtDate(aerialInspection.inspection_date),
+        fmtDate(aerialInspection.inspection_date, shopTz),
       ].filter(Boolean).join(' · '),
       url:    `${origin}/hd/aerial-inspections/${aerialInspection.id}`,
     },
@@ -342,11 +346,11 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     ${shopBlockHtml}
     <div class="inv-meta">
       <div class="inv-number">${inv.invoice_number}</div>
-      <p>Date: ${fmtDate(inv.created_at)}</p>
+      <p>Date: ${fmtDate(inv.created_at, shopTz)}</p>
       <p${inv.due_date && inv.status === 'overdue' ? ' class="due-highlight"' : ''}>Terms: ${esc(termsWithDueDate(inv.payment_terms, inv.due_date))}</p>
       <p>Status: <span class="status-badge status-${inv.status}">${inv.status}</span></p>
       ${inv.late_fee_applied && Number(inv.late_fee_amount) > 0 ? `<p class="due-highlight">Late Fee: ${fmt(inv.late_fee_amount)}</p>` : ''}
-      ${inv.paid_at ? `<p>Paid: ${fmtDate(inv.paid_at)}</p>` : ''}
+      ${inv.paid_at ? `<p>Paid: ${fmtDate(inv.paid_at, shopTz)}</p>` : ''}
     </div>
   </div>
 

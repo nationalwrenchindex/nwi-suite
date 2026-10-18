@@ -10,6 +10,7 @@ import { resolveLateFeeSettings, assessLateFee, lateFeeBlockMessage } from '@/li
 import type { AerialInspectionType } from '@/types/aerial'
 import { money } from '@/lib/format'
 import { feeRows } from '@/lib/invoice-document'
+import { shopTimeZone, fmtShopDate } from '@/lib/shop-time'
 import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
 import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
 
@@ -41,11 +42,6 @@ function fmt(n: number | null | undefined) {
   return `${money((n ?? 0))}`
 }
 
-function fmtDate(s: string | null | undefined) {
-  if (!s) return '—'
-  return new Date(s).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
-}
-
 export default async function InvoiceDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createClient()
@@ -57,12 +53,17 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
 
   const [{ data: inv }, { data: profile }, { data: dotInspection }, { data: aerialInspection }] = await Promise.all([
     supabase.from('hd_invoices').select('*').eq('id', id).eq('user_id', user.id).single(),
-    supabase.from('profiles').select('business_name, phone').eq('id', user.id).single(),
+    // state, for the shop's time zone: the server renders in UTC, so an invoice made at
+    // 11 pm Eastern printed the next day's date. See src/lib/shop-time.ts.
+    supabase.from('profiles').select('business_name, phone, state').eq('id', user.id).single(),
     supabase.from('hd_dot_inspections').select('id, inspection_id, overall_result').eq('invoice_id', id).eq('user_id', user.id).maybeSingle(),
     supabase.from('hd_aerial_inspections').select('id, inspection_type, overall_result, removed_from_service').eq('invoice_id', id).eq('user_id', user.id).maybeSingle(),
   ])
 
   if (!inv) notFound()
+
+  const shopTz = shopTimeZone((profile as { state?: string | null } | null)?.state)
+  const fmtDate = (s: string | null | undefined) => fmtShopDate(s, shopTz)
 
   // PMs reach an invoice two ways — attached directly, or performed on the same work
   // order. The second link is the newer writer, and a PM that used only that one was

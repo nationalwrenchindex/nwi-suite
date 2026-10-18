@@ -27,6 +27,7 @@ import { invoiceBodyFromQuote } from '../src/lib/hd/quote-to-invoice'
 import { billedHoursFromLibrary } from '../src/lib/hd/labor-library'
 import { editableLines } from '../src/lib/hd/invoice-edit-lines'
 import { stripLeadingZeros, parseFee } from '../src/components/hd/FeeInput'
+import { fmtShopDate, shopTimeZone } from '../src/lib/shop-time'
 import { loadEnv, openSession, visibleText } from './lib/smoke-session'
 
 loadEnv()
@@ -1935,6 +1936,22 @@ async function flowU(): Promise<void> {
         missing.length === 0, missing.length ? `absent: ${missing.join(', ')}` : 'both fee lines and $540.26 render')
     }
 
+    // THE INVOICE DATE IS THE SHOP'S DATE. INV-2026-0020 was created at 03:00:45 UTC
+    // on Oct 18 - 11 pm Oct 17 in this NC shop - and printed "October 18". This smoke
+    // invoice is given that exact created_at and the RENDERED page is read, so the
+    // server's UTC clock cannot pass for the shop's.
+    const owner = (await rest<Record<string, unknown>>(`profiles?id=eq.${OWNER}&select=state`))[0] ?? {}
+    const expected = fmtShopDate('2026-10-18T03:00:45.91718+00:00', shopTimeZone(owner.state as string | null))
+    const backdate = await fetch(`${SUPA}/rest/v1/hd_invoices?id=eq.${invId}`, {
+      method: 'PATCH', headers: SVC_H, body: JSON.stringify({ created_at: '2026-10-18T03:00:45.91718+00:00' }),
+    })
+    const datedPage = backdate.ok ? await page(`/hd/invoices/${invId}`) : null
+    record(F, `the invoice date is the shop's (${String(owner.state ?? 'no state')}), not UTC's`,
+      // 03:00 UTC is still Oct 17 in every US zone, so the shop's date is Oct 17.
+      !!datedPage && expected === 'October 17, 2026' && datedPage.text.includes(`Date: ${expected}`),
+      !backdate.ok ? `could not back-date -> ${backdate.status}` : !datedPage ? 'page did not load'
+        : datedPage.text.includes(`Date: ${expected}`) ? `Date: ${expected}` : `"Date: ${expected}" absent`)
+
     // THE EDIT FORM KEEPS THE COST BASIS. It rebuilt each line from the fields it
     // edits, so one save dropped unit_cost_base and markup_percent and the PUT then
     // derived parts_cost from nothing. Round-tripped through the form's own mapping and
@@ -1996,6 +2013,11 @@ async function flowV(): Promise<void> {
     ['035', '35', 35], ['035.00', '35.00', 35], ['0.50', '0.50', 0.5], ['35.', '35.', 35], ['0', '0', 0],
   ]
   const feeWrong = feeCases.filter(([raw, text, n]) => stripLeadingZeros(raw) !== text || parseFee(stripLeadingZeros(raw)) !== n)
+  // Fix 7: a DATE-only value is never shifted into a zone, and a state name resolves.
+  record('W shop date', 'a due date is printed as its own calendar day',
+    fmtShopDate('2026-11-16', 'America/Los_Angeles') === 'November 16, 2026'
+      && shopTimeZone('North Carolina') === shopTimeZone('NC'),
+    `${fmtShopDate('2026-11-16', 'America/Los_Angeles')}, NC -> ${shopTimeZone('NC')}`)
   record('W fee inputs', 'typed fees lose leading zeros, keep decimals',
     feeWrong.length === 0,
     feeWrong.length ? feeWrong.map(([r]) => `"${r}" -> "${stripLeadingZeros(r)}"`).join('; ') : '035 -> 35, 035.00 -> 35.00, 0.50 kept, 35. kept')
