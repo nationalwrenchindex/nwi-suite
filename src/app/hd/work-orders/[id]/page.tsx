@@ -23,11 +23,11 @@ export default async function WorkOrderDetailPage({
   const [{ data: wo }, { data: photos }, inspections, { data: brandingRow }] = await Promise.all([
     supabase
       .from('hd_work_orders')
+      // '*' rather than a column list so the migration-159 unit columns (unit_year,
+      // truck_*, vin) are read when they exist, and the page still loads before 159 is
+      // applied - naming them would fail the whole read until then.
       .select(`
-        id, work_order_number, status, service_type, location, service_requests, comments,
-        tech_name, labor_hours, labor_rate, total_amount, flagged_items, current_setpoint,
-        started_at, completed_at, created_at,
-        customer_name, customer_phone, unit_manufacturer, unit_model, unit_serial, unit_number,
+        *,
         unit:hd_units(id, unit_number, manufacturer, model, year, serial_number),
         fleet:hd_fleet_accounts(id, fleet_name, contact_email, contact_phone, address)
       `)
@@ -50,6 +50,23 @@ export default async function WorkOrderDetailPage({
   ])
 
   if (!wo) notFound()
+
+  // THE QUOTE'S RECORDED UNIT, for a work order made before migration 159 gave the
+  // work order its own year / truck / VIN columns. The document chain's value wins
+  // over the hd_units record, same rule as the rates, the tax and the terms; this only
+  // fills what the work order itself does not carry.
+  const woRow = wo as Record<string, unknown>
+  const UNIT_DOC_FIELDS = ['unit_year', 'truck_make', 'truck_model', 'truck_year', 'vin'] as const
+  if (woRow.quote_id && UNIT_DOC_FIELDS.some(k => !woRow[k])) {
+    const { data: q } = await supabase
+      .from('hd_quotes')
+      .select(UNIT_DOC_FIELDS.join(', '))
+      .eq('id', String(woRow.quote_id))
+      .eq('user_id', user.id)
+      .maybeSingle()
+    const quote = (q ?? {}) as Record<string, unknown>
+    for (const k of UNIT_DOC_FIELDS) if (!woRow[k] && quote[k]) woRow[k] = quote[k]
+  }
 
   const branding = resolveBranding(brandingRow as BrandingSource | null)
 

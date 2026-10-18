@@ -89,7 +89,12 @@ export default function WorkOrderList({
                   <td className="px-4 py-3 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.7)' }}>
                     <Link href={`/hd/work-orders/${wo.id}`} className="block">
                       {wo.fleet?.fleet_name ?? '—'}
-                      {wo.unit && <span className="block text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{wo.unit.unit_number} — {wo.unit.manufacturer}</span>}
+                      {/* The work order's recorded unit first, the linked record for what it left empty. */}
+                      {(() => {
+                        const label = [wo.unit_number || wo.unit?.unit_number, wo.unit_manufacturer || wo.unit?.manufacturer]
+                          .filter(Boolean).join(' — ')
+                        return label ? <span className="block text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{label}</span> : null
+                      })()}
                     </Link>
                   </td>
                   <td className="px-4 py-3 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>

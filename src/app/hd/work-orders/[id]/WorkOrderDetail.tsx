@@ -40,6 +40,12 @@ type WO = {
   unit_model: string | null
   unit_serial: string | null
   unit_number: string | null
+  // Migration 159, or filled from the quote by the page for an older work order.
+  unit_year?: string | null
+  truck_make?: string | null
+  truck_model?: string | null
+  truck_year?: string | null
+  vin?: string | null
   // Loose JSONB shared with the PM checklists, so it is typed as unknown and read
   // defensively. The converter writes { unit_not_identified: true } into it when an
   // approved quote carried no serial and no VIN.
@@ -80,6 +86,14 @@ const CATEGORIES = [
   { id: 'during',  label: 'During Service' },
   { id: 'after',   label: 'After Service' },
 ]
+
+/** The document's value when it has one, the linked record's when it does not. */
+function docFirst(doc: string | number | null | undefined, record: string | number | null | undefined): string | null {
+  const d = doc == null ? '' : String(doc).trim()
+  if (d) return d
+  const r = record == null ? '' : String(record).trim()
+  return r || null
+}
 
 function statusColor(s: string) {
   return s === 'in_progress' ? HD_ORANGE : s === 'completed' ? '#22C55E' : s === 'invoiced' ? '#3B82F6' : 'rgba(var(--hd-ink-rgb), 0.4)'
@@ -294,14 +308,23 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
   // Each one printed "—" or something misleading for a work order that came from an
   // approved quote, which is now a normal way for one to exist.
 
-  // The linked hd_unit when there is one, the quote's free text when there is not.
-  // A quote records the machine as text, so a quote-sourced job has no join to read.
-  const unitLabel = wo.unit
-    ? `${wo.unit.unit_number} — ${wo.unit.manufacturer} ${wo.unit.model}${wo.unit.year ? ` (${wo.unit.year})` : ''}`
-    : [
-        wo.unit_number,
-        [wo.unit_manufacturer, wo.unit_model].filter(Boolean).join(' ') || null,
-      ].filter(Boolean).join(' — ') || '—'
+  // THE DOCUMENT'S RECORDED UNIT WINS, field by field; the linked hd_unit only fills
+  // what the document left empty. This used to take the whole label from the hd_units
+  // row whenever one was linked, so the work order printed the unit RECORD's year
+  // rather than what the quote said - the same "recorded beats current" rule the
+  // rates, the tax and the terms already follow.
+  const unitView = {
+    number:       docFirst(wo.unit_number,       wo.unit?.unit_number),
+    manufacturer: docFirst(wo.unit_manufacturer, wo.unit?.manufacturer),
+    model:        docFirst(wo.unit_model,        wo.unit?.model),
+    year:         docFirst(wo.unit_year,         wo.unit?.year),
+    serial:       docFirst(wo.unit_serial,       wo.unit?.serial_number),
+    vin:          docFirst(wo.vin,               null),
+  }
+  const unitLabel = [
+    unitView.number,
+    [unitView.manufacturer, unitView.model].filter(Boolean).join(' ') + (unitView.year ? ` (${unitView.year})` : '') || null,
+  ].filter(s => s && s.trim()).join(' — ') || '—'
 
   // Hours and rate are two facts, and the row used to print "—" unless BOTH were
   // there. A job billing $135/hr with the hours still on the lines should say so.
@@ -422,7 +445,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
             // They are not meant to match, and labelling both "Total" made a correct
             // pair of numbers look like a bug.
             { label: 'Quoted Total', value: quotedTotalLabel },
-            { label: 'Serial / VIN', value: wo.unit?.serial_number ?? wo.unit_serial ?? '—' },
+            { label: 'Serial / VIN', value: [unitView.serial, unitView.vin].filter(Boolean).join(' / ') || '—' },
           ].map(({ label, value }) => (
             <div key={label}>
               <span className="text-xs uppercase tracking-wider block mb-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)', fontSize: 10 }}>{label}</span>
@@ -519,15 +542,15 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
           would put the two out of step with nothing to reconcile them. Reopening the
           work order unlocks them again. */}
       {/* The unit is passed down so the parts picker opens filtered to it. Same
-          resolution the invoice handoff uses above: the linked unit record first,
-          falling back to the free-typed fields. */}
+          resolution as the details block: the document's recorded unit first, the
+          linked unit record for whatever it left empty. */}
       <WorkOrderLineItems
         workOrderId={workOrderId}
         canEdit={status !== 'invoiced'}
         unit={{
-          manufacturer: wo.unit?.manufacturer  ?? wo.unit_manufacturer ?? null,
-          model:        wo.unit?.model         ?? wo.unit_model        ?? null,
-          serial:       wo.unit?.serial_number ?? wo.unit_serial       ?? null,
+          manufacturer: unitView.manufacturer,
+          model:        unitView.model,
+          serial:       unitView.serial,
         }}
       />
 
@@ -557,18 +580,14 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
           <Link
             href={
               `/hd/dot-inspections/new?work_order=${workOrderId}` +
-              (wo.unit
-                ? `&unit=${wo.unit.id}` +
-                  `&unit_manufacturer=${encodeURIComponent(wo.unit.manufacturer ?? '')}` +
-                  `&unit_model=${encodeURIComponent(wo.unit.model ?? '')}` +
-                  `&unit_serial=${encodeURIComponent(wo.unit.serial_number ?? '')}`
-                // No linked unit, but the quote named the machine: hand that over too,
-                // so the form does not open blank on a job that knows its unit.
-                : (wo.unit_manufacturer || wo.unit_model || wo.unit_serial)
-                  ? `&unit_manufacturer=${encodeURIComponent(wo.unit_manufacturer ?? '')}` +
-                    `&unit_model=${encodeURIComponent(wo.unit_model ?? '')}` +
-                    `&unit_serial=${encodeURIComponent(wo.unit_serial ?? '')}`
-                  : '')
+              // The same document-first unit as the details block, linked or not, so
+              // the form does not open blank on a job that knows its unit.
+              (wo.unit ? `&unit=${wo.unit.id}` : '') +
+              ((unitView.manufacturer || unitView.model || unitView.serial)
+                ? `&unit_manufacturer=${encodeURIComponent(unitView.manufacturer ?? '')}` +
+                  `&unit_model=${encodeURIComponent(unitView.model ?? '')}` +
+                  `&unit_serial=${encodeURIComponent(unitView.serial ?? '')}`
+                : '')
             }
             className="px-4 py-2 rounded-lg text-xs font-condensed font-bold tracking-wide transition-colors"
             style={{ background: 'var(--hd-inner)', color: 'rgba(var(--hd-ink-rgb), 0.7)', border: '1px solid var(--hd-border)' }}

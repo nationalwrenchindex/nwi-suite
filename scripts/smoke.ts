@@ -1666,7 +1666,9 @@ async function flowT(): Promise<void> {
     headers: { ...SVC_H, Prefer: 'return=representation' },
     body: JSON.stringify({
       user_id: OWNER, fleet_account_id: accountId, unit_number: UNIT_NO,
-      manufacturer: 'Thermo King', model: 'S-600', serial_number: SERIAL, status: 'active',
+      // year 2017 on the RECORD, 2018 on the quote below: the work order must show the
+      // quote's (WO-2026-1563 printed the record's year over the document's).
+      manufacturer: 'Thermo King', model: 'S-600', year: 2017, serial_number: SERIAL, status: 'active',
     }),
   })
   const unitId = unit.ok ? String(((await unit.json()) as Record<string, unknown>[])[0]?.id ?? '') : ''
@@ -1701,6 +1703,7 @@ async function flowT(): Promise<void> {
   // page shows the fleet name" would pass off the customer line with Fleet still "—".
   const made = await api('POST', '/api/hd/quotes', quoteBody(`${MARK} carry customer`, {
     fleet_account_id: accountId, unit_id: unitId, unit_number: UNIT_NO, unit_serial: SERIAL,
+    unit_year: '2018',
   }))
   const quoteId = String(((made.json.quote ?? {}) as Record<string, unknown>).id ?? '')
   if (quoteId) created.hdQuotes.add(quoteId)
@@ -1732,6 +1735,9 @@ async function flowT(): Promise<void> {
   if (record(F, 'the linked work order renders', !!woPage, woPage ? 'loaded' : 'did not load')) {
     record(F, 'Fleet shows the fleet name, not a dash', woPage!.text.includes(fleetName), woPage!.text.includes(fleetName) ? fleetName : 'fleet name absent')
     record(F, 'the unit number shows beside the unit', woPage!.text.includes(UNIT_NO), woPage!.text.includes(UNIT_NO) ? UNIT_NO : 'unit number absent')
+    record(F, "the unit year is the QUOTE's (2018), not the unit record's (2017)",
+      woPage!.text.includes('(2018)') && !woPage!.text.includes('(2017)'),
+      woPage!.text.includes('(2017)') ? 'the record year 2017 renders' : woPage!.text.includes('(2018)') ? '2018' : 'no year renders')
     record(F, 'no "No unit on this work order" under a linked unit',
       !woPage!.text.includes('No unit on this work order'),
       woPage!.text.includes('No unit on this work order') ? 'the note still renders' : 'absent')
@@ -1748,10 +1754,11 @@ async function flowT(): Promise<void> {
     if (invId) created.hdInvoices.add(invId)
     if (record(F, 'the invoice is created', !!invId, `-> ${inv.status} ${String(inv.json.error ?? '')}`)) {
       const i = (await rest<Record<string, unknown>>(
-        `hd_invoices?id=eq.${invId}&select=fleet_account_id,unit_id,unit_number,payment_terms`))[0] ?? {}
+        `hd_invoices?id=eq.${invId}&select=fleet_account_id,unit_id,unit_number,payment_terms,unit_year`))[0] ?? {}
       record(F, 'the invoice terms are the QUOTE\'s, not "Due on receipt"', i.payment_terms === 'net30', String(i.payment_terms))
       record(F, 'the invoice carries the fleet link', i.fleet_account_id === accountId, String(i.fleet_account_id))
       record(F, 'the invoice carries the unit number', i.unit_number === UNIT_NO, String(i.unit_number))
+      record(F, "the invoice carries the quote's unit year", i.unit_year === '2018', String(i.unit_year))
       const invPage = await page(`/hd/invoices/${invId}`)
       record(F, 'the invoice page reads Net 30',
         !!invPage && invPage.text.includes('Net 30') && !invPage.text.includes('Due on receipt'),

@@ -619,12 +619,12 @@ export default function NewInvoicePage() {
             </Field>
             <Field label="Unit Model"><input style={inp} value={form.unit_model} onChange={e => setField('unit_model', e.target.value)} placeholder="e.g. S-600" /></Field>
             <Field label="Serial Number"><input style={inp} value={form.unit_serial} onChange={e => setField('unit_serial', e.target.value)} placeholder="10-digit serial" /></Field>
-            <Field label="Unit Year"><input style={inp} value={form.unit_year} onChange={e => setField('unit_year', e.target.value)} placeholder="2018" /></Field>
+            <Field label="Unit Year"><input style={inp} value={form.unit_year} onChange={e => setField('unit_year', e.target.value)} placeholder="e.g. 2018" /></Field>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <Field label="Truck Make"><input style={inp} value={form.truck_make} onChange={e => setField('truck_make', e.target.value)} placeholder="Freightliner" /></Field>
-            <Field label="Truck Model"><input style={inp} value={form.truck_model} onChange={e => setField('truck_model', e.target.value)} placeholder="Cascadia" /></Field>
-            <Field label="Truck Year"><input style={inp} value={form.truck_year} onChange={e => setField('truck_year', e.target.value)} placeholder="2020" /></Field>
+            <Field label="Truck Make"><input style={inp} value={form.truck_make} onChange={e => setField('truck_make', e.target.value)} placeholder="e.g. Freightliner" /></Field>
+            <Field label="Truck Model"><input style={inp} value={form.truck_model} onChange={e => setField('truck_model', e.target.value)} placeholder="e.g. Cascadia" /></Field>
+            <Field label="Truck Year"><input style={inp} value={form.truck_year} onChange={e => setField('truck_year', e.target.value)} placeholder="e.g. 2020" /></Field>
             <Field label="VIN"><input style={inp} value={form.vin} onChange={e => setField('vin', e.target.value)} placeholder="17-digit VIN" /></Field>
           </div>
         </div>

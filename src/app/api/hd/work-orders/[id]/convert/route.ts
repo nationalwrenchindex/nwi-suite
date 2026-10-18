@@ -57,8 +57,13 @@ export async function GET(
   // fee columns, so the quote's road call and diagnostic fees never reached it - while
   // the quote's tax, which taxed them, did. Reading them back off the quote is what
   // makes that work order's invoice match the quote it was approved from.
-  const feeMissing = row.diagnostic_fee == null || row.road_call_fee == null
-  if (row.quote_id && (!row.payment_terms || !row.unit_number || !row.fleet_account_id || feeMissing)) {
+  //
+  // And the unit year, truck fields and VIN, which reached the work order only from
+  // migration 159 on.
+  const UNIT_FROM_QUOTE = ['unit_year', 'truck_make', 'truck_model', 'truck_year', 'vin'] as const
+  const feeMissing  = row.diagnostic_fee == null || row.road_call_fee == null
+  const unitMissing = UNIT_FROM_QUOTE.some(k => !row[k])
+  if (row.quote_id && (!row.payment_terms || !row.unit_number || !row.fleet_account_id || feeMissing || unitMissing)) {
     const { data: q } = await supabase
       .from('hd_quotes')
       .select('*')
@@ -71,6 +76,7 @@ export async function GET(
     if (!row.fleet_account_id && quote.fleet_account_id) row.fleet_account_id = quote.fleet_account_id
     if (row.diagnostic_fee == null && quote.diagnostic_fee != null) row.diagnostic_fee = quote.diagnostic_fee
     if (row.road_call_fee == null && quote.road_call_fee != null)   row.road_call_fee  = quote.road_call_fee
+    for (const k of UNIT_FROM_QUOTE) if (!row[k] && quote[k]) row[k] = quote[k]
   }
 
   // Already billed. Hand back the invoice that exists rather than letting the caller

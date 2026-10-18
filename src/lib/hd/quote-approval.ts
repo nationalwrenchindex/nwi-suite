@@ -400,6 +400,15 @@ export async function createWorkOrderFromQuote(
     unit_model:        quote.unit_model ?? null,
     unit_serial:       quote.unit_serial ?? null,
     unit_number:       quote.unit_number ?? null,
+    // The rest of the machine as the QUOTE recorded it (migration 159). Without these
+    // the work order screen read the year off the linked hd_units row, so a document
+    // could show a year the customer was never quoted. The recorded value wins; the
+    // unit record only fills what the document left empty.
+    unit_year:         quote.unit_year ?? null,
+    truck_make:        quote.truck_make ?? null,
+    truck_model:       quote.truck_model ?? null,
+    truck_year:        quote.truck_year ?? null,
+    vin:               quote.vin ?? null,
     // The Intel Hub links. hd_quotes gains these in migration 158; a quote saved
     // before it reads undefined here and carries null, which is what it carried before.
     fleet_account_id:  quote.fleet_account_id ?? null,

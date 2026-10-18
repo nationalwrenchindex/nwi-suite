@@ -303,6 +303,13 @@ export function invoiceIdentityFromWorkOrder(wo: Record<string, unknown>): Recor
     unit_model:        wo.unit_model ?? null,
     unit_serial:       wo.unit_serial ?? null,
     unit_number:       wo.unit_number ?? null,
+    // Migration 159. The convert route fills these from the quote for a work order
+    // made before it, so the invoice states the machine the customer was quoted for.
+    unit_year:         wo.unit_year ?? null,
+    truck_make:        wo.truck_make ?? null,
+    truck_model:       wo.truck_model ?? null,
+    truck_year:        wo.truck_year ?? null,
+    vin:               wo.vin ?? null,
     address_line1:     wo.address_line1 ?? null,
     address_line2:     wo.address_line2 ?? null,
     city:              wo.city ?? null,

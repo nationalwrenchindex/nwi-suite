@@ -14,6 +14,7 @@
 export const WORK_ORDER_LIST_SELECT = `
   id, work_order_number, status, service_type, created_at,
   tech_name, total_amount, started_at,
+  unit_number, unit_manufacturer,
   unit:hd_units(unit_number, manufacturer, model),
   fleet:hd_fleet_accounts(fleet_name)
 `
@@ -28,6 +29,9 @@ export interface WorkOrderListRow {
   tech_name:     string | null
   total_amount:  number | null
   created_at:    string
+  // The work order's own recorded unit (quote-sourced jobs often have no link).
+  unit_number:       string | null
+  unit_manufacturer: string | null
   unit:  { unit_number: string; manufacturer: string; model: string } | null
   fleet: { fleet_name: string } | null
 }
