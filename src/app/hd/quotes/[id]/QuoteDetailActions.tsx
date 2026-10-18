@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { invoiceBodyFromQuote } from '@/lib/hd/quote-to-invoice'
+import { isQuoteEditable, quoteLockReason } from '@/lib/hd/quote-edit'
 
 const ORANGE = '#FF6600'
 const BLUE   = '#2969B0'
@@ -283,6 +285,13 @@ export default function QuoteDetailActions({
   const [toast, setToast] = useState('')
   const [sendOpen, setSendOpen] = useState(false)
 
+  // Back from editing a SENT quote, where the tech said yes to re-sending: open the
+  // send dialog straight away. Same link as before - the edit never rotates it.
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get('resend') === '1') setSendOpen(true)
+  }, [])
+  const editable = isQuoteEditable(quoteData.status)
+
   // ===========================================================================
   // CONVERT TO WORK ORDER
   // ===========================================================================
@@ -429,6 +438,22 @@ export default function QuoteDetailActions({
         </svg>
         {quoteData.status === 'draft' ? 'Send Quote' : 'Send Again'}
       </button>
+      {/* EDIT, for a draft or sent quote. Approved and declined quotes are locked, and
+          say so here rather than hiding the button and leaving the tech to guess. */}
+      {editable ? (
+        <Link
+          href={`/hd/quotes/${quoteId}/edit`}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm"
+          style={{ background: '#FFFFFF', color: '#374151', border: '1px solid #D1D5DB', minHeight: 44 }}
+        >
+          Edit
+        </Link>
+      ) : (
+        <span className="text-xs px-3 py-2 rounded-lg" style={{ background: '#F3F4F6', color: '#6B7280' }}
+              title={quoteLockReason(quoteData.status)}>
+          Locked - {quoteData.status === 'approved' ? 'approved by the customer' : quoteData.status}
+        </span>
+      )}
       <button
         onClick={() => convertToWorkOrder()}
         disabled={busy}
