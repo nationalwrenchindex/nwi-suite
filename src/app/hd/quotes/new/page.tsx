@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { LABOR_GUIDE, type LaborGuideItem } from '@/lib/hd/labor-guide'
 import { billedHoursFromLibrary } from '@/lib/hd/labor-library'
+import FeeInput from '@/components/hd/FeeInput'
 import { useTaxSettings } from '@/lib/use-tax-settings'
 import { useHdFeeSettings } from '@/lib/hd/use-fee-settings'
 import { computeTax, taxDisplayRows, mergeBreakdowns } from '@/lib/tax'
@@ -1541,17 +1542,13 @@ export default function NewQuotePage() {
               </label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: MUTED }}>$</span>
-                <input
+                {/* Blank rather than a 0 the tech did not type, leading zeros
+                    stripped as they type. See FeeInput. */}
+                <FeeInput
                   style={{ ...inp, paddingLeft: 24, opacity: form.include_diagnostic ? 1 : 0.4 }}
-                  type="number"
-                  min={0}
-                  // Blank rather than a 0 the tech did not type. A zero in a money
-                  // field reads as "I charge nothing", which is a different claim
-                  // from "nobody has set this".
-                  value={form.diagnostic_fee === 0 ? '' : form.diagnostic_fee}
-                  placeholder="0.00"
+                  value={form.diagnostic_fee}
                   disabled={!form.include_diagnostic}
-                  onChange={e => setField('diagnostic_fee', parseFloat(e.target.value) || 0)}
+                  onChange={n => setField('diagnostic_fee', n)}
                 />
               </div>
               {/* Only while the shop has no configured fee. Once HD Settings holds one
@@ -1580,13 +1577,13 @@ export default function NewQuotePage() {
               </label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: MUTED }}>$</span>
-                <input
+                {/* A number-typed input left "035.00" on screen after 35 was typed
+                    over the 0. See FeeInput. */}
+                <FeeInput
                   style={{ ...inp, paddingLeft: 24, opacity: form.include_road_call ? 1 : 0.4 }}
-                  type="number"
-                  min={0}
                   value={form.road_call_fee}
                   disabled={!form.include_road_call}
-                  onChange={e => setField('road_call_fee', parseFloat(e.target.value) || 0)}
+                  onChange={n => setField('road_call_fee', n)}
                 />
               </div>
             </div>

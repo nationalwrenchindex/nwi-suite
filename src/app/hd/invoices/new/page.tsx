@@ -15,6 +15,7 @@ import { computeTax, taxDisplayRows, mergeBreakdowns } from '@/lib/tax'
 import { DEFAULT_HD_PARTS_MARKUP, sellPrice, lineAmount } from '@/lib/hd/parts-pricing'
 import AddressAutofill from '@/components/hd/AddressAutofill'
 import { money } from '@/lib/format'
+import FeeInput from '@/components/hd/FeeInput'
 
 // Direct-invoice fast path: skip the quote/approval step and bill a trusted
 // customer directly. Mirrors the quote form but posts straight to /api/hd/invoices.
@@ -659,7 +660,7 @@ export default function NewInvoicePage() {
               </label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: MUTED }}>$</span>
-                <input style={{ ...inp, paddingLeft: 24, opacity: form.include_diagnostic ? 1 : 0.4 }} type="number" min={0} value={form.diagnostic_fee} disabled={!form.include_diagnostic} onChange={e => setField('diagnostic_fee', parseFloat(e.target.value) || 0)} />
+                <FeeInput style={{ ...inp, paddingLeft: 24, opacity: form.include_diagnostic ? 1 : 0.4 }} value={form.diagnostic_fee} disabled={!form.include_diagnostic} onChange={n => setField('diagnostic_fee', n)} />
               </div>
             </div>
             <div>
@@ -669,7 +670,7 @@ export default function NewInvoicePage() {
               </label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: MUTED }}>$</span>
-                <input style={{ ...inp, paddingLeft: 24, opacity: form.include_road_call ? 1 : 0.4 }} type="number" min={0} value={form.road_call_fee} disabled={!form.include_road_call} onChange={e => setField('road_call_fee', parseFloat(e.target.value) || 0)} />
+                <FeeInput style={{ ...inp, paddingLeft: 24, opacity: form.include_road_call ? 1 : 0.4 }} value={form.road_call_fee} disabled={!form.include_road_call} onChange={n => setField('road_call_fee', n)} />
               </div>
             </div>
           </div>

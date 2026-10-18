@@ -26,6 +26,7 @@ import { LEGAL_VERSION } from '../src/lib/legal'
 import { invoiceBodyFromQuote } from '../src/lib/hd/quote-to-invoice'
 import { billedHoursFromLibrary } from '../src/lib/hd/labor-library'
 import { editableLines } from '../src/lib/hd/invoice-edit-lines'
+import { stripLeadingZeros, parseFee } from '../src/components/hd/FeeInput'
 import { loadEnv, openSession, visibleText } from './lib/smoke-session'
 
 loadEnv()
@@ -1988,6 +1989,16 @@ async function flowV(): Promise<void> {
     [0, 1.5, '1.5'], [null, 1.5, '1.5'], [2.6, 1.5, '2.6'], [null, null, ''], [0, 0, ''],
   ]
   const wrong = cases.filter(([m, b, want]) => billedHoursFromLibrary(m, b) !== want)
+
+  // Fix 6 rides here too: the fee inputs. "035.00" stayed on screen after 35 was typed
+  // over a 0. The field's own text handling, on the exact keystrokes that produced it.
+  const feeCases: Array<[string, string, number]> = [
+    ['035', '35', 35], ['035.00', '35.00', 35], ['0.50', '0.50', 0.5], ['35.', '35.', 35], ['0', '0', 0],
+  ]
+  const feeWrong = feeCases.filter(([raw, text, n]) => stripLeadingZeros(raw) !== text || parseFee(stripLeadingZeros(raw)) !== n)
+  record('W fee inputs', 'typed fees lose leading zeros, keep decimals',
+    feeWrong.length === 0,
+    feeWrong.length ? feeWrong.map(([r]) => `"${r}" -> "${stripLeadingZeros(r)}"`).join('; ') : '035 -> 35, 035.00 -> 35.00, 0.50 kept, 35. kept')
   record(F, 'pre-fill: mobile, else book, else blank - never 0',
     wrong.length === 0,
     wrong.length ? wrong.map(([m, b, w]) => `(${m}, ${b}) -> "${billedHoursFromLibrary(m, b)}" want "${w}"`).join('; ') : 'all five shapes')
