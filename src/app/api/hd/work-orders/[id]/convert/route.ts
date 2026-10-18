@@ -52,7 +52,13 @@ export async function GET(
   // migration 158 has no payment_terms column, and none made before this pass has a
   // fleet link or unit number - but its quote may. A value on the work order always
   // wins; this only fills an absence, from the document the customer approved.
-  if (row.quote_id && (!row.payment_terms || !row.unit_number || !row.fleet_account_id)) {
+  //
+  // THE FEES are filled the same way. A work order made before migration 159 has no
+  // fee columns, so the quote's road call and diagnostic fees never reached it - while
+  // the quote's tax, which taxed them, did. Reading them back off the quote is what
+  // makes that work order's invoice match the quote it was approved from.
+  const feeMissing = row.diagnostic_fee == null || row.road_call_fee == null
+  if (row.quote_id && (!row.payment_terms || !row.unit_number || !row.fleet_account_id || feeMissing)) {
     const { data: q } = await supabase
       .from('hd_quotes')
       .select('*')
@@ -63,6 +69,8 @@ export async function GET(
     if (!row.payment_terms && quote.payment_terms)       row.payment_terms    = quote.payment_terms
     if (!row.unit_number && quote.unit_number)           row.unit_number      = quote.unit_number
     if (!row.fleet_account_id && quote.fleet_account_id) row.fleet_account_id = quote.fleet_account_id
+    if (row.diagnostic_fee == null && quote.diagnostic_fee != null) row.diagnostic_fee = quote.diagnostic_fee
+    if (row.road_call_fee == null && quote.road_call_fee != null)   row.road_call_fee  = quote.road_call_fee
   }
 
   // Already billed. Hand back the invoice that exists rather than letting the caller

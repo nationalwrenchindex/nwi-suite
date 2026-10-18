@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { invoiceBodyFromQuote } from '@/lib/hd/quote-to-invoice'
 
 const ORANGE = '#FF6600'
 const BLUE   = '#2969B0'
@@ -24,33 +25,8 @@ export default function QuoteListActions({
       const { quote } = await qRes.json()
       if (!quote) return
 
-      const body = {
-        quote_id:          quote.id,
-        customer_name:     quote.customer_name,
-        customer_phone:    quote.customer_phone,
-        customer_email:    quote.customer_email,
-        unit_manufacturer: quote.unit_manufacturer,
-        unit_model:        quote.unit_model,
-        unit_serial:       quote.unit_serial,
-        unit_year:         quote.unit_year,
-        truck_make:        quote.truck_make,
-        truck_model:       quote.truck_model,
-        truck_year:        quote.truck_year,
-        vin:               quote.vin,
-        complaint:         quote.complaint,
-        diagnosis:         quote.diagnosis,
-        line_items:        quote.line_items,
-        labor_rate:        quote.labor_rate,
-        subtotal_labor:    quote.subtotal_labor,
-        subtotal_parts:    quote.subtotal_parts,
-        diagnostic_fee:    quote.diagnostic_fee,
-        road_call_fee:     quote.road_call_fee,
-        tax_rate:          quote.tax_rate,
-        tax_amount:        quote.tax_amount,
-        total:             quote.total,
-        notes:             quote.notes,
-        status:            'unpaid',
-      }
+      // The same body the quote detail screen sends - see invoiceBodyFromQuote.
+      const body = invoiceBodyFromQuote(quote)
 
       const iRes   = await fetch('/api/hd/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const { invoice } = await iRes.json()

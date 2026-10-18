@@ -31,6 +31,7 @@
 
 import { createServiceClient } from '@/lib/supabase/service'
 import { isMissingPaymentTermsColumn } from '@/lib/hd/payment-terms'
+import { isMissingMigration159Column, withoutMigration159Columns } from '@/lib/hd/migration-159'
 
 /** 32 hex characters, the same shape LD's quote token uses. */
 export function generateQuoteToken(): string {
@@ -163,6 +164,14 @@ export function termsFromQuote(q: Record<string, unknown>): Record<string, unkno
     shop_supplies_percent_applied: q.shop_supplies_percent_applied ?? null,
     shop_supplies_cap_applied:     q.shop_supplies_cap_applied ?? null,
     shop_supplies_fee:             q.shop_supplies_fee ?? null,
+
+    // THE FEES. Absent from this list, they had nowhere to go: the quote's tax had
+    // already taxed them in the labor bucket and that tax WAS copied, so the invoice
+    // taxed a $35.00 road call it no longer charged. Migration 159 gives the work
+    // order the columns; until it is applied the insert retries without them and the
+    // invoice converter reads the fees off the quote instead.
+    diagnostic_fee:                q.diagnostic_fee ?? null,
+    road_call_fee:                 q.road_call_fee ?? null,
   }
 }
 
@@ -519,22 +528,32 @@ export async function createWorkOrderFromQuote(
     }
   }
 
+  // Migrations 158 (payment_terms) and 159 (fees, unit year/truck/VIN) are applied by
+  // hand. Until they are, the work order saves without those columns rather than not
+  // saving at all; the invoice converter reads them from the quote in that window.
+  // A loop, because both can be pending at once and each retry strips only its own.
+  let row: Record<string, unknown> = insertRow
   let { data: wo, error } = await supabase
     .from('hd_work_orders')
-    .insert(insertRow)
+    .insert(row)
     .select('id, work_order_number')
     .single()
 
-  // Migration 158 adds hd_work_orders.payment_terms and is applied by hand. Until it
-  // is, the work order saves without the terms rather than not saving at all; the
-  // invoice converter reads them from the quote in that window.
-  if (error && isMissingPaymentTermsColumn(error)) {
-    console.error('[hd quote->wo] payment_terms missing - run migration 158', error.message)
-    const { payment_terms: _drop, ...withoutTerms } = insertRow
-    void _drop
+  for (let attempt = 0; error && attempt < 2; attempt++) {
+    if (isMissingPaymentTermsColumn(error) && 'payment_terms' in row) {
+      console.error('[hd quote->wo] payment_terms missing - run migration 158', error.message)
+      const { payment_terms: _drop, ...withoutTerms } = row
+      void _drop
+      row = withoutTerms
+    } else if (isMissingMigration159Column(error) && 'road_call_fee' in row) {
+      console.error('[hd quote->wo] fee/unit columns missing - run migration 159', error.message)
+      row = withoutMigration159Columns(row)
+    } else {
+      break
+    }
     ;({ data: wo, error } = await supabase
       .from('hd_work_orders')
-      .insert(withoutTerms)
+      .insert(row)
       .select('id, work_order_number')
       .single())
   }

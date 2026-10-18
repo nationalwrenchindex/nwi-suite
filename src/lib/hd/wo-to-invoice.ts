@@ -274,7 +274,19 @@ export function invoiceTermsFromWorkOrder(wo: Record<string, unknown>): Record<s
     shop_supplies_percent_applied: wo.shop_supplies_percent_applied ?? null,
     shop_supplies_cap_applied:     wo.shop_supplies_cap_applied ?? null,
     shop_supplies_fee:             wo.shop_supplies_fee ?? null,
+
+    // THE FEES. Missing from this list, INV-2026-0020 came out $35.00 under its quote:
+    // the road call fee was dropped while the quote's tax - which had taxed it in the
+    // labor bucket - was copied, so the bill taxed a fee it did not charge. The convert
+    // route fills these from the quote when the work order predates migration 159.
+    diagnostic_fee:                wo.diagnostic_fee ?? null,
+    road_call_fee:                 wo.road_call_fee ?? null,
   }
+}
+
+/** The two flat fees on a document, summed. Both are taxed as labor. */
+export function feesTotal(doc: Record<string, unknown>): number {
+  return (num(doc.diagnostic_fee) ?? 0) + (num(doc.road_call_fee) ?? 0)
 }
 
 /** Identity and the authorization record, carried so nothing is retyped. */
@@ -405,9 +417,13 @@ export function buildInvoicePayload(
   // ride in the labor bucket here, which slightly over-taxes supplies when the two
   // rates differ. Flagged rather than hidden: the exact split belongs in computeTax's
   // own buckets, and moving it there touches the LD path too.
+  //
+  // The diagnostic and road call fees are taxed as labor too (src/lib/tax.ts), which is
+  // how the quote computed the tax this normally copies.
   const taxableExtras =
     (num(baseTerms.travel_amount) ?? 0) +
-    (num(baseTerms.shop_supplies_fee) ?? 0)
+    (num(baseTerms.shop_supplies_fee) ?? 0) +
+    feesTotal(baseTerms)
 
   const { terms, source } = termsWithFallback(wo, totals, taxableExtras, fallback)
 
@@ -418,7 +434,9 @@ export function buildInvoicePayload(
     (num(terms.shop_supplies_fee) ?? 0)
 
   const taxAmount = num(terms.tax_amount) ?? 0
-  const total = r2(totals.subtotal_labor + totals.subtotal_parts + allExtras + taxAmount)
+  const total = r2(
+    totals.subtotal_labor + totals.subtotal_parts + feesTotal(terms) + allExtras + taxAmount,
+  )
 
   return {
     payload: {

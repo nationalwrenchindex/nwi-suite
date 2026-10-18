@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { invoiceBodyFromQuote } from '@/lib/hd/quote-to-invoice'
 
 const ORANGE = '#FF6600'
 const BLUE   = '#2969B0'
@@ -377,57 +378,9 @@ export default function QuoteDetailActions({
 
     setBusy(true)
     try {
-      const body = {
-        quote_id:          quoteData.id,
-        customer_name:     quoteData.customer_name,
-        customer_phone:    quoteData.customer_phone,
-        customer_email:    quoteData.customer_email,
-        // Billing identity travels with the quote — without these the invoice loses
-        // the address and terms the tech already captured and bills to a bare name.
-        address_line1:      quoteData.address_line1,
-        address_line2:      quoteData.address_line2,
-        city:               quoteData.city,
-        state:              quoteData.state,
-        zip:                quoteData.zip,
-        has_corp_address:   !!quoteData.has_corp_address,
-        corp_address_line1: quoteData.has_corp_address ? quoteData.corp_address_line1 : null,
-        corp_address_line2: quoteData.has_corp_address ? quoteData.corp_address_line2 : null,
-        corp_city:          quoteData.has_corp_address ? quoteData.corp_city  : null,
-        corp_state:         quoteData.has_corp_address ? quoteData.corp_state : null,
-        corp_zip:           quoteData.has_corp_address ? quoteData.corp_zip   : null,
-        payment_terms:      quoteData.payment_terms ?? 'net30',
-        // The Intel Hub links and the fleet's unit number. hd_invoices has all three
-        // columns; billing straight from the quote dropped them.
-        fleet_account_id:  quoteData.fleet_account_id ?? null,
-        unit_id:           quoteData.unit_id ?? null,
-        unit_number:       quoteData.unit_number ?? null,
-        unit_manufacturer: quoteData.unit_manufacturer,
-        unit_model:        quoteData.unit_model,
-        unit_serial:       quoteData.unit_serial,
-        unit_year:         quoteData.unit_year,
-        truck_make:        quoteData.truck_make,
-        truck_model:       quoteData.truck_model,
-        truck_year:        quoteData.truck_year,
-        vin:               quoteData.vin,
-        complaint:         quoteData.complaint,
-        diagnosis:         quoteData.diagnosis,
-        line_items:        quoteData.line_items,
-        labor_rate:        quoteData.labor_rate,
-        subtotal_labor:    quoteData.subtotal_labor,
-        subtotal_parts:    quoteData.subtotal_parts,
-        diagnostic_fee:    quoteData.diagnostic_fee,
-        road_call_fee:     quoteData.road_call_fee,
-        tax_rate:          quoteData.tax_rate,
-        tax_amount:        quoteData.tax_amount,
-        total:             quoteData.total,
-        notes:             quoteData.notes,
-        // The customer's PO travels onto the bill. Billing directly used to drop it,
-        // so the one document the fleet's accounts payable reads was the one without
-        // the reference they match on. The insert route strips it if migration 157 has
-        // not been applied, so sending it cannot cost the invoice.
-        customer_po_number: quoteData.customer_po_number ?? null,
-        status:            'unpaid',
-      }
+      // One body, shared with the quote list's button, so the two cannot drift again.
+      // It carries the extras and the tax breakdown the old hand-built body dropped.
+      const body = invoiceBodyFromQuote(quoteData as unknown as Record<string, unknown>)
       const res  = await fetch('/api/hd/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const data = await res.json()
       if (data.invoice?.id) router.push(`/hd/invoices/${data.invoice.id}`)

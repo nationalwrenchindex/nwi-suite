@@ -23,6 +23,7 @@
 
 import fs from 'fs'
 import { LEGAL_VERSION } from '../src/lib/legal'
+import { invoiceBodyFromQuote } from '../src/lib/hd/quote-to-invoice'
 import { loadEnv, openSession, visibleText } from './lib/smoke-session'
 
 loadEnv()
@@ -1781,6 +1782,142 @@ async function flowT(): Promise<void> {
   }
 }
 
+// ── U: both flat fees survive quote -> work order -> invoice, to the cent ───
+//
+// Q-2026-0010 ($260.11) became INV-2026-0020 ($225.11): the $35.00 road call fee was
+// dropped at the work order while the quote's tax, which had taxed it, was copied. So
+// the bill taxed a fee it did not charge. This drives a quote carrying BOTH fees and
+// travel through the chain the tech uses, and through Bill Directly, and asserts the
+// invoice total equals the quote total exactly with each fee printed as its own line.
+//
+// The lines are Q-2026-0010's own line_items, read from the live row - not an assumed
+// shape - with the descriptions marked. Tax is per bucket as the quote form stores it:
+//   labor bucket 202.50 + 35.00 road + 125.00 diag + 135.00 travel = 497.50 x 7.75% = 38.56
+//   parts bucket 3.90 x 7.75% = 0.30
+//   total 202.50 + 3.90 + 35.00 + 125.00 + 135.00 + 38.86 = 540.26
+async function flowU(): Promise<void> {
+  const F = 'U fees carry'
+  const NAME = `${MARK} fees customer`
+  const TOTAL = 540.26
+
+  const lines = [
+    {
+      id: 'zz-u1', type: 'labor', amount: 202.5, quantity: 0, unit_cost: 0, amount_max: 202.5,
+      book_hours: 1.5, description: `${MARK} fees labor`, part_number: '', mobile_hours: 1.5,
+      book_hours_max: 1.5, recharge_added: false, mobile_hours_max: 1.5, requires_refrigeration: false,
+    },
+    {
+      id: 'zz-u2', type: 'parts', amount: 3.9, quantity: 1, unit_cost: 3.9, amount_max: 3.9,
+      book_hours: 0, description: `${MARK} fees part`, part_number: 'ZZ-U-09', mobile_hours: 0,
+      book_hours_max: 0, markup_percent: 30, recharge_added: false, unit_cost_base: 3,
+      mobile_hours_max: 0, requires_refrigeration: false,
+    },
+  ]
+  const taxBreakdown = {
+    labor: { base: 497.5, rate: 7.75, taxed: true, amount: 38.56 },
+    parts: { base: 3.9,   rate: 7.75, taxed: true, amount: 0.3 },
+    version: 1,
+  }
+
+  const made = await api('POST', '/api/hd/quotes', {
+    company_name: NAME, customer_name: NAME, customer_phone: '+15555550189', customer_email: null,
+    customer_id: null, address_line1: '9 Yard Rd', address_line2: null, city: null, state: null, zip: null,
+    has_corp_address: false, payment_terms: 'net30',
+    unit_manufacturer: 'Thermo King', unit_model: 'S-600', unit_year: null, unit_serial: 'ZZ-NOMATCH-U',
+    complaint: `${MARK} fees`, diagnosis: `${MARK} fees`,
+    line_items: lines, labor_rate: 135, subtotal_labor: 202.5, subtotal_parts: 3.9,
+    diagnostic_fee: 125, road_call_fee: 35,
+    travel_hours: 1, travel_rate: 135, travel_amount: 135,
+    mileage_miles: 0, mileage_rate: null, mileage_amount: 0,
+    shop_supplies_percent_applied: null, shop_supplies_cap_applied: null, shop_supplies_fee: 0,
+    tax_rate: 7.75, tax_amount: 38.86, tax_breakdown: taxBreakdown, total: TOTAL,
+    notes: null, valid_until: null, customer_po_number: null, status: 'draft',
+  })
+  const quoteId = String(((made.json.quote ?? {}) as Record<string, unknown>).id ?? '')
+  if (quoteId) created.hdQuotes.add(quoteId)
+  await adoptSmokeCustomer(made.json.customer_id)
+  if (!record(F, 'a quote with both fees and travel saves', made.status === 201 && !!quoteId,
+    `-> ${made.status} ${String(made.json.error ?? '')}`)) return
+
+  const quote = (await rest<Record<string, unknown>>(`hd_quotes?id=eq.${quoteId}&select=*`))[0] ?? {}
+  if (!record(F, 'the quote stores the total and both fees',
+    usd(quote.total) === usd(TOTAL) && usd(quote.road_call_fee) === '35.00' && usd(quote.diagnostic_fee) === '125.00',
+    `total ${usd(quote.total)}, road ${usd(quote.road_call_fee)}, diag ${usd(quote.diagnostic_fee)}`)) return
+
+  // ── through the work order, as WorkOrderDetail does it ───────────────────
+  const conv = await api('POST', `/api/hd/quotes/${quoteId}/work-order`, {
+    record_verbal_approval: true, note: `${MARK} fees`,
+  })
+  const wos = await rest<Record<string, unknown>>(`hd_work_orders?quote_id=eq.${quoteId}&select=*`)
+  wos.forEach(w => created.hdWorkOrders.add(String(w.id)))
+  if (!record(F, 'the quote converts to one work order', conv.status === 200 && wos.length === 1,
+    `-> ${conv.status}, ${wos.length} wo`)) return
+  const wo = wos[0]
+
+  // Migration 159 gives the work order its own fee columns. Before it is applied the
+  // columns are absent from the row and the convert route reads the fees off the quote;
+  // after, the work order must hold the quote's figures.
+  if ('road_call_fee' in wo) {
+    record(F, 'the work order records both fees (159)',
+      usd(wo.road_call_fee) === '35.00' && usd(wo.diagnostic_fee) === '125.00',
+      `road ${usd(wo.road_call_fee)}, diag ${usd(wo.diagnostic_fee)}`)
+  } else {
+    // Not a row: a pass here could not fail. The invoice assertions below are what
+    // prove the fees arrive in this window.
+    console.log('  note  U  migration 159 not applied - the invoice reads the fees off the quote')
+  }
+
+  const built = await api('GET', `/api/hd/work-orders/${wo.id}/convert`)
+  const payload = (built.json.invoice_payload ?? {}) as Record<string, unknown>
+  if (!record(F, 'the work order builds an invoice payload', built.status === 200 && !!payload.customer_name,
+    `-> ${built.status} ${String(built.json.error ?? '')}`)) return
+  record(F, 'the payload carries both fees',
+    usd(payload.road_call_fee) === '35.00' && usd(payload.diagnostic_fee) === '125.00',
+    `road ${usd(payload.road_call_fee)}, diag ${usd(payload.diagnostic_fee)}`)
+  record(F, 'the payload total equals the quote total', usd(payload.total) === usd(TOTAL),
+    `payload ${usd(payload.total)} vs quote ${usd(TOTAL)}`)
+
+  const inv = await api('POST', '/api/hd/invoices', payload)
+  await adoptSmokeCustomer(inv.json.customer_id)
+  const invId = String(((inv.json.invoice ?? {}) as Record<string, unknown>).id ?? '')
+  if (invId) created.hdInvoices.add(invId)
+  if (record(F, 'the invoice is created', !!invId, `-> ${inv.status} ${String(inv.json.error ?? '')}`)) {
+    const i = (await rest<Record<string, unknown>>(
+      `hd_invoices?id=eq.${invId}&select=total,road_call_fee,diagnostic_fee,tax_amount`))[0] ?? {}
+    record(F, 'the invoice total equals the quote total to the cent', usd(i.total) === usd(TOTAL),
+      `invoice ${usd(i.total)} vs quote ${usd(TOTAL)}`)
+    record(F, 'the invoice stores both fees',
+      usd(i.road_call_fee) === '35.00' && usd(i.diagnostic_fee) === '125.00',
+      `road ${usd(i.road_call_fee)}, diag ${usd(i.diagnostic_fee)}`)
+    const invPage = await page(`/hd/invoices/${invId}`)
+    if (record(F, 'the invoice page renders', !!invPage, invPage ? 'loaded' : 'did not load')) {
+      const missing = missingControls(invPage!.text, ['Road Call Fee', 'Diagnostic Fee', '$540.26'])
+      record(F, 'the invoice shows each fee as its own line, and the quote total',
+        missing.length === 0, missing.length ? `absent: ${missing.join(', ')}` : 'both fee lines and $540.26 render')
+    }
+  }
+
+  // ── BILL DIRECTLY, the body both quote screens now send ──────────────────
+  const direct = await api('POST', '/api/hd/invoices', invoiceBodyFromQuote(quote))
+  const dId = String(((direct.json.invoice ?? {}) as Record<string, unknown>).id ?? '')
+  if (dId) created.hdInvoices.add(dId)
+  if (record(F, 'Bill Directly creates an invoice', !!dId, `-> ${direct.status} ${String(direct.json.error ?? '')}`)) {
+    const d = (await rest<Record<string, unknown>>(
+      `hd_invoices?id=eq.${dId}&select=total,road_call_fee,diagnostic_fee,travel_amount,tax_breakdown`))[0] ?? {}
+    const tb = (d.tax_breakdown ?? {}) as Record<string, Record<string, unknown>>
+    record(F, 'Bill Directly carries the fees, the travel and the tax breakdown',
+      usd(d.total) === usd(TOTAL) && usd(d.road_call_fee) === '35.00' && usd(d.diagnostic_fee) === '125.00'
+        && usd(d.travel_amount) === '135.00' && usd(tb.labor?.amount) === '38.56',
+      `total ${usd(d.total)}, road ${usd(d.road_call_fee)}, diag ${usd(d.diagnostic_fee)}, travel ${usd(d.travel_amount)}, labor tax ${usd(tb.labor?.amount)}`)
+    const dPage = await page(`/hd/invoices/${dId}`)
+    if (record(F, 'the direct invoice page renders', !!dPage, dPage ? 'loaded' : 'did not load')) {
+      const missing = missingControls(dPage!.text, ['Road Call Fee', 'Diagnostic Fee', 'Travel Time', '$540.26'])
+      record(F, 'the direct invoice displays every charge inside its total',
+        missing.length === 0, missing.length ? `absent: ${missing.join(', ')}` : 'fees, travel and $540.26 render')
+    }
+  }
+}
+
 async function main(): Promise<void> {
   console.log('='.repeat(96))
   console.log(`SMOKE  ${BASE}`)
@@ -1836,6 +1973,7 @@ async function main(): Promise<void> {
     await flowR()
     await flowS()
     await flowT()
+    await flowU()
   } finally {
     await cleanup()
   }
