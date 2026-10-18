@@ -395,6 +395,17 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
                 {invoicing ? 'Building invoice...' : '+ Create Invoice'}
               </button>
             )}
+            {/* The header edit: customer, unit, complaint, diagnosis, schedule. Not
+                offered once invoiced - the PATCH refuses it then too. */}
+            {status !== 'invoiced' && (
+              <Link
+                href={`/hd/work-orders/${workOrderId}/edit`}
+                className="px-3 py-1.5 rounded-lg text-xs font-condensed font-bold tracking-wide"
+                style={{ background: 'var(--hd-inner)', color: 'rgba(var(--hd-ink-rgb), 0.7)', border: '1px solid var(--hd-border)' }}
+              >
+                Edit Details
+              </Link>
+            )}
           </div>
         </div>
 

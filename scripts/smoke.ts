@@ -2049,6 +2049,140 @@ async function flowV(): Promise<void> {
     blank.status === 200 && Number(kept.mobile_hours) === 2.25, `-> ${blank.status}, mobile ${kept.mobile_hours}`)
 }
 
+// ── X: quotes and work orders can be corrected after they are made ─────────
+//
+// Kurt built five work orders, made mistakes, and deleted and rebuilt all five because
+// nothing could be edited. A draft or sent quote now edits in the new-quote form (PUT,
+// allow-listed, the customer's link never rotated); an approved one stays locked; a
+// work order's header edits through its allow-listed PATCH, never money, and locks
+// once invoiced.
+async function flowX(): Promise<void> {
+  const F = 'X edit paths'
+  const NAME  = `${MARK} edit customer`
+  const NAME2 = `${MARK} edit customer fixed`
+  // Q-2026-0008's real labor line shape, 1.0 h x $135.
+  const line = {
+    id: 'zz-x1', type: 'labor', amount: 135, quantity: 0, unit_cost: 0, amount_max: 135,
+    book_hours: 0, description: `${MARK} edit labor`, part_number: '', mobile_hours: 1,
+    book_hours_max: 0, recharge_added: false, mobile_hours_max: 1, requires_refrigeration: false,
+  }
+  const made = await api('POST', '/api/hd/quotes', {
+    company_name: NAME, customer_name: NAME, customer_phone: '+15555550190', customer_email: null,
+    customer_id: null, address_line1: '9 Yard Rd', address_line2: null, city: null, state: null, zip: null,
+    has_corp_address: false, payment_terms: 'net30',
+    unit_manufacturer: 'Thermo King', unit_model: 'S-600', unit_year: null, unit_serial: 'ZZ-NOMATCH-X',
+    complaint: `${MARK} edit`, diagnosis: `${MARK} edit`,
+    line_items: [line], labor_rate: 135, subtotal_labor: 135, subtotal_parts: 0,
+    diagnostic_fee: 0, road_call_fee: 0, tax_rate: 0, tax_amount: 0, total: 135,
+    notes: null, valid_until: null, customer_po_number: null, status: 'draft',
+  })
+  const quoteId = String(((made.json.quote ?? {}) as Record<string, unknown>).id ?? '')
+  if (quoteId) created.hdQuotes.add(quoteId)
+  await adoptSmokeCustomer(made.json.customer_id)
+  if (!record(F, 'a draft quote saves', made.status === 201 && !!quoteId, `-> ${made.status}`)) return
+
+  const detail = await page(`/hd/quotes/${quoteId}`)
+  record(F, 'a draft quote offers Edit',
+    !!detail && detail.html.includes(`/hd/quotes/${quoteId}/edit`), !detail ? 'did not load' : detail.html.includes('/edit') ? 'Edit link renders' : 'no Edit link')
+  const editPage = await page(`/hd/quotes/${quoteId}/edit`)
+  record(F, 'the edit screen is the quote form, seeded from the quote',
+    !!editPage && editPage.text.includes('EDIT QUOTE') && editPage.html.includes(NAME) && editPage.text.includes('Line Items'),
+    !editPage ? 'did not load' : !editPage.text.includes('EDIT QUOTE') ? 'not the edit form' : !editPage.html.includes(NAME) ? 'customer not seeded' : 'seeded')
+
+  // Edit the draft: customer name and the money, as the form sends them.
+  const twoHours = { ...line, amount: 270, amount_max: 270, mobile_hours: 2, mobile_hours_max: 2 }
+  const ed = await api('PUT', `/api/hd/quotes/${quoteId}`, {
+    company_name: NAME2, customer_name: NAME2, line_items: [twoHours], subtotal_labor: 270, total: 270,
+    status: 'draft', quote_number: 'ZZ-HIJACK', user_id: '00000000-0000-0000-0000-000000000000',
+  })
+  const q1 = (await rest<Record<string, unknown>>(`hd_quotes?id=eq.${quoteId}&select=customer_name,total,status,quote_number,user_id`))[0] ?? {}
+  record(F, 'editing a draft saves the changes', ed.status === 200 && q1.customer_name === NAME2 && usd(q1.total) === '270.00' && q1.status === 'draft',
+    `-> ${ed.status}, ${q1.customer_name}, ${usd(q1.total)}, ${q1.status}`)
+  record(F, 'the edit cannot write fields outside the allow-list',
+    q1.quote_number !== 'ZZ-HIJACK' && q1.user_id === OWNER, `number ${q1.quote_number}, owner kept: ${q1.user_id === OWNER}`)
+
+  // Send it, then edit the SENT quote: the customer's link must not change.
+  const sent = await api('PUT', `/api/hd/quotes/${quoteId}`, { status: 'sent' })
+  const q2 = (await rest<Record<string, unknown>>(`hd_quotes?id=eq.${quoteId}&select=status,public_token`))[0] ?? {}
+  const token = String(q2.public_token ?? '')
+  if (!record(F, 'marking it sent issues a customer link', sent.status === 200 && q2.status === 'sent' && !!token,
+    `-> ${sent.status}, ${q2.status}, token ${token ? 'issued' : 'none'}`)) return
+  const ed2 = await api('PUT', `/api/hd/quotes/${quoteId}`, {
+    customer_name: NAME2, diagnosis: `${MARK} edited after send`, status: 'draft', public_token: 'zz-rotated',
+  })
+  const q3 = (await rest<Record<string, unknown>>(`hd_quotes?id=eq.${quoteId}&select=status,public_token,diagnosis`))[0] ?? {}
+  record(F, 'editing a SENT quote keeps the same customer link',
+    ed2.status === 200 && q3.public_token === token && q3.status === 'sent' && String(q3.diagnosis ?? '').includes('edited after send'),
+    `-> ${ed2.status}, token ${q3.public_token === token ? 'unchanged' : 'CHANGED'}, ${q3.status}`)
+  const pub = await page(`/hd/quote/${token}`)
+  record(F, 'the customer link still opens, showing the edit',
+    !!pub && pub.text.includes('edited after send'), !pub ? 'link did not load' : pub.text.includes('edited after send') ? 'shows the change' : 'old content')
+
+  // Approve it: from here it is LOCKED.
+  const conv = await api('POST', `/api/hd/quotes/${quoteId}/work-order`, { record_verbal_approval: true, note: `${MARK} edit` })
+  const wos = await rest<Record<string, unknown>>(`hd_work_orders?quote_id=eq.${quoteId}&select=id,labor_rate,total_amount`)
+  wos.forEach(w => created.hdWorkOrders.add(String(w.id)))
+  if (!record(F, 'the quote is approved into a work order', conv.status === 200 && wos.length === 1, `-> ${conv.status}`)) return
+  const locked = await api('PUT', `/api/hd/quotes/${quoteId}`, { customer_name: `${MARK} too late`, total: 1 })
+  const q4 = (await rest<Record<string, unknown>>(`hd_quotes?id=eq.${quoteId}&select=customer_name,total,status`))[0] ?? {}
+  record(F, 'an APPROVED quote refuses edits',
+    locked.status === 409 && q4.customer_name === NAME2 && usd(q4.total) === '270.00',
+    `-> ${locked.status}, ${q4.status}, total ${usd(q4.total)}`)
+  const lockedDetail = await page(`/hd/quotes/${quoteId}`)
+  const lockedEdit = await page(`/hd/quotes/${quoteId}/edit`)
+  record(F, 'the approved quote says it is locked, and why',
+    !!lockedDetail && lockedDetail.text.includes('Locked') && !lockedDetail.html.includes(`/hd/quotes/${quoteId}/edit`)
+      && !!lockedEdit && lockedEdit.text.includes('is locked') && lockedEdit.text.includes('agreed to these numbers'),
+    !lockedDetail || !lockedEdit ? 'a page did not load' : lockedEdit.text.includes('is locked') ? 'locked, with the reason' : 'no lock notice')
+
+  // ── THE WORK ORDER HEADER ────────────────────────────────────────────────
+  const woId = String(wos[0].id)
+  const before = wos[0]
+  const woDetail = await page(`/hd/work-orders/${woId}`)
+  record(F, 'an open work order offers Edit Details',
+    !!woDetail && woDetail.text.includes('Edit Details'), !woDetail ? 'did not load' : woDetail.text.includes('Edit Details') ? 'renders' : 'absent')
+  const woEdit = await page(`/hd/work-orders/${woId}/edit`)
+  record(F, 'the work order edit screen renders the header fields',
+    !!woEdit && missingControls(woEdit.text, ['CUSTOMER', 'UNIT', 'Complaint', 'Diagnosis', 'Scheduled', 'Save Changes']).length === 0,
+    !woEdit ? 'did not load' : missingControls(woEdit.text, ['CUSTOMER', 'UNIT', 'Complaint', 'Diagnosis', 'Scheduled', 'Save Changes']).join(', ') || 'all render')
+
+  const patch = await api('PATCH', `/api/hd/work-orders/${woId}`, {
+    customer_name: `${MARK} wo fixed`, unit_number: 'ZZ-X-UNIT', unit_year: '2019',
+    service_requests: `${MARK} fixed complaint`, comments: `${MARK} fixed diagnosis`,
+    scheduled_at: '2026-10-20T14:00:00.000Z',
+    // Money that must NOT move through this route.
+    labor_rate: 999, total_amount: 1, tax_amount: 1,
+  })
+  const w = (await rest<Record<string, unknown>>(`hd_work_orders?id=eq.${woId}&select=*`))[0] ?? {}
+  record(F, 'the header edit saves customer, unit, complaint, diagnosis and schedule',
+    patch.status === 200 && w.customer_name === `${MARK} wo fixed` && w.unit_number === 'ZZ-X-UNIT'
+      && w.service_requests === `${MARK} fixed complaint` && w.comments === `${MARK} fixed diagnosis`
+      && new Date(String(w.scheduled_at)).toISOString() === '2026-10-20T14:00:00.000Z',
+    `-> ${patch.status} ${String(patch.json.error ?? '')}`)
+  if ('unit_year' in w) {
+    record(F, 'the header edit saves the unit year (159)', w.unit_year === '2019', String(w.unit_year))
+  } else {
+    const notSaved = (patch.json.not_saved ?? []) as string[]
+    record(F, 'before 159 the unit year is reported as not saved, not dropped silently',
+      notSaved.includes('unit_year'), `not_saved: ${notSaved.join(', ') || 'nothing'}`)
+  }
+  record(F, 'money does not move through the header edit',
+    String(w.labor_rate) === String(before.labor_rate) && String(w.total_amount) === String(before.total_amount),
+    `labor_rate ${w.labor_rate}, total ${w.total_amount}`)
+  const woAfter = await page(`/hd/work-orders/${woId}`)
+  record(F, 'the work order shows the corrected complaint',
+    !!woAfter && woAfter.text.includes('fixed complaint') && woAfter.text.includes('ZZ-X-UNIT'),
+    !woAfter ? 'did not load' : woAfter.text.includes('fixed complaint') ? 'renders' : 'old text')
+
+  // Invoiced: locked on the server, and the button is gone.
+  await fetch(`${SUPA}/rest/v1/hd_work_orders?id=eq.${woId}`, { method: 'PATCH', headers: SVC_H, body: JSON.stringify({ status: 'invoiced' }) })
+  const late = await api('PATCH', `/api/hd/work-orders/${woId}`, { customer_name: `${MARK} too late` })
+  const lateDetail = await page(`/hd/work-orders/${woId}`)
+  record(F, 'an invoiced work order refuses header edits and hides Edit Details',
+    late.status === 409 && !!lateDetail && !lateDetail.text.includes('Edit Details'),
+    `-> ${late.status}, button ${lateDetail?.text.includes('Edit Details') ? 'still shown' : 'hidden'}`)
+}
+
 async function main(): Promise<void> {
   console.log('='.repeat(96))
   console.log(`SMOKE  ${BASE}`)
@@ -2106,6 +2240,7 @@ async function main(): Promise<void> {
     await flowT()
     await flowU()
     await flowV()
+    await flowX()
   } finally {
     await cleanup()
   }
