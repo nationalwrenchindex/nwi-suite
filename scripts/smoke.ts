@@ -1816,6 +1816,12 @@ async function flowT(): Promise<void> {
 async function flowU(): Promise<void> {
   const F = 'U fees carry'
   const NAME = `${MARK} fees customer`
+  // Fix 5 rides on this chain: the assigned tech travels quote -> wo -> invoice.
+  const TECH = `${MARK} Tech U`
+
+  const form = await page('/hd/quotes/new')
+  record(F, 'the quote form renders an Assigned Tech field',
+    !!form && form.text.includes('Assigned Tech'), !form ? 'page did not load' : form.text.includes('Assigned Tech') ? 'renders' : 'label absent')
   const TOTAL = 540.26
 
   const lines = [
@@ -1850,6 +1856,7 @@ async function flowU(): Promise<void> {
     shop_supplies_percent_applied: null, shop_supplies_cap_applied: null, shop_supplies_fee: 0,
     tax_rate: 7.75, tax_amount: 38.86, tax_breakdown: taxBreakdown, total: TOTAL,
     notes: null, valid_until: null, customer_po_number: null, status: 'draft',
+    tech_name: TECH,
   })
   const quoteId = String(((made.json.quote ?? {}) as Record<string, unknown>).id ?? '')
   if (quoteId) created.hdQuotes.add(quoteId)
@@ -1875,6 +1882,16 @@ async function flowU(): Promise<void> {
   // Migration 159 gives the work order its own fee columns. Before it is applied the
   // columns are absent from the row and the convert route reads the fees off the quote;
   // after, the work order must hold the quote's figures.
+  // Migration 160 gives hd_quotes its tech_name column; before it, the quote saves
+  // without it and there is nothing to carry. After, the name must reach the work order.
+  const techOnQuote = 'tech_name' in quote
+  if (techOnQuote) {
+    record(F, 'the assigned tech carries quote -> work order (160)',
+      quote.tech_name === TECH && wo.tech_name === TECH, `quote ${quote.tech_name ?? 'null'}, wo ${wo.tech_name ?? 'null'}`)
+  } else {
+    console.log('  note  U  migration 160 not applied - hd_quotes has no tech_name yet')
+  }
+
   if ('road_call_fee' in wo) {
     record(F, 'the work order records both fees (159)',
       usd(wo.road_call_fee) === '35.00' && usd(wo.diagnostic_fee) === '125.00',
@@ -1901,7 +1918,10 @@ async function flowU(): Promise<void> {
   if (invId) created.hdInvoices.add(invId)
   if (record(F, 'the invoice is created', !!invId, `-> ${inv.status} ${String(inv.json.error ?? '')}`)) {
     const i = (await rest<Record<string, unknown>>(
-      `hd_invoices?id=eq.${invId}&select=total,road_call_fee,diagnostic_fee,tax_amount`))[0] ?? {}
+      `hd_invoices?id=eq.${invId}&select=*`))[0] ?? {}
+    if (techOnQuote && 'tech_name' in i) {
+      record(F, 'the assigned tech reaches the invoice (160)', i.tech_name === TECH, String(i.tech_name))
+    }
     record(F, 'the invoice total equals the quote total to the cent', usd(i.total) === usd(TOTAL),
       `invoice ${usd(i.total)} vs quote ${usd(TOTAL)}`)
     record(F, 'the invoice stores both fees',

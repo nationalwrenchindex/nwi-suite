@@ -105,6 +105,9 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
                 </p>
               )}
               {q.vin && <p className="text-sm" style={{ color: '#9CA3AF' }}>VIN: {q.vin}</p>}
+              {/* Who is doing the work (migration 160). Shop view only - the public
+                  approval page does not select it. */}
+              {q.tech_name && <p className="text-sm mt-1" style={{ color: '#6B7280' }}>Tech: {q.tech_name}</p>}
             </div>
           </div>
 

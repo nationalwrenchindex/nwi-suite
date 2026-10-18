@@ -416,6 +416,9 @@ export async function createWorkOrderFromQuote(
     // What the customer agreed to pay on. The invoice reads it from here; without it
     // the invoice fell back to "Due on receipt", a term the quote does not even offer.
     payment_terms:     quote.payment_terms ?? null,
+    // Who is doing the work (hd_quotes.tech_name, migration 160). hd_work_orders has
+    // had the column since 047; nothing filled it from a quote before.
+    tech_name:         quote.tech_name ?? null,
     address_line1:     quote.address_line1 ?? null,
     address_line2:     quote.address_line2 ?? null,
     city:              quote.city ?? null,

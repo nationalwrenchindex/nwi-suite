@@ -181,6 +181,19 @@ export async function POST(req: NextRequest) {
       .single())
   }
 
+  // Migration 160 adds hd_quotes.tech_name. The quote saves without the tech rather
+  // than not saving; only the name is lost.
+  if (error && /tech_name/i.test(error.message)) {
+    console.error('[hd/quotes] tech_name missing - run migration 160', error.message)
+    const { tech_name: _t, ...withoutTech } = quoteRow as Record<string, unknown>
+    void _t
+    ;({ data, error } = await supabase
+      .from('hd_quotes')
+      .insert(withoutTech)
+      .select()
+      .single())
+  }
+
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   // A SENT quote needs a link the customer can open. Issued here rather than as a

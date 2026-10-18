@@ -245,6 +245,8 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                 )}
                 {inv.unit_serial && <p className="text-sm mt-1" style={{ color: '#6B7280' }}>Serial: {inv.unit_serial}</p>}
                 {inv.unit_year   && <p className="text-sm" style={{ color: '#6B7280' }}>Year: {inv.unit_year}</p>}
+                {/* Who did the work, carried from the quote by way of the work order. */}
+                {inv.tech_name && <p className="text-sm mt-1" style={{ color: '#6B7280' }}>Tech: {inv.tech_name}</p>}
                 {(inv.truck_make || inv.truck_model) && (
                   <p className="text-sm mt-1" style={{ color: '#6B7280' }}>
                     Truck: {[inv.truck_year, inv.truck_make, inv.truck_model].filter(Boolean).join(' ')}

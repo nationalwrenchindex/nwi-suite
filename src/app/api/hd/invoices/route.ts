@@ -220,6 +220,30 @@ export async function POST(req: NextRequest) {
       .single())
   }
 
+  // Migration 160: hd_invoices.tech_name. ONLY that key is removed, for the same
+  // reason as the PO above; the invoice is complete without it.
+  if (error && /tech_name/i.test(error.message ?? '')) {
+    console.error('[hd/invoices] tech_name missing - run migration 160', error.message)
+    const { tech_name: _dropTech, ...stripped } = insertRow as Record<string, unknown>
+    void _dropTech
+    ;({ data, error } = await supabase
+      .from('hd_invoices')
+      .insert(stripped)
+      .select()
+      .single())
+    // Both 157 and 160 pending: the PO retry above restarted from the full row and
+    // failed on tech_name, so this one now fails on the PO. Strip both.
+    if (error && /customer_po_number/i.test(error.message ?? '')) {
+      const { customer_po_number: _dropPo2, ...bare } = stripped
+      void _dropPo2
+      ;({ data, error } = await supabase
+        .from('hd_invoices')
+        .insert(bare)
+        .select()
+        .single())
+    }
+  }
+
   // THE MIGRATION-154 GUARD REFUSING A SECOND INVOICE for the same work order.
   //
   // 23505 on hd_invoices_one_per_work_order means this work order is already billed. A

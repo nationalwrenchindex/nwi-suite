@@ -303,6 +303,8 @@ export default function NewQuotePage() {
     // The customer's own PO, when they give one. Travels to the work order and the
     // invoice; see the field in Notes & Validity.
     customer_po_number: '',
+    // Who is doing the work. Optional; carried to the work order and the invoice.
+    tech_name: '',
   })
 
   // ===========================================================================
@@ -1181,6 +1183,7 @@ export default function NewQuotePage() {
         // Trimmed to null rather than saved as '': a blank PO must read as absent,
         // because the invoice prints a PO row only when there is one.
         customer_po_number: form.customer_po_number.trim() || null,
+        tech_name:         form.tech_name.trim() || null,
         status,
       }
       const res  = await fetch('/api/hd/quotes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -1857,6 +1860,18 @@ export default function NewQuotePage() {
                 to go, and a fleet that pays on PO does not pay an invoice without one
                 - which is a bill that sits unpaid until somebody calls about it.
                 It travels: quote -> work order -> invoice. */}
+            {/* WHO IS DOING THE WORK. Optional here, but it travels: quote -> work order
+                -> invoice, so per-tech reporting has a name on the billed labor. Free
+                text, the same notion of a tech as hd_work_orders.tech_name. */}
+            <Field label="Assigned Tech (optional)">
+              <input
+                style={inp}
+                value={form.tech_name}
+                onChange={e => setField('tech_name', e.target.value)}
+                placeholder="Who is doing the work"
+                maxLength={200}
+              />
+            </Field>
             <Field label="Customer PO # (optional)">
               <input
                 style={inp}

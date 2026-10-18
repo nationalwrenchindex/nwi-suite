@@ -70,6 +70,7 @@ export function invoiceBodyFromQuote(q: Record<string, unknown>): Record<string,
     tax_breakdown:      q.tax_breakdown ?? null,
     total:              q.total,
     notes:              q.notes,
+    tech_name:          q.tech_name ?? null,
     // The insert route strips this if migration 157 has not been applied.
     customer_po_number: q.customer_po_number ?? null,
     status:             'unpaid',

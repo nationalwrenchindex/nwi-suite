@@ -320,6 +320,9 @@ export function invoiceIdentityFromWorkOrder(wo: Record<string, unknown>): Recor
     complaint:         wo.service_requests ?? null,
     diagnosis:         wo.comments ?? null,
     internal_notes:    wo.internal_notes ?? null,
+    // Who did the work, so billed labor has a name on it (hd_invoices.tech_name,
+    // migration 160 - the insert route strips it until then).
+    tech_name:         wo.tech_name ?? null,
     // The customer's PO, which since migration 153 came off the approved quote. It must
     // reach the invoice or the fleet cannot reconcile what they authorized.
     //
