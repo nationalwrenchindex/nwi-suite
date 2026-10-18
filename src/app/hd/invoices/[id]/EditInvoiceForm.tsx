@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { money } from '@/lib/format'
 import { computeTax, parseBreakdown, taxDisplayRows } from '@/lib/tax'
+import { editableLines, type EditLine } from '@/lib/hd/invoice-edit-lines'
 
 const ORANGE = '#FF6600'
 const BLUE   = '#2969B0'
@@ -19,17 +20,7 @@ const BORDER = '#E5E7EB'
 const TEXT   = '#1A1A1A'
 const MUTED  = '#6B7280'
 
-interface LineItem {
-  id: string
-  type: 'labor' | 'parts'
-  description: string
-  book_hours?: number
-  mobile_hours: number
-  part_number: string
-  quantity: number
-  unit_cost: number
-  amount: number
-}
+type LineItem = EditLine
 
 const inp = {
   width: '100%', border: `1px solid ${BORDER}`, borderRadius: 8, padding: '10px 12px',
@@ -70,20 +61,9 @@ export default function EditInvoiceForm({ invoice }: { invoice: Record<string, u
   const [labor, setLabor] = useState({ description: '', hours: '1.0' })
   const [parts, setParts] = useState({ part_number: '', description: '', quantity: '1', unit_cost: '0.00' })
 
-  const [lineItems, setLineItems] = useState<LineItem[]>(() => {
-    const raw = Array.isArray(invoice.line_items) ? invoice.line_items as Record<string, unknown>[] : []
-    return raw.map(li => ({
-      id: str(li.id) || crypto.randomUUID(),
-      type: li.type === 'parts' ? 'parts' : 'labor',
-      description: str(li.description),
-      book_hours: li.book_hours != null ? num(li.book_hours) : undefined,
-      mobile_hours: num(li.mobile_hours),
-      part_number: str(li.part_number),
-      quantity: num(li.quantity),
-      unit_cost: num(li.unit_cost),
-      amount: num(li.amount),
-    }))
-  })
+  // Every stored key survives, unit_cost_base and markup_percent above all. See
+  // editableLines.
+  const [lineItems, setLineItems] = useState<LineItem[]>(() => editableLines(invoice.line_items))
 
   // What THIS invoice taxed, read off its own stored breakdown rather than off the
   // shop's current settings. NULL means it predates migration 140, and a pre-140

@@ -25,6 +25,7 @@ import fs from 'fs'
 import { LEGAL_VERSION } from '../src/lib/legal'
 import { invoiceBodyFromQuote } from '../src/lib/hd/quote-to-invoice'
 import { billedHoursFromLibrary } from '../src/lib/hd/labor-library'
+import { editableLines } from '../src/lib/hd/invoice-edit-lines'
 import { loadEnv, openSession, visibleText } from './lib/smoke-session'
 
 loadEnv()
@@ -1912,6 +1913,23 @@ async function flowU(): Promise<void> {
       record(F, 'the invoice shows each fee as its own line, and the quote total',
         missing.length === 0, missing.length ? `absent: ${missing.join(', ')}` : 'both fee lines and $540.26 render')
     }
+
+    // THE EDIT FORM KEEPS THE COST BASIS. It rebuilt each line from the fields it
+    // edits, so one save dropped unit_cost_base and markup_percent and the PUT then
+    // derived parts_cost from nothing. Round-tripped through the form's own mapping and
+    // the real PUT, on this invoice's real part line (cost 3.00, 30%).
+    const stored = (await rest<Record<string, unknown>>(`hd_invoices?id=eq.${invId}&select=line_items`))[0] ?? {}
+    const lines = editableLines(stored.line_items)
+    const part = lines.find(l => l.type === 'parts')
+    record(F, 'the invoice edit form keeps the part cost and markup',
+      part?.unit_cost_base === 3 && part?.markup_percent === 30,
+      `cost ${part?.unit_cost_base ?? 'dropped'}, markup ${part?.markup_percent ?? 'dropped'}`)
+    const put = await api('PUT', `/api/hd/invoices/${invId}`, { line_items: lines })
+    const after = (await rest<Record<string, unknown>>(`hd_invoices?id=eq.${invId}&select=parts_cost,line_items`))[0] ?? {}
+    const afterPart = (Array.isArray(after.line_items) ? after.line_items as Record<string, unknown>[] : []).find(l => l.type === 'parts')
+    record(F, 'saving the edit keeps the cost basis and parts_cost',
+      put.status === 200 && Number(afterPart?.unit_cost_base) === 3 && usd(after.parts_cost) === '3.00',
+      `-> ${put.status}, line cost ${afterPart?.unit_cost_base ?? 'dropped'}, parts_cost ${usd(after.parts_cost)}`)
   }
 
   // ── BILL DIRECTLY, the body both quote screens now send ──────────────────
