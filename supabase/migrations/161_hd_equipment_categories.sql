@@ -22,6 +22,9 @@
 --     linking uses (src/lib/hd/unit-match.ts), so "abc123" and "ABC123 " cannot both
 --     be entered for one shop.
 --
+--   * hd_units_unit_type_check (truck / trailer / both, added by hand, in no migration)
+--     is replaced by a not-blank check - see section 2. Found by Brock 2026-10-19.
+--
 -- ONE FIELD FOR "WHAT KIND OF EQUIPMENT". category_id is the source. unit_type stays,
 -- because the PM screens, Fleet Pro and the importers still read and write it; a
 -- trigger copies the category name into it (lowercased) whenever category_id is set,
@@ -70,6 +73,25 @@ ALTER TABLE public.hd_units
 
 CREATE INDEX IF NOT EXISTS hd_units_category_idx
   ON public.hd_units (category_id) WHERE category_id IS NOT NULL;
+
+-- unit_type WAS LIMITED TO truck / trailer / both by hd_units_unit_type_check. That
+-- constraint is in no migration file - it was added by hand - and it was written when
+-- those were the only kinds of equipment. The trigger below copies the category name
+-- into unit_type, so the first unit put in Boom, Aerial / Bucket, Reefer Unit, APU,
+-- Genset or Digger Derrick would be refused by it. What kinds of equipment a shop works
+-- on is the shop's decision; hd_equipment_categories is where it is made. The column
+-- keeps a not-blank check so it still cannot hold junk. Every current value (truck,
+-- trailer) passes it. NULL stays allowed, as it always was.
+ALTER TABLE public.hd_units DROP CONSTRAINT IF EXISTS hd_units_unit_type_check;
+ALTER TABLE public.hd_units DROP CONSTRAINT IF EXISTS hd_units_unit_type_not_blank;
+ALTER TABLE public.hd_units
+  ADD CONSTRAINT hd_units_unit_type_not_blank
+  CHECK (unit_type IS NULL OR btrim(unit_type) <> '');
+
+COMMENT ON COLUMN public.hd_units.unit_type IS
+  'Mirrors the category name, lowercased. category_id is the source of truth; this is kept for the PM screens, Fleet Pro and the importers, which still read and write it. Set by trigger hd_units_category_sync whenever category_id is set.';
+COMMENT ON COLUMN public.hd_units.category_id IS
+  'What kind of equipment this is - the source of truth. unit_type mirrors its name.';
 
 -- The category must be the SAME shop's, and unit_type follows it. A foreign key does
 -- not apply RLS, so without the ownership check one shop could point its unit at
@@ -206,6 +228,10 @@ SELECT 'hd_units_user_serial_unique' AS object FROM pg_indexes
  WHERE indexname = 'hd_units_user_serial_unique';
 SELECT 'hd_ensure_equipment_categories()' AS object FROM pg_proc
  WHERE proname = 'hd_ensure_equipment_categories';
+SELECT 'hd_units_unit_type_not_blank' AS object FROM pg_constraint
+ WHERE conname = 'hd_units_unit_type_not_blank';
+-- Expect NO rows: the truck / trailer / both list is gone.
+SELECT conname FROM pg_constraint WHERE conname = 'hd_units_unit_type_check';
 
 NOTIFY pgrst, 'reload schema';
 
