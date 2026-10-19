@@ -1,12 +1,14 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { ensureEquipmentCategories } from '@/lib/hd/equipment-categories'
+import { unitCategoryChip, TRUCK_BLUE as UNIT_TRUCK_BLUE } from '@/components/hd/UnitCategoryChip'
 
 export const metadata = { title: 'PM Schedules — NWI HD Suite' }
 
 const HD_ORANGE     = '#E85D24'
 const HD_BLUE       = '#1A6BAF'
-const TRUCK_BLUE    = '#3B82F6'   // distinct from Carrier's HD_BLUE
+const TRUCK_BLUE    = UNIT_TRUCK_BLUE   // distinct from Carrier's HD_BLUE
 const TRAILER_GREEN = '#22C55E'
 
 export default async function PMSchedulesPage() {
@@ -14,9 +16,13 @@ export default async function PMSchedulesPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
 
+  // Seed the shop's categories first, so a shop that has never opened the units list
+  // still sees Truck / Trailer on its units here instead of all-Uncategorized.
+  await ensureEquipmentCategories(supabase)
+
   const { data: units } = await supabase
     .from('hd_units')
-    .select('*, fleet_account:hd_fleet_accounts(fleet_name)')
+    .select('*, fleet_account:hd_fleet_accounts(fleet_name), category:hd_equipment_categories(name)')
     .eq('user_id', user.id)
     .eq('status', 'active')
     .order('unit_number')
@@ -152,7 +158,7 @@ export default async function PMSchedulesPage() {
             <tbody>
               {(units as unknown as {
                 id: string; unit_number: string; manufacturer: string; model: string
-                unit_type: string | null
+                category: { name: string } | null
                 total_hours: number | null; last_pm_date: string | null; last_pm_type: string | null
                 next_pm_due_hours: number | null
               }[]).map((u, i) => {
@@ -164,13 +170,15 @@ export default async function PMSchedulesPage() {
                   : hoursUntil <= 200 ? 'due_soon'
                   : 'ok'
                 const statusClr = pmStatus === 'overdue' ? '#EF4444' : pmStatus === 'due_soon' ? HD_ORANGE : '#22C55E'
+                // Type chip: from the unit's category, not unit_type - see UnitCategoryChip.
+                const chip = unitCategoryChip(u.category?.name)
                 return (
                   <tr key={u.id} style={{ borderTop: i > 0 ? '1px solid var(--hd-border)' : undefined }}>
                     <td className="px-4 py-3 text-sm text-white font-medium">{u.unit_number}</td>
                     <td className="px-4 py-3">
-                      <span className="text-xs font-medium px-2 py-0.5 rounded-full capitalize"
-                        style={{ background: `${u.unit_type === 'truck' ? TRUCK_BLUE : TRAILER_GREEN}20`, color: u.unit_type === 'truck' ? TRUCK_BLUE : TRAILER_GREEN }}>
-                        {u.unit_type ?? 'trailer'}
+                      <span className="text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap"
+                        style={{ background: `${chip.color}20`, color: chip.color }}>
+                        {chip.label}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.7)' }}>{u.manufacturer} {u.model}</td>

@@ -4,6 +4,10 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import PartsComingSoon from '@/components/hd/PartsComingSoon'
 import { FLEET_UNIT_LIST_SELECT, FLEET_UNIT_PAGE_SIZE, type FleetUnitListRow } from '@/app/api/hd/fleet-units/list'
+import {
+  describeUnit, findSerialHolder, ilikeLiteral, isSerialUniqueViolation, type SerialHolder,
+} from '@/app/api/hd/fleet-units/serials'
+import { getEquipmentCategories } from '@/lib/hd/equipment-categories'
 import FleetUnitList from './FleetUnitList'
 
 export const metadata = { title: 'Fleet Units — NWI HD Suite' }
@@ -41,6 +45,7 @@ export default async function FleetUnitsPage({
 
   const params    = await searchParams
   const saveError  = params.error === '1'
+  const categoryError = params.error === 'category'
   const savedMsg   = params.saved === 'updated' ? 'Unit updated' : params.saved === 'created' ? 'Unit added' : null
   const editId     = typeof params.edit === 'string' ? params.edit : null
   const fleetAccountId = typeof params.fleet_account_id === 'string' ? params.fleet_account_id : null
@@ -53,6 +58,33 @@ export default async function FleetUnitsPage({
   }
   const isEdit   = !!editUnit
   const showForm = params.new === '1' || isEdit
+
+  // Duplicate serial: saveUnit redirects with the serial that clashed and the id of the
+  // unit that already has it. The holder is re-read under this user's id, so the banner
+  // can name it ("unit 103 (International S1800)") and link to it, and a foreign id in
+  // the URL names nothing.
+  const dupSerial = params.error === 'serial' && typeof params.serial === 'string' ? params.serial : null
+  let dupHolder: SerialHolder | null = null
+  if (dupSerial && typeof params.dup === 'string') {
+    const { data } = await supabase
+      .from('hd_units')
+      .select('id, unit_number, manufacturer, model, serial_number')
+      .eq('id', params.dup)
+      .eq('user_id', user.id)
+      .maybeSingle()
+    dupHolder = (data as SerialHolder | null) ?? null
+  }
+
+  // Seeds the nine defaults (and each unit's category from its unit_type) the first time
+  // this shop opens the list - so it has to run BEFORE the units are read below.
+  // Inactive ones are included so a unit still in a deactivated category shows its name.
+  const categories       = await getEquipmentCategories(supabase, user.id, { includeInactive: true })
+  const activeCategories = categories.filter(c => c.is_active)
+  const editCategoryId   = (editUnit?.category_id as string | null | undefined) ?? null
+  const editCategory     = editCategoryId ? categories.find(c => c.id === editCategoryId) : undefined
+  // The edit form offers active categories, plus the unit's own if it was deactivated -
+  // otherwise saving an unrelated field would silently move the unit to Uncategorized.
+  const formCategories   = editCategory && !editCategory.is_active ? [...activeCategories, editCategory] : activeCategories
 
   // Resolve + validate the fleet account (must belong to this user) so we can lock the
   // form to it and scope the list. Invalid/foreign ids are ignored.
@@ -120,15 +152,32 @@ export default async function FleetUnitsPage({
     // Auto-calc next PM due hours from the last PM reading + manufacturer/type interval.
     const nextPmDue    = lastPmHours != null ? lastPmHours + pmInterval(manufacturer, lastPmType) : null
 
+    // Category, not unit_type. Migration 161's trigger copies the category name into
+    // unit_type, so unit_type is never written here: with a category it follows it, and
+    // with none it keeps what it had (or the column default on a new unit). A foreign key
+    // does not apply RLS, so the id is checked as this shop's before it is written.
+    const categoryId = (formData.get('category_id') as string ?? '').trim() || null
+    if (categoryId) {
+      const { data: cat } = await supabase
+        .from('hd_equipment_categories')
+        .select('id')
+        .eq('id', categoryId)
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (!cat) { redirect(`/hd/fleet-units?error=category${formQS}${accountQS}`); return }
+    }
+
+    const serialNumber = (formData.get('serial_number') as string ?? '').trim() || null
+
     const record = {
       unit_number:       unitNumber,
       manufacturer,
       model:             (formData.get('model') as string ?? '').trim() || 'Unknown',
-      unit_type:         (formData.get('unit_type') as string) || 'trailer',
+      category_id:       categoryId,
       year:              formData.get('year') ? Number(formData.get('year')) : null,
       refrigerant_type:  (formData.get('refrigerant_type') as string) || 'R-404A',
       total_hours:       formData.get('total_hours') ? Number(formData.get('total_hours')) : 0,
-      serial_number:     (formData.get('serial_number') as string ?? '').trim() || null,
+      serial_number:     serialNumber,
       bm_number:         (formData.get('bm_number') as string ?? '').trim() || null,
       last_pm_type:      lastPmType,
       last_pm_date:      lastPmDate,
@@ -143,6 +192,23 @@ export default async function FleetUnitsPage({
     } else {
       const res = await supabase.from('hd_units').insert({ ...record, user_id: user.id, fleet_account_id: accountId, status: 'active' })
       error = res.error
+    }
+
+    // One active unit per serial per shop (hd_units_user_serial_unique). The database
+    // decides; this only finds who already has the serial, so the banner can name them.
+    // ilike on the escaped serial narrows the read; findSerialHolder then applies the
+    // index's own rule (trim + uppercase, active units only, not this unit).
+    if (error && serialNumber && isSerialUniqueViolation(error)) {
+      const { data: candidates } = await supabase
+        .from('hd_units')
+        .select('id, unit_number, manufacturer, model, serial_number, active')
+        .eq('user_id', user.id)
+        .ilike('serial_number', `%${ilikeLiteral(serialNumber)}%`)
+        .limit(50)
+      const holder = findSerialHolder((candidates ?? []) as SerialHolder[], serialNumber, unitId)
+      const dupQS  = holder ? `&dup=${holder.id}` : ''
+      redirect(`/hd/fleet-units?error=serial&serial=${encodeURIComponent(serialNumber)}${dupQS}${formQS}${accountQS}`)
+      return
     }
 
     if (error) {
@@ -174,13 +240,22 @@ export default async function FleetUnitsPage({
             </p>
           )}
         </div>
-        <Link
-          href={scopedAccountId ? `?new=1&fleet_account_id=${scopedAccountId}` : '?new=1'}
-          className="px-4 py-2.5 rounded-lg text-sm font-semibold text-white"
-          style={{ background: HD_ORANGE }}
-        >
-          + Add Unit
-        </Link>
+        <div className="flex flex-wrap items-center gap-3">
+          <Link
+            href="/hd/fleet-units/categories"
+            className="px-4 py-2.5 rounded-lg text-sm font-semibold"
+            style={{ color: 'rgba(var(--hd-ink-rgb), 0.7)', border: '1px solid var(--hd-border)' }}
+          >
+            Manage categories
+          </Link>
+          <Link
+            href={scopedAccountId ? `?new=1&fleet_account_id=${scopedAccountId}` : '?new=1'}
+            className="px-4 py-2.5 rounded-lg text-sm font-semibold text-white"
+            style={{ background: HD_ORANGE }}
+          >
+            + Add Unit
+          </Link>
+        </div>
       </div>
 
       {savedMsg && (
@@ -204,6 +279,20 @@ export default async function FleetUnitsPage({
           {saveError && (
             <p className="text-sm px-3 py-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)' }}>
               Unit could not be saved. Check the required fields and try again — if this persists, the fleet-units table may not be migrated yet.
+            </p>
+          )}
+          {dupSerial && (
+            <p className="text-sm px-3 py-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)' }}>
+              Unit not saved: serial {dupSerial} is already on{' '}
+              {dupHolder ? (
+                <Link href={`/hd/fleet-units?edit=${dupHolder.id}`} className="underline font-semibold">{describeUnit(dupHolder)}</Link>
+              ) : 'another of your units'}
+              . Each active unit needs its own serial number — correct the serial here, or edit that unit if it is the same piece of equipment.
+            </p>
+          )}
+          {categoryError && (
+            <p className="text-sm px-3 py-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)' }}>
+              Unit not saved: that category was not found on your account. Pick another, or check <Link href="/hd/fleet-units/categories" className="underline">Manage categories</Link>.
             </p>
           )}
 
@@ -233,10 +322,12 @@ export default async function FleetUnitsPage({
               <input name="bm_number" defaultValue={ev('bm_number')} placeholder="e.g. 363xxx" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={inputStyle} />
             </div>
             <div>
-              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Unit Type</label>
-              <select name="unit_type" defaultValue={ev('unit_type') || 'trailer'} className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white" style={inputStyle}>
-                <option value="trailer">Trailer</option>
-                <option value="truck">Truck</option>
+              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Category</label>
+              <select name="category_id" defaultValue={editCategoryId ?? ''} className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white" style={inputStyle}>
+                <option value="">Uncategorized</option>
+                {formCategories.map(c => (
+                  <option key={c.id} value={c.id}>{c.name}{c.is_active ? '' : ' (inactive)'}</option>
+                ))}
               </select>
             </div>
             <div>
@@ -303,6 +394,7 @@ export default async function FleetUnitsPage({
         fleetAccountId={fleetAccountId}
         fleetAccountName={fleetAccountName}
         scopedAccountId={scopedAccountId}
+        categories={categories}
       />
 
       <PartsComingSoon />
