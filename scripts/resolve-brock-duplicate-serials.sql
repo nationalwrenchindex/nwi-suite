@@ -5,10 +5,11 @@
 --
 -- PREVIEW AND PRODUCTION SHARE ONE DATABASE.
 --
--- These are NOT like Kurt's pair, and neither is merged blindly here. Each one needs
--- a decision only Brock can make - which serial is real is on the unit's data plate.
--- Uncomment ONE option per pair, read the checks, then change ROLLBACK to COMMIT.
--- Nothing is deleted under any option.
+-- These are NOT like Kurt's pair, and neither is merged blindly here.
+-- DECIDED BY BROCK 2026-10-19: Pair A -> A1 (rename the test unit's serial; it keeps
+-- its work orders). Pair B -> B2 (53126 is a double entry of 53116; retire it).
+-- A1 and B2 are the live statements below; A2 and B1 stay commented. Read the checks,
+-- then change ROLLBACK to COMMIT. Nothing is deleted.
 --
 -- PAIR A - serial 6001241923
 --   3e6dd3bd-4680-4947-bc63-29d93eaa8ae1  unit 53177   TK C-600M  LTL Pros INC
@@ -42,9 +43,10 @@ SELECT id, unit_number, model, serial_number, bm_number, status, active,
 
 -- A1 (RECOMMENDED). Give the test unit a serial that is plainly a test value. It stays
 -- usable for testing and keeps its quotes, work orders and invoice.
--- UPDATE hd_units
---    SET serial_number = 'TEST-6001241923', updated_at = now()
---  WHERE id = 'bc654152-4ce6-4f09-abfd-c2d785218235' AND serial_number = '6001241923';
+UPDATE hd_units
+   SET serial_number = 'TEST-6001241923', updated_at = now(),
+       notes = btrim(coalesce(notes, '') || ' Serial changed 2026-10-19 from 6001241923, which belongs to unit 53177; this is a test unit.')
+ WHERE id = 'bc654152-4ce6-4f09-abfd-c2d785218235' AND serial_number = '6001241923';
 
 -- A2. Retire the test unit instead (inactive; the index skips inactive units).
 -- UPDATE hd_units
@@ -62,10 +64,10 @@ SELECT id, unit_number, model, serial_number, bm_number, status, active,
 
 -- B2. 53126 is the SAME unit as 53116, entered twice. Retire it; it has no references,
 -- so there is nothing to repoint.
--- UPDATE hd_units
---    SET active = false, status = 'inactive', updated_at = now(),
---        notes = btrim(coalesce(notes, '') || ' Merged into unit d608a410-4564-4bb7-9e58-fb37e9c4dbd5 (53116) on 2026-10-19: duplicate entry of serial 6001391390.')
---  WHERE id = '325cb0df-5f1e-4d10-9705-63bead0e5f8a';
+UPDATE hd_units
+   SET active = false, status = 'inactive', updated_at = now(),
+       notes = btrim(coalesce(notes, '') || ' Merged into unit d608a410-4564-4bb7-9e58-fb37e9c4dbd5 (53116) on 2026-10-19: duplicate entry of serial 6001391390.')
+ WHERE id = '325cb0df-5f1e-4d10-9705-63bead0e5f8a';
 
 -- ============================================================================
 
