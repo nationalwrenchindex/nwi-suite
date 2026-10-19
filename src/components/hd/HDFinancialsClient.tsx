@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
+import ByEquipmentTab from './ByEquipmentTab'
 
 const HD_ORANGE = '#E85D24'
 const HD_BLUE   = '#1A6BAF'
@@ -100,7 +101,7 @@ interface HDExpense {
   notes:        string | null
 }
 
-type Tab = 'overview' | 'invoices' | 'quotes' | 'expenses' | 'pl'
+type Tab = 'overview' | 'invoices' | 'quotes' | 'expenses' | 'pl' | 'equipment'
 
 const TABS: { id: Tab; label: string }[] = [
   { id: 'overview',  label: 'Overview'  },
@@ -108,6 +109,7 @@ const TABS: { id: Tab; label: string }[] = [
   { id: 'quotes',    label: 'Quotes'    },
   { id: 'expenses',  label: 'Expenses'  },
   { id: 'pl',        label: 'P&L'       },
+  { id: 'equipment', label: 'By Equipment' },
 ]
 
 const EXPENSE_CATEGORIES = [
@@ -973,6 +975,9 @@ export default function HDFinancialsClient({ stats }: { stats: OverviewStats }) 
       {activeTab === 'quotes'    && <QuotesTab />}
       {activeTab === 'expenses'  && <ExpensesTab />}
       {activeTab === 'pl'        && <PLTab stats={stats} />}
+      {/* Owns its own date range (default: the current year in the shop's zone), like
+          the QuickBooks export - the MTD/90D/YTD toggle above does not apply to it. */}
+      {activeTab === 'equipment' && <ByEquipmentTab />}
     </div>
   )
 }
