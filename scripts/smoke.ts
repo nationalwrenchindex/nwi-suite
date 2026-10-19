@@ -1019,6 +1019,19 @@ async function flowO(): Promise<void> {
   if (!record(F, 'an HD work order can be created', made.status === 201 || made.status === 200,
     `-> ${made.status}`)) return
 
+  // ANOTHER SHOP'S UNIT OR FLEET ACCOUNT CANNOT BE ATTACHED. The create route inserted
+  // unit_id and fleet_account_id as sent; an FK applies no RLS. A random uuid stands in
+  // for another account's id. Both must be refused and create nothing.
+  const FOREIGN = '00000000-0000-4000-8000-000000000000'
+  const badUnit  = await api('POST', '/api/hd/work-orders', { ...woBody, unit_id: FOREIGN })
+  const badFleet = await api('POST', '/api/hd/work-orders', { ...woBody, fleet_account_id: FOREIGN })
+  for (const r of [badUnit, badFleet]) {
+    const stray = (r.json.work_order ?? {}) as Record<string, unknown>
+    if (stray.id) created.hdWorkOrders.add(String(stray.id))
+  }
+  record(F, 'creating a work order refuses a unit or fleet that is not the shop\'s',
+    badUnit.status === 400 && badFleet.status === 400, `unit -> ${badUnit.status}, fleet -> ${badFleet.status}`)
+
   const wo = (made.json.work_order ?? made.json) as Record<string, unknown>
   const woId = String(wo.id ?? '')
   if (!woId) { record(F, 'the work order has an id', false, JSON.stringify(made.json).slice(0, 120)); return }

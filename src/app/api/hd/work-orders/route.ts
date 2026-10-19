@@ -69,6 +69,24 @@ export async function POST(req: NextRequest) {
   const customerName = str(body.customer_name)
   if (!customerName) return NextResponse.json({ error: 'customer_name required' }, { status: 400 })
 
+  // THE LINKS MUST BE THIS SHOP'S. unit_id and fleet_account_id were inserted as sent,
+  // and a foreign key does not apply RLS - so an id lifted from another shop's unit or
+  // fleet account attached it to this work order. Checked the same way the work order
+  // PATCH checks unit_id. NewWorkOrderForm and the calendar only ever offer the shop's
+  // own units and accounts, so a legitimate request always passes.
+  const unitId  = str(body.unit_id)
+  const fleetId = str(body.fleet_account_id)
+  if (unitId) {
+    const { data: unit } = await supabase
+      .from('hd_units').select('id').eq('id', unitId).eq('user_id', user.id).maybeSingle()
+    if (!unit) return NextResponse.json({ error: 'That unit was not found in your units.' }, { status: 400 })
+  }
+  if (fleetId) {
+    const { data: acct } = await supabase
+      .from('hd_fleet_accounts').select('id').eq('id', fleetId).eq('user_id', user.id).maybeSingle()
+    if (!acct) return NextResponse.json({ error: 'That fleet account was not found in your accounts.' }, { status: 400 })
+  }
+
   // Sequential work-order number, mirroring the invoices/quotes pattern.
   const { count } = await supabase
     .from('hd_work_orders')
@@ -92,8 +110,8 @@ export async function POST(req: NextRequest) {
       status:                   'open',
       scheduled_at,
       // Optional links to existing fleet records (so the list joins show them).
-      unit_id:                  str(body.unit_id),
-      fleet_account_id:         str(body.fleet_account_id),
+      unit_id:                  unitId,
+      fleet_account_id:         fleetId,
       customer_name:            customerName,
       customer_phone:           str(body.customer_phone),
       unit_number:              str(body.unit_number),
