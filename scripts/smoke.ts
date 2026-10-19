@@ -2174,6 +2174,26 @@ async function flowX(): Promise<void> {
     !!woAfter && woAfter.text.includes('fixed complaint') && woAfter.text.includes('ZZ-X-UNIT'),
     !woAfter ? 'did not load' : woAfter.text.includes('fixed complaint') ? 'renders' : 'old text')
 
+  // THE UNIT LINK through the PATCH: one of this shop's units links; an id from
+  // anywhere else is refused rather than trusted to the foreign key.
+  const unitRes = await fetch(`${SUPA}/rest/v1/hd_units`, {
+    method: 'POST', headers: { ...SVC_H, Prefer: 'return=representation' },
+    body: JSON.stringify({ user_id: OWNER, unit_number: 'ZZ-X-LINK', manufacturer: 'Thermo King', model: 'S-600', serial_number: 'ZZSERIALX01', status: 'active' }),
+  })
+  const linkUnitId = unitRes.ok ? String(((await unitRes.json()) as Record<string, unknown>[])[0]?.id ?? '') : ''
+  if (linkUnitId) created.fleetUnits.add(linkUnitId)
+  if (record(F, 'a unit is arranged to link', !!linkUnitId, `-> ${unitRes.status}`)) {
+    const linked = await api('PATCH', `/api/hd/work-orders/${woId}`, { unit_id: linkUnitId })
+    const wl = (await rest<Record<string, unknown>>(`hd_work_orders?id=eq.${woId}&select=unit_id`))[0] ?? {}
+    record(F, 'the PATCH links the work order to one of the shop\'s units',
+      linked.status === 200 && wl.unit_id === linkUnitId, `-> ${linked.status}, unit ${wl.unit_id ?? 'null'}`)
+    // A unit id that is not this shop's - a random uuid stands in for another account's.
+    const foreign = await api('PATCH', `/api/hd/work-orders/${woId}`, { unit_id: '00000000-0000-4000-8000-000000000000' })
+    const wf = (await rest<Record<string, unknown>>(`hd_work_orders?id=eq.${woId}&select=unit_id`))[0] ?? {}
+    record(F, 'the PATCH refuses a unit that is not the shop\'s',
+      foreign.status === 400 && wf.unit_id === linkUnitId, `-> ${foreign.status}, unit still ${wf.unit_id === linkUnitId ? 'ours' : wf.unit_id}`)
+  }
+
   // Invoiced: locked on the server, and the button is gone.
   await fetch(`${SUPA}/rest/v1/hd_work_orders?id=eq.${woId}`, { method: 'PATCH', headers: SVC_H, body: JSON.stringify({ status: 'invoiced' }) })
   const late = await api('PATCH', `/api/hd/work-orders/${woId}`, { customer_name: `${MARK} too late` })

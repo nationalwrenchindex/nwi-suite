@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
+import { matchUnitBySerial } from '@/lib/hd/unit-match'
 
 const HD_ORANGE = '#E85D24'
 const HD_BLUE   = '#1A6BAF'
@@ -28,8 +29,23 @@ interface CalendarWO {
   fleet_account:     { fleet_name: string } | null
 }
 
+// One of the shop's units, for the booking form's picker.
+interface PickUnit {
+  id: string
+  fleet_account_id: string | null
+  unit_number: string | null
+  manufacturer: string | null
+  model: string | null
+  serial_number: string | null
+  fleet_account: { fleet_name: string } | null
+}
+
 const BLANK_BOOKING = {
   customer_name: '', customer_phone: '',
+  // THE UNIT LINK. This form sent only free text, so every job booked from the
+  // calendar landed with unit_id NULL and could never appear in a per-unit history.
+  // Set by the picker, or by a typed serial that matches exactly one unit.
+  unit_id: '', fleet_account_id: '', unit_number: '',
   unit_manufacturer: '', unit_model: '', unit_serial: '',
   service_type: 'Diagnostic', job_description: '',
   scheduled_time: '09:00', estimated_duration_hours: '1', notes: '',
@@ -97,8 +113,40 @@ export default function HDCalendarClient() {
   const [bookingSaving, setBookingSaving] = useState(false)
   const [bookingError,  setBookingError]  = useState('')
 
+  // The shop's units, loaded when the booking form opens. Paged, because the list API
+  // pages; a shop has tens of units, so this is one or two requests.
+  const [units, setUnits] = useState<PickUnit[]>([])
+  async function loadUnits() {
+    try {
+      const all: PickUnit[] = []
+      for (let offset = 0; offset < 2000; offset += 200) {
+        const res = await fetch(`/api/hd/fleet-units?limit=200&offset=${offset}`)
+        if (!res.ok) break
+        const json = await res.json() as { units?: PickUnit[]; count?: number }
+        all.push(...(json.units ?? []))
+        if (!json.units?.length || all.length >= (json.count ?? 0)) break
+      }
+      setUnits(all)
+    } catch { /* the picker is a convenience; typed fields still book the job */ }
+  }
+
+  function pickUnit(id: string) {
+    const u = units.find(x => x.id === id)
+    setBookingForm(f => u ? {
+      ...f,
+      unit_id:           u.id,
+      fleet_account_id:  u.fleet_account_id ?? '',
+      unit_number:       u.unit_number ?? '',
+      unit_manufacturer: u.manufacturer ?? '',
+      unit_model:        u.model ?? '',
+      unit_serial:       u.serial_number ?? '',
+      customer_name:     f.customer_name || u.fleet_account?.fleet_name || '',
+    } : { ...f, unit_id: '', fleet_account_id: '' })
+  }
+
   function openBooking(date: string) {
     setBookingForm(BLANK_BOOKING)
+    void loadUnits()
     setBookingDate(date || todayStr())
     setBookingError('')
     setBooking(true)
@@ -109,9 +157,15 @@ export default function HDCalendarClient() {
     if (!bookingDate) { setBookingError('Pick a scheduled date.'); return }
     setBookingSaving(true); setBookingError('')
     try {
+      // No unit picked, but the serial typed is exactly one of the shop's units: that
+      // is the unit. Zero or several matches link nothing - see matchUnitBySerial.
+      const typedMatch = !bookingForm.unit_id ? matchUnitBySerial(units, bookingForm.unit_serial) : null
+      const body = typedMatch
+        ? { ...bookingForm, unit_id: typedMatch.id, fleet_account_id: typedMatch.fleet_account_id ?? '' }
+        : bookingForm
       const res = await fetch('/api/hd/work-orders', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...bookingForm, scheduled_date: bookingDate }),
+        body: JSON.stringify({ ...body, scheduled_date: bookingDate }),
       })
       const data = await res.json()
       if (!res.ok) { setBookingError(data.error ?? 'Could not book the job.'); return }
@@ -466,6 +520,21 @@ export default function HDCalendarClient() {
                 </label>
               </div>
 
+              {/* Pick one of the shop's units to link the job to it. Typing the
+                  fields by hand still works; a typed serial that matches exactly one
+                  unit links on save. */}
+              <label className="flex flex-col gap-1">
+                <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Unit</span>
+                <select value={bookingForm.unit_id} onChange={e => pickUnit(e.target.value)} className="px-3 py-2.5 rounded-lg text-sm text-white" style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}>
+                  <option value="">Not one of my units / type it below</option>
+                  {units.map(u => (
+                    <option key={u.id} value={u.id}>
+                      {[u.unit_number, [u.manufacturer, u.model].filter(Boolean).join(' '), u.serial_number, u.fleet_account?.fleet_name].filter(Boolean).join(' - ')}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
               <div className="grid grid-cols-3 gap-3">
                 <label className="flex flex-col gap-1">
                   <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Manufacturer</span>
@@ -477,7 +546,7 @@ export default function HDCalendarClient() {
                 </label>
                 <label className="flex flex-col gap-1">
                   <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Serial</span>
-                  <input value={bookingForm.unit_serial} onChange={e => setBookingForm(f => ({ ...f, unit_serial: e.target.value }))} placeholder="Serial #" className="px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20" style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }} />
+                  <input value={bookingForm.unit_serial} onChange={e => setBookingForm(f => ({ ...f, unit_serial: e.target.value, unit_id: '', fleet_account_id: '' }))} placeholder="Serial #" className="px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20" style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }} />
                 </label>
               </div>
 

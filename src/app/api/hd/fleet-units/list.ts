@@ -10,7 +10,7 @@
 // and the work order then showed the unit's real year - so the two looked like they
 // disagreed when the quote had recorded no year at all (Q-2026-0010 / WO-2026-1563).
 export const FLEET_UNIT_LIST_SELECT = `
-  id, unit_number, manufacturer, model, year, serial_number, bm_number,
+  id, fleet_account_id, unit_number, manufacturer, model, year, serial_number, bm_number,
   total_hours, next_pm_due_hours, status,
   fleet_account:hd_fleet_accounts(fleet_name)
 `
@@ -19,6 +19,8 @@ export const FLEET_UNIT_PAGE_SIZE = 50
 
 export interface FleetUnitListRow {
   id:                string
+  // For pickers that link a work order to a unit: the unit's fleet comes with it.
+  fleet_account_id:  string | null
   unit_number:       string
   manufacturer:      string
   model:             string

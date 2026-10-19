@@ -83,6 +83,28 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
   }
 
+  // THE UNIT LINK. Settable so a job booked as free text can be linked to the unit it
+  // was for - a work order with no unit_id cannot appear in a per-unit history.
+  //
+  // OWNERSHIP IS CHECKED HERE, not left to the foreign key. hd_units.id is a plain FK,
+  // and an FK does not apply RLS: without this, an id lifted from another shop's unit
+  // would link that shop's unit to this work order. null or '' clears the link.
+  if ('unit_id' in body) {
+    const raw = body.unit_id
+    if (raw == null || raw === '') {
+      update.unit_id = null
+    } else {
+      const { data: unit } = await supabase
+        .from('hd_units')
+        .select('id')
+        .eq('id', String(raw))
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (!unit) return NextResponse.json({ error: 'That unit was not found in your units.' }, { status: 400 })
+      update.unit_id = unit.id
+    }
+  }
+
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: 'Nothing to update.' }, { status: 400 })
   }
