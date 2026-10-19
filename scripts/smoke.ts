@@ -28,6 +28,9 @@ import { billedHoursFromLibrary } from '../src/lib/hd/labor-library'
 import { editableLines } from '../src/lib/hd/invoice-edit-lines'
 import { stripLeadingZeros, parseFee } from '../src/components/hd/FeeInput'
 import { fmtShopDate, shopTimeZone } from '../src/lib/shop-time'
+import { createClient as createSupabase } from '@supabase/supabase-js'
+import { loadRollupInput } from '../src/lib/hd/equipment-rollup-load'
+import { jobsFor, rollupByCategory, rollupByUnit } from '../src/lib/hd/equipment-rollup'
 import { loadEnv, openSession, visibleText } from './lib/smoke-session'
 
 loadEnv()
@@ -46,6 +49,7 @@ const MARK = 'SMOKE'
 interface Row { flow: string; step: string; ok: boolean; detail: string }
 const rows: Row[] = []
 let cookie = ''
+let accessToken = ''
 
 function record(flow: string, step: string, ok: boolean, detail = ''): boolean {
   rows.push({ flow, step, ok, detail })
@@ -2216,6 +2220,49 @@ async function flowX(): Promise<void> {
     `-> ${late.status}, button ${lateDetail?.text.includes('Edit Details') ? 'still shown' : 'hidden'}`)
 }
 
+// ── Y: the equipment rollup reads one account, against the LIVE database ──
+//
+// The pure tests (scripts/verify-equipment-rollup.ts) prove the arithmetic ignores
+// another shop's rows. This proves the READ does: the loader runs on a client signed in
+// as the smoke owner - RLS in force, exactly as a page would - and is asked for ANOTHER
+// account's id. It must come back empty. Asked for its own id, it must not.
+async function flowY(): Promise<void> {
+  const F = 'Y equipment RLS'
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!record(F, 'the anon key is configured', !!anon && !!accessToken, anon ? 'present' : 'NEXT_PUBLIC_SUPABASE_ANON_KEY missing')) return
+  const asOwner = createSupabase(SUPA, anon!, {
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
+  // Any OTHER account that has HD rows - read with the service key only to pick one.
+  const other = (await rest<{ user_id: string }>(`hd_units?select=user_id&user_id=neq.${OWNER}&limit=1`))[0]?.user_id
+  if (!record(F, 'another account with HD units exists to test against', !!other, other ? 'found' : 'none - cannot test isolation')) return
+
+  const year = { from: `${new Date().getFullYear()}-01-01`, to: `${new Date().getFullYear()}-12-31` }
+  try {
+    const theirs = await loadRollupInput(asOwner, other!, year, 'America/New_York')
+    const leaked = theirs.units.length + theirs.invoices.length + theirs.workOrders.length + theirs.categories.length + theirs.fleets.length
+    record(F, 'asking for another account\'s rows returns none of them', leaked === 0,
+      `${theirs.units.length} units, ${theirs.invoices.length} invoices, ${theirs.workOrders.length} work orders, ${theirs.categories.length} categories`)
+
+    const mine = await loadRollupInput(asOwner, OWNER, year, 'America/New_York')
+    record(F, 'its own rows are readable (the control)', mine.units.length > 0 && mine.workOrders.length > 0,
+      `${mine.units.length} units, ${mine.workOrders.length} work orders`)
+    record(F, 'every row read belongs to the signed-in account',
+      [...mine.units, ...mine.invoices, ...mine.workOrders, ...mine.categories, ...mine.fleets].every(r => r.user_id === OWNER))
+    const jobs = jobsFor(mine)
+    const byCat = rollupByCategory(mine, jobs)
+    const byUnit = rollupByUnit(mine, jobs)
+    const catSum = byCat.reduce((s, c) => s + c.invoiced, 0)
+    const jobSum = jobs.reduce((s, j) => s + j.invoiced, 0)
+    record(F, 'the category table accounts for every job - nothing dropped',
+      byCat.reduce((s, c) => s + c.jobs, 0) === jobs.length && Math.abs(catSum - jobSum) < 0.005,
+      `${jobs.length} jobs, ${byCat.length} category rows, ${byUnit.length} unit rows, invoiced ${usd(catSum)}`)
+  } catch (e) {
+    record(F, 'the loader runs as the signed-in user', false, e instanceof Error ? e.message : String(e))
+  }
+}
+
 async function main(): Promise<void> {
   console.log('='.repeat(96))
   console.log(`SMOKE  ${BASE}`)
@@ -2223,6 +2270,7 @@ async function main(): Promise<void> {
 
   const session = await openSession(OWNER)
   cookie = session.cookie
+  accessToken = session.accessToken
   console.log(`  session: ${session.email}`)
 
   const guard = await page('/financials')
@@ -2274,6 +2322,7 @@ async function main(): Promise<void> {
     await flowU()
     await flowV()
     await flowX()
+    await flowY()
   } finally {
     await cleanup()
   }
