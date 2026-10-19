@@ -111,6 +111,9 @@ const created = {
   customers: new Set<string>(),
   // HD labor library entries (hd_repair_items).
   libraryItems: new Set<string>(),
+  // Equipment categories this run adds (migration 161). Deleted AFTER the units, which
+  // are set null by the FK anyway.
+  equipmentCategories: new Set<string>(),
 }
 
 async function del(table: string, id: string): Promise<void> {
@@ -178,9 +181,20 @@ async function cleanup(): Promise<void> {
   } catch { /* a failed sweep must not mask the real result */ }
   for (const id of created.libraryItems) await del('hd_repair_items', id)
 
+  // Units a crashed run left behind, by the smoke serial prefix. Since migration 161 a
+  // stray ACTIVE unit holding a fixed smoke serial would make the next run's insert of
+  // that serial fail on the unique index - so they are swept, owner-scoped.
+  try {
+    const strays = await rest<{ id: string }>(`hd_units?select=id&user_id=eq.${OWNER}&serial_number=like.ZZSERIAL*`)
+    for (const s of strays) created.fleetUnits.add(s.id)
+    const cats = await rest<{ id: string }>(`hd_equipment_categories?select=id&user_id=eq.${OWNER}&name=like.${MARK}*`)
+    for (const c of cats) created.equipmentCategories.add(c.id)
+  } catch { /* a failed sweep must not mask the real result */ }
+
   // HD Intel Hub. Units before accounts: hd_units.fleet_account_id points at them.
   for (const id of created.fleetUnits)    await del('hd_units', id)
   for (const id of created.fleetAccounts) await del('hd_fleet_accounts', id)
+  for (const id of created.equipmentCategories) await del('hd_equipment_categories', id)
   // Customers last: an HD document may still have been pointing at one.
   for (const id of created.customers)     await del('customers', id)
 
@@ -2263,6 +2277,166 @@ async function flowY(): Promise<void> {
   }
 }
 
+// ── Z: equipment categories, By Equipment and the audit exports ─────────────
+//
+// docs/KURT-EQUIPMENT-TRACKING-SPEC.md, end to end through the routes a shop uses. The
+// rollup arithmetic is unit-tested in scripts/verify-equipment-rollup.ts; this proves
+// the SCREENS and the API produce it from real rows: a unit with several invoiced jobs,
+// an open work order that is not a job, paid vs unpaid, Uncategorized, a category move,
+// and the LD-only gate.
+//
+// NOTE: the first call into categories seeds the owner's defaults (migration 161's
+// hd_ensure_equipment_categories) - the same thing the shop's first visit does.
+async function flowZ(): Promise<void> {
+  const F = 'Z equipment'
+  const year = new Date().getFullYear()
+  const RANGE = `from=${year}-01-01&to=${year}-12-31`
+
+  // ── categories ──
+  const list = await api('GET', '/api/hd/equipment-categories')
+  const cats = (list.json.categories ?? []) as Array<Record<string, unknown>>
+  if (!record(F, 'categories load (seeded on first access)', list.status === 200 && cats.length > 0,
+    `-> ${list.status}, ${cats.length} categories`)) return
+  record(F, 'every category returned is the owner\'s', cats.every(c => c.user_id === OWNER))
+  const CAT = `${MARK} Crane`
+  const add = await api('POST', '/api/hd/equipment-categories', { name: CAT })
+  const added = ((add.json.categories ?? []) as Array<Record<string, unknown>>).find(c => c.name === CAT)
+  if (added?.id) created.equipmentCategories.add(String(added.id))
+  record(F, 'a shop can add its own category', add.status === 201 && !!added, `-> ${add.status}`)
+  const dupe = await api('POST', '/api/hd/equipment-categories', { name: CAT.toLowerCase() })
+  record(F, 'the same name in another case is refused readably',
+    dupe.status === 409 && /already exists/i.test(String(dupe.json.error ?? '')), `-> ${dupe.status} ${String(dupe.json.error ?? '')}`)
+  const blank = await api('POST', '/api/hd/equipment-categories', { name: '   ' })
+  record(F, 'a blank category name is refused', blank.status === 400, `-> ${blank.status}`)
+
+  // ── the units screens ──
+  const units = await page('/hd/fleet-units')
+  record(F, 'the units list renders the category controls',
+    !!units && missingControls(units.text, ['Manage categories', 'Category']).length === 0
+      && units.html.includes('name="unit_category"') && units.html.includes('Select all loaded units'),
+    !units ? 'did not load' : missingControls(units.text, ['Manage categories', 'Category']).join(', ') || 'renders')
+  const unitForm = await page('/hd/fleet-units?new=1')
+  record(F, 'the unit form picks a category, not truck/trailer',
+    !!unitForm && unitForm.html.includes('name="category_id"') && !unitForm.html.includes('name="unit_type"'),
+    !unitForm ? 'did not load' : unitForm.html.includes('name="unit_type"') ? 'the old unit_type select still renders' : 'category select')
+  const manage = await page('/hd/fleet-units/categories')
+  record(F, 'the category management screen renders',
+    !!manage && missingControls(manage.text, ['EQUIPMENT CATEGORIES', 'Add category', 'Uncategorized']).length === 0,
+    !manage ? 'did not load' : missingControls(manage.text, ['EQUIPMENT CATEGORIES', 'Add category', 'Uncategorized']).join(', ') || 'renders')
+
+  // ── a unit with several invoiced jobs, an open work order, paid vs unpaid ──
+  const uRes = await fetch(`${SUPA}/rest/v1/hd_units`, {
+    method: 'POST', headers: { ...SVC_H, Prefer: 'return=representation' },
+    body: JSON.stringify({ user_id: OWNER, unit_number: 'ZZ-EQ-1', manufacturer: 'Thermo King', model: 'S-600', serial_number: 'ZZSERIALEQ01', status: 'active' }),
+  })
+  const unitId = uRes.ok ? String(((await uRes.json()) as Record<string, unknown>[])[0]?.id ?? '') : ''
+  if (unitId) created.fleetUnits.add(unitId)
+  if (!record(F, 'an uncategorized unit is arranged', !!unitId, `-> ${uRes.status}`)) return
+
+  // Invoice rows in the shape the app stores (INV-2026-0020's labor line).
+  const labor = { id: 'zz-eq-l', type: 'labor', amount: 202.5, quantity: 0, unit_cost: 0, description: `${MARK} eq labor`, part_number: '', mobile_hours: 1.5 }
+  const mkInv = async (n: string, total: number, status: string, lines: unknown[]) => {
+    const r = await fetch(`${SUPA}/rest/v1/hd_invoices`, {
+      method: 'POST', headers: { ...SVC_H, Prefer: 'return=representation' },
+      body: JSON.stringify({ user_id: OWNER, invoice_number: `ZZ-EQ-${n}`, customer_name: `${MARK} eq customer`,
+        unit_id: unitId, status, total, subtotal_labor: lines.length ? 202.5 : 0, subtotal_parts: 0, tax_amount: 0, line_items: lines }),
+    })
+    const id = r.ok ? String(((await r.json()) as Record<string, unknown>[])[0]?.id ?? '') : ''
+    if (id) created.hdInvoices.add(id)
+    return id
+  }
+  const paidId   = await mkInv('PAID', 202.5, 'paid', [labor])
+  const unpaidId = await mkInv('UNPAID', 50, 'unpaid', [])
+  const woRes = await fetch(`${SUPA}/rest/v1/hd_work_orders`, {
+    method: 'POST', headers: { ...SVC_H, Prefer: 'return=representation' },
+    body: JSON.stringify({ user_id: OWNER, work_order_number: 'ZZ-EQ-OPEN', status: 'open', unit_id: unitId,
+      customer_name: `${MARK} eq customer`, total_amount: 999, service_type: 'Diagnostic' }),
+  })
+  const openWo = woRes.ok ? String(((await woRes.json()) as Record<string, unknown>[])[0]?.id ?? '') : ''
+  if (openWo) created.hdWorkOrders.add(openWo)
+  if (!record(F, 'two invoices and an open work order are arranged on it', !!paidId && !!unpaidId && !!openWo,
+    `paid ${!!paidId}, unpaid ${!!unpaidId}, wo ${!!openWo}`)) return
+
+  const eq = await api('GET', `/api/hd/financials/equipment?${RANGE}`)
+  const urow = ((eq.json.units ?? []) as Array<Record<string, any>>).find(u => u.unitId === unitId)
+  if (record(F, 'By Equipment returns the unit', eq.status === 200 && !!urow, `-> ${eq.status} ${String(eq.json.error ?? '')}`)) {
+    record(F, 'a unit with several invoiced jobs rolls up (2 jobs, 252.50)', urow!.jobs === 2 && usd(urow!.invoiced) === '252.50',
+      `jobs ${urow!.jobs}, invoiced ${usd(urow!.invoiced)}`)
+    record(F, 'an open work order is not a job', urow!.jobsFromWorkOrders === 0, `${urow!.jobsFromWorkOrders} work-order jobs`)
+    record(F, 'invoiced and collected differ on an unpaid invoice', usd(urow!.collected?.value) === '202.50' && urow!.collected?.missing === 0,
+      `collected ${usd(urow!.collected?.value)}, unknown on ${urow!.collected?.missing}`)
+    record(F, 'hours come from the labor line, and a job without them is counted as unrecorded',
+      urow!.laborHours?.value === 1.5 && urow!.laborHours?.missing === 1, JSON.stringify(urow!.laborHours))
+    record(F, 'an uncategorized unit reports under Uncategorized', urow!.categoryName === 'Uncategorized', String(urow!.categoryName))
+    const unc = ((eq.json.categories ?? []) as Array<Record<string, any>>).find(c => c.key === '__uncategorized__')
+    record(F, 'the Uncategorized row carries it', !!unc && unc.jobs >= 2, JSON.stringify({ jobs: unc?.jobs }))
+  }
+
+  // Move it into the shop's own category: the trigger mirrors the name into unit_type.
+  if (added?.id) {
+    const set = await api('POST', '/api/hd/fleet-units/category', { unit_ids: [unitId], category_id: added.id })
+    const u = (await rest<Record<string, unknown>>(`hd_units?id=eq.${unitId}&select=category_id,unit_type`))[0] ?? {}
+    record(F, 'setting a category saves, and unit_type mirrors its name',
+      set.status === 200 && u.category_id === added.id && u.unit_type === CAT.toLowerCase(), `-> ${set.status}, unit_type ${u.unit_type}`)
+    const eq2 = await api('GET', `/api/hd/financials/equipment?${RANGE}`)
+    const crow = ((eq2.json.categories ?? []) as Array<Record<string, any>>).find(c => c.key === added.id)
+    record(F, 'the unit\'s jobs move to that category', crow?.jobs === 2 && usd(crow?.invoiced) === '252.50', JSON.stringify({ jobs: crow?.jobs, invoiced: crow?.invoiced }))
+    const foreign = await api('POST', '/api/hd/fleet-units/category', { unit_ids: ['00000000-0000-4000-8000-000000000000'], category_id: added.id })
+    record(F, 'a unit that is not the shop\'s is refused', foreign.status === 404, `-> ${foreign.status}`)
+  }
+
+  const bad = await api('GET', '/api/hd/financials/equipment?from=2026-06-01&to=2026-05-01')
+  record(F, 'By Equipment refuses a backwards range', bad.status === 400, `-> ${bad.status}`)
+  const fin = await page('/hd/financials')
+  record(F, 'HD Financials offers the By Equipment tab', !!fin && fin.text.includes('By Equipment'), !fin ? 'did not load' : 'tab text')
+
+  // ── the audit exports ──
+  const audit = await page(`/hd/reports/audit?${RANGE}`)
+  record(F, 'the audit page renders all four downloads and the labels form',
+    !!audit && ['audit-schedule-pdf', 'audit-schedule-csv', 'audit-packet-pdf', 'audit-packet-csv', 'audit-labels'].every(t => audit.html.includes(`data-testid="${t}"`)),
+    !audit ? 'did not load' : 'testids')
+  for (const [kind, fmt] of [['audit-schedule', 'pdf'], ['audit-schedule', 'csv'], ['audit-packet', 'pdf'], ['audit-packet', 'csv']] as const) {
+    const res = await fetch(`${BASE}/api/hd/reports/${kind}?${RANGE}&format=${fmt}`, { headers: { cookie } })
+    const buf = Buffer.from(await res.arrayBuffer())
+    const ok = fmt === 'pdf'
+      ? res.status === 200 && buf.subarray(0, 5).toString() === '%PDF-'
+      : res.status === 200 && /text\/csv/.test(res.headers.get('content-type') ?? '')
+    let detail = `-> ${res.status} ${res.headers.get('content-type')}`
+    let extra = true
+    if (ok && kind === 'audit-schedule' && fmt === 'csv') {
+      const text = buf.toString('utf8').replace(/^\uFEFF/, '')
+      extra = text.split(/\r?\n/)[0].startsWith('section') && text.includes(`ZZ-EQ-1`)
+      detail += extra ? ', unit in appendix' : ', the smoke unit is missing from the appendix'
+    }
+    if (ok && kind === 'audit-packet' && fmt === 'csv') {
+      const text = buf.toString('utf8').replace(/^\uFEFF/, '')
+      extra = text.split(/\r?\n/)[0].includes('approved_by_recorded')
+      detail += extra ? ', approver column present' : ', approved_by_recorded missing'
+    }
+    record(F, `${kind} ${fmt.toUpperCase()} downloads`, ok && extra, detail)
+  }
+  const anon = await fetch(`${BASE}/api/hd/reports/audit-schedule?${RANGE}&format=csv`)
+  record(F, 'the exports refuse a signed-out caller', anon.status === 401, `-> ${anon.status}`)
+  const badRange = await fetch(`${BASE}/api/hd/reports/audit-packet?from=2023-01-01&to=2026-12-31&format=pdf`, { headers: { cookie } })
+  record(F, 'the exports refuse a range over 3 years', badRange.status === 400, `-> ${badRange.status}`)
+
+  // ── GATE D: an LD-only subscriber ──
+  // A dedicated LD-only TEST account is required: the suite does not sign in as a real
+  // customer. Until one is configured this step cannot run, and so it FAILS, saying why.
+  const ldId = process.env.SMOKE_LD_ONLY_ID
+  if (!ldId) {
+    record(F, 'an LD-only subscriber gets no By Equipment data and no HD Financials', false,
+      'SMOKE_LD_ONLY_ID is not set - point it at an LD-only TEST account (not a customer)')
+  } else {
+    const ld = await openSession(ldId)
+    const r = await fetch(`${BASE}/api/hd/financials/equipment?${RANGE}`, { headers: { cookie: ld.cookie } })
+    const pg = await fetch(`${BASE}/hd/financials`, { headers: { cookie: ld.cookie }, redirect: 'follow' })
+    const landed = new URL(pg.url).pathname
+    record(F, 'an LD-only subscriber gets no By Equipment data and no HD Financials',
+      r.status === 403 && landed !== '/hd/financials', `api -> ${r.status}, /hd/financials -> ${landed}`)
+  }
+}
+
 async function main(): Promise<void> {
   console.log('='.repeat(96))
   console.log(`SMOKE  ${BASE}`)
@@ -2323,6 +2497,7 @@ async function main(): Promise<void> {
     await flowV()
     await flowX()
     await flowY()
+    await flowZ()
   } finally {
     await cleanup()
   }
