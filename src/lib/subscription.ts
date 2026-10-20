@@ -41,6 +41,14 @@ export async function canAccessModule(userId: string, module: string): Promise<b
     .select('status, tier, modules, is_comped')
     .eq('user_id', userId)
     .single()
+  return subscriptionGrantsModule(sub, module)
+}
+
+/** The rule canAccessModule applies once the row is read. Pure, so it can be tested. */
+export function subscriptionGrantsModule(
+  sub: { status: string; tier: string | null; modules: string[] | null; is_comped: boolean | null } | null,
+  module: string,
+): boolean {
   if (!sub) return false
   if (!['active', 'trialing', 'past_due'].includes(sub.status)) return false
   if (sub.is_comped) return true

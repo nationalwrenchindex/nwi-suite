@@ -1,8 +1,8 @@
-// ToS 8.2 ASSERTS NO FREE TRIALS. This trial machinery is left in place deliberately,
-// but it is dormant: no Stripe price carries trial_period_days, no subscription is
-// trialing, and the checkout session sets no trial. Re-enabling a trial makes section
-// 8.2 of the published Terms FALSE on the day it ships, so the Terms must be updated
-// FIRST. See docs/tos-draft-clauses.md clause 8.
+// FREE TRIAL: 15 days, card required, NWI Full Suite Plus ONLY, one per customer.
+// The rules live in src/lib/ld-trial.ts. Every other tier is billed at checkout.
+// The published /terms page says nothing about trials; the DRAFT clause 8.2 in
+// docs/tos-draft-clauses.md ("We do not offer free trials") must change before it is
+// adopted, or it will contradict this.
 // ─── Stripe promo code setup (run once in Stripe dashboard) ──────────────────
 // 1. Coupons → Create coupon:
 //      Name: NWI Free Trial 90 Days
@@ -26,10 +26,11 @@ import { createClient } from '@/lib/supabase/server'
 import { stripe, getPriceId, getTierFromPriceId, TIER_MODULES, type PlanTier } from '@/lib/stripe'
 import { getSubscription } from '@/lib/subscription'
 import { sendFounderAlert } from '@/lib/email-alerts'
+import { buildLdCheckoutParams, returningReason, trialDaysFor, LD_TRIAL_TIER, type TrialHistory } from '@/lib/ld-trial'
 
 const VALID_TIERS: PlanTier[] = ['starter', 'pro', 'full_suite', 'full_suite_plus', 'elite', 'foreman_standalone', 'quickwrench', 'detailer']
-// ToS 8.2 asserts NO FREE TRIALS. Dormant, not deleted: re-enabling a trial makes
-// section 8.2 of the published Terms false, so update the Terms FIRST.
+// Tiers that never show Stripe's promo-code field when a code was pre-validated.
+// Unrelated to the free trial, which is decided in src/lib/ld-trial.ts.
 const NO_TRIAL_TIERS: PlanTier[] = ['elite', 'foreman_standalone']
 
 export async function POST(request: NextRequest) {
@@ -104,6 +105,22 @@ export async function POST(request: NextRequest) {
   const existingSub = await getSubscription(user.id)
   let customerId = existingSub?.stripe_customer_id ?? undefined
 
+  // ── Free trial: Full Suite Plus only, never a second time ──
+  // Read BEFORE a new Stripe customer is created, so the brand-new customer cannot be
+  // mistaken for the history. Only looked up for the trial price - other tiers never
+  // trial, so they pay no extra Stripe calls.
+  let trialDays: number | null = null
+  if (verifiedTier === LD_TRIAL_TIER) {
+    const email = profile?.email ?? user.email ?? null
+    const history: TrialHistory = {
+      subscriptionRow:                existingSub,
+      stripeSubscriptionsOnCustomer:  await countStripeSubscriptions(customerId ? [customerId] : []),
+      stripeSubscriptionsOnSameEmail: await countSameEmailSubscriptions(email, customerId),
+    }
+    trialDays = trialDaysFor(verifiedTier, history)
+    console.log(`[stripe/checkout] trial for user=${user.id}: ${trialDays ? `${trialDays} days` : `none (${returningReason(history)})`}`)
+  }
+
   if (!customerId) {
     const customer = await stripe.customers.create({
       email:    profile?.email ?? user.email!,
@@ -113,34 +130,24 @@ export async function POST(request: NextRequest) {
     customerId = customer.id
   }
 
-  // No free trials — subscribers are billed immediately at checkout. hasPromo
-  // still controls whether Stripe's promo-code field is shown.
+  // Only Full Suite Plus trials; everything else is billed at checkout. hasPromo
+  // controls whether Stripe's promo-code field is shown.
   const hasPromo = !!body.promotionCodeId && !NO_TRIAL_TIERS.includes(tier)
-
+  // Built by buildLdCheckoutParams (src/lib/ld-trial.ts) so the exact params sent to
+  // Stripe are under test: card always collected, trial only when trialDays is set.
   let session
   try {
-    session = await stripe.checkout.sessions.create({
-      customer:             customerId,
-      mode:                 'subscription',
-      payment_method_types: ['card'],
-      line_items: [{ price: priceId, quantity: 1 }],
-      subscription_data: {
-        metadata: {
-          user_id: user.id,
-          tier,
-          ...(resolvedModules ? { selected_modules: resolvedModules.join(',') } : {}),
-        },
-      },
-      metadata: {
-        user_id: user.id,
-        tier,
-        ...(resolvedModules ? { selected_modules: resolvedModules.join(',') } : {}),
-      },
-      success_url: `${appUrl}${successPath}?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url:  `${appUrl}/billing?canceled=true`,
-      // When a promo code was pre-validated on our side, hide Stripe's promo field to avoid confusion
-      ...(hasPromo ? {} : { allow_promotion_codes: true }),
-    })
+    session = await stripe.checkout.sessions.create(buildLdCheckoutParams({
+      customerId,
+      priceId,
+      userId:     user.id,
+      tier,
+      resolvedModules,
+      trialDays,
+      successUrl: `${appUrl}${successPath}?session_id={CHECKOUT_SESSION_ID}`,
+      cancelUrl:  `${appUrl}/billing?canceled=true`,
+      hasPromo,
+    }))
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Stripe checkout session creation failed'
     console.error('[POST /api/stripe/checkout] session create error:', err)
@@ -161,4 +168,33 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ url: session.url })
+}
+
+// Subscriptions of ANY status (cancelled included) across these Stripe customers.
+// null when Stripe cannot be read - the trial rules treat that as "has history".
+async function countStripeSubscriptions(customerIds: string[]): Promise<number | null> {
+  try {
+    let n = 0
+    for (const customer of customerIds) {
+      const subs = await stripe.subscriptions.list({ customer, status: 'all', limit: 1 })
+      n += subs.data.length
+    }
+    return n
+  } catch (err) {
+    console.error('[stripe/checkout] subscription history lookup failed:', err)
+    return null
+  }
+}
+
+// Other Stripe customers with the same email: catches cancel-then-sign-up-again on a
+// new NWI account with the same address. A different email cannot be caught here.
+async function countSameEmailSubscriptions(email: string | null, exclude: string | undefined): Promise<number | null> {
+  if (!email) return 0
+  try {
+    const customers = await stripe.customers.list({ email, limit: 20 })
+    return countStripeSubscriptions(customers.data.map(c => c.id).filter(id => id !== exclude))
+  } catch (err) {
+    console.error('[stripe/checkout] same-email lookup failed:', err)
+    return null
+  }
 }

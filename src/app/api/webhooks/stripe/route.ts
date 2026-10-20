@@ -356,10 +356,16 @@ export async function POST(request: NextRequest) {
           user_id:                userId,
           stripe_customer_id:     typeof session.customer === 'string' ? session.customer : session.customer?.id ?? null,
           stripe_subscription_id: subId ?? null,
-          status:                 'active',
+          // Stripe's own status, not a hardcoded 'active': a Full Suite Plus trial must
+          // read as 'trialing'. Card checkouts complete as 'active' or 'trialing', and
+          // both pass every access check (src/lib/subscription.ts), so who gets in is
+          // unchanged. During a trial current_period_end is the trial's end - the billing
+          // page shows it as the first charge date.
+          status:                 stripeSub.status,
           tier,
           modules,
-          current_period_end:     null,
+          current_period_end:     stripeSub.current_period_end
+            ? new Date(stripeSub.current_period_end * 1000).toISOString() : null,
           cancel_at_period_end:   false,
           vertical:               session.metadata?.vertical ?? 'light_duty',
         })
@@ -436,7 +442,10 @@ export async function POST(request: NextRequest) {
             const brockPhone = process.env.BROCK_PHONE_NUMBER
             if (brockPhone) {
               const ts     = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' })
-              const amount = amountDollars != null ? `$${amountDollars}/mo` : '—'
+              const trialNote = stripeSub.status === 'trialing' && stripeSub.trial_end
+                ? ` (FREE TRIAL - first charge ${new Date(stripeSub.trial_end * 1000).toLocaleDateString('en-US', { timeZone: 'America/New_York' })})`
+                : ''
+              const amount = (amountDollars != null ? `$${amountDollars}/mo` : '—') + trialNote
               await sendSubscriberSms({
                 to:   brockPhone,
                 body: `New NWI Subscriber! Name: ${name} Email: ${email} Plan: ${planName} Amount: ${amount} Time: ${ts}`,

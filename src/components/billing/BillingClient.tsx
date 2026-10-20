@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import type { Subscription } from '@/lib/subscription'
+import TrialBanner, { type TrialBilling } from './TrialBanner'
 import {
   MODULE_LABELS,
   MODULE_DESCRIPTIONS,
@@ -331,6 +332,7 @@ function ActiveSubscriptionView({
   onChangePlan,
   loadingPortal,
   loadingPlan,
+  trialBilling,
 }: {
   subscription:       Subscription
   plans:              Plan[]
@@ -339,6 +341,7 @@ function ActiveSubscriptionView({
   onChangePlan:       (tier: PlanTier) => void
   loadingPortal:      boolean
   loadingPlan:        PlanTier | null
+  trialBilling:       TrialBilling | null
 }) {
   const statusCfg = STATUS_DISPLAY[subscription.status] ?? STATUS_DISPLAY.inactive
   const currentPlan = plans.find(p => p.tier === subscription.tier)
@@ -357,40 +360,15 @@ function ActiveSubscriptionView({
   return (
     <div className="space-y-6">
       {/* Trial banner */}
-      {subscription.status === 'trialing' && subscription.current_period_end && (() => {
-        const end  = new Date(subscription.current_period_end)
-        const days = Math.max(0, Math.ceil((end.getTime() - Date.now()) / (1000 * 60 * 60 * 24)))
-        return (
-          <div
-            className="bg-blue/10 border border-blue/30 rounded-xl px-4 py-3 flex items-start gap-3"
-            suppressHydrationWarning
-          >
-            <span className="text-lg leading-none mt-0.5" aria-hidden>🎉</span>
-            <div className="flex-1">
-              <p className="text-blue-light font-medium text-sm">
-              {/*
-                ToS 8.2 asserts NO FREE TRIALS, and this banner is the UI that would contradict it.
-                Dormant, not deleted: no Stripe price carries trial_period_days and no subscription
-                is trialing, so it never renders today. Re-enabling a trial makes section 8.2 of the
-                published Terms false on the day it ships - update the Terms FIRST.
-                See docs/tos-draft-clauses.md clause 8.
-              */}
-                Free Trial Active — {days} day{days !== 1 ? 's' : ''} remaining
-              </p>
-              <p className="text-blue-light/60 text-xs mt-0.5">
-                Your first payment will be on {fmtPeriodEnd(subscription.current_period_end)}.
-                {' '}Cancel anytime before then with no charge.
-              </p>
-            </div>
-            <button
-              onClick={onOpenPortal}
-              className="text-blue-light/40 hover:text-blue-light text-xs underline whitespace-nowrap mt-0.5"
-            >
-              Cancel trial
-            </button>
-          </div>
-        )
-      })()}
+      {/* Only Full Suite Plus can be trialing - see src/lib/ld-trial.ts */}
+      <TrialBanner
+        status={subscription.status}
+        currentPeriodEnd={subscription.current_period_end}
+        trialBilling={trialBilling}
+        planName={TIER_DISPLAY[subscription.tier ?? ''] ?? null}
+        planPriceCents={currentPlan?.price ?? null}
+        onCancel={onOpenPortal}
+      />
 
       {/* Current plan card */}
       <div className="nwi-card">
@@ -427,6 +405,8 @@ function ActiveSubscriptionView({
           <p className="text-white/25 text-xs mt-4 pt-4 border-t border-dark-border" suppressHydrationWarning>
             {subscription.cancel_at_period_end
               ? `⚠️ Cancels on ${fmtPeriodEnd(subscription.current_period_end)}`
+              : subscription.status === 'trialing'
+              ? `Trial ends and first charge on ${fmtPeriodEnd(subscription.current_period_end)}`
               : `Renews on ${fmtPeriodEnd(subscription.current_period_end)}`}
           </p>
         )}
@@ -467,11 +447,13 @@ export default function BillingClient({
   plans,
   foremanAddonActive,
   businessType,
+  trialBilling = null,
 }: {
   subscription:       Subscription | null
   plans:              Plan[]
   foremanAddonActive: boolean
   businessType?:      string
+  trialBilling?:      TrialBilling | null
 }) {
   // Detailers are sold a single $49 plan; the mechanic tier lineup and the
   // standalone tools are not offered to them (and the Detailer plan is hidden
@@ -642,6 +624,7 @@ export default function BillingClient({
           onChangePlan={handleSelectPlan}
           loadingPortal={loadingPortal}
           loadingPlan={loadingPlan}
+          trialBilling={trialBilling}
         />
       ) : (
         <div>
