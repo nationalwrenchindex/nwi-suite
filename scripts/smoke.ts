@@ -2420,6 +2420,57 @@ async function flowZ(): Promise<void> {
   const badRange = await fetch(`${BASE}/api/hd/reports/audit-packet?from=2023-01-01&to=2026-12-31&format=pdf`, { headers: { cookie } })
   record(F, 'the exports refuse a range over 3 years', badRange.status === 400, `-> ${badRange.status}`)
 
+  // ── report labels (migration 162): save, read back, reach the export, restore ──
+  // The owner's real overrides are read first with the service key and written back
+  // exactly - null included - in a finally, so a run never leaves its wording behind.
+  const before = await rest<{ hd_report_labels: unknown }>(`profiles?id=eq.${OWNER}&select=hd_report_labels`)
+  if (!record(F, 'the labels column exists (migration 162)', before.length === 1 && 'hd_report_labels' in before[0],
+    before.length ? 'present' : 'profile row not found')) return
+  const original = before[0].hd_report_labels ?? null
+  try {
+    const g0 = await api('GET', '/api/hd/reports/labels')
+    record(F, 'the labels API says saving is available', g0.status === 200 && g0.json.available === true,
+      `-> ${g0.status}, available ${String(g0.json.available)}`)
+    const CLASS = `${MARK} Vehicle type`
+    const CATNAME = `${MARK} Aerial lift`
+    const body = { text: { classColumn: CLASS }, categories: added?.id ? { [String(added.id)]: CATNAME } : {} }
+    const save = await api('PATCH', '/api/hd/reports/labels', body)
+    const savedText = ((save.json.labels as Record<string, any> | undefined)?.text ?? {}) as Record<string, string>
+    record(F, 'labels save', save.status === 200 && savedText.classColumn === CLASS,
+      `-> ${save.status} ${String(save.json.error ?? '')}`)
+    const stored = (await rest<{ hd_report_labels: any }>(`profiles?id=eq.${OWNER}&select=hd_report_labels`))[0]?.hd_report_labels
+    record(F, 'the saved labels are in profiles.hd_report_labels',
+      stored?.text?.classColumn === CLASS && (!added?.id || stored?.categories?.[String(added.id)] === CATNAME), JSON.stringify(stored))
+    const g1 = await api('GET', '/api/hd/reports/labels')
+    const g1Text = ((g1.json.labels as Record<string, any> | undefined)?.text ?? {}) as Record<string, string>
+    record(F, 'the labels read back after saving', g1.status === 200 && g1Text.classColumn === CLASS && g1Text.jobs === 'Jobs',
+      `classColumn ${g1Text.classColumn}, jobs ${g1Text.jobs}`)
+    const csvRes = await fetch(`${BASE}/api/hd/reports/audit-schedule?${RANGE}&format=csv`, { headers: { cookie } })
+    const csv = (await csvRes.text()).replace(/^\uFEFF/, '')
+    const header = csv.split(/\r?\n/)[0]
+    record(F, 'the schedule CSV prints the saved column label', csvRes.status === 200 && header.includes(CLASS) && !header.includes('Equipment class'),
+      `header: ${header.slice(0, 80)}`)
+    record(F, 'the schedule CSV prints the saved category name', !added?.id ? false : csv.includes(CATNAME),
+      !added?.id ? 'the smoke category was not created' : csv.includes(CATNAME) ? 'present' : 'missing')
+    const pdfRes = await fetch(`${BASE}/api/hd/reports/audit-schedule?${RANGE}&format=pdf`, { headers: { cookie } })
+    const pdf = Buffer.from(await pdfRes.arrayBuffer())
+    record(F, 'the schedule PDF still renders with saved labels', pdfRes.status === 200 && pdf.subarray(0, 5).toString() === '%PDF-', `-> ${pdfRes.status}`)
+    const unknown = await api('PATCH', '/api/hd/reports/labels', { text: { notALabel: 'x' } })
+    record(F, 'an unknown label key is refused', unknown.status === 400, `-> ${unknown.status}`)
+    const foreignCat = await api('PATCH', '/api/hd/reports/labels', { categories: { '00000000-0000-4000-8000-000000000000': 'x' } })
+    record(F, "a category that is not the shop's is refused", foreignCat.status === 400, `-> ${foreignCat.status}`)
+    const tooLong = await api('PATCH', '/api/hd/reports/labels', { text: { jobs: 'x'.repeat(61) } })
+    record(F, 'an over-long label is refused', tooLong.status === 400, `-> ${tooLong.status}`)
+    const reset = await api('PATCH', '/api/hd/reports/labels', { text: {}, categories: {} })
+    const afterReset = (await rest<{ hd_report_labels: unknown }>(`profiles?id=eq.${OWNER}&select=hd_report_labels`))[0]?.hd_report_labels
+    record(F, 'clearing every label stores null (back to defaults)', reset.status === 200 && afterReset === null, JSON.stringify(afterReset))
+  } finally {
+    const res = await fetch(`${SUPA}/rest/v1/profiles?id=eq.${OWNER}`, {
+      method: 'PATCH', headers: SVC_H, body: JSON.stringify({ hd_report_labels: original }),
+    })
+    record(F, "the owner's original labels are restored", res.ok, `-> ${res.status}`)
+  }
+
   // ── GATE D: an LD-only subscriber ──
   // A dedicated LD-only TEST account is required: the suite does not sign in as a real
   // customer. Until one is configured this step cannot run, and so it FAILS, saying why.
