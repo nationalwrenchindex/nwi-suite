@@ -5,8 +5,9 @@
 
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { stripe, TIER_MODULES, type PlanTier } from '@/lib/stripe'
+import { stripe } from '@/lib/stripe'
 import { upsertSubscription } from '@/lib/subscription'
+import { decideProvision, type SessionFacts } from '@/lib/provision-session'
 
 export async function POST(request: NextRequest) {
   const supabase = await createClient()
@@ -25,41 +26,25 @@ export async function POST(request: NextRequest) {
       expand: ['subscription'],
     })
 
-    if (session.metadata?.user_id !== user.id) {
-      return NextResponse.json({ error: 'Session mismatch' }, { status: 403 })
+    // Grants only what Stripe confirms: a completed checkout with an active or trialing
+    // subscription. Anything else writes NOTHING and is logged - the webhook provisions
+    // when the payment really completes. See src/lib/provision-session.ts.
+    const decision = decideProvision({
+      mode:         session.mode ?? null,
+      status:       session.status ?? null,
+      metadata:     session.metadata ?? null,
+      customer:     session.customer as SessionFacts['customer'],
+      subscription: session.subscription as SessionFacts['subscription'],
+    }, user.id)
+
+    if (!decision.ok) {
+      console.warn(`[provision-session] REFUSED user=${user.id} session=${session_id}: ${decision.reason}`)
+      return NextResponse.json({ error: decision.error }, { status: decision.httpStatus })
     }
 
-    const tier = session.metadata?.tier as PlanTier | undefined
-    if (!tier || !TIER_MODULES[tier]) {
-      return NextResponse.json({ error: 'Unknown tier in session' }, { status: 400 })
-    }
+    await upsertSubscription({ user_id: user.id, ...decision.row })
 
-    const customerId = typeof session.customer === 'string'
-      ? session.customer
-      : (session.customer as { id: string } | null)?.id ?? ''
-
-    const sub = session.subscription && typeof session.subscription === 'object'
-      ? session.subscription as { id: string; status: string; current_period_end: number; cancel_at_period_end: boolean }
-      : null
-
-    // Use user-selected modules if present in metadata, otherwise fall back to tier defaults
-    const selectedModulesStr = session.metadata?.selected_modules
-    const modules = selectedModulesStr
-      ? selectedModulesStr.split(',').filter(Boolean)
-      : TIER_MODULES[tier]
-
-    await upsertSubscription({
-      user_id:                user.id,
-      stripe_customer_id:     customerId,
-      stripe_subscription_id: sub?.id ?? null,
-      status:                 sub?.status ?? 'trialing',
-      tier,
-      modules,
-      current_period_end:     sub ? new Date(sub.current_period_end * 1000).toISOString() : null,
-      cancel_at_period_end:   sub?.cancel_at_period_end ?? false,
-    })
-
-    return NextResponse.json({ ok: true, tier })
+    return NextResponse.json({ ok: true, tier: decision.row.tier })
   } catch (err) {
     console.error('[provision-session]', err)
     return NextResponse.json({ error: 'Failed to provision subscription' }, { status: 500 })
