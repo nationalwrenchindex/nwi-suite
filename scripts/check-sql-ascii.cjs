@@ -65,8 +65,17 @@ const errors = []
 const legacyLive = []
 const warns = []
 
+// A UTF-8 byte-order mark is a syntax error on line 1 in the Supabase SQL editor
+// (migration 163, Oct 21). It is checked on the raw bytes and fails in EVERY file,
+// applied history included: nothing should ever be pasted with one.
+const boms = []
+
 for (const f of files) {
-  const text = fs.readFileSync(f, 'utf8')
+  const buf = fs.readFileSync(f)
+  if (buf.length >= 3 && buf[0] === 0xef && buf[1] === 0xbb && buf[2] === 0xbf) {
+    boms.push(path.relative(path.join(__dirname, '..'), f).replace(/\\/g, '/'))
+  }
+  const text = buf.toString('utf8').replace(/^﻿/, '')
   const lines = text.split('\n')
   let inString = false
   const liveHits = []
@@ -153,5 +162,11 @@ if (warns.length) {
   if (legacy.length) console.log(`    ...plus ${legacy.length} older migration(s), already applied`)
 }
 
-console.log(`\n${errorFiles} file(s) with live-SQL non-ASCII, ${warnFiles} with comment-only.`)
-process.exitCode = errorFiles ? 1 : 0
+if (boms.length) {
+  console.log('\nERROR - UTF-8 byte-order mark (EF BB BF) at the start of the file.')
+  console.log('  The SQL editor reports a syntax error on line 1. Save the file without a BOM.\n')
+  for (const b of boms) console.log(`    ${b}`)
+}
+
+console.log(`\n${errorFiles} file(s) with live-SQL non-ASCII, ${warnFiles} with comment-only, ${boms.length} with a BOM.`)
+process.exitCode = errorFiles || boms.length ? 1 : 0
