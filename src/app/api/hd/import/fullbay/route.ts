@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { getEquipmentCategories } from '@/lib/hd/equipment-categories'
+import { summarizeTypes, typeColumns } from '@/lib/hd/equipment-type-match'
 
 function normalize(name: string) {
   return name.toLowerCase().trim().replace(/\s+/g, ' ')
@@ -106,6 +108,11 @@ export async function POST(req: NextRequest) {
   }
 
   // --- Pass 2: collect unique new units ---
+  // Equipment type is read from the file, never guessed: a type naming one of the shop's
+  // categories sets it; no type, or one naming no category, leaves the unit blank
+  // (Uncategorized). It used to hardcode 'trailer' for every unit.
+  const categories = await getEquipmentCategories(supabase, user.id)
+  const newUnitTypes: string[] = []
   const newUnitKeys   = new Set<string>()
   const newUnitInserts: Record<string, unknown>[] = []
 
@@ -122,8 +129,12 @@ export async function POST(req: NextRequest) {
 
       const year  = parseInt(col(row, 'Year')) || null
       const hours = parseAmount(col(row, 'Engine Hours', 'Hours'))
+      // Not a bare "Type": in a work-order export that can be the job's type, not the unit's.
+      const type  = col(row, 'Unit Type', 'Equipment Type', 'Asset Type', 'Vehicle Type')
+      newUnitTypes.push(type)
 
       newUnitInserts.push({
+        ...typeColumns(type, categories),
         user_id:         user.id,
         fleet_account_id: fleetId,
         unit_number:     unitNumber,
@@ -133,7 +144,6 @@ export async function POST(req: NextRequest) {
         serial_number:   col(row, 'VIN', 'Serial Number', 'Serial') || null,
         engine_hours:    hours,
         total_hours:     hours,
-        unit_type:       'trailer',
       })
     }
   }
@@ -229,6 +239,8 @@ export async function POST(req: NextRequest) {
     fleet_accounts_created: newClientKeys.size,
     fleet_accounts_matched: matchedClientKeys.size,
     units_created:          newUnitKeys.size,
+    // How the new units' equipment types landed: matched, or left Uncategorized.
+    unit_types:             summarizeTypes(newUnitTypes, categories),
     work_orders_imported:   woInserts.length,
     work_orders_skipped:    wosSkipped,
     total_revenue:          Math.round(totalRevenue * 100) / 100,

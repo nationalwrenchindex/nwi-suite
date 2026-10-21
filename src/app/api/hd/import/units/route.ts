@@ -4,6 +4,8 @@ import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import {
   partitionImportRows, summarizeSkips, isSerialUniqueViolation, type SerialHolder,
 } from '@/app/api/hd/fleet-units/serials'
+import { getEquipmentCategories } from '@/lib/hd/equipment-categories'
+import { summarizeTypes, typeColumns } from '@/lib/hd/equipment-type-match'
 
 type UnitRow = {
   unit_number?: string
@@ -13,6 +15,8 @@ type UnitRow = {
   serial_number?: string
   total_hours?: string
   fleet_name?: string
+  /** Equipment type, when the file carries one (the import mapping's "Equipment type"). */
+  unit_type?: string
 }
 
 // POST /api/hd/import/units  { rows: UnitRow[] }
@@ -26,6 +30,11 @@ type UnitRow = {
 // skipped and listed by line, serial and the unit that already has it. The rest import.
 // If every row is skipped the answer is a 409 whose error lists why, because the import
 // screens show `error` and nothing else on a failure.
+//
+// EQUIPMENT TYPE IS READ, NEVER GUESSED. A type in the file that names one of the shop's
+// categories sets that category; anything else leaves the unit blank (Uncategorized),
+// with unit_type written as null so the column's old 'trailer' default cannot fill it.
+// The response's `types` says how many landed blank and which file types matched nothing.
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -99,7 +108,13 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // Seeds the defaults first, so a shop importing before it ever opened the units screen
+  // still matches "Truck", "Trailer", ... from its file.
+  const categories = await getEquipmentCategories(supabase, user.id)
+  const types = summarizeTypes(keep.map(r => r.unit_type), categories)
+
   const toInsert = keep.map(r => ({
+    ...typeColumns(r.unit_type, categories),
     user_id:         user.id,
     unit_number:     r.unit_number?.trim()   || 'UNKNOWN',
     manufacturer:    r.manufacturer?.trim()  || 'UNKNOWN',
@@ -132,6 +147,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({
     imported: toInsert.length,
     skipped,
+    types,
     ...(skipped.length > 0 ? { message: `Skipped ${skipped.length}: ${summarizeSkips(skipped)}` } : {}),
   })
 }

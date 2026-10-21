@@ -11,7 +11,7 @@ const UNIT_FIELDS = [
   { key: 'engine_hours',  label: 'Engine Hours',        required: false },
   { key: 'total_hours',   label: 'Total Hours / SMH',   required: false },
   { key: 'fleet_name',    label: 'Fleet / Customer',    required: false },
-  { key: 'unit_type',     label: 'Unit Type (truck/trailer)', required: false },
+  { key: 'unit_type',     label: 'Equipment type (matches a category name)', required: false },
   { key: 'notes',         label: 'Notes',               required: false },
 ]
 

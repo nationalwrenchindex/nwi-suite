@@ -46,6 +46,7 @@ export default async function FleetUnitsPage({
   const params    = await searchParams
   const saveError  = params.error === '1'
   const categoryError = params.error === 'category'
+  const categoryRequiredError = params.error === 'category_required'
   const savedMsg   = params.saved === 'updated' ? 'Unit updated' : params.saved === 'created' ? 'Unit added' : null
   const editId     = typeof params.edit === 'string' ? params.edit : null
   const fleetAccountId = typeof params.fleet_account_id === 'string' ? params.fleet_account_id : null
@@ -154,9 +155,13 @@ export default async function FleetUnitsPage({
 
     // Category, not unit_type. Migration 161's trigger copies the category name into
     // unit_type, so unit_type is never written here: with a category it follows it, and
-    // with none it keeps what it had (or the column default on a new unit). A foreign key
+    // with none (an edit only - a new unit must have one) it keeps what it had. A foreign key
     // does not apply RLS, so the id is checked as this shop's before it is written.
     const categoryId = (formData.get('category_id') as string ?? '').trim() || null
+    // A NEW unit must say what it is - no silent default. The select is `required` in
+    // the form; this is the same rule for a request that skips the form. Editing an
+    // existing uncategorized unit is still allowed without one.
+    if (!unitId && !categoryId) { redirect(`/hd/fleet-units?error=category_required${formQS}${accountQS}`); return }
     if (categoryId) {
       const { data: cat } = await supabase
         .from('hd_equipment_categories')
@@ -295,6 +300,16 @@ export default async function FleetUnitsPage({
               Unit not saved: that category was not found on your account. Pick another, or check <Link href="/hd/fleet-units/categories" className="underline">Manage categories</Link>.
             </p>
           )}
+          {categoryRequiredError && (
+            <p className="text-sm px-3 py-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)' }}>
+              Unit not saved: choose what kind of equipment this is. If none of your categories fit, add one in <Link href="/hd/fleet-units/categories" className="underline">Manage categories</Link>.
+            </p>
+          )}
+          {!isEdit && formCategories.length === 0 && (
+            <p className="text-sm px-3 py-2 rounded-lg" style={{ background: 'rgba(245,158,11,0.12)', color: '#F59E0B', border: '1px solid rgba(245,158,11,0.3)' }}>
+              You have no active equipment categories, and a new unit needs one. Add or reactivate one in <Link href="/hd/fleet-units/categories" className="underline">Manage categories</Link>.
+            </p>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
@@ -322,9 +337,12 @@ export default async function FleetUnitsPage({
               <input name="bm_number" defaultValue={ev('bm_number')} placeholder="e.g. 363xxx" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={inputStyle} />
             </div>
             <div>
-              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Category</label>
-              <select name="category_id" defaultValue={editCategoryId ?? ''} className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white" style={inputStyle}>
-                <option value="">Uncategorized</option>
+              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Category{isEdit ? '' : ' *'}</label>
+              {/* Required on a new unit, with no preselected answer: the shop says what it is. */}
+              <select name="category_id" required={!isEdit} defaultValue={editCategoryId ?? ''} className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white" style={inputStyle}>
+                {isEdit
+                  ? <option value="">Uncategorized</option>
+                  : <option value="" disabled>Choose a category</option>}
                 {formCategories.map(c => (
                   <option key={c.id} value={c.id}>{c.name}{c.is_active ? '' : ' (inactive)'}</option>
                 ))}

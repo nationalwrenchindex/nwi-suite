@@ -186,7 +186,7 @@ export default function PMChecklistClient({
   const safetyComplete   = allSafetyChecked && safetyInitials.trim().length >= 2 && safetyDate && safetyTime
 
   const selectedUnitData = units.find(u => u.id === selectedUnit)
-  const unitType         = selectedUnitData?.unit_type ?? 'trailer'
+  const unitType         = selectedUnitData?.unit_type ?? null  // null = no category yet; never guessed
 
   // ── Customer (fleet account) filter for the unit dropdown ──
   const selectedAccountName = fleetAccounts.find(a => a.id === selectedAccountId)?.fleet_name ?? ''
@@ -593,7 +593,7 @@ export default function PMChecklistClient({
               <p style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
                 Unit #{selectedUnitData.unit_number}
                 {selectedUnitData.total_hours !== null ? ` · ${Number(selectedUnitData.total_hours).toFixed(0)} hours` : ''}
-                {' · '}{(selectedUnitData.unit_type ?? 'trailer').charAt(0).toUpperCase() + (selectedUnitData.unit_type ?? 'trailer').slice(1)}
+                {' · '}{selectedUnitData.unit_type ? selectedUnitData.unit_type.charAt(0).toUpperCase() + selectedUnitData.unit_type.slice(1) : 'Uncategorized'}
               </p>
             </div>
           )}

@@ -2319,6 +2319,44 @@ async function flowZ(): Promise<void> {
   record(F, 'the unit form picks a category, not truck/trailer',
     !!unitForm && unitForm.html.includes('name="category_id"') && !unitForm.html.includes('name="unit_type"'),
     !unitForm ? 'did not load' : unitForm.html.includes('name="unit_type"') ? 'the old unit_type select still renders' : 'category select')
+  // A new unit must say what it is: the select is required and nothing is preselected.
+  const catSelect = unitForm?.html.match(/<select[^>]*name="category_id"[^>]*>([\s\S]*?)<\/select>/)
+  record(F, 'a new unit must choose a category - required, no default',
+    !!catSelect && /\srequired(=""|\s|>)/.test(catSelect[0].slice(0, catSelect[0].indexOf('>') + 1))
+      // The empty placeholder is the selected-and-disabled entry, so the browser refuses
+      // to submit until a real category is picked; no real category may be preselected.
+      && /<option value="" disabled=""( selected="")?>Choose a category<\/option>/.test(catSelect[1]) && !catSelect[1].includes('>Uncategorized<')
+      && !/<option value="[^"]+"[^>]*selected/.test(catSelect[1]),
+    !catSelect ? 'category select not found' : catSelect[0].slice(0, 120))
+
+  // ── the CSV importer reads the type from the file, and leaves it blank otherwise ──
+  const uncIn = async () => (((await api('GET', '/api/hd/financials/equipment?' + RANGE)).json.categories ?? []) as Array<Record<string, any>>)
+    .find(c => c.key === '__uncategorized__')?.unitsInClass ?? 0
+  const uncBefore = await uncIn()
+  const imp = await api('POST', '/api/hd/import/units', { rows: [
+    { unit_number: 'ZZ-TYPE-1', manufacturer: 'Thermo King', model: 'S-600', serial_number: 'ZZSERIALTY01', unit_type: 'truck' },
+    { unit_number: 'ZZ-TYPE-2', manufacturer: 'Thermo King', model: 'S-600', serial_number: 'ZZSERIALTY02', unit_type: 'Hovercraft' },
+    { unit_number: 'ZZ-TYPE-3', manufacturer: 'Thermo King', model: 'S-600', serial_number: 'ZZSERIALTY03' },
+  ] })
+  const impTypes = imp.json.types as Record<string, any> | undefined
+  record(F, 'the CSV import reports which types matched and which landed Uncategorized',
+    imp.status === 200 && imp.json.imported === 3 && impTypes?.categorized === 1 && impTypes?.uncategorized === 2
+      && impTypes?.noTypeInFile === 1 && impTypes?.unmatchedTypes?.[0]?.type === 'Hovercraft',
+    `-> ${imp.status} ${JSON.stringify(impTypes ?? imp.json.error ?? '')}`)
+  const typed = await rest<{ serial_number: string; category_id: string | null; unit_type: string | null }>(
+    `hd_units?select=serial_number,category_id,unit_type&user_id=eq.${OWNER}&serial_number=in.(ZZSERIALTY01,ZZSERIALTY02,ZZSERIALTY03)`)
+  const bySerial = new Map(typed.map(u => [u.serial_number, u]))
+  const truckCat = cats.find(c => String(c.name).toLowerCase() === 'truck')
+  const t1 = bySerial.get('ZZSERIALTY01'), t2 = bySerial.get('ZZSERIALTY02'), t3 = bySerial.get('ZZSERIALTY03')
+  record(F, 'a type naming a category sets it (and unit_type mirrors it)',
+    !!truckCat && t1?.category_id === truckCat.id && t1?.unit_type === 'truck', JSON.stringify(t1))
+  record(F, "a type naming no category is left blank - not Trailer",
+    !!t2 && t2.category_id === null && t2.unit_type === null, JSON.stringify(t2))
+  record(F, "no type in the file is left blank - not Trailer",
+    !!t3 && t3.category_id === null && t3.unit_type === null, JSON.stringify(t3))
+  const uncAfter = await uncIn()
+  record(F, 'the blank units show in the report under Uncategorized', uncAfter === uncBefore + 2, `units in class ${uncBefore} -> ${uncAfter}`)
+
   const manage = await page('/hd/fleet-units/categories')
   record(F, 'the category management screen renders',
     !!manage && missingControls(manage.text, ['EQUIPMENT CATEGORIES', 'Add category', 'Uncategorized']).length === 0,
