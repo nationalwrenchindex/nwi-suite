@@ -646,7 +646,12 @@ async function flowHD(): Promise<void> {
   for (const [label, path] of [['detail', `/hd/invoices/${hdInv.id}`], ['edit', `/hd/invoices/${hdInv.id}/edit`]] as const) {
     const pg = await page(path)
     if (!record(F, `invoice ${label} loads`, !!pg, pg ? '' : `${path} did not load`)) continue
-    record(F, `invoice ${label} shows the stored total`, pg!.text.includes(usd(hdInv.total)), `stored ${usd(hdInv.total)}`)
+    // The page prints money with thousands separators (lib/format money()), so a total
+    // of 1000 or more reads "1,823.56". Matched both ways, as the LD invoice check does;
+    // this was wrong about the app until the first HD invoice over $1,000 (Oct 21).
+    const shownHd = pg!.text.includes(usd(hdInv.total)) ||
+      pg!.text.includes(Number(hdInv.total).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))
+    record(F, `invoice ${label} shows the stored total`, shownHd, `stored ${usd(hdInv.total)}`)
   }
 
   // NOT AN ASSERTION. HD has no work-order-to-invoice converter, so flow C has no HD

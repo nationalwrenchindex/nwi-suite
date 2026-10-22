@@ -16,6 +16,7 @@ import {
 } from '@/components/shared/line-items'
 import { money } from '@/lib/format'
 import NewQuoteForm from './NewQuoteForm'
+import { deepLinkTarget, urlWithoutQuote } from '@/lib/quote-deep-link'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -2345,12 +2346,24 @@ export default function QuotesTab({ initialQuoteId, isDetailer = false, workOrde
 
   useEffect(() => { loadQuotes() }, [loadQuotes])
 
+  // ?quote=<id> opens that quote ONCE. It used to re-open whenever nothing was
+  // selected, so closing the panel reopened it - see lib/quote-deep-link.ts.
+  const consumedDeepLink = useRef<string | null>(null)
   useEffect(() => {
-    if (initialQuoteId && quotes.length > 0 && !selected) {
-      const match = quotes.find(q => q.id === initialQuoteId)
-      if (match) setSelected(match)
+    const target = deepLinkTarget(initialQuoteId, quotes, consumedDeepLink.current)
+    if (target) {
+      consumedDeepLink.current = target.id
+      setSelected(target)
     }
-  }, [initialQuoteId, quotes, selected])
+  }, [initialQuoteId, quotes])
+
+  function handleModalClose() {
+    setSelected(null)
+    // Drop ?quote= so a refresh or Back lands on the list, not the panel again.
+    if (new URLSearchParams(window.location.search).has('quote')) {
+      window.history.replaceState(null, '', urlWithoutQuote(window.location.href))
+    }
+  }
 
   function handleQuoteUpdated(updatedQuote: Quote) {
     setQuotes(qs => qs.map(q => q.id === updatedQuote.id ? updatedQuote : q))
@@ -2598,7 +2611,7 @@ export default function QuotesTab({ initialQuoteId, isDetailer = false, workOrde
           quote={selected}
           isDetailer={isDetailer}
           workOrdersEnabled={workOrdersEnabled}
-          onClose={() => setSelected(null)}
+          onClose={handleModalClose}
           onUpdated={handleQuoteUpdated}
           onDeleted={handleQuoteDeleted}
         />
