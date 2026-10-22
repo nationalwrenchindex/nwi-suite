@@ -28,6 +28,10 @@ import { billedHoursFromLibrary } from '../src/lib/hd/labor-library'
 import { editableLines } from '../src/lib/hd/invoice-edit-lines'
 import { stripLeadingZeros, parseFee } from '../src/components/hd/FeeInput'
 import { fmtShopDate, shopTimeZone } from '../src/lib/shop-time'
+import { fromLineItems, markupOnReopen, type EditItem } from '../src/components/shared/line-items'
+import { documentMoney, documentExtras } from '../src/lib/document-money'
+import { documentTaxSettings } from '../src/lib/tax'
+import { EXTRAS_OFF } from '../src/lib/billable-extras'
 import { createClient as createSupabase } from '@supabase/supabase-js'
 import { loadRollupInput } from '../src/lib/hd/equipment-rollup-load'
 import { jobsFor, rollupByCategory, rollupByUnit } from '../src/lib/hd/equipment-rollup'
@@ -289,9 +293,11 @@ async function flowA(): Promise<string | null> {
 
   const open = await page(`/work-orders/${woId}`)
   if (!record(F, 'page loads', !!open, open ? '' : 'did not load or bounced to login')) return woId!
-  const missOpen = missingControls(open!.text, ['Add Line Item', 'Save Changes'])
+  // The line editor offers labour and part lines separately since the multi-line pass
+  // (Oct 22): "Add Labor Line" and "Add Part Line" replaced the single "Add Line Item".
+  const missOpen = missingControls(open!.text, ['Add Labor Line', 'Add Part Line', 'Save Changes'])
   record(F, 'controls while open', missOpen.length === 0,
-    missOpen.length ? `missing: ${missOpen.join(', ')}` : 'Add Line Item, Save Changes')
+    missOpen.length ? `missing: ${missOpen.join(', ')}` : 'Add Labor Line, Add Part Line, Save Changes')
   // Create Invoice is gated on status === 'complete' (WorkOrderForm line 528). Absent
   // here is CORRECT - billing a job still on the lift is the misclick that guard exists
   // to stop - so the gate is tested from both sides rather than assumed.
@@ -2282,6 +2288,129 @@ async function flowY(): Promise<void> {
   }
 }
 
+// ── W: LD document lines - several lines, detail, $0.00, unchanged, no-op ─────
+//
+// docs/NWI-ESTIMATE-DOCUMENT-SPEC.md section 7 items 1-2, on the customer's copy.
+// The quote is built the way the editor builds it - EditItems through the shared
+// line model, money through lib/document-money - not a hand-typed row shape, so the
+// fixture is one the product can actually produce. Asserted against RENDERED HTML.
+async function flowW(): Promise<void> {
+  const F = 'W doc lines'
+  const DETAIL = 'Disarm the SRS system, remove the steering wheel,\ntransfer the sensor and reassemble the column.'
+  const items: EditItem[] = [
+    { _id: 'w1', kind: 'labor', description: `${MARK} Labor: Clock Spring Replacement`, part_number: '',
+      quantity: 1.5, unit_price: shop.labor_rate, detail: DETAIL },
+    { _id: 'w2', description: `${MARK} Clock spring`, part_number: 'SMOKE-CS', quantity: 1, unit_price: 80 },
+    { _id: 'w3', kind: 'labor', description: `${MARK} Diagnostic scan`, part_number: '',
+      quantity: 0.5, unit_price: shop.labor_rate, included: true },
+    { _id: 'w4', description: `${MARK} Steering column bolt kit`, part_number: '', quantity: 1, unit_price: 12, customer_supplied: true },
+    { _id: 'w5', description: `${MARK} Shop rag`, part_number: '', quantity: 1, unit_price: 0 },
+  ]
+  const money = documentMoney({
+    items, markupPct: shop.markup, laborRate: shop.labor_rate, taxPct: shop.taxParts,
+    taxSettings: { tax_parts: shop.taxOnParts, tax_labor: shop.taxOnLabor, tax_rate_parts: shop.taxParts, tax_rate_labor: shop.taxLabor },
+    extrasSettings: EXTRAS_OFF, extras: { travelHours: 0, mileageMiles: 0 },
+  })
+  const c = await api('POST', '/api/quotes', { notes: `${MARK} W - document lines`, ...money.columns })
+  const qId = (c.json.quote as { id?: string } | undefined)?.id
+  if (!record(F, 'a quote with several lines saves', (c.status === 201 || c.status === 200) && !!qId,
+    `-> ${c.status} ${qId ? '' : JSON.stringify(c.json).slice(0, 130)}`)) return
+  created.quotes.add(qId!)
+
+  const stored = (await rest(`quotes?select=*&id=eq.${qId}`))[0]
+  const li = (stored.line_items ?? []) as Array<Record<string, unknown>>
+  record(F, 'all five lines stored, in the order arranged',
+    li.length === 5 && li.map(l => l.description).join('|') === items.map(i => i.description).join('|'),
+    `${li.length} lines`)
+  record(F, 'labour lines are typed and summed into labor_hours (1.5 + 0.5)',
+    li.filter(l => l.type === 'labor').length === 2 && Number(stored.labor_hours) === 2, `labor_hours ${stored.labor_hours}`)
+  record(F, 'detail, included and customer-supplied are stored on their lines',
+    li[0].detail === DETAIL && li[2].is_included === true && li[3].customer_supplied === true &&
+    Number(li[2].total) === 0 && Number(li[3].total) === 0)
+
+  // A link without SENDING it: preview mints the token and leaves the quote a draft.
+  const prev = await api('POST', `/api/quotes/${qId}/send`, { method: 'link', preview: true })
+  const url  = String(prev.json.quote_url ?? '')
+  const token = url.split('/quote/')[1]
+  if (!record(F, 'a customer link exists (preview - not sent)', !!token, `-> ${prev.status}`)) return
+
+  const res = await fetch(`${BASE}/quote/${token}`)
+  if (!record(F, 'the customer copy loads', res.ok, `-> ${res.status}`)) return
+  const html = await res.text()
+  const text = visibleText(html)
+  record(F, 'the customer copy shows every line', items.every(i => text.includes(i.description)),
+    items.filter(i => !text.includes(i.description)).map(i => i.description).join(', ') || '5 of 5')
+  // The detail prints in its own indented element, under its line, with its line break.
+  const detailEl = html.match(/data-testid="line-detail"[^>]*>([\s\S]*?)<\/span>/)
+  record(F, 'the line detail prints under its line, smaller and indented',
+    !!detailEl && visibleText(detailEl[1]).includes('Disarm the SRS system') && /pl-3/.test(html.slice(html.indexOf('data-testid="line-detail"') - 200, html.indexOf('data-testid="line-detail"') + 200)),
+    detailEl ? 'line-detail element present' : 'no line-detail element')
+  const detailAt = html.indexOf('Disarm the SRS system')
+  const lineAt   = html.indexOf(items[0].description)
+  record(F, 'the detail follows its own line, not another', lineAt >= 0 && detailAt > lineAt && detailAt - lineAt < 1500,
+    `line @${lineAt}, detail @${detailAt}`)
+  // Each $0.00 line prints $0.00 in its own row - never blank, never a dash.
+  const rowOf = (desc: string) => {
+    const at = html.indexOf(desc)
+    const start = html.lastIndexOf('<tr', at)
+    const end = html.indexOf('</tr>', at)
+    return at < 0 || start < 0 || end < 0 ? '' : visibleText(html.slice(start, end))
+  }
+  const zeroRows = [items[2], items[3], items[4]].map(i => ({ d: i.description, row: rowOf(i.description) }))
+  record(F, 'every $0.00 line renders $0.00 cleanly - no blank, no dash',
+    zeroRows.every(z => z.row.includes('$0.00') && !/[—–]\s*$/.test(z.row.trim())),
+    zeroRows.map(z => `${z.d.replace(`${MARK} `, '')}: "${z.row.replace(/\s+/g, ' ').trim().slice(-40)}"`).join(' | '))
+  record(F, 'the included line says "included"; the customer part says so',
+    /included/i.test(zeroRows[0].row) && /customer supplied/i.test(zeroRows[1].row))
+  record(F, 'the customer copy shows the stored total', text.includes(usd(stored.grand_total)) ||
+    text.includes(Number(stored.grand_total).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })),
+    `stored ${usd(stored.grand_total)}`)
+
+  // ── A no-op save: open it the way the editor does and save without a change ──
+  const markup = markupOnReopen(stored.parts_markup_percent as number | null)
+  const reopened = fromLineItems(stored.line_items as never, markup.percent, undefined, { withLabor: true })
+  const ext = documentExtras(stored)
+  const again = documentMoney({
+    items: reopened, markupPct: markup.percent, laborRate: Number(stored.labor_rate ?? 0),
+    taxPct: Number(stored.tax_percent ?? 0),
+    taxSettings: documentTaxSettings(stored.tax_breakdown, null, Number(stored.tax_percent ?? 0)),
+    extrasSettings: ext.settings, extras: ext.input, stored,
+  })
+  const put = await api('PUT', `/api/quotes/${qId}`, { ...again.columns, notes: stored.notes, customer_name: '', customer_phone: '' })
+  const after = (await rest(`quotes?select=*&id=eq.${qId}`))[0]
+  const moved = ['grand_total', 'tax_amount', 'labor_subtotal', 'parts_subtotal', 'labor_hours']
+    .filter(k => Number(after[k]) !== Number(stored[k]))
+  record(F, 'a no-op save changes no total and no line',
+    put.status === 200 && moved.length === 0 && JSON.stringify(after.line_items) === JSON.stringify(stored.line_items),
+    put.status !== 200 ? `PUT -> ${put.status} ${JSON.stringify(put.json).slice(0, 120)}`
+      : moved.length ? moved.map(k => `${k} ${stored[k]} -> ${after[k]}`).join('; ') : `grand ${usd(after.grand_total)} unchanged`)
+
+  // ── An existing document prints as it did ──
+  // A real, already-sent quote and invoice of the owner's (not the suite's), read only.
+  // Nothing they store carries the new fields, so none of the new markup may appear,
+  // and the total they print is still the stored total.
+  const oldQ = (await rest(`quotes?select=public_token,grand_total,notes&user_id=eq.${OWNER}&status=eq.sent&public_token=not.is.null&order=created_at.asc&limit=5`))
+    .find(q => !String(q.notes ?? '').includes(MARK))
+  if (record(F, 'an existing sent quote to compare', !!oldQ, oldQ ? '' : 'none on the owner account')) {
+    const r = await fetch(`${BASE}/quote/${oldQ!.public_token}`)
+    const h = await r.text()
+    record(F, 'an existing quote prints unchanged - no detail, flag or terms markup, same total',
+      r.ok && !h.includes('data-testid="line-detail"') && !h.includes('data-testid="line-flag"') &&
+      !h.includes('data-testid="terms-block"') &&
+      (visibleText(h).includes(usd(oldQ!.grand_total)) || visibleText(h).includes(Number(oldQ!.grand_total).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))),
+      `-> ${r.status}, stored ${usd(oldQ!.grand_total)}`)
+  }
+  const oldI = (await rest(`invoices?select=public_token,total,notes&user_id=eq.${OWNER}&public_token=not.is.null&order=created_at.asc&limit=5`))
+    .find(i => !String(i.notes ?? '').includes(MARK))
+  if (record(F, 'an existing invoice to compare', !!oldI, oldI ? '' : 'none on the owner account')) {
+    const r = await fetch(`${BASE}/invoice/${oldI!.public_token}`)
+    const h = await r.text()
+    record(F, 'an existing invoice prints unchanged - no detail, terms or pay-link markup',
+      r.ok && !h.includes('data-testid="line-detail"') && !h.includes('data-testid="terms-block"') && !h.includes('data-testid="pay-link"'),
+      `-> ${r.status}`)
+  }
+}
+
 // ── Z: equipment categories, By Equipment and the audit exports ─────────────
 //
 // docs/KURT-EQUIPMENT-TRACKING-SPEC.md, end to end through the routes a shop uses. The
@@ -2590,6 +2719,7 @@ async function main(): Promise<void> {
     await flowU()
     await flowV()
     await flowX()
+    await flowW()
     await flowY()
     await flowZ()
   } finally {

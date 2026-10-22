@@ -279,10 +279,14 @@ async function main() {
   // ══ 10. QUOTES AND THE FINALIZED VIEW ══════════════════════════════════════
   hr('10. The quote and the finalized view')
 
+  // Since the multi-line pass (Oct 22) the quote form, the quote editor and the work
+  // order all price through ONE function, lib/document-money - so the extras maths is
+  // asserted where it now lives, and the form is asserted to go through it.
   const quote = fs.readFileSync('src/components/financials/NewQuoteForm.tsx', 'utf8')
-  ok(quote.includes('computeExtras('), 'the quote form computes the extras')
-  ok(quote.includes('totalsWithExtras('), 'and re-taxes through the same helper the work order uses')
-  ok(quote.includes('...extrasColumns(extrasResult)'), 'and stores the computed columns')
+  const dm    = fs.readFileSync('src/lib/document-money.ts', 'utf8')
+  ok(quote.includes('documentMoney(') && dm.includes('computeExtras('), 'the quote form computes the extras (lib/document-money)')
+  ok(dm.includes('totalsWithExtras('), 'and re-taxes through the same helper the work order uses')
+  ok(quote.includes('...docMoney.columns') && dm.includes('...extrasColumns(extras)'), 'and stores the computed columns')
   ok(quote.includes('money(withExtras.grandTotal)'),
     'the quoted TOTAL includes the extras - not a figure that excludes them')
   ok(quote.includes('money(withExtras.subtotal)'), 'and so does the subtotal')
@@ -303,7 +307,7 @@ async function main() {
     'and the retired item list is labelled as such where it still appears')
 
   // The quote base must be the POST-MARKUP parts figure, matching the invoice.
-  ok(quote.includes('computeExtras(') && quote.includes('totals.partsTotal,'),
+  ok(dm.includes('computeExtras(t.partsTotal,'),
     'the quote bases supplies on partsTotal - post-markup, the figure the customer reads')
 
 

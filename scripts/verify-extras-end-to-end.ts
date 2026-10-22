@@ -391,9 +391,15 @@ async function main() {
   ok(tab.includes('computeExtras('), 'QuotesTab computes the extras')
   ok(tab.includes('...extrasColumns(extrasResult)'), 'and stores the computed columns')
   ok(tab.includes('extrasMismatch'), 'and refuses to save on a mismatch')
-  ok(tab.includes('round2(grandTotalBase + extras.totalDelta)'),
+  // A mechanic's quote is totalled by lib/document-money (Oct 22), whose grand total is
+  // totalsWithExtras' - extras inside it - on the post-markup parts total. Detailers keep
+  // their own path, with supplies switched off.
+  const dmSrc = fs.readFileSync('src/lib/document-money.ts', 'utf8')
+  ok(tab.includes('docMoney ? docMoney.grandTotal') && dmSrc.includes('grandTotal:    w.grandTotal') &&
+    dmSrc.includes('totalsWithExtras('),
     'and its grand total includes them - not a figure that excludes them')
-  ok(tab.includes('isDetailer ? 0 : partsTotal'),
+  ok(dmSrc.includes('computeExtras(t.partsTotal,') && tab.includes('isDetailer ? null : documentMoney(') &&
+    tab.includes('billShopSupplies: false'),
     'supplies is based on the POST-MARKUP parts total, and detailers are excluded')
   ok(!/setShopSuppliesPercent|value={shopSuppliesPercent}/.test(tab),
     'and there is no input for the percentage')
