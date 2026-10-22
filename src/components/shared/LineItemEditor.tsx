@@ -140,7 +140,7 @@ export function LineItemTable({ lineItems }: { lineItems: LineItem[] | null | un
 
 /** The edit / add form for one row. */
 function RowForm({
-  kind, vals, setVals, onApply, onCancel, applyLabel,
+  kind, vals, setVals, onApply, onCancel, applyLabel, priceLabel,
 }: {
   kind:       LineKind
   vals:       RowVals
@@ -148,6 +148,7 @@ function RowForm({
   onApply:    () => void
   onCancel:   () => void
   applyLabel: string
+  priceLabel: string
 }) {
   const labor = kind === 'labor'
   const free  = vals.included || (!labor && vals.customer_supplied)
@@ -180,7 +181,7 @@ function RowForm({
           />
         </div>
         <div>
-          <label className="nwi-label text-[10px]">{labor ? 'Rate ($/hr)' : 'Base Price ($)'}</label>
+          <label className="nwi-label text-[10px]">{labor ? 'Rate ($/hr)' : `${priceLabel} ($)`}</label>
           <input
             type="number" min={0} step={0.01}
             className="nwi-input text-sm disabled:opacity-40"
@@ -215,8 +216,8 @@ function RowForm({
         )}
       </div>
       <div className="flex gap-2">
-        <button onClick={onApply} className="px-3 py-1.5 bg-orange hover:bg-orange-hover text-white text-xs font-semibold rounded-lg transition-colors">{applyLabel}</button>
-        <button onClick={onCancel} className="px-3 py-1.5 border border-white/15 text-white/50 hover:text-white text-xs rounded-lg transition-colors">Cancel</button>
+        <button type="button" onClick={onApply} className="px-3 py-1.5 bg-orange hover:bg-orange-hover text-white text-xs font-semibold rounded-lg transition-colors">{applyLabel}</button>
+        <button type="button" onClick={onCancel} className="px-3 py-1.5 border border-white/15 text-white/50 hover:text-white text-xs rounded-lg transition-colors">Cancel</button>
       </div>
     </div>
   )
@@ -233,6 +234,7 @@ export default function LineItemEditor({
   emptyHint,
   allowLabor = false,
   laborRate = 0,
+  priceLabel = 'Base Price',
 }: {
   items:       EditItem[]
   onChange:    (next: EditItem[]) => void
@@ -241,6 +243,8 @@ export default function LineItemEditor({
   allowLabor?: boolean
   /** The document's own rate, which a new labour line starts at. */
   laborRate?:  number
+  /** "Base Price" where a markup is applied on save; "Price" where none is (invoices). */
+  priceLabel?: string
 }) {
   const [editingId,   setEditingId]   = useState<string | null>(null)
   const [editingVals, setEditingVals] = useState<RowVals>(blankVals('part', laborRate))
@@ -323,7 +327,7 @@ export default function LineItemEditor({
         <span className="text-white/30 text-[10px] uppercase tracking-wider">{allowLabor ? 'Description' : 'Part / Description'}</span>
         <span className="text-white/30 text-[10px] uppercase tracking-wider">Part #</span>
         <span className="text-white/30 text-[10px] uppercase tracking-wider text-right">{allowLabor ? 'Qty / Hrs' : 'Qty'}</span>
-        <span className="text-white/30 text-[10px] uppercase tracking-wider text-right">{allowLabor ? 'Base / Rate' : 'Base Price'}</span>
+        <span className="text-white/30 text-[10px] uppercase tracking-wider text-right">{allowLabor ? `${priceLabel === 'Base Price' ? 'Base' : priceLabel} / Rate` : priceLabel}</span>
         <span className="text-white/30 text-[10px] uppercase tracking-wider text-right">Total</span>
         <span />
       </div>
@@ -338,7 +342,7 @@ export default function LineItemEditor({
             <RowForm
               kind={isLaborEdit(li) ? 'labor' : 'part'}
               vals={editingVals} setVals={setEditingVals}
-              onApply={commitEdit} onCancel={() => setEditingId(null)} applyLabel="Apply"
+              onApply={commitEdit} onCancel={() => setEditingId(null)} applyLabel="Apply" priceLabel={priceLabel}
             />
           ) : (() => {
             const labor = isLaborEdit(li)
@@ -353,16 +357,16 @@ export default function LineItemEditor({
             )
             const rowActions = (
               <>
-                <button onClick={() => move(index, -1)} disabled={index === 0} className="p-1 text-white/25 hover:text-white disabled:opacity-20 transition-colors rounded" title="Move up">
+                <button type="button" onClick={() => move(index, -1)} disabled={index === 0} className="p-1 text-white/25 hover:text-white disabled:opacity-20 transition-colors rounded" title="Move up">
                   <ArrowIcon up />
                 </button>
-                <button onClick={() => move(index, 1)} disabled={index === items.length - 1} className="p-1 text-white/25 hover:text-white disabled:opacity-20 transition-colors rounded" title="Move down">
+                <button type="button" onClick={() => move(index, 1)} disabled={index === items.length - 1} className="p-1 text-white/25 hover:text-white disabled:opacity-20 transition-colors rounded" title="Move down">
                   <ArrowIcon />
                 </button>
-                <button onClick={() => startEdit(li)} className="p-1.5 text-white/25 hover:text-orange transition-colors rounded" title="Edit item">
+                <button type="button" onClick={() => startEdit(li)} className="p-1.5 text-white/25 hover:text-orange transition-colors rounded" title="Edit item">
                   <EditIcon />
                 </button>
-                <button onClick={() => remove(li._id)} className="p-1.5 text-white/25 hover:text-danger transition-colors rounded" title="Remove item">
+                <button type="button" onClick={() => remove(li._id)} className="p-1.5 text-white/25 hover:text-danger transition-colors rounded" title="Remove item">
                   <TrashIcon />
                 </button>
               </>
@@ -410,18 +414,18 @@ export default function LineItemEditor({
           <RowForm
             kind={adding} vals={newVals} setVals={setNewVals}
             onApply={commitNew} onCancel={() => setAdding(null)}
-            applyLabel={adding === 'labor' ? 'Add Labor' : 'Add Item'}
+            applyLabel={adding === 'labor' ? 'Add Labor' : 'Add Item'} priceLabel={priceLabel}
           />
         </div>
       ) : (
         <div className="flex border-t border-white/5">
           {allowLabor && (
-            <button onClick={() => startAdd('labor')} className="flex-1 flex items-center gap-2 px-4 py-3 text-white/40 hover:text-orange hover:bg-white/5 text-xs transition-colors border-r border-white/5">
+            <button type="button" onClick={() => startAdd('labor')} className="flex-1 flex items-center gap-2 px-4 py-3 text-white/40 hover:text-orange hover:bg-white/5 text-xs transition-colors border-r border-white/5">
               <PlusIcon />
               Add Labor Line
             </button>
           )}
-          <button onClick={() => startAdd('part')} className="flex-1 flex items-center gap-2 px-4 py-3 text-white/40 hover:text-orange hover:bg-white/5 text-xs transition-colors">
+          <button type="button" onClick={() => startAdd('part')} className="flex-1 flex items-center gap-2 px-4 py-3 text-white/40 hover:text-orange hover:bg-white/5 text-xs transition-colors">
             <PlusIcon />
             {allowLabor ? 'Add Part Line' : 'Add Line Item'}
           </button>

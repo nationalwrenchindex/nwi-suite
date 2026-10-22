@@ -294,6 +294,31 @@ export function lineMeta(qty: number, unitPrice: number, labor: boolean): string
   return q ? `${q} × ${priceText}` : priceText
 }
 
+/**
+ * The grey meta line, with spec 2.5's flags said in words
+ * (docs/NWI-ESTIMATE-DOCUMENT-SPEC.md):
+ *
+ *   included           "1.5 hours · included"  - the word stands where the rate would
+ *   customer supplied  "customer supplied"     - the part the customer brought
+ *
+ * Both lines still print their $0.00 amount; neither may read as a blank or a dash.
+ * A line with neither flag gets `base` back untouched, so every line written before
+ * these existed prints exactly as it did.
+ */
+export function docLineMeta(
+  li: { is_included?: boolean | null; customer_supplied?: boolean | null },
+  base: string | null,
+  qty: number,
+  labor: boolean,
+): string | null {
+  if (li.is_included) {
+    const q = quantityText(qty, labor)
+    return q ? `${q} · included` : 'included'
+  }
+  if (li.customer_supplied) return base ? `${base} · customer supplied` : 'customer supplied'
+  return base
+}
+
 /** Local money formatter so this module stays free of display dependencies. */
 function formatMoney(n: number): string {
   return `$${n.toFixed(2)}`

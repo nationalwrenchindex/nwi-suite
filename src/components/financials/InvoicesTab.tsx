@@ -3,9 +3,10 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useTaxSettings } from '@/lib/use-tax-settings'
 import { computeTax, taxDisplayRows } from '@/lib/tax'
-import { isLaborItem } from '@/components/shared/line-items'
+import { computeTotals, toLineItems, type EditItem } from '@/components/shared/line-items'
+import LineItemEditor from '@/components/shared/LineItemEditor'
 import { useRouter } from 'next/navigation'
-import type { Invoice, InvoiceStatus, InvoiceProgressStatus, LineItem, PaymentMethod } from '@/types/financials'
+import type { Invoice, InvoiceStatus, InvoiceProgressStatus, PaymentMethod } from '@/types/financials'
 import { money } from '@/lib/format'
 import { daysPastDue } from '@/lib/hd/payment-terms'
 import CustomerUnitPicker from '@/components/work-orders/CustomerUnitPicker'
@@ -97,7 +98,6 @@ function InvoiceStatusBadge({ invoice }: { invoice: Invoice }) {
 
 // ─── Empty line item ──────────────────────────────────────────────────────────
 
-const emptyLine = (): LineItem => ({ description: '', quantity: 1, unit_price: 0, total: 0 })
 
 // ─── Filter options ───────────────────────────────────────────────────────────
 
@@ -186,7 +186,6 @@ export default function InvoicesTab() {
     customer_email:  '',
     vehicle_id:      '',
     unit_number:     '',
-    line_items:      [emptyLine()] as LineItem[],
     tax_rate:        0,
     discount_amount: 0,
     notes:           '',
@@ -194,21 +193,22 @@ export default function InvoicesTab() {
     status:          'draft' as InvoiceStatus,
   }))
 
-  // ── Computed totals ──
-  const subtotal = form.line_items.reduce((s, l) => s + l.total, 0)
-
-  // SPLITTING PARTS FROM LABOR ON A FREE-TYPED INVOICE.
-  // invoices.line_items is {description, quantity, unit_price, total} -- there is no
-  // type column to read. isLaborItem is the convention LD already uses to round-trip
-  // labor in and out of stored line_items (see components/shared/line-items), so it is
-  // the same rule applied here rather than a new one invented for tax.
+  // ── Lines: the shared editor ──
+  // Labour and parts lines in the same editor the quote and the work order use, each
+  // with an optional detail, "included" or customer-supplied. Prices here are what the
+  // customer pays - a direct invoice applies no markup - so the editor's price IS the
+  // sell price and toLineItems is called at 0%.
   //
-  // Consequence worth knowing: a labor line the tech titles something else -- "Shop
-  // time", "Diag" -- reads as parts and gets taxed as parts. That is the existing
-  // behaviour of every other reader of this column, not a regression, but it is why
-  // the label under the field says to start a labor line with the word Labor.
-  const laborBase = round2(form.line_items.filter(l => isLaborItem(l)).reduce((s, l) => s + l.total, 0))
-  const partsBase = round2(subtotal - laborBase)
+  // LABOUR IS A LINE TYPE NOW, not a guess from the description. This form used to
+  // treat a line as labour only if its text started with "Labor", so "Diag" or "Shop
+  // time" was taxed as parts.
+  const [invItems, setInvItems] = useState<EditItem[]>([])
+  const lineTotals = computeTotals({ items: invItems, markupPct: 0, laborHours: 0, laborRate: 0, taxPct: 0 })
+
+  // ── Computed totals ──
+  const subtotal  = round2(lineTotals.subtotal)
+  const laborBase = round2(lineTotals.laborSubtotal)
+  const partsBase = round2(lineTotals.partsTotal)
 
   const tax    = taxSettings
     ? computeTax({ parts: partsBase, labor: laborBase }, taxSettings)
@@ -238,35 +238,11 @@ export default function InvoicesTab() {
 
   useEffect(() => { fetchInvoices(invoiceStatusFilter, sourceFilter) }, [invoiceStatusFilter, sourceFilter, fetchInvoices])
 
-  // ── Line item helpers ──
-  function updateLine(index: number, field: keyof LineItem, value: string | number) {
-    setForm(prev => {
-      const items = prev.line_items.map((item, i) => {
-        if (i !== index) return item
-        const updated = { ...item, [field]: value }
-        updated.total = Number(updated.quantity) * Number(updated.unit_price)
-        return updated
-      })
-      return { ...prev, line_items: items }
-    })
-  }
-
-  function addLine() {
-    setForm(prev => ({ ...prev, line_items: [...prev.line_items, emptyLine()] }))
-  }
-
-  function removeLine(index: number) {
-    setForm(prev => ({
-      ...prev,
-      line_items: prev.line_items.filter((_, i) => i !== index),
-    }))
-  }
-
   // ── Submit new invoice ──
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setFormError(null)
-    if (form.line_items.length === 0) {
+    if (invItems.length === 0) {
       setFormError('Add at least one line item.')
       return
     }
@@ -285,7 +261,7 @@ export default function InvoicesTab() {
           // never reaches that unit's cost history.
           vehicle_id:      form.vehicle_id || null,
           unit_number:     form.unit_number.trim() || null,
-          line_items:      form.line_items,
+          line_items:      toLineItems({ items: invItems, markupPct: 0, laborHours: 0, laborRate: 0 }),
           subtotal,
           // A FRACTION, not a percent. invoices.tax_rate is numeric(6,4) and the only
           // fraction column in the system; see the header of src/lib/tax.
@@ -314,13 +290,13 @@ export default function InvoicesTab() {
         customer_email:  '',
         vehicle_id:      '',
         unit_number:     '',
-        line_items:      [emptyLine()],
         tax_rate:        0,
         discount_amount: 0,
         notes:           '',
         terms:           'Payment due upon receipt.',
         status:          'draft',
       })
+      setInvItems([])
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
@@ -573,53 +549,10 @@ export default function InvoicesTab() {
 
             {/* Line items */}
             <div>
-              <div className="flex items-center justify-between mb-2">
-                <label className="nwi-label mb-0">Line Items</label>
-                <button type="button" onClick={addLine}
-                  className="text-orange text-xs hover:underline">
-                  + Add item
-                </button>
-              </div>
-
-              <div className="space-y-2">
-                {/* Header */}
-                <div className="hidden sm:grid grid-cols-[1fr_80px_100px_90px_28px] gap-2 px-1">
-                  {['Description', 'Qty', 'Unit Price', 'Total', ''].map(h => (
-                    <span key={h} className="text-white/30 text-xs uppercase tracking-widest">{h}</span>
-                  ))}
-                </div>
-
-                {form.line_items.map((item, idx) => (
-                  <div key={idx} className="grid grid-cols-[1fr_80px_100px_90px_28px] gap-2 items-center">
-                    <input
-                      className="nwi-input py-2 text-sm"
-                      placeholder="Description"
-                      value={item.description}
-                      onChange={e => updateLine(idx, 'description', e.target.value)}
-                      required
-                    />
-                    <input
-                      type="number" min="1" step="1"
-                      className="nwi-input py-2 text-sm text-center"
-                      value={item.quantity}
-                      onChange={e => updateLine(idx, 'quantity', Number(e.target.value))}
-                    />
-                    <input
-                      type="number" min="0" step="0.01"
-                      className="nwi-input py-2 text-sm text-right"
-                      value={item.unit_price}
-                      onChange={e => updateLine(idx, 'unit_price', Number(e.target.value))}
-                    />
-                    <div className="nwi-input py-2 text-sm text-right bg-dark-card/50 cursor-default">
-                      {fmt(item.total)}
-                    </div>
-                    <button type="button" onClick={() => removeLine(idx)}
-                      className="text-white/20 hover:text-danger transition-colors text-lg leading-none">
-                      ×
-                    </button>
-                  </div>
-                ))}
-              </div>
+              <label className="nwi-label mb-2">Line Items</label>
+              {/* Inside a <form>: every button in the editor is type="button", so adding
+                  or moving a line can never submit the invoice. */}
+              <LineItemEditor items={invItems} onChange={setInvItems} allowLabor priceLabel="Price" />
             </div>
 
             {/* Totals row */}

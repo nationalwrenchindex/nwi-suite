@@ -13,6 +13,7 @@ import {
 import { useRouter } from 'next/navigation'
 import type { Invoice, ShopSupplyItem, AdditionalPartItem, AdditionalLaborItem, ServiceLine, Adjustment, AdjustmentPreset } from '@/types/financials'
 import { money } from '@/lib/format'
+import { LineDetail } from '@/components/shared/LineItemEditor'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -1099,9 +1100,13 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
                   <tbody>
                     {sq.line_items.map((li, i) => (
                       <tr key={i} className="border-b border-white/5 last:border-0">
-                        <td className="px-4 py-2.5 text-white/70">{li.description}</td>
+                        <td className="px-4 py-2.5 text-white/70">
+                          {li.description}
+                          {li.customer_supplied && <span className="ml-1.5 text-[10px] uppercase tracking-wider text-white/45">customer supplied</span>}
+                          <LineDetail text={li.detail} />
+                        </td>
                         <td className="px-4 py-2.5 text-white/50 text-right">{li.quantity}</td>
-                        <td className="px-4 py-2.5 text-white/50 text-right">{fmt(li.unit_price)}</td>
+                        <td className="px-4 py-2.5 text-white/50 text-right">{li.is_included ? 'included' : fmt(li.unit_price)}</td>
                         <td className="px-4 py-2.5 text-white font-medium text-right">{fmt(li.total)}</td>
                       </tr>
                     ))}

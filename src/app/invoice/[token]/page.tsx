@@ -32,6 +32,7 @@ import {
   enrichLaborDescription,
   quantityText,
   lineMeta,
+  docLineMeta,
 } from '@/lib/invoice-document'
 import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
 import { missingMigration142Column } from '@/lib/migration-142'
@@ -156,6 +157,8 @@ interface DocLine {
   meta: string | null
   amount: number
   note?: string | null
+  /** Spec 2.5: what the work involves, printed indented under the line in smaller type. */
+  detail?: string | null
 }
 
 function LineRows({
@@ -188,6 +191,11 @@ function LineRow({ row: r, last }: { row: DocLine; last: boolean }) {
         <p className="text-sm" style={{ color: TEXT }}>{r.description}</p>
         {r.note && <p className="text-xs font-mono mt-0.5" style={{ color: MUTED }}>{r.note}</p>}
         {r.meta && <p className="text-xs mt-0.5" style={{ color: FAINT }}>{r.meta}</p>}
+        {r.detail && (
+          <p data-testid="line-detail" className="text-xs mt-1 pl-3 whitespace-pre-line" style={{ color: MUTED }}>
+            {r.detail}
+          </p>
+        )}
       </div>
       <span className="text-sm font-semibold flex-shrink-0" style={{ color: TEXT }}>
         {fmt(r.amount)}
@@ -428,7 +436,11 @@ export default async function PublicInvoicePage(
       // The part number is what lets a customer order the same part again, or
       // check it against a warranty claim. Nothing captured it until now.
       note: (li as { part_number?: string | null }).part_number || null,
-      meta: lineMeta(qty, unit, labor),
+      // Spec 2.5. "included" stands where the rate would; a customer-supplied part says
+      // so. Both still print their $0.00 - never a blank or a dash. Absent on every
+      // line written before them, so those print exactly as they did.
+      meta: docLineMeta(li as { is_included?: boolean; customer_supplied?: boolean }, lineMeta(qty, unit, labor), qty, labor),
+      detail: (li as { detail?: string | null }).detail?.trim() || null,
       amount: Number(li.total ?? 0),
       sequence: seg.sequence,
       label: seg.label,

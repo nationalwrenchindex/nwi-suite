@@ -5,8 +5,34 @@ import { notFound } from 'next/navigation'
 import { createServiceClient } from '@/lib/supabase/service'
 import QuoteApprovalClient from './QuoteApprovalClient'
 import type { Metadata } from 'next'
-import type { MultiJobEntry } from '@/types/financials'
+import type { LineItem, MultiJobEntry } from '@/types/financials'
+import { isLaborItem } from '@/components/shared/line-items'
 import { money } from '@/lib/format'
+
+/**
+ * Spec 2.5 (docs/NWI-ESTIMATE-DOCUMENT-SPEC.md): what the work involves, indented under
+ * the line in smaller type. Renders nothing for a line without one, which is every
+ * line written before the field existed.
+ */
+function LineDetail({ text }: { text?: string | null }) {
+  if (!text?.trim()) return null
+  return (
+    <span data-testid="line-detail" className="block pl-3 mt-1 text-xs text-white/50 whitespace-pre-line">
+      {text.trim()}
+    </span>
+  )
+}
+
+/** "included" and "customer supplied", said in words beside a line that prints $0.00. */
+function LineFlags({ li }: { li: LineItem }) {
+  const word = li.is_included ? 'included' : li.customer_supplied ? 'customer supplied' : null
+  if (!word) return null
+  return (
+    <span data-testid="line-flag" className="ml-1.5 text-[10px] uppercase tracking-wider text-white/45">
+      {word}
+    </span>
+  )
+}
 import { BrandFooter } from '@/components/BrandHeader'
 import { publicDocumentMetadata } from '@/lib/public-metadata'
 import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
@@ -110,7 +136,7 @@ export default async function PublicQuotePage(
   const jobs: MultiJobEntry[] = Array.isArray(q.jobs) && q.jobs.length > 0 ? q.jobs : []
   const isMultiJob = jobs.length > 0
 
-  const lineItems: Array<{ description: string; quantity: number; unit_price: number; total: number }> =
+  const lineItems: LineItem[] =
     Array.isArray(q.line_items) ? q.line_items : []
 
   const serviceLines: Array<{ service_name: string; vehicle_category: string | null; price_cents: number }> =
@@ -119,11 +145,14 @@ export default async function PublicQuotePage(
     Array.isArray(q.adjustments) ? q.adjustments : []
   const isDetailerModel = isDetailer && (serviceLines.length > 0 || adjustments.length > 0)
 
+  // A line's own `type` wins; an untyped row falls back to the "starts with Labor"
+  // convention, exactly as before (isLaborItem). Parts print first, then labour, each
+  // in the order the tech arranged them - the grouping every sent quote already has.
   const partsItems  = lineItems.filter(li =>
-    !/^labor/i.test(li.description?.trim() ?? '') &&
+    !isLaborItem(li) &&
     !(isDetailer && li.description?.trim() === 'Service')
   )
-  const laborItems  = lineItems.filter(li => /^labor/i.test(li.description?.trim() ?? ''))
+  const laborItems  = lineItems.filter(li => isLaborItem(li))
 
   const isExpired   = q.status === 'expired' || (
     q.status === 'sent' && q.quote_expires_at && new Date(q.quote_expires_at) < new Date()
@@ -266,16 +295,24 @@ export default async function PublicQuotePage(
               <tbody>
                 {partsItems.map((li, i) => (
                   <tr key={i} className="border-b border-white/5 last:border-0">
-                    <td className="px-4 py-2.5 text-white/80">{li.description}</td>
-                    <td className="px-4 py-2.5 text-white/50 text-right">{li.quantity}</td>
-                    <td className="px-4 py-2.5 text-white text-right font-medium">{fmt(li.total)}</td>
+                    <td className="px-4 py-2.5 text-white/80 align-top">
+                      {li.description}
+                      <LineFlags li={li} />
+                      <LineDetail text={li.detail} />
+                    </td>
+                    <td className="px-4 py-2.5 text-white/50 text-right align-top">{li.quantity}</td>
+                    <td className="px-4 py-2.5 text-white text-right font-medium align-top">{fmt(li.total)}</td>
                   </tr>
                 ))}
                 {laborItems.map((li, i) => (
                   <tr key={`labor-${i}`} className="border-b border-white/5 last:border-0">
-                    <td className="px-4 py-2.5 text-white/80">{li.description}</td>
-                    <td className="px-4 py-2.5 text-white/50 text-right">{li.quantity}h</td>
-                    <td className="px-4 py-2.5 text-white text-right font-medium">{fmt(li.total)}</td>
+                    <td className="px-4 py-2.5 text-white/80 align-top">
+                      {li.description}
+                      <LineFlags li={li} />
+                      <LineDetail text={li.detail} />
+                    </td>
+                    <td className="px-4 py-2.5 text-white/50 text-right align-top">{li.quantity}h</td>
+                    <td className="px-4 py-2.5 text-white text-right font-medium align-top">{fmt(li.total)}</td>
                   </tr>
                 ))}
               </tbody>

@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Invoice, MultiJobEntry, ServiceLine, Adjustment, ShopSupplyItem, AdditionalPartItem, AdditionalLaborItem } from '@/types/financials'
 import { money } from '@/lib/format'
+import { LineDetail } from '@/components/shared/LineItemEditor'
 import { segmentedLine, segmentHeading } from '@/lib/invoice-document'
 import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
 
@@ -188,7 +189,12 @@ function Section({ label, children }: { label: string; children: React.ReactNode
 function ReadOnlyTable({ rows }: {
   // `heading` is the segment the line belonged to and `note` its part number. Both
   // optional, so every existing caller passing {label, qty, amount} is unaffected.
-  rows: Array<{ label: string; qty?: string; amount: number; isComp?: boolean; heading?: string | null; note?: string | null }>
+  // `detail` and `flag` are spec 2.5: what the work involves, and "included" /
+  // "customer supplied" said in words. Optional, so existing callers are unaffected.
+  rows: Array<{
+    label: string; qty?: string; amount: number; isComp?: boolean; heading?: string | null; note?: string | null
+    detail?: string | null; flag?: string | null
+  }>
 }) {
   if (rows.length === 0) return null
   return (
@@ -211,9 +217,13 @@ function ReadOnlyTable({ rows }: {
                   </span>
                 )}
                 {r.label}
+                {r.flag && (
+                  <span className="ml-1.5 text-[10px] uppercase tracking-wider text-white/45">{r.flag}</span>
+                )}
                 {r.note && (
                   <span className="block text-[11px] font-mono text-white/35">{r.note}</span>
                 )}
+                <LineDetail text={r.detail} />
               </td>
               {rows.some(x => x.qty) && <td className="px-4 py-2.5 text-white/50 text-right">{r.qty ?? ''}</td>}
               <td className="px-4 py-2.5 text-right">
@@ -1250,6 +1260,8 @@ export default function FinalizedInvoiceClient({
                   label:  li.description,
                   qty:    String(li.quantity),
                   amount: li.total,
+                  detail: li.detail ?? null,
+                  flag:   li.is_included ? 'included' : li.customer_supplied ? 'customer supplied' : null,
                 }))}
               />
             )}
@@ -1296,6 +1308,8 @@ export default function FinalizedInvoiceClient({
                   amount:  li.total,
                   heading: segmentHeading(seg),
                   note:    typeof row.part_number === 'string' ? row.part_number : null,
+                  detail:  li.detail ?? null,
+                  flag:    li.is_included ? 'included' : li.customer_supplied ? 'customer supplied' : null,
                 }
               })}
             />
