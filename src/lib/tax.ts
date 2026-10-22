@@ -247,6 +247,38 @@ export function breakdownTaxTotal(breakdown: TaxBreakdown | null | undefined): n
 }
 
 /**
+ * The tax terms an EXISTING document was priced under, for re-totalling it when its
+ * lines are edited. Recorded values beat current settings (CLAUDE.md, spec section 6).
+ *
+ *   * A category the document's breakdown recorded keeps what it recorded: taxed or
+ *     exempt, at its rate.
+ *   * A category the document never had (adding the first part to a labour-only quote)
+ *     has no recorded term, so it takes the shop's current setting - what HD's quote
+ *     editor does - and the tax rate the document recorded when that is not loaded.
+ *   * NO BREAKDOWN AT ALL is a legacy document taxed as one rate over its subtotal.
+ *     Returns null, and the caller applies the document's own tax_percent that way,
+ *     which is exactly how it was priced.
+ */
+export function documentTaxSettings(
+  storedBreakdown: unknown,
+  current: TaxSettings | null,
+  documentTaxPercent: number,
+): TaxSettings | null {
+  const b = parseBreakdown(storedBreakdown)
+  if (!b) return null
+  const side = (bucket: TaxBucket | undefined, curTaxed: boolean | undefined, curRate: number | undefined) =>
+    bucket
+      ? { taxed: bucket.taxed, rate: bucket.taxed ? bucket.rate : (curRate ?? documentTaxPercent) }
+      : { taxed: curTaxed ?? true, rate: curRate ?? documentTaxPercent }
+  const parts = side(b.parts, current?.tax_parts, current?.tax_rate_parts)
+  const labor = side(b.labor, current?.tax_labor, current?.tax_rate_labor)
+  return {
+    tax_parts: parts.taxed, tax_rate_parts: parts.rate,
+    tax_labor: labor.taxed, tax_rate_labor: labor.rate,
+  }
+}
+
+/**
  * True when a write failed only because migration 140 has not been applied yet.
  *
  * Migrations here are applied by hand, and a preview deploy runs against the same

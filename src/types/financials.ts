@@ -109,6 +109,19 @@ export interface LineItem {
    */
   type?:        'parts' | 'labor'
   part_number?: string | null
+  /**
+   * Document spec 2.5 (docs/NWI-ESTIMATE-DOCUMENT-SPEC.md). All three optional and
+   * absent unless set, so a row written before them is byte-for-byte what it was and
+   * prints exactly as it did.
+   *
+   * `detail` is what the work involves - free text, multi-line, printed indented under
+   * the description in smaller type. `is_included` prints the word "included" in the
+   * rate column; `customer_supplied` marks a part the customer brought. Both of those
+   * lines carry unit_price 0 and total 0: they charge nothing, and they still print.
+   */
+  detail?:            string | null
+  is_included?:       boolean
+  customer_supplied?: boolean
 }
 
 // Detailer quote model (replaces line_items + labor_rate for detailers)

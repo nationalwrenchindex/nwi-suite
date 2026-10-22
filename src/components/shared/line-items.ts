@@ -83,7 +83,16 @@ export function isLaborItem(li: LineItem): boolean {
   return /^labor/i.test((li.description ?? '').trim())
 }
 
-/** A parts row as the editor holds it. `unit_price` is the BASE price. */
+/**
+ * A row as the editor holds it.
+ *
+ * PART rows: `quantity` is the count and `unit_price` is the BASE price (pre-markup).
+ * LABOR rows: `quantity` is hours and `unit_price` is the hourly rate. Labor carries no
+ * markup, so nothing is divided out of it or multiplied into it.
+ *
+ * `kind` is absent on every part row built before labour lines existed, and absent
+ * still means part.
+ */
 export interface EditItem {
   _id:         string
   description: string
@@ -91,6 +100,48 @@ export interface EditItem {
   unit_price:  number
   /** The manufacturer's part number. Empty string when the tech has not typed one. */
   part_number: string
+  kind?:              LineKind
+  /** Spec 2.5: what the work involves. Printed indented under the description. */
+  detail?:            string
+  /** Prints "included" in the rate column. Charges nothing. */
+  included?:          boolean
+  /** A part the customer supplied. Prints at $0.00. Parts only. */
+  customer_supplied?: boolean
+  /**
+   * THE NO-OP GUARANTEE. The row exactly as it was stored, the editable fields as they
+   * were loaded, and the markup it was loaded under. While all three still match, the
+   * stored row is written back VERBATIM - so opening and saving a document cannot move
+   * a cent through a divide-out and multiply-back, and cannot strip keys this editor
+   * does not know about (QuickWrench's unit_cost, a segment number).
+   */
+  _stored?:       LineItem
+  _loadedKey?:    string
+  _loadedMarkup?: number
+}
+
+export type LineKind = 'part' | 'labor'
+
+export function isLaborEdit(li: EditItem): boolean {
+  return li.kind === 'labor'
+}
+
+/** Included lines and customer-supplied parts are on the document and charge nothing. */
+export function chargesNothing(li: EditItem): boolean {
+  return !!li.included || (!isLaborEdit(li) && !!li.customer_supplied)
+}
+
+/** Everything the tech can change on a row, in one comparable string. */
+export function editKey(li: EditItem): string {
+  return JSON.stringify([
+    li.kind ?? 'part', li.description, li.quantity, li.unit_price, li.part_number ?? '',
+    li.detail ?? '', !!li.included, !!li.customer_supplied,
+  ])
+}
+
+/** True while a loaded row still holds exactly what was loaded, under the same markup. */
+export function isUntouched(li: EditItem, markupPct: number): boolean {
+  if (!li._stored || li._loadedKey !== editKey(li)) return false
+  return isLaborEdit(li) || li._loadedMarkup === markupPct
 }
 
 export interface LineTotals {
@@ -129,41 +180,93 @@ export function fromLineItems(
   lineItems:       LineItem[] | null | undefined,
   markupPct:       number,
   skipDescription?: string,
+  /**
+   * Keep labour rows, in their stored order, as `kind: 'labor'` items. Off by default:
+   * a caller that still holds labour as one hours x rate pair must not get it twice.
+   * The multi-line editors (quote, work order) pass true and keep labor_hours at 0.
+   */
+  opts: { withLabor?: boolean } = {},
 ): EditItem[] {
   return (lineItems ?? [])
-    .filter(li => !isLaborItem(li))
+    .filter(li => opts.withLabor || !isLaborItem(li))
     .filter(li => !(skipDescription && li.description?.trim() === skipDescription))
-    .map((li, i) => ({
-      _id:         `li-${i}`,
-      description: li.description,
-      quantity:    li.quantity,
-      part_number: li.part_number ?? '',
-      unit_price:  markupPct > 0
-        ? round2(li.unit_price / (1 + markupPct / 100))
-        : li.unit_price,
-    }))
+    .map((li, i) => {
+      const labor = !!opts.withLabor && isLaborItem(li)
+      const item: EditItem = {
+        _id:         `li-${i}`,
+        description: li.description,
+        quantity:    li.quantity,
+        part_number: li.part_number ?? '',
+        unit_price:  !labor && markupPct > 0
+          ? round2(li.unit_price / (1 + markupPct / 100))
+          : li.unit_price,
+        ...(labor ? { kind: 'labor' as const } : {}),
+        ...(li.detail ? { detail: li.detail } : {}),
+        ...(li.is_included ? { included: true } : {}),
+        ...(li.customer_supplied ? { customer_supplied: true } : {}),
+      }
+      // The no-op guarantee only on the multi-line path, whose callers save through
+      // the same toLineItems that honours it.
+      return opts.withLabor
+        ? { ...item, _stored: li, _loadedKey: editKey(item), _loadedMarkup: markupPct }
+        : item
+    })
 }
 
-/** Editor rows -> stored line_items: applies the markup and appends the labour
- *  row. Labour is appended only when there are hours, so a parts-only job does
- *  not carry a $0 Labor line into the customer's document. */
+/** One part row as stored: post-markup unit price, and the spec 2.5 fields when set. */
+function partRow(li: EditItem, markup: number): LineItem {
+  const free = chargesNothing(li)
+  return {
+    description: li.description,
+    quantity:    li.quantity,
+    unit_price:  free ? 0 : round2(li.unit_price * (1 + markup)),
+    total:       free ? 0 : round2(li.quantity * li.unit_price * (1 + markup)),
+    // Written on every new row from here on, so no reader ever has to guess
+    // again. part_number is omitted rather than stored as '' when empty —
+    // an absent key reads as "not captured", a '' would read as "no part
+    // number exists", and only the first of those is true.
+    type:        'parts' as const,
+    ...(li.part_number?.trim() ? { part_number: li.part_number.trim() } : {}),
+    ...specFields(li),
+  }
+}
+
+/** One labour row as stored: hours in quantity, the rate in unit_price. */
+function laborRow(li: EditItem): LineItem {
+  const free = chargesNothing(li)
+  return {
+    description: li.description,
+    quantity:    li.quantity,
+    unit_price:  free ? 0 : li.unit_price,
+    total:       free ? 0 : round2(li.quantity * li.unit_price),
+    type:        'labor' as const,
+    ...specFields(li),
+  }
+}
+
+/** Absent unless set, so a row without them stores exactly what it always did. */
+function specFields(li: EditItem): Partial<LineItem> {
+  const detail = li.detail?.trim()
+  return {
+    ...(detail ? { detail } : {}),
+    ...(li.included ? { is_included: true } : {}),
+    ...(!isLaborEdit(li) && li.customer_supplied ? { customer_supplied: true } : {}),
+  }
+}
+
+/** Editor rows -> stored line_items, in the order the tech arranged them: applies the
+ *  markup to parts and appends the legacy single labour row when there are hours.
+ *  Labour is appended only when there are hours, so a parts-only job does not carry a
+ *  $0 Labor line into the customer's document. */
 export function toLineItems({
   items, markupPct, laborHours, laborRate,
 }: Omit<LineInputs, 'taxPct'>): LineItem[] {
   const markup = markupPct / 100
   return [
-    ...items.map(li => ({
-      description: li.description,
-      quantity:    li.quantity,
-      unit_price:  round2(li.unit_price * (1 + markup)),
-      total:       round2(li.quantity * li.unit_price * (1 + markup)),
-      // Written on every new row from here on, so no reader ever has to guess
-      // again. part_number is omitted rather than stored as '' when empty —
-      // an absent key reads as "not captured", a '' would read as "no part
-      // number exists", and only the first of those is true.
-      type:        'parts' as const,
-      ...(li.part_number?.trim() ? { part_number: li.part_number.trim() } : {}),
-    })),
+    ...items.map(li =>
+      isUntouched(li, markupPct) ? li._stored!
+        : isLaborEdit(li) ? laborRow(li)
+        : partRow(li, markup)),
     ...(laborHours > 0 ? [{
       description: 'Labor',
       quantity:    laborHours,
@@ -187,10 +290,20 @@ export function toLineItems({
 export function computeTotals({
   items, markupPct, laborHours, laborRate, taxPct, taxSettings,
 }: LineInputs): LineTotals {
-  const partsBase     = items.reduce((s, li) => s + li.quantity * li.unit_price, 0)
+  const factor        = 1 + markupPct / 100
+  // An untouched row contributes what it STORED - the figure the customer was shown -
+  // so a no-op save cannot drift a cent through rounding the base back out.
+  const partsBase     = items.filter(li => !isLaborEdit(li)).reduce((s, li) =>
+    s + (chargesNothing(li) ? 0
+      : isUntouched(li, markupPct) ? Number(li._stored!.total) / factor
+      : li.quantity * li.unit_price), 0)
   const markupAmt     = partsBase * (markupPct / 100)
   const partsTotal    = partsBase + markupAmt
-  const laborSubtotal = (laborHours || 0) * (laborRate || 0)
+  const laborSubtotal = (laborHours || 0) * (laborRate || 0) +
+    items.filter(isLaborEdit).reduce((s, li) =>
+      s + (chargesNothing(li) ? 0
+        : isUntouched(li, markupPct) ? Number(li._stored!.total)
+        : li.quantity * li.unit_price), 0)
   const subtotal      = partsTotal + laborSubtotal
 
   if (!taxSettings) {
@@ -226,12 +339,21 @@ export function validateLines({
   return null
 }
 
+/**
+ * labor_hours on the document: the legacy single pair plus every labour line's hours.
+ * labor_rate stays the document's own rate - the default a new labour line starts at.
+ */
+export function totalLaborHours({ items, laborHours }: Pick<LineInputs, 'items' | 'laborHours'>): number {
+  const lines = items.filter(isLaborEdit).reduce((s, li) => s + (Number(li.quantity) || 0), 0)
+  return Math.round(((laborHours || 0) + lines) * 10000) / 10000
+}
+
 /** The money columns quotes, work orders and invoices all persist. */
 export function lineMoneyColumns(inputs: LineInputs) {
   const t = computeTotals(inputs)
   return {
     line_items:           toLineItems(inputs),
-    labor_hours:          inputs.laborHours,
+    labor_hours:          totalLaborHours(inputs),
     labor_rate:           inputs.laborRate,
     parts_subtotal:       round2(t.partsBase),
     parts_markup_percent: inputs.markupPct,
