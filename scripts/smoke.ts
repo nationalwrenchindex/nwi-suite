@@ -143,6 +143,20 @@ async function cleanup(): Promise<void> {
   for (const id of created.workOrders) await del('work_orders', id)
   for (const id of created.quotes)     await del('quotes', id)
 
+  // Flow Tm restores the owner's terms in its own finally. A run killed mid-flow
+  // leaves the marker text instead - cleared here, and only fields holding it.
+  try {
+    const p = (await rest<Record<string, string | null>>(
+      `profiles?select=warranty_terms,customer_supplied_parts_clause,pay_link_url&id=eq.${OWNER}`))[0]
+    const fix: Record<string, null> = {}
+    if (p?.warranty_terms?.startsWith(MARK)) fix.warranty_terms = null
+    if (p?.customer_supplied_parts_clause?.startsWith(MARK)) fix.customer_supplied_parts_clause = null
+    if (p?.pay_link_url === 'https://pay.example.com/smoke-shop') fix.pay_link_url = null
+    if (Object.keys(fix).length) {
+      await fetch(`${SUPA}/rest/v1/profiles?id=eq.${OWNER}`, { method: 'PATCH', headers: SVC_H, body: JSON.stringify(fix) })
+    }
+  } catch { /* a failed sweep must not mask the real result */ }
+
   // HD approval flow. Sweep strays from a crashed run first, by the marker name.
   try {
     const strays = await rest<{ id: string }>(`hd_quotes?select=id&customer_name=like.${MARK}*`)
@@ -2411,6 +2425,172 @@ async function flowW(): Promise<void> {
   }
 }
 
+// ── Tm: the terms block, end to end (migration 164, spec 2.8) ────────────────
+//
+// Settings saves the three fields; a quote records the shop's terms at its first SEND
+// and an invoice at FINALIZE; the customer's copy prints what the document recorded;
+// and changing Settings afterwards does not rewrite a document the customer already
+// has. The owner's real terms are read first and written back in a finally - and the
+// cleanup sweeps a marker left by a crashed run.
+async function flowTerms(): Promise<void> {
+  const F = 'Tm terms'
+  const COLS = 'warranty_terms,customer_supplied_parts_clause,pay_link_url,default_payment_terms,default_payment_instructions'
+  const original = (await rest(`profiles?select=${COLS}&id=eq.${OWNER}`))[0]
+  if (!record(F, 'the 164 columns exist on the owner profile', !!original && 'warranty_terms' in original,
+    original ? '' : 'profiles read failed - is migration 164 applied?')) return
+
+  const WARRANTY_1 = `${MARK} 90 days / 4,000 miles on workmanship.`
+  const CLAUSE     = `${MARK} Customer parts are installed without warranty; re-diagnosis is billable.`
+  const PAY_LINK   = 'https://pay.example.com/smoke-shop'
+  const WARRANTY_2 = `${MARK} CHANGED AFTER SEND - must not appear on a sent document.`
+  try {
+    // ── Settings ──
+    const bad = await api('PUT', '/api/user/profile', { pay_link_url: 'http://pay.example.com/plain' })
+    const evil = await api('PUT', '/api/user/profile', { pay_link_url: 'javascript:alert(1)' })
+    record(F, 'a non-https or script pay link is refused with a readable message',
+      bad.status === 400 && evil.status === 400 && /https/.test(String(bad.json.error ?? '')),
+      `http -> ${bad.status}, javascript: -> ${evil.status}`)
+    const save = await api('PUT', '/api/user/profile', {
+      warranty_terms: `  ${WARRANTY_1}  `, customer_supplied_parts_clause: CLAUSE, pay_link_url: PAY_LINK,
+    })
+    const saved = (await rest(`profiles?select=${COLS}&id=eq.${OWNER}`))[0]
+    if (!record(F, 'Settings saves warranty, clause and pay link (trimmed)',
+      save.status === 200 && saved.warranty_terms === WARRANTY_1 && saved.customer_supplied_parts_clause === CLAUSE &&
+        saved.pay_link_url === PAY_LINK,
+      save.status !== 200 ? `-> ${save.status} ${JSON.stringify(save.json).slice(0, 140)}` : '')) return
+    const settings = await page('/settings')
+    record(F, 'the Settings page renders the three fields with the saved values',
+      !!settings && missingControls(settings.text, ['Pay link (optional)', 'Warranty terms', 'Customer-supplied parts']).length === 0 &&
+        settings.html.includes(WARRANTY_1) && settings.html.includes(PAY_LINK) && !settings.text.includes('need migration 164'),
+      !settings ? 'did not load'
+        : missingControls(settings.text, ['Pay link (optional)', 'Warranty terms', 'Customer-supplied parts']).join(', ') ||
+          (settings.html.includes(WARRANTY_1) ? 'renders' : 'saved warranty not in the field'))
+
+    // ── A quote records the terms at its first send ──
+    const items: EditItem[] = [
+      { _id: 't1', description: `${MARK} Terms check part`, part_number: '', quantity: 1, unit_price: 40 },
+    ]
+    const money = documentMoney({
+      items, markupPct: shop.markup, laborRate: shop.labor_rate, taxPct: shop.taxParts,
+      taxSettings: { tax_parts: shop.taxOnParts, tax_labor: shop.taxOnLabor, tax_rate_parts: shop.taxParts, tax_rate_labor: shop.taxLabor },
+      extrasSettings: EXTRAS_OFF, extras: { travelHours: 0, mileageMiles: 0 },
+    })
+    const c = await api('POST', '/api/quotes', { notes: `${MARK} Tm - terms`, ...money.columns })
+    const qId = (c.json.quote as { id?: string } | undefined)?.id
+    if (!record(F, 'a quote saves', !!qId, `-> ${c.status}`)) return
+    created.quotes.add(qId!)
+
+    // A preview link is not a send: nothing may be recorded yet.
+    await api('POST', `/api/quotes/${qId}/send`, { method: 'link', preview: true })
+    const draft = (await rest(`quotes?select=terms_snapshot,status&id=eq.${qId}`))[0]
+    record(F, 'a preview link records no terms (not sent)', draft.terms_snapshot === null, `status ${draft.status}`)
+
+    // 'link' is a real send with no SMS or email: the tech hands the link over.
+    const sent = await api('POST', `/api/quotes/${qId}/send`, { method: 'link' })
+    const token = String(sent.json.quote_url ?? '').split('/quote/')[1]
+    const q = (await rest(`quotes?select=terms_snapshot,status&id=eq.${qId}`))[0]
+    const qs = q.terms_snapshot as Record<string, unknown> | null
+    record(F, 'the send records the shop\'s terms on the quote',
+      sent.status === 200 && q.status === 'sent' && !!qs && qs.version === 1 && qs.warranty === WARRANTY_1 &&
+        qs.customer_supplied_clause === CLAUSE && qs.pay_link === PAY_LINK &&
+        qs.payment_terms === (saved.default_payment_terms ?? null) &&
+        qs.payment_instructions === ((String(saved.default_payment_instructions ?? '').trim()) || null),
+      `-> ${sent.status}, status ${q.status}, snapshot ${qs ? JSON.stringify(qs).slice(0, 120) : 'null'}`)
+    if (!record(F, 'the sent quote has a customer link', !!token, `-> ${sent.status}`)) return
+
+    const readQuote = async () => {
+      const r = await fetch(`${BASE}/quote/${token}`)
+      const h = await r.text()
+      const m = h.match(/<div data-testid="terms-block"[\s\S]*?<\/div>\s*<\/div>/)
+      return { ok: r.ok, status: r.status, block: m ? visibleText(m[0]) : '', blockHtml: m?.[0] ?? '' }
+    }
+    const qp = await readQuote()
+    const qWant = ['Terms', 'Warranty', WARRANTY_1, 'Customer-supplied parts', CLAUSE, 'How to pay', 'Pay online']
+    if (saved.default_payment_terms) qWant.push('Payment terms')
+    record(F, 'the customer\'s quote prints the Terms block with every recorded row',
+      qp.ok && qWant.every(w => qp.block.includes(w)),
+      !qp.ok ? `-> ${qp.status}` : qp.block ? `missing: ${qWant.filter(w => !qp.block.includes(w)).join(', ') || 'none'}` : 'no terms-block')
+    record(F, 'the quote\'s pay link is the recorded https link, opened safely',
+      qp.blockHtml.includes(`href="${PAY_LINK}"`) && /rel="noopener noreferrer nofollow"/.test(qp.blockHtml))
+
+    // ── Settings change after the send ──
+    const change = await api('PUT', '/api/user/profile', { warranty_terms: WARRANTY_2 })
+    await api('POST', `/api/quotes/${qId}/send`, { method: 'link' })
+    const qAfter = (await rest(`quotes?select=terms_snapshot&id=eq.${qId}`))[0]
+    const qp2 = await readQuote()
+    record(F, 'changing Settings and resending keeps the terms the quote recorded',
+      change.status === 200 && (qAfter.terms_snapshot as Record<string, unknown>)?.warranty === WARRANTY_1 &&
+        (qAfter.terms_snapshot as Record<string, unknown>)?.captured_at === qs?.captured_at &&
+        qp2.block.includes(WARRANTY_1) && !qp2.block.includes(WARRANTY_2),
+      `stored warranty "${String((qAfter.terms_snapshot as Record<string, unknown>)?.warranty ?? '').slice(0, 40)}"`)
+
+    // ── An invoice records the terms at finalize ──
+    const lineTotal = 40
+    const inv = await api('POST', '/api/invoices', {
+      invoice_number: `${MARK}-TERMS-${Date.now()}`, notes: `${MARK} Tm - terms`,
+      line_items: [{ description: `${MARK} Terms check part`, quantity: 1, unit_price: lineTotal, total: lineTotal }],
+      subtotal: lineTotal, tax_rate: 0, tax_amount: 0, total: lineTotal, invoice_status: 'in_progress',
+    })
+    const invId = (inv.json.invoice as { id?: string } | undefined)?.id
+    if (!record(F, 'an in-progress invoice saves', !!invId, `-> ${inv.status} ${invId ? '' : JSON.stringify(inv.json).slice(0, 120)}`)) return
+    created.invoices.add(invId!)
+    const before = (await rest(`invoices?select=terms_snapshot&id=eq.${invId}`))[0]
+    record(F, 'an in-progress invoice records no terms yet', before.terms_snapshot === null)
+
+    const fin = await api('POST', `/api/invoices/${invId}/finalize`)
+    const fi = (await rest(`invoices?select=terms_snapshot,public_token,invoice_status&id=eq.${invId}`))[0]
+    const isnap = fi.terms_snapshot as Record<string, unknown> | null
+    record(F, 'finalize records the shop\'s terms as they stand now',
+      (fin.status === 200 || fin.status === 201) && !!isnap && isnap.warranty === WARRANTY_2 &&
+        isnap.customer_supplied_clause === CLAUSE && isnap.pay_link === PAY_LINK,
+      `-> ${fin.status}, ${isnap ? `warranty "${String(isnap.warranty).slice(0, 40)}"` : 'no snapshot'}`)
+
+    const readInvoice = async () => {
+      const r = await fetch(`${BASE}/invoice/${fi.public_token}`)
+      const h = await r.text()
+      const m = h.match(/<div data-testid="terms-block"[\s\S]*?<\/div>\s*<\/div>\s*<\/div>/)
+      const pay = h.match(/<a[^>]*data-testid="pay-link"[^>]*>/)
+      return { ok: r.ok, status: r.status, block: m ? visibleText(m[0]) : '', pay: pay?.[0] ?? '' }
+    }
+    const ip = await readInvoice()
+    record(F, 'the customer\'s invoice prints warranty and clause in the Terms block',
+      ip.ok && [WARRANTY_2, CLAUSE, 'Warranty', 'Customer-supplied parts'].every(w => ip.block.includes(w)),
+      !ip.ok ? `-> ${ip.status}` : ip.block ? ip.block.slice(0, 120) : 'no terms-block')
+    record(F, 'the invoice\'s Terms block does not repeat payment terms or How to pay',
+      !!ip.block && !ip.block.includes('Payment terms') && !ip.block.includes('How to pay'))
+    record(F, 'the invoice prints the recorded pay link under How to Pay',
+      ip.pay.includes(`href="${PAY_LINK}"`) && ip.pay.includes('noopener'), ip.pay ? ip.pay.slice(0, 120) : 'no pay-link')
+
+    // Reopen, change Settings, finalize again: the invoice keeps what it recorded.
+    await api('POST', `/api/invoices/${invId}/reopen`)
+    await api('PUT', '/api/user/profile', { warranty_terms: WARRANTY_1, pay_link_url: '' })
+    const fin2 = await api('POST', `/api/invoices/${invId}/finalize`)
+    const fi2 = (await rest(`invoices?select=terms_snapshot&id=eq.${invId}`))[0]
+    const ip2 = await readInvoice()
+    record(F, 'refinalizing after a Settings change keeps the recorded terms and link',
+      (fin2.status === 200 || fin2.status === 201) &&
+        (fi2.terms_snapshot as Record<string, unknown>)?.warranty === WARRANTY_2 &&
+        ip2.block.includes(WARRANTY_2) && !ip2.block.includes(WARRANTY_1) && ip2.pay.includes(PAY_LINK),
+      `-> ${fin2.status}, stored warranty "${String((fi2.terms_snapshot as Record<string, unknown>)?.warranty ?? '').slice(0, 40)}"`)
+  } finally {
+    // The owner's own terms, exactly as they were - service role, so even values the
+    // route would now refuse go back untouched.
+    const r = await fetch(`${SUPA}/rest/v1/profiles?id=eq.${OWNER}`, {
+      method: 'PATCH', headers: SVC_H,
+      body: JSON.stringify({
+        warranty_terms: original.warranty_terms ?? null,
+        customer_supplied_parts_clause: original.customer_supplied_parts_clause ?? null,
+        pay_link_url: original.pay_link_url ?? null,
+      }),
+    })
+    const back = (await rest(`profiles?select=${COLS}&id=eq.${OWNER}`))[0]
+    record(F, 'the owner\'s terms are restored to what they were',
+      r.ok && back.warranty_terms === original.warranty_terms &&
+        back.customer_supplied_parts_clause === original.customer_supplied_parts_clause && back.pay_link_url === original.pay_link_url,
+      `-> ${r.status}`)
+  }
+}
+
 // ── Z: equipment categories, By Equipment and the audit exports ─────────────
 //
 // docs/KURT-EQUIPMENT-TRACKING-SPEC.md, end to end through the routes a shop uses. The
@@ -2720,6 +2900,7 @@ async function main(): Promise<void> {
     await flowV()
     await flowX()
     await flowW()
+    await flowTerms()
     await flowY()
     await flowZ()
   } finally {
