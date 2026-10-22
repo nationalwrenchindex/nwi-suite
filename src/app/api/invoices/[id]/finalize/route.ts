@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { computeDueDate, DEFAULT_PAYMENT_TERMS, isMissingPaymentTermsColumn } from '@/lib/hd/payment-terms'
 import { deductForInvoice, releaseAllocations } from '@/lib/inventory/ledger'
+import { recordTermsSnapshot } from '@/lib/document-terms'
 
 const INVOICE_SELECT = `
   *,
@@ -127,6 +128,14 @@ export async function POST(
   if (updateErr || !updated) {
     console.error('[finalize]', updateErr)
     return NextResponse.json({ error: 'Failed to finalize invoice.' }, { status: 500 })
+  }
+
+  // The shop's terms as they stand at finalize are what this invoice carries from now
+  // on (spec 2.8; lib/document-terms). Best-effort: a finalized invoice is never
+  // reported as failed because its terms block could not be stored.
+  const terms = await recordTermsSnapshot(supabase, 'invoices', id, user.id)
+  if (!terms.written && terms.reason !== 'already recorded') {
+    console.warn(`[finalize] terms not recorded on invoice ${id}: ${terms.reason}`)
   }
 
   // Link any auto-generated COGS expenses from job completion to this invoice

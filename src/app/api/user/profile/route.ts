@@ -7,6 +7,7 @@ import { missingMigration142Column } from '@/lib/migration-142'
 import { taxSettingsFrom } from '@/lib/tax'
 import { extrasSettingsFrom } from '@/lib/billable-extras'
 import { normalisePaymentTerms, PAYMENT_TERMS } from '@/lib/hd/payment-terms'
+import { safePayLink, isMissing164Column } from '@/lib/document-terms'
 
 // Columns that exist on every deployment.
 const BASE_COLUMNS = 'average_mpg, fuel_type, offer_mpi_on_booking, default_labor_rate, default_parts_markup_percent, default_tax_percent'
@@ -236,6 +237,39 @@ export async function PUT(request: NextRequest) {
     update.default_payment_terms = t
   }
 
+  // ── The terms block (migration 164, spec 2.8) ──
+  // Free text, trimmed; empty clears it. Capped so a pasted novel cannot bloat every
+  // document that records it.
+  for (const key of ['warranty_terms', 'customer_supplied_parts_clause'] as const) {
+    if (!(key in body)) continue
+    const v = body[key]
+    if (v !== null && typeof v !== 'string') {
+      return NextResponse.json({ error: `${key} must be text or null` }, { status: 400 })
+    }
+    const t = (v ?? '').trim()
+    if (t.length > 2000) {
+      return NextResponse.json({ error: `${key} is limited to 2,000 characters` }, { status: 400 })
+    }
+    update[key] = t || null
+  }
+  if ('pay_link_url' in body) {
+    const raw = body.pay_link_url
+    const s = typeof raw === 'string' ? raw.trim() : ''
+    if (!s) {
+      update.pay_link_url = null
+    } else {
+      // https only - this becomes a link on a customer's document.
+      const safe = safePayLink(s)
+      if (!safe) {
+        return NextResponse.json(
+          { error: 'The pay link must be a full https:// address, e.g. https://pay.example.com/your-shop' },
+          { status: 400 },
+        )
+      }
+      update.pay_link_url = safe
+    }
+  }
+
   for (const key of ['address_line1', 'address_line2', 'city', 'state', 'zip'] as const) {
     if (!(key in body)) continue
     const raw = body[key]
@@ -313,6 +347,11 @@ export async function PUT(request: NextRequest) {
     // note above: a save that returns ok while discarding the number the shop just
     // typed is how a shop ends up billing a rate it believes it changed. But the
     // message has to say what to do, not just "column does not exist".
+    if (isMissing164Column(error)) {
+      return NextResponse.json({
+        error: 'Warranty, customer-supplied parts and the pay link need migration 164 applied first. Nothing was saved.',
+      }, { status: 409 })
+    }
     const missing = missingMigration142Column(error)
     if (missing) {
       return NextResponse.json({

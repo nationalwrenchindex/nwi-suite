@@ -5,6 +5,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { money } from '@/lib/format'
+import { recordTermsSnapshot } from '@/lib/document-terms'
 
 const QUOTE_SELECT = `
   *,
@@ -279,6 +280,14 @@ export async function POST(
     .eq('user_id', user.id)
     .select(QUOTE_SELECT)
     .single()
+
+  // The shop's terms as they stand at the FIRST send are what this quote carries from
+  // now on (spec 2.8; lib/document-terms). Best-effort: never fails a delivered send,
+  // and a resend keeps what the first send recorded.
+  const terms = await recordTermsSnapshot(supabase, 'quotes', id, user.id)
+  if (!terms.written && terms.reason !== 'already recorded') {
+    console.warn(`[send] terms not recorded on quote ${id}: ${terms.reason}`)
+  }
 
   if (updateErr || !updated) {
     // The customer HAS the quote - the send succeeded. Failing the request now would

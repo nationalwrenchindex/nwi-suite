@@ -37,6 +37,7 @@ import { BrandFooter } from '@/components/BrandHeader'
 import { publicDocumentMetadata } from '@/lib/public-metadata'
 import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
 import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
+import { parseTermsSnapshot, termsBlockRows } from '@/lib/document-terms'
 
 const QUOTE_SELECT = `
   id, quote_number, status, public_token,
@@ -94,6 +95,18 @@ export default async function PublicQuotePage(
     .single()
 
   if (error || !quote) notFound()
+
+  // The terms this quote recorded at its first send (migration 164). A separate read,
+  // so a database without 164 loses only this block, never the page.
+  const { data: termsRow } = await sc
+    .from('quotes')
+    .select('terms_snapshot')
+    .eq('id', (quote as { id: string }).id)
+    .maybeSingle()
+  const termsRows = termsBlockRows(
+    parseTermsSnapshot((termsRow as { terms_snapshot?: unknown } | null)?.terms_snapshot),
+    { includePayment: true },
+  )
 
   const { data: profile } = await sc
     .from('profiles')
@@ -419,6 +432,26 @@ export default async function PublicQuotePage(
           <div className="bg-white/5 rounded-xl px-4 py-3 space-y-1">
             <p className="text-white/40 text-xs uppercase tracking-widest">Notes from {techName}</p>
             <p className="text-white/70 text-sm whitespace-pre-wrap">{q.notes}</p>
+          </div>
+        )}
+
+        {/* Terms (spec 2.8): what this quote recorded when it was sent. A quote sent
+            before migration 164 recorded none and prints no block - as before. */}
+        {termsRows.length > 0 && (
+          <div data-testid="terms-block" className="bg-white/5 rounded-xl px-4 py-3 space-y-3">
+            <p className="text-white/40 text-xs uppercase tracking-widest">Terms</p>
+            {termsRows.map(r => (
+              <div key={r.key} className="space-y-0.5">
+                <p className="text-white/50 text-xs font-semibold">{r.label}</p>
+                {r.text && <p className="text-white/70 text-sm whitespace-pre-wrap">{r.text}</p>}
+                {r.link && (
+                  <a href={r.link} target="_blank" rel="noopener noreferrer nofollow"
+                    className="inline-block text-[#FF6600] text-sm underline break-all">
+                    Pay online
+                  </a>
+                )}
+              </div>
+            ))}
           </div>
         )}
 

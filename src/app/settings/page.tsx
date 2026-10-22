@@ -4,6 +4,7 @@ import AppNav from '@/components/layout/AppNav'
 import SettingsClient from '@/components/settings/SettingsClient'
 import ThemeToggle from '@/components/layout/ThemeToggle'
 import { hasQuickWrenchAccess } from '@/lib/subscription'
+import { TERMS_PROFILE_SELECT_164 } from '@/lib/document-terms'
 import type { PricingRow } from '@/components/detailer/DetailerPricingEditor'
 import Link from 'next/link'
 
@@ -38,6 +39,13 @@ export default async function SettingsPage() {
 
   const [{ data: profile }, hasQW, { data: pricingRows }, { data: adjPresets }, { data: listing }] = await Promise.all([
     (async () => {
+      // 164 (the terms block) first; without it, the page loads exactly as before.
+      const with164 = await supabase
+        .from('profiles')
+        .select(`${PROFILE_BASE}, ${PROFILE_142}, ${PROFILE_143}, ${TERMS_PROFILE_SELECT_164}`)
+        .eq('id', user.id)
+        .single()
+      if (!with164.error) return with164
       const full = await supabase
         .from('profiles')
         .select(`${PROFILE_BASE}, ${PROFILE_142}, ${PROFILE_143}`)
@@ -116,6 +124,10 @@ export default async function SettingsPage() {
     address_line1?:                      string | null
     address_line2?:                      string | null
     zip?:                                string | null
+    // Migration 164, the terms block. Absent until applied.
+    warranty_terms?:                     string | null
+    customer_supplied_parts_clause?:     string | null
+    pay_link_url?:                       string | null
   }
 
   return (
@@ -202,6 +214,12 @@ export default async function SettingsPage() {
             zip:           p.zip ?? null,
           }}
           initialDefaultTerms={p.default_payment_terms ?? 'net_7'}
+          // undefined (not '') when 164 is not applied, so the card can say so.
+          initialDocumentTerms={'warranty_terms' in p ? {
+            warranty_terms:                 p.warranty_terms ?? '',
+            customer_supplied_parts_clause: p.customer_supplied_parts_clause ?? '',
+            pay_link_url:                   p.pay_link_url ?? '',
+          } : undefined}
           initialPricingRows={(pricingRows ?? []) as PricingRow[]}
           initialBillConsumables={p.bill_consumables_separately ?? false}
           initialWorkOrdersEnabled={p.work_orders_enabled ?? false}

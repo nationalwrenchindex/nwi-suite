@@ -37,6 +37,7 @@ import {
 import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
 import { missingMigration142Column } from '@/lib/migration-142'
 import { termsWithDueDate } from '@/lib/hd/payment-terms'
+import { parseTermsSnapshot, termsBlockRows } from '@/lib/document-terms'
 import InvoiceViewClient from './InvoiceViewClient'
 import InvoiceApprovalClient from './InvoiceApprovalClient'
 import type { ReactNode } from 'react'
@@ -393,6 +394,14 @@ export default async function PublicInvoicePage(
 
   // Payment instructions: invoice-level setting takes priority, fall back to profile default
   const paymentInstructions = inv.payment_instructions || p?.default_payment_instructions || null
+
+  // The terms this invoice recorded at finalize (migration 164). A separate read, so a
+  // database without 164 loses only these blocks, never the page.
+  const { data: termsRow } = await sc
+    .from('invoices').select('terms_snapshot').eq('id', inv.id).maybeSingle()
+  const termsSnap = parseTermsSnapshot((termsRow as { terms_snapshot?: unknown } | null)?.terms_snapshot)
+  const termsRows = termsBlockRows(termsSnap, { includePayment: false })
+  const payLink   = termsSnap?.pay_link ?? null
 
   // Travel, mileage and shop supplies as stored on this invoice. extrasFromDocument
   // reads, it does not recompute — an invoice already sent must keep the figures the
@@ -777,15 +786,46 @@ export default async function PublicInvoicePage(
             Without this the customer has the amount and no way to pay it. The
             invoice's own value wins over the shop default, so a one-off "pay the
             driver by card" overrides "mail a check". */}
-        {paymentInstructions && !isPaid && (
+        {(paymentInstructions || payLink) && !isPaid && (
           <div
             className="mt-5 px-5 py-4"
             style={{ background: CARD, border: `2px solid ${ORANGE}`, borderRadius: 12 }}
           >
             <SectionLabel>How to Pay</SectionLabel>
-            <p className="text-sm whitespace-pre-wrap leading-relaxed" style={{ color: BODY }}>
-              {paymentInstructions}
-            </p>
+            {paymentInstructions && (
+              <p className="text-sm whitespace-pre-wrap leading-relaxed" style={{ color: BODY }}>
+                {paymentInstructions}
+              </p>
+            )}
+            {/* The pay link this invoice recorded at finalize (migration 164). https
+                only, checked when saved and again when read. */}
+            {payLink && (
+              <a
+                data-testid="pay-link"
+                href={payLink} target="_blank" rel="noopener noreferrer nofollow"
+                className="inline-block mt-3 px-4 py-2 rounded-lg text-sm font-semibold"
+                style={{ background: ORANGE, color: '#fff' }}
+              >
+                Pay online
+              </a>
+            )}
+          </div>
+        )}
+
+        {/* Terms (spec 2.8): the warranty and the customer-supplied parts clause this
+            invoice recorded at finalize. Payment terms and How to Pay print above. An
+            invoice finalized before migration 164 recorded none - no block, as before. */}
+        {termsRows.length > 0 && (
+          <div data-testid="terms-block" className="mt-5 px-5 py-4" style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12 }}>
+            <SectionLabel>Terms</SectionLabel>
+            <div className="space-y-3">
+              {termsRows.map(r => (
+                <div key={r.key}>
+                  <p className="text-xs font-semibold" style={{ color: MUTED }}>{r.label}</p>
+                  <p className="text-sm whitespace-pre-wrap leading-relaxed" style={{ color: BODY }}>{r.text}</p>
+                </div>
+              ))}
+            </div>
           </div>
         )}
 

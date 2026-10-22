@@ -165,6 +165,7 @@ export default function SettingsClient({
   initialExtras       = EXTRAS_DEFAULTS,
   initialAddress      = {},
   initialDefaultTerms = DEFAULT_PAYMENT_TERMS,
+  initialDocumentTerms,
 
   initialPricingRows       = [],
   initialBillConsumables   = false,
@@ -191,6 +192,8 @@ export default function SettingsClient({
   initialExtras?:              ExtrasDefaults
   initialAddress?:             { address_line1?: string | null; address_line2?: string | null; zip?: string | null }
   initialDefaultTerms?:        string
+  /** Migration 164. Undefined when it is not applied yet. */
+  initialDocumentTerms?:       { warranty_terms: string; customer_supplied_parts_clause: string; pay_link_url: string }
 
   initialPricingRows?:         PricingRow[]
   initialBillConsumables?:     boolean
@@ -210,6 +213,11 @@ export default function SettingsClient({
 
   const [paymentInstr,        setPaymentInstr]        = useState(initialPaymentInstr)
   const [savingPaymentInstr,  setSavingPaymentInstr]  = useState(false)
+  // The terms block (migration 164): printed on every quote and invoice, recorded onto
+  // each one when it is sent or finalized.
+  const [docTerms, setDocTerms] = useState(initialDocumentTerms ?? {
+    warranty_terms: '', customer_supplied_parts_clause: '', pay_link_url: '',
+  })
 
   const [mpg,         setMpg]         = useState(initialAverageMpg != null ? String(initialAverageMpg) : '')
   const [fuelType,    setFuelType]    = useState(initialFuelType)
@@ -308,6 +316,22 @@ export default function SettingsClient({
         setTimeout(() => setSavedMsg(null), 8000)
         setSavingPaymentInstr(false)
         return
+      }
+      // Its own request, so a missing migration 164 cannot stop the payment terms
+      // above from saving. Sent only once 164 is applied (the page knows).
+      if (initialDocumentTerms) {
+        const r2 = await fetch('/api/user/profile', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(docTerms),
+        })
+        if (!r2.ok) {
+          const j = await r2.json().catch(() => ({}))
+          setSavedMsg((j as { error?: string }).error ?? 'Payment terms saved, but the warranty, parts clause and pay link were not.')
+          setTimeout(() => setSavedMsg(null), 8000)
+          setSavingPaymentInstr(false)
+          return
+        }
       }
       setSavedMsg('Payment terms and instructions saved.')
       setTimeout(() => setSavedMsg(null), 3000)
@@ -845,13 +869,65 @@ export default function SettingsClient({
               Sets the due date on new invoices. Due on receipt is past due the day after you send it.
             </p>
           </div>
-          <textarea
-            rows={6}
-            className="nwi-input resize-y text-sm w-full"
-            placeholder="Payment accepted via Venmo (@username), Zelle (your-phone), Cash App ($cashtag), or cash. Please pay within 7 days of receiving this invoice."
-            value={paymentInstr}
-            onChange={e => setPaymentInstr(e.target.value)}
-          />
+          <div>
+            <label className="nwi-label">How to pay - remit address and instructions</label>
+            <textarea
+              rows={6}
+              className="nwi-input resize-y text-sm w-full"
+              placeholder="Payment accepted via Venmo (@username), Zelle (your-phone), Cash App ($cashtag), or cash. Checks payable to Your Shop LLC, 123 Main St, City, ST 00000."
+              value={paymentInstr}
+              onChange={e => setPaymentInstr(e.target.value)}
+            />
+          </div>
+
+          {/* ── The terms block (spec 2.8) ── */}
+          {initialDocumentTerms ? (
+            <>
+              <div>
+                <label className="nwi-label">Pay link (optional)</label>
+                <input
+                  type="url" inputMode="url"
+                  className="nwi-input text-sm w-full"
+                  placeholder="https://pay.example.com/your-shop"
+                  value={docTerms.pay_link_url}
+                  onChange={e => setDocTerms(t => ({ ...t, pay_link_url: e.target.value }))}
+                />
+                <p className="text-white/30 text-[11px] mt-1">
+                  A Square, Stripe, PayPal or other https:// payment page. Printed under How to pay.
+                </p>
+              </div>
+              <div>
+                <label className="nwi-label">Warranty terms</label>
+                <textarea
+                  rows={3}
+                  className="nwi-input resize-y text-sm w-full"
+                  placeholder="90 days / 4,000 miles on workmanship. Parts carry the manufacturer's warranty."
+                  value={docTerms.warranty_terms}
+                  onChange={e => setDocTerms(t => ({ ...t, warranty_terms: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="nwi-label">Customer-supplied parts</label>
+                <textarea
+                  rows={3}
+                  className="nwi-input resize-y text-sm w-full"
+                  placeholder="Parts supplied by the customer are installed without warranty. If a customer-supplied part fails or is incorrect, re-diagnosis and re-installation are billable."
+                  value={docTerms.customer_supplied_parts_clause}
+                  onChange={e => setDocTerms(t => ({ ...t, customer_supplied_parts_clause: e.target.value }))}
+                />
+              </div>
+              <p className="text-white/30 text-[11px]">
+                Printed in the Terms block of every quote and invoice. Each document keeps the terms
+                in force when it was sent or finalized - changing them here does not rewrite a
+                document a customer already has.
+              </p>
+            </>
+          ) : (
+            <p className="text-white/40 text-xs">
+              Warranty terms, a customer-supplied parts clause and a pay link need migration 164
+              applied first.
+            </p>
+          )}
           <button
             onClick={savePaymentInstructions}
             disabled={savingPaymentInstr}
