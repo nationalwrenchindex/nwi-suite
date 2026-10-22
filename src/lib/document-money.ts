@@ -148,9 +148,11 @@ export function documentMoney(input: DocumentMoneyInput): DocumentMoney {
  * The extras an EXISTING document carries: its hours and miles, the rates it was priced
  * at, and settings that bill exactly what it recorded and nothing more.
  *
- * A recorded rate already implies the document bills that extra (computeExtras), so the
- * settings here are EXTRAS_OFF: nothing the shop switched on after this document was
- * written can appear on it when a line is edited.
+ * An extra bills when the document recorded its rate - that is how computeExtras reads
+ * an override - and is OFF when it did not, so nothing the shop switched on after this
+ * document was written can appear on it when a line is edited. The settings mirror the
+ * recorded rates so the travel and mileage inputs show exactly when the document bills
+ * them.
  */
 export function documentExtras(doc: Record<string, unknown> | null | undefined): {
   settings: ExtrasSettings
@@ -160,8 +162,17 @@ export function documentExtras(doc: Record<string, unknown> | null | undefined):
   const n = (v: unknown) => { const x = Number(v); return Number.isFinite(x) ? x : 0 }
   const nn = (v: unknown): number | null =>
     v === null || v === undefined || v === '' || !Number.isFinite(Number(v)) ? null : Number(v)
+  const travelRate   = nn(d.travel_rate)
+  const mileageRate  = nn(d.mileage_rate)
+  const suppliesPct  = nn(d.shop_supplies_percent_applied)
   return {
-    settings: EXTRAS_OFF,
+    settings: {
+      ...EXTRAS_OFF,
+      billTravel:          travelRate !== null,  travelRatePerHour:  travelRate,
+      billMileage:         mileageRate !== null, mileageRatePerMile: mileageRate,
+      billShopSupplies:    suppliesPct !== null, shopSuppliesPercent: suppliesPct,
+      shopSuppliesCap:     nn(d.shop_supplies_cap_applied),
+    },
     input: {
       travelHours:                 n(d.travel_hours),
       mileageMiles:                n(d.mileage_miles),

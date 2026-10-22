@@ -107,7 +107,10 @@ const exempt = documentTaxSettings({ labor: { base: 100, rate: 0, taxed: false, 
 check('labour recorded EXEMPT stays exempt when today taxes it', exempt?.tax_labor === false)
 const ex = documentExtras({ travel_hours: 1.5, travel_rate: 90, mileage_miles: 0, mileage_rate: null, shop_supplies_percent_applied: null })
 check('stored travel hours and rate come back, not zero', ex.input.travelHours === 1.5 && ex.input.travelRateOverride === 90)
-check('an extra the document never recorded stays off (EXTRAS_OFF + overrides only)', same(ex.settings, EXTRAS_OFF) && ex.input.shopSuppliesPercentOverride === null)
+check('an extra the document recorded bills; one it never recorded stays off',
+  ex.settings.billTravel && !ex.settings.billMileage && !ex.settings.billShopSupplies && ex.input.shopSuppliesPercentOverride === null)
+const none = documentExtras({})
+check('a document with no extras recorded bills none, whatever the shop does today', same(none.settings, EXTRAS_OFF))
 
 console.log('\nEvery real LD quote and work order: a no-op save changes nothing')
 async function realRows() {

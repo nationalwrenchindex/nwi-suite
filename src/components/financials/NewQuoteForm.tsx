@@ -17,20 +17,15 @@
 
 import { useState } from 'react'
 import CustomerUnitPicker from '@/components/work-orders/CustomerUnitPicker'
-import { computeTotals, toLineItems, round2, type EditItem } from '@/components/shared/line-items'
+import LineItemEditor from '@/components/shared/LineItemEditor'
+import { totalLaborHours, type EditItem } from '@/components/shared/line-items'
+import { documentMoney } from '@/lib/document-money'
 import { useTaxSettings } from '@/lib/use-tax-settings'
 import { useExtrasSettingsState } from '@/lib/use-extras-settings'
-import {
-  computeExtras, extrasColumns, extrasDisplayRows, totalsWithExtras,
-} from '@/lib/billable-extras'
+import { extrasDisplayRows } from '@/lib/billable-extras'
 import { taxDisplayRows } from '@/lib/tax'
 import { money } from '@/lib/format'
 import { BLANK_QUOTE_SEED, seedNotes, type QuoteSeed } from '@/types/quote-seed'
-
-let rowSeq = 0
-const blankRow = (): EditItem => ({
-  _id: `new-${rowSeq++}`, description: '', quantity: 1, unit_price: 0, part_number: '',
-})
 
 export default function NewQuoteForm({
   defaults,
@@ -68,15 +63,19 @@ export default function NewQuoteForm({
   const [unitLabel,  setUnitLabel]  = useState('')
   const [notes,      setNotes]      = useState(seedNotes(seed))
 
-  const [items, setItems] = useState<EditItem[]>(() =>
-    (seed.lines ?? []).length > 0
-      ? (seed.lines ?? []).map((l, i) => ({
-          _id: `seed-${i}`, description: l.description, quantity: l.quantity, unit_price: l.unit_price,
-          part_number: l.part_number ?? '',
-        }))
-      : [blankRow()],
-  )
-  const [laborHours, setLaborHours] = useState(seed.laborHours ?? 0)
+  // Parts and labour are LINES, in the same editor the quote and the work order use -
+  // several labour lines if the job has several, each with what the work involves.
+  const [items, setItems] = useState<EditItem[]>(() => [
+    ...(seed.lines ?? []).map((l, i) => ({
+      _id: `seed-${i}`, description: l.description, quantity: l.quantity, unit_price: l.unit_price,
+      part_number: l.part_number ?? '',
+    })),
+    ...((seed.laborHours ?? 0) > 0 ? [{
+      _id: 'seed-labor', kind: 'labor' as const, description: 'Labor', part_number: '',
+      quantity: seed.laborHours ?? 0, unit_price: defaults.labor_rate,
+    }] : []),
+  ])
+  // The rate a new labour line starts at, stored as the quote's labor_rate.
   const [laborRate,  setLaborRate]  = useState(defaults.labor_rate)
   const [markupPct,  setMarkupPct]  = useState(defaults.markup_percent)
   const [taxPct,     setTaxPct]     = useState(defaults.tax_percent)
@@ -84,40 +83,24 @@ export default function NewQuoteForm({
   const [saving, setSaving] = useState(false)
   const [error,  setError]  = useState<string | null>(null)
 
-  // One calculator, the same one the editor uses. Parts and labor are taxed per the
-  // shop's settings; until the fetch resolves this falls back to the old single rate,
-  // so nothing on screen is ever briefly wrong in the exempt direction.
-  const totals = computeTotals({ items, markupPct, laborHours, laborRate, taxPct, taxSettings })
-
-  // ── Billable extras ──
-  // Shop supplies is a percentage of the PARTS TOTAL AS QUOTED - post-markup, the
-  // figure the customer reads - so a quote and the invoice it becomes agree. Travel
-  // and mileage are hours and miles; the amounts compute. None of the three is an
-  // item anybody adds.
-  const extrasResult = computeExtras(
-    totals.partsTotal,
-    { travelHours, mileageMiles },
-    extrasSettings,
-    laborRate,
-  )
-  // Re-taxed with the extras in their own buckets: travel and mileage as labour,
-  // shop supplies as parts. Same call the work order makes.
-  const withExtras = totalsWithExtras(
-    { parts: totals.partsTotal, labor: totals.laborSubtotal },
-    extrasResult,
-    taxSettings,
-    taxPct,
-  )
-
-  function update(id: string, patch: Partial<EditItem>) {
-    setItems(prev => prev.map(r => (r._id === id ? { ...r, ...patch } : r)))
-  }
+  // One calculator, the same one the quote editor and the work order use. A NEW quote
+  // is priced under the shop's current settings, which it then stores. Until the tax
+  // fetch resolves this falls back to the single rate, so nothing on screen is ever
+  // briefly wrong in the exempt direction. Shop supplies is a percentage of the PARTS
+  // TOTAL AS QUOTED - post-markup - so a quote and the invoice it becomes agree.
+  const docMoney = documentMoney({
+    items, markupPct, laborRate, taxPct, taxSettings,
+    extrasSettings, extras: { travelHours, mileageMiles },
+  })
+  const totals       = docMoney
+  const extrasResult = docMoney.extras
+  const withExtras   = docMoney
+  const laborHours   = totalLaborHours({ items, laborHours: 0 })
 
   async function submit() {
     setError(null)
-    const priced = items.filter(r => r.description.trim() || r.unit_price > 0 || r.quantity !== 1)
-    if (priced.length === 0 && laborHours <= 0) {
-      setError('Add a part or some labour hours before saving.')
+    if (items.length === 0) {
+      setError('Add a labor or part line before saving.')
       return
     }
     if (withExtras.grandTotal < 0) {
@@ -137,20 +120,10 @@ export default function NewQuoteForm({
           customer_id: customerId,
           vehicle_id:  vehicleId,
           notes:       notes.trim() || null,
-          // Stored post-markup, because that is the number the customer agreed to.
-          // toLineItems applies it; the editor divides it back out on read.
-          line_items:           toLineItems({ items: priced, markupPct, laborHours, laborRate }),
-          labor_hours:          laborHours,
-          labor_rate:           laborRate,
-          parts_subtotal:       round2(totals.partsBase),
-          parts_markup_percent: markupPct,
-          labor_subtotal:       round2(totals.laborSubtotal),
-          tax_percent:          taxPct,
-          // From withExtras, not totals: the extras are part of this quote's money.
-          tax_amount:           round2(withExtras.taxAmount),
-          grand_total:          round2(withExtras.grandTotal),
-          tax_breakdown:        withExtras.taxBreakdown,
-          ...extrasColumns(extrasResult),
+          // Every money column from lib/document-money: lines stored post-markup in
+          // the order arranged, labour hours summed off the labour lines, the extras
+          // inside tax_amount and grand_total, and what was taxed.
+          ...docMoney.columns,
         }),
       })
       const json = await res.json()
@@ -199,63 +172,22 @@ export default function NewQuoteForm({
         </p>
       )}
 
-      {/* ── Parts ── */}
+      {/* ── Lines: labour and parts ── */}
       <div className="space-y-2">
-        <p className="nwi-label">Parts</p>
-        {items.map(row => (
-          <div key={row._id} className="grid grid-cols-[1fr_110px_70px_100px_32px] gap-2 items-center">
-            <input
-              className="nwi-input text-sm" placeholder="Part description"
-              value={row.description} disabled={saving}
-              onChange={e => update(row._id, { description: e.target.value })}
-            />
-            {/* The part number the customer can order against. Never captured
-                before, which is why nothing useful survived to the invoice. */}
-            <input
-              className="nwi-input text-sm font-mono" placeholder="Part #"
-              value={row.part_number} disabled={saving}
-              onChange={e => update(row._id, { part_number: e.target.value })}
-            />
-            <input
-              type="number" min={0} step={1} className="nwi-input text-sm" placeholder="Qty"
-              value={row.quantity} disabled={saving}
-              onChange={e => update(row._id, { quantity: Number(e.target.value) || 0 })}
-            />
-            <input
-              type="number" min={0} step={0.01} className="nwi-input text-sm" placeholder="Your cost"
-              // Blank rather than a seeded zero, so typing 45 cannot produce "045".
-              value={row.unit_price === 0 ? '' : row.unit_price} disabled={saving}
-              onChange={e => update(row._id, { unit_price: e.target.value === '' ? 0 : Number(e.target.value) })}
-            />
-            <button
-              onClick={() => setItems(prev => (prev.length === 1 ? [blankRow()] : prev.filter(r => r._id !== row._id)))}
-              disabled={saving}
-              className="text-white/30 hover:text-danger text-lg leading-none"
-              title="Remove"
-            >
-              ×
-            </button>
-          </div>
-        ))}
-        <button
-          onClick={() => setItems(prev => [...prev, blankRow()])}
-          disabled={saving}
-          className="text-orange text-xs hover:underline"
-        >
-          + Add part
-        </button>
+        <p className="nwi-label">Labor and parts</p>
+        <LineItemEditor items={items} onChange={setItems} allowLabor laborRate={laborRate} />
         <p className="text-white/25 text-[11px]">
-          Enter what you pay. The {markupPct}% markup is added for the customer.
+          Parts: enter what you pay. The {markupPct}% markup is added for the customer.
+          Labor: hours at the rate on the line.
         </p>
       </div>
 
-      {/* ── Labour and rates ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {/* ── Rates ── */}
+      <div className="grid grid-cols-3 gap-3">
         {([
-          ['Labour hours', laborHours, setLaborHours, 0.25],
-          ['Labour rate',  laborRate,  setLaborRate,  1],
-          ['Markup %',     markupPct,  setMarkupPct,  1],
-          ['Tax %',        taxPct,     setTaxPct,     0.001],
+          ['Rate for new labor lines', laborRate,  setLaborRate,  1],
+          ['Markup %',                 markupPct,  setMarkupPct,  1],
+          ['Tax %',                    taxPct,     setTaxPct,     0.001],
         ] as const).map(([label, value, set, step]) => (
           <div key={label}>
             <label className="nwi-label">{label}</label>

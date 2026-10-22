@@ -112,6 +112,11 @@ export async function POST(req: NextRequest) {
   for (const key of [
     'labor_hours', 'labor_rate', 'parts_subtotal', 'parts_markup_percent',
     'labor_subtotal', 'tax_percent', 'tax_amount', 'grand_total',
+    // THE EXTRAS (migration 142, applied). NewQuoteForm always sent them and this
+    // route dropped them, so a quote with travel stored a grand_total that included
+    // travel its own travel columns did not record.
+    'travel_hours', 'travel_rate', 'travel_amount', 'mileage_miles', 'mileage_rate', 'mileage_amount',
+    'shop_supplies_percent_applied', 'shop_supplies_cap_applied', 'shop_supplies_fee',
   ] as const) {
     const n = num(body[key])
     if (n !== null) money[key] = n

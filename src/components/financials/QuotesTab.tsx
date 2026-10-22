@@ -10,10 +10,12 @@ import { useTaxSettings } from '@/lib/use-tax-settings'
 import type { Quote, QuoteStatus, LineItem, ServiceLine, Adjustment, AdjustmentPreset } from '@/types/financials'
 import LineItemEditor, { LineItemTable } from '@/components/shared/LineItemEditor'
 import {
-  round2, isLaborItem, fromLineItems, toLineItems, computeTotals,
-  markupOnReopen, markupLabel,
+  round2, fromLineItems, computeTotals,
+  markupOnReopen, markupLabel, editKey, totalLaborHours,
   type EditItem,
 } from '@/components/shared/line-items'
+import { documentMoney, documentExtras } from '@/lib/document-money'
+import { documentTaxSettings } from '@/lib/tax'
 import { money } from '@/lib/format'
 import NewQuoteForm from './NewQuoteForm'
 import { deepLinkTarget, urlWithoutQuote } from '@/lib/quote-deep-link'
@@ -543,14 +545,23 @@ function QuoteDetailModal({
   const storedMarkup  = markupOnReopen(initialQuote.parts_markup_percent)
   // The detailer model carries one synthetic 'Service' row that is not a part, so
   // it is excluded from the parts table rather than shown as a zero-quantity line.
+  //
+  // A mechanic's quote holds its labour AS LINES, in their stored order - several of
+  // them if the job needs it. Loading it as one hours x rate pair collapsed QuickWrench's
+  // per-job labour rows ("Labor — Front Brake Pad Replacement", "Labor — Oil & Filter
+  // Change") into a single "Labor" row on the first save.
   const [initialItems] = useState<EditItem[]>(() =>
-    fromLineItems(initialQuote.line_items, storedMarkup.percent, isDetailer ? 'Service' : undefined)
+    fromLineItems(initialQuote.line_items, storedMarkup.percent, isDetailer ? 'Service' : undefined,
+      { withLabor: !isDetailer })
   )
-  const [initLaborHours] = useState(initialQuote.labor_hours ?? 0)
-  const [initLaborRate]  = useState(initialQuote.labor_rate  ?? 125)
+  // Labour is in the lines for a mechanic's quote, so the old single pair stays at 0.
+  const [initLaborHours] = useState(isDetailer ? (initialQuote.labor_hours ?? 0) : 0)
+  // The quote's OWN rate, the one a new labour line starts at. No invented fallback:
+  // these were 125 and 8.5, numbers no shop chose.
+  const [initLaborRate]  = useState(initialQuote.labor_rate  ?? 0)
   const [initMarkup]     = useState(storedMarkup.percent)
   const [markupTouched,  setMarkupTouched] = useState(false)
-  const [initTaxPct]     = useState(initialQuote.tax_percent ?? 8.5)
+  const [initTaxPct]     = useState(initialQuote.tax_percent ?? 0)
   const [initNotes]      = useState(initialQuote.notes ?? '')
   const [initCustName]   = useState(
     initialQuote.customer
@@ -647,7 +658,8 @@ function QuoteDetailModal({
     its: EditItem[], lh: number, lr: number, mp: number, tp: number,
     n: string, cn: string, cp: string, vid: string | null,
   ) {
-    return JSON.stringify({ its: its.map(x => ({ d: x.description, q: x.quantity, p: x.unit_price })), lh, lr, mp, tp, n, cn, cp, vid })
+    // editKey covers every editable field, and the array order covers a reorder.
+    return JSON.stringify({ its: its.map(editKey), lh, lr, mp, tp, n, cn, cp, vid })
   }
   function makeDetHash(
     sls: EditServiceLine[], adjs: EditAdjustment[], tp: number,
@@ -685,38 +697,52 @@ function QuoteDetailModal({
   // separately-stated repair labor, and that question is not settled here.
   // Hours and miles only. The percentage is never a question - it comes from
   // Settings and computes itself off the parts total below.
-  const { settings: extrasSettings, loaded: extrasLoaded } = useExtrasSettingsState()
-  const [travelHours,  setTravelHours]  = useState(0)
-  const [mileageMiles, setMileageMiles] = useState(0)
+  const { settings: currentExtras, loaded: currentExtrasLoaded } = useExtrasSettingsState()
+  // RECORDED VALUES BEAT CURRENT SETTINGS. A mechanic's quote re-totals under the
+  // extras it stored: its own travel hours and miles (these started at 0 on every
+  // reopen, so saving a quote that billed travel removed the travel) and its own
+  // rates. An extra it never recorded stays off. See lib/document-money.
+  const docExtras = documentExtras(initialQuote as unknown as Record<string, unknown>)
+  const extrasSettings = isDetailer ? currentExtras : docExtras.settings
+  const extrasLoaded   = isDetailer ? currentExtrasLoaded : true
+  const [travelHours,  setTravelHours]  = useState(isDetailer ? 0 : docExtras.input.travelHours)
+  const [mileageMiles, setMileageMiles] = useState(isDetailer ? 0 : docExtras.input.mileageMiles)
 
-  const t                   = computeTotals(isDetailer
-    ? { ...lineInputs, items: [], laborHours: 0, laborRate: 0 }
-    : { ...lineInputs, taxSettings })
-  const partsBase           = t.partsBase
-  const markupAmt           = t.markupAmt
-  const partsTotal          = t.partsTotal
-  const laborSubtotal       = t.laborSubtotal
+  // A mechanic's quote: one calculator, the same one the work order uses, under the
+  // tax this quote recorded - not today's settings.
+  const docMoney = isDetailer ? null : documentMoney({
+    items, markupPct, laborRate, taxPct,
+    taxSettings:    documentTaxSettings((initialQuote as { tax_breakdown?: unknown }).tax_breakdown, taxSettings, taxPct),
+    extrasSettings: docExtras.settings,
+    extras:         { ...docExtras.input, travelHours, mileageMiles },
+    stored:         initialQuote as unknown as Record<string, unknown>,
+  })
+
+  const t                   = computeTotals({ ...lineInputs, items: [], laborHours: 0, laborRate: 0 })
+  const partsBase           = docMoney ? docMoney.partsBase     : t.partsBase
+  const markupAmt           = docMoney ? docMoney.markupAmt     : t.markupAmt
+  const laborSubtotal       = docMoney ? docMoney.laborSubtotal : t.laborSubtotal
   const servicesSubtotal    = isDetailer ? serviceLines.reduce((s, sl) => s + sl.price_cents / 100, 0) : 0
   const adjustmentsSubtotal = isDetailer ? adjustments.reduce((s, a) => s + a.price_cents / 100, 0) : 0
-  const subtotal            = isDetailer ? servicesSubtotal + adjustmentsSubtotal : t.subtotal
-  const taxAmount           = isDetailer ? round2(subtotal * ((taxPct || 0) / 100)) : t.taxAmount
-  const grandTotalBase      = isDetailer ? round2(subtotal + taxAmount)             : t.grandTotal
 
   // ── Billable extras ──────────────────────────────────────────────────────
-  // Supplies is a percentage of the POST-MARKUP parts total - the figure the
-  // customer reads - so this quote and the invoice it becomes agree. Travel taxes as
-  // labour, mileage is not taxed, supplies taxes as parts. Detailers are excluded
-  // from the percentage fee throughout, so they get no extras here either.
-  const extrasResult = computeExtras(
-    isDetailer ? 0 : partsTotal,
+  // Detailers are excluded from the percentage fee throughout, and are otherwise
+  // exactly as they were.
+  const detailerSubtotal = servicesSubtotal + adjustmentsSubtotal
+  const detailerTax      = round2(detailerSubtotal * ((taxPct || 0) / 100))
+  const extrasResult = docMoney ? docMoney.extras : computeExtras(
+    0,
     { travelHours, mileageMiles },
-    isDetailer ? { ...extrasSettings, billShopSupplies: false } : extrasSettings,
+    { ...currentExtras, billShopSupplies: false },
     laborRate,
   )
-  const extras     = extrasDelta(extrasResult, isDetailer ? null : taxSettings)
-  const taxWithExtras   = round2(taxAmount + extras.taxDelta)
-  const subtotalWithExtras = round2(subtotal + extras.subtotalDelta)
-  const grandTotal  = round2(grandTotalBase + extras.totalDelta)
+  const extras = extrasDelta(extrasResult, null)
+  // For a mechanic's quote every figure comes off docMoney, extras inside the tax.
+  const subtotal           = docMoney ? round2(docMoney.subtotal - docMoney.extras.total) : detailerSubtotal
+  const subtotalWithExtras = docMoney ? docMoney.subtotal   : round2(detailerSubtotal + extras.subtotalDelta)
+  const taxAmount          = docMoney ? docMoney.taxAmount  : detailerTax
+  const grandTotal         = docMoney ? docMoney.grandTotal : round2(detailerSubtotal + detailerTax + extras.totalDelta)
+  const laborHoursShown    = totalLaborHours({ items, laborHours })
   // A quote must not display a charge outside its total either.
   const extrasMismatch = extrasAgree(extrasResult, subtotalWithExtras, subtotal)
 
@@ -809,19 +835,12 @@ function QuoteDetailModal({
           adjustments:          adjustments.map(({ _id, ...a }) => a),
         }
       } else {
-        const savedLineItems = toLineItems({ items, markupPct, laborHours, laborRate })
         body = {
-          line_items:           savedLineItems,
-          labor_hours:          laborHours,
-          labor_rate:           laborRate,
-          parts_subtotal:       round2(partsBase),
-          parts_markup_percent: markupPct,
-          labor_subtotal:       round2(laborSubtotal),
-          tax_percent:          taxPct,
-          tax_amount:           round2(taxAmount),
-          grand_total:          round2(grandTotal),
-          // Computed, stored with the rate in force so a reopen cannot re-price them.
-          ...extrasColumns(extrasResult),
+          // Every money column from one place: the lines in the order arranged, the
+          // labour hours summed off the labour lines, the extras INSIDE tax_amount and
+          // grand_total (tax_amount used to leave the extras' tax out), and the tax
+          // breakdown this quote recorded. An unchanged quote saves its own figures.
+          ...docMoney!.columns,
           notes,
           customer_name:        custName,
           customer_phone:       custPhone,
@@ -830,12 +849,7 @@ function QuoteDetailModal({
           customer_id:          initialQuote.customer_id ?? null,
           vehicle_id:           vehicleId,
           po_number:            poNumber,
-          // WHAT WAS TAXED. computeTotals has returned this since the parts/labor
-          // split shipped and the save was dropping it on the floor, so an LD quote
-          // stored a correct tax_amount with no record of what it applied to — the
-          // public quote page could not say "Labor — not taxable", and a converted
-          // invoice inherited null.
-          tax_breakdown:        t.taxBreakdown,
+          // tax_breakdown rides in docMoney.columns: what was taxed, extras included.
         }
       }
 
@@ -1232,7 +1246,7 @@ function QuoteDetailModal({
                 <p className="text-white/30 text-xs uppercase tracking-widest">Line Items</p>
 
                 {isDraft ? (
-                  <LineItemEditor key={editorNonce} items={items} onChange={setItems} />
+                  <LineItemEditor key={editorNonce} items={items} onChange={setItems} allowLabor laborRate={laborRate} />
                 ) : (
                   <LineItemTable lineItems={initialQuote.line_items} />
                 )}
@@ -1348,13 +1362,16 @@ function QuoteDetailModal({
               isDraft ? (
                 <div className="space-y-2">
                   <p className="text-white/30 text-xs uppercase tracking-widest">Labor</p>
+                  {/* Labour is entered as lines above. This is the quote's own rate, the
+                      one a new labour line starts at; changing it re-prices nothing
+                      already on the quote. */}
                   <div className="grid grid-cols-3 gap-3">
                     <div>
-                      <label className="nwi-label">Hours</label>
-                      <input type="number" min={0} step={0.25} className="nwi-input" value={laborHours} onChange={e => setLaborHours(Number(e.target.value) || 0)} />
+                      <label className="nwi-label">Hours (from lines)</label>
+                      <div className="nwi-input bg-white/5 text-white/60 pointer-events-none">{laborHoursShown}</div>
                     </div>
                     <div>
-                      <label className="nwi-label">Rate $/hr</label>
+                      <label className="nwi-label">Rate for new lines $/hr</label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40 text-sm">$</span>
                         <input type="number" min={0} step={5} className="nwi-input pl-7" value={laborRate} onChange={e => setLaborRate(Number(e.target.value) || 0)} />
@@ -1667,7 +1684,7 @@ function QuoteDetailModal({
                       )}
                       {laborSubtotal > 0 && (
                         <div className="flex justify-between text-sm">
-                          <span className="text-white/60">Labor ({laborHours}h × {fmt(laborRate)}/hr)</span>
+                          <span className="text-white/60">Labor ({laborHoursShown}h)</span>
                           <span className="text-white">{fmt(laborSubtotal)}</span>
                         </div>
                       )}

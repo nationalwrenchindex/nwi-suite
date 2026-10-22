@@ -23,7 +23,7 @@ import {
   extrasTaxBuckets, partsBaseFromLines, round2,
 } from '@/lib/billable-extras'
 import {
-  computeTax, taxSettingsFrom, TAX_SETTINGS_SELECT, effectiveRatePercent,
+  computeTax, taxSettingsFrom, TAX_SETTINGS_SELECT, effectiveRatePercent, documentTaxSettings,
 } from '@/lib/tax'
 import { isBillable, type SegmentStatus } from '@/types/segments'
 
@@ -196,14 +196,20 @@ export async function syncParentExtras(
 
     // Travel and mileage come from what the tech entered on the parent; only the
     // supplies base is derived from the segments.
+    // LD reads the recorded travel/mileage rates and tax terms too (below). HD keeps
+    // its existing behaviour in this pass; it has the same gap - see the LD comment.
+    const recordedTerms = product === 'ld'
     const { data: parent } = await supabase
       .from(spec.table)
-      .select('travel_hours, mileage_miles, labor_rate, shop_supplies_percent_applied, shop_supplies_cap_applied')
+      .select(recordedTerms
+        ? 'travel_hours, mileage_miles, labor_rate, shop_supplies_percent_applied, shop_supplies_cap_applied, travel_rate, mileage_rate, tax_breakdown, tax_percent'
+        : 'travel_hours, mileage_miles, labor_rate, shop_supplies_percent_applied, shop_supplies_cap_applied')
       .eq('id', parentId)
       .eq('user_id', userId)
       .single()
 
     const p = (parent ?? {}) as Record<string, unknown>
+    const recorded = (v: unknown) => (v == null ? null : Number(v))
     const extras = computeExtras(
       partsBase,
       {
@@ -211,10 +217,15 @@ export async function syncParentExtras(
         mileageMiles: Number(p.mileage_miles ?? 0),
         // A percentage already recorded on this work order wins over the current
         // Settings value, so editing a segment cannot re-price a job at a new rate.
-        shopSuppliesPercentOverride: p.shop_supplies_percent_applied == null
-          ? null : Number(p.shop_supplies_percent_applied),
-        shopSuppliesCapOverride: p.shop_supplies_cap_applied == null
-          ? null : Number(p.shop_supplies_cap_applied),
+        shopSuppliesPercentOverride: recorded(p.shop_supplies_percent_applied),
+        shopSuppliesCapOverride:     recorded(p.shop_supplies_cap_applied),
+        // RECORDED VALUES BEAT CURRENT SETTINGS - for travel and mileage too. Without
+        // these, every LD work-order save re-priced the travel at today's rate even
+        // though the work order stored the rate it was quoted at.
+        ...(recordedTerms ? {
+          travelRateOverride:  recorded(p.travel_rate),
+          mileageRateOverride: recorded(p.mileage_rate),
+        } : {}),
       },
       settings,
       Number(p.labor_rate ?? 0),
@@ -245,7 +256,12 @@ export async function syncParentExtras(
         .select(TAX_SETTINGS_SELECT)
         .eq('id', userId)
         .single()
-      const taxSettings = taxSettingsFrom(taxProfile)
+      // An LD work order that RECORDED what it taxed keeps those terms; one that did
+      // not (a new record whose form lost the race to the profile fetch) still takes
+      // the shop's settings, which is the case this function was written to fix.
+      const taxSettings = (recordedTerms
+        ? documentTaxSettings(p.tax_breakdown, taxSettingsFrom(taxProfile), Number(p.tax_percent ?? 0))
+        : null) ?? taxSettingsFrom(taxProfile)
 
       const laborBase = await lineItemLaborBase(supabase, spec, parentId, userId)
       const buckets   = extrasTaxBuckets(extras)

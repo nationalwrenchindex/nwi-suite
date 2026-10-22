@@ -190,6 +190,17 @@ export async function PUT(
     po_number:            body.po_number?.trim() || null,
   }
   if (body.jobs !== undefined) updatePayload.jobs = body.jobs
+  // THE EXTRAS. The editor has always sent these and this route dropped every one, so
+  // a quote whose travel hours were edited stored a grand_total that included travel
+  // its own travel columns did not record. Written only when sent, as tax_breakdown is.
+  // Columns from migration 142, which is applied.
+  const raw = body as unknown as Record<string, unknown>
+  for (const k of [
+    'travel_hours', 'travel_rate', 'travel_amount', 'mileage_miles', 'mileage_rate', 'mileage_amount',
+    'shop_supplies_percent_applied', 'shop_supplies_cap_applied', 'shop_supplies_fee',
+  ]) {
+    if (raw[k] !== undefined && !isDetailer) updatePayload[k] = raw[k]
+  }
   // Written only when sent, so a caller that does not know about the split cannot
   // wipe a breakdown that is already on the row.
   if (body.tax_breakdown !== undefined) updatePayload.tax_breakdown = body.tax_breakdown ?? null

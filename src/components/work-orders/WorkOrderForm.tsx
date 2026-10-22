@@ -10,15 +10,16 @@
 import { useState } from 'react'
 import { useTaxSettings } from '@/lib/use-tax-settings'
 import { useExtrasSettingsState } from '@/lib/use-extras-settings'
-import { computeExtras, extrasColumns, extrasDisplayRows, totalsWithExtras } from '@/lib/billable-extras'
-import { taxDisplayRows } from '@/lib/tax'
+import { extrasDisplayRows } from '@/lib/billable-extras'
+import { taxDisplayRows, documentTaxSettings } from '@/lib/tax'
 import { useRouter } from 'next/navigation'
 import LineItemEditor from '@/components/shared/LineItemEditor'
 import {
-  fromLineItems, computeTotals, lineMoneyColumns, validateLines,
+  fromLineItems, validateLines, totalLaborHours,
   markupOnReopen, markupLabel,
   type EditItem,
 } from '@/components/shared/line-items'
+import { documentMoney, documentExtras } from '@/lib/document-money'
 import type { PricingMode } from '@/components/shared/segments'
 import {
   STATUS_META, NEXT_STATUS,
@@ -78,13 +79,17 @@ export default function WorkOrderForm({
   // A NEW work order still seeds from Settings — but through chooseMode(), at the
   // moment the tech picks "Single job", and it is then stored on the record.
   const storedMarkup = markupOnReopen(workOrder?.parts_markup_percent)
+  // Labour loads AS LINES, in stored order, so a work order can carry several -
+  // the same editor and the same model as the quote it came from.
   const [items, setItems] = useState<EditItem[]>(
-    () => fromLineItems(workOrder?.line_items, storedMarkup.percent),
+    () => fromLineItems(workOrder?.line_items, storedMarkup.percent, undefined, { withLabor: true }),
   )
   // A new work order starts with NO rates seeded. The defaults land only when the tech
   // picks "Single job" — pre-filling them meant a segment-priced record still had a
   // labour rate and a markup sitting on it, waiting to be written.
-  const [laborHours, setLaborHours] = useState(workOrder?.labor_hours ?? 0)
+  //
+  // The old single hours x rate pair stays at 0: labour is in the lines.
+  const [laborHours, setLaborHours] = useState(0)
   const [laborRate,  setLaborRate]  = useState(isNew ? 0 : (workOrder?.labor_rate  ?? defaults.labor_rate))
   const [markupPct,  setMarkupPct]  = useState(isNew ? 0 : storedMarkup.percent)
   /** True until the tech types a markup on a record that never had one recorded. */
@@ -95,7 +100,14 @@ export default function WorkOrderForm({
   // ── Billable extras ──
   // The inputs come off the work order, never recomputed from today's Settings —
   // the stored amount is what the customer was told.
-  const { settings: extras, loaded: extrasLoaded } = useExtrasSettingsState()
+  const { settings: currentExtras, loaded: currentExtrasLoaded } = useExtrasSettingsState()
+  // An EXISTING single-job work order bills the extras it recorded, at the rates it
+  // recorded - not whatever Settings say today. A new one, or a segment-priced one
+  // (whose extras the server keeps in step with its segments), uses the shop's.
+  const docExtras    = documentExtras(workOrder as unknown as Record<string, unknown>)
+  const recordedTerms = !isNew && ownsPricing
+  const extras       = recordedTerms ? docExtras.settings : currentExtras
+  const extrasLoaded = recordedTerms ? true : currentExtrasLoaded
   const [travelHours,  setTravelHours]  = useState(Number(workOrder?.travel_hours  ?? 0))
   const [mileageMiles, setMileageMiles] = useState(Number(workOrder?.mileage_miles ?? 0))
 
@@ -125,26 +137,24 @@ export default function WorkOrderForm({
   // Parts and labor are taxed per the shop's settings. Until the fetch resolves,
   // taxSettings is null and computeTotals falls back to the old single-rate maths,
   // so the figures on screen are never momentarily wrong in the exempt direction.
-  const inputs = { items, markupPct, laborHours, laborRate, taxPct, taxSettings }
-  const totals = computeTotals(inputs)
-
-  // Extras ride on top of the line totals. The shop-supplies base is the parts
-  // subtotal AS IT APPEARS ON THE DOCUMENT — post-markup, the figure the customer
-  // reads — not the shop's raw cost. See computeExtras.
-  const extrasResult = computeExtras(
-    totals.partsTotal,
-    { travelHours, mileageMiles },
-    extras,
-    laborRate,
-  )
-  // Re-taxed with the extras in their own buckets: travel and mileage as labour,
-  // shop supplies as parts. One calculator, src/lib/tax.ts, unchanged.
-  const withExtras = totalsWithExtras(
-    { parts: totals.partsTotal, labor: totals.laborSubtotal },
-    extrasResult,
-    taxSettings ?? null,
-    taxPct,
-  )
+  // One calculator, the same one the quote editor uses (lib/document-money): the
+  // lines, the extras on top of the POST-markup parts total, everything taxed in its
+  // own bucket. An existing work order is re-totalled under the tax it RECORDED.
+  const docMoney = documentMoney({
+    items, markupPct, laborRate, laborHours, taxPct,
+    taxSettings: recordedTerms
+      ? documentTaxSettings((workOrder as { tax_breakdown?: unknown }).tax_breakdown, taxSettings, taxPct)
+      : taxSettings,
+    extrasSettings: extras,
+    extras: recordedTerms
+      ? { ...docExtras.input, travelHours, mileageMiles }
+      : { travelHours, mileageMiles },
+    stored: recordedTerms ? workOrder as unknown as Record<string, unknown> : null,
+  })
+  const totals       = docMoney
+  const extrasResult = docMoney.extras
+  const withExtras   = docMoney
+  const laborHoursShown = totalLaborHours({ items, laborHours })
   const status = (workOrder?.status ?? 'open') as WorkOrderStatus
   const next   = NEXT_STATUS[status]
 
@@ -174,11 +184,7 @@ export default function WorkOrderForm({
     // was shown.
     return {
       ...withMode,
-      ...lineMoneyColumns(inputs),
-      ...extrasColumns(extrasResult),
-      tax_amount:    withExtras.taxAmount,
-      grand_total:   withExtras.grandTotal,
-      tax_breakdown: withExtras.taxBreakdown,
+      ...docMoney.columns,
     }
   }
 
@@ -392,18 +398,17 @@ export default function WorkOrderForm({
         <p className="text-white/30 text-xs uppercase tracking-widest">Parts &amp; Labor</p>
 
         {isLocked
-          ? <LineItemEditor items={items} onChange={() => {}} />
-          : <LineItemEditor items={items} onChange={setItems} />}
+          ? <LineItemEditor items={items} onChange={() => {}} allowLabor laborRate={laborRate} />
+          : <LineItemEditor items={items} onChange={setItems} allowLabor laborRate={laborRate} />}
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div>
-            <label className="nwi-label text-[10px]">Labor Hours</label>
-            <input type="number" min={0} step={0.25} className="nwi-input text-sm"
-              value={laborHours} disabled={isLocked}
-              onChange={e => setLaborHours(Number(e.target.value) || 0)} />
+            {/* Labour is entered as lines above; this is their total. */}
+            <label className="nwi-label text-[10px]">Labor Hours (from lines)</label>
+            <div className="nwi-input text-sm bg-white/5 text-white/60 pointer-events-none">{laborHoursShown}</div>
           </div>
           <div>
-            <label className="nwi-label text-[10px]">Labor Rate ($)</label>
+            <label className="nwi-label text-[10px]">Rate for new labor lines ($)</label>
             <input type="number" min={0} step={1} className="nwi-input text-sm"
               value={laborRate} disabled={isLocked}
               onChange={e => setLaborRate(Number(e.target.value) || 0)} />
