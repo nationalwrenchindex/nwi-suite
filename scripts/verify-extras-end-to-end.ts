@@ -395,8 +395,10 @@ async function main() {
   // totalsWithExtras' - extras inside it - on the post-markup parts total. Detailers keep
   // their own path, with supplies switched off.
   const dmSrc = fs.readFileSync('src/lib/document-money.ts', 'utf8')
-  ok(tab.includes('docMoney ? docMoney.grandTotal') && dmSrc.includes('grandTotal:    w.grandTotal') &&
-    dmSrc.includes('totalsWithExtras('),
+  // Since migration 165 the grand total goes through applyDiscount, which is fed w's
+  // figures and returns them unchanged when there is no discount.
+  ok(tab.includes('docMoney ? docMoney.grandTotal') && dmSrc.includes('grandTotal:    d ? d.grandTotal : w.grandTotal') &&
+    dmSrc.includes('subtotal:   w.subtotal,') && dmSrc.includes('totalsWithExtras('),
     'and its grand total includes them - not a figure that excludes them')
   ok(dmSrc.includes('computeExtras(t.partsTotal,') && tab.includes('isDetailer ? null : documentMoney(') &&
     tab.includes('billShopSupplies: false'),

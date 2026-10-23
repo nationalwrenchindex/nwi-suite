@@ -220,12 +220,17 @@ async function main() {
   hr('6. Create, save and convert must use the same computation')
 
   const sync = fs.readFileSync('src/lib/segments/parent-extras.ts', 'utf8')
-  ok(sync.includes('columns.tax_amount    = taxable.taxAmount'),
+  // Since migration 165 the three go through applyDiscount, fed exactly these
+  // figures; with no discount it returns them unchanged (verify-document-discount).
+  ok(sync.includes('columns.tax_amount    = applied.taxAmount') &&
+    sync.includes('taxAmount:  taxable.taxAmount,'),
     'the sync writes tax_amount, not only the extras columns')
   ok(!sync.includes('columns.subtotal '),
     'and does NOT write a subtotal column, which work_orders does not have')
-  ok(sync.includes('columns.grand_total   = round2(subtotal + taxable.taxAmount)'), 'and the grand total')
-  ok(sync.includes('tax_breakdown = taxable.breakdown'), 'and the breakdown')
+  ok(sync.includes('columns.grand_total   = applied.grandTotal') && sync.includes('    subtotal,\n'),
+    'and the grand total')
+  ok(sync.includes('tax_breakdown = applied.breakdown') && sync.includes('breakdown:  taxable.breakdown,'),
+    'and the breakdown')
   ok(sync.includes('if (!segmented) {'),
     'and only for a LINE-ITEM parent, whose own money columns are the billed figures')
   for (const f of ['src/app/api/work-orders/route.ts', 'src/app/api/work-orders/[id]/route.ts']) {
