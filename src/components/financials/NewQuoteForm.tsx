@@ -20,6 +20,10 @@ import CustomerUnitPicker from '@/components/work-orders/CustomerUnitPicker'
 import LineItemEditor from '@/components/shared/LineItemEditor'
 import { totalLaborHours, type EditItem } from '@/components/shared/line-items'
 import { documentMoney } from '@/lib/document-money'
+import { discountLabel } from '@/lib/document-discount'
+import {
+  DiscountEditor, EMPTY_DISCOUNT, discountFromDraft, type DiscountDraft,
+} from '@/components/shared/DiscountEditor'
 import { useTaxSettings } from '@/lib/use-tax-settings'
 import { useExtrasSettingsState } from '@/lib/use-extras-settings'
 import { extrasDisplayRows } from '@/lib/billable-extras'
@@ -79,6 +83,7 @@ export default function NewQuoteForm({
   const [laborRate,  setLaborRate]  = useState(defaults.labor_rate)
   const [markupPct,  setMarkupPct]  = useState(defaults.markup_percent)
   const [taxPct,     setTaxPct]     = useState(defaults.tax_percent)
+  const [discountDraft, setDiscountDraft] = useState<DiscountDraft>(EMPTY_DISCOUNT)
 
   const [saving, setSaving] = useState(false)
   const [error,  setError]  = useState<string | null>(null)
@@ -91,6 +96,7 @@ export default function NewQuoteForm({
   const docMoney = documentMoney({
     items, markupPct, laborRate, taxPct, taxSettings,
     extrasSettings, extras: { travelHours, mileageMiles },
+    discount: discountFromDraft(discountDraft),
   })
   const totals       = docMoney
   const extrasResult = docMoney.extras
@@ -101,6 +107,10 @@ export default function NewQuoteForm({
     setError(null)
     if (items.length === 0) {
       setError('Add a labor or part line before saving.')
+      return
+    }
+    if (docMoney.discountError) {
+      setError(docMoney.discountError)
       return
     }
     if (withExtras.grandTotal < 0) {
@@ -252,6 +262,19 @@ export default function NewQuoteForm({
           <Row key={r.key} label={r.detail ? `${r.label} (${r.detail})` : r.label} value={money(r.amount)} />
         ))}
         <Row label="Subtotal" value={money(withExtras.subtotal)} />
+        {docMoney.discount && (
+          <div className="flex justify-between" data-testid="discount-row">
+            <span className="text-white/60">
+              {discountLabel(docMoney.discount)}
+              {docMoney.discount.reason && <span className="text-white/40 text-xs ml-1.5">· {docMoney.discount.reason}</span>}
+            </span>
+            <span className="text-emerald-400">-{money(docMoney.discount.amount)}</span>
+          </div>
+        )}
+        <div className="py-1">
+          <DiscountEditor value={discountDraft} onChange={setDiscountDraft}
+            applied={docMoney.discount} error={docMoney.discountError} />
+        </div>
         {/* One row per category, including the exempt one — same as every other
             surface since the tax split shipped. */}
         {withExtras.taxBreakdown

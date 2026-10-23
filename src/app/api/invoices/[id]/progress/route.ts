@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { isMissingTaxBreakdownColumn } from '@/lib/tax'
 import { missingMigration142Column, withoutMigration142Columns } from '@/lib/migration-142'
 import { createClient } from '@/lib/supabase/server'
+import { discountForWrite, isMissing165Column, MIGRATION_165_MESSAGE } from '@/lib/document-discount'
 
 const INVOICE_SELECT = `
   *,
@@ -70,6 +71,21 @@ export async function PATCH(
   // Migration 142. Shop-only; nothing customer-facing reads it.
   if (body.internal_notes   !== undefined) updates.internal_notes   = (body.internal_notes as string | null)?.trim() || null
 
+  // ── THE DISCOUNT (migration 165) ──
+  // An in-progress invoice takes a discount without being recreated: it is its own
+  // field, not a line, so the read-only approved lines do not stand in its way.
+  // Checked to add up; null clears it; discount_amount (an existing column) always
+  // follows it so nothing that already reads that column can disagree.
+  const disc = discountForWrite(body.discount)
+  if ('error' in disc) return NextResponse.json({ error: disc.error }, { status: 422 })
+  if (!disc.skip) {
+    updates.discount        = disc.value
+    updates.discount_amount = disc.value?.amount ?? 0
+    if (disc.value && typeof updates.total === 'number' && updates.total < 0) {
+      return NextResponse.json({ error: 'The total cannot be negative.' }, { status: 422 })
+    }
+  }
+
   let { data, error } = await supabase
     .from('invoices')
     .update(updates)
@@ -99,6 +115,20 @@ export async function PATCH(
     ;({ data, error } = await supabase
       .from('invoices')
       .update(withoutMigration142Columns(updates))
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select(INVOICE_SELECT)
+      .single())
+  }
+
+  // Before 165: setting a discount is refused, never saved as a discounted total with
+  // no record of why; clearing one that cannot exist is dropped and the save retried.
+  if (error && isMissing165Column(error)) {
+    if (updates.discount) return NextResponse.json({ error: MIGRATION_165_MESSAGE }, { status: 409 })
+    delete updates.discount
+    ;({ data, error } = await supabase
+      .from('invoices')
+      .update(updates)
       .eq('id', id)
       .eq('user_id', user.id)
       .select(INVOICE_SELECT)

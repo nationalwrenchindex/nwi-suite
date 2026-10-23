@@ -11,6 +11,7 @@ import { syncParentExtrasQuietly } from '@/lib/segments/parent-extras'
 import { hasWorkOrders } from '@/lib/work-orders'
 import { WORK_ORDER_STATUSES, type WorkOrderStatus } from '@/types/work-orders'
 import { WORK_ORDER_SELECT, WORK_ORDER_PAGE_SIZE } from './list'
+import { discountForWrite, isMissing165Column, MIGRATION_165_MESSAGE } from '@/lib/document-discount'
 
 export const dynamic = 'force-dynamic'
 
@@ -130,11 +131,20 @@ export async function POST(request: NextRequest) {
     internal_notes:                str(body.internal_notes),
   }
 
+  // The discount (migration 165), checked to add up. Written only when there is one,
+  // and before 165 a work order WITH one is refused rather than saved without it.
+  const discount = discountForWrite(body.discount)
+  if ('error' in discount) return NextResponse.json({ error: discount.error }, { status: 422 })
+  if (!discount.skip && discount.value) (insert as Record<string, unknown>).discount = discount.value
+
   const { data, error } = await writeToleratingMigration142<Record<string, unknown>, Record<string, unknown>>(
     insert as unknown as Record<string, unknown>,
     row => supabase.from('work_orders').insert(row).select(WORK_ORDER_SELECT).single(),
   )
 
+  if (error && isMissing165Column(error)) {
+    return NextResponse.json({ error: MIGRATION_165_MESSAGE }, { status: 409 })
+  }
   if (error || !data) {
     console.error('[POST /api/work-orders]', error)
     const msg = (error as { message?: string } | null)?.message

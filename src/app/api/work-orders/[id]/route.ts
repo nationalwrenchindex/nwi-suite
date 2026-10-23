@@ -11,6 +11,7 @@ import { writeToleratingMigration142 } from '@/lib/migration-142'
 import { syncParentExtrasQuietly } from '@/lib/segments/parent-extras'
 import { hasWorkOrders } from '@/lib/work-orders'
 import { WORK_ORDER_SELECT } from '../list'
+import { discountForWrite, isMissing165Column, MIGRATION_165_MESSAGE } from '@/lib/document-discount'
 
 import { allocateForWorkOrder, partLinesFromJson } from '@/lib/inventory/ledger'
 
@@ -121,6 +122,12 @@ export async function PATCH(
   if ('tax_amount'           in body) updates.tax_amount           = num(body.tax_amount)
   if ('grand_total'          in body) updates.grand_total          = num(body.grand_total)
   if ('tax_breakdown'        in body) updates.tax_breakdown        = body.tax_breakdown ?? null
+  // The discount (migration 165): checked to add up; null clears it.
+  if ('discount' in body) {
+    const d = discountForWrite(body.discount)
+    if ('error' in d) return NextResponse.json({ error: d.error }, { status: 422 })
+    if (!d.skip) updates.discount = d.value
+  }
 
   // ── Migration 142 ──
   for (const k of [
@@ -137,8 +144,8 @@ export async function PATCH(
     return NextResponse.json({ error: 'No valid fields to update.' }, { status: 400 })
   }
 
-  const { data, error } = await writeToleratingMigration142<Record<string, unknown>, Record<string, unknown>>(
-    updates,
+  const write = (u: Record<string, unknown>) => writeToleratingMigration142<Record<string, unknown>, Record<string, unknown>>(
+    u,
     row => supabase
       .from('work_orders')
       .update(row)
@@ -147,6 +154,15 @@ export async function PATCH(
       .select(WORK_ORDER_SELECT)
       .single(),
   )
+  let { data, error } = await write(updates)
+
+  // Before 165: clearing a discount that cannot exist is dropped and retried; setting
+  // one is refused, never stored as a discounted total with no record of why.
+  if (error && isMissing165Column(error)) {
+    if (updates.discount) return NextResponse.json({ error: MIGRATION_165_MESSAGE }, { status: 409 })
+    delete updates.discount
+    ;({ data, error } = await write(updates))
+  }
 
   if (error || !data) {
     console.error('[PATCH /api/work-orders/[id]]', error)

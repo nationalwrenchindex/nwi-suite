@@ -38,6 +38,7 @@ import { publicDocumentMetadata } from '@/lib/public-metadata'
 import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
 import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
 import { parseTermsSnapshot, termsBlockRows } from '@/lib/document-terms'
+import { discountLabel, parseDiscount } from '@/lib/document-discount'
 
 const QUOTE_SELECT = `
   id, quote_number, status, public_token,
@@ -107,6 +108,14 @@ export default async function PublicQuotePage(
     parseTermsSnapshot((termsRow as { terms_snapshot?: unknown } | null)?.terms_snapshot),
     { includePayment: true },
   )
+  // The discount it recorded (migration 165). Its own read for the same reason: a
+  // database without 165 loses the row, never the page.
+  const { data: discountRow } = await sc
+    .from('quotes')
+    .select('discount')
+    .eq('id', (quote as { id: string }).id)
+    .maybeSingle()
+  const discount = parseDiscount((discountRow as { discount?: unknown } | null)?.discount)
 
   const { data: profile } = await sc
     .from('profiles')
@@ -403,6 +412,25 @@ export default async function PublicQuotePage(
               <span className="text-white">{fmt(r.amount)}</span>
             </div>
           ))}
+          {/* THE DISCOUNT (migration 165): the subtotal before it, then the discount and
+              its reason, then tax on what is left. A customer has to SEE the break - a
+              discount nobody can see is money given away for nothing. None, no rows:
+              every quote without one prints exactly as before. */}
+          {discount && (
+            <>
+              <div className="flex justify-between text-sm border-t border-white/10 pt-2">
+                <span className="text-white/60">Subtotal</span>
+                <span className="text-white">{fmt(discount.subtotal_before)}</span>
+              </div>
+              <div className="flex justify-between text-sm" data-testid="discount-row">
+                <span className="text-white/60">
+                  {discountLabel(discount)}
+                  {discount.reason && <span className="text-white/40 text-xs ml-1.5">· {discount.reason}</span>}
+                </span>
+                <span className="text-emerald-400">-{fmt(discount.amount)}</span>
+              </div>
+            </>
+          )}
           {/* What was taxed, including what was not, so a customer can see that labor
               is not taxable instead of wondering why the tax looks low. Quotes written
               before migration 140 have no breakdown and keep their single Tax line. */}

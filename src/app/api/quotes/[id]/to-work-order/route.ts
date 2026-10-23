@@ -13,6 +13,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { hasWorkOrders } from '@/lib/work-orders'
 import { WORK_ORDER_SELECT } from '@/app/api/work-orders/list'
+import { parseDiscount } from '@/lib/document-discount'
 
 export const dynamic = 'force-dynamic'
 
@@ -96,6 +97,22 @@ export async function POST(
       tax_percent:          quote.tax_percent,
       tax_amount:           quote.tax_amount,
       grand_total:          quote.grand_total,
+      // WHAT THE TOTAL WAS MADE OF, carried with it. grand_total above already
+      // included the quote's travel, mileage, supplies and tax split, and the work
+      // order received none of them - so it re-taxed under today's settings and showed
+      // a total its own columns did not explain. Copied, never recomputed.
+      tax_breakdown:                 quote.tax_breakdown ?? null,
+      travel_hours:                  quote.travel_hours   ?? 0,
+      travel_rate:                   quote.travel_rate    ?? null,
+      travel_amount:                 quote.travel_amount  ?? 0,
+      mileage_miles:                 quote.mileage_miles  ?? 0,
+      mileage_rate:                  quote.mileage_rate   ?? null,
+      mileage_amount:                quote.mileage_amount ?? 0,
+      shop_supplies_percent_applied: quote.shop_supplies_percent_applied ?? null,
+      shop_supplies_cap_applied:     quote.shop_supplies_cap_applied     ?? null,
+      shop_supplies_fee:             quote.shop_supplies_fee             ?? 0,
+      // The discount the customer agreed to (migration 165), only when there is one.
+      ...(parseDiscount(quote.discount) ? { discount: parseDiscount(quote.discount) } : {}),
       source:               'quote',
       source_quote_id:      quote.id,
     })

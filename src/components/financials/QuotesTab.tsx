@@ -14,7 +14,10 @@ import {
   markupOnReopen, markupLabel, editKey, totalLaborHours,
   type EditItem,
 } from '@/components/shared/line-items'
-import { documentMoney, documentExtras } from '@/lib/document-money'
+import { documentMoney, documentExtras, storedDiscount } from '@/lib/document-money'
+import {
+  DiscountEditor, DiscountRows, draftFrom, discountFromDraft, discountKey, type DiscountDraft,
+} from '@/components/shared/DiscountEditor'
 import { documentTaxSettings } from '@/lib/tax'
 import { money } from '@/lib/format'
 import NewQuoteForm from './NewQuoteForm'
@@ -592,6 +595,10 @@ function QuoteDetailModal({
   const [custPhone,   setCustPhone]   = useState(initCustPhone)
   const [vehicleId,   setVehicleId]   = useState<string | null>(initialQuote.vehicle_id)
   const [vehicle,     setVehicle]     = useState(initialQuote.vehicle)
+  // The discount this quote recorded (migration 165), or none.
+  const [initDiscount] = useState<DiscountDraft>(() =>
+    draftFrom(storedDiscount(initialQuote as unknown as Record<string, unknown>)))
+  const [discountDraft, setDiscountDraft] = useState<DiscountDraft>(initDiscount)
 
   // ── Detailer edit state ────────────────────────────────────────────────────
   const [serviceLines,   setServiceLines]   = useState<EditServiceLine[]>(initServiceLines)
@@ -656,10 +663,10 @@ function QuoteDetailModal({
   // ── Dirty detection ────────────────────────────────────────────────────────
   function makeHash(
     its: EditItem[], lh: number, lr: number, mp: number, tp: number,
-    n: string, cn: string, cp: string, vid: string | null,
+    n: string, cn: string, cp: string, vid: string | null, dk = '',
   ) {
     // editKey covers every editable field, and the array order covers a reorder.
-    return JSON.stringify({ its: its.map(editKey), lh, lr, mp, tp, n, cn, cp, vid })
+    return JSON.stringify({ its: its.map(editKey), lh, lr, mp, tp, n, cn, cp, vid, dk })
   }
   function makeDetHash(
     sls: EditServiceLine[], adjs: EditAdjustment[], tp: number,
@@ -674,11 +681,11 @@ function QuoteDetailModal({
   const [savedHash, setSavedHash] = useState(() =>
     isDetailer
       ? makeDetHash(initServiceLines, initAdjustments, initTaxPct, initNotes, initCustName, initCustPhone, initialQuote.vehicle_id)
-      : makeHash(initialItems, initLaborHours, initLaborRate, initMarkup, initTaxPct, initNotes, initCustName, initCustPhone, initialQuote.vehicle_id)
+      : makeHash(initialItems, initLaborHours, initLaborRate, initMarkup, initTaxPct, initNotes, initCustName, initCustPhone, initialQuote.vehicle_id, discountKey(initDiscount))
   )
   const currentHash = isDetailer
     ? makeDetHash(serviceLines, adjustments, taxPct, notes, custName, custPhone, vehicleId)
-    : makeHash(items, laborHours, laborRate, markupPct, taxPct, notes, custName, custPhone, vehicleId)
+    : makeHash(items, laborHours, laborRate, markupPct, taxPct, notes, custName, custPhone, vehicleId, discountKey(discountDraft))
   const isDirty = isDraft && currentHash !== savedHash
 
   // Live status for polling-driven updates
@@ -715,6 +722,7 @@ function QuoteDetailModal({
     taxSettings:    documentTaxSettings((initialQuote as { tax_breakdown?: unknown }).tax_breakdown, taxSettings, taxPct),
     extrasSettings: docExtras.settings,
     extras:         { ...docExtras.input, travelHours, mileageMiles },
+    discount:       discountFromDraft(discountDraft),
     stored:         initialQuote as unknown as Record<string, unknown>,
   })
 
@@ -785,6 +793,8 @@ function QuoteDetailModal({
   function validate(): string | null {
     if (extrasMismatch)
       return 'Cannot save: ' + extrasMismatch
+    if (docMoney?.discountError)
+      return 'Cannot save: ' + docMoney.discountError
     if (grandTotal < 0)
       return 'Grand total cannot be negative.'
     if (isDetailer) {
@@ -886,6 +896,7 @@ function QuoteDetailModal({
     setVehicle(initialQuote.vehicle)
     setServiceLines(initServiceLines)
     setAdjustments(initAdjustments)
+    setDiscountDraft(initDiscount)
     // LineItemEditor owns its own inline-edit state, so a discard clears it by
     // remounting rather than by reaching in — same visible behaviour as before.
     setEditorNonce(n => n + 1)
@@ -1713,6 +1724,19 @@ function QuoteDetailModal({
                       />
                     </div>
                   )}
+                  {!isDetailer && docMoney && (
+                    <>
+                      <DiscountRows discount={docMoney.discount} subtotalBefore={docMoney.subtotal} />
+                      <div className="pt-1">
+                        <DiscountEditor
+                          value={discountDraft}
+                          onChange={setDiscountDraft}
+                          applied={docMoney.discount}
+                          error={docMoney.discountError}
+                        />
+                      </div>
+                    </>
+                  )}
                   {taxPct > 0 && (
                     <div className="flex justify-between text-sm border-t border-white/10 pt-2.5">
                       <span className="text-white/40">Tax ({taxPct}%)</span>
@@ -1781,6 +1805,10 @@ function QuoteDetailModal({
                       )}
                     </>
                   )}
+                  {(() => {
+                    const d = storedDiscount(initialQuote as unknown as Record<string, unknown>)
+                    return d ? <DiscountRows discount={d} subtotalBefore={d.subtotal_before} /> : null
+                  })()}
                   {initialQuote.tax_amount != null && (
                     <div className="flex justify-between text-sm border-t border-white/10 pt-2.5">
                       <span className="text-white/40">

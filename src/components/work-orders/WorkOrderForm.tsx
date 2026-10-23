@@ -19,7 +19,11 @@ import {
   markupOnReopen, markupLabel,
   type EditItem,
 } from '@/components/shared/line-items'
-import { documentMoney, documentExtras } from '@/lib/document-money'
+import { documentMoney, documentExtras, storedDiscount } from '@/lib/document-money'
+import { discountLabel } from '@/lib/document-discount'
+import {
+  DiscountEditor, draftFrom, discountFromDraft, type DiscountDraft,
+} from '@/components/shared/DiscountEditor'
 import type { PricingMode } from '@/components/shared/segments'
 import {
   STATUS_META, NEXT_STATUS,
@@ -110,6 +114,8 @@ export default function WorkOrderForm({
   const extrasLoaded = recordedTerms ? true : currentExtrasLoaded
   const [travelHours,  setTravelHours]  = useState(Number(workOrder?.travel_hours  ?? 0))
   const [mileageMiles, setMileageMiles] = useState(Number(workOrder?.mileage_miles ?? 0))
+  const [discountDraft, setDiscountDraft] = useState<DiscountDraft>(() =>
+    draftFrom(storedDiscount(workOrder as unknown as Record<string, unknown>)))
 
   /** Seeds the shop's defaults at the moment "Single job" is chosen, and clears them
    *  again if the tech switches to segments before saving. */
@@ -149,6 +155,8 @@ export default function WorkOrderForm({
     extras: recordedTerms
       ? { ...docExtras.input, travelHours, mileageMiles }
       : { travelHours, mileageMiles },
+    // The discount it recorded or carried from its quote (migration 165).
+    discount: owns ? discountFromDraft(discountDraft) : null,
     stored: recordedTerms ? workOrder as unknown as Record<string, unknown> : null,
   })
   const totals       = docMoney
@@ -193,7 +201,8 @@ export default function WorkOrderForm({
       ? validateLines({ items, laborHours, laborRate, grandTotal: withExtras.grandTotal })
       : null
     if (v) { setErr(v); return }
-    if (!customerId)                    { setErr('Pick or create a customer.'); return }
+    if (owns && docMoney.discountError) { setErr(docMoney.discountError); return }
+    if (!customerId)                   { setErr('Pick or create a customer.'); return }
     if (!vehicleId && !unitLabel.trim()) { setErr('Pick a vehicle or describe the unit.'); return }
     if (!jobDesc.trim())                { setErr('A job description is required.'); return }
     if (isNew && !mode)                 { setErr('Choose how this job is priced first.'); return }
@@ -456,6 +465,19 @@ export default function WorkOrderForm({
               line items straight to tax and a tech had no figure to check the extras
               against. */}
           <Row label="Subtotal" value={fmt(withExtras.subtotal)} />
+          {docMoney.discount && (
+            <div className="flex items-center justify-between text-sm" data-testid="discount-row">
+              <span className="text-white/60">
+                {discountLabel(docMoney.discount)}
+                {docMoney.discount.reason && <span className="text-white/40 text-xs ml-1.5">· {docMoney.discount.reason}</span>}
+              </span>
+              <span className="text-emerald-400">-{fmt(docMoney.discount.amount)}</span>
+            </div>
+          )}
+          <div className="py-1">
+            <DiscountEditor value={discountDraft} onChange={setDiscountDraft} disabled={isLocked}
+              applied={docMoney.discount} error={docMoney.discountError} />
+          </div>
           {/* One row per category when the split is known, including the exempt one,
               so a tech sees "Labor - not taxable" before a customer does.
               FROM withExtras, NOT totals: totals taxes the line items alone, so it put

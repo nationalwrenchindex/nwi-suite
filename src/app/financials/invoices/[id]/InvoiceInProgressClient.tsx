@@ -14,6 +14,10 @@ import { useRouter } from 'next/navigation'
 import type { Invoice, ShopSupplyItem, AdditionalPartItem, AdditionalLaborItem, ServiceLine, Adjustment, AdjustmentPreset } from '@/types/financials'
 import { money } from '@/lib/format'
 import { LineDetail } from '@/components/shared/LineItemEditor'
+import { applyDiscount, discountLabel, laborFromLines, parseDiscount } from '@/lib/document-discount'
+import {
+  DiscountEditor, draftFrom, discountFromDraft, type DiscountDraft,
+} from '@/components/shared/DiscountEditor'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -523,6 +527,10 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
     Array.isArray(invoice.adjustments) ? invoice.adjustments : []
   )
   const [adjPresets,      setAdjPresets]      = useState<AdjustmentPreset[]>([])
+  // The discount this invoice recorded or carried from its quote or work order
+  // (migration 165). Editable while the invoice is in progress.
+  const storedDisc = parseDiscount((invoice as unknown as { discount?: unknown }).discount)
+  const [discountDraft, setDiscountDraft] = useState<DiscountDraft>(() => draftFrom(storedDisc))
 
   // UI state
   const [saving,          setSaving]          = useState(false)
@@ -690,7 +698,11 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
   //
   // Additions are unambiguous: shop supplies and additional parts are parts,
   // additional labor is labor.
-  const storedTax  = parseBreakdown(invoice.tax_breakdown)
+  // WITH A DISCOUNT STORED, the stored breakdown is AFTER it, and rebuilding the
+  // baseline from that would take the discount off twice. The discount recorded the
+  // split before it, and that is the baseline; it is applied once, below, to the
+  // baseline plus whatever has been added. No discount: exactly as before.
+  const storedTax  = storedDisc ? storedDisc.pre_tax_breakdown : parseBreakdown(invoice.tax_breakdown)
   const baseParts  = storedTax?.parts?.base ?? (sq ? quotedPartsSubtotal : null)
   const baseLabor  = storedTax?.labor?.base ?? (sq ? quotedLaborSubtotal : null)
   const baselineReconciles =
@@ -748,11 +760,37 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
     ? { breakdown: mergeBreakdowns([approvedBreakdown, addedBreakdown]) }
     : null
 
-  const newTaxAmount = tax ? breakdownTaxTotal(tax.breakdown) : round2(newSubtotal * taxRate)
+  const preDiscountTax = tax ? breakdownTaxTotal(tax.breakdown) : round2(newSubtotal * taxRate)
+
+  // ── THE DISCOUNT (lib/document-discount, migration 165) ────────────────────
+  // Applied LAST, to the approved lines plus the lines added since: the labour lines
+  // and the parts lines, never the extras. Only the tax buckets it touches are
+  // re-taxed, at this invoice's own rates; the rest keep the tax they carry.
+  // Detailers are left out, as they are of the tax split.
+  const discounting = isDetailer ? null : applyDiscount({
+    discount:   discountFromDraft(discountDraft),
+    laborLines: round2(laborFromLines(invoice.line_items) + additionalLaborTotal),
+    partsLines: round2(approvedPartsBase + additionalPartsTotal),
+    subtotal:   newSubtotal,
+    breakdown:  tax ? tax.breakdown : null,
+    taxAmount:  preDiscountTax,
+    taxPct:     Number(taxRate ?? 0) * 100,
+  })
+  const discountOk      = !!discounting && discounting.ok
+  const discountApplied = discounting && discounting.ok ? discounting.discount : null
+  const discountError   = discounting && !discounting.ok ? discounting.error : null
+  const finalBreakdown  = discounting && discounting.ok ? discounting.breakdown : (tax ? tax.breakdown : null)
+
+  const newTaxAmount = discounting && discounting.ok ? discounting.taxAmount : preDiscountTax
   // Computed once: the Running Total needs to know whether a split exists before it
   // decides whether its total line still has to carry a rate.
-  const taxSplitRows = tax ? taxDisplayRows(tax.breakdown) : []
-  const grandTotal   = round2(newSubtotal + newTaxAmount)
+  const taxSplitRows = tax && finalBreakdown ? taxDisplayRows(finalBreakdown) : []
+  const grandTotal   = discounting && discounting.ok ? discounting.grandTotal : round2(newSubtotal + newTaxAmount)
+  // What a save writes for the discount: the one applied, a null that clears one this
+  // invoice had, or nothing at all - so an invoice that never had one writes nothing new.
+  const discountPayload: Record<string, unknown> = isDetailer || !discountOk
+    ? {}
+    : discountApplied ? { discount: discountApplied } : storedDisc ? { discount: null } : {}
 
   // ── extrasAgree ON AN IN-PROGRESS INVOICE ──────────────────────────────────
   // It used to run only at convert and at finalize, which are the two moments nobody
@@ -850,6 +888,10 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
       showToast('Cannot finalize: ' + runningExtrasMismatch)
       return
     }
+    if (discountError) {
+      showToast('Cannot finalize: ' + discountError, 'error')
+      return
+    }
     setFinalizing(true)
     try {
       // Save current progress first, then finalize
@@ -872,8 +914,9 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
           // Null when the split could not be established -- see the derivation above.
           // A null here means the invoice keeps reading as pre-split rather than
           // claiming nothing was taxed.
-          tax_breakdown:    tax ? tax.breakdown : null,
+          tax_breakdown:    tax ? finalBreakdown : null,
           total:            grandTotal,
+          ...discountPayload,
         }),
       })
       const res  = await fetch(`/api/invoices/${invoice.id}/finalize`, { method: 'POST' })
@@ -894,6 +937,10 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
   // ── Save progress ──────────────────────────────────────────────────────────
 
   async function handleSave() {
+    if (discountError) {
+      showToast('Cannot save: ' + discountError, 'error')
+      return
+    }
     setSaving(true)
     try {
       const res = await fetch(`/api/invoices/${invoice.id}/progress`, {
@@ -915,8 +962,9 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
           // Null when the split could not be established -- see the derivation above.
           // A null here means the invoice keeps reading as pre-split rather than
           // claiming nothing was taxed.
-          tax_breakdown:    tax ? tax.breakdown : null,
+          tax_breakdown:    tax ? finalBreakdown : null,
           total:            grandTotal,
+          ...discountPayload,
         }),
       })
       const json = await res.json()
@@ -1215,6 +1263,13 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
                 <span className="text-white/50">Subtotal</span>
                 <span className="text-white">{fmt(Number(invoice.subtotal ?? 0))}</span>
               </div>
+              {/* As stored: the discount the saved total already includes. */}
+              {storedDisc && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/50">{discountLabel(storedDisc)}{storedDisc.reason ? ` · ${storedDisc.reason}` : ''}</span>
+                  <span className="text-emerald-400">-{fmt(storedDisc.amount)}</span>
+                </div>
+              )}
               {Number(invoice.tax_amount ?? 0) > 0 && (
                 <div className="flex justify-between text-sm">
                   {/*
@@ -1759,6 +1814,26 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
             <p className="text-[11px] text-white/35 -mt-1">
               Shop supplies capped at {fmt(extrasResult.shopSupplies.rate ?? 0)}.
             </p>
+          )}
+          {/* The discount: its own row under the subtotal, so the customer's copy and
+              this screen both show the break. Not a line - the approved lines above stay
+              read-only, and this is editable for as long as the invoice is in progress. */}
+          {!isDetailer && (
+            <>
+              {discountApplied && (
+                <div className="flex justify-between text-sm" data-testid="discount-row">
+                  <span className="text-white/50">
+                    {discountLabel(discountApplied)}
+                    {discountApplied.reason && <span className="text-white/30 text-xs ml-1.5">· {discountApplied.reason}</span>}
+                  </span>
+                  <span className="text-emerald-400">-{fmt(discountApplied.amount)}</span>
+                </div>
+              )}
+              <div className="py-1">
+                <DiscountEditor value={discountDraft} onChange={setDiscountDraft}
+                  applied={discountApplied} error={discountError} />
+              </div>
+            </>
           )}
           {/*
             Tax reads ONCE: the split, then its total.

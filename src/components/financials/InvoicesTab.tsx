@@ -10,6 +10,10 @@ import type { Invoice, InvoiceStatus, InvoiceProgressStatus, PaymentMethod } fro
 import { money } from '@/lib/format'
 import { daysPastDue } from '@/lib/hd/payment-terms'
 import CustomerUnitPicker from '@/components/work-orders/CustomerUnitPicker'
+import { applyDiscount, discountLabel } from '@/lib/document-discount'
+import {
+  DiscountEditor, EMPTY_DISCOUNT, discountFromDraft, type DiscountDraft,
+} from '@/components/shared/DiscountEditor'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -213,8 +217,24 @@ export default function InvoicesTab() {
   const tax    = taxSettings
     ? computeTax({ parts: partsBase, labor: laborBase }, taxSettings)
     : null
-  const taxAmt = tax ? tax.taxAmount : round2(subtotal * (form.tax_rate / 100))
-  const total  = round2(Math.max(0, subtotal + taxAmt - form.discount_amount))
+  const preDiscountTax = tax ? tax.taxAmount : round2(subtotal * (form.tax_rate / 100))
+  // THE DISCOUNT (lib/document-discount, migration 165). This form used to take a
+  // dollar figure off AFTER tax, so the customer paid tax on money they were never
+  // charged. It now comes off the labour and parts lines, and tax is on what is left.
+  const [discountDraft, setDiscountDraft] = useState<DiscountDraft>(EMPTY_DISCOUNT)
+  const discounting = applyDiscount({
+    discount:   discountFromDraft(discountDraft),
+    laborLines: laborBase,
+    partsLines: partsBase,
+    subtotal,
+    breakdown:  tax ? tax.breakdown : null,
+    taxAmount:  preDiscountTax,
+    taxPct:     form.tax_rate,
+  })
+  const discountApplied = discounting.ok ? discounting.discount : null
+  const discountError   = discounting.ok ? null : discounting.error
+  const taxAmt = discounting.ok ? discounting.taxAmount : preDiscountTax
+  const total  = discounting.ok ? discounting.grandTotal : round2(subtotal + preDiscountTax)
 
   // ── Fetch invoices ──
   const fetchInvoices = useCallback(async (invoiceStatus: string | InvoiceProgressStatus | 'active', source: string) => {
@@ -246,6 +266,10 @@ export default function InvoicesTab() {
       setFormError('Add at least one line item.')
       return
     }
+    if (discountError) {
+      setFormError(discountError)
+      return
+    }
     setSubmitting(true)
     try {
       const res = await fetch('/api/invoices', {
@@ -267,8 +291,9 @@ export default function InvoicesTab() {
           // fraction column in the system; see the header of src/lib/tax.
           tax_rate:        form.tax_rate / 100,
           tax_amount:      taxAmt,
-          tax_breakdown:   tax ? tax.breakdown : null,
-          discount_amount: form.discount_amount,
+          tax_breakdown:   tax && discounting.ok ? discounting.breakdown : tax ? tax.breakdown : null,
+          discount_amount: discountApplied?.amount ?? 0,
+          ...(discountApplied ? { discount: discountApplied } : {}),
           total,
           status:          form.status,
           notes:           form.notes || null,
@@ -297,6 +322,7 @@ export default function InvoicesTab() {
         status:          'draft',
       })
       setInvItems([])
+      setDiscountDraft(EMPTY_DISCOUNT)
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
@@ -561,6 +587,18 @@ export default function InvoicesTab() {
                 <span className="text-white/40">Subtotal</span>
                 <span className="text-white w-24 text-right">{fmt(subtotal)}</span>
               </div>
+              {discountApplied && (
+                <div className="flex gap-8 text-sm" data-testid="discount-row">
+                  <span className="text-white/40">
+                    {discountLabel(discountApplied)}{discountApplied.reason ? ` · ${discountApplied.reason}` : ''}
+                  </span>
+                  <span className="text-emerald-400 w-24 text-right">-{fmt(discountApplied.amount)}</span>
+                </div>
+              )}
+              <div className="w-full max-w-md text-left py-1">
+                <DiscountEditor value={discountDraft} onChange={setDiscountDraft}
+                  applied={discountApplied} error={discountError} />
+              </div>
               <div className="flex items-center gap-4 text-sm">
                 <span className="text-white/40">Tax</span>
                 <input
@@ -575,7 +613,7 @@ export default function InvoicesTab() {
               </div>
               {/* What is being taxed, including what is not. Also the only place the
                   tech is told how a labor line is recognised on this form. */}
-              {tax && taxDisplayRows(tax.breakdown).map(r => (
+              {tax && taxDisplayRows((discounting.ok && discounting.breakdown) || tax.breakdown).map(r => (
                 <div key={r.category} className="flex items-center gap-4 text-xs">
                   <span className="text-white/30 flex-1">{r.text}</span>
                   <span className="text-white/50 w-24 text-right">{r.taxed ? fmt(r.amount) : '—'}</span>
@@ -587,17 +625,6 @@ export default function InvoicesTab() {
                   labor for tax. Anything else counts as parts.
                 </p>
               )}
-              <div className="flex items-center gap-4 text-sm">
-                <span className="text-white/40">Discount</span>
-                <input
-                  type="number" min="0" step="0.01"
-                  className="nwi-input py-1 text-xs text-right w-24"
-                  value={form.discount_amount}
-                  onChange={e => setForm(p => ({ ...p, discount_amount: Number(e.target.value) }))}
-                  placeholder="0.00"
-                />
-                <span className="text-white w-24 text-right text-danger">-{fmt(form.discount_amount)}</span>
-              </div>
               <div className="flex gap-8 text-base font-bold border-t border-dark-border pt-2 mt-1">
                 <span className="text-white">Total</span>
                 <span className="text-orange w-24 text-right">{fmt(total)}</span>

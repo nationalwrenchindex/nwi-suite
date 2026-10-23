@@ -26,6 +26,7 @@ import {
   computeTax, taxSettingsFrom, TAX_SETTINGS_SELECT, effectiveRatePercent, documentTaxSettings,
 } from '@/lib/tax'
 import { isBillable, type SegmentStatus } from '@/types/segments'
+import { applyDiscount, parseDiscount } from '@/lib/document-discount'
 
 /**
  * The parts total across every BILLABLE segment, as it appears to the customer.
@@ -277,11 +278,40 @@ export async function syncParentExtras(
       // and grand_total. Writing one would fail this entire UPDATE and the sync would
       // silently store nothing at all. The converter recomputes the subtotal from the
       // line items, so nothing needs it stored.
-      columns.tax_amount    = taxable.taxAmount
-      columns.grand_total   = round2(subtotal + taxable.taxAmount)
+      // ── THE DISCOUNT (migration 165), LD only ──
+      // Recomputing the total without it would silently take a recorded discount back
+      // off every work order on its next save. Read on its own, so a database without
+      // 165 simply has none and this sync works exactly as before.
+      let discount = null as ReturnType<typeof parseDiscount>
+      if (recordedTerms) {
+        const { data: dRow, error: dErr } = await supabase
+          .from(spec.table).select('discount').eq('id', parentId).eq('user_id', userId).maybeSingle()
+        if (!dErr) discount = parseDiscount((dRow as { discount?: unknown } | null)?.discount)
+      }
+      const applied = applyDiscount({
+        discount,
+        laborLines: laborBase,
+        partsLines: partsBase,
+        subtotal,
+        breakdown:  taxable.breakdown,
+        taxAmount:  taxable.taxAmount,
+        taxPct:     effectiveRatePercent(taxable),
+      })
+      if (!applied.ok) {
+        // The lines no longer carry the discount (the form refuses this, so it is
+        // another writer). Leave the totals as the form wrote them rather than drop the
+        // discount from the total while it is still recorded and printed.
+        const { error } = await supabase
+          .from(spec.table).update(columns).eq('id', parentId).eq('user_id', userId)
+        return { written: !error, partsBase, columns, reason: `discount not applied: ${applied.error}` }
+      }
+
+      columns.tax_amount    = applied.taxAmount
+      columns.grand_total   = applied.grandTotal
       columns.tax_percent   = effectiveRatePercent(taxable)
       // Cast: the breakdown is jsonb, not a number, and this map is otherwise numeric.
-      ;(columns as Record<string, unknown>).tax_breakdown = taxable.breakdown
+      ;(columns as Record<string, unknown>).tax_breakdown = applied.breakdown
+      if (applied.discount) (columns as Record<string, unknown>).discount = applied.discount
     }
 
     const { error } = await supabase

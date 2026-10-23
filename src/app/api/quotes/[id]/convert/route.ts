@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { parseBreakdown } from '@/lib/tax'
+import { parseDiscount } from '@/lib/document-discount'
 import { createClient } from '@/lib/supabase/server'
 import { writeToleratingMigration142 } from '@/lib/migration-142'
 
@@ -78,6 +79,7 @@ export async function POST(
 
   // Build invoice row from quote data
   const q = quote as Record<string, unknown>
+  const quoteDiscount = parseDiscount(q.discount)
   const invoiceInsert = {
     user_id:         user.id,
     invoice_number,
@@ -130,7 +132,11 @@ export async function POST(
     shop_supplies_fee:             quote.shop_supplies_fee             ?? 0,
     // The customer approved this split on the quote; the invoice bills the same one.
     tax_breakdown:   parseBreakdown((quote as { tax_breakdown?: unknown }).tax_breakdown),
-    discount_amount: 0,
+    // The discount the customer agreed to, carried as recorded (migration 165).
+    // grand_total and tax_breakdown above are already after it; subtotal is before
+    // it, as invoices.subtotal has always meant. Only written when there is one.
+    discount_amount: quoteDiscount?.amount ?? 0,
+    ...(quoteDiscount ? { discount: quoteDiscount } : {}),
     total:           Number(quote.grand_total  ?? 0),
     status:          'draft',
     source:          'quote',

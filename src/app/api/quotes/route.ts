@@ -3,6 +3,7 @@
 
 import { NextResponse, type NextRequest } from 'next/server'
 import { isMissingTaxBreakdownColumn, withoutTaxBreakdown } from '@/lib/tax'
+import { discountForWrite, isMissing165Column, MIGRATION_165_MESSAGE } from '@/lib/document-discount'
 import { createClient } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -124,6 +125,9 @@ export async function POST(req: NextRequest) {
   if (typeof money.grand_total === 'number' && money.grand_total < 0) {
     return NextResponse.json({ error: 'Grand total cannot be negative.' }, { status: 422 })
   }
+  // The discount (migration 165), checked to add up. Written only when there is one.
+  const discount = discountForWrite(body.discount)
+  if ('error' in discount) return NextResponse.json({ error: discount.error }, { status: 422 })
 
   const lineItems = Array.isArray(body.line_items) ? body.line_items : null
 
@@ -204,6 +208,7 @@ export async function POST(req: NextRequest) {
     ...money,
   }
   if (taxBreakdown) insertData.tax_breakdown = taxBreakdown
+  if (!discount.skip && discount.value) insertData.discount = discount.value
   if (body.po_number) insertData.po_number = String(body.po_number)
 
   if (prePopLaborRate  !== null) insertData.labor_rate           = prePopLaborRate
@@ -229,6 +234,12 @@ export async function POST(req: NextRequest) {
       .insert(withoutTaxBreakdown(insertData))
       .select('*')
       .single())
+  }
+
+  // A discounted total with no record of the discount would print as a mystery
+  // shortfall, so before 165 a quote WITH a discount is refused, not trimmed.
+  if (error && isMissing165Column(error)) {
+    return NextResponse.json({ error: MIGRATION_165_MESSAGE }, { status: 409 })
   }
 
   if (error) {

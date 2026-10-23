@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { isMissingTaxBreakdownColumn, withoutTaxBreakdown } from '@/lib/tax'
 import { missingMigration142Column, withoutMigration142Columns } from '@/lib/migration-142'
 import { createClient } from '@/lib/supabase/server'
+import { discountForWrite, isMissing165Column, MIGRATION_165_MESSAGE } from '@/lib/document-discount'
 
 const INVOICE_SELECT = `
   *,
@@ -83,6 +84,11 @@ export async function POST(request: NextRequest) {
 
   const today = new Date().toISOString().slice(0, 10)
 
+  // The discount (migration 165), checked to add up. discount_amount follows it.
+  const discount = discountForWrite(body.discount)
+  if ('error' in discount) return NextResponse.json({ error: discount.error }, { status: 422 })
+  if (Number(body.total) < 0) return NextResponse.json({ error: 'The total cannot be negative.' }, { status: 422 })
+
   const invoiceRow = {
       user_id:         user.id,
       invoice_number:  body.invoice_number,
@@ -103,7 +109,8 @@ export async function POST(request: NextRequest) {
       tax_amount:      Number(body.tax_amount      ?? 0),
       // What was taxed. Null reads as "no split known", never as "nothing taxed".
       tax_breakdown:   body.tax_breakdown ?? null,
-      discount_amount: Number(body.discount_amount ?? 0),
+      discount_amount: !discount.skip ? (discount.value?.amount ?? 0) : Number(body.discount_amount ?? 0),
+      ...(!discount.skip && discount.value ? { discount: discount.value } : {}),
       total:           Number(body.total),
       status:           body.status          ?? 'draft',
       source:           body.source          ?? 'manual',
@@ -140,6 +147,10 @@ export async function POST(request: NextRequest) {
       .insert(withoutMigration142Columns(withoutTaxBreakdown(invoiceRow)))
       .select(INVOICE_SELECT)
       .single())
+  }
+
+  if (error && isMissing165Column(error)) {
+    return NextResponse.json({ error: MIGRATION_165_MESSAGE }, { status: 409 })
   }
 
   if (error) {

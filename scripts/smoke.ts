@@ -30,8 +30,9 @@ import { stripLeadingZeros, parseFee } from '../src/components/hd/FeeInput'
 import { fmtShopDate, shopTimeZone } from '../src/lib/shop-time'
 import { fromLineItems, markupOnReopen, type EditItem } from '../src/components/shared/line-items'
 import { documentMoney, documentExtras } from '../src/lib/document-money'
-import { documentTaxSettings } from '../src/lib/tax'
-import { EXTRAS_OFF } from '../src/lib/billable-extras'
+import { documentTaxSettings, parseBreakdown, breakdownTaxTotal } from '../src/lib/tax'
+import { EXTRAS_OFF, partsBaseFromLines } from '../src/lib/billable-extras'
+import { applyDiscount, laborFromLines, normalizeDiscount, parseDiscount } from '../src/lib/document-discount'
 import { createClient as createSupabase } from '@supabase/supabase-js'
 import { loadRollupInput } from '../src/lib/hd/equipment-rollup-load'
 import { jobsFor, rollupByCategory, rollupByUnit } from '../src/lib/hd/equipment-rollup'
@@ -137,6 +138,13 @@ async function cleanup(): Promise<void> {
     await fetch(`${SUPA}/rest/v1/work_orders?id=eq.${id}`, {
       method: 'PATCH', headers: SVC_H,
       body: JSON.stringify({ converted_invoice_id: null, converted_at: null }),
+    })
+  }
+  // A converted quote points at its invoice (flow Dc converts quotes).
+  for (const id of created.quotes) {
+    await fetch(`${SUPA}/rest/v1/quotes?id=eq.${id}`, {
+      method: 'PATCH', headers: SVC_H,
+      body: JSON.stringify({ converted_invoice_id: null }),
     })
   }
   for (const id of created.invoices)   await del('invoices', id)
@@ -2410,7 +2418,7 @@ async function flowW(): Promise<void> {
     const h = await r.text()
     record(F, 'an existing quote prints unchanged - no detail, flag or terms markup, same total',
       r.ok && !h.includes('data-testid="line-detail"') && !h.includes('data-testid="line-flag"') &&
-      !h.includes('data-testid="terms-block"') &&
+      !h.includes('data-testid="terms-block"') && !h.includes('data-testid="discount-row"') &&
       (visibleText(h).includes(usd(oldQ!.grand_total)) || visibleText(h).includes(Number(oldQ!.grand_total).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }))),
       `-> ${r.status}, stored ${usd(oldQ!.grand_total)}`)
   }
@@ -2419,8 +2427,9 @@ async function flowW(): Promise<void> {
   if (record(F, 'an existing invoice to compare', !!oldI, oldI ? '' : 'none on the owner account')) {
     const r = await fetch(`${BASE}/invoice/${oldI!.public_token}`)
     const h = await r.text()
-    record(F, 'an existing invoice prints unchanged - no detail, terms or pay-link markup',
-      r.ok && !h.includes('data-testid="line-detail"') && !h.includes('data-testid="terms-block"') && !h.includes('data-testid="pay-link"'),
+    record(F, 'an existing invoice prints unchanged - no detail, terms, pay-link or discount markup',
+      r.ok && !h.includes('data-testid="line-detail"') && !h.includes('data-testid="terms-block"') &&
+        !h.includes('data-testid="pay-link"') && !h.includes('data-testid="discount-row"'),
       `-> ${r.status}`)
   }
 }
@@ -2589,6 +2598,239 @@ async function flowTerms(): Promise<void> {
         back.customer_supplied_parts_clause === original.customer_supplied_parts_clause && back.pay_link_url === original.pay_link_url,
       `-> ${r.status}`)
   }
+}
+
+// ── Dc: the discount, end to end (migration 165) ────────────────────────────
+//
+// The brief's worked example on a real quote: labour 870.00, parts 822.39, 7.75% on
+// each, $100 off the whole document -> 1715.80. Saved, printed for the customer,
+// saved again with nothing changed, carried to an invoice, changed on the invoice
+// while it is in progress, finalized and printed. Then the subscriber's case: an
+// invoice already in progress with NO discount takes one without being recreated.
+// And a quote -> work order -> invoice carry. Every row is the suite's and is deleted.
+//
+// Before 165 is applied the discount cannot be stored, so those steps FAIL and say
+// so; what can be proven without it (a discount is refused readably, nothing old
+// prints a discount row) is still checked.
+async function flowDiscount(): Promise<void> {
+  const F = 'Dc discount'
+  const TAX = { tax_parts: true, tax_labor: true, tax_rate_parts: 7.75, tax_rate_labor: 7.75 }
+  const REASON = `${MARK} fleet customer`
+  const items: EditItem[] = [
+    { _id: 'd1', kind: 'labor', description: `${MARK} Labor: brake job`, part_number: '', quantity: 8.7, unit_price: 100 },
+    { _id: 'd2', description: `${MARK} Brake parts`, part_number: 'SMOKE-BRK', quantity: 1, unit_price: 822.39 },
+  ]
+  const priced = (d: unknown) => documentMoney({
+    items, markupPct: 0, laborRate: 100, taxPct: 7.75, taxSettings: TAX,
+    extrasSettings: EXTRAS_OFF, extras: { travelHours: 0, mileageMiles: 0 }, discount: normalizeDiscount(d),
+  })
+  const money = priced({ type: 'flat', value: 100, scope: 'document', reason: REASON })
+  record(F, 'the worked example prices to 1715.80 (labor 818.59, parts 773.80, tax 63.44 + 59.97)',
+    money.grandTotal === 1715.8 && money.taxBreakdown?.labor?.amount === 63.44 && money.taxBreakdown?.parts?.amount === 59.97,
+    `${money.grandTotal}`)
+
+  // ── Is 165 applied? ──
+  const probe = await fetch(`${SUPA}/rest/v1/quotes?select=discount&limit=1`, { headers: SVC_H })
+  const has165 = probe.ok
+  if (!has165) {
+    const c = await api('POST', '/api/quotes', { notes: `${MARK} Dc - before 165`, ...money.columns })
+    const qId = (c.json.quote as { id?: string } | undefined)?.id
+    if (qId) created.quotes.add(qId)
+    record(F, 'before 165: a quote WITH a discount is refused readably, never saved without it',
+      c.status === 409 && /migration 165/i.test(String(c.json.error ?? '')) && !qId,
+      `-> ${c.status} ${String(c.json.error ?? '').slice(0, 90)}`)
+    const plain = await api('POST', '/api/quotes', { notes: `${MARK} Dc - before 165, none`, ...priced(null).columns })
+    const pId = (plain.json.quote as { id?: string } | undefined)?.id
+    if (pId) created.quotes.add(pId)
+    record(F, 'before 165: a quote with NO discount still saves', plain.status === 201 && !!pId, `-> ${plain.status}`)
+    record(F, 'migration 165 applied - the discount can be stored', false,
+      'quotes.discount does not exist yet: apply supabase/migrations/165_document_discount.sql, then rerun')
+    return
+  }
+
+  // ── The quote ──
+  const c = await api('POST', '/api/quotes', { notes: `${MARK} Dc - discount`, ...money.columns })
+  const qId = (c.json.quote as { id?: string } | undefined)?.id
+  if (!record(F, 'a quote with a discount saves', c.status === 201 && !!qId, `-> ${c.status} ${qId ? '' : JSON.stringify(c.json).slice(0, 120)}`)) return
+  created.quotes.add(qId!)
+  const q = (await rest(`quotes?select=*&id=eq.${qId}`))[0]
+  const qd = q.discount as Record<string, unknown> | null
+  record(F, 'stored: 1715.80, tax 123.41, $100 split 51.41 labor / 48.59 parts, with the reason',
+    Number(q.grand_total) === 1715.8 && Number(q.tax_amount) === 123.41 && qd?.amount === 100 &&
+      qd?.labor_amount === 51.41 && qd?.parts_amount === 48.59 && qd?.reason === REASON,
+    `grand ${q.grand_total}, tax ${q.tax_amount}, discount ${JSON.stringify(qd)?.slice(0, 80)}`)
+
+  // A record that contradicts itself is refused, never stored as a negative total.
+  const bad = await api('PUT', `/api/quotes/${qId}`, {
+    ...money.columns, notes: q.notes, customer_name: '', customer_phone: '',
+    discount: { ...(qd ?? {}), amount: 5000, labor_amount: 2500, parts_amount: 2500 }, grand_total: -3000,
+  })
+  const afterBad = (await rest(`quotes?select=grand_total,discount&id=eq.${qId}`))[0]
+  record(F, 'a discount larger than the subtotal is refused with a readable message',
+    (bad.status === 422) && /negative|larger than/i.test(String(bad.json.error ?? '')) && Number(afterBad.grand_total) === 1715.8,
+    `-> ${bad.status} ${String(bad.json.error ?? '').slice(0, 80)}`)
+
+  // No-op save: reopen exactly as the editor does and save without a change.
+  const reopened = fromLineItems(q.line_items as never, 0, undefined, { withLabor: true })
+  const again = documentMoney({
+    items: reopened, markupPct: 0, laborRate: Number(q.labor_rate ?? 0), taxPct: Number(q.tax_percent ?? 0),
+    taxSettings: documentTaxSettings(q.tax_breakdown, null, Number(q.tax_percent ?? 0)),
+    extrasSettings: documentExtras(q).settings, extras: documentExtras(q).input,
+    discount: parseDiscount(q.discount), stored: q,
+  })
+  const put = await api('PUT', `/api/quotes/${qId}`, { ...again.columns, notes: q.notes, customer_name: '', customer_phone: '' })
+  const q2 = (await rest(`quotes?select=*&id=eq.${qId}`))[0]
+  const movedQ = ['grand_total', 'tax_amount', 'labor_subtotal', 'parts_subtotal'].filter(k => Number(q2[k]) !== Number(q[k]))
+  record(F, 'a no-op save of the discounted quote moves nothing',
+    put.status === 200 && movedQ.length === 0 && JSON.stringify(q2.discount) === JSON.stringify(q.discount),
+    put.status !== 200 ? `PUT -> ${put.status}` : movedQ.join(', ') || 'unchanged')
+
+  // ── The customer's quote ──
+  const sent = await api('POST', `/api/quotes/${qId}/send`, { method: 'link' })
+  const token = String(sent.json.quote_url ?? '').split('/quote/')[1]
+  const qPage = token ? await fetch(`${BASE}/quote/${token}`) : null
+  const qHtml = qPage ? await qPage.text() : ''
+  const qText = visibleText(qHtml)
+  const usdc = (n: number) => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const qRow = qHtml.match(/data-testid="discount-row"[\s\S]*?<\/div>/)?.[0] ?? ''
+  record(F, 'the customer quote prints Subtotal, the discount with its reason, then the total',
+    !!qPage?.ok && qText.includes(usdc(1692.39)) && visibleText(qRow).includes('Discount ($100.00)') &&
+      visibleText(qRow).includes(REASON) && visibleText(qRow).includes('-$100.00') && qText.includes(usdc(1715.8)) &&
+      qText.indexOf(usdc(1692.39)) < qText.indexOf('-$100.00') && qText.indexOf('-$100.00') < qText.lastIndexOf(usdc(1715.8)),
+    !qPage ? 'no link' : qRow ? visibleText(qRow).slice(0, 90) : 'no discount-row')
+
+  // ── Carried to an invoice ──
+  await api('POST', `/api/quotes/${qId}/respond`, { action: 'approve' })
+  const conv = await api('POST', `/api/quotes/${qId}/convert`)
+  const invId = (conv.json.invoice as { id?: string } | undefined)?.id
+  if (!record(F, 'the approved quote converts to an invoice', conv.status === 201 && !!invId,
+    `-> ${conv.status} ${invId ? '' : JSON.stringify(conv.json).slice(0, 120)}`)) return
+  created.invoices.add(invId!)
+  const inv = (await rest(`invoices?select=*&id=eq.${invId}`))[0]
+  record(F, 'the discount carries quote -> invoice unchanged',
+    JSON.stringify(inv.discount) === JSON.stringify(q.discount) && Number(inv.total) === 1715.8 &&
+      Number(inv.discount_amount) === 100 && Number(inv.subtotal) === 1692.39 && Number(inv.tax_amount) === 123.41,
+    `total ${inv.total}, subtotal ${inv.subtotal}, discount_amount ${inv.discount_amount}`)
+
+  // The in-progress screen renders the discount control, already open with it.
+  const ip = await page(`/financials/invoices/${invId}`)
+  record(F, 'the in-progress invoice renders the discount editor with the carried discount',
+    !!ip && ip.html.includes('data-testid="discount-editor"') && ip.html.includes(REASON),
+    !ip ? 'did not load' : ip.html.includes('discount-editor') ? 'reason missing' : 'no discount editor')
+
+  // Changed while in progress, computed the way the screen computes it: the baseline is
+  // the split BEFORE the discount, the discount applied once.
+  const inProgress = (row: Record<string, unknown>, d: unknown) => {
+    const stored = parseDiscount(row.discount)
+    const baseline = stored ? stored.pre_tax_breakdown : parseBreakdown(row.tax_breakdown)
+    return applyDiscount({
+      discount: normalizeDiscount(d), laborLines: laborFromLines(row.line_items),
+      partsLines: partsBaseFromLines(row.line_items), subtotal: Number(row.subtotal),
+      breakdown: baseline, taxAmount: breakdownTaxTotal(baseline), taxPct: Number(row.tax_rate ?? 0) * 100,
+    })
+  }
+  const ten = inProgress(inv, { type: 'percent', value: 10, scope: 'document', reason: REASON })
+  if (record(F, 'the in-progress figures for 10% compute', ten.ok, ten.ok ? '' : ten.error) && ten.ok) {
+    const pr = await api('PATCH', `/api/invoices/${invId}/progress`, {
+      subtotal: Number(inv.subtotal), tax_amount: ten.taxAmount, tax_breakdown: ten.breakdown, total: ten.grandTotal, discount: ten.discount,
+    })
+    const inv2 = (await rest(`invoices?select=*&id=eq.${invId}`))[0]
+    record(F, 'an in-progress invoice takes a changed discount and recomputes (10% -> 1641.19)',
+      pr.status === 200 && Number(inv2.total) === 1641.19 && Number(inv2.discount_amount) === 169.24 &&
+        Number(inv2.tax_amount) === 118.04 && Number(inv2.subtotal) === 1692.39,
+      `-> ${pr.status}, total ${inv2.total}, discount ${inv2.discount_amount}, tax ${inv2.tax_amount}`)
+    // No-op: the same screen opened again and saved with nothing changed.
+    const same = inProgress(inv2, parseDiscount(inv2.discount))
+    if (same.ok) {
+      await api('PATCH', `/api/invoices/${invId}/progress`, {
+        subtotal: Number(inv2.subtotal), tax_amount: same.taxAmount, tax_breakdown: same.breakdown, total: same.grandTotal, discount: same.discount,
+      })
+    }
+    const inv3 = (await rest(`invoices?select=*&id=eq.${invId}`))[0]
+    const movedI = ['total', 'tax_amount', 'subtotal', 'discount_amount'].filter(k => Number(inv3[k]) !== Number(inv2[k]))
+    record(F, 'a no-op save of the in-progress invoice moves nothing (the discount is not taken twice)',
+      same.ok && movedI.length === 0 && JSON.stringify(inv3.tax_breakdown) === JSON.stringify(inv2.tax_breakdown),
+      movedI.length ? movedI.map(k => `${k} ${inv2[k]} -> ${inv3[k]}`).join('; ') : `total ${inv3.total}`)
+  }
+
+  // ── Finalized and printed ──
+  const fin = await api('POST', `/api/invoices/${invId}/finalize`)
+  const finRow = (await rest(`invoices?select=public_token,total,invoice_status&id=eq.${invId}`))[0]
+  const iPage = finRow.public_token ? await fetch(`${BASE}/invoice/${finRow.public_token}`) : null
+  const iHtml = iPage ? await iPage.text() : ''
+  const iText = visibleText(iHtml)
+  const iRow = iHtml.match(/data-testid="discount-row"[\s\S]*?<\/div>/)?.[0] ?? ''
+  record(F, 'the customer invoice prints Subtotal, the discount with its reason, then the total',
+    (fin.status === 200 || fin.status === 201) && !!iPage?.ok && iText.includes(usdc(1692.39)) &&
+      visibleText(iRow).includes('Discount (10%)') && visibleText(iRow).includes(REASON) &&
+      visibleText(iRow).includes('-$169.24') && iText.includes(usdc(1641.19)),
+    !iPage ? `finalize -> ${fin.status}, no token` : iRow ? visibleText(iRow).slice(0, 90) : 'no discount-row')
+  const finPage = await page(`/financials/invoices/${invId}`)
+  record(F, 'the shop\'s finalized view shows the discount row',
+    !!finPage && finPage.html.includes('data-testid="discount-row"') && finPage.text.includes('-$169.24'),
+    !finPage ? 'did not load' : 'discount row missing')
+
+  // ── The subscriber's case: in progress, NO discount, takes one without recreating ──
+  const plain = priced(null)
+  const c2 = await api('POST', '/api/quotes', { notes: `${MARK} Dc - plain`, ...plain.columns })
+  const q2Id = (c2.json.quote as { id?: string } | undefined)?.id
+  if (q2Id) {
+    created.quotes.add(q2Id)
+    await api('POST', `/api/quotes/${q2Id}/send`, { method: 'link' })
+    await api('POST', `/api/quotes/${q2Id}/respond`, { action: 'approve' })
+    const conv2 = await api('POST', `/api/quotes/${q2Id}/convert`)
+    const inv2Id = (conv2.json.invoice as { id?: string } | undefined)?.id
+    if (inv2Id) {
+      created.invoices.add(inv2Id)
+      const before = (await rest(`invoices?select=*&id=eq.${inv2Id}`))[0]
+      const ipPlain = await page(`/financials/invoices/${inv2Id}`)
+      record(F, 'an in-progress invoice with no discount offers "+ Add discount" and prints no discount row',
+        !!ipPlain && ipPlain.html.includes('data-testid="add-discount"') && !ipPlain.html.includes('data-testid="discount-row"'),
+        !ipPlain ? 'did not load' : '')
+      const labor = inProgress(before, { type: 'flat', value: 100, scope: 'labor', reason: REASON })
+      if (labor.ok) {
+        const pr = await api('PATCH', `/api/invoices/${inv2Id}/progress`, {
+          subtotal: Number(before.subtotal), tax_amount: labor.taxAmount, tax_breakdown: labor.breakdown, total: labor.grandTotal, discount: labor.discount,
+        })
+        const after = (await rest(`invoices?select=*&id=eq.${inv2Id}`))[0]
+        record(F, 'the same invoice - not recreated - takes $100 off labor: 1715.81, parts tax untouched',
+          pr.status === 200 && after.id === before.id && Number(after.total) === 1715.81 &&
+            (after.tax_breakdown as { parts?: { amount: number } })?.parts?.amount === 63.74 &&
+            (after.tax_breakdown as { labor?: { amount: number } })?.labor?.amount === 59.68,
+          `-> ${pr.status}, total ${after.total}`)
+      } else record(F, 'the same invoice takes $100 off labor', false, labor.error)
+    } else record(F, 'a plain quote converts for the in-progress case', false, `-> ${conv2.status}`)
+  } else record(F, 'a plain quote saves for the in-progress case', false, `-> ${c2.status}`)
+
+  // ── Quote -> work order -> invoice ──
+  const c3 = await api('POST', '/api/quotes', { notes: `${MARK} Dc - via work order`, ...priced({ type: 'flat', value: 100, scope: 'parts', reason: REASON }).columns })
+  const q3Id = (c3.json.quote as { id?: string } | undefined)?.id
+  if (!q3Id) { record(F, 'a quote for the work-order carry saves', false, `-> ${c3.status}`); return }
+  created.quotes.add(q3Id)
+  const toWo = await api('POST', `/api/quotes/${q3Id}/to-work-order`)
+  const woId = (toWo.json.work_order as { id?: string } | undefined)?.id ?? (toWo.json.work_order_id as string | undefined)
+  if (!record(F, 'the quote opens a work order', toWo.status === 201 && !!woId, `-> ${toWo.status} ${JSON.stringify(toWo.json).slice(0, 100)}`)) return
+  created.workOrders.add(woId!)
+  const wo = (await rest(`work_orders?select=*&id=eq.${woId}`))[0]
+  record(F, 'the work order carries the discount and the quoted total (1715.81, parts only)',
+    JSON.stringify(wo.discount) === JSON.stringify((await rest(`quotes?select=discount&id=eq.${q3Id}`))[0].discount) &&
+      Number(wo.grand_total) === 1715.81,
+    `grand ${wo.grand_total}`)
+  // A save of the work order - the server re-totals on every write - keeps it.
+  await api('PATCH', `/api/work-orders/${woId}`, { job_description: `${MARK} Dc - saved` })
+  const woSaved = (await rest(`work_orders?select=grand_total,discount,tax_amount&id=eq.${woId}`))[0]
+  record(F, 'a work-order save keeps the discount in its total (server re-total)',
+    Number(woSaved.grand_total) === 1715.81 && (woSaved.discount as { amount?: number })?.amount === 100,
+    `grand ${woSaved.grand_total}, tax ${woSaved.tax_amount}`)
+  await api('POST', `/api/work-orders/${woId}/status`, { status: 'complete', notify: false })
+  const woConv = await api('POST', `/api/work-orders/${woId}/convert`)
+  const woInvId = (woConv.json.invoice as { id?: string } | undefined)?.id
+  if (woInvId) created.invoices.add(woInvId)
+  const woInv = woInvId ? (await rest(`invoices?select=*&id=eq.${woInvId}`))[0] : null
+  record(F, 'and carries work order -> invoice: 1715.81, $100 off parts, parts tax 55.99',
+    !!woInv && Number(woInv.total) === 1715.81 && Number(woInv.discount_amount) === 100 &&
+      (woInv.tax_breakdown as { parts?: { amount: number } })?.parts?.amount === 55.99,
+    woInv ? `total ${woInv.total}, discount ${woInv.discount_amount}` : `convert -> ${woConv.status} ${JSON.stringify(woConv.json).slice(0, 120)}`)
 }
 
 // ── Z: equipment categories, By Equipment and the audit exports ─────────────
@@ -2901,6 +3143,7 @@ async function main(): Promise<void> {
     await flowX()
     await flowW()
     await flowTerms()
+    await flowDiscount()
     await flowY()
     await flowZ()
   } finally {

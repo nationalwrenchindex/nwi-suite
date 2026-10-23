@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentFuelPrice } from '@/lib/fuel-price'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { parseDiscount } from '@/lib/document-discount'
 
 // ─── TorqueWrench: queue review request when invoice is marked paid ───────────
 
@@ -104,6 +105,8 @@ interface InvoiceForBreakdown {
   travel_amount?:     number | null
   mileage_amount?:    number | null
   shop_supplies_fee?: number | null
+  /** Migration 165. Absent before it, null when there is none. */
+  discount?:          unknown
 }
 
 function calcBreakdown(inv: InvoiceForBreakdown) {
@@ -124,14 +127,18 @@ function calcBreakdown(inv: InvoiceForBreakdown) {
   const totalPartsCost         = r2(quotedPartsCost + additionalPartsCost)
   const quotedPartsRevenue     = r2(quotedPartsCost * (1 + markupPct / 100))
   const additionalPartsRevenue = additionalParts.reduce((s, p) => s + p.total, 0)
-  const partsGrossProfit       = r2((quotedPartsRevenue + additionalPartsRevenue) - totalPartsCost)
+  // A discount (migration 165) is revenue not collected: what came off the parts
+  // comes out of parts profit, what came off labour out of labour income. net_profit
+  // already reads the post-discount total.
+  const discount               = parseDiscount(inv.discount)
+  const partsGrossProfit       = r2((quotedPartsRevenue + additionalPartsRevenue) - totalPartsCost - (discount?.parts_amount ?? 0))
 
   // Labor. Travel time is labour revenue: it is time billed at an hourly rate, and
   // leaving it out understated labour income on every mobile job.
   const additionalLabor        = Array.isArray(inv.additional_labor) ? inv.additional_labor : []
   const quotedLaborSubtotal    = Number(inv.labor_subtotal ?? sq?.labor_subtotal ?? 0)
   const travelRevenue          = Number(inv.travel_amount ?? 0)
-  const laborIncome            = r2(quotedLaborSubtotal + travelRevenue + additionalLabor.reduce((s, l) => s + l.subtotal, 0))
+  const laborIncome            = r2(quotedLaborSubtotal + travelRevenue + additionalLabor.reduce((s, l) => s + l.subtotal, 0) - (discount?.labor_amount ?? 0))
 
   // Shop supplies (no markup — cost = charged amount)
   const shopSupplies           = Array.isArray(inv.shop_supplies) ? inv.shop_supplies : []

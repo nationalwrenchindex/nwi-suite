@@ -38,6 +38,7 @@ import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
 import { missingMigration142Column } from '@/lib/migration-142'
 import { termsWithDueDate } from '@/lib/hd/payment-terms'
 import { parseTermsSnapshot, termsBlockRows } from '@/lib/document-terms'
+import { discountLabel, parseDiscount } from '@/lib/document-discount'
 import InvoiceViewClient from './InvoiceViewClient'
 import InvoiceApprovalClient from './InvoiceApprovalClient'
 import type { ReactNode } from 'react'
@@ -403,6 +404,12 @@ export default async function PublicInvoicePage(
   const termsRows = termsBlockRows(termsSnap, { includePayment: false })
   const payLink   = termsSnap?.pay_link ?? null
 
+  // The discount it recorded (migration 165). Its own read, so a database without 165
+  // loses the row, never the page. Detailers are not offered one.
+  const { data: discountRow } = await sc
+    .from('invoices').select('discount').eq('id', inv.id).maybeSingle()
+  const discount = isDetailer ? null : parseDiscount((discountRow as { discount?: unknown } | null)?.discount)
+
   // Travel, mileage and shop supplies as stored on this invoice. extrasFromDocument
   // reads, it does not recompute — an invoice already sent must keep the figures the
   // customer was given, whatever Settings says today.
@@ -737,6 +744,21 @@ export default async function PublicInvoicePage(
                   <span>Subtotal</span>
                   <span style={{ color: TEXT }}>{fmt(displaySubtotal)}</span>
                 </div>
+                {/* THE DISCOUNT (migration 165), under the subtotal it came off, with its
+                    reason, so the customer can see the break. None, no row. */}
+                {discount && (
+                  <div
+                    data-testid="discount-row"
+                    className="flex justify-between py-2 text-sm"
+                    style={{ color: MUTED, borderBottom: `1px solid ${RULE}` }}
+                  >
+                    <span>
+                      {discountLabel(discount)}
+                      {discount.reason && <span className="block text-xs" style={{ color: FAINT }}>{discount.reason}</span>}
+                    </span>
+                    <span style={{ color: TEXT }}>-{fmt(discount.amount)}</span>
+                  </div>
+                )}
                 {/* WHAT WAS TAXED, including what was not.
                     A customer who is not charged tax on labor should be able to see
                     that stated, rather than being left to work out why the tax looks

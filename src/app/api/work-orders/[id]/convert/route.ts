@@ -14,7 +14,10 @@ import { PARENTS } from '@/lib/segments/parent'
 import { SEGMENT_SELECT, shapeSegments } from '@/lib/segments/select'
 import { isBillable } from '@/types/segments'
 import { invoiceFromSegments, jobNotesFromSegments } from '@/lib/segments/invoice'
-import { taxSettingsFrom, TAX_SETTINGS_SELECT, mergeBreakdowns, breakdownTaxTotal, computeTax } from '@/lib/tax'
+import {
+  taxSettingsFrom, TAX_SETTINGS_SELECT, mergeBreakdowns, breakdownTaxTotal, computeTax, documentTaxSettings,
+} from '@/lib/tax'
+import { applyDiscount, parseDiscount, isMissing165Column, MIGRATION_165_MESSAGE } from '@/lib/document-discount'
 import {
   extrasFromDocument, extrasDelta, extrasAgree, extrasColumns, partsBaseFromLines,
 } from '@/lib/billable-extras'
@@ -60,7 +63,15 @@ export async function POST(
     .select(TAX_SETTINGS_SELECT)
     .eq('id', user.id)
     .single()
-  const taxSettings = taxSettingsFrom(shopProfile)
+  // RECORDED VALUES BEAT CURRENT SETTINGS: the work order's own tax split, bucket by
+  // bucket, when it recorded one; today's settings only fill what it never recorded
+  // (lib/tax documentTaxSettings). This read today's settings outright, so a rate
+  // change between authorization and billing re-taxed work the customer had approved.
+  const taxSettings = documentTaxSettings(
+    (wo as { tax_breakdown?: unknown }).tax_breakdown,
+    taxSettingsFrom(shopProfile),
+    Number(wo.tax_percent ?? 0),
+  ) ?? taxSettingsFrom(shopProfile)
 
   // Billing an unfinished job is almost always a misclick, and the customer gets a
   // bill for work still on the lift.
@@ -265,6 +276,34 @@ export async function POST(
     )
   }
 
+  // ── THE DISCOUNT, carried (migration 165) ───────────────────────────────────
+  // The work order's recorded discount - type, value, scope, reason - applied to the
+  // same lines it was applied to there, after the checks above have passed on the
+  // undiscounted figures. Same lines, same terms, same discount: the invoice bills
+  // what the work order showed. Segment-priced work is priced per segment and has no
+  // single set of lines to take it off, so a discount there is refused readably rather
+  // than dropped.
+  const woDiscount = parseDiscount((wo as { discount?: unknown }).discount)
+  if (woDiscount && segmented) {
+    return NextResponse.json(
+      { error: 'This work order has a discount, but its work is priced by segment. Remove the discount from the work order and add it on the invoice instead.' },
+      { status: 422 },
+    )
+  }
+  const applied = applyDiscount({
+    discount:   woDiscount,
+    laborLines: parentLaborBase,
+    partsLines: parentPartsBase,
+    subtotal:   money.subtotal,
+    breakdown:  money.tax_breakdown,
+    taxAmount:  money.tax_amount,
+    taxPct:     round2(effectiveRate * 100),
+  })
+  if (!applied.ok) {
+    return NextResponse.json({ error: `This work order's discount cannot be billed: ${applied.error}` }, { status: 422 })
+  }
+  const discounted = applied.discount
+
   const invoiceInsert = {
     user_id:          user.id,
     invoice_number,
@@ -272,17 +311,22 @@ export async function POST(
     customer_id:      wo.customer_id ?? null,
     vehicle_id:       wo.vehicle_id  ?? null,
     line_items:       money.line_items,
+    // Before the discount, as invoices.subtotal has always meant; the discount and
+    // the total after it are their own columns.
     subtotal:         money.subtotal,
     // Recomputed with the extras in, so the single-rate column is not the
     // segments-only rate applied to a larger subtotal.
-    tax_rate:         effectiveRate,
-    tax_amount:       money.tax_amount,
+    tax_rate:         discounted && applied.subtotalAfter > 0
+                        ? Math.round((applied.taxAmount / applied.subtotalAfter) * 10000) / 10000
+                        : effectiveRate,
+    tax_amount:       applied.taxAmount,
     // Carried forward from the segments rather than recomputed: the customer already
     // approved these figures, and re-deriving them here is how two screens start
-    // disagreeing about one job.
-    tax_breakdown:    money.tax_breakdown,
-    discount_amount:  0,
-    total:            money.total,
+    // disagreeing about one job. With a discount, only the buckets it touched differ.
+    tax_breakdown:    applied.breakdown,
+    discount_amount:  discounted?.amount ?? 0,
+    ...(discounted ? { discount: discounted } : {}),
+    total:            applied.grandTotal,
     status:           'draft',
     source:           'work_order',
     // The work order this invoice bills (migration 146). work_orders.converted_invoice_id
@@ -350,6 +394,9 @@ export async function POST(
     row => supabase.from('invoices').insert(row).select(INVOICE_SELECT).single(),
   )
 
+  if (insertErr && isMissing165Column(insertErr)) {
+    return NextResponse.json({ error: MIGRATION_165_MESSAGE }, { status: 409 })
+  }
   if (insertErr || !invoice) {
     console.error('[POST /api/work-orders/[id]/convert] insert invoice', insertErr)
     const msg = (insertErr as { message?: string } | null)?.message

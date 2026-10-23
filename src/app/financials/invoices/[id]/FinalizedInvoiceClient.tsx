@@ -7,6 +7,7 @@ import { money } from '@/lib/format'
 import { LineDetail } from '@/components/shared/LineItemEditor'
 import { segmentedLine, segmentHeading } from '@/lib/invoice-document'
 import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
+import { discountLabel, parseDiscount } from '@/lib/document-discount'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tools.nationalwrenchindex.com'
 
@@ -102,11 +103,14 @@ function calcJobPnL(invoice: import('@/types/financials').Invoice) {
   const quotedPartsRevenue     = round2(quotedPartsCost * (1 + markupPct / 100))
   const additionalPartsRevenue = additionalParts.reduce((s, p) => s + p.total, 0)
   const partsRevenue           = round2(quotedPartsRevenue + additionalPartsRevenue)
-  const partsGrossProfit       = round2(partsRevenue - totalPartsCost)
+  // A discount is revenue not collected - out of parts profit and labour income, as
+  // the paid-invoice breakdown in api/invoices/[id] does it.
+  const disc                   = parseDiscount((invoice as unknown as { discount?: unknown }).discount)
+  const partsGrossProfit       = round2(partsRevenue - totalPartsCost - (disc?.parts_amount ?? 0))
 
   const additionalLabor     = Array.isArray(invoice.additional_labor) ? invoice.additional_labor : []
   const quotedLaborSubtotal = Number(sq?.labor_subtotal ?? 0)
-  const laborIncome         = round2(quotedLaborSubtotal + additionalLabor.reduce((s, l) => s + l.subtotal, 0))
+  const laborIncome         = round2(quotedLaborSubtotal + additionalLabor.reduce((s, l) => s + l.subtotal, 0) - (disc?.labor_amount ?? 0))
 
   const shopSupplies      = Array.isArray(invoice.shop_supplies) ? invoice.shop_supplies : []
   const shopSuppliesTotal = round2(shopSupplies.reduce((s, ss) => s + ss.total, 0))
@@ -1318,6 +1322,15 @@ export default function FinalizedInvoiceClient({
                 <span className="text-white/50">Subtotal</span>
                 <span className="text-white">{fmt(Number(invoice.subtotal ?? 0))}</span>
               </div>
+              {(() => {
+                const d = parseDiscount((invoice as unknown as { discount?: unknown }).discount)
+                return d ? (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-white/50">{discountLabel(d)}{d.reason ? ` · ${d.reason}` : ''}</span>
+                    <span className="text-emerald-400">-{fmt(d.amount)}</span>
+                  </div>
+                ) : null
+              })()}
               {Number(invoice.tax_amount ?? 0) > 0 && (
                 <div className="flex justify-between text-sm">
                   <span className="text-white/40">Tax</span>
@@ -1530,6 +1543,19 @@ export default function FinalizedInvoiceClient({
             <span className="text-white/50">Subtotal</span>
             <span className="text-white">{fmt(displaySubtotal)}</span>
           </div>
+          {/* The discount this invoice recorded (migration 165). None, no row. */}
+          {(() => {
+            const d = isDetailer ? null : parseDiscount((invoice as unknown as { discount?: unknown }).discount)
+            return d ? (
+              <div className="flex justify-between text-sm" data-testid="discount-row">
+                <span className="text-white/50">
+                  {discountLabel(d)}
+                  {d.reason && <span className="text-white/30 text-xs ml-1.5">· {d.reason}</span>}
+                </span>
+                <span className="text-emerald-400">-{fmt(d.amount)}</span>
+              </div>
+            ) : null
+          })()}
           {displayTaxAmt > 0 && (
             <div className="flex justify-between text-sm">
               <span className="text-white/40">Tax ({Math.round((isDetailer ? detailerTaxRate : taxRate) * 10000) / 100}%)</span>

@@ -22,6 +22,9 @@ import {
   type ExtrasInput, type ExtrasResult, type ExtrasSettings,
 } from '@/lib/billable-extras'
 import { parseBreakdown, type TaxBreakdown, type TaxSettings } from '@/lib/tax'
+import {
+  applyDiscount, normalizeDiscount, parseDiscount, type DiscountInput, type DocumentDiscount,
+} from '@/lib/document-discount'
 
 export interface DocumentMoneyInput {
   items:       EditItem[]
@@ -36,10 +39,27 @@ export interface DocumentMoneyInput {
   extrasSettings: ExtrasSettings
   extras:      ExtrasInput
   /**
+   * The discount (lib/document-discount, migration 165), applied last: it takes off
+   * the labour and parts lines and re-taxes only the buckets it touches. Null, absent
+   * or zero is no discount, and then nothing below differs from before it existed.
+   */
+  discount?:   DiscountInput | null
+  /**
    * The document as stored, when re-totalling an existing one. While nothing about it
    * has changed, its own figures are returned untouched - see `unchanged`.
    */
   stored?:     Record<string, unknown> | null
+}
+
+/** The same discount: type, value, scope and reason - or both none. */
+function sameDiscount(a: DiscountInput | null, b: DiscountInput | null): boolean {
+  if (!a || !b) return !a && !b
+  return a.type === b.type && a.value === b.value && a.scope === b.scope && (a.reason ?? null) === (b.reason ?? null)
+}
+
+/** The discount an existing document recorded, as the editor's starting value. */
+export function storedDiscount(doc: Record<string, unknown> | null | undefined): DocumentDiscount | null {
+  return parseDiscount(doc?.discount)
 }
 
 /** The money columns a document stores, copied as-is for an unchanged save. */
@@ -48,6 +68,7 @@ const STORED_MONEY_COLUMNS = [
   'labor_subtotal', 'tax_percent', 'tax_amount', 'grand_total', 'tax_breakdown',
   'travel_hours', 'travel_rate', 'travel_amount', 'mileage_miles', 'mileage_rate', 'mileage_amount',
   'shop_supplies_percent_applied', 'shop_supplies_cap_applied', 'shop_supplies_fee',
+  'discount',
 ] as const
 
 /**
@@ -72,7 +93,8 @@ export function unchanged(input: DocumentMoneyInput): boolean {
     sameNum(s.labor_rate, input.laborRate) &&
     sameNum(s.tax_percent, input.taxPct) &&
     sameNum(s.travel_hours, input.extras.travelHours) &&
-    sameNum(s.mileage_miles, input.extras.mileageMiles)
+    sameNum(s.mileage_miles, input.extras.mileageMiles) &&
+    sameDiscount(normalizeDiscount(input.discount ?? null), parseDiscount(s.discount))
 }
 
 export interface DocumentMoney {
@@ -81,7 +103,15 @@ export interface DocumentMoney {
   partsTotal:    number
   laborSubtotal: number
   extras:        ExtrasResult
+  /** Before the discount - what the customer's copy prints as "Subtotal". */
   subtotal:      number
+  /** The discount as applied, or null for none. */
+  discount:      DocumentDiscount | null
+  /**
+   * Why the discount cannot be applied ("larger than the labor it applies to"). When
+   * set, the figures are the UNDISCOUNTED ones and the caller must refuse to save.
+   */
+  discountError: string | null
   taxAmount:     number
   grandTotal:    number
   taxBreakdown:  TaxBreakdown | null
@@ -111,19 +141,47 @@ export function documentMoney(input: DocumentMoneyInput): DocumentMoney {
     const storedExtras = extrasFromDocument(s)
     const columns: Record<string, unknown> = {}
     for (const k of STORED_MONEY_COLUMNS) if (k in s) columns[k] = s[k]
+    const disc = parseDiscount(s.discount)
     return {
       partsBase:     n(s.parts_subtotal),
       markupAmt:     t.markupAmt,
       partsTotal:    t.partsTotal,
       laborSubtotal: n(s.labor_subtotal),
       extras:        storedExtras,
-      subtotal:      round2(n(s.grand_total) - n(s.tax_amount)),
+      // grand_total - tax_amount is AFTER the discount; the subtotal before it is the
+      // one the discount recorded.
+      subtotal:      disc ? disc.subtotal_before : round2(n(s.grand_total) - n(s.tax_amount)),
+      discount:      disc,
+      discountError: null,
       taxAmount:     n(s.tax_amount),
       grandTotal:    n(s.grand_total),
       taxBreakdown:  parseBreakdown(s.tax_breakdown),
       columns,
     }
   }
+  // The discount comes off the LINES - labour lines and post-markup parts lines - and
+  // only the buckets it touches are re-taxed. No discount returns w's figures as-is.
+  const applied = applyDiscount({
+    discount:   normalizeDiscount(input.discount ?? null),
+    laborLines: t.laborSubtotal,
+    partsLines: t.partsTotal,
+    subtotal:   w.subtotal,
+    breakdown:  w.taxBreakdown,
+    taxAmount:  w.taxAmount,
+    taxPct:     input.taxPct,
+  })
+  const d = applied.ok ? applied : null
+  const columns: Record<string, unknown> = {
+    ...lineMoneyColumns(lineInputs),
+    ...extrasColumns(extras),
+    tax_amount:    round2(d ? d.taxAmount : w.taxAmount),
+    grand_total:   round2(d ? d.grandTotal : w.grandTotal),
+    tax_breakdown: d ? d.breakdown : w.taxBreakdown,
+  }
+  // Written only when there is one, or to clear one the document had - so a document
+  // that never had a discount writes nothing new (and saves before 165 is applied).
+  if (d?.discount) columns.discount = d.discount
+  else if (input.stored && parseDiscount(input.stored.discount)) columns.discount = null
   return {
     partsBase:     t.partsBase,
     markupAmt:     t.markupAmt,
@@ -131,16 +189,12 @@ export function documentMoney(input: DocumentMoneyInput): DocumentMoney {
     laborSubtotal: t.laborSubtotal,
     extras,
     subtotal:      w.subtotal,
-    taxAmount:     w.taxAmount,
-    grandTotal:    w.grandTotal,
-    taxBreakdown:  w.taxBreakdown,
-    columns: {
-      ...lineMoneyColumns(lineInputs),
-      ...extrasColumns(extras),
-      tax_amount:    round2(w.taxAmount),
-      grand_total:   round2(w.grandTotal),
-      tax_breakdown: w.taxBreakdown,
-    },
+    discount:      d?.discount ?? null,
+    discountError: applied.ok ? null : applied.error,
+    taxAmount:     d ? d.taxAmount : w.taxAmount,
+    grandTotal:    d ? d.grandTotal : w.grandTotal,
+    taxBreakdown:  d ? d.breakdown : w.taxBreakdown,
+    columns,
   }
 }
 

@@ -4,6 +4,7 @@
 
 import { NextResponse } from 'next/server'
 import { isMissingTaxBreakdownColumn } from '@/lib/tax'
+import { discountForWrite, isMissing165Column, MIGRATION_165_MESSAGE } from '@/lib/document-discount'
 import { createClient } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -139,6 +140,10 @@ export async function PUT(
   if (body.grand_total < 0) {
     return NextResponse.json({ error: 'Grand total cannot be negative.' }, { status: 422 })
   }
+  // The discount (migration 165): absent leaves the column alone, null clears it,
+  // anything else must add up.
+  const discount = discountForWrite((body as unknown as Record<string, unknown>).discount)
+  if ('error' in discount) return NextResponse.json({ error: discount.error }, { status: 422 })
 
   // For detailers the service fee lives in labor_rate — strip any synthetic 'Service' line item
   // so it can never be double-counted regardless of what the client sends.
@@ -204,6 +209,7 @@ export async function PUT(
   // Written only when sent, so a caller that does not know about the split cannot
   // wipe a breakdown that is already on the row.
   if (body.tax_breakdown !== undefined) updatePayload.tax_breakdown = body.tax_breakdown ?? null
+  if (!discount.skip && !isDetailer) updatePayload.discount = discount.value
   if (isDetailer) {
     updatePayload.service_lines = (body.service_lines ?? []).filter(
       (sl) => typeof sl.service_name === 'string' && sl.service_name.trim().length > 0
@@ -225,6 +231,22 @@ export async function PUT(
   if (updateErr && isMissingTaxBreakdownColumn(updateErr)) {
     console.error('[PUT /api/quotes/:id] tax_breakdown missing — run migration 140', updateErr.message)
     delete updatePayload.tax_breakdown
+    ;({ data: updated, error: updateErr } = await supabase
+      .from('quotes')
+      .update(updatePayload)
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select(QUOTE_SELECT)
+      .single())
+  }
+
+  // Before 165: clearing a discount that cannot exist is dropped and the save retried;
+  // SETTING one is refused, never stored as a discounted total with no record of why.
+  if (updateErr && isMissing165Column(updateErr)) {
+    if (updatePayload.discount) {
+      return NextResponse.json({ error: MIGRATION_165_MESSAGE }, { status: 409 })
+    }
+    delete updatePayload.discount
     ;({ data: updated, error: updateErr } = await supabase
       .from('quotes')
       .update(updatePayload)
