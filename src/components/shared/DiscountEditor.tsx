@@ -133,7 +133,7 @@ export function DiscountEditor({
         <p className="text-danger text-xs">{error}</p>
       ) : applied ? (
         <p className="text-white/40 text-xs">
-          {discountLabel(applied)} comes to <span className="text-emerald-400">-{fmt(applied.amount)}</span>
+          {discountLabel(applied)} comes to <span className="text-emerald-400">{'-' + fmt(applied.amount)}</span>
           {applied.labor_amount > 0 && applied.parts_amount > 0
             ? ` (labor -${fmt(applied.labor_amount)}, parts -${fmt(applied.parts_amount)})`
             : ''}
@@ -168,7 +168,7 @@ export function DiscountRows({
           {discountLabel(discount)}
           {discount.reason && <span className="text-white/40 text-xs ml-1.5">· {discount.reason}</span>}
         </span>
-        <span className="text-emerald-400">-{fmt(discount.amount)}</span>
+        <span className="text-emerald-400">{'-' + fmt(discount.amount)}</span>
       </div>
     </>
   )

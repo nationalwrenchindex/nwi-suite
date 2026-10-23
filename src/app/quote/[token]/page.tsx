@@ -427,7 +427,7 @@ export default async function PublicQuotePage(
                   {discountLabel(discount)}
                   {discount.reason && <span className="text-white/40 text-xs ml-1.5">· {discount.reason}</span>}
                 </span>
-                <span className="text-emerald-400">-{fmt(discount.amount)}</span>
+                <span className="text-emerald-400">{'-' + fmt(discount.amount)}</span>
               </div>
             </>
           )}

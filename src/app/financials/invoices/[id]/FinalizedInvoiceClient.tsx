@@ -1327,7 +1327,7 @@ export default function FinalizedInvoiceClient({
                 return d ? (
                   <div className="flex justify-between text-sm">
                     <span className="text-white/50">{discountLabel(d)}{d.reason ? ` · ${d.reason}` : ''}</span>
-                    <span className="text-emerald-400">-{fmt(d.amount)}</span>
+                    <span className="text-emerald-400">{'-' + fmt(d.amount)}</span>
                   </div>
                 ) : null
               })()}
@@ -1552,7 +1552,7 @@ export default function FinalizedInvoiceClient({
                   {discountLabel(d)}
                   {d.reason && <span className="text-white/30 text-xs ml-1.5">· {d.reason}</span>}
                 </span>
-                <span className="text-emerald-400">-{fmt(d.amount)}</span>
+                <span className="text-emerald-400">{'-' + fmt(d.amount)}</span>
               </div>
             ) : null
           })()}

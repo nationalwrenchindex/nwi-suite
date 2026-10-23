@@ -1267,7 +1267,7 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
               {storedDisc && (
                 <div className="flex justify-between text-sm">
                   <span className="text-white/50">{discountLabel(storedDisc)}{storedDisc.reason ? ` · ${storedDisc.reason}` : ''}</span>
-                  <span className="text-emerald-400">-{fmt(storedDisc.amount)}</span>
+                  <span className="text-emerald-400">{'-' + fmt(storedDisc.amount)}</span>
                 </div>
               )}
               {Number(invoice.tax_amount ?? 0) > 0 && (
@@ -1826,7 +1826,7 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
                     {discountLabel(discountApplied)}
                     {discountApplied.reason && <span className="text-white/30 text-xs ml-1.5">· {discountApplied.reason}</span>}
                   </span>
-                  <span className="text-emerald-400">-{fmt(discountApplied.amount)}</span>
+                  <span className="text-emerald-400">{'-' + fmt(discountApplied.amount)}</span>
                 </div>
               )}
               <div className="py-1">

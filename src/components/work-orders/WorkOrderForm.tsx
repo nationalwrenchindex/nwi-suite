@@ -471,7 +471,7 @@ export default function WorkOrderForm({
                 {discountLabel(docMoney.discount)}
                 {docMoney.discount.reason && <span className="text-white/40 text-xs ml-1.5">· {docMoney.discount.reason}</span>}
               </span>
-              <span className="text-emerald-400">-{fmt(docMoney.discount.amount)}</span>
+              <span className="text-emerald-400">{'-' + fmt(docMoney.discount.amount)}</span>
             </div>
           )}
           <div className="py-1">

@@ -756,7 +756,7 @@ export default async function PublicInvoicePage(
                       {discountLabel(discount)}
                       {discount.reason && <span className="block text-xs" style={{ color: FAINT }}>{discount.reason}</span>}
                     </span>
-                    <span style={{ color: TEXT }}>-{fmt(discount.amount)}</span>
+                    <span style={{ color: TEXT }}>{'-' + fmt(discount.amount)}</span>
                   </div>
                 )}
                 {/* WHAT WAS TAXED, including what was not.

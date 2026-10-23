@@ -2716,7 +2716,8 @@ async function flowDiscount(): Promise<void> {
   const ip = await page(`/financials/invoices/${invId}`)
   record(F, 'the in-progress invoice renders the discount editor with the carried discount',
     !!ip && ip.html.includes('data-testid="discount-editor"') && ip.html.includes(REASON),
-    !ip ? 'did not load' : ip.html.includes('discount-editor') ? 'reason missing' : 'no discount editor')
+    !ip ? 'did not load' : !ip.html.includes('discount-editor') ? 'no discount editor'
+      : !ip.html.includes(REASON) ? 'reason missing' : 'editor open with the reason')
 
   // Changed while in progress, computed the way the screen computes it: the baseline is
   // the split BEFORE the discount, the discount applied once.
@@ -2768,7 +2769,7 @@ async function flowDiscount(): Promise<void> {
   const finPage = await page(`/financials/invoices/${invId}`)
   record(F, 'the shop\'s finalized view shows the discount row',
     !!finPage && finPage.html.includes('data-testid="discount-row"') && finPage.text.includes('-$169.24'),
-    !finPage ? 'did not load' : 'discount row missing')
+    !finPage ? 'did not load' : finPage.html.includes('data-testid="discount-row"') ? '-$169.24 row' : 'discount row missing')
 
   // ── The subscriber's case: in progress, NO discount, takes one without recreating ──
   const plain = priced(null)
@@ -2803,7 +2804,22 @@ async function flowDiscount(): Promise<void> {
   } else record(F, 'a plain quote saves for the in-progress case', false, `-> ${c2.status}`)
 
   // ── Quote -> work order -> invoice ──
-  const c3 = await api('POST', '/api/quotes', { notes: `${MARK} Dc - via work order`, ...priced({ type: 'flat', value: 100, scope: 'parts', reason: REASON }).columns })
+  // Priced the way THIS shop prices a new quote - its own shop-supplies setting on -
+  // because the work order's server re-total applies the shop's supplies to anything
+  // that recorded none. A quote with supplies off is a shape this shop's editor does
+  // not produce (CLAUDE.md: fixtures from a real shape), and it measured that re-total,
+  // not the carry. The worked example's exact figures are proven above and in
+  // verify-document-discount; this leg proves the carry: same total on every document.
+  const shopExtras = {
+    ...EXTRAS_OFF,
+    billShopSupplies: shop.billsSupplies, shopSuppliesPercent: shop.suppliesPct, shopSuppliesCap: shop.suppliesCap,
+  }
+  const viaWo = documentMoney({
+    items, markupPct: 0, laborRate: 100, taxPct: 7.75, taxSettings: TAX,
+    extrasSettings: shopExtras, extras: { travelHours: 0, mileageMiles: 0 },
+    discount: normalizeDiscount({ type: 'flat', value: 100, scope: 'parts', reason: REASON }),
+  })
+  const c3 = await api('POST', '/api/quotes', { notes: `${MARK} Dc - via work order`, ...viaWo.columns })
   const q3Id = (c3.json.quote as { id?: string } | undefined)?.id
   if (!q3Id) { record(F, 'a quote for the work-order carry saves', false, `-> ${c3.status}`); return }
   created.quotes.add(q3Id)
@@ -2812,25 +2828,29 @@ async function flowDiscount(): Promise<void> {
   if (!record(F, 'the quote opens a work order', toWo.status === 201 && !!woId, `-> ${toWo.status} ${JSON.stringify(toWo.json).slice(0, 100)}`)) return
   created.workOrders.add(woId!)
   const wo = (await rest(`work_orders?select=*&id=eq.${woId}`))[0]
-  record(F, 'the work order carries the discount and the quoted total (1715.81, parts only)',
-    JSON.stringify(wo.discount) === JSON.stringify((await rest(`quotes?select=discount&id=eq.${q3Id}`))[0].discount) &&
-      Number(wo.grand_total) === 1715.81,
-    `grand ${wo.grand_total}`)
+  const q3 = (await rest(`quotes?select=discount,grand_total,tax_breakdown&id=eq.${q3Id}`))[0]
+  const quoted = Number(q3.grand_total)
+  const quotedPartsTax = (q3.tax_breakdown as { parts?: { amount: number } })?.parts?.amount
+  record(F, 'the work order carries the discount and the quoted total ($100 off parts)',
+    JSON.stringify(wo.discount) === JSON.stringify(q3.discount) && Number(wo.grand_total) === quoted &&
+      (q3.discount as { parts_amount?: number })?.parts_amount === 100,
+    `quote ${usd(quoted)}, work order ${usd(wo.grand_total)}`)
   // A save of the work order - the server re-totals on every write - keeps it.
   await api('PATCH', `/api/work-orders/${woId}`, { job_description: `${MARK} Dc - saved` })
   const woSaved = (await rest(`work_orders?select=grand_total,discount,tax_amount&id=eq.${woId}`))[0]
   record(F, 'a work-order save keeps the discount in its total (server re-total)',
-    Number(woSaved.grand_total) === 1715.81 && (woSaved.discount as { amount?: number })?.amount === 100,
-    `grand ${woSaved.grand_total}, tax ${woSaved.tax_amount}`)
+    Number(woSaved.grand_total) === quoted && (woSaved.discount as { amount?: number })?.amount === 100,
+    `quote ${usd(quoted)}, saved ${usd(woSaved.grand_total)}, tax ${woSaved.tax_amount}`)
   await api('POST', `/api/work-orders/${woId}/status`, { status: 'complete', notify: false })
   const woConv = await api('POST', `/api/work-orders/${woId}/convert`)
   const woInvId = (woConv.json.invoice as { id?: string } | undefined)?.id
   if (woInvId) created.invoices.add(woInvId)
   const woInv = woInvId ? (await rest(`invoices?select=*&id=eq.${woInvId}`))[0] : null
-  record(F, 'and carries work order -> invoice: 1715.81, $100 off parts, parts tax 55.99',
-    !!woInv && Number(woInv.total) === 1715.81 && Number(woInv.discount_amount) === 100 &&
-      (woInv.tax_breakdown as { parts?: { amount: number } })?.parts?.amount === 55.99,
-    woInv ? `total ${woInv.total}, discount ${woInv.discount_amount}` : `convert -> ${woConv.status} ${JSON.stringify(woConv.json).slice(0, 120)}`)
+  record(F, 'and carries work order -> invoice: the quoted total, $100 off parts, the quoted parts tax',
+    !!woInv && Number(woInv.total) === quoted && Number(woInv.discount_amount) === 100 &&
+      (woInv.tax_breakdown as { parts?: { amount: number } })?.parts?.amount === quotedPartsTax,
+    woInv ? `quote ${usd(quoted)}, invoice ${usd(woInv.total)}, discount ${woInv.discount_amount}`
+      : `convert -> ${woConv.status} ${JSON.stringify(woConv.json).slice(0, 120)}`)
 }
 
 // ── Z: equipment categories, By Equipment and the audit exports ─────────────

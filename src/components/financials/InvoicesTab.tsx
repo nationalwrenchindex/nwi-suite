@@ -592,7 +592,7 @@ export default function InvoicesTab() {
                   <span className="text-white/40">
                     {discountLabel(discountApplied)}{discountApplied.reason ? ` · ${discountApplied.reason}` : ''}
                   </span>
-                  <span className="text-emerald-400 w-24 text-right">-{fmt(discountApplied.amount)}</span>
+                  <span className="text-emerald-400 w-24 text-right">{'-' + fmt(discountApplied.amount)}</span>
                 </div>
               )}
               <div className="w-full max-w-md text-left py-1">
