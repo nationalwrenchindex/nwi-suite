@@ -1455,31 +1455,105 @@ function PartsTab({
 // ─── Tab 5: Quote ─────────────────────────────────────────────────────────────
 
 // A row from the shared repair-items labor library (hd_repair_items).
-interface LibItem { id: string; description: string; mobile_hours: number | string | null; shop_hours: number | string | null }
+interface LibItem {
+  id: string
+  labor_code: string | null
+  description: string
+  mobile_hours: number | string | null
+  shop_hours: number | string | null
+  is_master: boolean
+}
 
-function libHours(i: LibItem): number {
-  const m = i.mobile_hours ?? i.shop_hours
-  const n = typeof m === 'number' ? m : m ? Number(m) : NaN
-  return Number.isFinite(n) && n > 0 ? n : 1
+const SUGGESTION_LIMIT = 5
+
+// The hours a pick fills: FIELD (mobile) time only, else null. This used to fall back
+// to shop time and then to 1 hour, so a shop-only card or one with no hours at all
+// quietly billed a figure nobody chose. Blank is honest: the line says the card has no
+// field time and the tech enters the hours.
+function libHours(i: LibItem): number | null {
+  const n = Number(i.mobile_hours)
+  return i.mobile_hours != null && Number.isFinite(n) && n > 0 ? n : null
+}
+
+function libShopHours(i: LibItem): number | null {
+  const n = Number(i.shop_hours)
+  return i.shop_hours != null && Number.isFinite(n) && n > 0 ? n : null
+}
+
+const sameName = (a: string, b: string) =>
+  a.trim().replace(/\s+/g, ' ').toLowerCase() === b.trim().replace(/\s+/g, ' ').toLowerCase()
+
+// What the quote tab remembers about one labor line's link to the library.
+interface LineLibraryState {
+  picked?: LibItem                                // picked from the library
+  saved?:  { code: string | null; description: string } // saved as a new card (once)
+  error?:  string
+}
+
+// Under each labor line: "From your library, RF-0021" for an unchanged pick, "Saved as
+// GN-0005" once saved, or the unticked "Save to my labor library" box. Ticking it saves
+// the line once; nothing saves on blur any more, which added a row every time the tech
+// clicked away. A shop-only pick also says why its hours are blank.
+function LineLibraryControl({
+  description, state, onSave,
+}: {
+  description: string
+  state:       LineLibraryState | undefined
+  onSave:      () => void
+}) {
+  const picked = state?.picked
+  const pickedUnchanged = picked != null && sameName(description, picked.description)
+  const shopOnly = picked != null && libHours(picked) == null
+  const shop = picked ? libShopHours(picked) : null
+  return (
+    <div className="mt-1 space-y-1">
+      {shopOnly && (
+        <p className="text-[11px]" style={{ color: '#FCD34D' }}>
+          {shop != null
+            ? `This card has no field time (Shop: ${shop} hr). Enter the hours.`
+            : 'This card has no field time. Enter the hours.'}
+        </p>
+      )}
+      {pickedUnchanged ? (
+        <p className="text-[11px] text-white/45">
+          {picked!.is_master
+            ? `From the NWI labor catalog, ${picked!.labor_code ?? 'no code'}`
+            : `From your library, ${picked!.labor_code ?? 'no code'}`}
+        </p>
+      ) : state?.saved ? (
+        <p className="text-[11px] text-white/45">{`Saved to your library as ${state.saved.code ?? 'a new card'}`}</p>
+      ) : (
+        <label className="flex items-center gap-1.5 text-[11px] text-white/45 cursor-pointer">
+          <input type="checkbox" checked={false} onChange={e => { if (e.target.checked) onSave() }}
+            className="w-3 h-3" style={{ accentColor: '#E85D24' }} />
+          Save to my labor library
+        </label>
+      )}
+      {state?.error && <p className="text-[11px]" style={{ color: '#EF4444' }}>{state.error}</p>}
+    </div>
+  )
 }
 
 // Free-text labor description input with library autocomplete. Suggestions come
-// from hd_repair_items; picking one fills the description + hours.
+// from hd_repair_items (description or labor code); picking one fills the description
+// and, when the card has field time, the hours. When more match than are shown, the
+// list says so.
 function LaborDescInput({
-  value, placeholder, libItems, onText, onPick, onCommit,
+  value, placeholder, libItems, onText, onPick,
 }: {
   value:       string
   placeholder?: string
   libItems:    LibItem[]
   onText:      (v: string) => void
-  onPick:      (description: string, hours: number) => void
-  onCommit:    () => void
+  onPick:      (item: LibItem) => void
 }) {
   const [open, setOpen] = useState(false)
   const term = value.trim().toLowerCase()
-  const suggestions = term
-    ? libItems.filter(i => i.description.toLowerCase().includes(term) && i.description.toLowerCase() !== term).slice(0, 5)
+  const matching = term
+    ? libItems.filter(i => (i.description.toLowerCase().includes(term) || (i.labor_code ?? '').toLowerCase().includes(term))
+        && i.description.toLowerCase() !== term)
     : []
+  const suggestions = matching.slice(0, SUGGESTION_LIMIT)
   return (
     <div className="relative">
       <input
@@ -1487,7 +1561,7 @@ function LaborDescInput({
         placeholder={placeholder}
         onChange={e => { onText(e.target.value); setOpen(true) }}
         onFocus={() => setOpen(true)}
-        onBlur={() => { setTimeout(() => setOpen(false), 150); onCommit() }}
+        onBlur={() => { setTimeout(() => setOpen(false), 150) }}
         className="w-full px-2 py-1.5 rounded text-sm text-white outline-none"
         style={{ background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.15)' }}
       />
@@ -1497,13 +1571,23 @@ function LaborDescInput({
             <button
               key={s.id}
               type="button"
-              onMouseDown={e => { e.preventDefault(); onPick(s.description, libHours(s)); setOpen(false) }}
+              onMouseDown={e => { e.preventDefault(); onPick(s); setOpen(false) }}
               className="w-full text-left px-3 py-2 text-sm text-white/80 hover:bg-orange/20 hover:text-orange flex items-center justify-between gap-2"
             >
-              <span className="truncate">{s.description}</span>
-              <span className="text-white/30 text-xs shrink-0">{libHours(s)}h</span>
+              <span className="truncate">
+                {s.labor_code && <span className="font-mono text-[11px] text-white/35 mr-2">{s.labor_code}</span>}
+                {s.description}
+              </span>
+              <span className="text-white/30 text-xs shrink-0">
+                {libHours(s) != null ? `${libHours(s)}h` : libShopHours(s) != null ? `shop ${libShopHours(s)}h` : 'no hours'}
+              </span>
             </button>
           ))}
+          {matching.length > suggestions.length && (
+            <p className="px-3 py-1.5 text-[11px]" style={{ color: '#F59E0B' }}>
+              {`Showing ${suggestions.length} of ${matching.length}. Keep typing to narrow it down.`}
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -1560,8 +1644,8 @@ function QuoteTab({
   const [customerPhone, setCustomerPhone] = useState(initialCustomerPhone)
   const [saving,        setSaving]        = useState(false)
   const [quoteNumber,   setQuoteNumber]   = useState<string | null>(null)
-  const [quoteId,       setQuoteId]       = useState<string | null>(null)
-  const [woBusy,        setWoBusy]        = useState(false)
+  const [quoteId,       setQuoteId]       = useState<string | null>(null)
+  const [woBusy,        setWoBusy]        = useState(false)
   const [woErr,         setWoErr]         = useState<string | null>(null)
   const [savedHash,     setSavedHash]     = useState('')
   const [sendingSms,    setSendingSms]    = useState(false)
@@ -1581,16 +1665,39 @@ function QuoteTab({
   }, [])
   useEffect(() => { fetchLibItems() }, [fetchLibItems])
 
-  // Save a custom labor description to the shared library (fire-and-forget).
-  const saveLaborToLibrary = useCallback((description: string, hours: number) => {
+  // Each labor line's link to the library, by line key (job key or extra line id).
+  const [lineLibrary, setLineLibrary] = useState<Record<string, LineLibraryState>>({})
+  const patchLine = useCallback((key: string, patch: Partial<LineLibraryState>) =>
+    setLineLibrary(m => ({ ...m, [key]: { ...m[key], ...patch } })), [])
+
+  // A pick puts that card on the quote: remember it, and count the use by id (own
+  // cards only - the route refuses a catalog row). Never the hours.
+  const pickLibraryItem = useCallback((key: string, item: LibItem) => {
+    setLineLibrary(m => ({ ...m, [key]: { ...m[key], picked: item, error: undefined } }))
+    if (!item.is_master) fetch(`/api/hd/repair-items/${item.id}/used`, { method: 'POST' }).catch(() => { /* library optional */ })
+  }, [])
+
+  // Save one line to the library as a NEW card - when its box is ticked, once. The
+  // route always inserts; this used to post on every blur and relied on the route to
+  // merge by name.
+  const saveLaborToLibrary = useCallback(async (key: string, description: string, hours: number) => {
     const d = description.trim()
-    if (!d) return
-    fetch('/api/hd/repair-items', {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ description: d, mobile_hours: hours, source: 'manual', applies_to: 'both', category: 'labor' }),
-    }).then(() => fetchLibItems()).catch(() => { /* library optional */ })
-  }, [fetchLibItems])
+    if (!d) { patchLine(key, { error: 'Type the labor description first.' }); return }
+    if (!(hours > 0)) { patchLine(key, { error: 'Enter the hours first - a card with 0 hours cannot be saved.' }); return }
+    try {
+      const r = await fetch('/api/hd/repair-items', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ description: d, mobile_hours: hours, source: 'manual', applies_to: 'both', category: 'labor' }),
+      })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { patchLine(key, { error: j.error ?? 'Could not save to your library.' }); return }
+      patchLine(key, { saved: { code: j.item?.labor_code ?? null, description: d }, error: undefined })
+      fetchLibItems()
+    } catch {
+      patchLine(key, { error: 'Could not save to your library.' })
+    }
+  }, [fetchLibItems, patchLine])
 
   // Part pricing: cost is what the tech paid the store; customer price is cost
   // marked up, unless the tech manually overrode it.
@@ -1831,9 +1938,15 @@ function QuoteTab({
                       value={b.desc}
                       libItems={libItems}
                       onText={v => onLaborDescChange(b.key, v)}
-                      onPick={(desc, hours) => { onLaborDescChange(b.key, desc); onLaborHoursChange(b.key, hours) }}
-                      onCommit={() => { if (b.desc.trim() && b.desc.trim() !== b.j.name) saveLaborToLibrary(b.desc, b.laborHrs) }}
+                      onPick={item => {
+                        onLaborDescChange(b.key, item.description)
+                        // No field time: the hours go blank (0), never a guessed figure.
+                        onLaborHoursChange(b.key, libHours(item) ?? 0)
+                        pickLibraryItem(b.key, item)
+                      }}
                     />
+                    <LineLibraryControl description={b.desc} state={lineLibrary[b.key]}
+                      onSave={() => saveLaborToLibrary(b.key, b.desc, b.laborHrs)} />
                   </div>
                   <span className="text-orange font-bold text-xs whitespace-nowrap">{fmt(b.subtotal)}</span>
                   <button type="button" onClick={() => onRemoveJob(b.j)} aria-label="Remove job" className="text-white/30 hover:text-danger text-lg leading-none flex-shrink-0">×</button>
@@ -1883,7 +1996,8 @@ function QuoteTab({
                       <span className="text-white/50 text-xs">Labor</span>
                       <input
                         type="number" min={0.25} step={0.25}
-                        value={b.laborHrs}
+                        value={b.laborHrs || ''}
+                        placeholder="hrs"
                         onChange={e => onLaborHoursChange(b.key, Number(e.target.value) || 0)}
                         className="text-right text-xs text-white rounded px-1.5 py-1 outline-none"
                         style={{ width: 60, background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.15)' }}
@@ -1907,13 +2021,19 @@ function QuoteTab({
                     placeholder="e.g. Diagnostic Fee, Shop Supplies, Road Call Fee"
                     libItems={libItems}
                     onText={v => updateExtraLabor(line.id, { description: v })}
-                    onPick={(desc, hours) => updateExtraLabor(line.id, { description: desc, hours })}
-                    onCommit={() => { if (line.description.trim()) saveLaborToLibrary(line.description, line.hours) }}
+                    onPick={item => {
+                      // No field time: the hours go blank (0), never a guessed figure.
+                      updateExtraLabor(line.id, { description: item.description, hours: libHours(item) ?? 0 })
+                      pickLibraryItem(line.id, item)
+                    }}
                   />
+                  <LineLibraryControl description={line.description} state={lineLibrary[line.id]}
+                    onSave={() => saveLaborToLibrary(line.id, line.description, line.hours)} />
                 </div>
                 <input
                   type="number" min={0} step={0.25}
-                  value={line.hours}
+                  value={line.hours || ''}
+                  placeholder="hrs"
                   onChange={e => updateExtraLabor(line.id, { hours: Number(e.target.value) || 0 })}
                   className="text-right text-xs text-white rounded px-1.5 py-1 outline-none"
                   style={{ width: 60, background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.15)' }}

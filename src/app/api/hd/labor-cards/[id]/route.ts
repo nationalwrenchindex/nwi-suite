@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import {
-  LABOR_CARD_COLUMNS, cleanLaborCard, isMissing166Column, MIGRATION_166_MESSAGE,
+  LABOR_CARD_COLUMNS, cleanLaborCard, isMissing166Column, MIGRATION_166_MESSAGE, isMissing167Column, MIGRATION_167_MESSAGE,
 } from '@/lib/hd/labor-cards'
 import { authedHD, ownsCategory } from '../shared'
 
@@ -45,6 +45,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (error) {
     if (isMissing166Column(error)) return NextResponse.json({ error: MIGRATION_166_MESSAGE }, { status: 503 })
+    if (isMissing167Column(error)) return NextResponse.json({ error: MIGRATION_167_MESSAGE }, { status: 503 })
     console.error('[hd/labor-cards] update failed', error)
     return NextResponse.json({ error: 'Database error' }, { status: 500 })
   }

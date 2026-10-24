@@ -12,6 +12,13 @@
 // 0 MEANS EMPTY. Rows saved before this screen store 0 where nothing was typed ("Replace
 // engine mounts" has shop_hours 0). A 0 is shown as an empty field and a typed 0 is
 // stored as NULL. Existing 0s are never rewritten unless that row is edited here.
+//
+// LABOR CODES (migration 167). Every row carries a permanent code, PREFIX-NNNN, the
+// prefix from its equipment type (RF reefer, TC truck, ...). The database assigns it on
+// insert and refuses any change to it, so nothing here ever writes labor_code. A code is
+// never reused: a soft-deleted card keeps its code and the counter never goes back.
+// oem_labor_code is the shop's own reference (free text, optional) - shown and searched
+// on this screen only, never in the quote picker.
 
 export const EQUIPMENT_TYPES = [
   { value: 'reefer',         label: 'Reefer' },
@@ -35,11 +42,22 @@ export function equipmentTypeLabel(v: string | null | undefined): string {
 
 /** Columns the screen reads and writes. */
 export const LABOR_CARD_COLUMNS =
-  'id, description, mobile_hours, mobile_hours_high, shop_hours, shop_hours_high, detail, suggested_related, ' +
-  'equipment_type, equipment_category_id, created_at, updated_at'
+  'id, labor_code, oem_labor_code, description, mobile_hours, mobile_hours_high, shop_hours, shop_hours_high, ' +
+  'detail, suggested_related, equipment_type, equipment_category_id, created_at, updated_at'
+
+/** The prefix each equipment type's codes carry (hd_labor_code_prefix in 167). */
+export const LABOR_CODE_PREFIX: Record<EquipmentType, string> = {
+  reefer: 'RF', truck: 'TC', trailer: 'TR', boom: 'BM', aerial: 'AE',
+  digger_derrick: 'DD', apu: 'AP', genset: 'GS', other: 'OT',
+}
+
+/** The format 167 enforces. GN is the prefix for rows that had no type at backfill. */
+export const LABOR_CODE_FORMAT = /^(RF|TC|TR|BM|AE|DD|AP|GS|OT|GN)-[0-9]{4,}$/
 
 export interface LaborCard {
   id: string
+  labor_code: string
+  oem_labor_code: string | null
   description: string
   mobile_hours: number | string | null
   mobile_hours_high: number | string | null
@@ -64,11 +82,12 @@ export interface LaborCardDraft {
   suggested_related: string
   equipment_type: string
   equipment_category_id: string
+  oem_labor_code: string
 }
 
 export const EMPTY_DRAFT: LaborCardDraft = {
   description: '', mobile_low: '', mobile_high: '', shop_low: '', shop_high: '',
-  detail: '', suggested_related: '', equipment_type: '', equipment_category_id: '',
+  detail: '', suggested_related: '', equipment_type: '', equipment_category_id: '', oem_labor_code: '',
 }
 
 /** The row's columns a save writes. */
@@ -80,13 +99,15 @@ export interface LaborCardWrite {
   shop_hours_high: number | null
   detail: string | null
   suggested_related: string | null
-  equipment_type: string | null
+  equipment_type: string
   equipment_category_id: string | null
+  oem_labor_code: string | null
 }
 
 // DECIMAL(4,2): 99.99 is the largest figure the column holds.
 const MAX_HOURS = 99.99
 const MAX_TEXT  = 500
+const MAX_OEM   = 60
 
 /** A stored or typed figure as a positive number of hours, else null. 0 is empty. */
 export function positiveHours(v: unknown): number | null {
@@ -154,8 +175,13 @@ export function cleanLaborCard(body: Record<string, unknown>): CleanResult {
     return { ok: false, error: 'Enter field time, shop time, or both.' }
   }
 
+  // Required: the type picks the code's prefix, and a code never changes once given.
   const typeRaw = typeof body.equipment_type === 'string' ? body.equipment_type.trim() : ''
-  if (typeRaw && !TYPE_VALUES.includes(typeRaw)) return { ok: false, error: `Unknown equipment type "${typeRaw}".` }
+  if (!typeRaw) return { ok: false, error: 'Pick the equipment type.' }
+  if (!TYPE_VALUES.includes(typeRaw)) return { ok: false, error: `Unknown equipment type "${typeRaw}".` }
+
+  const oemRaw = typeof body.oem_labor_code === 'string' ? body.oem_labor_code.trim() : ''
+  if (oemRaw.length > MAX_OEM) return { ok: false, error: `OEM labor code must be ${MAX_OEM} characters or less.` }
 
   const catRaw = typeof body.equipment_category_id === 'string' ? body.equipment_category_id.trim() : ''
   if (catRaw && !UUID.test(catRaw)) return { ok: false, error: 'Unknown equipment category.' }
@@ -170,8 +196,9 @@ export function cleanLaborCard(body: Record<string, unknown>): CleanResult {
       shop_hours_high:       shop.high,
       detail:                text(body.detail),
       suggested_related:     text(body.suggested_related),
-      equipment_type:        typeRaw || null,
+      equipment_type:        typeRaw,
       equipment_category_id: catRaw || null,
+      oem_labor_code:        oemRaw || null,
     },
   }
 }
@@ -195,6 +222,7 @@ export function draftFromCard(c: LaborCard): LaborCardDraft {
     suggested_related:     c.suggested_related ?? '',
     equipment_type:        c.equipment_type ?? '',
     equipment_category_id: c.equipment_category_id ?? '',
+    oem_labor_code:        c.oem_labor_code ?? '',
   }
 }
 
@@ -215,7 +243,7 @@ export interface LaborCardFilter {
   sort: LaborCardSort
 }
 
-/** Search (description, detail, related), filter by type and category, then sort. */
+/** Search (description, detail, related, both codes), filter by type and category, then sort. */
 export function filterLaborCards(cards: LaborCard[], f: LaborCardFilter): LaborCard[] {
   const q = f.search.trim().toLowerCase()
   const out = cards.filter(c => {
@@ -223,11 +251,29 @@ export function filterLaborCards(cards: LaborCard[], f: LaborCardFilter): LaborC
     if (f.categoryId === 'none' && c.equipment_category_id) return false
     if (f.categoryId && f.categoryId !== 'none' && c.equipment_category_id !== f.categoryId) return false
     if (!q) return true
-    return [c.description, c.detail, c.suggested_related].some(s => (s ?? '').toLowerCase().includes(q))
+    return [c.description, c.detail, c.suggested_related, c.labor_code, c.oem_labor_code]
+      .some(s => (s ?? '').toLowerCase().includes(q))
   })
   return out.sort(f.sort === 'description'
     ? (a, b) => a.description.localeCompare(b.description, undefined, { sensitivity: 'base' }) || a.id.localeCompare(b.id)
     : (a, b) => b.updated_at.localeCompare(a.updated_at) || a.id.localeCompare(b.id))
+}
+
+/** How two operation names compare: trimmed, case and inner spacing ignored. */
+export function sameOperationName(a: string | null | undefined, b: string | null | undefined): boolean {
+  const n = (s: string | null | undefined) => (s ?? '').trim().replace(/\s+/g, ' ').toLowerCase()
+  return n(a) !== '' && n(a) === n(b)
+}
+
+/**
+ * The shop's own card already named this, for the "You already have a card named this"
+ * hint. Display only - nothing reads it to decide a write. The card being edited is
+ * left out, so editing a card does not warn about itself.
+ */
+export function cardNamed<T extends { id: string; description: string }>(
+  cards: readonly T[], name: string, exceptId?: string | null,
+): T | null {
+  return cards.find(c => c.id !== exceptId && sameOperationName(c.description, name)) ?? null
 }
 
 /** A write against a database without migration 166's columns. */
@@ -240,3 +286,13 @@ export function isMissing166Column(err: { code?: string; message?: string } | nu
 
 export const MIGRATION_166_MESSAGE =
   'Labor cards need migration 166 (supabase/migrations/166_labor_cards.sql). Apply it in the Supabase SQL editor, then save again.'
+
+/** A write against a database without migration 167's columns. */
+export function isMissing167Column(err: { code?: string; message?: string } | null | undefined): boolean {
+  if (!err) return false
+  if (err.code !== '42703' && err.code !== 'PGRST204') return false
+  return /labor_code/.test(err.message ?? '')
+}
+
+export const MIGRATION_167_MESSAGE =
+  'Labor codes need migration 167 (supabase/migrations/167_labor_codes.sql). Apply it in the Supabase SQL editor, then save again.'

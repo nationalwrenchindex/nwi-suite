@@ -9,7 +9,10 @@ import {
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { LABOR_GUIDE, type LaborGuideItem } from '@/lib/hd/labor-guide'
-import { billedHoursFromLibrary } from '@/lib/hd/labor-library'
+import {
+  billedHighFromLibrary, billedHoursFromLibrary, shopReferenceText, trimmedNotice,
+} from '@/lib/hd/labor-library'
+import { hoursText, sameOperationName } from '@/lib/hd/labor-cards'
 import FeeInput from '@/components/hd/FeeInput'
 import { useTaxSettings } from '@/lib/use-tax-settings'
 import { useHdFeeSettings } from '@/lib/hd/use-fee-settings'
@@ -75,15 +78,29 @@ interface PartResult {
 // A row from the personal labor library (hd_repair_items)
 interface LibraryItem {
   id: string
+  labor_code: string | null
   description: string
   category: string | null
   mobile_hours: number | string | null
+  mobile_hours_high: number | string | null
   shop_hours: number | string | null
+  shop_hours_high: number | string | null
   requires_refrigeration: boolean
   refrigeration_service: string | null
   refrigeration_hours: number | string | null
   is_master: boolean
 }
+
+interface LaborSearch {
+  term:  string
+  items: LibraryItem[]
+  total: number
+  // The shop's own card named exactly the search text, for the duplicate hint.
+  exact: { id: string; labor_code: string | null; description: string } | null
+}
+const NO_LABOR_SEARCH: LaborSearch = { term: '', items: [], total: 0, exact: null }
+const LIBRARY_PICKER_LIMIT = 8
+const GUIDE_PICKER_LIMIT   = 8
 
 // ─────────────────────────────────────────────────────────────────────────────
 // THE PICKER SEARCHES BOTH INTEL HUBS
@@ -308,8 +325,15 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
   // genuinely adds 1.5 to 2.5 hrs, so ticking that switches this on by itself.
   const [laborRange, setLaborRange]         = useState(false)
   const [laborRecharge, setLaborRecharge]   = useState(false)
-  const [saveToLibrary, setSaveToLibrary]   = useState(true)
-  const [laborLibrary, setLaborLibrary]     = useState<LibraryItem[]>([])
+  // Off by default (Oct 24). Ticked by default, every line added from the modal became
+  // a library card whether the tech wanted one or not.
+  const [saveToLibrary, setSaveToLibrary]   = useState(false)
+  // The library picker searches on the server (GET /api/hd/repair-items?q=), never a
+  // capped list held here. total says how many matched in all, so a trimmed list says so.
+  const [laborSearch, setLaborSearch]       = useState<LaborSearch>(NO_LABOR_SEARCH)
+  // The library card this line was picked from, if any. While the name is unchanged
+  // the line IS that card: it is counted by id when added and never re-saved.
+  const [laborPicked, setLaborPicked]       = useState<LibraryItem | null>(null)
   const [laborSelectedKey, setLaborSelectedKey] = useState('')
   // Set only when a library item carries explicit refrigeration_hours — its
   // recovery time becomes a SEPARATE labor line (matches buildRepairLines()).
@@ -508,15 +532,6 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
     } catch {}
   }, [])
 
-  async function fetchLibrary() {
-    try {
-      const res  = await fetch('/api/hd/repair-items')
-      const data = await res.json()
-      setLaborLibrary((data.items ?? []) as LibraryItem[])
-    } catch {}
-  }
-
-  useEffect(() => { fetchLibrary() }, [])
 
   function pullFromQW() {
     try {
@@ -897,31 +912,80 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
     : (form.truck_make.trim() || form.truck_model.trim())
       ? ['engine', 'fuel', 'electrical', 'brakes', 'suspension', 'cooling']
       : null
-  const catOk = (c: string | null) => !activeCategories || !c || activeCategories.includes(c.toLowerCase())
+  const categoriesKey = activeCategories ? activeCategories.join(',') : ''
+
+  // The search runs on the server: description or labor code, the unit-type category
+  // filter (rows with no category always pass, so a tech's own saves never vanish),
+  // own rows first and most used at the top. A short pause after typing, and a newer
+  // keystroke cancels an older request so results never arrive out of order.
+  useEffect(() => {
+    if (!laborModal) return
+    const term = laborDesc.trim()
+    if (!term) { setLaborSearch(NO_LABOR_SEARCH); return }
+    const ctl = new AbortController()
+    const t = setTimeout(async () => {
+      try {
+        const sp = new URLSearchParams({ q: term, limit: String(LIBRARY_PICKER_LIMIT) })
+        if (categoriesKey) sp.set('categories', categoriesKey)
+        const res  = await fetch(`/api/hd/repair-items?${sp}`, { signal: ctl.signal })
+        const data = await res.json()
+        if (!res.ok) return
+        const items = (data.items ?? []) as LibraryItem[]
+        setLaborSearch({ term, items, total: Number(data.total ?? items.length), exact: data.exact ?? null })
+      } catch { /* aborted or offline: keep the last results */ }
+    }, 200)
+    return () => { clearTimeout(t); ctl.abort() }
+  }, [laborModal, laborDesc, categoriesKey])
+
   // Personal library first (own items then master), then LABOR_GUIDE fallbacks.
-  const libMatches = laborTerm
-    ? laborLibrary.filter(i => i.description.toLowerCase().includes(laborTerm) && catOk(i.category)).slice(0, 8)
-    : []
-  const guideMatches = laborTerm
-    ? LABOR_GUIDE.filter(i => i.label.toLowerCase().includes(laborTerm)).slice(0, 8)
-    : []
+  const libMatches   = laborTerm ? laborSearch.items : []
+  const libTrimmed   = laborTerm ? trimmedNotice(libMatches.length, laborSearch.total) : ''
+  const guideAll     = laborTerm ? LABOR_GUIDE.filter(i => i.label.toLowerCase().includes(laborTerm)) : []
+  const guideMatches = guideAll.slice(0, GUIDE_PICKER_LIMIT)
+  const guideTrimmed = trimmedNotice(guideMatches.length, guideAll.length)
   const showLaborResults = laborTerm.length > 0 && (libMatches.length > 0 || guideMatches.length > 0)
+
+  // While the name is the picked card's, the line is that card. Rename it and it is a
+  // new operation the tech may save as a card of its own.
+  const pickedUnchanged = laborPicked != null && sameOperationName(laborDesc, laborPicked.description)
+  // Display only: the shop already has a card by this name. Never blocks, never merges.
+  const sameNameCard = !pickedUnchanged && laborSearch.exact && sameOperationName(laborSearch.exact.description, laborDesc)
+    ? laborSearch.exact : null
+  // A picked card with no field time: billed hours are left blank on purpose.
+  const pickedShopOnly = laborPicked != null && !billedHoursFromLibrary(laborPicked.mobile_hours)
+  const pickedShopLo   = laborPicked ? libNum(laborPicked.shop_hours) : null
+  const pickedShopHi   = laborPicked ? billedHighFromLibrary(laborPicked.shop_hours, laborPicked.shop_hours_high) : ''
+  const pickedShopText = pickedShopLo != null && pickedShopLo > 0
+    ? (pickedShopHi ? `${pickedShopLo} to ${pickedShopHi} hr` : `${pickedShopLo} hr`) : ''
+
+  // "Bill shop time": fills the billed field from the shop figure, only when pressed.
+  function billShopTime() {
+    if (pickedShopLo == null || pickedShopLo <= 0) return
+    setLaborMobileMin(String(pickedShopLo))
+    setLaborMobileMax(pickedShopHi || String(pickedShopLo))
+    setLaborRange(!!pickedShopHi)
+  }
 
   function selectLibraryItem(i: LibraryItem) {
     // No `?? 1.0` on the book hours any more. A library item that records no shop
-    // hours has no book time, and saying so is the point - the field beside the
-    // billable number reads "no book time" rather than a 1.0 nobody looked up.
-    const book = libNum(i.shop_hours)
-    // BILLED HOURS: the mobile figure, else the book figure, else BLANK - a 0 counts
-    // as missing. The old `?? 1.5` let "test labor"'s mobile 0 straight through and
-    // priced it at $0.00. See billedHoursFromLibrary; addLaborItem refuses a blank.
+    // hours has no book time, and saying so is the point - the reference slot stays
+    // empty rather than showing a 1.0 nobody looked up. A 0 is empty too.
+    const book   = libNum(i.shop_hours)
+    const bookOk = book != null && book > 0
+    const bookHi = billedHighFromLibrary(i.shop_hours, i.shop_hours_high)
+    // BILLED HOURS COME FROM FIELD TIME ONLY - both ends when the card has a field
+    // range. A card with only shop time leaves the field BLANK: the quote bills field
+    // time, and filling a bay figure in underbills a job done in a lot. The modal says
+    // so and offers "Bill shop time", which fills it only when pressed. addLaborItem
+    // refuses a blank, so the tech has to decide.
     setLaborDesc(i.description)
-    setLaborBookMin(book == null ? '' : String(book))
-    setLaborBookMax(book == null ? '' : String(book))
-    // A library item holds one mobile figure, so this is a single number, not a range.
-    setLaborRange(false)
-    const billed = billedHoursFromLibrary(i.mobile_hours, i.shop_hours)
-    setLaborMobileMin(billed); setLaborMobileMax(billed)
+    setLaborBookMin(bookOk ? String(book) : '')
+    setLaborBookMax(bookOk ? (bookHi || String(book)) : '')
+    const billed   = billedHoursFromLibrary(i.mobile_hours)
+    const billedHi = billedHighFromLibrary(i.mobile_hours, i.mobile_hours_high)
+    setLaborRange(!!billedHi)
+    setLaborMobileMin(billed); setLaborMobileMax(billedHi || billed)
+    setLaborPicked(i)
     const refrigHrs = libNum(i.refrigeration_hours)
     if (i.requires_refrigeration && refrigHrs && refrigHrs > 0) {
       // Explicit refrigeration service → its own separate line; base mobile stays as-is.
@@ -949,6 +1013,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
     setLaborRefrig(null)
     setLaborRecharge(item.requires_refrigeration)
     setLaborSelectedKey(`guide:${item.label}`)
+    setLaborPicked(null)
   }
 
   function closeLaborModal() {
@@ -961,11 +1026,15 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
     setLaborRange(false)
     setLaborRecharge(false)
     setLaborRefrig(null)
-    setSaveToLibrary(true)
+    setSaveToLibrary(false)
     setLaborSelectedKey('')
+    setLaborPicked(null)
+    setLaborSearch(NO_LABOR_SEARCH)
   }
 
-  async function saveLaborToLibrary(description: string, book: number, mobile: number, refrig: boolean) {
+  // Always a new card (the route never merges). book is NULL when the modal had no book
+  // figure - it used to send 0, which reads as "no time at all" on the labor cards screen.
+  async function saveLaborToLibrary(description: string, book: number | null, mobile: number, refrig: boolean) {
     try {
       await fetch('/api/hd/repair-items', {
         method: 'POST',
@@ -978,8 +1047,14 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
           source: 'manual',
         }),
       })
-      fetchLibrary()
     } catch {}
+  }
+
+  // A picked card went onto the quote: count it, by id. Own cards only - the route
+  // refuses a catalog row - and never the hours.
+  function countLibraryUse(i: LibraryItem) {
+    if (i.is_master) return
+    fetch(`/api/hd/repair-items/${i.id}/used`, { method: 'POST' }).catch(() => {})
   }
 
   const rechargeAddMin  = laborRecharge ? 1.5 : 0
@@ -1000,11 +1075,14 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
   // printing a zero for it reads as a quoted figure.
   const bookRefMin = parseFloat(laborBookMin)
   const bookRefMax = parseFloat(laborBookMax)
-  const bookRefText = Number.isFinite(bookRefMin) && bookRefMin > 0
-    ? (Number.isFinite(bookRefMax) && Math.abs(bookRefMax - bookRefMin) > 0.01
-        ? `book: ${bookRefMin} to ${bookRefMax} hr`
-        : `book: ${bookRefMin} hr`)
-    : ''
+  // A library card's figure is its SHOP time and says so; a guide entry's is book time.
+  const bookRefText = laborPicked
+    ? shopReferenceText(laborBookMin, laborBookMax)
+    : Number.isFinite(bookRefMin) && bookRefMin > 0
+      ? (Number.isFinite(bookRefMax) && Math.abs(bookRefMax - bookRefMin) > 0.01
+          ? `book: ${bookRefMin} to ${bookRefMax} hr`
+          : `book: ${bookRefMin} hr`)
+      : ''
 
   /**
    * The arithmetic, spelled out: "1.5 hrs x $135.00/hr = $202.50".
@@ -1071,11 +1149,16 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
     }
 
     setLineItems(l => [...l, ...newLines])
-    // Store the base labor (without the situational recovery add) in the library.
-    // Never with 0 billable hours: a library entry saved that way pre-fills a $0.00
-    // line every time it is picked. The route refuses it too.
-    if (saveToLibrary && baseMobileMin > 0) {
-      saveLaborToLibrary(description, bookMin, baseMobileMin, laborRecharge || laborRefrig != null)
+    // A line picked from the library, name unchanged, IS that card: count the use and
+    // save nothing. Changing only its hours on this quote leaves the card alone.
+    // Otherwise store the base labor (without the situational recovery add) as a NEW
+    // card, only when ticked, and never with 0 billable hours: a card saved that way
+    // pre-fills a $0.00 line every time it is picked. The route refuses it too.
+    if (pickedUnchanged && laborPicked) {
+      countLibraryUse(laborPicked)
+    } else if (saveToLibrary && baseMobileMin > 0) {
+      const book = laborBookMin.trim() ? (parseFloat(laborBookMin) || 0) : null
+      saveLaborToLibrary(description, book, baseMobileMin, laborRecharge || laborRefrig != null)
     } else if (saveToLibrary) {
       setToast('Added to the quote. Not saved to your library - it has no billable hours.')
     }
@@ -2052,8 +2135,8 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                     {libMatches.map(i => {
                       const key = `lib:${i.id}`
                       const isSel = laborSelectedKey === key
-                      const book = libNum(i.shop_hours)
-                      const mob  = libNum(i.mobile_hours)
+                      const fieldT = hoursText(i.mobile_hours, i.mobile_hours_high)
+                      const shopT  = hoursText(i.shop_hours, i.shop_hours_high)
                       return (
                         <button
                           key={key}
@@ -2066,9 +2149,12 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                           }}
                         >
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate" style={{ color: isSel ? ORANGE : '#FFFFFF' }}>{i.description}</p>
+                            <p className="text-sm font-medium truncate" style={{ color: isSel ? ORANGE : '#FFFFFF' }}>
+                              {i.labor_code && <span className="font-mono text-xs mr-2" style={{ color: '#8a9bad' }}>{i.labor_code}</span>}
+                              {i.description}
+                            </p>
                             <p className="text-xs mt-0.5" style={{ color: '#8a9bad' }}>
-                              Book: {book != null ? `${book} hrs` : '—'} &nbsp;&bull;&nbsp; Mobile: {mob != null ? `${mob} hrs` : '—'}
+                              {`Field: ${fieldT || '—'}`} &nbsp;&bull;&nbsp; {`Shop: ${shopT || '—'}`}
                             </p>
                           </div>
                           {/* Only tech's own saved items get the badge; master items look native */}
@@ -2078,6 +2164,12 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                         </button>
                       )
                     })}
+
+                    {libTrimmed && (
+                      <p className="px-4 py-2 text-xs" style={{ color: '#F59E0B', borderBottom: `1px solid ${D_BORDER}` }}>
+                        {`Your library: ${libTrimmed}`}
+                      </p>
+                    )}
 
                     {/* LABOR_GUIDE fallback suggestions */}
                     {guideMatches.map(item => {
@@ -2108,7 +2200,17 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                         </button>
                       )
                     })}
+                    {guideTrimmed && (
+                      <p className="px-4 py-2 text-xs" style={{ color: '#F59E0B' }}>
+                        {`Labor guide: ${guideTrimmed}`}
+                      </p>
+                    )}
                   </div>
+                )}
+                {sameNameCard && (
+                  <p className="text-xs mt-1" style={{ color: '#F59E0B' }}>
+                    {`You already have a card named this (${sameNameCard.labor_code ?? 'no code'}).`}
+                  </p>
                 )}
               </div>
 
@@ -2184,6 +2286,22 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                     {bookRefText && <span className="ml-2" style={{ color: '#6b7a8c' }}>{bookRefText}</span>}
                   </span>
                 </div>
+                {pickedShopOnly && (
+                  <div className="flex flex-wrap items-center gap-2 mt-1 px-3 py-2 rounded-lg" style={{ background: '#2a2213', border: '1px solid #6b5417' }}>
+                    <p className="text-xs flex-1 min-w-[200px]" style={{ color: '#FCD34D' }}>
+                      {pickedShopText
+                        ? `This card has no field time. Shop time is ${pickedShopText}; field work usually takes longer. Enter the billed hours.`
+                        : 'This card has no field time and no shop time. Enter the billed hours.'}
+                    </p>
+                    {pickedShopText && (
+                      <button type="button" onClick={billShopTime}
+                        className="text-xs font-semibold px-3 py-1.5 rounded-lg"
+                        style={{ color: '#FCD34D', border: '1px solid #6b5417', background: 'transparent', cursor: 'pointer' }}>
+                        {`Bill shop time (${pickedShopText})`}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Refrigeration: explicit service (separate line) vs fixed-recovery checkbox */}
@@ -2235,17 +2353,26 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                 </div>
               )}
 
-              {/* Save to library */}
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={saveToLibrary}
-                  onChange={e => setSaveToLibrary(e.target.checked)}
-                  className="w-4 h-4 rounded"
-                  style={{ accentColor: ORANGE }}
-                />
-                <span className="text-sm" style={{ color: '#c9d5e0' }}>Save to my labor library</span>
-              </label>
+              {/* Save to library - not offered for a card picked from it, unchanged: that
+                  line is the card, and saving it again would make a copy. */}
+              {pickedUnchanged && laborPicked ? (
+                <p className="text-sm" style={{ color: '#c9d5e0' }}>
+                  {laborPicked.is_master
+                    ? `From the NWI labor catalog, ${laborPicked.labor_code ?? 'no code'}`
+                    : `From your library, ${laborPicked.labor_code ?? 'no code'}`}
+                </p>
+              ) : (
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={saveToLibrary}
+                    onChange={e => setSaveToLibrary(e.target.checked)}
+                    className="w-4 h-4 rounded"
+                    style={{ accentColor: ORANGE }}
+                  />
+                  <span className="text-sm" style={{ color: '#c9d5e0' }}>Save to my labor library as a new card</span>
+                </label>
+              )}
 
               {/* ===================================================================
                   THE ARITHMETIC, NOT A BARE TOTAL.

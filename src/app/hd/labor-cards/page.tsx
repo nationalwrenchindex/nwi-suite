@@ -45,7 +45,7 @@ export default async function LaborCardsPage() {
       </div>
       {cards == null ? (
         <p role="alert" className="text-sm px-4 py-2.5 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)' }}>
-          Your labor cards could not be loaded. Reload the page; if it keeps happening, migration 166 may not be applied.
+          Your labor cards could not be loaded. Reload the page; if it keeps happening, migration 166 or 167 may not be applied.
         </p>
       ) : (
         <LaborCardManager initialCards={cards} categories={categories.map(c => ({ id: c.id, name: c.name }))} />

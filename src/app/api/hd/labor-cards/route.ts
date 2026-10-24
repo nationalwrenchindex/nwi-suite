@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import { authedHD, ownsCategory } from './shared'
 import {
-  LABOR_CARD_COLUMNS, cleanLaborCard, isMissing166Column, MIGRATION_166_MESSAGE, type LaborCard,
+  LABOR_CARD_COLUMNS, cleanLaborCard, isMissing166Column, MIGRATION_166_MESSAGE, isMissing167Column, MIGRATION_167_MESSAGE, type LaborCard,
 } from '@/lib/hd/labor-cards'
 
 export const dynamic = 'force-dynamic'
@@ -44,6 +44,9 @@ export async function GET() {
     if (isMissing166Column({ code: '42703', message: msg })) {
       return NextResponse.json({ error: MIGRATION_166_MESSAGE }, { status: 503 })
     }
+    if (isMissing167Column({ code: '42703', message: msg })) {
+      return NextResponse.json({ error: MIGRATION_167_MESSAGE }, { status: 503 })
+    }
     console.error('[hd/labor-cards] read failed', msg)
     return NextResponse.json({ error: 'Database error' }, { status: 500 })
   }
@@ -83,6 +86,7 @@ export async function POST(req: NextRequest) {
 
   if (error) {
     if (isMissing166Column(error)) return NextResponse.json({ error: MIGRATION_166_MESSAGE }, { status: 503 })
+    if (isMissing167Column(error)) return NextResponse.json({ error: MIGRATION_167_MESSAGE }, { status: 503 })
     console.error('[hd/labor-cards] insert failed', error)
     return NextResponse.json({ error: 'Database error' }, { status: 500 })
   }
