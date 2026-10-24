@@ -45,6 +45,10 @@ export async function POST() {
       notes:                 item.notes ?? null,
       is_master:             true,
       user_id:               null,
+      // Migration 166: the NWI catalog is global and NWI's. Without these a newly
+      // seeded master row would take the column defaults, private and shop.
+      scope:                 'global',
+      origin:                'nwi',
       active:                true,
       updated_at:            now,
     }

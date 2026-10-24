@@ -2113,6 +2113,167 @@ async function flowV(): Promise<void> {
     blank.status === 200 && Number(kept.mobile_hours) === 2.25, `-> ${blank.status}, mobile ${kept.mobile_hours}`)
 }
 
+// ── Lc: labor cards - the hand-authoring screen (migration 166) ────────────
+//
+// Its own route INSERTS and never merges by description; either hour pair may be empty;
+// an edit is by id and touches only that row; a delete is soft (active = false). Every
+// result is read back out of the database with the service key and compared - not the
+// route's answer. Then the quote modal's existing "Save to my labor library" path, and
+// the 166 policies driven as the signed-in user.
+async function flowLaborCards(): Promise<void> {
+  const F = 'Lc labor cards'
+  const COLS = 'id,user_id,description,mobile_hours,mobile_hours_high,shop_hours,shop_hours_high,detail,suggested_related,equipment_type,equipment_category_id,scope,origin,is_master,active,source,updated_at'
+  const readRow = async (id: string) => (await rest<Record<string, unknown>>(`hd_repair_items?id=eq.${id}&select=${COLS}`))[0]
+  const num = (v: unknown) => (v == null ? null : Number(v))
+  const activeCount = async () => (await rest<{ id: string }>(`hd_repair_items?select=id&user_id=eq.${OWNER}&active=eq.true`)).length
+
+  const before = await activeCount()
+  const written = (n: number) => `${n} operation${n !== 1 ? 's' : ''} written`
+  const pg = await page('/hd/labor-cards')
+  if (!record(F, 'the labor cards page renders', !!pg, pg ? 'loaded' : 'did not load')) return
+  const missing = missingControls(pg!.text, ['LABOR CARDS', 'Field time', 'Shop time', 'Detail', 'Suggested related operation',
+    'Equipment type', 'My category', 'Save and next', 'Recently edited', written(before)])
+  record(F, 'every field, the sort and the count render', missing.length === 0 && pg!.html.includes('data-testid="labor-card-form"'),
+    missing.length ? `absent: ${missing.join(', ')}` : `count reads ${before}, the database's active rows`)
+  const nav = await page('/hd/dashboard')
+  record(F, 'reachable from the HD navigation', !!nav && nav.html.includes('href="/hd/labor-cards"'), nav ? '' : '/hd/dashboard did not load')
+
+  const myCat = (await rest<{ id: string }>(`hd_equipment_categories?select=id&user_id=eq.${OWNER}&is_active=eq.true&limit=1`))[0]?.id ?? null
+  const theirCat = (await rest<{ id: string }>(`hd_equipment_categories?select=id&user_id=neq.${OWNER}&limit=1`))[0]?.id ?? null
+
+  // Two DIFFERENT jobs with the SAME name - the case the repair-items POST would fold.
+  const NAME = `${MARK} lc Replace engine mounts`
+  const a = await api('POST', '/api/hd/labor-cards', {
+    description: NAME, mobile_low: '1.5', mobile_high: '2.5', shop_low: '', shop_high: '',
+    detail: 'SB-310, in the lot', suggested_related: 'Add refrigeration recovery & recharge',
+    equipment_type: 'reefer', equipment_category_id: myCat ?? '',
+  })
+  const aId = String(((a.json.card ?? {}) as Record<string, unknown>).id ?? '')
+  if (aId) created.libraryItems.add(aId)
+  const b = await api('POST', '/api/hd/labor-cards', {
+    description: NAME.toUpperCase(), mobile_low: '', shop_low: '3', shop_high: '',
+    detail: 'Precedent, in a bay', equipment_type: 'trailer',
+  })
+  const bId = String(((b.json.card ?? {}) as Record<string, unknown>).id ?? '')
+  if (bId) created.libraryItems.add(bId)
+  if (!record(F, 'two cards with the same name both insert', a.status === 201 && b.status === 201 && !!aId && !!bId && aId !== bId,
+    `-> ${a.status} ${a.json.error ?? ''}, ${b.status} ${b.json.error ?? ''}`)) return
+
+  const ra = await readRow(aId)
+  const rb = await readRow(bId)
+  record(F, 'card 1 reads back field-only, every field as typed',
+    !!ra && ra.user_id === OWNER && ra.description === NAME && num(ra.mobile_hours) === 1.5 && num(ra.mobile_hours_high) === 2.5
+      && ra.shop_hours == null && ra.shop_hours_high == null && ra.detail === 'SB-310, in the lot'
+      && ra.suggested_related === 'Add refrigeration recovery & recharge' && ra.equipment_type === 'reefer'
+      && ra.equipment_category_id === myCat && ra.scope === 'private' && ra.origin === 'shop'
+      && ra.is_master === false && ra.active === true,
+    JSON.stringify(ra))
+  record(F, 'card 2 reads back shop-only, a separate row',
+    !!rb && rb.mobile_hours == null && num(rb.shop_hours) === 3 && rb.shop_hours_high == null && rb.equipment_type === 'trailer'
+      && rb.detail === 'Precedent, in a bay',
+    JSON.stringify(rb))
+  record(F, 'a card with no hours at all is refused, nothing written',
+    (await api('POST', '/api/hd/labor-cards', { description: `${MARK} lc none` })).status === 400
+      && (await rest(`hd_repair_items?select=id&description=eq.${encodeURIComponent(`${MARK} lc none`)}`)).length === 0)
+  record(F, 'a high below the low is refused',
+    (await api('POST', '/api/hd/labor-cards', { description: `${MARK} lc bad`, mobile_low: '3', mobile_high: '2' })).status === 400)
+
+  const listed = await page('/hd/labor-cards')
+  record(F, 'both render, and the count moved by exactly 2',
+    !!listed && listed.html.includes(`data-card-id="${aId}"`) && listed.html.includes(`data-card-id="${bId}"`)
+      && listed.text.includes(written(before + 2)),
+    listed ? `want "${written(before + 2)}"` : 'did not load')
+
+  // Edit card 1 by id. Card 2, same name, must not move.
+  const bBefore = await readRow(bId)
+  const e = await api('PATCH', `/api/hd/labor-cards/${aId}`, {
+    description: NAME, mobile_low: '2', mobile_high: '', shop_low: '1.25', shop_high: '1.75',
+    detail: 'SB-310, edited', suggested_related: '', equipment_type: 'reefer', equipment_category_id: '',
+  })
+  const ea = await readRow(aId)
+  record(F, 'an edit reads back exactly as sent',
+    e.status === 200 && num(ea.mobile_hours) === 2 && ea.mobile_hours_high == null && num(ea.shop_hours) === 1.25
+      && num(ea.shop_hours_high) === 1.75 && ea.detail === 'SB-310, edited' && ea.suggested_related == null
+      && ea.equipment_category_id == null && String(ea.updated_at) > String(ra.updated_at),
+    `-> ${e.status}, ${JSON.stringify(ea)}`)
+  record(F, 'the edit touched no other row, not even the one with the same name',
+    JSON.stringify(await readRow(bId)) === JSON.stringify(bBefore))
+
+  if (theirCat) {
+    const t = await api('PATCH', `/api/hd/labor-cards/${bId}`, { description: NAME, shop_low: '3', equipment_category_id: theirCat })
+    record(F, "another shop's category is refused", t.status === 400 && (await readRow(bId)).equipment_category_id == null, `-> ${t.status}`)
+  } else {
+    record(F, "another shop's category is refused", false, 'no other account has a category to test with')
+  }
+  const kurtRow = (await rest<{ id: string }>(`hd_repair_items?select=id&user_id=neq.${OWNER}&is_master=eq.false&limit=1`))[0]?.id
+  const master  = (await rest<{ id: string }>('hd_repair_items?select=id&is_master=eq.true&limit=1'))[0]?.id
+  if (kurtRow && master) {
+    const k = await api('PATCH', `/api/hd/labor-cards/${kurtRow}`, { description: 'x', mobile_low: '1' })
+    const m = await api('DELETE', `/api/hd/labor-cards/${master}`)
+    record(F, "another shop's card and an NWI catalog row are 404 here",
+      k.status === 404 && m.status === 404 && (await readRow(master)).active === true, `-> ${k.status}, ${m.status}`)
+  } else {
+    record(F, "another shop's card and an NWI catalog row are 404 here", false, 'no such rows to test with')
+  }
+
+  // Soft delete card 2.
+  const d = await api('DELETE', `/api/hd/labor-cards/${bId}`)
+  const db = await readRow(bId)
+  const after = await api('GET', '/api/hd/labor-cards')
+  const ids = ((after.json.cards ?? []) as Array<{ id: string }>).map(c => c.id)
+  record(F, 'a delete is soft: the row stays, active false, gone from the list',
+    d.status === 200 && !!db && db.active === false && !ids.includes(bId) && ids.includes(aId),
+    `-> ${d.status}, active ${db?.active}, listed ${ids.includes(bId)}`)
+  const gone = await page('/hd/labor-cards')
+  record(F, 'the deleted card no longer renders', !!gone && !gone.html.includes(`data-card-id="${bId}"`) && gone.text.includes(written(before + 1)))
+
+  // The quote modal's checkbox: the same body QuoteForm.saveLaborToLibrary sends.
+  const QM = `${MARK} lc quote modal`
+  const q = await api('POST', '/api/hd/repair-items', { description: QM, shop_hours: 1, mobile_hours: 1.5, requires_refrigeration: false, source: 'manual' })
+  const qId = String(((q.json.item ?? {}) as Record<string, unknown>).id ?? '')
+  if (qId) created.libraryItems.add(qId)
+  const rq = qId ? await readRow(qId) : undefined
+  const pick = await api('GET', '/api/hd/repair-items')
+  record(F, '"Save to my labor library" still writes a readable row',
+    q.status === 201 && !!rq && num(rq.mobile_hours) === 1.5 && num(rq.shop_hours) === 1 && rq.scope === 'private'
+      && rq.origin === 'shop' && rq.source === 'manual'
+      && ((pick.json.items ?? []) as Array<{ id: string }>).some(i => i.id === qId),
+    `-> ${q.status} ${q.json.error ?? ''}, ${JSON.stringify(rq)}`)
+
+  // The 166 policies, as the signed-in user with the anon key - no route in between.
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!record(F, 'the anon key is configured', !!anon && !!accessToken)) return
+  const asOwner = createSupabase(SUPA, anon!, {
+    global: { headers: { Authorization: `Bearer ${accessToken}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  })
+  const seen = await asOwner.from('hd_repair_items').select('user_id, is_master').limit(1000)
+  const rowsSeen = seen.data ?? []
+  record(F, 'RLS: reads only its own rows and the NWI catalog',
+    !seen.error && rowsSeen.length > 0 && rowsSeen.every(r => r.user_id === OWNER || (r.user_id == null && r.is_master === true))
+      && rowsSeen.some(r => r.is_master === true),
+    `${rowsSeen.length} rows, ${rowsSeen.filter(r => r.is_master).length} catalog`)
+  const tries: Array<[string, Record<string, unknown>]> = [
+    ['is_master true', { is_master: true }], ['scope global', { scope: 'global' }],
+    ['origin nwi', { origin: 'nwi' }], ['another user', { user_id: '00000000-0000-0000-0000-000000000001' }],
+    ...(theirCat ? [["another shop's category", { equipment_category_id: theirCat }] as [string, Record<string, unknown>]] : []),
+  ]
+  const leaked: string[] = []
+  for (const [label, extra] of tries) {
+    const ins = await asOwner.from('hd_repair_items')
+      .insert({ user_id: OWNER, description: `${MARK} lc rls ${label}`, mobile_hours: 1, ...extra }).select('id')
+    for (const r of ins.data ?? []) { created.libraryItems.add(r.id as string); leaked.push(`insert ${label}`) }
+    const up = await asOwner.from('hd_repair_items').update(extra).eq('id', aId).select('id')
+    if ((up.data ?? []).length) leaked.push(`update ${label}`)
+  }
+  const stillPrivate = await readRow(aId)
+  record(F, 'RLS: a shop cannot make a row catalog, global, NWI, someone else\'s, or point it at another shop\'s category',
+    leaked.length === 0 && stillPrivate.scope === 'private' && stillPrivate.is_master === false && stillPrivate.user_id === OWNER,
+    leaked.length ? `ALLOWED: ${leaked.join(', ')}` : `${tries.length} inserts and ${tries.length} updates refused`)
+  const masterEdit = master ? await asOwner.from('hd_repair_items').update({ description: 'x' }).eq('id', master).select('id') : null
+  record(F, 'RLS: the NWI catalog cannot be edited by a shop', !!masterEdit && (masterEdit.data ?? []).length === 0)
+}
+
 // ── X: quotes and work orders can be corrected after they are made ─────────
 //
 // Kurt built five work orders, made mistakes, and deleted and rebuilt all five because
@@ -3160,6 +3321,7 @@ async function main(): Promise<void> {
     await flowT()
     await flowU()
     await flowV()
+    await flowLaborCards()
     await flowX()
     await flowW()
     await flowTerms()

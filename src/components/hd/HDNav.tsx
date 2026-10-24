@@ -56,6 +56,13 @@ function navIcon(path: string) {
         <circle cx="17" cy="17" r="3" /><line x1="19.5" y1="19.5" x2="21" y2="21" />
       </svg>
     ),
+    'labor-cards': (
+      <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
+        <rect x="3" y="4" width="18" height="16" rx="2" />
+        <line x1="7" y1="9" x2="17" y2="9" /><line x1="7" y1="13" x2="14" y2="13" />
+        <circle cx="16.5" cy="16.5" r="2" /><line x1="16.5" y1="15" x2="16.5" y2="16.5" />
+      </svg>
+    ),
     invoices: (
       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
         <rect x="2" y="3" width="20" height="14" rx="2" />
@@ -177,6 +184,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/hd/fleet-accounts',  label: 'Fleet Accounts'},
   { href: '/hd/invoicing',       label: 'Invoicing'     },
   { href: '/hd/quotes',          label: 'Quotes'        },
+  { href: '/hd/labor-cards',     label: 'Labor Cards'   },
   { href: '/hd/invoices',        label: 'Invoices'      },
   { href: '/hd/dot-inspections', label: 'DOT Inspections'},
   { href: '/hd/equipment-inspections', label: 'Equipment Inspections'},
