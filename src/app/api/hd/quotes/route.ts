@@ -4,6 +4,8 @@ import { checkHDAccess } from '@/lib/hd-access'
 import { logHDCustomer } from '@/lib/hd/customer-logging'
 import { missingMigration142Column, withoutMigration142Columns } from '@/lib/migration-142'
 import { isMissingTaxBreakdownColumn, withoutTaxBreakdown } from '@/lib/tax'
+import { checkDiscountWrite } from '@/lib/hd/hd-discount'
+import { recordTermsSnapshot } from '@/lib/document-terms'
 import { addressFrom } from '@/lib/address'
 
 import { generateQuoteToken } from '@/lib/hd/quote-approval'
@@ -77,6 +79,12 @@ export async function POST(req: NextRequest) {
   // from a customer record and the customer could not be corrected from the quote.
   // Migration 142 adds the column.
   const { company_name, customer_id: clientCustomerId, ...quoteBody } = body
+
+  // Migration 168. The terms are recorded when the quote is SENT, never by the form.
+  // A discount is stored only as a well-formed record whose parts add up.
+  delete quoteBody.terms_snapshot
+  const discountError = checkDiscountWrite(quoteBody)
+  if (discountError) return NextResponse.json({ error: discountError }, { status: 400 })
 
   const { count } = await supabase
     .from('hd_quotes')
@@ -216,6 +224,12 @@ export async function POST(req: NextRequest) {
     } else if (tokened) {
       quote = tokened as Record<string, unknown>
     }
+  }
+
+  // Saved straight to sent: record the shop's terms now (migration 168), as the send
+  // route does. Never fails the save.
+  if (quote && quote.status === 'sent') {
+    await recordTermsSnapshot(supabase, 'hd_quotes', String(quote.id), user.id)
   }
 
   return NextResponse.json({ quote, customer_id: linkedCustomerId }, { status: 201 })

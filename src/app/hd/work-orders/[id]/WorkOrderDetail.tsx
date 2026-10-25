@@ -11,6 +11,7 @@ import { inspectionDateLabel, type InspectionSummary } from '@/lib/hd/inspection
 // this client component.
 import { BrandHeader } from '@/components/BrandHeader'
 import WorkOrderLineItems from '@/components/hd/WorkOrderLineItems'
+import WorkOrderDiscount from '@/components/hd/WorkOrderDiscount'
 import type { Branding } from '@/lib/branding'
 import { money } from '@/lib/format'
 
@@ -28,6 +29,8 @@ type WO = {
   labor_hours: number | null
   labor_rate: number | null
   total_amount: number | null
+  /** Migration 168: carried from the quote or set on the job. */
+  discount?: unknown
   current_setpoint: string | null
   started_at: string | null
   completed_at: string | null
@@ -564,6 +567,8 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
           serial:       unitView.serial,
         }}
       />
+
+      <WorkOrderDiscount workOrderId={workOrderId} discount={wo.discount ?? null} locked={status === 'invoiced'} />
 
       {/* Inspections — aerial and DOT records attached to this work order */}
       <div className="rounded-xl overflow-hidden mb-6" style={{ border: '1px solid var(--hd-border)' }}>

@@ -10,7 +10,7 @@
 
 import { useState } from 'react'
 import {
-  DISCOUNT_SCOPES, discountLabel, normalizeDiscount,
+  DISCOUNT_SCOPES, discountLabel, discountPrintLabel, normalizeDiscount,
   type DiscountInput, type DiscountScope, type DiscountType, type DocumentDiscount,
 } from '@/lib/document-discount'
 
@@ -43,8 +43,42 @@ export function discountKey(d: DiscountDraft): string {
 
 const fmt = (n: number) => `$${n.toFixed(2)}`
 
+/**
+ * The surfaces the editor sits on. 'ld' is LD's dark card and is the default, so
+ * every LD screen renders exactly as before. 'light' is HD's white document forms
+ * (quote and invoice editors), 'hd' the HD app surface (the work order screen), which
+ * follows HD's own dark and light theme. Colour only - the control is the same.
+ */
+export type DiscountTheme = 'ld' | 'light' | 'hd'
+
+const LIGHT_INPUT: React.CSSProperties = {
+  border: '1px solid #E5E7EB', borderRadius: 8, padding: '8px 10px', fontSize: 14,
+  color: '#1A1A1A', background: '#FFFFFF', minHeight: 40,
+}
+
+const THEMES: Record<DiscountTheme, {
+  box: string; heading: string; remove: string; toggle: string; off: string
+  input: string; inputStyle?: React.CSSProperties; note: string; amount: string; error: string
+}> = {
+  ld: {
+    box: 'border-white/10', heading: 'text-white/50', remove: 'text-white/40 hover:text-white/70',
+    toggle: 'border-white/15', off: 'text-white/60 hover:text-white',
+    input: 'nwi-input text-sm', note: 'text-white/40', amount: 'text-emerald-400', error: 'text-danger',
+  },
+  light: {
+    box: 'border-gray-200', heading: 'text-gray-500', remove: 'text-gray-500 hover:text-gray-800',
+    toggle: 'border-gray-300', off: 'text-gray-500 hover:text-gray-900',
+    input: 'text-sm', inputStyle: LIGHT_INPUT, note: 'text-gray-500', amount: 'text-emerald-700', error: 'text-red-600',
+  },
+  hd: {
+    box: 'border-white/10', heading: 'text-white/50', remove: 'text-white/40 hover:text-white/70',
+    toggle: 'border-white/15', off: 'text-white/60 hover:text-white',
+    input: 'nwi-input text-sm', note: 'text-white/50', amount: 'text-emerald-400', error: 'text-red-400',
+  },
+}
+
 export function DiscountEditor({
-  value, onChange, applied, error, disabled = false,
+  value, onChange, applied, error, disabled = false, theme = 'ld', notice = null,
 }: {
   value:    DiscountDraft
   onChange: (d: DiscountDraft) => void
@@ -53,7 +87,11 @@ export function DiscountEditor({
   /** Why it cannot be applied, shown under the inputs. */
   error:    string | null
   disabled?: boolean
+  theme?:   DiscountTheme
+  /** A fact about the tax shown under the "comes to" line - HD's missing tax rate. */
+  notice?:  string | null
 }) {
+  const t = THEMES[theme]
   const has = !!normalizeDiscount(value)
   const [open, setOpen] = useState(has)
   if (!open && !has) {
@@ -71,30 +109,30 @@ export function DiscountEditor({
   }
   const set = (patch: Partial<DiscountDraft>) => onChange({ ...value, ...patch })
   return (
-    <div data-testid="discount-editor" className="space-y-2 rounded-lg border border-white/10 p-3">
+    <div data-testid="discount-editor" className={`space-y-2 rounded-lg border ${t.box} p-3`}>
       <div className="flex items-center justify-between">
-        <p className="text-white/50 text-xs uppercase tracking-widest">Discount</p>
+        <p className={`${t.heading} text-xs uppercase tracking-widest`}>Discount</p>
         <button
           type="button"
           disabled={disabled}
           onClick={() => { onChange(EMPTY_DISCOUNT); setOpen(false) }}
-          className="text-xs text-white/40 hover:text-white/70"
+          className={`text-xs ${t.remove}`}
         >
           Remove
         </button>
       </div>
       <div className="grid grid-cols-[auto_1fr] sm:grid-cols-[auto_1fr_auto] gap-2">
-        <div className="flex rounded-lg overflow-hidden border border-white/15">
-          {(['flat', 'percent'] as const).map(t => (
+        <div className={`flex rounded-lg overflow-hidden border ${t.toggle}`}>
+          {(['flat', 'percent'] as const).map(kind => (
             <button
-              key={t}
+              key={kind}
               type="button"
               disabled={disabled}
-              aria-pressed={value.type === t}
-              onClick={() => set({ type: t })}
-              className={`px-3 text-sm ${value.type === t ? 'bg-[#FF6600] text-white' : 'text-white/60 hover:text-white'}`}
+              aria-pressed={value.type === kind}
+              onClick={() => set({ type: kind })}
+              className={`px-3 text-sm ${value.type === kind ? 'bg-[#FF6600] text-white' : t.off}`}
             >
-              {t === 'flat' ? '$' : '%'}
+              {kind === 'flat' ? '$' : '%'}
             </button>
           ))}
         </div>
@@ -102,7 +140,8 @@ export function DiscountEditor({
           type="number" min={0} step={value.type === 'flat' ? 0.01 : 0.5} inputMode="decimal"
           name="discount_value"
           aria-label="Discount amount"
-          className="nwi-input text-sm"
+          className={t.input}
+          style={t.inputStyle}
           placeholder={value.type === 'flat' ? '0.00' : '0'}
           disabled={disabled}
           value={value.value}
@@ -111,7 +150,8 @@ export function DiscountEditor({
         <select
           name="discount_scope"
           aria-label="Discount applies to"
-          className="nwi-input text-sm col-span-2 sm:col-span-1"
+          className={`${t.input} col-span-2 sm:col-span-1`}
+          style={t.inputStyle}
           disabled={disabled}
           value={value.scope}
           onChange={e => set({ scope: e.target.value as DiscountScope })}
@@ -123,23 +163,25 @@ export function DiscountEditor({
         name="discount_reason"
         aria-label="Discount reason"
         maxLength={200}
-        className="nwi-input text-sm w-full"
+        className={`${t.input} w-full`}
+        style={t.inputStyle ? { ...t.inputStyle, width: '100%' } : undefined}
         placeholder="Reason, printed for the customer (optional) - e.g. fleet customer"
         disabled={disabled}
         value={value.reason}
         onChange={e => set({ reason: e.target.value })}
       />
       {error ? (
-        <p className="text-danger text-xs">{error}</p>
+        <p className={`${t.error} text-xs`}>{error}</p>
       ) : applied ? (
-        <p className="text-white/40 text-xs">
-          {discountLabel(applied)} comes to <span className="text-emerald-400">{'-' + fmt(applied.amount)}</span>
+        <p className={`${t.note} text-xs`}>
+          {theme === 'ld' ? discountLabel(applied) : discountPrintLabel(applied)} comes to <span className={t.amount}>{'-' + fmt(applied.amount)}</span>
           {applied.labor_amount > 0 && applied.parts_amount > 0
             ? ` (labor -${fmt(applied.labor_amount)}, parts -${fmt(applied.parts_amount)})`
             : ''}
           . Tax is on the discounted amount.
         </p>
       ) : null}
+      {notice && !error && <p className={`${theme === 'light' ? 'text-amber-700' : 'text-amber-400'} text-xs`} data-testid="discount-notice">{notice}</p>}
     </div>
   )
 }

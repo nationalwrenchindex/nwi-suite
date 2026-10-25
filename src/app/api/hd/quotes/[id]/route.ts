@@ -4,6 +4,8 @@ import { checkHDAccess } from '@/lib/hd-access'
 
 import { mintQuoteToken } from '@/lib/hd/quote-approval'
 import { EDITABLE_QUOTE_STATUSES, isQuoteEditable, quoteEditUpdate, quoteLockReason } from '@/lib/hd/quote-edit'
+import { checkDiscountWrite } from '@/lib/hd/hd-discount'
+import { recordTermsSnapshot } from '@/lib/document-terms'
 
 export const dynamic = 'force-dynamic'
 
@@ -76,6 +78,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const update: Record<string, unknown> = {
     ...quoteEditUpdate(body), status, updated_at: new Date().toISOString(),
   }
+  // Migration 168: only a well-formed discount whose parts add up is written.
+  const discountError = checkDiscountWrite(update)
+  if (discountError) return NextResponse.json({ error: discountError }, { status: 400 })
 
   const write = (row: Record<string, unknown>) => supabase
     .from('hd_quotes')
@@ -102,6 +107,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   let quote = data as Record<string, unknown>
+  // Marked sent from the form just now: record the shop's terms, as the send route
+  // does. Only on that step - editing a quote that went out before migration 168 must
+  // not give it terms the customer was never sent.
+  if (current.status === 'draft' && quote?.status === 'sent') {
+    await recordTermsSnapshot(supabase, 'hd_quotes', id, user.id)
+  }
+
   if (quote?.status === 'sent' && !quote.public_token) {
     try {
       quote = { ...quote, public_token: await mintQuoteToken(id, user.id) }

@@ -7,6 +7,7 @@ import { missingMigration142Column, withoutMigration142Columns } from '@/lib/mig
 import { addressFrom } from '@/lib/address'
 import { resolveInvoiceFleetLinks } from '@/lib/fleet-pro/invoice-link'
 import { costingFromLineItems, isMissingCostingColumn } from '@/lib/hd/invoice-costing'
+import { checkDiscountWrite, checkTermsSnapshotWrite } from '@/lib/hd/hd-discount'
 import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import { HD_INVOICE_LIST_SELECT, HD_INVOICE_DEFAULT_LIMIT, applyHDInvoiceListFilter } from './list'
 
@@ -115,6 +116,12 @@ export async function POST(req: NextRequest) {
 
   // company_name is a customers-table field, not an hd_invoices column.
   const { company_name, ...invoiceBody } = body
+
+  // Migration 168, carried from the quote or the work order: a discount only as a
+  // well-formed record whose parts add up, the recorded terms only as a valid snapshot.
+  const discountError = checkDiscountWrite(invoiceBody)
+  if (discountError) return NextResponse.json({ error: discountError }, { status: 400 })
+  checkTermsSnapshotWrite(invoiceBody)
 
   const { count } = await supabase
     .from('hd_invoices')

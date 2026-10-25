@@ -69,6 +69,11 @@ export function invoiceBodyFromQuote(q: Record<string, unknown>): Record<string,
     tax_amount:         q.tax_amount,
     tax_breakdown:      q.tax_breakdown ?? null,
     total:              q.total,
+    // Migration 168. q.total and the tax above are already after this discount; the
+    // record says what came off and what the tax was before it.
+    discount:           q.discount ?? null,
+    // The terms the quote recorded when it was sent. The invoice keeps them.
+    terms_snapshot:     q.terms_snapshot ?? null,
     notes:              q.notes,
     tech_name:          q.tech_name ?? null,
     // The insert route strips this if migration 157 has not been applied.

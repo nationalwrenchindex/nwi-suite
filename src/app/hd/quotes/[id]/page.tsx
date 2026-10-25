@@ -7,6 +7,7 @@ import { money } from '@/lib/format'
 import { feeRows } from '@/lib/invoice-document'
 import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
 import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
+import { discountPrintLabel, parseDiscount } from '@/lib/document-discount'
 
 const ORANGE = '#FF6600'
 const BLUE   = '#2969B0'
@@ -28,6 +29,12 @@ interface LineItem {
   quantity?: number
   unit_cost?: number
   amount: number
+}
+
+/** "Subtotal" then the discount and its reason - nothing at all when there is none. */
+function discountRows(doc: Record<string, unknown>): Array<{ label: string; val: number }> {
+  const d = parseDiscount(doc.discount)
+  return d ? [{ label: 'Subtotal', val: d.subtotal_before }, { label: discountPrintLabel(d), val: -d.amount }] : []
 }
 
 function fmt(n: number | null | undefined) {
@@ -171,6 +178,9 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
                 ...feeRows(q as Record<string, unknown>).map(r => ({ label: r.label, val: r.amount })),
                 ...extrasDisplayRows(extrasFromDocument(q as Record<string, unknown>))
                   .map(r => ({ label: r.detail ? `${r.label} (${r.detail})` : r.label, val: r.amount })),
+                // Migration 168. Between the subtotal and the tax, and only when there is
+                // one: the stored tax and total below are already after it.
+                ...discountRows(q as Record<string, unknown>),
                 // ===================================================================
                 // THE TAX, PER BUCKET WHERE THE DOCUMENT RECORDED IT THAT WAY.
                 // ===================================================================

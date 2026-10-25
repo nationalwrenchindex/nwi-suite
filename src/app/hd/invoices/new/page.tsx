@@ -15,6 +15,7 @@ import { computeTax, taxDisplayRows, mergeBreakdowns } from '@/lib/tax'
 import { DEFAULT_HD_PARTS_MARKUP, sellPrice, lineAmount } from '@/lib/hd/parts-pricing'
 import AddressAutofill from '@/components/hd/AddressAutofill'
 import { money } from '@/lib/format'
+import PaymentTermsSelect from '@/components/hd/PaymentTermsSelect'
 import FeeInput from '@/components/hd/FeeInput'
 
 // Direct-invoice fast path: skip the quote/approval step and bill a trusted
@@ -824,11 +825,7 @@ export default function NewInvoicePage() {
               </Field>
             </div>
             <Field label="Payment Terms">
-              <select style={inp} value={form.payment_terms} onChange={e => setField('payment_terms', e.target.value)}>
-                <option value="net15">Net 15 (due in 15 days)</option>
-                <option value="net30">Net 30 (due in 30 days)</option>
-                <option value="net45">Net 45 (due in 45 days)</option>
-              </select>
+              <PaymentTermsSelect style={inp} value={form.payment_terms} onChange={v => setField('payment_terms', v)} />
             </Field>
           </div>
         </div>

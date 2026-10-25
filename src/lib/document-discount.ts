@@ -253,6 +253,21 @@ export function discountLabel(d: DiscountInput): string {
   return `Discount (${what}${on})`
 }
 
+/**
+ * The printed row label, which states each fact once: a FLAT discount's amount is
+ * already in the amount column, so it is not repeated here; a percentage is
+ * information the amount does not carry, so it stays. Then the reason, if any.
+ *   "Discount - Fleet customer"  "Discount (10%) - Fleet customer"  "Discount on labor"
+ * HD prints this. LD still prints discountLabel.
+ */
+export function discountPrintLabel(d: DiscountInput): string {
+  const on = d.scope === 'labor' ? 'on labor' : d.scope === 'parts' ? 'on parts' : ''
+  const head = d.type === 'percent'
+    ? `Discount (${[`${trimPct(d.value)}%`, on].filter(Boolean).join(' ')})`
+    : on ? `Discount ${on}` : 'Discount'
+  return d.reason ? `${head} - ${d.reason}` : head
+}
+
 function trimPct(n: number): string {
   return String(Math.round(n * 100) / 100)
 }

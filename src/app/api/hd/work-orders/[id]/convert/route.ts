@@ -156,10 +156,19 @@ export async function GET(
     : prof.default_labor_rate != null ? Number(prof.default_labor_rate)
     : null
 
-  const { payload, source: termsSource } = buildInvoicePayload(row, rows, {
+  const { payload, source: termsSource, discountError } = buildInvoicePayload(row, rows, {
     laborRate: fallbackRate,
     taxSettings: taxSettingsFrom(prof),
   })
+
+  // A discount that no longer fits the lines (a flat amount bigger than what is left)
+  // is refused with the reason, never dropped: an invoice without it would bill more
+  // than the customer was quoted.
+  if (discountError) {
+    return NextResponse.json({
+      error: discountError, reason: 'discount', work_order_number: row.work_order_number ?? null,
+    }, { status: 422 })
+  }
 
   // If the work order recorded nothing AND the shop has no setting either, there is no
   // honest number to bill at. Refuse rather than send a zero.

@@ -10,14 +10,20 @@
 //   hd_quotes   : "net30" x 5
 //   invoices    : nothing — the column arrives with migration 143
 //
-// The canonical set is 'due_on_receipt' | 'net_7' | 'net_15' | 'net_30'. The old
-// spellings are NORMALISED ON READ rather than rewritten, because an UPDATE across
-// 23 rows including sent invoices is not a thing to do silently. 'net_45' is still
-// understood, because the previous vocabulary allowed it and a value that was once
-// valid must not become unreadable; it is simply not offered any more.
+// The canonical set is 'due_on_receipt' | 'net_3' | 'net_7' | 'net_15' | 'net_30'.
+// The old spellings are NORMALISED ON READ rather than rewritten, because an UPDATE
+// across 23 rows including sent invoices is not a thing to do silently. 'net_45' is
+// still understood, because the previous vocabulary allowed it and a value that was
+// once valid must not become unreadable; it is simply not offered any more.
+//
+// NET 3 (HD parity pass). Added to the list only: every stored spelling - "net30",
+// "net15", "Due on receipt" - reads exactly as before, and no stored value is
+// rewritten. LD's customers.payment_terms CHECK (migration 077: net15/net30/net45) is
+// a different vocabulary on a different table and is deliberately left alone; nothing
+// that writes that column offers this list.
 
 /** The terms a picker offers, in the order they appear. */
-export const PAYMENT_TERMS = ['due_on_receipt', 'net_7', 'net_15', 'net_30'] as const
+export const PAYMENT_TERMS = ['due_on_receipt', 'net_3', 'net_7', 'net_15', 'net_30'] as const
 export type PaymentTerms = (typeof PAYMENT_TERMS)[number]
 
 /** Including the ones only understood for reading. */
@@ -25,6 +31,7 @@ export type PaymentTermsRead = PaymentTerms | 'net_45'
 
 export const PAYMENT_TERMS_LABEL: Record<PaymentTermsRead, string> = {
   due_on_receipt: 'Due on receipt',
+  net_3:          'Net 3',
   net_7:          'Net 7',
   net_15:         'Net 15',
   net_30:         'Net 30',
@@ -66,6 +73,7 @@ export function normalisePaymentTerms(terms: string | null | undefined): Payment
     case 'due_upon_receipt':
     case 'cod':
       return 'due_on_receipt'
+    case 'net_3':  case 'net3':  return 'net_3'
     case 'net_7':  case 'net7':  return 'net_7'
     case 'net_15': case 'net15': return 'net_15'
     case 'net_30': case 'net30': return 'net_30'
@@ -78,6 +86,7 @@ export function termDays(terms: string | null | undefined): number {
   const t = normalisePaymentTerms(terms)
   switch (t) {
     case 'due_on_receipt': return 0
+    case 'net_3':          return 3
     case 'net_7':          return 7
     case 'net_15':         return 15
     case 'net_30':         return 30

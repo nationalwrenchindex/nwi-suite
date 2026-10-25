@@ -47,6 +47,8 @@ export const QUOTE_EDIT_FIELDS = [
   'mileage_miles', 'mileage_rate', 'mileage_amount',
   'shop_supplies_percent_applied', 'shop_supplies_cap_applied', 'shop_supplies_fee',
   'notes', 'valid_until', 'customer_po_number', 'tech_name',
+  // Migration 168. Checked by the route (checkDiscountWrite) before it is written.
+  'discount',
 ] as const
 
 export function quoteEditUpdate(body: Record<string, unknown>): Record<string, unknown> {

@@ -8,6 +8,8 @@
 // Everything here is a pure function so the route can stay a thin data fetch and the
 // browser can build the file client-side (house pattern: blob + URL.createObjectURL).
 
+import { termsDisplay } from '@/lib/hd/payment-terms'
+
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 export interface QBLineItem {
@@ -81,11 +83,10 @@ export function toQBDate(value: string | null | undefined): string {
   return `${m[2]}/${m[3]}/${m[1]}`
 }
 
-// Net terms are stored as 'net30'; QuickBooks' term list reads "Net 30".
+// QuickBooks' term list reads "Net 30". Stored as 'net30' on older rows and 'net_30'
+// on newer ones; termsDisplay reads every spelling (and Net 3), and free text verbatim.
 function termsLabel(terms: string | null | undefined): string {
-  const t = (terms ?? '').toLowerCase()
-  if (t === 'net15' || t === 'net30' || t === 'net45') return `Net ${t.slice(3)}`
-  return (terms && terms.trim()) || 'Due on receipt'
+  return termsDisplay(terms)
 }
 
 function invoiceNo(inv: QBInvoice): string {

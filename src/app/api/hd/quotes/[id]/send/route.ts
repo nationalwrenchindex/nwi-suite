@@ -28,6 +28,7 @@ import { sendSmsResult } from '@/lib/twilio'
 import { getContactSuppression } from '@/lib/customer-contact'
 import { mintQuoteToken, publicQuoteUrl } from '@/lib/hd/quote-approval'
 import { buildQuoteSms, buildQuoteEmail } from '@/lib/hd/sms-templates'
+import { recordTermsSnapshot } from '@/lib/document-terms'
 
 export const dynamic = 'force-dynamic'
 
@@ -161,6 +162,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
    * because a reporting column is missing would be the wrong trade.
    */
   async function recordSend(channel: 'sms' | 'email' | 'link', destination: string | null) {
+    // Migration 168: the shop's terms are recorded on the quote the first time it goes
+    // out, and the customer's copy prints those from then on. A resend keeps them.
+    // Never fails the send.
+    await recordTermsSnapshot(supabase, 'hd_quotes', id, user!.id)
     const now = new Date().toISOString()
     const update: Record<string, unknown> = {
       sent_at:      (q.sent_at as string | null) ?? now,

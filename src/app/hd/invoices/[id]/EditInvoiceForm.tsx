@@ -12,6 +12,10 @@ import {
   openInvoiceEdit, priceInvoiceEdit, invoiceSaveBody, invoiceExtrasSettings,
   invoiceDoesNotAddUp, doesNotAddUpMessage, correctionBody, type InvoiceEditState,
 } from '@/lib/hd/invoice-edit-save'
+import { discountPrintLabel } from '@/lib/document-discount'
+import {
+  DiscountEditor, draftFrom, discountFromDraft, type DiscountDraft,
+} from '@/components/shared/DiscountEditor'
 
 const ORANGE = '#FF6600'
 const BLUE   = '#2969B0'
@@ -79,10 +83,12 @@ export default function EditInvoiceForm({ invoice, shopLaborRate }: {
   // editableLines.
   const [lineItems, setLineItems] = useState<LineItem[]>(() => opened.state.lines)
 
-  type FormFields = Omit<InvoiceEditState, 'lines' | 'travelHours' | 'mileageMiles'>
+  type FormFields = Omit<InvoiceEditState, 'lines' | 'travelHours' | 'mileageMiles' | 'discount'>
   const [form, setForm] = useState<FormFields>(() => Object.fromEntries(
-    Object.entries(opened.state).filter(([k]) => k !== 'lines' && k !== 'travelHours' && k !== 'mileageMiles'),
+    Object.entries(opened.state).filter(([k]) => !['lines', 'travelHours', 'mileageMiles', 'discount'].includes(k)),
   ) as FormFields)
+  // The discount it recorded (migration 168), as the editor's four answers.
+  const [discountDraft, setDiscountDraft] = useState<DiscountDraft>(() => draftFrom(opened.state.discount))
   function setField(k: keyof FormFields, v: string | number) { setForm(f => ({ ...f, [k]: v })) }
   function fmt(n: number) { return `${money(n)}` }
   // NULL only when the invoice recorded no rate and the shop has none set either.
@@ -136,7 +142,7 @@ export default function EditInvoiceForm({ invoice, shopLaborRate }: {
   // Priced against the invoice as opened: the extras at the rates it recorded, the
   // tax carried from what it stored plus the tax on whatever the edit changed. An
   // untouched invoice prices to exactly its stored figures.
-  const edited: InvoiceEditState = { ...form, lines: lineItems, travelHours, mileageMiles }
+  const edited: InvoiceEditState = { ...form, lines: lineItems, travelHours, mileageMiles, discount: discountFromDraft(discountDraft) }
   const price = priceInvoiceEdit(invoice, opened.state, edited)
   const subtotalLabor = price.subtotalLabor
   const subtotalParts = price.subtotalParts
@@ -152,6 +158,7 @@ export default function EditInvoiceForm({ invoice, shopLaborRate }: {
     if (!form.customer_name.trim()) { setToast('Customer name is required.'); return }
     // Refuse rather than bill a figure that does not add up. Loud on purpose.
     if (extrasMismatch) { setToast('Cannot save: ' + extrasMismatch); return }
+    if (price.discountError) { setToast('Cannot save: ' + price.discountError); return }
     // Only the fields this edit changed. Nothing changed means nothing is written.
     const body = invoiceSaveBody(invoice, opened, edited)
     if (Object.keys(body).length === 0) { router.push(`/hd/invoices/${id}`); return }
@@ -312,6 +319,18 @@ export default function EditInvoiceForm({ invoice, shopLaborRate }: {
               ].map(r => (
                 <div key={r.label} className="flex justify-between py-1.5 text-sm" style={{ color: MUTED }}><span>{r.label}</span><span>{fmt(r.val)}</span></div>
               ))}
+              {/* The discount sits between the subtotal and the tax: it comes off the
+                  labor and parts lines, and the tax below is on what is left. */}
+              {price.discount && (
+                <>
+                  <div className="flex justify-between py-1.5 text-sm" style={{ color: TEXT, borderTop: `1px solid ${BORDER}`, marginTop: 4 }}>
+                    <span>Subtotal</span><span>{fmt(price.subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between py-1.5 text-sm" style={{ color: '#047857' }} data-testid="discount-row">
+                    <span>{discountPrintLabel(price.discount)}</span><span>{'-' + fmt(price.discount.amount)}</span>
+                  </div>
+                </>
+              )}
               <div className="flex items-center gap-3 py-2" style={{ borderTop: `1px solid ${BORDER}`, marginTop: 4 }}>
                 <span className="text-sm flex-1" style={{ color: MUTED }}>Tax %</span>
                 <input type="number" min={0} max={30} step={0.1} value={form.tax_rate_parts}
@@ -332,6 +351,12 @@ export default function EditInvoiceForm({ invoice, shopLaborRate }: {
               <div className="flex justify-between items-center pt-3" style={{ borderTop: `2px solid ${ORANGE}`, marginTop: 4 }}>
                 <span className="font-bold text-base" style={{ color: TEXT }}>TOTAL</span>
                 <span className="font-bold text-2xl" style={{ color: ORANGE }}>{fmt(totalWithExtras)}</span>
+              </div>
+              {/* Labor and parts lines only. Travel, mileage, supplies and the fees are
+                  never discounted. */}
+              <div className="mt-4">
+                <DiscountEditor theme="light" value={discountDraft} onChange={setDiscountDraft}
+                  applied={price.discount} error={price.discountError} notice={price.discountNotice} />
               </div>
             </div>
           </div>

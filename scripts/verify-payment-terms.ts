@@ -76,8 +76,11 @@ async function main() {
 
   ok(termDays('due_on_receipt') === 0, 'due_on_receipt is 0 days')
   ok(termDays('net_7') === 7 && termDays('net_15') === 15 && termDays('net_30') === 30, 'net 7/15/30 are 7/15/30 days')
+  ok(termDays('net_3') === 3 && termDays('net3') === 3 && termsDisplay('net_3') === 'Net 3', 'net 3 is 3 days and reads "Net 3" (HD parity pass)')
   ok(DEFAULT_PAYMENT_TERMS === 'net_7', 'the business default is net_7, per the brief')
-  ok(PAYMENT_TERMS.length === 4, `the picker offers exactly the four specified values (${PAYMENT_TERMS.join(', ')})`)
+  // The HD parity pass added Net 3 - Brock's list, in this order.
+  ok(PAYMENT_TERMS.join(',') === 'due_on_receipt,net_3,net_7,net_15,net_30',
+    `the picker offers exactly Due on receipt, Net 3, Net 7, Net 15, Net 30 (${PAYMENT_TERMS.join(', ')})`)
   ok(!(PAYMENT_TERMS as readonly string[]).includes('net_45'),
     'net_45 is NOT offered, but is still readable — a value that was once valid must not become unreadable')
 

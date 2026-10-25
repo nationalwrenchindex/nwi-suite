@@ -172,6 +172,13 @@ export function termsFromQuote(q: Record<string, unknown>): Record<string, unkno
     // invoice converter reads the fees off the quote instead.
     diagnostic_fee:                q.diagnostic_fee ?? null,
     road_call_fee:                 q.road_call_fee ?? null,
+
+    // MIGRATION 168. The discount the customer approved, with the tax as it stood
+    // before it - the converter re-applies it to the invoice from those figures, so
+    // the work order's tax (copied above, post-discount) is never discounted twice.
+    // And the terms the quote recorded when it was sent, carried to the invoice.
+    discount:                      q.discount ?? null,
+    terms_snapshot:                q.terms_snapshot ?? null,
   }
 }
 

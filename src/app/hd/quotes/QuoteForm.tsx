@@ -21,7 +21,13 @@ import { parseAddress } from '@/lib/hd/address-parse'
 import { DEFAULT_HD_PARTS_MARKUP, sellPrice, lineAmount } from '@/lib/hd/parts-pricing'
 import AddressAutofill from '@/components/hd/AddressAutofill'
 import { money } from '@/lib/format'
+import PaymentTermsSelect from '@/components/hd/PaymentTermsSelect'
 import { documentExtras } from '@/lib/document-money'
+import { discountPrintLabel, parseDiscount } from '@/lib/document-discount'
+import { hdApplyDiscount } from '@/lib/hd/hd-discount'
+import {
+  DiscountEditor, draftFrom, discountFromDraft, type DiscountDraft,
+} from '@/components/shared/DiscountEditor'
 
 const ORANGE  = '#FF6600'
 const BLUE    = '#2969B0'
@@ -288,6 +294,10 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
   const docExtras      = editing ? documentExtras(initial) : null
   const extrasSettings = docExtras ? docExtras.settings : currentExtras
   const extrasLoaded   = docExtras ? true : currentExtrasLoaded
+  // The discount this quote recorded (migration 168). Its amounts are re-derived from
+  // the lines on every render, exactly like the tax.
+  const [discountDraft, setDiscountDraft] = useState<DiscountDraft>(() =>
+    draftFrom(editing ? parseDiscount(initial.discount) : null))
   const [travelHours,  setTravelHours]  = useState(editing ? Number(initial.travel_hours ?? 0) || 0 : 0)
   const [mileageMiles, setMileageMiles] = useState(editing ? Number(initial.mileage_miles ?? 0) || 0 : 0)
   const [toast, setToast]                 = useState('')
@@ -904,6 +914,26 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
   // An HD invoice must not display a charge outside its total either.
   const extrasMismatch = extrasAgree(extrasResult, subtotalWithExtras, taxBase)
 
+  // ── Discount (migration 168) ─────────────────────────────────────────────
+  // Off the labor and parts LINES only; travel, mileage, supplies and the fees ride in
+  // the subtotal and are never discounted. The tax is the merged split above, reduced
+  // per bucket on the discounted base - the shared engine, not a copy of it.
+  const preDiscountBreakdown = mergeBreakdowns([tax.breakdown, extras.breakdown])
+  const disc = hdApplyDiscount({
+    discount:   discountFromDraft(discountDraft),
+    laborLines: parseFloat(subtotalLabor.toFixed(2)),
+    partsLines: parseFloat(subtotalParts.toFixed(2)),
+    subtotal:   subtotalWithExtras,
+    breakdown:  preDiscountBreakdown,
+    taxAmount:  taxWithExtras,
+    taxRatePct: form.tax_rate,
+  })
+  const discountApplied = disc.ok ? disc.discount : null
+  const discountError   = disc.ok ? null : disc.error
+  const taxFinal        = disc.ok ? disc.taxAmount : taxWithExtras
+  const totalFinal      = disc.ok ? disc.grandTotal : totalWithExtras
+  const breakdownFinal  = disc.ok ? disc.breakdown : preDiscountBreakdown
+
 
   function fmt(n: number) { return `${money(n)}` }
 
@@ -1269,6 +1299,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
 
     // Refuse rather than bill a figure that does not add up. Loud on purpose.
     if (extrasMismatch) { setToast('Cannot save: ' + extrasMismatch); return }
+    if (discountError) { setToast('Cannot save: ' + discountError); return }
     setSaving(true)
     try {
       const body = {
@@ -1322,11 +1353,16 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
         // mergeBreakdowns SUMS already-rounded bucket amounts rather than recomputing
         // over the merged bases - the two disagree by a cent, and the agreed figure
         // is the one that wins. See breakdownTaxTotal in lib/tax.ts.
-        tax_breakdown:     mergeBreakdowns([tax.breakdown, extras.breakdown]),
+        //
+        // AFTER THE DISCOUNT, when there is one: the record below holds the split and
+        // the tax as they stood before it.
+        tax_breakdown:     breakdownFinal,
         // With the extras in. taxWithExtras / totalWithExtras include travel and
         // supplies tax; mileage adds to the subtotal and attracts none.
-        tax_amount:        taxWithExtras,
-        total:             totalWithExtras,
+        tax_amount:        taxFinal,
+        total:             totalFinal,
+        // NULL clears it. The route refuses a record whose parts do not add up.
+        discount:          discountApplied,
         // Computed, stored with the rate in force so a reopen cannot re-price them.
         ...extrasColumns(extrasResult),
         notes:             form.notes || null,
@@ -1944,10 +1980,24 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                   taxDisplayRows emits nothing for a category with no base, and keying
                   the inputs off it would leave a tech with nowhere to type the rate
                   until after he had added a line. */}
+              {/* The discount sits between the subtotal and the tax. Nothing at all
+                  prints for a quote without one. */}
+              {discountApplied && (
+                <>
+                  <div className="flex justify-between py-1.5 text-sm" style={{ color: TEXT, borderTop: `1px solid ${BORDER}`, marginTop: 4 }}>
+                    <span>Subtotal</span><span>{fmt(subtotalWithExtras)}</span>
+                  </div>
+                  <div className="flex justify-between py-1.5 text-sm" style={{ color: '#047857' }} data-testid="discount-row">
+                    <span>{discountPrintLabel(discountApplied)}</span><span>{'-' + fmt(discountApplied.amount)}</span>
+                  </div>
+                </>
+              )}
               <div style={{ borderTop: `1px solid ${BORDER}`, marginTop: 4 }}>
                 {([
-                  { key: 'parts', label: 'parts', taxed: taxedPartsFlag, rate: form.tax_rate,       field: 'tax_rate',       amount: tax.breakdown.parts?.amount ?? 0 },
-                  { key: 'labor', label: 'labor', taxed: taxedLaborFlag, rate: form.tax_rate_labor, field: 'tax_rate_labor', amount: tax.breakdown.labor?.amount ?? 0 },
+                  // With a discount, each bucket's tax AFTER it (extras included), so
+                  // the rows add up to the Tax line beneath them.
+                  { key: 'parts', label: 'parts', taxed: taxedPartsFlag, rate: form.tax_rate,       field: 'tax_rate',       amount: (discountApplied ? breakdownFinal?.parts?.amount : tax.breakdown.parts?.amount) ?? 0 },
+                  { key: 'labor', label: 'labor', taxed: taxedLaborFlag, rate: form.tax_rate_labor, field: 'tax_rate_labor', amount: (discountApplied ? breakdownFinal?.labor?.amount : tax.breakdown.labor?.amount) ?? 0 },
                 ] as const).map(row => (
                   <div key={row.key} className="flex items-center gap-2 py-2">
                     <span className="text-sm flex-1" style={{ color: MUTED }}>
@@ -1992,12 +2042,18 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                     Its own line so the figures above it visibly add up to it. */}
                 <div className="flex items-center gap-3 py-1.5" style={{ borderTop: `1px solid ${BORDER}` }}>
                   <span className="text-sm flex-1 font-semibold" style={{ color: MUTED }}>Tax</span>
-                  <span className="text-sm font-semibold" style={{ color: MUTED }}>{fmt(taxWithExtras)}</span>
+                  <span className="text-sm font-semibold" style={{ color: MUTED }}>{fmt(taxFinal)}</span>
                 </div>
               </div>
               <div className="flex justify-between items-center pt-3" style={{ borderTop: `2px solid ${ORANGE}`, marginTop: 4 }}>
                 <span className="font-bold text-base" style={{ color: TEXT }}>TOTAL</span>
-                <span className="font-bold text-2xl" style={{ color: ORANGE }}>{fmt(totalWithExtras)}</span>
+                <span className="font-bold text-2xl" style={{ color: ORANGE }}>{fmt(totalFinal)}</span>
+              </div>
+              {/* Labor and parts lines only. Travel, mileage, supplies and the fees are
+                  never discounted. */}
+              <div style={{ marginTop: 16 }}>
+                <DiscountEditor theme="light" value={discountDraft} onChange={setDiscountDraft}
+                  applied={discountApplied} error={discountError} notice={disc.ok ? disc.notice : null} />
               </div>
             </div>
           </div>
@@ -2021,11 +2077,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
               <input style={inp} type="date" value={form.valid_until} onChange={e => setField('valid_until', e.target.value)} />
             </Field>
             <Field label="Payment Terms">
-              <select style={inp} value={form.payment_terms} onChange={e => setField('payment_terms', e.target.value)}>
-                <option value="net15">Net 15 (due in 15 days)</option>
-                <option value="net30">Net 30 (due in 30 days)</option>
-                <option value="net45">Net 45 (due in 45 days)</option>
-              </select>
+              <PaymentTermsSelect style={inp} value={form.payment_terms} onChange={v => setField('payment_terms', v)} />
             </Field>
             {/* THE CUSTOMER'S PO NUMBER.
                 Migration 153 added hd_quotes.customer_po_number, and the only thing

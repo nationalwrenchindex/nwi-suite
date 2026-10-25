@@ -33,7 +33,9 @@ import { documentMoney, documentExtras } from '../src/lib/document-money'
 import { openInvoiceEdit, invoiceSaveBody, invoiceDoesNotAddUp, correctionBody } from '../src/lib/hd/invoice-edit-save'
 import { documentTaxSettings, parseBreakdown, breakdownTaxTotal } from '../src/lib/tax'
 import { EXTRAS_OFF, partsBaseFromLines, computeExtras } from '../src/lib/billable-extras'
-import { applyDiscount, laborFromLines, normalizeDiscount, parseDiscount } from '../src/lib/document-discount'
+import { applyDiscount, laborFromLines, normalizeDiscount, parseDiscount, discountPrintLabel } from '../src/lib/document-discount'
+import { hdApplyDiscount } from '../src/lib/hd/hd-discount'
+import { termsSnapshotFrom, parseTermsSnapshot } from '../src/lib/document-terms'
 import { createClient as createSupabase } from '@supabase/supabase-js'
 import { loadRollupInput } from '../src/lib/hd/equipment-rollup-load'
 import { jobsFor, rollupByCategory, rollupByUnit } from '../src/lib/hd/equipment-rollup'
@@ -3294,6 +3296,146 @@ async function flowIe(): Promise<void> {
   }
 }
 
+// ── Hq: the HD discount and terms, quote -> work order -> invoice ───────────
+//
+// Migration 168 end to end through the routes and screens a shop uses. The quote is
+// built from a REAL saved quote's shape - its money, tax split and extras - with the
+// line text and part numbers replaced by SMOKE values, so converting it cannot touch
+// real stock. The arithmetic is unit-tested on real rows in verify-hd-discount.ts.
+async function flowHq(): Promise<void> {
+  const F = 'Hq HD discount + terms'
+  const real = (await rest<Record<string, unknown>>(
+    `hd_quotes?user_id=eq.${OWNER}&status=eq.approved&tax_breakdown=not.is.null&customer_name=not.like.${MARK}*&select=*&order=created_at.desc&limit=20`))
+    .find(q => Array.isArray(q.line_items) && (q.line_items as unknown[]).length > 0 &&
+      (q.line_items as Array<Record<string, unknown>>).some(l => l.type === 'labor'))
+  if (!record(F, 'a real approved quote to copy the shape of', !!real, real ? String(real.quote_number) : 'none with labor lines and a tax split')) return
+
+  const lines: Array<Record<string, unknown>> = (real!.line_items as Array<Record<string, unknown>>).map((l, i) => ({
+    ...l, id: `zz-hq-${i}`, description: `${MARK} hq line ${i}`, part_number: l.type === 'parts' ? `${MARK}-HQ-${i}` : '',
+  }))
+  const lab = r2(lines.filter(l => l.type === 'labor').reduce((s, l) => s + Number(l.amount ?? 0), 0))
+  const par = r2(lines.filter(l => l.type === 'parts').reduce((s, l) => s + Number(l.amount ?? 0), 0))
+  const sub = r2(lab + par + Number(real!.diagnostic_fee ?? 0) + Number(real!.road_call_fee ?? 0) +
+    Number(real!.travel_amount ?? 0) + Number(real!.mileage_amount ?? 0) + Number(real!.shop_supplies_fee ?? 0))
+  const REASON = `${MARK} fleet`
+  const d = hdApplyDiscount({ discount: normalizeDiscount({ type: 'flat', value: 25, scope: 'document', reason: REASON }),
+    laborLines: lab, partsLines: par, subtotal: sub, breakdown: parseBreakdown(real!.tax_breakdown),
+    taxAmount: Number(real!.tax_amount ?? 0), taxRatePct: null })
+  if (!record(F, 'the discount prices on the real figures', d.ok, d.ok ? `${usd(sub)} - 25.00, total ${usd(d.grandTotal)}` : d.error)) return
+  if (!d.ok || !d.discount) return
+  const label = discountPrintLabel(d.discount)
+
+  const pick = (k: string) => real![k] ?? null
+  const body: Record<string, unknown> = {
+    customer_name: `${MARK} hq discount`, customer_phone: '+15555550166', status: 'sent',
+    unit_manufacturer: pick('unit_manufacturer'), unit_model: pick('unit_model'), unit_serial: 'ZZ-HQ-TEST',
+    payment_terms: pick('payment_terms'), labor_rate: pick('labor_rate'), labor_hours: pick('labor_hours'),
+    parts_markup_percent: pick('parts_markup_percent'), line_items: lines, subtotal_labor: lab, subtotal_parts: par,
+    diagnostic_fee: pick('diagnostic_fee'), road_call_fee: pick('road_call_fee'),
+    travel_hours: pick('travel_hours'), travel_rate: pick('travel_rate'), travel_amount: pick('travel_amount'),
+    mileage_miles: pick('mileage_miles'), mileage_rate: pick('mileage_rate'), mileage_amount: pick('mileage_amount'),
+    shop_supplies_percent_applied: pick('shop_supplies_percent_applied'), shop_supplies_cap_applied: pick('shop_supplies_cap_applied'),
+    shop_supplies_fee: pick('shop_supplies_fee'),
+    tax_rate: pick('tax_rate'), tax_amount: d.taxAmount, tax_breakdown: d.breakdown, total: d.grandTotal, discount: d.discount,
+    // A client cannot set the recorded terms. The route drops this.
+    terms_snapshot: { version: 1, captured_at: 'x', warranty: `${MARK} forged` },
+  }
+  const made = await api('POST', '/api/hd/quotes', body)
+  await adoptSmokeCustomer(made.json.customer_id)
+  const quote = (made.json.quote ?? {}) as Record<string, unknown>
+  const quoteId = String(quote.id ?? '')
+  if (quoteId) created.hdQuotes.add(quoteId)
+  if (!record(F, 'a discounted quote saves as sent', made.status === 201 && !!quoteId, `-> ${made.status} ${String(made.json.error ?? '')}`)) return
+
+  const qRow = (await rest<Record<string, unknown>>(`hd_quotes?id=eq.${quoteId}&select=*`))[0] ?? {}
+  const qd = parseDiscount(qRow.discount)
+  record(F, 'the quote stores the discount and the discounted total',
+    !!qd && qd.amount === 25 && usd(qRow.total) === usd(d.grandTotal) && usd(qRow.tax_amount) === usd(d.taxAmount),
+    `discount ${qd?.amount}, total ${usd(qRow.total)}, tax ${usd(qRow.tax_amount)}`)
+  const prof = (await rest<Record<string, unknown>>(
+    `profiles?id=eq.${OWNER}&select=warranty_terms,customer_supplied_parts_clause,default_payment_terms,default_payment_instructions,pay_link_url`))[0] ?? {}
+  const want = termsSnapshotFrom(prof)
+  const got = parseTermsSnapshot(qRow.terms_snapshot)
+  const sameTerms = (a: ReturnType<typeof parseTermsSnapshot>, b: ReturnType<typeof parseTermsSnapshot>) =>
+    !!a && !!b && JSON.stringify({ ...a, captured_at: '' }) === JSON.stringify({ ...b, captured_at: '' })
+  record(F, "sent, it records the shop's terms - not the forged ones the body carried",
+    sameTerms(got, want) && got?.warranty !== `${MARK} forged`, JSON.stringify(got).slice(0, 160))
+
+  const bad = await api('PUT', `/api/hd/quotes/${quoteId}`, { discount: { ...d.discount, labor_amount: d.discount.labor_amount + 5 } })
+  record(F, 'a discount whose parts do not add up is refused', bad.status === 400, `-> ${bad.status} ${String(bad.json.error ?? '')}`)
+
+  const qpg = await page(`/hd/quotes/${quoteId}`)
+  record(F, 'the quote screen prints the discount row with its reason, between subtotal and tax',
+    !!qpg && qpg.text.includes(label) && qpg.text.includes('-$25.00') && qpg.text.indexOf('Subtotal') < qpg.text.indexOf(label),
+    label)
+  const qed = await page(`/hd/quotes/${quoteId}/edit`)
+  record(F, 'the quote editor renders the discount control and Net 3',
+    !!qed && qed.html.includes('data-testid="discount-editor"') && qed.text.includes('Net 3 (due in 3 days)'),
+    qed ? '' : 'did not load')
+
+  // Approval -> work order: the discount and the terms travel.
+  const token = String(qRow.public_token ?? '')
+  const ok = await fetch(`${BASE}/api/hd/quotes/public/${token}/respond`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision: 'approve' }) })
+  record(F, 'the customer approves it', ok.ok, `-> ${ok.status}`)
+  const wo = (await rest<Record<string, unknown>>(`hd_work_orders?quote_id=eq.${quoteId}&select=*`))[0]
+  if (wo) created.hdWorkOrders.add(String(wo.id))
+  if (!record(F, 'the work order exists', !!wo)) return
+  record(F, 'the work order carries the discount and the terms',
+    JSON.stringify(parseDiscount(wo.discount)) === JSON.stringify(qd) && sameTerms(parseTermsSnapshot(wo.terms_snapshot), got),
+    `discount ${parseDiscount(wo.discount)?.amount}`)
+  const wpg = await page(`/hd/work-orders/${wo.id}`)
+  record(F, 'the work order screen shows the discount card', !!wpg && wpg.text.includes('DISCOUNT') && wpg.text.includes(`${label} comes to -$25.00`),
+    wpg ? '' : 'did not load')
+
+  // Changed on the work order, then put back: the quoted total moves and returns.
+  const w10 = await api('PUT', `/api/hd/work-orders/${wo.id}/discount`, { discount: { type: 'percent', value: 10, scope: 'document', reason: REASON } })
+  const wAfter = (await rest<Record<string, unknown>>(`hd_work_orders?id=eq.${wo.id}&select=total_amount,tax_amount,discount`))[0] ?? {}
+  record(F, 'a work order discount change is priced and saved', w10.status === 200 && parseDiscount(wAfter.discount)?.type === 'percent' &&
+    usd(wAfter.total_amount) !== usd(wo.total_amount), `-> ${w10.status}, quoted total ${usd(wo.total_amount)} -> ${usd(wAfter.total_amount)} ${String(w10.json.error ?? '')}`)
+  const wBack = await api('PUT', `/api/hd/work-orders/${wo.id}/discount`, { discount: { type: 'flat', value: 25, scope: 'document', reason: REASON } })
+  const wRow = (await rest<Record<string, unknown>>(`hd_work_orders?id=eq.${wo.id}&select=total_amount,tax_amount,tax_breakdown`))[0] ?? {}
+  record(F, 'put back, the quoted total and tax return to the cent', wBack.status === 200 &&
+    usd(wRow.total_amount) === usd(wo.total_amount) && usd(wRow.tax_amount) === usd(wo.tax_amount) &&
+    JSON.stringify(parseBreakdown(wRow.tax_breakdown)) === JSON.stringify(parseBreakdown(wo.tax_breakdown)),
+    `${usd(wRow.total_amount)} / ${usd(wRow.tax_amount)}`)
+
+  // Convert and bill.
+  const built = await api('GET', `/api/hd/work-orders/${wo.id}/convert`)
+  const payload = (built.json.invoice_payload ?? {}) as Record<string, unknown>
+  record(F, 'the converter bills the discounted quote total exactly', built.status === 200 && usd(payload.total) === usd(qRow.total) &&
+    usd(payload.tax_amount) === usd(qRow.tax_amount) && parseDiscount(payload.discount)?.amount === 25,
+    `-> ${built.status} total ${usd(payload.total)} (quote ${usd(qRow.total)}) ${String(built.json.error ?? '')}`)
+  const inv = await api('POST', '/api/hd/invoices', payload)
+  await adoptSmokeCustomer(inv.json.customer_id)
+  const invRow = (inv.json.invoice ?? {}) as Record<string, unknown>
+  const invId = String(invRow.id ?? '')
+  if (invId) created.hdInvoices.add(invId)
+  if (!record(F, 'the invoice is created', (inv.status === 201 || inv.status === 200) && !!invId, `-> ${inv.status} ${String(inv.json.error ?? '')}`)) return
+  const stored = (await rest<Record<string, unknown>>(`hd_invoices?id=eq.${invId}&select=*`))[0] ?? {}
+  record(F, "the invoice stores the discount, the quote total and the quote's terms",
+    parseDiscount(stored.discount)?.amount === 25 && usd(stored.total) === usd(qRow.total) &&
+    sameTerms(parseTermsSnapshot(stored.terms_snapshot), got) && !invoiceDoesNotAddUp(stored),
+    `total ${usd(stored.total)}`)
+  const ipg = await page(`/hd/invoices/${invId}`)
+  record(F, 'the invoice screen prints the discount row with its reason', !!ipg && ipg.text.includes(label) && ipg.text.includes('-$25.00'))
+  const ied = await page(`/hd/invoices/${invId}/edit`)
+  record(F, 'the invoice editor opens on the discount, with no correction prompt',
+    !!ied && ied.html.includes('data-testid="discount-editor"') && !ied.text.includes('does not add up'))
+  const o = openInvoiceEdit(stored, null)
+  record(F, 'reopened and saved unchanged, the invoice writes nothing (no double discount)',
+    Object.keys(invoiceSaveBody(stored, o, o.state)).length === 0)
+  const locked = await api('PUT', `/api/hd/work-orders/${wo.id}/discount`, { discount: null })
+  record(F, 'once invoiced, the work order discount is locked', locked.status === 409, `-> ${locked.status}`)
+
+  // The settings screen exposes the five terms fields and Net 3.
+  const spg = await page('/hd/settings')
+  const fields = ['default_payment_terms', 'default_payment_instructions', 'pay_link_url', 'warranty_terms', 'customer_supplied_parts_clause']
+  const missing = spg ? fields.filter(f => !spg.html.includes(`name="${f}"`)) : fields
+  record(F, 'HD settings shows the five terms fields', !!spg && missing.length === 0, missing.length ? `missing ${missing.join(', ')}` : '')
+  record(F, 'and offers Net 3', !!spg && spg.text.includes('Net 3'))
+}
+
 // ── Z: equipment categories, By Equipment and the audit exports ─────────────
 //
 // docs/KURT-EQUIPMENT-TRACKING-SPEC.md, end to end through the routes a shop uses. The
@@ -3607,6 +3749,7 @@ async function main(): Promise<void> {
     await flowTerms()
     await flowDiscount()
     await flowIe()
+    await flowHq()
     await flowY()
     await flowZ()
   } finally {

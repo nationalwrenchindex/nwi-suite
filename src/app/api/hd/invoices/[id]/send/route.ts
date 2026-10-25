@@ -15,6 +15,7 @@ import { sendSmsResult } from '@/lib/twilio'
 import { getContactSuppression } from '@/lib/customer-contact'
 import { mintInvoiceToken, publicInvoiceUrl } from '@/lib/hd/invoice-token'
 import { buildInvoiceSms, buildInvoiceEmail } from '@/lib/hd/sms-templates'
+import { recordTermsSnapshot } from '@/lib/document-terms'
 import { buildPMReportAttachment } from '@/lib/hd/pm-report-attachment'
 import {
   resolveLateFeeSettings,
@@ -294,6 +295,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const inv    = invoice
   const userId = user.id
   async function recordSend() {
+    // Migration 168: HD's finalize point. The shop's terms are recorded the first time
+    // the invoice goes out - unless it already carries its quote's, which it keeps.
+    // Never fails the send.
+    await recordTermsSnapshot(supabase, 'hd_invoices', id, userId)
     const now         = new Date().toISOString()
     const priorCount  = Number(inv.sent_count ?? 0)
     const update: Record<string, unknown> = {

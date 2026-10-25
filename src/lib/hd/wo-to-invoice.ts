@@ -53,7 +53,9 @@
 // computeTax is the SAME function LD uses, so parts and labor are taxed at their own
 // rates with each bucket rounded independently. See the per-bucket rounding note in
 // src/lib/tax.ts - this file must not grow its own tax arithmetic.
-import { computeTax, effectiveRatePercent, type TaxSettings } from '@/lib/tax'
+import { computeTax, effectiveRatePercent, parseBreakdown, type TaxSettings } from '@/lib/tax'
+import { parseDiscount, type DiscountInput, type DocumentDiscount } from '@/lib/document-discount'
+import { hdApplyDiscount, recordedRate } from '@/lib/hd/hd-discount'
 
 /** A row out of hd_work_order_line_items. */
 export interface WorkOrderLineRow {
@@ -357,7 +359,8 @@ export function invoiceIdentityFromWorkOrder(wo: Record<string, unknown>): Recor
 export function termsWithFallback(
   wo: Record<string, unknown>,
   totals: InvoiceTotals,
-  extras: number,
+  /** The taxable extras and fees, by the bucket each is taxed in. */
+  extras: { labor: number; parts: number },
   fallback: ShopFallback,
 ): { terms: Record<string, unknown>; source: TermsSource } {
   const terms = invoiceTermsFromWorkOrder(wo)
@@ -378,12 +381,12 @@ export function termsWithFallback(
   if (terms.tax_amount == null) {
     const result = computeTax(
       {
-        parts: totals.subtotal_parts,
-        // Travel, mileage and shop supplies ride in the LABOR bucket, matching the
-        // settled rule: travel is taxed as labor, supplies as parts, mileage not at
-        // all. extras is passed pre-summed here, so this is the conservative reading -
-        // see the caller, which excludes mileage from it.
-        labor: totals.subtotal_labor + extras,
+        // The settled rule: shop supplies is taxed as PARTS, travel and the fees as
+        // labor, mileage not at all (the caller leaves it out). Supplies used to ride
+        // in the labor bucket here, which mis-taxed it whenever the two rates differ.
+        // Forward only: this prices a NEW invoice; no stored split is rewritten.
+        parts: totals.subtotal_parts + extras.parts,
+        labor: totals.subtotal_labor + extras.labor,
       },
       fallback.taxSettings,
     )
@@ -412,7 +415,7 @@ export function buildInvoicePayload(
   wo: Record<string, unknown>,
   lineRows: WorkOrderLineRow[],
   fallback: ShopFallback,
-): { payload: Record<string, unknown>; source: TermsSource } {
+): { payload: Record<string, unknown>; source: TermsSource; discountError: string | null } {
   // The work order's own rate if it has one, the shop's current setting if not. Passed
   // into the line builder so a labor line with no unit_price of its own prices at a
   // real rate instead of at 0.
@@ -423,17 +426,14 @@ export function buildInvoicePayload(
   const baseTerms = invoiceTermsFromWorkOrder(wo)
 
   // MILEAGE IS EXCLUDED from the taxable extras. It is reimbursement of a cost, not a
-  // sale - the settled rule. Travel is taxed as labor and shop supplies as parts; both
-  // ride in the labor bucket here, which slightly over-taxes supplies when the two
-  // rates differ. Flagged rather than hidden: the exact split belongs in computeTax's
-  // own buckets, and moving it there touches the LD path too.
+  // sale - the settled rule. Travel is taxed as labor, shop supplies as parts.
   //
   // The diagnostic and road call fees are taxed as labor too (src/lib/tax.ts), which is
   // how the quote computed the tax this normally copies.
-  const taxableExtras =
-    (num(baseTerms.travel_amount) ?? 0) +
-    (num(baseTerms.shop_supplies_fee) ?? 0) +
-    feesTotal(baseTerms)
+  const taxableExtras = {
+    labor: (num(baseTerms.travel_amount) ?? 0) + feesTotal(baseTerms),
+    parts: num(baseTerms.shop_supplies_fee) ?? 0,
+  }
 
   const { terms, source } = termsWithFallback(wo, totals, taxableExtras, fallback)
 
@@ -443,10 +443,47 @@ export function buildInvoicePayload(
     (num(terms.mileage_amount) ?? 0) +
     (num(terms.shop_supplies_fee) ?? 0)
 
-  const taxAmount = num(terms.tax_amount) ?? 0
-  const total = r2(
-    totals.subtotal_labor + totals.subtotal_parts + feesTotal(terms) + allExtras + taxAmount,
-  )
+  const subtotal = r2(totals.subtotal_labor + totals.subtotal_parts + feesTotal(terms) + allExtras)
+
+  // ===========================================================================
+  // THE DISCOUNT (migration 168), from the approved quote or set on the work order.
+  // ===========================================================================
+  //
+  // Re-applied to the invoice's own lines through the shared engine. The tax it comes
+  // off is the tax BEFORE the discount: when the work order carries its quote's tax,
+  // that tax is already discounted, so the record's tax_before / pre_tax_breakdown is
+  // the starting point - never the carried figure, which would discount twice. When
+  // the tax was just computed from settings (above) it is pre-discount already.
+  //
+  // Lines unchanged since the quote give exactly the quote's figures, to the cent.
+  let taxAmount = num(terms.tax_amount) ?? 0
+  let discount: DocumentDiscount | null = null
+  let discountError: string | null = null
+  const recorded = parseDiscount(wo.discount)
+  if (recorded) {
+    const before = source.taxFromDocument
+      ? { taxAmount: recorded.tax_before, breakdown: recorded.pre_tax_breakdown }
+      : { taxAmount, breakdown: parseBreakdown(terms.tax_breakdown) }
+    const applied = hdApplyDiscount({
+      discount:   { type: recorded.type, value: recorded.value, scope: recorded.scope, reason: recorded.reason },
+      laborLines: totals.subtotal_labor,
+      partsLines: totals.subtotal_parts,
+      subtotal,
+      breakdown:  before.breakdown,
+      taxAmount:  before.taxAmount,
+      taxRatePct: recordedRate(terms.tax_rate),
+    })
+    if (!applied.ok) {
+      discountError = `The work order's discount cannot be applied to this invoice: ${applied.error}`
+    } else {
+      discount = applied.discount
+      taxAmount = applied.taxAmount
+      terms.tax_amount = applied.taxAmount
+      terms.tax_breakdown = applied.breakdown
+    }
+  }
+
+  const total = r2(subtotal - (discount?.amount ?? 0) + taxAmount)
 
   return {
     payload: {
@@ -458,6 +495,9 @@ export function buildInvoicePayload(
       parts_cost:     totals.parts_cost,
       parts_sell:     totals.parts_sell,
       total,
+      discount,
+      // The terms the quote recorded when it was sent, carried by the work order.
+      terms_snapshot: wo.terms_snapshot ?? null,
       status:         'unpaid',
       // Recorded on the invoice itself so a figure that came from Settings rather than
       // from the job is visible later, when someone asks why the tax is what it is.
@@ -469,5 +509,74 @@ export function buildInvoicePayload(
         : (wo.internal_notes ?? null),
     },
     source,
+    discountError,
   }
+}
+
+/**
+ * Set, change or remove the discount on a work order (migration 168).
+ *
+ * The work order keeps the same invariant as the quote and the invoice: its tax and
+ * total columns are AFTER the discount, and the record holds the tax as it stood
+ * before it. So a work order carrying its quote's tax has that tax re-figured here,
+ * from the pre-discount figures, never from the already-discounted ones; and removing
+ * the discount restores them. A work order with no tax recorded stores the discount
+ * only - the invoice prices its tax at convert, and applies the discount there.
+ *
+ * Priced against the lines exactly as the converter will bill them, so what the tech
+ * sees here is what the invoice gets while the lines stay as they are. The converter
+ * re-applies it to whatever the lines are at billing time.
+ */
+export function workOrderDiscountUpdate(
+  wo: Record<string, unknown>,
+  lineRows: WorkOrderLineRow[],
+  input: DiscountInput | null,
+  fallbackLaborRate: number | null,
+): { update: Record<string, unknown>; discount: DocumentDiscount | null; notice: string | null } | { error: string } {
+  const prior = parseDiscount(wo.discount)
+  const carried = num(wo.tax_amount) != null
+  const before = prior
+    ? { taxAmount: prior.tax_before, breakdown: prior.pre_tax_breakdown }
+    : { taxAmount: num(wo.tax_amount) ?? 0, breakdown: parseBreakdown(wo.tax_breakdown) }
+
+  const totals = sumInvoiceLines(invoiceLinesFromWorkOrder(lineRows, num(wo.labor_rate) ?? fallbackLaborRate))
+  const terms = invoiceTermsFromWorkOrder(wo)
+  const subtotal = r2(
+    totals.subtotal_labor + totals.subtotal_parts + feesTotal(terms) +
+    (num(terms.travel_amount) ?? 0) + (num(terms.mileage_amount) ?? 0) + (num(terms.shop_supplies_fee) ?? 0),
+  )
+
+  let discount: DocumentDiscount | null = null
+  let notice: string | null = null
+  let tax = before.taxAmount
+  let breakdown = before.breakdown
+  if (input) {
+    const r = hdApplyDiscount({
+      discount:   input,
+      laborLines: totals.subtotal_labor,
+      partsLines: totals.subtotal_parts,
+      subtotal,
+      // No tax recorded yet: nothing to take tax off here. The invoice will.
+      breakdown:  carried ? before.breakdown : { version: 1 },
+      taxAmount:  carried ? before.taxAmount : 0,
+      taxRatePct: recordedRate(wo.tax_percent),
+    })
+    if (!r.ok) return { error: r.error }
+    discount = r.discount
+    notice = r.notice ?? null
+    tax = r.taxAmount
+    breakdown = r.breakdown
+  }
+
+  const update: Record<string, unknown> = { discount }
+  if (carried) {
+    const oldTax = num(wo.tax_amount) ?? 0
+    update.tax_amount = tax
+    update.tax_breakdown = breakdown
+    // The quoted total moves by exactly what the discount and its tax moved.
+    if (num(wo.total_amount) != null) {
+      update.total_amount = r2((num(wo.total_amount) ?? 0) + (prior?.amount ?? 0) - (discount?.amount ?? 0) + (tax - oldTax))
+    }
+  }
+  return { update, discount, notice }
 }

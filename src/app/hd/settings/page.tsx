@@ -7,6 +7,7 @@ import LateFeeSettingsForm from '@/components/hd/LateFeeSettingsForm'
 import ExportData from '@/components/hd/ExportData'
 import ThemeToggle from '@/components/layout/ThemeToggle'
 import TaxSettingsFields from '@/components/settings/TaxSettingsFields'
+import HDDocumentTermsForm, { type HDDocumentTerms } from '@/components/hd/HDDocumentTermsForm'
 
 export const metadata = { title: 'Settings — NWI HD Suite' }
 
@@ -22,7 +23,7 @@ export default async function HDSettingsPage() {
   // rather than just the two fees.
   const PROFILE_FEES = 'hd_diagnostic_fee, hd_road_call_fee'
 
-  const [profileResult, { data: lateFee }] = await Promise.all([
+  const [profileResult, { data: lateFee }, termsResult] = await Promise.all([
     supabase
       .from('profiles')
       .select(`${PROFILE_BASE}, ${PROFILE_FEES}`)
@@ -33,7 +34,15 @@ export default async function HDSettingsPage() {
       .select('fee_type, flat_fee_amount, percentage_rate, grace_period_days, send_sms_notification, active')
       .eq('user_id', user.id)
       .maybeSingle(),
+    // The terms block (migrations 143 and 164). Its own query so a missing column
+    // costs only this card, never the labor rate and logo above it.
+    supabase
+      .from('profiles')
+      .select('default_payment_terms, default_payment_instructions, pay_link_url, warranty_terms, customer_supplied_parts_clause')
+      .eq('id', user.id)
+      .maybeSingle(),
   ])
+  const docTerms = termsResult.error ? null : (termsResult.data as HDDocumentTerms | null)
 
   let profile = profileResult.data as Record<string, unknown> | null
   let feesAvailable = profile != null && 'hd_diagnostic_fee' in profile
@@ -142,6 +151,22 @@ export default async function HDSettingsPage() {
             call fee follow the labor setting.
           </p>
           <TaxSettingsFields variant="hd" />
+        </div>
+
+        {/* The terms block on quotes and invoices - the same profile columns LD's
+            settings write. Each document records them when it is sent. */}
+        <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
+          <p className="font-condensed font-bold text-white text-lg tracking-wide mb-1">PAYMENT &amp; WARRANTY TERMS</p>
+          <p className="text-sm mb-4" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+            Printed at the bottom of your quotes and invoices: payment terms, how to pay, a pay link, your warranty and your customer-supplied parts clause.
+          </p>
+          {docTerms ? (
+            <HDDocumentTermsForm initial={docTerms} />
+          ) : (
+            <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+              These settings could not be loaded. Refresh the page; if this stays, the terms columns (migrations 143 and 164) are missing.
+            </p>
+          )}
         </div>
 
         <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>

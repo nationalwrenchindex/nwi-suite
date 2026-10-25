@@ -23,6 +23,12 @@
 //            save writes nothing at all - so it cannot re-derive costing from the line
 //            items or re-resolve fleet links as a side effect.
 //
+//   DISCOUNT Migration 168, the shared engine via hdApplyDiscount. A discounted invoice
+//            stores POST-discount tax, so the tax is carried from the figures BEFORE
+//            the discount (the record's tax_before / pre_tax_breakdown) and the
+//            discount is applied once on top - never twice. Labor and parts lines
+//            only; the extras and fees are never discounted.
+//
 // THE CASE IT REFUSES. A stored invoice whose total is not its own lines + fees +
 // extras + tax (INV-2026-0002, 0006, 0014 - a 125.00 diagnostic fee outside the total)
 // is never saved silently: any save would quietly "correct" it. The form offers one
@@ -33,6 +39,8 @@ import { computeExtras, extrasColumns, extrasFromDocument, round2, type ExtrasRe
 import { documentExtras } from '@/lib/document-money'
 import { computeTax, parseBreakdown, type TaxBreakdown, type TaxBucket, type TaxSettings } from '@/lib/tax'
 import { editableLines, type EditLine } from '@/lib/hd/invoice-edit-lines'
+import { parseDiscount, type DiscountInput, type DocumentDiscount } from '@/lib/document-discount'
+import { hdApplyDiscount, recordedRate } from '@/lib/hd/hd-discount'
 
 const num = (v: unknown, d = 0) => { const n = Number(v); return Number.isFinite(n) ? n : d }
 const str = (v: unknown) => (typeof v === 'string' ? v : v == null ? '' : String(v))
@@ -57,12 +65,20 @@ export interface InvoiceEditState {
   travelHours: number
   mileageMiles: number
   lines: EditLine[]
+  /** What the discount is (type, value, scope, reason). Its amounts are re-derived. */
+  discount: DiscountInput | null
 }
 
 export interface OpenedInvoice {
   state: InvoiceEditState
   /** True when the invoice recorded no labor rate and the shop's current one is shown. */
   laborRateAssumed: boolean
+}
+
+/** The discount's four answers off a stored record, or null. */
+function discountInputOf(invoice: Record<string, unknown>): DiscountInput | null {
+  const d = parseDiscount(invoice.discount)
+  return d ? { type: d.type, value: d.value, scope: d.scope, reason: d.reason } : null
 }
 
 /**
@@ -102,6 +118,7 @@ export function openInvoiceEdit(invoice: Record<string, unknown>, shopLaborRate:
       travelHours:       num(invoice.travel_hours),
       mileageMiles:      num(invoice.mileage_miles),
       lines:             editableLines(invoice.line_items),
+      discount:          discountInputOf(invoice),
     },
   }
 }
@@ -163,12 +180,20 @@ export interface InvoicePrice {
   subtotalParts: number
   extras: ExtrasResult
   extrasChanged: boolean
-  /** Subtotal including fees and extras. */
+  /** Subtotal including fees and extras, BEFORE any discount - printed as "Subtotal". */
   subtotal: number
+  /** After the discount. */
   taxAmount: number
-  /** NULL when the invoice has no stored split - it keeps none. */
+  /** NULL when the invoice has no stored split - it keeps none. After the discount. */
   breakdown: TaxBreakdown | null
   total: number
+  /** The discount as applied, or null for none. */
+  discount: DocumentDiscount | null
+  /** Why the discount cannot be applied. The figures are then undiscounted and the
+   *  form refuses to save. */
+  discountError: string | null
+  /** Shown beside the discount: the invoice recorded no tax rate. */
+  discountNotice: string | null
 }
 
 /** A bucket plus a difference, dropped when nothing is left in it. */
@@ -208,19 +233,37 @@ export function priceInvoiceEdit(
   }
   const subtotal = round2(t.labor + t.parts + t.fees + extras.total)
   const cols = (e: ExtrasResult) => JSON.stringify(extrasColumns(e))
-  return {
+  const d = hdApplyDiscount({
+    discount: s.discount, laborLines: t.labor, partsLines: t.parts, subtotal, breakdown, taxAmount,
+    taxRatePct: rateFor(invoice, opened, s),
+  })
+  const priced = {
     subtotalLabor: t.labor,
     subtotalParts: t.parts,
     extras,
     extrasChanged: cols(extras) !== cols(openedExtras),
     subtotal,
-    taxAmount,
-    breakdown,
-    total: round2(subtotal + taxAmount),
   }
+  if (!d.ok) {
+    return { ...priced, taxAmount, breakdown, total: round2(subtotal + taxAmount),
+      discount: null, discountError: d.error, discountNotice: null }
+  }
+  return { ...priced, taxAmount: d.taxAmount, breakdown: d.breakdown, total: d.grandTotal,
+    discount: d.discount, discountError: null, discountNotice: d.notice ?? null }
 }
 
+/**
+ * The single rate a discount on a split-less invoice takes its tax off at: the one the
+ * tech just typed, else the one the invoice recorded - NULL, never 0, when it has none.
+ */
+function rateFor(invoice: Record<string, unknown>, opened: InvoiceEditState, s: InvoiceEditState): number | null {
+  return s.tax_rate !== opened.tax_rate ? s.tax_rate : recordedRate(invoice.tax_rate)
+}
+
+/** The tax to carry from: before the discount, when the invoice has one. */
 function storedTaxOf(invoice: Record<string, unknown>) {
+  const d = parseDiscount(invoice.discount)
+  if (d) return { taxAmount: d.tax_before, breakdown: d.pre_tax_breakdown }
   return { taxAmount: round2(num(invoice.tax_amount)), breakdown: parseBreakdown(invoice.tax_breakdown) }
 }
 
@@ -233,7 +276,8 @@ export function invoiceDoesNotAddUp(invoice: Record<string, unknown>): { stored:
   const t = subtotals(s)
   const extras = extrasFromDocument(invoice)
   const stored = round2(num(invoice.total))
-  const own = round2(t.labor + t.parts + t.fees + extras.total + num(invoice.tax_amount))
+  const discounted = parseDiscount(invoice.discount)?.amount ?? 0
+  const own = round2(t.labor + t.parts + t.fees + extras.total - discounted + num(invoice.tax_amount))
   if (own !== stored) return { stored, own: correctionFor(invoice).total, reason: 'total' }
   const bd = parseBreakdown(invoice.tax_breakdown)
   if (bd) {
@@ -248,15 +292,25 @@ export function invoiceDoesNotAddUp(invoice: Record<string, unknown>): { stored:
  * extras, taxed at the rates it recorded. Only ever applied when the tech confirms it.
  */
 export function correctionFor(invoice: Record<string, unknown>): {
-  total: number; taxAmount: number; breakdown: TaxBreakdown; subtotalLabor: number; subtotalParts: number
+  total: number; taxAmount: number; breakdown: TaxBreakdown | null; subtotalLabor: number; subtotalParts: number
+  discount: DocumentDiscount | null
 } {
   const s = openInvoiceEdit(invoice, null).state
   const t = subtotals(s)
   const extras = extrasFromDocument(invoice)
   const tax = taxFor(s, extras, taxSettingsFor(invoice, s))
   const subtotal = round2(t.labor + t.parts + t.fees + extras.total)
+  // A recorded discount is applied to the recalculated figures, so the correction
+  // does not quietly drop it. One that no longer fits is left as stored: the invoice
+  // then still does not add up, and is still refused.
+  const d = hdApplyDiscount({ discount: s.discount, laborLines: t.labor, partsLines: t.parts,
+    subtotal, breakdown: tax.breakdown, taxAmount: tax.taxAmount, taxRatePct: null })
+  if (d.ok && d.discount) {
+    return { total: d.grandTotal, taxAmount: d.taxAmount, breakdown: d.breakdown,
+      subtotalLabor: t.labor, subtotalParts: t.parts, discount: d.discount }
+  }
   return { total: round2(subtotal + tax.taxAmount), taxAmount: tax.taxAmount, breakdown: tax.breakdown,
-    subtotalLabor: t.labor, subtotalParts: t.parts }
+    subtotalLabor: t.labor, subtotalParts: t.parts, discount: null }
 }
 
 /** The one sentence the editor shows on an invoice that does not add up. */
@@ -281,6 +335,7 @@ export function correctionBody(invoice: Record<string, unknown>, now = new Date(
     tax_amount:     c.taxAmount,
     tax_breakdown:  c.breakdown,
     total:          c.total,
+    ...(c.discount ? { discount: c.discount } : {}),
     internal_notes: appendNote(invoice.internal_notes,
       `Total corrected on purpose from ${usd(stored)} to ${usd(c.total)} in the invoice editor: the stored total was not its own lines, fees, extras and tax ` +
       `(tax ${usd(round2(num(invoice.tax_amount)))} -> ${usd(c.taxAmount)}).`, now),
@@ -309,6 +364,9 @@ export function invoiceSaveBody(
   now = new Date(),
 ): Record<string, unknown> {
   const price = priceInvoiceEdit(invoice, opened.state, s)
+  // The form refuses first and shows why. Throwing here keeps any other caller from
+  // writing undiscounted figures over a discount it could not apply.
+  if (price.discountError) throw new Error(price.discountError)
   const full: Record<string, unknown> = {}
   for (const k of TEXT_KEYS) {
     // Blank and missing are the same thing to the customer; "" over NULL is not an edit.
@@ -333,8 +391,13 @@ export function invoiceSaveBody(
     if ((k === 'diagnostic_fee' || k === 'road_call_fee') && invoice[k] == null && v === 0) continue
     if (!sameValue(v, invoice[k])) full[k] = v
   }
-  if (JSON.stringify(price.breakdown) !== JSON.stringify(parseBreakdown(invoice.tax_breakdown))) {
+  if (JSON.stringify(parseBreakdown(price.breakdown)) !== JSON.stringify(parseBreakdown(invoice.tax_breakdown))) {
     full.tax_breakdown = price.breakdown
+  }
+  // The discount record, compared through the one reader so key order cannot make an
+  // unchanged discount look edited. Removing it writes NULL.
+  if (JSON.stringify(parseDiscount(price.discount)) !== JSON.stringify(parseDiscount(invoice.discount))) {
+    full.discount = price.discount
   }
   // A4: a rate taken from Settings is written with a note saying so.
   if (opened.laborRateAssumed && 'labor_rate' in full && s.labor_rate === opened.state.labor_rate) {

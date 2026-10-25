@@ -5,6 +5,8 @@ import { checkHDAccess } from '@/lib/hd-access'
 import { computeDueDate } from '@/lib/hd/payment-terms'
 import { resolveInvoiceFleetLinks } from '@/lib/fleet-pro/invoice-link'
 import { costingFromLineItems, isMissingCostingColumn } from '@/lib/hd/invoice-costing'
+import { checkDiscountWrite } from '@/lib/hd/hd-discount'
+import { recordTermsSnapshot } from '@/lib/document-terms'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,6 +45,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   } catch {
     return NextResponse.json({ error: 'Invalid body' }, { status: 400 })
   }
+
+  // The terms are recorded once, when the invoice is sent - never set by an edit.
+  delete body.terms_snapshot
+  // A discount (migration 168) is stored only as a well-formed record whose parts add up.
+  const discountError = checkDiscountWrite(body)
+  if (discountError) return NextResponse.json({ error: discountError }, { status: 400 })
 
   const update: Record<string, unknown> = { ...body, updated_at: new Date().toISOString() }
   if (body.status === 'paid' && !body.paid_at) {
@@ -143,6 +151,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Marked sent: the shop's terms are recorded on it now, unless it already carries
+  // its quote's. Never fails the save.
+  if (body.status === 'sent') await recordTermsSnapshot(supabase, 'hd_invoices', id, user.id)
   return NextResponse.json({ invoice: data })
 }
 

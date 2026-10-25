@@ -135,7 +135,9 @@ export function isMissing164Column(error: unknown): boolean {
 
 /**
  * Record the shop's terms on a document that has none yet. Called when a quote is
- * sent and when an invoice is finalized.
+ * sent and when an invoice is finalized - for HD, when an invoice is sent, the point
+ * at which the customer is handed it (HD invoices have no finalize step). An HD
+ * document carried from a quote already holds the quote's terms and keeps them.
  *
  * NEVER FAILS THE CALLER. A quote that went to the customer, or an invoice that was
  * finalized, must not be reported as failed because a display block could not be
@@ -144,7 +146,7 @@ export function isMissing164Column(error: unknown): boolean {
  */
 export async function recordTermsSnapshot(
   supabase: SupabaseClient,
-  table:    'quotes' | 'invoices',
+  table:    'quotes' | 'invoices' | 'hd_quotes' | 'hd_invoices',
   id:       string,
   userId:   string,
 ): Promise<{ written: boolean; reason?: string }> {
