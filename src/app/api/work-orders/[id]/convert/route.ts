@@ -18,6 +18,7 @@ import {
   taxSettingsFrom, TAX_SETTINGS_SELECT, mergeBreakdowns, breakdownTaxTotal, computeTax, documentTaxSettings,
 } from '@/lib/tax'
 import { applyDiscount, parseDiscount, isMissing165Column, MIGRATION_165_MESSAGE } from '@/lib/document-discount'
+import { carriedTerms } from '@/lib/document-terms'
 import {
   extrasFromDocument, extrasDelta, extrasAgree, extrasColumns, partsBaseFromLines,
 } from '@/lib/billable-extras'
@@ -304,6 +305,15 @@ export async function POST(
   }
   const discounted = applied.discount
 
+  // The terms the customer approved on the quote this work order came from (if any).
+  // Carried onto the NEW invoice only; finalize keeps them. See carriedTerms.
+  let sourceQuote: Record<string, unknown> | null = null
+  if (wo.source_quote_id) {
+    const { data: sq } = await supabase
+      .from('quotes').select('terms_snapshot').eq('id', String(wo.source_quote_id)).eq('user_id', user.id).maybeSingle()
+    sourceQuote = (sq ?? null) as Record<string, unknown> | null
+  }
+
   const invoiceInsert = {
     user_id:          user.id,
     invoice_number,
@@ -384,6 +394,8 @@ export async function POST(
     shop_supplies_percent_applied: wo.shop_supplies_percent_applied ?? null,
     shop_supplies_cap_applied:     wo.shop_supplies_cap_applied     ?? null,
     shop_supplies_fee:             wo.shop_supplies_fee             ?? 0,
+
+    ...carriedTerms(sourceQuote),
   }
 
   const { data: invoice, error: insertErr } = await writeToleratingMigration142<

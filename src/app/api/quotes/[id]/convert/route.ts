@@ -3,6 +3,7 @@ import { parseBreakdown } from '@/lib/tax'
 import { parseDiscount } from '@/lib/document-discount'
 import { createClient } from '@/lib/supabase/server'
 import { writeToleratingMigration142 } from '@/lib/migration-142'
+import { carriedTerms } from '@/lib/document-terms'
 
 const INVOICE_SELECT = `
   *,
@@ -158,6 +159,9 @@ export async function POST(
     // Detailer model: carry service_lines and adjustments forward
     service_lines:   Array.isArray(q.service_lines) ? q.service_lines : [],
     adjustments:     Array.isArray(q.adjustments)   ? q.adjustments   : [],
+    // The terms the customer approved, recorded when this quote was sent. Finalize
+    // keeps them instead of recording the shop's terms of that day. New invoices only.
+    ...carriedTerms(q),
   }
 
   // Migration 142 is applied by hand and this code can deploy before it. Without

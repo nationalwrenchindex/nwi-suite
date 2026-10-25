@@ -71,6 +71,20 @@ export function termsSnapshotFrom(
   }
 }
 
+/**
+ * What finalize / send records on a document: NOTHING when it already holds a snapshot
+ * - recorded terms are kept forever, whether captured at an earlier send or carried
+ * from the quote - otherwise the shop's terms right now. recordTermsSnapshot writes
+ * this; scripts/replay-ld-terms.ts runs it against every stored invoice.
+ */
+export function termsToRecord(
+  existing: unknown,
+  profile: Record<string, unknown> | null | undefined,
+  now = new Date(),
+): TermsSnapshot | null {
+  return existing ? null : termsSnapshotFrom(profile, now)
+}
+
 /** A stored snapshot, or null when the document recorded none. Never throws. */
 export function parseTermsSnapshot(v: unknown): TermsSnapshot | null {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return null
@@ -154,9 +168,8 @@ export async function recordTermsSnapshot(
     const { data: doc, error: docErr } = await supabase
       .from(table).select('terms_snapshot').eq('id', id).eq('user_id', userId).single()
     if (docErr) return { written: false, reason: docErr.message }
-    if ((doc as { terms_snapshot?: unknown } | null)?.terms_snapshot) {
-      return { written: false, reason: 'already recorded' }
-    }
+    const existing = (doc as { terms_snapshot?: unknown } | null)?.terms_snapshot
+    if (existing) return { written: false, reason: 'already recorded' }
     const { data: profile, error: pErr } = await supabase
       .from('profiles')
       .select(`${TERMS_PROFILE_SELECT_164}, default_payment_terms, default_payment_instructions`)
@@ -165,7 +178,7 @@ export async function recordTermsSnapshot(
     if (pErr) return { written: false, reason: pErr.message }
     const { error } = await supabase
       .from(table)
-      .update({ terms_snapshot: termsSnapshotFrom(profile as Record<string, unknown>) })
+      .update({ terms_snapshot: termsToRecord(existing, profile as Record<string, unknown>) })
       .eq('id', id)
       .eq('user_id', userId)
       .is('terms_snapshot', null)
@@ -204,3 +217,19 @@ export function hdTermsBlockRows(snap: TermsSnapshot | null): TermsRow[] {
   return rows
 }
 
+/**
+ * The terms a NEW invoice carries from the quote it was converted from (LD and HD,
+ * Brock Oct 25: "the accepted offer governs"). The customer approved the quote under
+ * the terms it recorded when it was sent, so the invoice prints those - not the shop's
+ * terms on the day it is finalized.
+ *
+ * FORWARD ONLY, by construction: this is spread into the INSERT of a new invoice and
+ * nowhere else. Finalize records terms only on an invoice that has none
+ * (recordTermsSnapshot), so an invoice that already holds a snapshot keeps it forever,
+ * and one converted from a quote that recorded none still records the shop's terms at
+ * finalize, exactly as before. Returns {} when there is nothing to carry.
+ */
+export function carriedTerms(quote: Record<string, unknown> | null | undefined): { terms_snapshot?: TermsSnapshot } {
+  const snap = parseTermsSnapshot(quote?.terms_snapshot)
+  return snap ? { terms_snapshot: snap } : {}
+}
