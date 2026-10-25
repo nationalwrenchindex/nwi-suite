@@ -99,7 +99,9 @@ export async function POST(
     // Derived from the invoice date where there is one, so the due date matches the
     // date printed on the document rather than the moment the button was pressed.
     const basis = (invoice.invoice_date as string | null) ?? now
-    updates.due_date = computeDueDate(basis, effectiveTerms)
+    // Unrecognised terms give no due date rather than a guessed 30 days.
+    const due = computeDueDate(basis, effectiveTerms)
+    if (due) updates.due_date = due
   }
 
   let { data: updated, error: updateErr } = await supabase

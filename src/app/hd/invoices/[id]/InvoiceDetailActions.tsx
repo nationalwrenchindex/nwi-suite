@@ -274,7 +274,9 @@ export default function InvoiceDetailActions({
         <Link
           href={`/hd/invoices/${invoiceId}/edit`}
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold text-sm"
-          style={{ background: '#FFF7ED', color: 'var(--paper-accent)', border: `1px solid ${tint(ORANGE, 25)}`, minHeight: 44 }}
+          // Dark ink and underlined: colour must not be the only thing marking a link
+          // (it was orange on a pale tint, 2.77:1).
+          style={{ background: '#FFF7ED', color: 'var(--paper-text)', textDecoration: 'underline', border: `1px solid ${tint(ORANGE, 25)}`, minHeight: 44 }}
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />

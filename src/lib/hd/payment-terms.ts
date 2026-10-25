@@ -162,8 +162,17 @@ export function daysPastDue(
   return days > 0 ? days : 0
 }
 
-// Due date = sent date + N days, returned as a YYYY-MM-DD string (DATE column).
-export function computeDueDate(sentAtISO: string, terms: string | null | undefined): string {
+/**
+ * Due date = sent date + N days, as a YYYY-MM-DD string (DATE column).
+ *
+ * NULL WHEN THERE ARE NO RECOGNISED TERMS (Brock, Oct 25). An invoice with no payment
+ * terms has no agreed due date - it used to get termDays' 30-day fallback, a deadline
+ * nobody gave the customer. With no due date the invoice is never overdue and the
+ * late-fee job skips it entirely. Callers write nothing on NULL, so a stored due date
+ * is never cleared or recalculated. (0 stored due dates came from the fallback.)
+ */
+export function computeDueDate(sentAtISO: string, terms: string | null | undefined): string | null {
+  if (!normalisePaymentTerms(terms)) return null
   const d = new Date(sentAtISO)
   d.setDate(d.getDate() + termDays(terms))
   return d.toISOString().slice(0, 10)

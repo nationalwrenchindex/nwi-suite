@@ -400,7 +400,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
                 onClick={() => void createInvoice()}
                 disabled={invoicing}
                 className="px-3 py-1.5 rounded-lg text-xs font-condensed font-bold tracking-wide disabled:opacity-50"
-                style={{ background: `${tint(HD_ORANGE, 9)}`, color: 'var(--hd-accent-text)', border: `1px solid ${tint(HD_ORANGE, 33)}` }}
+                style={{ background: `${tint(HD_ORANGE, 9)}`, color: 'var(--hd-text)', border: `1px solid ${tint(HD_ORANGE, 33)}` }}
               >
                 {invoicing ? 'Building invoice...' : '+ Create Invoice'}
               </button>
@@ -522,7 +522,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
                     type="button"
                     onClick={() => { setLocationDraft(location ?? ''); setEditingLocation(true) }}
                     className="text-xs font-semibold"
-                    style={{ color: 'var(--hd-accent-text)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                    style={{ color: 'var(--hd-text)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
                   >
                     {location ? 'edit' : 'add'}
                   </button>
@@ -596,7 +596,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
           <Link
             href={`/hd/aerial-inspections/new?work_order=${workOrderId}${wo.unit ? `&unit=${wo.unit.id}` : ''}`}
             className="px-4 py-2 rounded-lg text-xs font-condensed font-bold tracking-wide transition-colors"
-            style={{ background: `${tint(HD_ORANGE, 9)}`, color: 'var(--hd-accent-text)', border: `1px solid ${tint(HD_ORANGE, 33)}` }}
+            style={{ background: `${tint(HD_ORANGE, 9)}`, color: 'var(--hd-text)', border: `1px solid ${tint(HD_ORANGE, 33)}` }}
           >
             + Start Aerial Inspection
           </Link>
@@ -681,7 +681,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
                     <Link
                       href={ins.href}
                       className="px-3 py-1.5 rounded-lg text-xs font-semibold"
-                      style={{ background: `${tint(HD_ORANGE, 13)}`, color: 'var(--hd-accent-text)', border: `1px solid ${tint(HD_ORANGE, 25)}` }}
+                      style={{ background: `${tint(HD_ORANGE, 13)}`, color: 'var(--hd-text)', border: `1px solid ${tint(HD_ORANGE, 25)}` }}
                     >
                       View
                     </Link>
@@ -721,7 +721,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
                       onClick={() => fileRefs.current[cat.id]?.click()}
                       disabled={isUploading}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
-                      style={{ background: isUploading ? 'var(--hd-border)' : `${HD_ORANGE}20`, color: textTone(isUploading ? 'var(--hd-text-faint)' : 'var(--hd-accent-text)'), border: `1px solid ${tint(HD_ORANGE, 25)}` }}
+                      style={{ background: isUploading ? 'var(--hd-border)' : `${HD_ORANGE}20`, color: textTone(isUploading ? 'var(--hd-text-faint)' : 'var(--hd-text)'), border: `1px solid ${tint(HD_ORANGE, 25)}` }}
                     >
                       {isUploading ? (
                         <>

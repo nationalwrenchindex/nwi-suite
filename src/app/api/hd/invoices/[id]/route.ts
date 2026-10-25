@@ -83,7 +83,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const sentAt = (existing?.sent_at as string | null) ?? new Date().toISOString()
     const terms  = (body.payment_terms as string | undefined) ?? (existing?.payment_terms as string | null)
     update.sent_at  = sentAt
-    update.due_date = computeDueDate(sentAt, terms)
+    // No recognised terms, no due date - and a stored one is kept, never cleared.
+    const due = computeDueDate(sentAt, terms)
+    if (due) update.due_date = due
   }
 
   // An invoice corrected after the fact has to land on the right Fleet Pro dashboard,

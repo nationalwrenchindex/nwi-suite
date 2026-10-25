@@ -296,7 +296,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                     </div>
                     {items.map(item => (
                       <div key={item.id} className="grid px-4 py-3 items-center" style={{ gridTemplateColumns: '70px 1fr 100px 100px 100px', gap: 8, borderBottom: '1px solid #F9FAFB' }}>
-                        <span className="text-xs px-2 py-0.5 rounded-full font-semibold w-fit" style={item.type === 'labor' ? { background: '#FFF7ED', color: 'var(--paper-accent)' } : { background: '#EBF5FF', color: BLUE }}>
+                        <span className="text-xs px-2 py-0.5 rounded-full font-semibold w-fit" style={item.type === 'labor' ? { background: '#FFF7ED', color: 'var(--paper-text)' } : { background: '#EBF5FF', color: BLUE }}>
                           {item.type}
                         </span>
                         <div>
@@ -319,7 +319,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                     {items.map(item => (
                       <div key={item.id} className="px-4 py-3" style={{ borderBottom: '1px solid #F3F4F6' }}>
                         <div className="flex items-start gap-2">
-                          <span className="text-xs px-2 py-0.5 rounded-full font-semibold flex-shrink-0" style={item.type === 'labor' ? { background: '#FFF7ED', color: 'var(--paper-accent)' } : { background: '#EBF5FF', color: BLUE }}>
+                          <span className="text-xs px-2 py-0.5 rounded-full font-semibold flex-shrink-0" style={item.type === 'labor' ? { background: '#FFF7ED', color: 'var(--paper-text)' } : { background: '#EBF5FF', color: BLUE }}>
                             {item.type}
                           </span>
                           <div className="min-w-0">

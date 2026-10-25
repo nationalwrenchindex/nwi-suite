@@ -80,6 +80,8 @@ export async function GET(request: NextRequest) {
           .in('user_id', ids)
           .in('status', ['sent', 'overdue'])
           .eq('late_fee_applied', false)
+          // No due date = no agreed deadline = never late. An invoice sent with no
+          // payment terms has none (computeDueDate), so it is excluded here entirely.
           .not('due_date', 'is', null)
           .order('id', { ascending: true })
           .range(from, to),

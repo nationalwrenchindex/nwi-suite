@@ -1487,7 +1487,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                       <span
                         className="text-xs px-1.5 py-0.5 rounded font-semibold"
                         style={hit.source === 'fleet'
-                          ? { background: '#FFF7ED', color: 'var(--paper-accent)' }
+                          ? { background: '#FFF7ED', color: 'var(--paper-text)' }
                           : { background: '#EBF5FF', color: BLUE }}
                       >
                         {hit.source === 'fleet' ? 'Fleet' : 'Customer'}
@@ -1867,7 +1867,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                       {/* Editable description */}
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs px-1.5 py-0.5 rounded font-semibold shrink-0" style={{ background: '#FFF7ED', color: 'var(--paper-accent)' }}>LAB</span>
+                          <span className="text-xs px-1.5 py-0.5 rounded font-semibold shrink-0" style={{ background: '#FFF7ED', color: 'var(--paper-text)' }}>LAB</span>
                           <input
                             value={item.description}
                             onChange={e => updateLineDescription(item.id, e.target.value)}

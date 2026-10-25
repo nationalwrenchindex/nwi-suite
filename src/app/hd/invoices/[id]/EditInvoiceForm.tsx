@@ -255,7 +255,7 @@ export default function EditInvoiceForm({ invoice, shopLaborRate }: {
               {lineItems.map(item => (
                 <div key={item.id} className="px-4 py-3" style={{ borderBottom: `1px solid #F9FAFB` }}>
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs px-1.5 py-0.5 rounded font-semibold shrink-0" style={item.type === 'labor' ? { background: '#FFF7ED', color: 'var(--paper-accent)' } : { background: '#EBF5FF', color: BLUE }}>
+                    <span className="text-xs px-1.5 py-0.5 rounded font-semibold shrink-0" style={item.type === 'labor' ? { background: '#FFF7ED', color: 'var(--paper-text)' } : { background: '#EBF5FF', color: BLUE }}>
                       {item.type === 'labor' ? 'LAB' : 'PRT'}
                     </span>
                     <input value={item.description} onChange={e => updateDescription(item.id, e.target.value)} style={{ ...inp, minHeight: 36, padding: '6px 10px' }} />

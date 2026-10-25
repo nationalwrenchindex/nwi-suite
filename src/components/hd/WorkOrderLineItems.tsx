@@ -287,7 +287,7 @@ export default function WorkOrderLineItems({
           <button
             type="button" onClick={() => addLine('labor')}
             className="px-4 py-2 rounded-lg text-xs font-condensed font-bold tracking-wide"
-            style={{ background: `${tint(HD_ORANGE, 9)}`, color: 'var(--hd-accent-text)', border: `1px solid ${tint(HD_ORANGE, 33)}` }}
+            style={{ background: `${tint(HD_ORANGE, 9)}`, color: 'var(--hd-text)', border: `1px solid ${tint(HD_ORANGE, 33)}` }}
           >
             + Add Labor
           </button>
@@ -300,7 +300,7 @@ export default function WorkOrderLineItems({
           </button>
           <div className="flex-1" />
           {dirty && (
-            <span className="text-xs" style={{ color: 'var(--hd-accent-text)' }}>Unsaved changes</span>
+            <span className="text-xs" style={{ color: 'var(--hd-text)' }}>Unsaved changes</span>
           )}
           <button
             type="button" onClick={save} disabled={saving || !dirty}
@@ -382,7 +382,8 @@ export default function WorkOrderLineItems({
                           className="text-[10px] px-1.5 py-0.5 rounded font-bold"
                           style={isPart
                             ? { background: `${tint(BLUE, 13)}`, color: 'var(--hd-info)' }
-                            : { background: `${tint(HD_ORANGE, 13)}`, color: 'var(--hd-accent-text)' }}
+                            // Small text that says which line is labor: dark ink, not orange.
+                            : { background: `${tint(HD_ORANGE, 13)}`, color: 'var(--hd-text)' }}
                         >
                           {isPart ? 'PRT' : 'LAB'}
                         </span>
@@ -500,7 +501,7 @@ export default function WorkOrderLineItems({
               )}
               <div className="flex justify-between items-center pt-2 mt-1" style={{ borderTop: `2px solid ${HD_ORANGE}` }}>
                 <span className="font-condensed font-bold text-sm tracking-widest text-white">LINE TOTAL</span>
-                <span className="font-bold text-xl" style={{ color: 'var(--hd-accent-text)' }}>{fmt(totals.total)}</span>
+                <span className="font-bold text-xl" style={{ color: 'var(--hd-text)' }}>{fmt(totals.total)}</span>
               </div>
               {/* The work order's own total_amount is a separate stored figure that
                   predates these rows. It is left untouched on purpose so the

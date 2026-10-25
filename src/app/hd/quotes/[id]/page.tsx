@@ -148,7 +148,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
                 </div>
                 {items.map(item => (
                   <div key={item.id} className="grid px-4 py-3 items-center" style={{ gridTemplateColumns: '70px 1fr 100px 100px 100px', borderBottom: '1px solid #F9FAFB' }}>
-                    <span className="text-xs px-2 py-0.5 rounded-full font-semibold w-fit" style={item.type === 'labor' ? { background: '#FFF7ED', color: 'var(--paper-accent)' } : { background: '#EBF5FF', color: BLUE }}>
+                    <span className="text-xs px-2 py-0.5 rounded-full font-semibold w-fit" style={item.type === 'labor' ? { background: '#FFF7ED', color: 'var(--paper-text)' } : { background: '#EBF5FF', color: BLUE }}>
                       {item.type}
                     </span>
                     <div>

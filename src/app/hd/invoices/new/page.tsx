@@ -494,6 +494,7 @@ export default function NewInvoicePage() {
         status,
         // On direct send, stamp the sent timestamp + due date now (POST inserts as-is;
         // no quote→invoice PUT transition happens on this fast path).
+        // No terms, no due date: nothing to be late against.
         ...(sentAt ? { sent_at: sentAt, due_date: computeDueDate(sentAt, form.payment_terms) } : {}),
       }
       const res  = await fetch('/api/hd/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -691,7 +692,7 @@ export default function NewInvoicePage() {
             <div style={{ border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden' }}>
               {lineItems.map(item => (
                 <div key={item.id} className="flex items-center gap-3 px-4 py-3" style={{ borderBottom: `1px solid #F9FAFB` }}>
-                  <span className="text-xs px-1.5 py-0.5 rounded font-semibold shrink-0" style={item.type === 'labor' ? { background: '#FFF7ED', color: 'var(--paper-accent)' } : { background: '#EBF5FF', color: BLUE }}>
+                  <span className="text-xs px-1.5 py-0.5 rounded font-semibold shrink-0" style={item.type === 'labor' ? { background: '#FFF7ED', color: 'var(--paper-text)' } : { background: '#EBF5FF', color: BLUE }}>
                     {item.type === 'labor' ? 'LAB' : 'PRT'}
                   </span>
                   <div className="flex-1 min-w-0">

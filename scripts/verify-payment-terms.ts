@@ -94,6 +94,11 @@ async function main() {
   ok(computeDueDate(basis, 'net_7')  === '2026-10-10', 'net_7 on 2026-10-03 is due 2026-10-10')
   ok(computeDueDate(basis, 'net_30') === '2026-11-02', 'net_30 on 2026-10-03 is due 2026-11-02')
   ok(computeDueDate(basis, 'due_on_receipt') === basis, 'due_on_receipt is due the day it is issued')
+  // Brock, Oct 25: no terms, no due date - never the old 30-day fallback.
+  ok(computeDueDate(basis, null) === null && computeDueDate(basis, '') === null,
+    'NO terms give NO due date - an invoice is never late against a deadline nobody gave')
+  ok(computeDueDate(basis, 'Payment due upon receipt.') === null,
+    'unrecognised free text gives no due date either, rather than a guessed 30 days')
   ok(termsWithDueDate('net_7', '2026-10-10') === 'Net 7 — due 10/10/2026',
     'the phrasing is exactly "Net 7 — due 10/10/2026", as specified')
   ok(termsWithDueDate('net_7', null) === 'Net 7',
