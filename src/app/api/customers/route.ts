@@ -139,7 +139,9 @@ export async function POST(request: NextRequest) {
       corp_state:   body.corp_state   ?? null,
       corp_zip:     body.corp_zip     ?? null,
       has_corp_address: body.has_corp_address ?? false,
-      payment_terms: body.payment_terms ?? 'net30',
+      // No terms until someone sets them (Brock, Oct 25). This was 'net30', and with the
+      // column default it gave 870 of 877 customers terms nobody agreed to.
+      payment_terms: body.payment_terms || null,
       notes:        body.notes        ?? null,
     })
     .select('*')

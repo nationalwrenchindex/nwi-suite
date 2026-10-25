@@ -115,11 +115,11 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                 so it survives the work order being deleted — only then is it not a link. */}
             {inv.work_order_number && (
               inv.work_order_id ? (
-                <Link href={`/hd/work-orders/${inv.work_order_id}`} className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: '#FFF7ED', color: 'var(--paper-accent)' }}>
+                <Link href={`/hd/work-orders/${inv.work_order_id}`} className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: '#FFF7ED', color: 'var(--paper-text)' }}>
                   {inv.work_order_number}
                 </Link>
               ) : (
-                <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: '#FFF7ED', color: 'var(--paper-accent)' }}>
+                <span className="text-xs font-semibold px-2.5 py-1 rounded-full" style={{ background: '#FFF7ED', color: 'var(--paper-text)' }}>
                   {inv.work_order_number}
                 </span>
               )
@@ -189,7 +189,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
               </div>
             </div>
             <div className="text-right">
-              <p className="font-bold text-xl" style={{ color: 'var(--paper-accent)' }}>{inv.invoice_number}</p>
+              <p className="font-bold text-xl" style={{ color: 'var(--paper-text)' }}>{inv.invoice_number}</p>
               {inv.work_order_number && (
                 <p className="text-sm" style={{ color: 'var(--paper-muted)' }}>Work Order: {inv.work_order_number}</p>
               )}
@@ -380,7 +380,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                 ))}
                 <div className="flex justify-between items-center py-3" style={{ borderTop: `2px solid ${ORANGE}`, marginTop: 4 }}>
                   <span className="font-bold text-base" style={{ color: '#1A1A1A' }}>TOTAL DUE</span>
-                  <span className="font-bold text-3xl" style={{ color: 'var(--paper-accent)' }}>{fmt(inv.total)}</span>
+                  <span className="font-bold text-3xl" style={{ color: 'var(--paper-text)' }}>{fmt(inv.total)}</span>
                 </div>
 
                 {/* NOT yet charged, and deliberately outside the totals column above —

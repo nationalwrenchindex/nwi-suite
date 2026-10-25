@@ -350,7 +350,7 @@ export default function EditInvoiceForm({ invoice, shopLaborRate }: {
               ))}
               <div className="flex justify-between items-center pt-3" style={{ borderTop: `2px solid ${ORANGE}`, marginTop: 4 }}>
                 <span className="font-bold text-base" style={{ color: TEXT }}>TOTAL</span>
-                <span className="font-bold text-2xl" style={{ color: 'var(--paper-accent)' }}>{fmt(totalWithExtras)}</span>
+                <span className="font-bold text-2xl" style={{ color: 'var(--paper-text)' }}>{fmt(totalWithExtras)}</span>
               </div>
               {/* Labor and parts lines only. Travel, mileage, supplies and the fees are
                   never discounted. */}

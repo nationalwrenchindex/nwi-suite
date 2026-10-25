@@ -110,7 +110,8 @@ export default function NewInvoicePage() {
     address_line1: '', address_line2: '', city: '', state: '', zip: '',
     corp_address_line1: '', corp_address_line2: '', corp_city: '', corp_state: '', corp_zip: '',
     has_corp_address: false,
-    payment_terms: 'net30',
+    // None until someone sets it, or a linked customer's account does (Brock, Oct 25).
+    payment_terms: '',
     unit_number: '', unit_manufacturer: '', unit_model: '', unit_serial: '', unit_year: '',
     truck_make: '', truck_model: '', truck_year: '', vin: '',
     complaint: '', diagnosis: '',
@@ -452,7 +453,7 @@ export default function NewInvoicePage() {
         corp_city:         form.has_corp_address ? (form.corp_city || null) : null,
         corp_state:        form.has_corp_address ? (form.corp_state || null) : null,
         corp_zip:          form.has_corp_address ? (form.corp_zip || null) : null,
-        payment_terms:     form.payment_terms || 'net30',
+        payment_terms:     form.payment_terms || null,
         unit_number:       form.unit_number || null,
         unit_manufacturer: form.unit_manufacturer || null,
         unit_model:        form.unit_model || null,
@@ -519,7 +520,7 @@ export default function NewInvoicePage() {
           <span style={{ color: 'var(--paper-muted)' }}>/</span>
           <span className="font-condensed font-bold text-2xl" style={{ color: TEXT }}>NEW INVOICE</span>
           {form.work_order_number ? (
-            <Link href={`/hd/work-orders/${form.work_order_id}`} className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: '#FFF7ED', color: 'var(--paper-accent)' }}>
+            <Link href={`/hd/work-orders/${form.work_order_id}`} className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: '#FFF7ED', color: 'var(--paper-text)' }}>
               From {form.work_order_number}
             </Link>
           ) : (
@@ -810,7 +811,7 @@ export default function NewInvoicePage() {
               </div>
               <div className="flex justify-between items-center pt-3" style={{ borderTop: `2px solid ${ORANGE}`, marginTop: 4 }}>
                 <span className="font-bold text-base" style={{ color: TEXT }}>TOTAL</span>
-                <span className="font-bold text-2xl" style={{ color: 'var(--paper-accent)' }}>{fmt(totalWithExtras)}</span>
+                <span className="font-bold text-2xl" style={{ color: 'var(--paper-text)' }}>{fmt(totalWithExtras)}</span>
               </div>
             </div>
           </div>

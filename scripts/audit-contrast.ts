@@ -93,7 +93,9 @@ async function main() {
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--no-sandbox'] })
   const results: any[] = []
   try {
-    for (const mode of ['light', 'dark']) {
+    // AUDIT_MODES=dark limits the run to one theme.
+    const modes = (process.env.AUDIT_MODES ?? 'light,dark').split(',').map(x => x.trim()).filter(Boolean)
+    for (const mode of modes) {
       for (const p of pages) {
         const pg = await browser.newPage()
         await pg.setViewport({ width: 1280, height: 900 })

@@ -372,7 +372,8 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
     address_line1: '', address_line2: '', city: '', state: '', zip: '',
     corp_address_line1: '', corp_address_line2: '', corp_city: '', corp_state: '', corp_zip: '',
     has_corp_address: false,
-    payment_terms: 'net30',
+    // None until someone sets it, or a linked customer's account does (Brock, Oct 25).
+    payment_terms: '',
     unit_number: '', unit_manufacturer: '', unit_model: '', unit_serial: '', unit_year: '',
     truck_make: '', truck_model: '', truck_year: '', vin: '',
     complaint: '', diagnosis: '',
@@ -1331,7 +1332,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
         corp_city:         form.has_corp_address ? (form.corp_city || null) : null,
         corp_state:        form.has_corp_address ? (form.corp_state || null) : null,
         corp_zip:          form.has_corp_address ? (form.corp_zip || null) : null,
-        payment_terms:     form.payment_terms || 'net30',
+        payment_terms:     form.payment_terms || null,
         unit_number:       form.unit_number.trim() || null,
         unit_manufacturer: form.unit_manufacturer || null,
         unit_model:        form.unit_model || null,
@@ -2058,7 +2059,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
               </div>
               <div className="flex justify-between items-center pt-3" style={{ borderTop: `2px solid ${ORANGE}`, marginTop: 4 }}>
                 <span className="font-bold text-base" style={{ color: TEXT }}>TOTAL</span>
-                <span className="font-bold text-2xl" style={{ color: 'var(--paper-accent)' }}>{fmt(totalFinal)}</span>
+                <span className="font-bold text-2xl" style={{ color: 'var(--paper-text)' }}>{fmt(totalFinal)}</span>
               </div>
               {/* Labor and parts lines only. Travel, mileage, supplies and the fees are
                   never discounted. */}
@@ -2537,7 +2538,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                       className="w-full text-left px-3 py-2 hover:bg-gray-50 flex items-start gap-3"
                       style={{ borderBottom: `1px solid #F9FAFB` }}
                     >
-                      <span className="font-mono text-xs font-semibold" style={{ color: 'var(--paper-accent)', minWidth: 100 }}>{p.part_number}</span>
+                      <span className="font-mono text-xs font-semibold" style={{ color: 'var(--paper-text)', minWidth: 100 }}>{p.part_number}</span>
                       <span className="text-sm" style={{ color: TEXT }}>{p.description}</span>
                     </button>
                   ))}

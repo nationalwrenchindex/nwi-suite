@@ -39,7 +39,9 @@ const FAINT  = 'var(--paper-muted)'
 // Orange stays the brand for rules and the logo tile. As TEXT it is the darker paper
 // accent - #FF6600 is 2.94:1 on white, below AA even for the large invoice number.
 const ORANGE = '#FF6600'
-const ACCENT = 'var(--paper-accent)'
+// The invoice number and the amount due are the two figures a customer must read: dark
+// ink, never brand colour (Brock, Oct 25). Orange stays on the rules and the logo.
+const ACCENT = 'var(--paper-text)'
 // The brand orange as a button fill, with DARK text: #1A1A1A is 5.93:1 on #FF6600
 // (white was 2.94:1). Brand standards lock #FF6600; the text is what changes.
 const ON_ACCENT = '#1A1A1A'

@@ -27,7 +27,8 @@ function AddCustomerForm({ onCreated }: { onCreated: (c: CustomerListItem) => vo
     first_name: '', last_name: '', company_name: '', phone: '', email: '',
     address_line1: '', address_line2: '', city: '', state: '', zip: '',
     corp_address_line1: '', corp_address_line2: '', corp_city: '', corp_state: '', corp_zip: '',
-    payment_terms: 'net30',
+    // No terms until someone sets them - a blank is "not set", never Net 30.
+    payment_terms: '',
   }
   const [form, setForm]     = useState(blank)
   const [hasCorp, setHasCorp] = useState(false)
@@ -54,7 +55,7 @@ function AddCustomerForm({ onCreated }: { onCreated: (c: CustomerListItem) => vo
       corp_city: hasCorp ? (form.corp_city || null) : null,
       corp_state: hasCorp ? (form.corp_state || null) : null,
       corp_zip: hasCorp ? (form.corp_zip || null) : null,
-      payment_terms: (form.payment_terms as CreateCustomerPayload['payment_terms']) || 'net30',
+      payment_terms: (form.payment_terms as CreateCustomerPayload['payment_terms']) || null,
     }
     try {
       const res = await fetch('/api/customers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
@@ -99,6 +100,7 @@ function AddCustomerForm({ onCreated }: { onCreated: (c: CustomerListItem) => vo
 
       <div><label className="nwi-label">Payment Terms</label>
         <select value={form.payment_terms} onChange={e => set('payment_terms', e.target.value)} className="nwi-input">
+          <option value="">No terms set</option>
           <option value="net15">Net 15 (due in 15 days)</option>
           <option value="net30">Net 30 (due in 30 days)</option>
           <option value="net45">Net 45 (due in 45 days)</option>
@@ -453,7 +455,7 @@ function CustomerProfile({
       city: customer.city ?? '', state: customer.state ?? '', zip: customer.zip ?? '',
       corp_address_line1: customer.corp_address_line1 ?? '', corp_address_line2: customer.corp_address_line2 ?? '',
       corp_city: customer.corp_city ?? '', corp_state: customer.corp_state ?? '', corp_zip: customer.corp_zip ?? '',
-      payment_terms: customer.payment_terms ?? 'net30',
+      payment_terms: customer.payment_terms ?? '',
       notes: customer.notes ?? '',
     })
     setEditHasCorp(!!customer.has_corp_address)
@@ -477,7 +479,7 @@ function CustomerProfile({
           corp_city: editHasCorp ? (editForm.corp_city || null) : null,
           corp_state: editHasCorp ? (editForm.corp_state || null) : null,
           corp_zip: editHasCorp ? (editForm.corp_zip || null) : null,
-          payment_terms: editForm.payment_terms || 'net30',
+          payment_terms: editForm.payment_terms || null,
           notes: editForm.notes || null,
         }),
       })
@@ -562,6 +564,7 @@ function CustomerProfile({
                 </div>
                 <div><label className="nwi-label">Payment Terms</label>
                   <select value={editForm.payment_terms} onChange={e => setEditForm(p => ({ ...p, payment_terms: e.target.value }))} className="nwi-input">
+                    <option value="">No terms set</option>
                     <option value="net15">Net 15 (due in 15 days)</option>
                     <option value="net30">Net 30 (due in 30 days)</option>
                     <option value="net45">Net 45 (due in 45 days)</option>
@@ -604,7 +607,7 @@ function CustomerProfile({
                     <span className="text-white/30">Service: </span>🏢 {[customer.corp_address_line1, customer.corp_address_line2, customer.corp_city, customer.corp_state, customer.corp_zip].filter(Boolean).join(', ')}
                   </p>
                 )}
-                <p className="text-white/40 text-xs">Terms: {(customer.payment_terms ?? 'net30').replace('net', 'Net ')}</p>
+                <p className="text-white/40 text-xs">Terms: {customer.payment_terms ? customer.payment_terms.replace('net', 'Net ') : 'not set'}</p>
                 {customer.notes  && <p className="text-white/40 text-xs mt-2 italic">{customer.notes}</p>}
               </div>
             )}

@@ -116,7 +116,7 @@ export default async function QuotesPage() {
                         borderBottom: '1px solid #F3F4F6',
                       }}
                     >
-                      <span className="font-mono text-xs font-semibold" style={{ color: 'var(--paper-accent)' }}>{q.quote_number}</span>
+                      <span className="font-mono text-xs font-semibold" style={{ color: 'var(--paper-text)' }}>{q.quote_number}</span>
                       <span className="text-sm font-medium truncate" style={{ color: '#1A1A1A' }}>{q.customer_name}</span>
                       <span className="text-sm truncate" style={{ color: 'var(--paper-muted)' }}>
                         {[q.unit_manufacturer, q.unit_model].filter(Boolean).join(' ') || '—'}
@@ -145,7 +145,7 @@ export default async function QuotesPage() {
                   return (
                     <div key={q.id} className="p-4" style={{ borderBottom: '1px solid #F3F4F6' }}>
                       <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className="font-mono text-xs font-semibold" style={{ color: 'var(--paper-accent)' }}>{q.quote_number}</span>
+                        <span className="font-mono text-xs font-semibold" style={{ color: 'var(--paper-text)' }}>{q.quote_number}</span>
                         <span className="text-xs font-semibold px-2 py-1 rounded-full capitalize" style={{ background: st.bg, color: st.color }}>{q.status}</span>
                       </div>
                       <p className="text-sm font-medium" style={{ color: '#1A1A1A' }}>{q.customer_name}</p>

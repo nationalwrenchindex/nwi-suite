@@ -138,7 +138,7 @@ export default function InvoiceList({
                 className="grid gap-3 px-4 py-3 items-center"
                 style={{ gridTemplateColumns: GRID_COLS, borderBottom: '1px solid #F3F4F6' }}
               >
-                <span className="font-mono text-xs font-semibold" style={{ color: 'var(--paper-accent)' }}>{inv.invoice_number}</span>
+                <span className="font-mono text-xs font-semibold" style={{ color: 'var(--paper-text)' }}>{inv.invoice_number}</span>
                 <span className="text-sm font-medium truncate" style={{ color: '#1A1A1A' }}>{inv.customer_name}</span>
                 <span className="text-sm truncate" style={{ color: 'var(--paper-muted)' }}>
                   {[inv.unit_manufacturer, inv.unit_model].filter(Boolean).join(' ') || '—'}
@@ -166,7 +166,7 @@ export default function InvoiceList({
             return (
               <div key={inv.id} className="p-4" style={{ borderBottom: '1px solid #F3F4F6' }}>
                 <div className="flex items-center justify-between gap-2 mb-1">
-                  <span className="font-mono text-xs font-semibold" style={{ color: 'var(--paper-accent)' }}>{inv.invoice_number}</span>
+                  <span className="font-mono text-xs font-semibold" style={{ color: 'var(--paper-text)' }}>{inv.invoice_number}</span>
                   <span className="text-xs font-semibold px-2 py-1 rounded-full capitalize" style={{ background: st.bg, color: st.color }}>{inv.status}</span>
                 </div>
                 <p className="text-sm font-medium" style={{ color: '#1A1A1A' }}>{inv.customer_name}</p>

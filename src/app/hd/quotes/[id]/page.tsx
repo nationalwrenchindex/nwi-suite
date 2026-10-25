@@ -207,7 +207,7 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
               ))}
               <div className="flex justify-between items-center pt-3 mt-1" style={{ borderTop: `2px solid ${ORANGE}` }}>
                 <span className="font-bold" style={{ color: '#1A1A1A' }}>TOTAL</span>
-                <span className="font-bold text-2xl" style={{ color: 'var(--paper-accent)' }}>{fmt(q.total)}</span>
+                <span className="font-bold text-2xl" style={{ color: 'var(--paper-text)' }}>{fmt(q.total)}</span>
               </div>
             </div>
           </div>

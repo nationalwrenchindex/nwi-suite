@@ -299,7 +299,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   .brand-name { font-size: 20px; font-weight: 800; letter-spacing: 0.5px; color: #1a1a1a; }
   .brand-sub { font-size: 11px; color: #666; margin-top: 2px; line-height: 1.45; }
   .inv-meta { text-align: right; }
-  .inv-number { font-size: 22px; font-weight: 700; color: var(--paper-accent); }
+  .inv-number { font-size: 22px; font-weight: 700; color: var(--paper-text); }
   .inv-meta p { font-size: 12px; color: #555; margin-top: 4px; }
   .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 28px; }
   .info-box h3 { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--paper-muted); margin-bottom: 8px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
@@ -321,7 +321,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   .totals-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 13px; }
   .totals-row.divider { border-top: 1px solid #e5e7eb; margin-top: 4px; padding-top: 8px; }
   /* TOTAL DUE is the largest thing on the page — bigger than the invoice number. */
-  .totals-row.total { font-size: 26px; font-weight: 800; color: var(--paper-accent); border-top: 2px solid #FF6600; margin-top: 4px; padding-top: 10px; align-items: baseline; }
+  .totals-row.total { font-size: 26px; font-weight: 800; color: var(--paper-text); border-top: 2px solid #FF6600; margin-top: 4px; padding-top: 10px; align-items: baseline; }
   .totals-row.total span:first-child { font-size: 14px; font-weight: 700; color: #1a1a1a; text-transform: uppercase; letter-spacing: 0.5px; }
   .pay-box { margin-top: 24px; padding: 16px; border: 2px solid #FF6600; border-radius: 8px; }
   .pay-box h3 { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--paper-muted); margin-bottom: 6px; }
