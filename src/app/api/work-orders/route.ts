@@ -156,7 +156,15 @@ export async function POST(request: NextRequest) {
   // supplies fee at all: the client form races the profile fetch and loses, which is
   // why WO-2026-0018 stored 0.00 at a NULL percent while a segment-priced job on the
   // same account stored 0.77 at 20%. Never allowed to fail this request.
-  if (data?.id) await syncParentExtrasQuietly(supabase, 'ld', String(data.id), user.id)
+  //
+  // A new work order is priced on the shop's settings; one made from a quote carries
+  // the quote's recorded extras and nothing more (absent stays absent). Every later
+  // save bills only what the work order recorded.
+  if (data?.id) {
+    await syncParentExtrasQuietly(supabase, 'ld', String(data.id), user.id, {
+      newDocument: !insert.source_quote_id,
+    })
+  }
 
   return NextResponse.json({ work_order: data }, { status: 201 })
 }

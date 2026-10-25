@@ -23,5 +23,19 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
 
   if (!inv) notFound()
 
-  return <EditInvoiceForm invoice={inv as Record<string, unknown>} />
+  // Used ONLY when the invoice recorded no labor rate, and then shown as assumed.
+  // hd_labor_rate first, as the work order converter reads it: default_labor_rate is
+  // LD's, and would bill an HD job at the light-duty rate.
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('hd_labor_rate, default_labor_rate')
+    .eq('id', user.id)
+    .maybeSingle()
+  const p = (profile ?? {}) as Record<string, unknown>
+  const shopLaborRate =
+    p.hd_labor_rate != null ? Number(p.hd_labor_rate)
+    : p.default_labor_rate != null ? Number(p.default_labor_rate)
+    : null
+
+  return <EditInvoiceForm invoice={inv as Record<string, unknown>} shopLaborRate={shopLaborRate} />
 }

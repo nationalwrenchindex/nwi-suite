@@ -1,16 +1,17 @@
 'use client'
 
-import { useState } from 'react'
-import { useExtrasSettingsState } from '@/lib/use-extras-settings'
+import { useMemo, useState } from 'react'
 import { ExtrasInputs } from '@/components/shared/ExtrasFields'
-import {
-  computeExtras, extrasColumns, extrasDisplayRows, extrasDelta, extrasAgree,
-} from '@/lib/billable-extras'
+import { extrasDisplayRows, extrasAgree } from '@/lib/billable-extras'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { money } from '@/lib/format'
-import { computeTax, parseBreakdown, taxDisplayRows } from '@/lib/tax'
-import { editableLines, type EditLine } from '@/lib/hd/invoice-edit-lines'
+import { taxDisplayRows } from '@/lib/tax'
+import { type EditLine } from '@/lib/hd/invoice-edit-lines'
+import {
+  openInvoiceEdit, priceInvoiceEdit, invoiceSaveBody, invoiceExtrasSettings,
+  invoiceDoesNotAddUp, doesNotAddUpMessage, correctionBody, type InvoiceEditState,
+} from '@/lib/hd/invoice-edit-save'
 
 const ORANGE = '#FF6600'
 const BLUE   = '#2969B0'
@@ -41,20 +42,33 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   return <h2 className="font-condensed font-bold text-xl mb-4" style={{ color: TEXT, letterSpacing: '0.5px' }}>{children}</h2>
 }
 
-const num = (v: unknown, d = 0) => { const n = Number(v); return Number.isFinite(n) ? n : d }
-const str = (v: unknown) => (typeof v === 'string' ? v : v == null ? '' : String(v))
-
-export default function EditInvoiceForm({ invoice }: { invoice: Record<string, unknown> }) {
+/**
+ * Editing a saved HD invoice. The money rules live in lib/hd/invoice-edit-save, which
+ * the replay (scripts/replay-hd-invoice-save.ts) runs against every stored invoice:
+ * recorded extras only, tax carried rather than re-derived, and only changed fields
+ * written. `shopLaborRate` is the shop's HD rate, used only when the invoice recorded
+ * none - and then shown as assumed and noted on save.
+ */
+export default function EditInvoiceForm({ invoice, shopLaborRate }: {
+  invoice: Record<string, unknown>
+  shopLaborRate: number | null
+}) {
   const router = useRouter()
   const id = String(invoice.id)
 
+  // The invoice as opened. Every price is carried from this, so it never changes.
+  const [opened] = useState(() => openInvoiceEdit(invoice, shopLaborRate))
+  // An invoice whose stored total is not its own lines + fees + extras + tax is never
+  // saved silently. The tech is offered one deliberate correction instead.
+  const notAddingUp = useMemo(() => invoiceDoesNotAddUp(invoice), [invoice])
+
   const [saving, setSaving] = useState(false)
-  // HD gets the same three extras as LD, with the same tax treatment and the same
-  // cap. Hours and miles are the only inputs; shop supplies is a percentage of parts
-  // and is never a question. HD had four read sites and no producer before this.
-  const { settings: extrasSettings, loaded: extrasLoaded } = useExtrasSettingsState()
-  const [travelHours,  setTravelHours]  = useState(Number(invoice.travel_hours ?? 0))
-  const [mileageMiles, setMileageMiles] = useState(Number(invoice.mileage_miles ?? 0))
+  const [correcting, setCorrecting] = useState(false)
+  // The extras this invoice BILLS: exactly the rates it recorded. A travel, mileage or
+  // supplies rate it never recorded is off, whatever Settings say today.
+  const extrasSettings = useMemo(() => invoiceExtrasSettings(invoice), [invoice])
+  const [travelHours,  setTravelHours]  = useState(opened.state.travelHours)
+  const [mileageMiles, setMileageMiles] = useState(opened.state.mileageMiles)
   const [toast, setToast]   = useState('')
   const [laborModal, setLaborModal] = useState(false)
   const [partsModal, setPartsModal] = useState(false)
@@ -63,44 +77,21 @@ export default function EditInvoiceForm({ invoice }: { invoice: Record<string, u
 
   // Every stored key survives, unit_cost_base and markup_percent above all. See
   // editableLines.
-  const [lineItems, setLineItems] = useState<LineItem[]>(() => editableLines(invoice.line_items))
+  const [lineItems, setLineItems] = useState<LineItem[]>(() => opened.state.lines)
 
-  // What THIS invoice taxed, read off its own stored breakdown rather than off the
-  // shop's current settings. NULL means it predates migration 140, and a pre-140
-  // invoice taxed labor -- so that is the fallback, not "exempt".
-  const storedTax  = parseBreakdown(invoice.tax_breakdown)
-  const taxedParts = storedTax?.parts ? storedTax.parts.taxed : true
-  const taxedLabor = storedTax?.labor ? storedTax.labor.taxed : true
-
-  const [form, setForm] = useState({
-    customer_name:  str(invoice.customer_name),
-    customer_phone: str(invoice.customer_phone),
-    customer_email: str(invoice.customer_email),
-    unit_number:       str(invoice.unit_number),
-    unit_manufacturer: str(invoice.unit_manufacturer),
-    unit_model:     str(invoice.unit_model),
-    unit_serial:    str(invoice.unit_serial),
-    labor_rate:     num(invoice.labor_rate, 125),
-    diagnostic_fee: num(invoice.diagnostic_fee),
-    road_call_fee:  num(invoice.road_call_fee),
-    tax_rate:       num(invoice.tax_rate),
-    // Seeded from what THIS invoice already taxed, never from the shop's current
-    // settings. Editing an invoice must not quietly re-base its tax: a shop that
-    // turns labor tax off and then opens a sent invoice to fix a typo would
-    // otherwise watch the total drop, which is exactly the "do not alter what was
-    // already sent" rule. A legacy invoice has no stored breakdown, and a legacy
-    // invoice taxed labor, so that is the fallback.
-    tax_rate_labor: storedTax?.labor?.rate ?? num(invoice.tax_rate),
-    notes:          str(invoice.notes),
-    payment_terms:  str(invoice.payment_terms) || 'net30',
-  })
-  function setField(k: string, v: string | number) { setForm(f => ({ ...f, [k]: v })) }
+  type FormFields = Omit<InvoiceEditState, 'lines' | 'travelHours' | 'mileageMiles'>
+  const [form, setForm] = useState<FormFields>(() => Object.fromEntries(
+    Object.entries(opened.state).filter(([k]) => k !== 'lines' && k !== 'travelHours' && k !== 'mileageMiles'),
+  ) as FormFields)
+  function setField(k: keyof FormFields, v: string | number) { setForm(f => ({ ...f, [k]: v })) }
   function fmt(n: number) { return `${money(n)}` }
+  // NULL only when the invoice recorded no rate and the shop has none set either.
+  const rate = form.labor_rate ?? 0
 
   // Inline edit of a labor line's hours → recompute amount from the current rate.
   function updateHours(itemId: string, raw: string) {
     const h = Math.max(0, parseFloat(raw) || 0)
-    setLineItems(l => l.map(i => i.id === itemId ? { ...i, mobile_hours: h, amount: parseFloat((h * form.labor_rate).toFixed(2)) } : i))
+    setLineItems(l => l.map(i => i.id === itemId ? { ...i, mobile_hours: h, amount: parseFloat((h * rate).toFixed(2)) } : i))
   }
   function updateDescription(itemId: string, v: string) {
     setLineItems(l => l.map(i => i.id === itemId ? { ...i, description: v } : i))
@@ -119,11 +110,12 @@ export default function EditInvoiceForm({ invoice }: { invoice: Record<string, u
   function addLabor() {
     const description = labor.description.trim()
     if (!description) { setToast('Enter a labor description.'); return }
+    if (form.labor_rate == null) { setToast('This invoice has no labor rate. Enter one above first.'); return }
     const hours = Math.max(0, parseFloat(labor.hours) || 0)
     setLineItems(l => [...l, {
       id: crypto.randomUUID(), type: 'labor', description,
       mobile_hours: hours, part_number: '', quantity: 0, unit_cost: 0,
-      amount: parseFloat((hours * form.labor_rate).toFixed(2)),
+      amount: parseFloat((hours * rate).toFixed(2)),
     }])
     setLabor({ description: '', hours: '1.0' }); setLaborModal(false)
   }
@@ -140,86 +132,51 @@ export default function EditInvoiceForm({ invoice }: { invoice: Record<string, u
     setParts({ part_number: '', description: '', quantity: '1', unit_cost: '0.00' }); setPartsModal(false)
   }
 
-  const subtotalLabor = lineItems.filter(i => i.type === 'labor').reduce((s, i) => s + i.amount, 0)
-  const subtotalParts = lineItems.filter(i => i.type === 'parts').reduce((s, i) => s + i.amount, 0)
+  // ── Money ────────────────────────────────────────────────────────────────
+  // Priced against the invoice as opened: the extras at the rates it recorded, the
+  // tax carried from what it stored plus the tax on whatever the edit changed. An
+  // untouched invoice prices to exactly its stored figures.
+  const edited: InvoiceEditState = { ...form, lines: lineItems, travelHours, mileageMiles }
+  const price = priceInvoiceEdit(invoice, opened.state, edited)
+  const subtotalLabor = price.subtotalLabor
+  const subtotalParts = price.subtotalParts
+  const extrasResult  = price.extras
+  const taxWithExtras   = price.taxAmount
+  const totalWithExtras = price.total
   const taxBase = subtotalLabor + subtotalParts + form.diagnostic_fee + form.road_call_fee
-
-  // Diagnostic and road call fees are LABOR. Same rule as the new-invoice form.
-  const tax = computeTax(
-    { parts: subtotalParts, labor: subtotalLabor + form.diagnostic_fee + form.road_call_fee },
-    {
-      tax_parts:      taxedParts,
-      tax_labor:      taxedLabor,
-      tax_rate_parts: form.tax_rate,
-      tax_rate_labor: form.tax_rate_labor,
-    },
-  )
-  const taxAmount = tax.taxAmount
-  const total = taxBase + taxAmount
-  const taxedPartsFlag = taxedParts
-  const taxedLaborFlag = taxedLabor
-
-  // ── Billable extras ──────────────────────────────────────────────────────
-  // Supplies is a percentage of the PARTS subtotal only - never labour, never the
-  // diagnostic or road-call fee, which are labour. Travel is taxed as labour,
-  // mileage is not taxed at all, supplies is taxed as parts. extrasDelta does the
-  // per-bucket rounding; nothing is re-derived from the document total.
-  const extrasResult = computeExtras(
-    subtotalParts,
-    { travelHours, mileageMiles },
-    extrasSettings,
-    Number(form.labor_rate ?? 0),
-  )
-  const extras = extrasDelta(extrasResult, {
-    tax_parts:      taxedPartsFlag,
-    tax_labor:      taxedLaborFlag,
-    tax_rate_parts: form.tax_rate,
-    tax_rate_labor: form.tax_rate_labor,
-  })
-  const subtotalWithExtras = parseFloat((taxBase + extras.subtotalDelta).toFixed(2))
-  const taxWithExtras      = parseFloat((taxAmount + extras.taxDelta).toFixed(2))
-  const totalWithExtras    = parseFloat((total + extras.totalDelta).toFixed(2))
   // An HD invoice must not display a charge outside its total either.
-  const extrasMismatch = extrasAgree(extrasResult, subtotalWithExtras, taxBase)
-
+  const extrasMismatch = extrasAgree(extrasResult, price.subtotal, taxBase)
 
   async function save() {
+    if (notAddingUp) { setToast(doesNotAddUpMessage(notAddingUp)); return }
     if (!form.customer_name.trim()) { setToast('Customer name is required.'); return }
     // Refuse rather than bill a figure that does not add up. Loud on purpose.
     if (extrasMismatch) { setToast('Cannot save: ' + extrasMismatch); return }
+    // Only the fields this edit changed. Nothing changed means nothing is written.
+    const body = invoiceSaveBody(invoice, opened, edited)
+    if (Object.keys(body).length === 0) { router.push(`/hd/invoices/${id}`); return }
     setSaving(true)
     try {
-      const body = {
-        customer_name:  form.customer_name,
-        customer_phone: form.customer_phone || null,
-        customer_email: form.customer_email || null,
-        unit_number:       form.unit_number || null,
-        unit_manufacturer: form.unit_manufacturer || null,
-        unit_model:     form.unit_model || null,
-        unit_serial:    form.unit_serial || null,
-        line_items:     lineItems,
-        labor_rate:     form.labor_rate,
-        subtotal_labor: parseFloat(subtotalLabor.toFixed(2)),
-        subtotal_parts: parseFloat(subtotalParts.toFixed(2)),
-        diagnostic_fee: parseFloat(form.diagnostic_fee.toFixed(2)),
-        road_call_fee:  parseFloat(form.road_call_fee.toFixed(2)),
-        tax_rate:       form.tax_rate,
-        // With the extras in. taxWithExtras / totalWithExtras include travel and
-        // supplies tax; mileage adds to the subtotal and attracts none.
-        tax_amount:     taxWithExtras,
-        tax_breakdown:  tax.breakdown,
-        total:          totalWithExtras,
-        // Computed, stored with the rate in force so a reopen cannot re-price them.
-        ...extrasColumns(extrasResult),
-        notes:          form.notes || null,
-        payment_terms:  form.payment_terms || 'net30',
-      }
       const res = await fetch(`/api/hd/invoices/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const data = await res.json()
       if (data.invoice) router.push(`/hd/invoices/${id}`)
       else setToast(data.error ?? 'Save failed')
     } finally {
       setSaving(false)
+    }
+  }
+
+  // The deliberate correction. Recalculates from the invoice's own lines, fees and
+  // extras at the rates it recorded, and records what changed in internal_notes.
+  async function correct() {
+    setCorrecting(true)
+    try {
+      const res = await fetch(`/api/hd/invoices/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(correctionBody(invoice)) })
+      const data = await res.json()
+      if (data.invoice) window.location.reload()
+      else setToast(data.error ?? 'Correction failed')
+    } finally {
+      setCorrecting(false)
     }
   }
 
@@ -231,6 +188,18 @@ export default function EditInvoiceForm({ invoice }: { invoice: Record<string, u
           <span style={{ color: BORDER }}>/</span>
           <span className="font-condensed font-bold text-2xl" style={{ color: TEXT }}>EDIT INVOICE</span>
         </div>
+
+        {/* A stored invoice that does not add up is never saved silently. One explicit
+            action corrects it, and nothing changes unless the tech takes it. */}
+        {notAddingUp && (
+          <div role="alert" style={{ ...cardStyle, background: '#FFFBEB', border: '1px solid #FCD34D' }}>
+            <p className="text-sm font-semibold mb-3" style={{ color: '#92400E' }}>{doesNotAddUpMessage(notAddingUp)}</p>
+            <p className="text-xs mb-3" style={{ color: '#92400E' }}>{`Saving is off until this is settled. Bringing it to ${fmt(notAddingUp.own)} recalculates the total from this invoice's own lines, fees and extras at the rates it recorded, changes nothing else, and records the change in the internal notes.`}</p>
+            <button onClick={correct} disabled={correcting} className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50" style={{ background: ORANGE, minHeight: 44 }}>
+              {correcting ? 'Correcting...' : `Bring it to ${fmt(notAddingUp.own)}`}
+            </button>
+          </div>
+        )}
 
         <div style={cardStyle}>
           <SectionTitle>Customer &amp; Unit</SectionTitle>
@@ -255,7 +224,7 @@ export default function EditInvoiceForm({ invoice }: { invoice: Record<string, u
               <Field label="Labor Rate / Hour">
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: MUTED }}>$</span>
-                  <input style={{ ...inp, paddingLeft: 24, width: 140 }} type="number" min={0} value={form.labor_rate}
+                  <input style={{ ...inp, paddingLeft: 24, width: 140 }} type="number" min={0} value={form.labor_rate ?? ''}
                     onChange={e => {
                       const r = parseFloat(e.target.value) || 0
                       setField('labor_rate', r)
@@ -264,6 +233,13 @@ export default function EditInvoiceForm({ invoice }: { invoice: Record<string, u
                     }} />
                 </div>
               </Field>
+              {/* A4: a rate the invoice never recorded is shown as assumed, never invented. */}
+              {opened.laborRateAssumed && form.labor_rate === opened.state.labor_rate && (
+                <p className="text-xs mt-1" style={{ color: '#92400E', maxWidth: 220 }}>{`Assumed rate: ${fmt(rate)}/hr from your settings. This invoice recorded none; saving records it.`}</p>
+              )}
+              {form.labor_rate == null && (
+                <p className="text-xs mt-1" style={{ color: '#92400E', maxWidth: 220 }}>No labor rate on this invoice and none in your settings. Enter one to price labor.</p>
+              )}
             </div>
           </div>
 
@@ -285,7 +261,7 @@ export default function EditInvoiceForm({ invoice }: { invoice: Record<string, u
                       <label className="flex items-center gap-1">Hours
                         <input type="number" min={0} step={0.25} value={item.mobile_hours} onChange={e => updateHours(item.id, e.target.value)}
                           style={{ width: 80, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '4px 8px', fontSize: 13, textAlign: 'right' }} />
-                        <span>× {fmt(form.labor_rate)}/hr</span>
+                        <span>× {fmt(rate)}/hr</span>
                       </label>
                     ) : (
                       <>
@@ -316,12 +292,12 @@ export default function EditInvoiceForm({ invoice }: { invoice: Record<string, u
             <div style={{ width: 280, marginBottom: 12 }}>
               <ExtrasInputs
                 settings={extrasSettings}
-                loaded={extrasLoaded}
+                loaded
                 travelHours={travelHours}
                 mileageMiles={mileageMiles}
                 onTravelHours={setTravelHours}
                 onMileageMiles={setMileageMiles}
-                laborRate={Number(form.labor_rate ?? 0)}
+                laborRate={rate}
               />
             </div>
             <div style={{ width: 280 }}>
@@ -338,15 +314,17 @@ export default function EditInvoiceForm({ invoice }: { invoice: Record<string, u
               ))}
               <div className="flex items-center gap-3 py-2" style={{ borderTop: `1px solid ${BORDER}`, marginTop: 4 }}>
                 <span className="text-sm flex-1" style={{ color: MUTED }}>Tax %</span>
-                <input type="number" min={0} max={30} step={0.1} value={form.tax_rate}
+                <input type="number" min={0} max={30} step={0.1} value={form.tax_rate_parts}
                   onChange={e => {
                     const v = parseFloat(e.target.value) || 0
-                    setForm(f => ({ ...f, tax_rate: v, tax_rate_labor: f.tax_rate_labor === f.tax_rate ? v : f.tax_rate_labor }))
+                    // The parts rate and the column move together; labor follows only
+                    // when it was taxed at the same rate.
+                    setForm(f => ({ ...f, tax_rate: v, tax_rate_parts: v, tax_rate_labor: f.tax_rate_labor === f.tax_rate_parts ? v : f.tax_rate_labor }))
                   }}
                   style={{ width: 70, border: `1px solid ${BORDER}`, borderRadius: 6, padding: '4px 8px', fontSize: 13, textAlign: 'right' }} />
                 <span className="text-sm" style={{ color: MUTED }}>{fmt(taxWithExtras)}</span>
               </div>
-              {taxDisplayRows(tax.breakdown).map(r => (
+              {taxDisplayRows(price.breakdown).map(r => (
                 <div key={r.category} className="flex justify-between text-xs py-0.5" style={{ color: MUTED }}>
                   <span>{r.text}</span><span>{fmt(r.amount)}</span>
                 </div>
@@ -379,7 +357,7 @@ export default function EditInvoiceForm({ invoice }: { invoice: Record<string, u
             <div className="flex flex-col gap-4">
               <Field label="Description"><input style={inp} autoFocus value={labor.description} onChange={e => setLabor(d => ({ ...d, description: e.target.value }))} /></Field>
               <Field label="Hours"><input style={inp} type="number" min={0} step={0.25} value={labor.hours} onChange={e => setLabor(d => ({ ...d, hours: e.target.value }))} /></Field>
-              <p className="text-sm" style={{ color: MUTED }}>Amount: <strong style={{ color: TEXT }}>{fmt((parseFloat(labor.hours) || 0) * form.labor_rate)}</strong></p>
+              <p className="text-sm" style={{ color: MUTED }}>Amount: <strong style={{ color: TEXT }}>{fmt((parseFloat(labor.hours) || 0) * rate)}</strong></p>
               <div className="flex gap-3">
                 <button onClick={() => setLaborModal(false)} className="flex-1 py-2.5 rounded-lg font-semibold text-sm" style={{ background: '#F3F4F6', color: '#374151' }}>Cancel</button>
                 <button onClick={addLabor} className="flex-1 py-2.5 rounded-lg font-semibold text-sm text-white" style={{ background: ORANGE }}>Add Line</button>

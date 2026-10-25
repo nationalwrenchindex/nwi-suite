@@ -328,9 +328,20 @@ async function main() {
   // The three HD write paths must call the calculator at all.
   const hdFiles = [
     'src/app/hd/invoices/new/page.tsx',
-    'src/app/hd/invoices/[id]/EditInvoiceForm.tsx',
     'src/app/hd/quotes/new/page.tsx',
   ]
+  // The invoice EDITOR prices through lib/hd/invoice-edit-save since Phase A (Oct 24):
+  // the calculator calls moved there, so they are pinned there, and the form is pinned
+  // to using it. scripts/replay-hd-invoice-save.ts runs that module on every stored row.
+  {
+    const lib  = fs.readFileSync('src/lib/hd/invoice-edit-save.ts', 'utf8')
+    const form = fs.readFileSync('src/app/hd/invoices/[id]/EditInvoiceForm.tsx', 'utf8')
+    ok(lib.includes('computeExtras('), 'invoice-edit-save calls computeExtras')
+    ok(lib.includes('...(price.extrasChanged ? extrasColumns(price.extras) : {})'), 'invoice-edit-save stores the computed columns when they change')
+    ok(form.includes('priceInvoiceEdit(') && form.includes('invoiceSaveBody('), '[id]/EditInvoiceForm.tsx prices and saves through it')
+    ok(form.includes('extrasMismatch'), '[id]/EditInvoiceForm.tsx refuses to save on a mismatch')
+    ok(form.includes('totalWithExtras'), '[id]/EditInvoiceForm.tsx totals with the extras in')
+  }
   for (const f of hdFiles) {
     const src = fs.readFileSync(f, 'utf8')
     const name = f.split('/').slice(-2).join('/')

@@ -15,18 +15,25 @@
 //
 // This recomputes them whenever a segment changes. It is the parts base that moves -
 // add a part to a segment and the supplies fee follows, with no save-and-reload.
+//
+// LD ONLY. There was an HD branch here that nothing ever called (every caller passes
+// 'ld'); it was deleted rather than left as a live-looking path with the old
+// "current settings win" behaviour. HD work orders keep their own money.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { PARENTS, type SegmentProduct } from './parent'
+import { PARENTS } from './parent'
 import {
   computeExtras, extrasColumns, extrasSettingsFrom, EXTRAS_SETTINGS_SELECT,
   extrasTaxBuckets, partsBaseFromLines, round2,
 } from '@/lib/billable-extras'
+import { documentExtras } from '@/lib/document-money'
 import {
   computeTax, taxSettingsFrom, TAX_SETTINGS_SELECT, effectiveRatePercent, documentTaxSettings,
 } from '@/lib/tax'
 import { isBillable, type SegmentStatus } from '@/types/segments'
 import { applyDiscount, parseDiscount } from '@/lib/document-discount'
+
+const LD = PARENTS.ld
 
 /**
  * The parts total across every BILLABLE segment, as it appears to the customer.
@@ -60,31 +67,21 @@ export function billableSegmentPartsBase(
  */
 async function lineItemPartsBase(
   supabase: SupabaseClient,
-  spec:     { table: string; lineItems: { kind: 'column'; name: string } | { kind: 'table'; name: string; fk: string } },
   parentId: string,
   userId:   string,
 ): Promise<number> {
-  if (spec.lineItems.kind === 'column') {
-    const { data } = await supabase
-      .from(spec.table)
-      .select(`${spec.lineItems.name}, parts_subtotal, parts_markup_percent`)
-      .eq('id', parentId)
-      .eq('user_id', userId)
-      .single()
-    const row = (data ?? {}) as Record<string, unknown>
-    const fromLines = partsBaseFromLines(row[spec.lineItems.name])
-    if (fromLines > 0) return fromLines
-    const base   = Number(row.parts_subtotal ?? 0)
-    const markup = Number(row.parts_markup_percent ?? 0)
-    return base > 0 ? round2(base * (1 + markup / 100)) : 0
-  }
-
-  // HD keeps line items in their own table.
   const { data } = await supabase
-    .from(spec.lineItems.name)
-    .select('type, total')
-    .eq(spec.lineItems.fk, parentId)
-  return partsBaseFromLines(data)
+    .from(LD.table)
+    .select('line_items, parts_subtotal, parts_markup_percent')
+    .eq('id', parentId)
+    .eq('user_id', userId)
+    .single()
+  const row = (data ?? {}) as Record<string, unknown>
+  const fromLines = partsBaseFromLines(row.line_items)
+  if (fromLines > 0) return fromLines
+  const base   = Number(row.parts_subtotal ?? 0)
+  const markup = Number(row.parts_markup_percent ?? 0)
+  return base > 0 ? round2(base * (1 + markup / 100)) : 0
 }
 
 /**
@@ -96,7 +93,6 @@ async function lineItemPartsBase(
  */
 async function lineItemLaborBase(
   supabase: SupabaseClient,
-  spec:     { table: string; lineItems: { kind: 'column'; name: string } | { kind: 'table'; name: string; fk: string } },
   parentId: string,
   userId:   string,
 ): Promise<number> {
@@ -107,29 +103,30 @@ async function lineItemLaborBase(
       if (!raw || typeof raw !== 'object') continue
       const l = raw as Record<string, unknown>
       const isLabor = l.type === 'labor' ||
-        (l.type === undefined && typeof l.description === 'string' && /^labor/i.test(l.description.trim()))
+        (l.type === undefined && typeof l.description === 'string' && /^labor\b/i.test(l.description.trim()))
       if (isLabor) n += Number(l.total ?? 0)
     }
     return round2(n)
   }
 
-  if (spec.lineItems.kind === 'column') {
-    const { data } = await supabase
-      .from(spec.table)
-      .select(`${spec.lineItems.name}, labor_subtotal`)
-      .eq('id', parentId)
-      .eq('user_id', userId)
-      .single()
-    const row = (data ?? {}) as Record<string, unknown>
-    const fromLines = sumLabor(row[spec.lineItems.name])
-    return fromLines > 0 ? fromLines : round2(Number(row.labor_subtotal ?? 0))
-  }
-
   const { data } = await supabase
-    .from(spec.lineItems.name)
-    .select('type, total')
-    .eq(spec.lineItems.fk, parentId)
-  return sumLabor(data)
+    .from(LD.table)
+    .select('line_items, labor_subtotal')
+    .eq('id', parentId)
+    .eq('user_id', userId)
+    .single()
+  const row = (data ?? {}) as Record<string, unknown>
+  const fromLines = sumLabor(row.line_items)
+  return fromLines > 0 ? fromLines : round2(Number(row.labor_subtotal ?? 0))
+}
+
+export interface SyncOptions {
+  /**
+   * True ONLY for the insert of a brand-new work order that did not come from a quote.
+   * Then the shop's current settings price the extras it did not record. Every other
+   * sync bills exactly what the work order recorded.
+   */
+  newDocument?: boolean
 }
 
 export interface SyncResult {
@@ -154,24 +151,16 @@ export interface SyncResult {
  */
 export async function syncParentExtras(
   supabase: SupabaseClient,
-  product:  SegmentProduct,
+  /** LD only - the HD branch was never called and has been removed. */
+  _product: 'ld',
   parentId: string,
   userId:   string,
+  opts:     SyncOptions = {},
 ): Promise<SyncResult> {
-  const spec = PARENTS[product]
+  const spec = LD
   const empty = { written: false, partsBase: 0, columns: {} as Record<string, number | null> }
 
   try {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select(EXTRAS_SETTINGS_SELECT)
-      .eq('id', userId)
-      .single()
-
-    const settings = extrasSettingsFrom(profile as Record<string, unknown> | null)
-
-    // Nothing billed at all means nothing to compute. Still writes, so switching the
-    // setting off clears a stale fee rather than leaving it on the row.
     const { data: segRows } = await supabase
       .from('work_order_segments')
       .select('status, line_items')
@@ -193,41 +182,40 @@ export async function syncParentExtras(
     const segmented = Array.isArray(segRows) && segRows.length > 0
     const partsBase = segmented
       ? billableSegmentPartsBase(segRows)
-      : await lineItemPartsBase(supabase, spec, parentId, userId)
+      : await lineItemPartsBase(supabase, parentId, userId)
 
     // Travel and mileage come from what the tech entered on the parent; only the
     // supplies base is derived from the segments.
-    // LD reads the recorded travel/mileage rates and tax terms too (below). HD keeps
-    // its existing behaviour in this pass; it has the same gap - see the LD comment.
-    const recordedTerms = product === 'ld'
     const { data: parent } = await supabase
       .from(spec.table)
-      .select(recordedTerms
-        ? 'travel_hours, mileage_miles, labor_rate, shop_supplies_percent_applied, shop_supplies_cap_applied, travel_rate, mileage_rate, tax_breakdown, tax_percent'
-        : 'travel_hours, mileage_miles, labor_rate, shop_supplies_percent_applied, shop_supplies_cap_applied')
+      .select('travel_hours, mileage_miles, labor_rate, shop_supplies_percent_applied, shop_supplies_cap_applied, travel_rate, mileage_rate, tax_breakdown, tax_percent')
       .eq('id', parentId)
       .eq('user_id', userId)
       .single()
 
     const p = (parent ?? {}) as Record<string, unknown>
-    const recorded = (v: unknown) => (v == null ? null : Number(v))
+    // RECORDED VALUES BEAT CURRENT SETTINGS, and ABSENT STAYS ABSENT. The work order
+    // bills exactly the extras it recorded, at the rates it recorded (documentExtras,
+    // the reader the editors use). The shop's settings are not consulted at all.
+    //
+    // THE BUG THIS CLOSES: the recorded rates were passed as overrides, but on top of
+    // the CURRENT settings - so a work order made from a quote that recorded no
+    // supplies percentage picked up today's percentage on its first save, and billed a
+    // fee the customer was never quoted.
+    //
+    // THE ONE EXCEPTION is the moment a work order is CREATED from scratch (not from a
+    // quote): a new document is priced on the shop's settings, as every editor prices a
+    // new document. A recorded rate still wins even then.
+    const doc = documentExtras(p)
+    let settings = doc.settings
+    if (opts.newDocument) {
+      const { data: profile } = await supabase
+        .from('profiles').select(EXTRAS_SETTINGS_SELECT).eq('id', userId).single()
+      settings = extrasSettingsFrom(profile as Record<string, unknown> | null)
+    }
     const extras = computeExtras(
       partsBase,
-      {
-        travelHours:  Number(p.travel_hours  ?? 0),
-        mileageMiles: Number(p.mileage_miles ?? 0),
-        // A percentage already recorded on this work order wins over the current
-        // Settings value, so editing a segment cannot re-price a job at a new rate.
-        shopSuppliesPercentOverride: recorded(p.shop_supplies_percent_applied),
-        shopSuppliesCapOverride:     recorded(p.shop_supplies_cap_applied),
-        // RECORDED VALUES BEAT CURRENT SETTINGS - for travel and mileage too. Without
-        // these, every LD work-order save re-priced the travel at today's rate even
-        // though the work order stored the rate it was quoted at.
-        ...(recordedTerms ? {
-          travelRateOverride:  recorded(p.travel_rate),
-          mileageRateOverride: recorded(p.mileage_rate),
-        } : {}),
-      },
+      { ...doc.input, travelHours: Number(p.travel_hours ?? 0), mileageMiles: Number(p.mileage_miles ?? 0) },
       settings,
       Number(p.labor_rate ?? 0),
     )
@@ -260,11 +248,10 @@ export async function syncParentExtras(
       // An LD work order that RECORDED what it taxed keeps those terms; one that did
       // not (a new record whose form lost the race to the profile fetch) still takes
       // the shop's settings, which is the case this function was written to fix.
-      const taxSettings = (recordedTerms
-        ? documentTaxSettings(p.tax_breakdown, taxSettingsFrom(taxProfile), Number(p.tax_percent ?? 0))
-        : null) ?? taxSettingsFrom(taxProfile)
+      const taxSettings = documentTaxSettings(p.tax_breakdown, taxSettingsFrom(taxProfile), Number(p.tax_percent ?? 0))
+        ?? taxSettingsFrom(taxProfile)
 
-      const laborBase = await lineItemLaborBase(supabase, spec, parentId, userId)
+      const laborBase = await lineItemLaborBase(supabase, parentId, userId)
       const buckets   = extrasTaxBuckets(extras)
       // Travel joins labour, supplies joins parts, mileage is taxed nowhere but still
       // belongs in the subtotal - which is what buckets.untaxed carries.
@@ -278,12 +265,12 @@ export async function syncParentExtras(
       // and grand_total. Writing one would fail this entire UPDATE and the sync would
       // silently store nothing at all. The converter recomputes the subtotal from the
       // line items, so nothing needs it stored.
-      // ── THE DISCOUNT (migration 165), LD only ──
+      // ── THE DISCOUNT (migration 165) ──
       // Recomputing the total without it would silently take a recorded discount back
       // off every work order on its next save. Read on its own, so a database without
       // 165 simply has none and this sync works exactly as before.
       let discount = null as ReturnType<typeof parseDiscount>
-      if (recordedTerms) {
+      {
         const { data: dRow, error: dErr } = await supabase
           .from(spec.table).select('discount').eq('id', parentId).eq('user_id', userId).maybeSingle()
         if (!dErr) discount = parseDiscount((dRow as { discount?: unknown } | null)?.discount)
@@ -333,11 +320,12 @@ export async function syncParentExtras(
 /** Fire-and-log. Callers use this so a sync failure cannot fail their request. */
 export async function syncParentExtrasQuietly(
   supabase: SupabaseClient,
-  product:  SegmentProduct,
+  product:  'ld',
   parentId: string,
   userId:   string,
+  opts:     SyncOptions = {},
 ): Promise<void> {
-  const r = await syncParentExtras(supabase, product, parentId, userId)
+  const r = await syncParentExtras(supabase, product, parentId, userId, opts)
   if (!r.written && r.reason) {
     console.warn(`[parent-extras] ${product} ${parentId} not synced: ${r.reason}`)
   }

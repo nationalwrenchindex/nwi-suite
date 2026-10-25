@@ -30,8 +30,9 @@ import { stripLeadingZeros, parseFee } from '../src/components/hd/FeeInput'
 import { fmtShopDate, shopTimeZone } from '../src/lib/shop-time'
 import { fromLineItems, markupOnReopen, type EditItem } from '../src/components/shared/line-items'
 import { documentMoney, documentExtras } from '../src/lib/document-money'
+import { openInvoiceEdit, invoiceSaveBody, invoiceDoesNotAddUp, correctionBody } from '../src/lib/hd/invoice-edit-save'
 import { documentTaxSettings, parseBreakdown, breakdownTaxTotal } from '../src/lib/tax'
-import { EXTRAS_OFF, partsBaseFromLines } from '../src/lib/billable-extras'
+import { EXTRAS_OFF, partsBaseFromLines, computeExtras } from '../src/lib/billable-extras'
 import { applyDiscount, laborFromLines, normalizeDiscount, parseDiscount } from '../src/lib/document-discount'
 import { createClient as createSupabase } from '@supabase/supabase-js'
 import { loadRollupInput } from '../src/lib/hd/equipment-rollup-load'
@@ -3154,6 +3155,145 @@ async function flowDiscount(): Promise<void> {
       : `convert -> ${woConv.status} ${JSON.stringify(woConv.json).slice(0, 120)}`)
 }
 
+// ── Ie: saving an existing HD invoice (Phase A money fixes) ─────────────────
+//
+// The editor prices through lib/hd/invoice-edit-save, and this drives that same code
+// against a SAVED row, then the real PUT, then reads the row back. The rendered edit
+// page is asserted for what the tech sees (the assumed rate, the does-not-add-up
+// prompt). scripts/replay-hd-invoice-save.ts runs the unchanged save over every stored
+// invoice; this proves the edited paths.
+//
+// THE FIXTURE IS A REAL ROW. The money of the newest owner invoice that adds up and
+// has parts and a stored tax split is copied (inserted directly over REST, so no stock
+// ledger runs and no customer is linked), then put into the state each check needs:
+// no recorded labor rate (A4), blank terms (A3), no recorded supplies while the shop
+// bills them (A1).
+async function flowIe(): Promise<void> {
+  const F = 'Ie HD invoice edit'
+  const candidates = await rest<Record<string, unknown>>(
+    `hd_invoices?user_id=eq.${OWNER}&tax_breakdown=not.is.null&subtotal_parts=gt.0&customer_name=not.like.${MARK}*&select=*&order=created_at.desc&limit=20`)
+  const real = candidates.find(r => !invoiceDoesNotAddUp(r) && r.shop_supplies_percent_applied == null)
+  if (!record(F, 'a real saved invoice to copy the shape of', !!real,
+    real ? `${real.invoice_number} (${usd(real.total)})` : 'no owner invoice with parts, a tax split and no supplies adds up')) return
+
+  const prof = (await rest<Record<string, unknown>>(
+    `profiles?id=eq.${OWNER}&select=hd_labor_rate,default_labor_rate,bill_shop_supplies,shop_supplies_percent`))[0] ?? {}
+  const shopRate = prof.hd_labor_rate != null ? Number(prof.hd_labor_rate) : prof.default_labor_rate != null ? Number(prof.default_labor_rate) : null
+  const copy: Record<string, unknown> = {
+    user_id: OWNER, status: 'unpaid',
+    invoice_number: `${MARK}-IE-${Date.now()}`, customer_name: `${MARK} Ie edit save`,
+    line_items: real!.line_items, subtotal_labor: real!.subtotal_labor, subtotal_parts: real!.subtotal_parts,
+    diagnostic_fee: real!.diagnostic_fee, road_call_fee: real!.road_call_fee,
+    tax_rate: real!.tax_rate, tax_amount: real!.tax_amount, tax_breakdown: real!.tax_breakdown, total: real!.total,
+    // The states under test.
+    labor_rate: null, payment_terms: null, internal_notes: null,
+    travel_hours: 0, travel_rate: null, mileage_miles: 0, mileage_rate: null,
+    shop_supplies_percent_applied: null, shop_supplies_cap_applied: null, shop_supplies_fee: 0,
+  }
+  const ins = await fetch(`${SUPA}/rest/v1/hd_invoices`, {
+    method: 'POST', headers: { ...SVC_H, Prefer: 'return=representation' }, body: JSON.stringify(copy),
+  })
+  const insJson = await ins.json().catch(() => null)
+  const id = Array.isArray(insJson) ? String(insJson[0]?.id ?? '') : ''
+  if (id) created.hdInvoices.add(id)
+  if (!record(F, 'the copy is stored', !!id, id ? '' : `-> ${ins.status} ${JSON.stringify(insJson).slice(0, 160)}`)) return
+  const readRow = async () => (await rest<Record<string, unknown>>(`hd_invoices?id=eq.${id}&select=*`))[0] ?? {}
+
+  // ── A4: no recorded labor rate - the shop's, shown as assumed, noted on save ──
+  let row = await readRow()
+  const pg = await page(`/hd/invoices/${id}/edit`)
+  if (record(F, 'the edit page renders', !!pg, pg ? '' : 'did not load')) {
+    const want = shopRate != null ? `Assumed rate: $${shopRate.toFixed(2)}/hr from your settings` : 'No labor rate on this invoice and none in your settings'
+    record(F, 'a missing labor rate shows as assumed, not invented (A4)', pg!.text.includes(want), want)
+    record(F, 'an invoice that adds up shows no correction prompt', !pg!.text.includes('does not add up'))
+  }
+  const opened = openInvoiceEdit(row, shopRate)
+  const body = invoiceSaveBody(row, opened, opened.state)
+  record(F, 'an unchanged save writes only the assumed rate and its note (A3, A4)',
+    JSON.stringify(Object.keys(body).sort()) === JSON.stringify(shopRate != null ? ['internal_notes', 'labor_rate'] : []),
+    JSON.stringify(body).slice(0, 200))
+  const put = await api('PUT', `/api/hd/invoices/${id}`, body)
+  const after = await readRow()
+  record(F, 'the save is accepted', put.status === 200, `-> ${put.status} ${String(put.json.error ?? '')}`)
+  record(F, 'blank terms stay blank - no net30 (A3)', after.payment_terms == null, String(after.payment_terms))
+  if (shopRate != null) {
+    record(F, "the shop's rate is recorded with a note saying so (A4)",
+      Number(after.labor_rate) === shopRate && String(after.internal_notes ?? '').includes('taken from shop settings - the invoice had none recorded'),
+      `labor_rate ${after.labor_rate}; notes ${JSON.stringify(after.internal_notes)}`)
+  }
+  record(F, 'the total and tax did not move', usd(after.total) === usd(row.total) && usd(after.tax_amount) === usd(row.tax_amount),
+    `total ${usd(row.total)} -> ${usd(after.total)}, tax ${usd(row.tax_amount)} -> ${usd(after.tax_amount)}`)
+
+  // ── An unchanged save of the saved row writes nothing ──
+  row = after
+  const again = openInvoiceEdit(row, shopRate)
+  const none = invoiceSaveBody(row, again, again.state)
+  record(F, 'reopened and saved unchanged, nothing is written', Object.keys(none).length === 0, JSON.stringify(none))
+
+  // ── A1 + A5: add a $100.00 part. No recorded supplies stays none; tax is carried ──
+  const bd = parseBreakdown(row.tax_breakdown)!
+  const partRate = bd.parts?.rate ?? Number(row.tax_rate)
+  const partsTaxed = bd.parts ? bd.parts.taxed : true
+  const oldPartsBase = bd.parts?.base ?? 0
+  const partsTaxDelta = partsTaxed ? r2(r2((oldPartsBase + 100) * partRate / 100) - r2(oldPartsBase * partRate / 100)) : 0
+  const edited = { ...again.state, lines: [...again.state.lines, {
+    id: crypto.randomUUID(), type: 'parts' as const, description: `${MARK} part`, mobile_hours: 0,
+    part_number: '', quantity: 1, unit_cost: 100, amount: 100,
+  }] }
+  const put2 = await api('PUT', `/api/hd/invoices/${id}`, invoiceSaveBody(row, again, edited))
+  const a2 = await readRow()
+  record(F, 'the edited save is accepted', put2.status === 200, `-> ${put2.status} ${String(put2.json.error ?? '')}`)
+  const billsSupplies = prof.bill_shop_supplies === true && Number(prof.shop_supplies_percent ?? 0) > 0
+  record(F, `no recorded supplies stays none${billsSupplies ? ` though the shop bills ${prof.shop_supplies_percent}%` : ' (shop bills none today - check is weaker)'} (A1)`,
+    Number(a2.shop_supplies_fee ?? 0) === 0 && a2.shop_supplies_percent_applied == null,
+    `fee ${a2.shop_supplies_fee}, pct ${a2.shop_supplies_percent_applied}`)
+  record(F, 'the tax moves by exactly the tax on the new part',
+    usd(a2.tax_amount) === usd(r2(Number(row.tax_amount) + partsTaxDelta)),
+    `${usd(row.tax_amount)} + ${usd(partsTaxDelta)} -> ${usd(a2.tax_amount)}`)
+  record(F, 'the total moves by the part and its tax',
+    usd(a2.total) === usd(r2(Number(row.total) + 100 + partsTaxDelta)),
+    `${usd(row.total)} + 100.00 + ${usd(partsTaxDelta)} -> ${usd(a2.total)}`)
+  const bd2 = parseBreakdown(a2.tax_breakdown)
+  const split = bd2 ? r2((bd2.parts?.amount ?? 0) + (bd2.labor?.amount ?? 0) + (bd2.services?.amount ?? 0)) : NaN
+  record(F, 'the stored tax split sums to the tax, to the cent (A5)', usd(split) === usd(a2.tax_amount),
+    `split ${usd(split)} vs tax ${usd(a2.tax_amount)}`)
+
+  // ── A11 shape: a diagnostic fee outside the total (INV-2026-0002's pattern) ──
+  const fee = 125
+  await fetch(`${SUPA}/rest/v1/hd_invoices?id=eq.${id}`, {
+    method: 'PATCH', headers: SVC_H, body: JSON.stringify({ diagnostic_fee: r2(Number(a2.diagnostic_fee ?? 0) + fee) }),
+  })
+  const broken = await readRow()
+  const lb = parseBreakdown(broken.tax_breakdown)?.labor
+  const laborTaxDelta = lb && lb.taxed ? r2(r2((lb.base + fee) * lb.rate / 100) - r2(lb.base * lb.rate / 100)) : 0
+  const own = r2(Number(broken.total) + fee + laborTaxDelta)
+  const prompt = `This invoice does not add up. Its stored total is $${usd(broken.total)} and its own lines and fees come to $${usd(own)}. Bring it to $${usd(own)}?`
+  record(F, 'a stored total outside its own lines is refused, never saved silently', !!invoiceDoesNotAddUp(broken),
+    JSON.stringify(invoiceDoesNotAddUp(broken)))
+  const bpg = await page(`/hd/invoices/${id}/edit`)
+  record(F, 'the edit page offers the one correction, worded with both figures',
+    !!bpg && bpg.text.includes(prompt), prompt)
+  const fix = await api('PUT', `/api/hd/invoices/${id}`, correctionBody(broken))
+  const fixed = await readRow()
+  record(F, 'taking the correction brings it to its own figure and notes it',
+    fix.status === 200 && usd(fixed.total) === usd(own) && String(fixed.internal_notes ?? '').includes('corrected on purpose')
+      && !invoiceDoesNotAddUp(fixed),
+    `-> ${fix.status}, total ${usd(fixed.total)} (want ${usd(own)}), notes ${JSON.stringify(fixed.internal_notes).slice(0, 120)}`)
+
+  // ── A2: a saved quote that recorded no supplies % does not pick up today's ──
+  // The quote editor's pricing is inline in QuoteForm, so this runs the reader it now
+  // uses (documentExtras) on a real saved quote, with its supplies set to "none".
+  const q = (await rest<Record<string, unknown>>(
+    `hd_quotes?user_id=eq.${OWNER}&customer_name=not.like.${MARK}*&select=*&order=created_at.desc&limit=1`))[0]
+  if (record(F, 'a real saved quote to read', !!q, q ? String(q.quote_number) : 'none')) {
+    const noneRecorded = { ...q, shop_supplies_percent_applied: null, shop_supplies_cap_applied: null }
+    const doc = documentExtras(noneRecorded)
+    const ex = computeExtras(200, { ...doc.input }, doc.settings, Number(q.labor_rate ?? 0))
+    record(F, `a quote with no recorded supplies prices none on $200.00 of parts${billsSupplies ? '' : ' (shop bills none today)'} (A2)`,
+      ex.shopSupplies.amount === 0, `supplies ${usd(ex.shopSupplies.amount)}`)
+  }
+}
+
 // ── Z: equipment categories, By Equipment and the audit exports ─────────────
 //
 // docs/KURT-EQUIPMENT-TRACKING-SPEC.md, end to end through the routes a shop uses. The
@@ -3466,6 +3606,7 @@ async function main(): Promise<void> {
     await flowW()
     await flowTerms()
     await flowDiscount()
+    await flowIe()
     await flowY()
     await flowZ()
   } finally {

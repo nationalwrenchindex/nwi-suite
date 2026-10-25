@@ -206,6 +206,10 @@ export default function WorkOrderForm({
     if (!vehicleId && !unitLabel.trim()) { setErr('Pick a vehicle or describe the unit.'); return }
     if (!jobDesc.trim())                { setErr('A job description is required.'); return }
     if (isNew && !mode)                 { setErr('Choose how this job is priced first.'); return }
+    // A work order records its extras when it is written, and the server sync now bills
+    // exactly what it recorded (lib/segments/parent-extras). Saving before the shop's
+    // settings arrive would record "no extras" for good, so wait for them.
+    if (!extrasLoaded)                  { setErr('Your shop settings are still loading. Try again in a moment.'); return }
 
     setErr(null); setSaving(true)
     try {

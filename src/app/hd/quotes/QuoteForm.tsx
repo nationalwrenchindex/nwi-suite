@@ -21,6 +21,7 @@ import { parseAddress } from '@/lib/hd/address-parse'
 import { DEFAULT_HD_PARTS_MARKUP, sellPrice, lineAmount } from '@/lib/hd/parts-pricing'
 import AddressAutofill from '@/components/hd/AddressAutofill'
 import { money } from '@/lib/format'
+import { documentExtras } from '@/lib/document-money'
 
 const ORANGE  = '#FF6600'
 const BLUE    = '#2969B0'
@@ -279,7 +280,14 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
   const [saving, setSaving]               = useState(false)
   // HD gets the same three extras as LD, same tax treatment, same cap. Hours and
   // miles are the only inputs; the percentage is never a question.
-  const { settings: extrasSettings, loaded: extrasLoaded } = useExtrasSettingsState()
+  const { settings: currentExtras, loaded: currentExtrasLoaded } = useExtrasSettingsState()
+  // A SAVED quote bills exactly the extras it recorded, at the rates it recorded - the
+  // same reader LD's editors use. A supplies percentage (or a travel or mileage rate)
+  // it never recorded stays off on edit; it does not pick up today's setting. A new
+  // quote uses the shop's settings.
+  const docExtras      = editing ? documentExtras(initial) : null
+  const extrasSettings = docExtras ? docExtras.settings : currentExtras
+  const extrasLoaded   = docExtras ? true : currentExtrasLoaded
   const [travelHours,  setTravelHours]  = useState(editing ? Number(initial.travel_hours ?? 0) || 0 : 0)
   const [mileageMiles, setMileageMiles] = useState(editing ? Number(initial.mileage_miles ?? 0) || 0 : 0)
   const [toast, setToast]                 = useState('')
@@ -874,11 +882,11 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
       mileageMiles,
       // A saved quote's recorded extras rates win over current settings - and over
       // the "bills nothing" useExtrasSettings reports before its fetch resolves.
-      ...(editing ? {
-        travelRateOverride:          initial.travel_rate  != null ? Number(initial.travel_rate)  : null,
-        mileageRateOverride:         initial.mileage_rate != null ? Number(initial.mileage_rate) : null,
-        shopSuppliesPercentOverride: initial.shop_supplies_percent_applied != null ? Number(initial.shop_supplies_percent_applied) : null,
-        shopSuppliesCapOverride:     initial.shop_supplies_cap_applied     != null ? Number(initial.shop_supplies_cap_applied)     : null,
+      ...(docExtras ? {
+        travelRateOverride:          docExtras.input.travelRateOverride,
+        mileageRateOverride:         docExtras.input.mileageRateOverride,
+        shopSuppliesPercentOverride: docExtras.input.shopSuppliesPercentOverride,
+        shopSuppliesCapOverride:     docExtras.input.shopSuppliesCapOverride,
       } : {}),
     },
     extrasSettings,
