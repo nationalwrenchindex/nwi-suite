@@ -79,7 +79,7 @@ export default async function HDPublicQuotePage(
     <div className="min-h-dvh" style={{ background: 'var(--hd-bg)' }}>
       <HDQuoteApprovalClient quote={quote} businessName={business} />
       <footer className="pb-10 text-center">
-        <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+        <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>
           {business}
         </p>
       </footer>

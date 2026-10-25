@@ -11,8 +11,16 @@
 // they cannot see the inside of is how a dispute starts.
 
 import { useState } from 'react'
+import { discountPrintLabel, parseDiscount } from '@/lib/document-discount'
+import { documentPaymentTerms, hdTermsBlockRows, parseTermsSnapshot } from '@/lib/document-terms'
+import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
+import DocumentTermsBlock from '@/components/hd/DocumentTermsBlock'
 
-const HD_ORANGE = '#E85D24'
+// The brand fills, unchanged, with DARK text: #1A1A1A is 4.99:1 on #E85D24 and 4.62:1
+// on #EF4444, where white was 3.49:1 and 3.76:1. Inline, so no theme remap touches it.
+const APPROVE_BG = '#E85D24'
+const DECLINE_BG = '#EF4444'
+const ON_FILL    = '#1A1A1A'
 
 interface QuoteLine {
   type?: string
@@ -57,8 +65,13 @@ export interface PublicHDQuote {
   shop_supplies_fee: number | null
   tax_rate: number | null
   tax_amount: number | null
+  /** Migration 140: the tax per bucket, each at the rate it was charged. */
+  tax_breakdown?: unknown
   total: number | null
   payment_terms: string | null
+  /** Migration 168: the discount and the terms this quote recorded. */
+  discount?: unknown
+  terms_snapshot?: unknown
   valid_until: string | null
   approved_at: string | null
   declined_at: string | null
@@ -78,6 +91,11 @@ export default function HDQuoteApprovalClient({
   quote: PublicHDQuote
   businessName: string
 }) {
+  const discount = parseDiscount(quote.discount)
+  const taxRows = taxDisplayRows(parseBreakdown(quote.tax_breakdown))
+  const snap = parseTermsSnapshot(quote.terms_snapshot)
+  const paymentTerms = documentPaymentTerms(quote.payment_terms, snap)
+  const termsRows = hdTermsBlockRows(snap)
   const [po, setPo] = useState('')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState<'approve' | 'decline' | null>(null)
@@ -127,10 +145,10 @@ export default function HDQuoteApprovalClient({
         >
           {approved ? '✓' : '—'}
         </div>
-        <h1 className="font-condensed font-bold text-2xl mb-2" style={{ color: 'var(--hd-ink)' }}>
+        <h1 className="font-condensed font-bold text-2xl mb-2" style={{ color: 'var(--hd-text)' }}>
           {approved ? 'Approved. Thank you.' : 'Quote declined'}
         </h1>
-        <p className="text-sm mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>
+        <p className="text-sm mb-1" style={{ color: 'var(--hd-text-muted)' }}>
           {quote.quote_number} &middot; {businessName}
         </p>
         {approved && done.workOrder && (
@@ -139,10 +157,10 @@ export default function HDQuoteApprovalClient({
           </p>
         )}
         {done.message && (
-          <p className="text-xs mt-3" style={{ color: 'rgba(var(--hd-ink-rgb), 0.45)' }}>{done.message}</p>
+          <p className="text-xs mt-3" style={{ color: 'var(--hd-text-muted)' }}>{done.message}</p>
         )}
         {!approved && (
-          <p className="text-sm mt-4" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>
+          <p className="text-sm mt-4" style={{ color: 'var(--hd-text-muted)' }}>
             Nothing has been scheduled. {businessName} will follow up if you would like to
             revisit any of it.
           </p>
@@ -157,18 +175,18 @@ export default function HDQuoteApprovalClient({
   return (
     <div className="max-w-2xl mx-auto px-4 py-8">
       <div className="mb-6">
-        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>
           Quote for approval
         </p>
-        <h1 className="font-condensed font-bold text-3xl tracking-wide" style={{ color: 'var(--hd-ink)' }}>
+        <h1 className="font-condensed font-bold text-3xl tracking-wide" style={{ color: 'var(--hd-text)' }}>
           {quote.quote_number}
         </h1>
-        <p className="text-sm mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>
+        <p className="text-sm mt-1" style={{ color: 'var(--hd-text-muted)' }}>
           From {businessName}
           {quote.customer_name ? ` for ${quote.customer_name}` : ''}
         </p>
         {quote.valid_until && (
-          <p className="text-xs mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.45)' }}>
+          <p className="text-xs mt-1" style={{ color: 'var(--hd-text-muted)' }}>
             Valid until {new Date(quote.valid_until).toLocaleDateString()}
           </p>
         )}
@@ -176,9 +194,9 @@ export default function HDQuoteApprovalClient({
 
       {(unit || truck || quote.unit_serial || quote.vin) && (
         <div className="rounded-xl p-4 mb-4" style={{ background: 'rgba(var(--hd-ink-rgb), 0.04)' }}>
-          {unit && <p className="text-sm" style={{ color: 'var(--hd-ink)' }}>{unit}</p>}
-          {truck && <p className="text-sm" style={{ color: 'var(--hd-ink)' }}>{truck}</p>}
-          <p className="text-xs mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+          {unit && <p className="text-sm" style={{ color: 'var(--hd-text)' }}>{unit}</p>}
+          {truck && <p className="text-sm" style={{ color: 'var(--hd-text)' }}>{truck}</p>}
+          <p className="text-xs mt-1" style={{ color: 'var(--hd-text-muted)' }}>
             {[
               quote.unit_number && `Unit ${quote.unit_number}`,
               quote.unit_serial && `Serial ${quote.unit_serial}`,
@@ -190,18 +208,18 @@ export default function HDQuoteApprovalClient({
 
       {quote.complaint && (
         <div className="mb-4">
-          <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+          <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--hd-text-faint)' }}>
             Reported problem
           </p>
-          <p className="text-sm" style={{ color: 'var(--hd-ink)' }}>{quote.complaint}</p>
+          <p className="text-sm" style={{ color: 'var(--hd-text)' }}>{quote.complaint}</p>
         </div>
       )}
       {quote.diagnosis && (
         <div className="mb-4">
-          <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+          <p className="text-xs uppercase tracking-wider mb-1" style={{ color: 'var(--hd-text-faint)' }}>
             What we found
           </p>
-          <p className="text-sm" style={{ color: 'var(--hd-ink)' }}>{quote.diagnosis}</p>
+          <p className="text-sm" style={{ color: 'var(--hd-text)' }}>{quote.diagnosis}</p>
         </div>
       )}
 
@@ -209,11 +227,11 @@ export default function HDQuoteApprovalClient({
           approving a figure they cannot see inside of is how a dispute starts. */}
       <div className="rounded-xl border mb-4" style={{ borderColor: 'rgba(var(--hd-ink-rgb), 0.12)' }}>
         <div className="px-4 py-2 text-xs uppercase tracking-wider"
-          style={{ background: 'rgba(var(--hd-ink-rgb), 0.04)', color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+          style={{ background: 'rgba(var(--hd-ink-rgb), 0.04)', color: 'var(--hd-text-muted)' }}>
           What this covers
         </div>
         {lines.length === 0 ? (
-          <p className="px-4 py-4 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+          <p className="px-4 py-4 text-sm" style={{ color: 'var(--hd-text-muted)' }}>
             No line items on this quote.
           </p>
         ) : (
@@ -225,10 +243,10 @@ export default function HDQuoteApprovalClient({
                 <li key={i} className="px-4 py-3 border-t flex items-start justify-between gap-3"
                   style={{ borderColor: 'rgba(var(--hd-ink-rgb), 0.08)' }}>
                   <div className="min-w-0">
-                    <p className="text-sm" style={{ color: 'var(--hd-ink)' }}>
+                    <p className="text-sm" style={{ color: 'var(--hd-text)' }}>
                       {l.description || l.part_number || (isLabor ? 'Labor' : 'Part')}
                     </p>
-                    <p className="text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.45)' }}>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--hd-text-muted)' }}>
                       {isLabor
                         ? [h != null && hours(h), quote.labor_rate != null && `at ${money(quote.labor_rate)}/hr`]
                             .filter(Boolean).join(' ')
@@ -236,7 +254,7 @@ export default function HDQuoteApprovalClient({
                             .filter(Boolean).join(' · ')}
                     </p>
                   </div>
-                  <p className="text-sm font-medium shrink-0" style={{ color: 'var(--hd-ink)' }}>
+                  <p className="text-sm font-medium shrink-0" style={{ color: 'var(--hd-text)' }}>
                     {money(l.amount)}
                   </p>
                 </li>
@@ -258,25 +276,51 @@ export default function HDQuoteApprovalClient({
           [quote.shop_supplies_percent_applied != null
             ? `Shop supplies (${quote.shop_supplies_percent_applied}%)` : 'Shop supplies',
             quote.shop_supplies_fee],
-          [quote.tax_rate ? `Tax (${quote.tax_rate}%)` : 'Tax', quote.tax_amount],
         ] as Array<[string, number | null]>)
           .filter(([, v]) => v != null && Number(v) !== 0)
           .map(([label, v]) => (
             <div key={label} className="flex justify-between text-sm py-0.5">
-              <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>{label}</span>
-              <span style={{ color: 'var(--hd-ink)' }}>{money(v)}</span>
+              <span style={{ color: 'var(--hd-text-muted)' }}>{label}</span>
+              <span style={{ color: 'var(--hd-text)' }}>{money(v)}</span>
             </div>
           ))}
+        {/* The discount: between the subtotal and the tax, only when there is one. The
+            amount is ONE text node - '-' and the figure in a single string. */}
+        {discount && (
+          <>
+            <div className="flex justify-between text-sm py-0.5 mt-1 pt-1 border-t" style={{ borderColor: 'rgba(var(--hd-ink-rgb), 0.12)' }}>
+              <span style={{ color: 'var(--hd-text-muted)' }}>Subtotal</span>
+              <span style={{ color: 'var(--hd-text)' }}>{money(discount.subtotal_before)}</span>
+            </div>
+            <div className="flex justify-between text-sm py-0.5" data-testid="discount-row">
+              <span style={{ color: 'var(--hd-text-muted)' }}>{discountPrintLabel(discount)}</span>
+              <span style={{ color: 'var(--hd-positive)' }}>{'-' + money(discount.amount)}</span>
+            </div>
+          </>
+        )}
+        {/* The tax as recorded: per bucket with each bucket's own rate, or the single
+            line a quote saved before migration 140 carries. */}
+        {(taxRows.length > 0
+          ? taxRows.filter(r => r.taxed && r.amount > 0).map(r => [r.text, r.amount] as [string, number])
+          : Number(quote.tax_amount) > 0 ? [[quote.tax_rate ? `Tax (${quote.tax_rate}%)` : 'Tax', Number(quote.tax_amount)] as [string, number]] : []
+        ).map(([label, v]) => (
+          <div key={label} className="flex justify-between text-sm py-0.5" data-testid="tax-row">
+            <span style={{ color: 'var(--hd-text-muted)' }}>{label}</span>
+            <span style={{ color: 'var(--hd-text)' }}>{money(v)}</span>
+          </div>
+        ))}
         <div className="flex justify-between items-baseline mt-3 pt-3 border-t"
           style={{ borderColor: 'rgba(var(--hd-ink-rgb), 0.12)' }}>
-          <span className="font-condensed font-bold uppercase tracking-wide" style={{ color: 'var(--hd-ink)' }}>
+          <span className="font-condensed font-bold uppercase tracking-wide" style={{ color: 'var(--hd-text)' }}>
             Total
           </span>
-          <span className="font-bold text-xl" style={{ color: 'var(--hd-ink)' }}>{money(quote.total)}</span>
+          <span className="font-bold text-xl" style={{ color: 'var(--hd-text)' }}>{money(quote.total)}</span>
         </div>
-        {quote.payment_terms && (
-          <p className="text-xs mt-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.45)' }}>
-            {quote.payment_terms}
+        {/* The quote's own terms, else the ones it recorded, else nothing. Printed as
+            "Net 30", never the stored code ("net30"). */}
+        {paymentTerms && (
+          <p className="text-xs mt-2" style={{ color: 'var(--hd-text-muted)' }} data-testid="payment-terms">
+            Payment terms: {paymentTerms}
           </p>
         )}
       </div>
@@ -284,7 +328,7 @@ export default function HDQuoteApprovalClient({
       {/* The customer's own fields. PO first - for a fleet it is the thing they need to
           put on before anything is authorized. */}
       <label className="block mb-3">
-        <span className="text-xs uppercase tracking-wider" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+        <span className="text-xs uppercase tracking-wider" style={{ color: 'var(--hd-text-muted)' }}>
           Your PO number <span style={{ opacity: 0.6 }}>(optional)</span>
         </span>
         <input
@@ -292,12 +336,12 @@ export default function HDQuoteApprovalClient({
           onChange={e => setPo(e.target.value)}
           placeholder="PO-12345"
           className="w-full mt-1 rounded-lg px-3 py-2 text-sm border"
-          style={{ borderColor: 'rgba(var(--hd-ink-rgb), 0.18)', background: 'transparent', color: 'var(--hd-ink)' }}
+          style={{ borderColor: 'rgba(var(--hd-ink-rgb), 0.18)', background: 'transparent', color: 'var(--hd-text)' }}
         />
       </label>
 
       <label className="block mb-5">
-        <span className="text-xs uppercase tracking-wider" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+        <span className="text-xs uppercase tracking-wider" style={{ color: 'var(--hd-text-muted)' }}>
           Anything we should know <span style={{ opacity: 0.6 }}>(optional)</span>
         </span>
         <textarea
@@ -306,15 +350,20 @@ export default function HDQuoteApprovalClient({
           rows={3}
           placeholder="Access hours, gate code, who to call on arrival..."
           className="w-full mt-1 rounded-lg px-3 py-2 text-sm border"
-          style={{ borderColor: 'rgba(var(--hd-ink-rgb), 0.18)', background: 'transparent', color: 'var(--hd-ink)' }}
+          style={{ borderColor: 'rgba(var(--hd-ink-rgb), 0.18)', background: 'transparent', color: 'var(--hd-text)' }}
         />
       </label>
 
-      {error && <p className="text-sm mb-3" style={{ color: '#EF4444' }}>{error}</p>}
+      {/* The terms the customer is agreeing to, recorded when the quote was sent. */}
+      <div className="mb-6">
+        <DocumentTermsBlock rows={termsRows} text="var(--hd-text)" muted="var(--hd-text-muted)" border="rgba(var(--hd-ink-rgb), 0.12)" />
+      </div>
+
+      {error && <p className="text-sm mb-3" style={{ color: 'var(--hd-negative)' }}>{error}</p>}
 
       {confirming === 'decline' ? (
         <div className="rounded-xl p-4 mb-3" style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)' }}>
-          <p className="text-sm mb-3" style={{ color: 'var(--hd-ink)' }}>
+          <p className="text-sm mb-3" style={{ color: 'var(--hd-text)' }}>
             Decline this quote? Nothing will be scheduled. {businessName} will see your
             note and can follow up.
           </p>
@@ -322,8 +371,8 @@ export default function HDQuoteApprovalClient({
             <button
               onClick={() => void respond('decline')}
               disabled={busy !== null}
-              className="px-4 py-2 rounded-lg text-sm font-bold text-white disabled:opacity-50"
-              style={{ background: '#EF4444' }}
+              className="px-4 py-2 rounded-lg text-sm font-bold disabled:opacity-50"
+              style={{ background: DECLINE_BG, color: ON_FILL }}
             >
               {busy === 'decline' ? 'Recording...' : 'Yes, decline'}
             </button>
@@ -331,7 +380,7 @@ export default function HDQuoteApprovalClient({
               onClick={() => setConfirming(null)}
               disabled={busy !== null}
               className="px-4 py-2 rounded-lg text-sm"
-              style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}
+              style={{ color: 'var(--hd-text-muted)' }}
             >
               Go back
             </button>
@@ -342,8 +391,8 @@ export default function HDQuoteApprovalClient({
           <button
             onClick={() => void respond('approve')}
             disabled={busy !== null}
-            className="flex-1 py-3 rounded-xl font-condensed font-bold tracking-wide text-white disabled:opacity-50"
-            style={{ background: HD_ORANGE }}
+            className="flex-1 py-3 rounded-xl font-condensed font-bold tracking-wide disabled:opacity-50"
+            style={{ background: APPROVE_BG, color: ON_FILL }}
           >
             {busy === 'approve' ? 'Approving...' : `APPROVE ${money(quote.total)}`}
           </button>
@@ -358,7 +407,7 @@ export default function HDQuoteApprovalClient({
         </div>
       )}
 
-      <p className="text-xs text-center mt-4" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+      <p className="text-xs text-center mt-4" style={{ color: 'var(--hd-text-faint)' }}>
         Approving authorizes {businessName} to carry out the work above at this price.
       </p>
     </div>

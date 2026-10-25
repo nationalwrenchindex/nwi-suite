@@ -58,7 +58,7 @@ export default async function NewAerialInspectionPage({
         <h1 className="font-condensed font-bold text-2xl text-white tracking-wide mb-1">
           NEW AERIAL INSPECTION
         </h1>
-        <p className="text-white/40 text-sm mb-4">Select the inspection cadence.</p>
+        <p className="text-[color:var(--hd-text-faint)] text-sm mb-4">Select the inspection cadence.</p>
         {TYPES.map(t => {
           const def = AERIAL_FORMS[t]
           return (
@@ -69,8 +69,8 @@ export default async function NewAerialInspectionPage({
               style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}
             >
               <p className="text-white font-semibold">{def.title}</p>
-              <p className="text-white/40 text-xs mt-0.5">{def.citation}</p>
-              <p className="text-white/30 text-xs mt-1.5">{def.cadence}</p>
+              <p className="text-[color:var(--hd-text-faint)] text-xs mt-0.5">{def.citation}</p>
+              <p className="text-[color:var(--hd-text-faint)] text-xs mt-1.5">{def.cadence}</p>
               <p className="text-orange text-xs mt-2">
                 {def.sections.length} sections · {def.sections.reduce((n, s) => n + s.items.length, 0)} checkpoints →
               </p>

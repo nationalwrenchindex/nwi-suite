@@ -4,11 +4,12 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { money } from '@/lib/format'
+import { tint } from '@/lib/hd/text-tone'
 
 const ORANGE = '#FF6600'
 const BLUE   = '#2969B0'
 const BORDER = '#E5E7EB'
-const MUTED  = '#6B7280'
+const MUTED  = 'var(--paper-muted)'
 const TEXT   = '#1A1A1A'
 
 type SendState = 'idle' | 'sending' | 'sent' | 'failed'
@@ -273,7 +274,7 @@ export default function InvoiceDetailActions({
         <Link
           href={`/hd/invoices/${invoiceId}/edit`}
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold text-sm"
-          style={{ background: '#FFF7ED', color: ORANGE, border: `1px solid ${ORANGE}40`, minHeight: 44 }}
+          style={{ background: '#FFF7ED', color: 'var(--paper-accent)', border: `1px solid ${tint(ORANGE, 25)}`, minHeight: 44 }}
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
@@ -287,7 +288,7 @@ export default function InvoiceDetailActions({
             onClick={markPaid}
             disabled={busy}
             className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold text-sm disabled:opacity-50"
-            style={{ background: '#DCFCE7', color: '#16a34a', minHeight: 44 }}
+            style={{ background: '#DCFCE7', color: '#15803d', minHeight: 44 }}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
               <polyline points="20 6 9 17 4 12" />
@@ -299,7 +300,7 @@ export default function InvoiceDetailActions({
         <Link
           href={`/api/hd/invoices/${invoiceId}/pdf`}
           target="_blank"
-          className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold text-sm text-white"
+          className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold text-sm text-on-fill"
           style={{ background: BLUE, minHeight: 44 }}
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -315,7 +316,7 @@ export default function InvoiceDetailActions({
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold text-sm"
           style={
             sendState === 'sent'
-              ? { background: '#DCFCE7', color: '#16a34a', border: '1px solid #BBF7D0', minHeight: 44 }
+              ? { background: '#DCFCE7', color: '#15803d', border: '1px solid #BBF7D0', minHeight: 44 }
               : { background: '#F3F4F6', color: '#374151', border: `1px solid ${BORDER}`, minHeight: 44 }
           }
         >
@@ -329,7 +330,7 @@ export default function InvoiceDetailActions({
           onClick={deleteInvoice}
           disabled={busy}
           className="px-4 py-2 rounded-lg font-semibold text-sm disabled:opacity-50"
-          style={{ background: '#FEE2E2', color: '#dc2626', minHeight: 44 }}
+          style={{ background: '#FEE2E2', color: '#b91c1c', minHeight: 44 }}
         >
           Delete
         </button>
@@ -372,7 +373,7 @@ export default function InvoiceDetailActions({
           style={{ background: '#FFFFFF', border: `1px solid ${BORDER}`, maxHeight: '88vh' }}
         >
           <div className="flex items-start justify-between gap-3 mb-3">
-            <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#9CA3AF' }}>
+            <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--paper-muted)' }}>
               {mode === null ? `Send ${invoiceNumber}` : mode === 'late_fee' ? 'Resend with late fee' : 'Resend original invoice'}
             </p>
             <button
@@ -424,7 +425,7 @@ export default function InvoiceDetailActions({
                 </button>
               ) : (
                 <div className="w-full p-3 rounded-lg" style={{ background: '#F9FAFB', border: `1px dashed ${BORDER}` }}>
-                  <span className="block text-sm font-semibold" style={{ color: '#9CA3AF' }}>
+                  <span className="block text-sm font-semibold" style={{ color: 'var(--paper-muted)' }}>
                     Resend with Late Fee — unavailable
                   </span>
                   <span className="block text-xs mt-1" style={{ color: MUTED }}>{feeBlockedWhy}</span>
@@ -478,7 +479,7 @@ export default function InvoiceDetailActions({
           <button
             onClick={() => send('sms')}
             disabled={sending}
-            className="mt-3 w-full px-4 py-2 rounded-lg font-semibold text-sm text-white disabled:opacity-60"
+            className="mt-3 w-full px-4 py-2 rounded-lg font-semibold text-sm text-on-accent disabled:opacity-60"
             style={{ background: ORANGE, minHeight: 44 }}
           >
             {sending && lastChannel === 'sms' ? 'Sending…' : count > 0 ? 'Send text again' : 'Send text'}
@@ -516,7 +517,7 @@ export default function InvoiceDetailActions({
           </div>
 
           {sendState === 'sent' && (
-            <p className="mt-3 text-sm font-semibold" style={{ color: '#16a34a' }}>
+            <p className="mt-3 text-sm font-semibold" style={{ color: '#15803d' }}>
               Sent to {lastChannel === 'sms' ? phone : email}.{' '}
               {feeJustApplied
                 ? `The ${money(lateFeeAmount)} late fee is on the invoice and the customer has the new total.`

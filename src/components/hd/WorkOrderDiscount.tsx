@@ -48,20 +48,20 @@ export default function WorkOrderDiscount({ workOrderId, discount, locked }: {
   return (
     <div className="rounded-xl p-5 mb-6" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
       <p className="font-condensed font-bold text-white text-sm tracking-widest mb-1">DISCOUNT</p>
-      <p className="text-xs mb-3" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+      <p className="text-xs mb-3" style={{ color: 'var(--hd-text-muted)' }}>
         Comes off the labor and parts lines only - never travel, mileage, shop supplies or the fees. It carries to the invoice.
       </p>
       <DiscountEditor theme="hd" value={draft} onChange={d => { setDraft(d); setError(null) }}
         disabled={locked || saving} applied={dirty ? null : saved} error={error} notice={dirty ? null : notice} />
       {dirty && !locked && (
         <button type="button" onClick={save} disabled={saving}
-          className="mt-3 px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
+          className="mt-3 px-4 py-2 rounded-lg text-sm font-semibold text-on-accent disabled:opacity-50"
           style={{ background: '#E85D24', minHeight: 40 }}>
           {saving ? 'Saving...' : discountFromDraft(draft) ? 'Save discount' : 'Remove discount'}
         </button>
       )}
       {locked && (
-        <p className="text-xs mt-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+        <p className="text-xs mt-2" style={{ color: 'var(--hd-text-muted)' }}>
           Invoiced - change the discount on the invoice.
         </p>
       )}

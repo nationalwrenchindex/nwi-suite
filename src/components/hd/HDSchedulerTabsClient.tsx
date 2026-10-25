@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import HDCalendarClient  from './HDCalendarClient'
 import HDSchedulerClient from './HDSchedulerClient'
+import { tint } from '@/lib/hd/text-tone'
 
 const HD_ORANGE = '#E85D24'
 
@@ -69,8 +70,8 @@ export default function HDSchedulerTabsClient({
             onClick={() => setActiveTab(tab.id)}
             className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium transition-colors relative"
             style={activeTab === tab.id
-              ? { color: HD_ORANGE }
-              : { color: 'rgba(var(--hd-ink-rgb), 0.4)' }
+              ? { color: 'var(--hd-accent-text)' }
+              : { color: 'var(--hd-text-faint)' }
             }
           >
             {tab.icon}
@@ -78,7 +79,7 @@ export default function HDSchedulerTabsClient({
             {tab.id === 'jobs' && activeCount > 0 && (
               <span
                 className="text-[10px] font-bold px-1.5 py-0.5 rounded-full ml-0.5"
-                style={{ background: `${HD_ORANGE}25`, color: HD_ORANGE }}
+                style={{ background: `${tint(HD_ORANGE, 15)}`, color: 'var(--hd-accent-text)' }}
               >
                 {activeCount}
               </span>

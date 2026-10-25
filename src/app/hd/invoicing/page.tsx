@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import { money } from '@/lib/format'
+import { textTone } from '@/lib/hd/text-tone'
 
 export const metadata = { title: 'Invoicing — NWI HD Suite' }
 
@@ -50,12 +51,12 @@ export default async function InvoicingPage() {
     <main className="flex-1 p-4 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>HD Suite</p>
+          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>HD Suite</p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">INVOICING</h1>
         </div>
         <Link
           href="/hd/quotes/new"
-          className="px-4 py-2.5 rounded-lg text-sm font-semibold text-white inline-flex items-center"
+          className="px-4 py-2.5 rounded-lg text-sm font-semibold text-on-accent inline-flex items-center"
           style={{ background: HD_ORANGE, minHeight: 44 }}
         >
           + Create Invoice
@@ -64,13 +65,13 @@ export default async function InvoicingPage() {
 
       <div className="grid grid-cols-2 gap-4 mb-6">
         <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
-          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Outstanding (Completed)</p>
-          <p className="font-condensed font-bold text-2xl" style={{ color: totalOutstanding > 0 ? HD_ORANGE : '#22C55E' }}>
+          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>Outstanding (Completed)</p>
+          <p className="font-condensed font-bold text-2xl" style={{ color: textTone(totalOutstanding > 0 ? 'var(--hd-accent-text)' : 'var(--hd-positive)') }}>
             ${totalOutstanding.toLocaleString()}
           </p>
         </div>
         <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
-          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Total Invoiced</p>
+          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>Total Invoiced</p>
           <p className="font-condensed font-bold text-2xl text-white">${totalInvoiced.toLocaleString()}</p>
         </div>
       </div>
@@ -78,8 +79,8 @@ export default async function InvoicingPage() {
       <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
         {!workOrders || workOrders.length === 0 ? (
           <div className="py-16 text-center" style={{ background: 'var(--hd-card)' }}>
-            <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>No completed work orders to invoice</p>
-            <p className="text-xs mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.2)' }}>Complete work orders will appear here for invoicing</p>
+            <p className="text-sm" style={{ color: 'var(--hd-text-faint)' }}>No completed work orders to invoice</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--hd-text-faint)' }}>Complete work orders will appear here for invoicing</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -87,7 +88,7 @@ export default async function InvoicingPage() {
             <thead style={{ background: 'var(--hd-inner)' }}>
               <tr>
                 {['Work Order', 'Fleet', 'Unit', 'Amount', 'Status', 'Completed'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs uppercase tracking-wider" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{h}</th>
+                  <th key={h} className="px-4 py-3 text-left text-xs uppercase tracking-wider" style={{ color: 'var(--hd-text-faint)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -102,8 +103,8 @@ export default async function InvoicingPage() {
                   <td className="px-4 py-3 text-sm text-white font-medium">
                     {wo.work_order_number ?? `WO-${wo.id.slice(0, 6).toUpperCase()}`}
                   </td>
-                  <td className="px-4 py-3 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>{wo.fleet_account?.fleet_name ?? '—'}</td>
-                  <td className="px-4 py-3 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>{wo.unit?.unit_number ?? '—'}</td>
+                  <td className="px-4 py-3 text-sm" style={{ color: 'var(--hd-text-muted)' }}>{wo.fleet_account?.fleet_name ?? '—'}</td>
+                  <td className="px-4 py-3 text-sm" style={{ color: 'var(--hd-text-muted)' }}>{wo.unit?.unit_number ?? '—'}</td>
                   <td className="px-4 py-3 text-sm font-medium text-white">
                     {wo.total_amount ? `${money(Number(wo.total_amount))}` : '—'}
                   </td>
@@ -111,12 +112,12 @@ export default async function InvoicingPage() {
                     <span className="text-xs font-medium px-2 py-0.5 rounded-full"
                       style={{
                         background: wo.status === 'invoiced' ? '#3B82F620' : `${HD_ORANGE}20`,
-                        color:      wo.status === 'invoiced' ? '#3B82F6' : HD_ORANGE,
+                        color: textTone(wo.status === 'invoiced' ? 'var(--hd-info)' : 'var(--hd-accent-text)'),
                       }}>
                       {wo.status === 'invoiced' ? 'Invoiced' : 'Awaiting Invoice'}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                  <td className="px-4 py-3 text-xs" style={{ color: 'var(--hd-text-faint)' }}>
                     {wo.completed_at ? new Date(wo.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—'}
                   </td>
                 </tr>

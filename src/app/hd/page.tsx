@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { textTone, tint } from '@/lib/hd/text-tone'
 
 const HD_ORANGE = '#E85D24'
 const HD_BLUE   = '#1A6BAF'
@@ -107,13 +108,13 @@ export default async function HDLandingPage() {
           </div>
           <div>
             <p style={{ fontWeight: 800, fontSize: 13, letterSpacing: '0.12em', lineHeight: 1, color: 'var(--hd-text)', textTransform: 'uppercase', margin: 0 }}>NWI HD Suite</p>
-            <p style={{ fontSize: 10, color: 'rgba(var(--hd-ink-rgb), 0.35)', margin: '3px 0 0' }}>Heavy Duty &amp; Transport Refrigeration</p>
+            <p style={{ fontSize: 10, color: 'var(--hd-text-faint)', margin: '3px 0 0' }}>Heavy Duty &amp; Transport Refrigeration</p>
           </div>
         </div>
         <div style={{ display: 'flex', gap: '0.625rem' }}>
           <Link
             href="/hd/login"
-            style={{ fontSize: 13, padding: '0.5rem 1rem', borderRadius: 8, border: '1px solid var(--hd-border)', color: 'rgba(var(--hd-ink-rgb), 0.55)', textDecoration: 'none', fontWeight: 500 }}
+            style={{ fontSize: 13, padding: '0.5rem 1rem', borderRadius: 8, border: '1px solid var(--hd-border)', color: 'var(--hd-text-muted)', textDecoration: 'none', fontWeight: 500 }}
           >
             Log In
           </Link>
@@ -128,14 +129,14 @@ export default async function HDLandingPage() {
 
       {/* ── Hero ── */}
       <section style={{ textAlign: 'center', padding: '5rem 1.5rem 4rem', maxWidth: 640, margin: '0 auto' }}>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: `${HD_ORANGE}18`, border: `1px solid ${HD_ORANGE}40`, borderRadius: 999, padding: '0.375rem 0.875rem', marginBottom: '1.5rem' }}>
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: `${tint(HD_ORANGE, 9)}`, border: `1px solid ${tint(HD_ORANGE, 25)}`, borderRadius: 999, padding: '0.375rem 0.875rem', marginBottom: '1.5rem' }}>
           <span style={{ width: 6, height: 6, borderRadius: '50%', background: HD_ORANGE, display: 'inline-block' }} />
-          <span style={{ fontSize: 11, color: HD_ORANGE, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>HD Suite</span>
+          <span style={{ fontSize: 11, color: 'var(--hd-accent-text)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>HD Suite</span>
         </div>
         <h1 style={{ fontSize: 'clamp(2rem, 5vw, 3.25rem)', fontWeight: 900, lineHeight: 1.1, letterSpacing: '-0.02em', margin: '0 0 1.25rem' }}>
           Built for Transport Refrigeration<br />and Heavy Duty Techs
         </h1>
-        <p style={{ fontSize: 16, color: 'rgba(var(--hd-ink-rgb), 0.55)', lineHeight: 1.65, margin: '0 auto 2.5rem', maxWidth: 460 }}>
+        <p style={{ fontSize: 16, color: 'var(--hd-text-muted)', lineHeight: 1.65, margin: '0 auto 2.5rem', maxWidth: 460 }}>
           Alarm codes, labor guides, fleet management, EPA 608 logging, and professional invoicing — everything a reefer or HD tech needs in one tool.
         </p>
         <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
@@ -156,17 +157,17 @@ export default async function HDLandingPage() {
 
       {/* ── Features ── */}
       <section style={{ maxWidth: 960, margin: '0 auto', padding: '3rem 1.5rem' }}>
-        <p style={{ textAlign: 'center', fontSize: 11, letterSpacing: '0.12em', color: 'rgba(var(--hd-ink-rgb), 0.3)', textTransform: 'uppercase', marginBottom: '2.5rem', fontWeight: 600 }}>
+        <p style={{ textAlign: 'center', fontSize: 11, letterSpacing: '0.12em', color: 'var(--hd-text-faint)', textTransform: 'uppercase', marginBottom: '2.5rem', fontWeight: 600 }}>
           What&apos;s Included
         </p>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '1rem' }}>
           {FEATURES.map(({ title, desc, icon }) => (
             <div key={title} style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)', borderRadius: 14, padding: '1.25rem 1.25rem 1.375rem' }}>
-              <div style={{ width: 40, height: 40, borderRadius: 10, background: `${HD_BLUE}28`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#60A5FA', marginBottom: '0.875rem' }}>
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: `${tint(HD_BLUE, 16)}`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--hd-info)', marginBottom: '0.875rem' }}>
                 {icon}
               </div>
               <p style={{ fontWeight: 700, fontSize: 14, color: 'var(--hd-text)', margin: '0 0 0.375rem' }}>{title}</p>
-              <p style={{ fontSize: 12, color: 'rgba(var(--hd-ink-rgb), 0.45)', lineHeight: 1.6, margin: 0 }}>{desc}</p>
+              <p style={{ fontSize: 12, color: 'var(--hd-text-muted)', lineHeight: 1.6, margin: 0 }}>{desc}</p>
             </div>
           ))}
         </div>
@@ -174,7 +175,7 @@ export default async function HDLandingPage() {
 
       {/* ── Pricing ── */}
       <section style={{ maxWidth: 920, margin: '0 auto', padding: '3rem 1.5rem 5rem' }}>
-        <p style={{ textAlign: 'center', fontSize: 11, letterSpacing: '0.12em', color: 'rgba(var(--hd-ink-rgb), 0.3)', textTransform: 'uppercase', marginBottom: '0.5rem', fontWeight: 600 }}>
+        <p style={{ textAlign: 'center', fontSize: 11, letterSpacing: '0.12em', color: 'var(--hd-text-faint)', textTransform: 'uppercase', marginBottom: '0.5rem', fontWeight: 600 }}>
           Pricing
         </p>
         <h2 style={{ textAlign: 'center', fontSize: 28, fontWeight: 800, margin: '0 0 2.5rem', letterSpacing: '-0.01em' }}>
@@ -217,13 +218,13 @@ export default async function HDLandingPage() {
                 )}
                 <p style={{ fontWeight: 800, fontSize: 15, color: 'var(--hd-text)', margin: '0 0 0.25rem' }}>{name}</p>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, margin: '0 0 1.125rem' }}>
-                  <span style={{ fontSize: 34, fontWeight: 900, color: isRec ? HD_ORANGE : '#fff', lineHeight: 1 }}>${price}</span>
-                  <span style={{ fontSize: 12, color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>/month</span>
+                  <span style={{ fontSize: 34, fontWeight: 900, color: textTone(isRec ? 'var(--hd-accent-text)' : '#fff'), lineHeight: 1 }}>${price}</span>
+                  <span style={{ fontSize: 12, color: 'var(--hd-text-faint)' }}>/month</span>
                 </div>
                 <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 1.375rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                   {features.map(f => (
                     <li key={f} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'rgba(var(--hd-ink-rgb), 0.65)' }}>
-                      <span style={{ color: isRec ? HD_ORANGE : '#22C55E', fontSize: 15, lineHeight: 1 }}>✓</span>
+                      <span style={{ color: textTone(isRec ? 'var(--hd-accent-text)' : 'var(--hd-positive)'), fontSize: 15, lineHeight: 1 }}>✓</span>
                       {f}
                     </li>
                   ))}
@@ -256,7 +257,7 @@ export default async function HDLandingPage() {
 
       {/* ── Footer ── */}
       <footer style={{ borderTop: '1px solid var(--hd-border)', padding: '2rem 1.5rem', textAlign: 'center' }}>
-        <p style={{ fontSize: 12, color: 'rgba(var(--hd-ink-rgb), 0.2)', margin: 0 }}>
+        <p style={{ fontSize: 12, color: 'var(--hd-text-faint)', margin: 0 }}>
           © {new Date().getFullYear()} National Wrench Index · HD Suite
         </p>
       </footer>

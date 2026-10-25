@@ -23,7 +23,7 @@ const BG     = '#F4F5F7'
 const CARD   = '#FFFFFF'
 const BORDER = '#E5E7EB'
 const TEXT   = '#1A1A1A'
-const MUTED  = '#6B7280'
+const MUTED  = 'var(--paper-muted)'
 
 type LineItem = EditLine
 
@@ -188,11 +188,11 @@ export default function EditInvoiceForm({ invoice, shopLaborRate }: {
   }
 
   return (
-    <div style={{ background: BG, minHeight: '100dvh', padding: '24px 20px' }}>
+    <div style={{ background: BG, color: TEXT, minHeight: '100dvh', padding: '24px 20px' }}>
       <div style={{ maxWidth: 860, margin: '0 auto' }}>
         <div className="flex items-center gap-3 mb-6">
           <Link href={`/hd/invoices/${id}`} style={{ color: MUTED, fontSize: 13 }}>← Invoice</Link>
-          <span style={{ color: BORDER }}>/</span>
+          <span style={{ color: 'var(--paper-muted)' }}>/</span>
           <span className="font-condensed font-bold text-2xl" style={{ color: TEXT }}>EDIT INVOICE</span>
         </div>
 
@@ -202,7 +202,7 @@ export default function EditInvoiceForm({ invoice, shopLaborRate }: {
           <div role="alert" style={{ ...cardStyle, background: '#FFFBEB', border: '1px solid #FCD34D' }}>
             <p className="text-sm font-semibold mb-3" style={{ color: '#92400E' }}>{doesNotAddUpMessage(notAddingUp)}</p>
             <p className="text-xs mb-3" style={{ color: '#92400E' }}>{`Saving is off until this is settled. Bringing it to ${fmt(notAddingUp.own)} recalculates the total from this invoice's own lines, fees and extras at the rates it recorded, changes nothing else, and records the change in the internal notes.`}</p>
-            <button onClick={correct} disabled={correcting} className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50" style={{ background: ORANGE, minHeight: 44 }}>
+            <button onClick={correct} disabled={correcting} className="px-4 py-2 rounded-lg text-sm font-semibold text-on-accent disabled:opacity-50" style={{ background: ORANGE, minHeight: 44 }}>
               {correcting ? 'Correcting...' : `Bring it to ${fmt(notAddingUp.own)}`}
             </button>
           </div>
@@ -225,7 +225,7 @@ export default function EditInvoiceForm({ invoice, shopLaborRate }: {
         <div style={cardStyle}>
           <SectionTitle>Line Items</SectionTitle>
           <div className="flex flex-wrap gap-3 mb-4 items-end">
-            <button onClick={() => setLaborModal(true)} className="px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: ORANGE, minHeight: 44 }}>+ Add Labor</button>
+            <button onClick={() => setLaborModal(true)} className="px-4 py-2 rounded-lg text-sm font-semibold text-on-accent" style={{ background: ORANGE, minHeight: 44 }}>+ Add Labor</button>
             <button onClick={() => setPartsModal(true)} className="px-4 py-2 rounded-lg text-sm font-semibold" style={{ background: '#EBF5FF', color: BLUE, border: `1px solid #BFDBFE`, minHeight: 44 }}>+ Add Parts</button>
             <div className="ml-auto">
               <Field label="Labor Rate / Hour">
@@ -255,11 +255,11 @@ export default function EditInvoiceForm({ invoice, shopLaborRate }: {
               {lineItems.map(item => (
                 <div key={item.id} className="px-4 py-3" style={{ borderBottom: `1px solid #F9FAFB` }}>
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="text-xs px-1.5 py-0.5 rounded font-semibold shrink-0" style={item.type === 'labor' ? { background: '#FFF7ED', color: ORANGE } : { background: '#EBF5FF', color: BLUE }}>
+                    <span className="text-xs px-1.5 py-0.5 rounded font-semibold shrink-0" style={item.type === 'labor' ? { background: '#FFF7ED', color: 'var(--paper-accent)' } : { background: '#EBF5FF', color: BLUE }}>
                       {item.type === 'labor' ? 'LAB' : 'PRT'}
                     </span>
                     <input value={item.description} onChange={e => updateDescription(item.id, e.target.value)} style={{ ...inp, minHeight: 36, padding: '6px 10px' }} />
-                    <button onClick={() => removeItem(item.id)} style={{ color: '#9CA3AF' }}>
+                    <button onClick={() => removeItem(item.id)} style={{ color: 'var(--paper-muted)' }}>
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                     </button>
                   </div>
@@ -350,7 +350,7 @@ export default function EditInvoiceForm({ invoice, shopLaborRate }: {
               ))}
               <div className="flex justify-between items-center pt-3" style={{ borderTop: `2px solid ${ORANGE}`, marginTop: 4 }}>
                 <span className="font-bold text-base" style={{ color: TEXT }}>TOTAL</span>
-                <span className="font-bold text-2xl" style={{ color: ORANGE }}>{fmt(totalWithExtras)}</span>
+                <span className="font-bold text-2xl" style={{ color: 'var(--paper-accent)' }}>{fmt(totalWithExtras)}</span>
               </div>
               {/* Labor and parts lines only. Travel, mileage, supplies and the fees are
                   never discounted. */}
@@ -369,7 +369,7 @@ export default function EditInvoiceForm({ invoice, shopLaborRate }: {
 
         <div className="flex flex-col sm:flex-row gap-3 pb-8">
           <Link href={`/hd/invoices/${id}`} className="flex-1 py-3 rounded-lg font-semibold text-sm text-center" style={{ background: '#F3F4F6', color: '#374151', border: `1px solid ${BORDER}`, minHeight: 48, lineHeight: '24px' }}>Cancel</Link>
-          <button onClick={save} disabled={saving} className="flex-1 py-3 rounded-lg font-semibold text-sm text-white disabled:opacity-50" style={{ background: ORANGE, minHeight: 48 }}>
+          <button onClick={save} disabled={saving} className="flex-1 py-3 rounded-lg font-semibold text-sm text-on-accent disabled:opacity-50" style={{ background: ORANGE, minHeight: 48 }}>
             {saving ? 'Saving...' : 'Save Changes'}
           </button>
         </div>
@@ -385,7 +385,7 @@ export default function EditInvoiceForm({ invoice, shopLaborRate }: {
               <p className="text-sm" style={{ color: MUTED }}>Amount: <strong style={{ color: TEXT }}>{fmt((parseFloat(labor.hours) || 0) * rate)}</strong></p>
               <div className="flex gap-3">
                 <button onClick={() => setLaborModal(false)} className="flex-1 py-2.5 rounded-lg font-semibold text-sm" style={{ background: '#F3F4F6', color: '#374151' }}>Cancel</button>
-                <button onClick={addLabor} className="flex-1 py-2.5 rounded-lg font-semibold text-sm text-white" style={{ background: ORANGE }}>Add Line</button>
+                <button onClick={addLabor} className="flex-1 py-2.5 rounded-lg font-semibold text-sm text-on-accent" style={{ background: ORANGE }}>Add Line</button>
               </div>
             </div>
           </div>
@@ -410,7 +410,7 @@ export default function EditInvoiceForm({ invoice, shopLaborRate }: {
               </div>
               <div className="flex gap-3">
                 <button onClick={() => setPartsModal(false)} className="flex-1 py-2.5 rounded-lg font-semibold text-sm" style={{ background: '#F3F4F6', color: '#374151' }}>Cancel</button>
-                <button onClick={addParts} className="flex-1 py-2.5 rounded-lg font-semibold text-sm text-white" style={{ background: BLUE }}>Add Line</button>
+                <button onClick={addParts} className="flex-1 py-2.5 rounded-lg font-semibold text-sm text-on-fill" style={{ background: BLUE }}>Add Line</button>
               </div>
             </div>
           </div>
@@ -418,7 +418,7 @@ export default function EditInvoiceForm({ invoice, shopLaborRate }: {
       )}
 
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl text-sm font-semibold text-white shadow-xl" style={{ background: '#1A1A1A' }}>
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl text-sm font-semibold text-on-fill shadow-xl" style={{ background: '#1A1A1A' }}>
           {toast}
           <button className="ml-4 opacity-60 hover:opacity-100" onClick={() => setToast('')}>×</button>
         </div>

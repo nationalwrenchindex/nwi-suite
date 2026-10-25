@@ -38,13 +38,13 @@ export default async function LaborCardsPage() {
     <main className="flex-1 p-4 sm:p-6 max-w-5xl">
       <div className="mb-6">
         <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">LABOR CARDS</h1>
-        <p className="text-sm mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+        <p className="text-sm mt-1" style={{ color: 'var(--hd-text-faint)' }}>
           Your own labor operations, with field time and shop time kept separate. Type one, press Enter,
           and the form clears for the next.
         </p>
       </div>
       {cards == null ? (
-        <p role="alert" className="text-sm px-4 py-2.5 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)' }}>
+        <p role="alert" className="text-sm px-4 py-2.5 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: 'var(--hd-negative)', border: '1px solid rgba(239,68,68,0.3)' }}>
           Your labor cards could not be loaded. Reload the page; if it keeps happening, migration 166 or 167 may not be applied.
         </p>
       ) : (

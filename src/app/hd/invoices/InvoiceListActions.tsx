@@ -57,7 +57,7 @@ export default function InvoiceListActions({
           onClick={markPaid}
           disabled={busy}
           className="text-xs font-medium px-2.5 py-1.5 rounded-lg disabled:opacity-50"
-          style={{ background: '#DCFCE7', color: '#16a34a', minHeight: 32 }}
+          style={{ background: '#DCFCE7', color: '#15803d', minHeight: 32 }}
         >
           Mark Paid
         </button>
@@ -74,7 +74,7 @@ export default function InvoiceListActions({
         onClick={deleteInvoice}
         disabled={busy}
         className="text-xs font-medium px-2.5 py-1.5 rounded-lg disabled:opacity-50"
-        style={{ background: '#FEE2E2', color: '#dc2626', minHeight: 32 }}
+        style={{ background: '#FEE2E2', color: '#b91c1c', minHeight: 32 }}
       >
         Delete
       </button>

@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { tint } from '@/lib/hd/text-tone'
 
 const HD_ORANGE = '#E85D24'
 
@@ -27,14 +28,14 @@ export default function PartsComingSoon() {
       className="rounded-xl p-6 mt-6"
       style={{
         background: 'linear-gradient(135deg, var(--hd-card) 0%, var(--hd-sunken) 100%)',
-        border: `1px solid ${HD_ORANGE}40`,
+        border: `1px solid ${tint(HD_ORANGE, 25)}`,
       }}
     >
       <div className="flex items-start gap-4">
         {/* Icon */}
         <div
           className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
-          style={{ background: `${HD_ORANGE}20`, border: `1px solid ${HD_ORANGE}40` }}
+          style={{ background: `${tint(HD_ORANGE, 13)}`, border: `1px solid ${tint(HD_ORANGE, 25)}` }}
         >
           <svg className="w-6 h-6" fill="none" stroke={HD_ORANGE} strokeWidth={1.75} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round"
@@ -47,13 +48,13 @@ export default function PartsComingSoon() {
             <p className="font-condensed font-bold text-white text-lg tracking-wide">PARTS PRICING &amp; INVENTORY</p>
             <span
               className="text-xs font-bold px-2 py-0.5 rounded-full"
-              style={{ background: `${HD_ORANGE}20`, color: HD_ORANGE, border: `1px solid ${HD_ORANGE}50` }}
+              style={{ background: `${tint(HD_ORANGE, 13)}`, color: 'var(--hd-accent-text)', border: `1px solid ${tint(HD_ORANGE, 31)}` }}
             >
               COMING SOON
             </span>
           </div>
 
-          <p className="text-sm leading-relaxed mb-4" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>
+          <p className="text-sm leading-relaxed mb-4" style={{ color: 'var(--hd-text-muted)' }}>
             NWI HD Suite is pending approval for{' '}
             <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.85)' }}>O&apos;Reilly Auto Parts</span> and{' '}
             <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.85)' }}>NAPA</span> API integration for real-time
@@ -72,7 +73,7 @@ export default function PartsComingSoon() {
               <span
                 key={f}
                 className="px-2.5 py-1 rounded-full"
-                style={{ background: 'var(--hd-inner)', color: 'rgba(var(--hd-ink-rgb), 0.5)', border: '1px solid var(--hd-border)' }}
+                style={{ background: 'var(--hd-inner)', color: 'var(--hd-text-muted)', border: '1px solid var(--hd-border)' }}
               >
                 {f}
               </span>
@@ -80,7 +81,7 @@ export default function PartsComingSoon() {
           </div>
 
           {status === 'done' ? (
-            <p className="text-sm font-semibold" style={{ color: '#22C55E' }}>
+            <p className="text-sm font-semibold" style={{ color: 'var(--hd-positive)' }}>
               ✓ You&apos;re on the list — we&apos;ll email you when parts integration launches.
             </p>
           ) : (
@@ -98,7 +99,7 @@ export default function PartsComingSoon() {
             </button>
           )}
           {status === 'error' && (
-            <p className="text-xs mt-2" style={{ color: '#EF4444' }}>Something went wrong — try again.</p>
+            <p className="text-xs mt-2" style={{ color: 'var(--hd-negative)' }}>Something went wrong — try again.</p>
           )}
         </div>
       </div>

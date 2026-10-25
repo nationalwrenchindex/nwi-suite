@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { money } from '@/lib/format'
+import { tint } from '@/lib/hd/text-tone'
 
 export const metadata = { title: 'Intel Hub — NWI HD Suite' }
 
@@ -103,15 +104,15 @@ export default async function IntelHubPage({
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>HD Suite</p>
+          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>HD Suite</p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">INTEL HUB</h1>
-          <p className="text-sm mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Fleet accounts, unit profiles &amp; service history</p>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--hd-text-faint)' }}>Fleet accounts, unit profiles &amp; service history</p>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {pmAlertCount > 0 && (
             <span
               className="text-xs font-bold px-3 py-1.5 rounded-full"
-              style={{ background: '#EF444420', color: '#EF4444' }}
+              style={{ background: '#EF444420', color: 'var(--hd-negative)' }}
             >
               {pmAlertCount} PM alert{pmAlertCount !== 1 ? 's' : ''}
             </span>
@@ -119,13 +120,13 @@ export default async function IntelHubPage({
           <Link
             href="/hd/fleet-accounts?new=1"
             className="px-3 py-2 rounded-lg text-xs font-semibold text-white"
-            style={{ background: `${HD_BLUE}cc` }}
+            style={{ background: `${tint(HD_BLUE, 80)}` }}
           >
             + Customer
           </Link>
           <Link
             href="/hd/fleet-units?new=1"
-            className="px-3 py-2 rounded-lg text-xs font-semibold text-white"
+            className="px-3 py-2 rounded-lg text-xs font-semibold text-on-accent"
             style={{ background: HD_ORANGE }}
           >
             + Unit
@@ -146,7 +147,7 @@ export default async function IntelHubPage({
           />
           <button
             type="submit"
-            className="px-5 py-2.5 rounded-lg text-sm font-semibold text-white"
+            className="px-5 py-2.5 rounded-lg text-sm font-semibold text-on-fill"
             style={{ background: HD_BLUE }}
           >
             Search
@@ -155,7 +156,7 @@ export default async function IntelHubPage({
             <Link
               href="/hd/intel"
               className="px-4 py-2.5 rounded-lg text-sm"
-              style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)', border: '1px solid var(--hd-border)' }}
+              style={{ color: 'var(--hd-text-faint)', border: '1px solid var(--hd-border)' }}
             >
               Clear
             </Link>
@@ -174,14 +175,14 @@ export default async function IntelHubPage({
               key={tab.key}
               href={`/hd/intel?view=${tab.key}`}
               className="flex items-center gap-2 px-4 py-2.5 text-sm font-medium whitespace-nowrap relative transition-colors"
-              style={view === tab.key ? { color: HD_ORANGE } : { color: 'rgba(var(--hd-ink-rgb), 0.4)' }}
+              style={view === tab.key ? { color: 'var(--hd-accent-text)' } : { color: 'var(--hd-text-faint)' }}
             >
               {tab.label}
               <span
                 className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
                 style={view === tab.key
-                  ? { background: `${HD_ORANGE}25`, color: HD_ORANGE }
-                  : { background: 'var(--hd-border)', color: 'rgba(var(--hd-ink-rgb), 0.35)' }
+                  ? { background: `${tint(HD_ORANGE, 15)}`, color: 'var(--hd-accent-text)' }
+                  : { background: 'var(--hd-border)', color: 'var(--hd-text-faint)' }
                 }
               >
                 {tab.count}
@@ -200,7 +201,7 @@ export default async function IntelHubPage({
           <Link
             href={`/hd/intel${q ? `?q=${encodeURIComponent(q)}` : `?view=${view}`}`}
             className="inline-flex items-center gap-1.5 text-xs mb-4"
-            style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}
+            style={{ color: 'var(--hd-text-faint)' }}
           >
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -208,7 +209,7 @@ export default async function IntelHubPage({
             Back
           </Link>
 
-          <div className="rounded-xl p-5 mb-4" style={{ background: 'var(--hd-card)', border: `1px solid ${HD_BLUE}50` }}>
+          <div className="rounded-xl p-5 mb-4" style={{ background: 'var(--hd-card)', border: `1px solid ${tint(HD_BLUE, 31)}` }}>
             <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
               <div>
                 <p className="font-condensed font-bold text-white text-2xl tracking-wide leading-tight">
@@ -217,7 +218,7 @@ export default async function IntelHubPage({
                 <p className="text-base font-medium mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.7)' }}>
                   {selectedUnit.manufacturer} {selectedUnit.model}
                 </p>
-                <p className="text-sm mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                <p className="text-sm mt-0.5" style={{ color: 'var(--hd-text-faint)' }}>
                   {selectedUnit.unit_type ?? 'Unknown type'}
                   {selectedUnit.serial_number ? ` · SN: ${selectedUnit.serial_number}` : ''}
                   {selectedUnit.total_hours ? ` · ${Number(selectedUnit.total_hours).toLocaleString()} hrs` : ''}
@@ -233,8 +234,8 @@ export default async function IntelHubPage({
                   const isDueSoon  = !isOverdue && ((hoursUntil !== null && hoursUntil <= 200) || dateStatus === 'due_soon')
                   return (
                     <>
-                      {isOverdue  && <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: '#EF444420', color: '#EF4444' }}>PM OVERDUE</span>}
-                      {isDueSoon  && <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: `${HD_ORANGE}25`, color: HD_ORANGE }}>PM DUE SOON</span>}
+                      {isOverdue  && <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: '#EF444420', color: 'var(--hd-negative)' }}>PM OVERDUE</span>}
+                      {isDueSoon  && <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: `${tint(HD_ORANGE, 15)}`, color: 'var(--hd-accent-text)' }}>PM DUE SOON</span>}
                     </>
                   )
                 })()}
@@ -242,7 +243,7 @@ export default async function IntelHubPage({
             </div>
 
             {selectedUnit.last_pm_date && (
-              <p className="text-xs mb-4" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+              <p className="text-xs mb-4" style={{ color: 'var(--hd-text-faint)' }}>
                 Last PM: {new Date(selectedUnit.last_pm_date as string).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                 {selectedUnit.last_pm_type ? ` (${String(selectedUnit.last_pm_type).replace(/_/g, ' ')})` : ''}
               </p>
@@ -255,8 +256,8 @@ export default async function IntelHubPage({
               <p className="font-condensed font-bold text-white text-lg tracking-wide mb-4">PM HISTORY</p>
               {!unitPMs || unitPMs.length === 0 ? (
                 <div className="py-8 text-center">
-                  <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>No PMs recorded</p>
-                  <Link href="/hd/pm-checklist" className="text-xs mt-2 block" style={{ color: HD_ORANGE }}>
+                  <p className="text-sm" style={{ color: 'var(--hd-text-faint)' }}>No PMs recorded</p>
+                  <Link href="/hd/pm-checklist" className="text-xs mt-2 block" style={{ color: 'var(--hd-accent-text)' }}>
                     Start a PM checklist →
                   </Link>
                 </div>
@@ -268,14 +269,14 @@ export default async function IntelHubPage({
                         <p className="text-sm text-white font-medium capitalize">
                           {(pm.pm_type as string).replace(/_/g, ' ')} PM
                         </p>
-                        <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                        <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>
                           {pm.completed_at ? new Date(pm.completed_at as string).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                         </p>
                       </div>
-                      <div className="flex gap-3 flex-wrap text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+                      <div className="flex gap-3 flex-wrap text-xs" style={{ color: 'var(--hd-text-muted)' }}>
                         {pm.battery_cca     && <span>Battery: {String(pm.battery_cca)} CCA</span>}
-                        {pm.alarm_codes_found && <span style={{ color: '#EF4444' }}>Alarms: {String(pm.alarm_codes_found)}</span>}
-                        {pm.flagged_items   && <span style={{ color: HD_ORANGE }}>Flagged items</span>}
+                        {pm.alarm_codes_found && <span style={{ color: 'var(--hd-negative)' }}>Alarms: {String(pm.alarm_codes_found)}</span>}
+                        {pm.flagged_items   && <span style={{ color: 'var(--hd-accent-text)' }}>Flagged items</span>}
                       </div>
                     </div>
                   ))}
@@ -288,8 +289,8 @@ export default async function IntelHubPage({
               <p className="font-condensed font-bold text-white text-lg tracking-wide mb-4">SERVICE HISTORY</p>
               {!unitWOs || unitWOs.length === 0 ? (
                 <div className="py-8 text-center">
-                  <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>No work orders recorded</p>
-                  <Link href="/hd/work-orders?new=1" className="text-xs mt-2 block" style={{ color: HD_ORANGE }}>
+                  <p className="text-sm" style={{ color: 'var(--hd-text-faint)' }}>No work orders recorded</p>
+                  <Link href="/hd/work-orders?new=1" className="text-xs mt-2 block" style={{ color: 'var(--hd-accent-text)' }}>
                     Create first work order →
                   </Link>
                 </div>
@@ -302,17 +303,17 @@ export default async function IntelHubPage({
                           {wo.work_order_number ?? `WO-${(wo.id as string).slice(0, 6).toUpperCase()}`}
                         </p>
                         {wo.total_amount && (
-                          <p className="text-sm font-semibold" style={{ color: HD_ORANGE }}>
+                          <p className="text-sm font-semibold" style={{ color: 'var(--hd-accent-text)' }}>
                             {money(wo.total_amount)}
                           </p>
                         )}
                       </div>
-                      <div className="flex items-center justify-between text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                      <div className="flex items-center justify-between text-xs" style={{ color: 'var(--hd-text-faint)' }}>
                         <span className="capitalize">{wo.service_type ?? 'Service'}</span>
                         <span className="capitalize">{(wo.status as string).replace(/_/g, ' ')}</span>
                       </div>
                       {(wo.completed_at || wo.created_at) && (
-                        <p className="text-xs mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>
+                        <p className="text-xs mt-1" style={{ color: 'var(--hd-text-faint)' }}>
                           {new Date((wo.completed_at ?? wo.created_at) as string).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                         </p>
                       )}
@@ -328,7 +329,7 @@ export default async function IntelHubPage({
       {/* Search results */}
       {q && !selectedUnitId && (
         <div>
-          <p className="text-xs uppercase tracking-widest mb-4" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+          <p className="text-xs uppercase tracking-widest mb-4" style={{ color: 'var(--hd-text-faint)' }}>
             {(units ?? []).length} unit{(units ?? []).length !== 1 ? 's' : ''} matching &quot;{q}&quot;
           </p>
           <UnitGrid units={units ?? []} />
@@ -340,8 +341,8 @@ export default async function IntelHubPage({
         <div>
           {!accounts || accounts.length === 0 ? (
             <div className="py-20 text-center rounded-xl" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
-              <p className="text-sm mb-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>No fleet accounts yet</p>
-              <Link href="/hd/fleet-accounts?new=1" className="text-xs" style={{ color: HD_ORANGE }}>
+              <p className="text-sm mb-2" style={{ color: 'var(--hd-text-faint)' }}>No fleet accounts yet</p>
+              <Link href="/hd/fleet-accounts?new=1" className="text-xs" style={{ color: 'var(--hd-accent-text)' }}>
                 + Add your first fleet account
               </Link>
             </div>
@@ -361,7 +362,7 @@ export default async function IntelHubPage({
                       </p>
                       <span
                         className="text-xs px-2 py-0.5 rounded-full font-bold flex-shrink-0 ml-2"
-                        style={{ background: `${HD_BLUE}25`, color: '#60A5FA' }}
+                        style={{ background: `${tint(HD_BLUE, 15)}`, color: 'var(--hd-info)' }}
                       >
                         {unitCount} unit{unitCount !== 1 ? 's' : ''}
                       </span>
@@ -375,7 +376,7 @@ export default async function IntelHubPage({
                         <a
                           href={`tel:${acct.contact_phone}`}
                           className="flex items-center gap-2 text-sm"
-                          style={{ color: '#60A5FA' }}
+                          style={{ color: 'var(--hd-info)' }}
                         >
                           <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 014.69 12 19.79 19.79 0 011.61 3.44 2 2 0 013.6 1.27h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L7.91 8.91a16 16 0 006 6l.92-.92a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/>
@@ -387,7 +388,7 @@ export default async function IntelHubPage({
                         <a
                           href={`mailto:${acct.contact_email}`}
                           className="flex items-center gap-2 text-sm truncate"
-                          style={{ color: '#60A5FA' }}
+                          style={{ color: 'var(--hd-info)' }}
                         >
                           <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
@@ -396,7 +397,7 @@ export default async function IntelHubPage({
                         </a>
                       )}
                       {acct.address && (
-                        <p className="text-xs truncate" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+                        <p className="text-xs truncate" style={{ color: 'var(--hd-text-faint)' }}>
                           {acct.address as string}
                         </p>
                       )}
@@ -410,7 +411,7 @@ export default async function IntelHubPage({
                       <Link
                         href={`/hd/fleet-units?fleet_account_id=${acct.id}`}
                         className="text-xs font-medium"
-                        style={{ color: HD_ORANGE }}
+                        style={{ color: 'var(--hd-accent-text)' }}
                       >
                         View units →
                       </Link>
@@ -418,14 +419,14 @@ export default async function IntelHubPage({
                         <Link
                           href={`/hd/fleet-units?new=1&fleet_account_id=${acct.id}`}
                           className="text-xs font-medium"
-                          style={{ color: HD_ORANGE }}
+                          style={{ color: 'var(--hd-accent-text)' }}
                         >
                           + Unit
                         </Link>
                         <Link
                           href={`/hd/fleet-accounts/${acct.id}`}
                           className="text-xs"
-                          style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}
+                          style={{ color: 'var(--hd-text-faint)' }}
                         >
                           Edit
                         </Link>
@@ -444,8 +445,8 @@ export default async function IntelHubPage({
         <div>
           {(units ?? []).length === 0 ? (
             <div className="py-20 text-center rounded-xl" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
-              <p className="text-sm mb-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>No units found</p>
-              <Link href="/hd/fleet-units?new=1" className="text-xs" style={{ color: HD_ORANGE }}>
+              <p className="text-sm mb-2" style={{ color: 'var(--hd-text-faint)' }}>No units found</p>
+              <Link href="/hd/fleet-units?new=1" className="text-xs" style={{ color: 'var(--hd-accent-text)' }}>
                 + Add first unit
               </Link>
             </div>
@@ -498,34 +499,34 @@ function UnitGrid({ units }: { units: UnitRow[] }) {
               </p>
               <div className="flex flex-col items-end gap-1 flex-shrink-0">
                 {isOverdue && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: '#EF444420', color: '#EF4444' }}>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: '#EF444420', color: 'var(--hd-negative)' }}>
                     PM OVERDUE
                   </span>
                 )}
                 {isDueSoon && !isOverdue && (
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: `${HD_ORANGE}25`, color: HD_ORANGE }}>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ background: `${tint(HD_ORANGE, 15)}`, color: 'var(--hd-accent-text)' }}>
                     PM DUE SOON
                   </span>
                 )}
               </div>
             </div>
 
-            <p className="text-sm mb-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>
+            <p className="text-sm mb-2" style={{ color: 'var(--hd-text-muted)' }}>
               {u.manufacturer as string} {u.model as string}
             </p>
 
-            <div className="flex items-center justify-between text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+            <div className="flex items-center justify-between text-xs" style={{ color: 'var(--hd-text-faint)' }}>
               <span>{u.total_hours !== null ? `${Number(u.total_hours).toLocaleString()} hrs` : 'No hours logged'}</span>
               {u.serial_number != null && <span className="truncate ml-2">SN: {String(u.serial_number)}</span>}
             </div>
 
             {u.last_pm_date != null && (
-              <p className="text-xs mt-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>
+              <p className="text-xs mt-2" style={{ color: 'var(--hd-text-faint)' }}>
                 Last PM: {new Date(u.last_pm_date as string).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
               </p>
             )}
 
-            <p className="text-xs mt-2 font-medium" style={{ color: HD_ORANGE }}>View history →</p>
+            <p className="text-xs mt-2 font-medium" style={{ color: 'var(--hd-accent-text)' }}>View history →</p>
           </Link>
         )
       })}

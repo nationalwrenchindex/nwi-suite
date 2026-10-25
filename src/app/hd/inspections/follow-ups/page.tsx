@@ -142,13 +142,13 @@ export default async function InspectionFollowUpsPage() {
     <main className="flex-1 p-6">
       <div className="mb-6 flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>
             HD Suite
           </p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">
             INSPECTION FOLLOW-UPS
           </h1>
-          <p className="text-white/40 text-sm mt-1">
+          <p className="text-[color:var(--hd-text-faint)] text-sm mt-1">
             Defects that did not take a unit out of service. Still needs doing, just not today.
           </p>
         </div>

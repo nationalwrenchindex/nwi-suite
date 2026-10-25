@@ -246,25 +246,24 @@ export function laborFromLines(lines: unknown): number {
   return round2(n)
 }
 
-/** "10% off labor", "$100.00 off" - the label the customer's copy prints. */
-export function discountLabel(d: DiscountInput): string {
-  const what = d.type === 'percent' ? `${trimPct(d.value)}%` : money(d.value)
-  const on = d.scope === 'labor' ? ' on labor' : d.scope === 'parts' ? ' on parts' : ''
-  return `Discount (${what}${on})`
-}
-
 /**
- * The printed row label, which states each fact once: a FLAT discount's amount is
- * already in the amount column, so it is not repeated here; a percentage is
- * information the amount does not carry, so it stays. Then the reason, if any.
- *   "Discount - Fleet customer"  "Discount (10%) - Fleet customer"  "Discount on labor"
- * HD prints this. LD still prints discountLabel.
+ * The row label, BOTH PRODUCTS. It states each fact once: a FLAT discount's amount is
+ * already in the amount column, so it is not repeated here ("Discount ($100.00)
+ * -100.00" said it twice); a percentage is information the amount does not carry, so
+ * it stays; a scope is named.
+ *   "Discount"  "Discount on labor"  "Discount (10%)"  "Discount (15% on parts)"
+ * LD prints the reason on its own beside this; HD prints discountPrintLabel.
  */
-export function discountPrintLabel(d: DiscountInput): string {
+export function discountLabel(d: DiscountInput): string {
   const on = d.scope === 'labor' ? 'on labor' : d.scope === 'parts' ? 'on parts' : ''
-  const head = d.type === 'percent'
+  return d.type === 'percent'
     ? `Discount (${[`${trimPct(d.value)}%`, on].filter(Boolean).join(' ')})`
     : on ? `Discount ${on}` : 'Discount'
+}
+
+/** The label with its reason, on one line: "Discount (10%) - Fleet customer". */
+export function discountPrintLabel(d: DiscountInput): string {
+  const head = discountLabel(d)
   return d.reason ? `${head} - ${d.reason}` : head
 }
 

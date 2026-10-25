@@ -54,7 +54,7 @@ export default function HDLoginPage() {
 
         <form onSubmit={handleLogin} className="rounded-xl p-6 space-y-4" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
           <div>
-            <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Email</label>
+            <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>Email</label>
             <input
               type="email"
               value={email}
@@ -66,7 +66,7 @@ export default function HDLoginPage() {
             />
           </div>
           <div>
-            <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Password</label>
+            <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>Password</label>
             <input
               type="password"
               value={pass}
@@ -82,16 +82,16 @@ export default function HDLoginPage() {
           <button
             type="submit"
             disabled={loading || captcha.pending}
-            className="w-full py-3 rounded-xl font-bold text-white text-sm"
+            className="w-full py-3 rounded-xl font-bold text-on-accent text-sm"
             style={{ background: HD_ORANGE, opacity: loading || captcha.pending ? 0.6 : 1 }}
           >
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
 
-        <p className="text-center text-xs mt-4" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>
+        <p className="text-center text-xs mt-4" style={{ color: 'var(--hd-text-faint)' }}>
           No account?{' '}
-          <a href="/hd/signup" style={{ color: HD_ORANGE }}>Start today</a>
+          <a href="/hd/signup" style={{ color: 'var(--hd-accent-text)' }}>Start today</a>
         </p>
       </div>
     </div>

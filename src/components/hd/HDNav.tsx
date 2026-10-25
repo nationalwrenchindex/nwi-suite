@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
+import { tint } from '@/lib/hd/text-tone'
 
 interface NavItem {
   href:  string
@@ -222,11 +223,11 @@ export default function HDNav({ businessName }: { businessName?: string }) {
         onClick={() => setOpen(false)}
         className="flex items-center gap-3 px-3 py-3 rounded-lg text-sm transition-colors"
         style={isActive
-          ? { background: `${HD_ORANGE}20`, color: HD_ORANGE, minHeight: 44 }
-          : { color: 'rgba(var(--hd-ink-rgb), 0.5)', minHeight: 44 }
+          ? { background: `${tint(HD_ORANGE, 13)}`, color: 'var(--hd-accent-text)', minHeight: 44 }
+          : { color: 'var(--hd-text-muted)', minHeight: 44 }
         }
         onMouseEnter={e => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(var(--hd-ink-rgb), 0.9)' }}
-        onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'rgba(var(--hd-ink-rgb), 0.5)' }}
+        onMouseLeave={e => { if (!isActive) (e.currentTarget as HTMLElement).style.color = 'var(--hd-text-muted)' }}
       >
         <span className="flex-shrink-0">{item.icon}</span>
         <span className="font-medium truncate">{item.label}</span>
@@ -248,7 +249,7 @@ export default function HDNav({ businessName }: { businessName?: string }) {
         </div>
         <div className="min-w-0">
           <p className="font-condensed font-bold text-white text-sm leading-tight tracking-wide">NWI HD SUITE</p>
-          <p className="text-xs truncate" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+          <p className="text-xs truncate" style={{ color: 'var(--hd-text-faint)' }}>
             {businessName ?? 'Heavy Duty'}
           </p>
         </div>
@@ -279,9 +280,9 @@ export default function HDNav({ businessName }: { businessName?: string }) {
         <button
           onClick={signOut}
           className="flex items-center gap-2 w-full px-3 py-2 rounded-lg text-sm transition-colors text-left"
-          style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}
+          style={{ color: 'var(--hd-text-faint)' }}
           onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'rgba(var(--hd-ink-rgb), 0.7)' }}
-          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'rgba(var(--hd-ink-rgb), 0.35)' }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--hd-text-faint)' }}
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={1.75} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -310,7 +311,7 @@ export default function HDNav({ businessName }: { businessName?: string }) {
         <button
           onClick={() => setOpen(true)}
           className="flex items-center justify-center rounded-lg transition-colors"
-          style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)', minWidth: 44, minHeight: 44 }}
+          style={{ color: 'var(--hd-text-muted)', minWidth: 44, minHeight: 44 }}
         >
           <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <line x1="3" y1="12" x2="21" y2="12" />
@@ -330,7 +331,7 @@ export default function HDNav({ businessName }: { businessName?: string }) {
         </div>
         <Link
           href="/hd/pm-checklist"
-          className="ml-auto px-3 py-1.5 rounded-lg text-xs font-semibold text-white"
+          className="ml-auto px-3 py-1.5 rounded-lg text-xs font-semibold text-on-accent"
           style={{ background: HD_ORANGE }}
         >
           PM Checklist
@@ -348,7 +349,7 @@ export default function HDNav({ businessName }: { businessName?: string }) {
             <button
               onClick={() => setOpen(false)}
               className="absolute top-3 right-3 p-1.5 rounded-lg"
-              style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}
+              style={{ color: 'var(--hd-text-faint)' }}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />

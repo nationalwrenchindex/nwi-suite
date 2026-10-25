@@ -12,6 +12,7 @@ import {
 import AddPartToWorkOrder from '@/components/parts/AddPartToWorkOrder'
 import type { PickedPart } from '@/components/parts/PartsFinder'
 import { money } from '@/lib/format'
+import { tint } from '@/lib/hd/text-tone'
 
 // Parts and labor priced on the job itself, instead of first appearing at the
 // invoice form. Self-contained: it fetches and saves its own rows, so the work order
@@ -276,34 +277,34 @@ export default function WorkOrderLineItems({
     <div className="rounded-xl overflow-hidden mb-6" style={{ border: `1px solid ${BORDER}` }}>
       <div className="px-5 py-3 flex flex-wrap items-center justify-between gap-2" style={{ background: 'var(--hd-sunken)', borderBottom: `1px solid ${BORDER}` }}>
         <p className="font-condensed font-bold text-white text-sm tracking-widest">PARTS &amp; LABOR</p>
-        <span className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+        <span className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>
           {lines.length} line{lines.length !== 1 ? 's' : ''}
         </span>
       </div>
 
       {canEdit && (
-        <div className="px-5 py-3 flex flex-wrap items-center gap-2" style={{ background: '#0f1820', borderBottom: `1px solid ${BORDER}` }}>
+        <div className="px-5 py-3 flex flex-wrap items-center gap-2" style={{ background: 'var(--hd-sunken)', borderBottom: `1px solid ${BORDER}` }}>
           <button
             type="button" onClick={() => addLine('labor')}
             className="px-4 py-2 rounded-lg text-xs font-condensed font-bold tracking-wide"
-            style={{ background: `${HD_ORANGE}18`, color: HD_ORANGE, border: `1px solid ${HD_ORANGE}55` }}
+            style={{ background: `${tint(HD_ORANGE, 9)}`, color: 'var(--hd-accent-text)', border: `1px solid ${tint(HD_ORANGE, 33)}` }}
           >
             + Add Labor
           </button>
           <button
             type="button" onClick={() => addLine('part')}
             className="px-4 py-2 rounded-lg text-xs font-condensed font-bold tracking-wide"
-            style={{ background: `${BLUE}18`, color: BLUE, border: `1px solid ${BLUE}55` }}
+            style={{ background: `${tint(BLUE, 9)}`, color: 'var(--hd-info)', border: `1px solid ${tint(BLUE, 33)}` }}
           >
             + Add Part
           </button>
           <div className="flex-1" />
           {dirty && (
-            <span className="text-xs" style={{ color: HD_ORANGE }}>Unsaved changes</span>
+            <span className="text-xs" style={{ color: 'var(--hd-accent-text)' }}>Unsaved changes</span>
           )}
           <button
             type="button" onClick={save} disabled={saving || !dirty}
-            className="px-5 py-2 rounded-lg text-xs font-condensed font-bold tracking-wide text-white disabled:opacity-40"
+            className="px-5 py-2 rounded-lg text-xs font-condensed font-bold tracking-wide text-on-accent disabled:opacity-40"
             style={{ background: HD_ORANGE }}
           >
             {saving ? 'Saving…' : 'Save Lines'}
@@ -326,13 +327,13 @@ export default function WorkOrderLineItems({
 
       <div style={{ background: CARD }}>
         {error && (
-          <p className="mx-5 mt-4 text-sm px-3 py-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)' }}>
+          <p className="mx-5 mt-4 text-sm px-3 py-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: 'var(--hd-negative)', border: '1px solid rgba(239,68,68,0.3)' }}>
             {error}
           </p>
         )}
 
         {note && !error && (
-          <p className="mx-5 mt-4 text-sm px-3 py-2 rounded-lg" style={{ background: 'rgba(34,197,94,0.12)', color: '#22C55E', border: '1px solid rgba(34,197,94,0.3)' }}>
+          <p className="mx-5 mt-4 text-sm px-3 py-2 rounded-lg" style={{ background: 'rgba(34,197,94,0.12)', color: 'var(--hd-positive)', border: '1px solid rgba(34,197,94,0.3)' }}>
             {note}
           </p>
         )}
@@ -340,7 +341,7 @@ export default function WorkOrderLineItems({
         {/* Before the save, not after. A row the tech can still fill in gets told it
             needs something rather than being deleted out from under him. */}
         {blankCount > 0 && (
-          <p className="mx-5 mt-4 text-xs px-3 py-2 rounded-lg" style={{ background: 'rgba(245,158,11,0.12)', color: '#F59E0B', border: '1px solid rgba(245,158,11,0.3)' }}>
+          <p className="mx-5 mt-4 text-xs px-3 py-2 rounded-lg" style={{ background: 'rgba(245,158,11,0.12)', color: 'var(--hd-warn)', border: '1px solid rgba(245,158,11,0.3)' }}>
             {blankCount === 1
               ? 'One line has no description and no price. It will not be saved.'
               : `${blankCount} lines have no description and no price. They will not be saved.`}
@@ -348,10 +349,10 @@ export default function WorkOrderLineItems({
         )}
 
         {loading ? (
-          <p className="p-5 text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>Loading line items…</p>
+          <p className="p-5 text-xs" style={{ color: 'var(--hd-text-faint)' }}>Loading line items…</p>
         ) : lines.length === 0 ? (
           <div className="p-5">
-            <p className="text-xs py-4 text-center" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)', border: `1px dashed ${BORDER}`, borderRadius: 8 }}>
+            <p className="text-xs py-4 text-center" style={{ color: 'var(--hd-text-faint)', border: `1px dashed ${BORDER}`, borderRadius: 8 }}>
               {canEdit ? 'No parts or labor on this job yet — add a line above' : 'No parts or labor on this job'}
             </p>
           </div>
@@ -359,7 +360,7 @@ export default function WorkOrderLineItems({
           <div className="overflow-x-auto">
             <table className="w-full text-sm" style={{ minWidth: 860 }}>
               <thead style={{ background: HEAD }}>
-                <tr style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                <tr style={{ color: 'var(--hd-text-faint)' }}>
                   <th className={thCls} style={{ width: 60 }}>Type</th>
                   <th className={thCls} style={{ width: 130 }}>Part #</th>
                   <th className={thCls}>Description</th>
@@ -380,8 +381,8 @@ export default function WorkOrderLineItems({
                         <span
                           className="text-[10px] px-1.5 py-0.5 rounded font-bold"
                           style={isPart
-                            ? { background: `${BLUE}20`, color: BLUE }
-                            : { background: `${HD_ORANGE}20`, color: HD_ORANGE }}
+                            ? { background: `${tint(BLUE, 13)}`, color: 'var(--hd-info)' }
+                            : { background: `${tint(HD_ORANGE, 13)}`, color: 'var(--hd-accent-text)' }}
                         >
                           {isPart ? 'PRT' : 'LAB'}
                         </span>
@@ -394,7 +395,7 @@ export default function WorkOrderLineItems({
                             placeholder="37-33-6021"
                           />
                         ) : (
-                          <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>—</span>
+                          <span style={{ color: 'var(--hd-text-faint)' }}>—</span>
                         )}
                       </td>
                       <td className="px-3 py-2">
@@ -422,7 +423,7 @@ export default function WorkOrderLineItems({
                             placeholder="0.00"
                           />
                         ) : (
-                          <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>—</span>
+                          <span style={{ color: 'var(--hd-text-faint)' }}>—</span>
                         )}
                       </td>
                       <td className="px-3 py-2">
@@ -433,7 +434,7 @@ export default function WorkOrderLineItems({
                             value={d.markup_percent} onChange={e => update(d.key, { markup_percent: e.target.value })}
                           />
                         ) : (
-                          <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>—</span>
+                          <span style={{ color: 'var(--hd-text-faint)' }}>—</span>
                         )}
                       </td>
                       <td className="px-3 py-2">
@@ -457,7 +458,7 @@ export default function WorkOrderLineItems({
                           blank LAB rows look like a billing bug rather than a row
                           nobody had filled in yet. */}
                       {isBlank(d) ? (
-                        <td className="px-3 py-2 text-right text-xs" style={{ color: '#F59E0B' }}>needs a description</td>
+                        <td className="px-3 py-2 text-right text-xs" style={{ color: 'var(--hd-warn)' }}>needs a description</td>
                       ) : (
                         <td className="px-3 py-2 text-right font-semibold text-white">{fmt(draftTotal(d))}</td>
                       )}
@@ -465,11 +466,11 @@ export default function WorkOrderLineItems({
                         <td className="px-3 py-2">
                           <div className="flex items-center gap-1">
                             <button type="button" onClick={() => move(i, -1)} disabled={i === 0}
-                              className="px-1.5 py-0.5 rounded text-xs disabled:opacity-25" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)', border: `1px solid ${BORDER}` }} title="Move up">↑</button>
+                              className="px-1.5 py-0.5 rounded text-xs disabled:opacity-25" style={{ color: 'var(--hd-text-muted)', border: `1px solid ${BORDER}` }} title="Move up">↑</button>
                             <button type="button" onClick={() => move(i, 1)} disabled={i === lines.length - 1}
-                              className="px-1.5 py-0.5 rounded text-xs disabled:opacity-25" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)', border: `1px solid ${BORDER}` }} title="Move down">↓</button>
+                              className="px-1.5 py-0.5 rounded text-xs disabled:opacity-25" style={{ color: 'var(--hd-text-muted)', border: `1px solid ${BORDER}` }} title="Move down">↓</button>
                             <button type="button" onClick={() => removeLine(d.key)}
-                              className="px-1.5 py-0.5 rounded text-xs" style={{ color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)' }} title="Remove line">×</button>
+                              className="px-1.5 py-0.5 rounded text-xs" style={{ color: 'var(--hd-negative)', border: '1px solid rgba(239,68,68,0.3)' }} title="Remove line">×</button>
                           </div>
                         </td>
                       )}
@@ -484,22 +485,22 @@ export default function WorkOrderLineItems({
         {lines.length > 0 && (
           <div className="px-5 py-4 flex justify-end" style={{ borderTop: `1px solid ${BORDER}` }}>
             <div style={{ width: 260 }}>
-              <div className="flex justify-between py-1 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+              <div className="flex justify-between py-1 text-sm" style={{ color: 'var(--hd-text-muted)' }}>
                 <span>Labor</span><span>{fmt(totals.labor)}</span>
               </div>
-              <div className="flex justify-between py-1 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+              <div className="flex justify-between py-1 text-sm" style={{ color: 'var(--hd-text-muted)' }}>
                 <span>Parts</span><span>{fmt(totals.parts)}</span>
               </div>
               {/* Margin is the tech's own figure, shown here because this screen is
                   the internal job sheet. It is not on any customer-facing document. */}
               {totals.partsCost > 0 && (
-                <div className="flex justify-between py-1 text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+                <div className="flex justify-between py-1 text-xs" style={{ color: 'var(--hd-text-faint)' }}>
                   <span>Parts cost (your margin {fmt(totals.parts - totals.partsCost)})</span><span>{fmt(totals.partsCost)}</span>
                 </div>
               )}
               <div className="flex justify-between items-center pt-2 mt-1" style={{ borderTop: `2px solid ${HD_ORANGE}` }}>
                 <span className="font-condensed font-bold text-sm tracking-widest text-white">LINE TOTAL</span>
-                <span className="font-bold text-xl" style={{ color: HD_ORANGE }}>{fmt(totals.total)}</span>
+                <span className="font-bold text-xl" style={{ color: 'var(--hd-accent-text)' }}>{fmt(totals.total)}</span>
               </div>
               {/* The work order's own total_amount is a separate stored figure that
                   predates these rows. It is left untouched on purpose so the
@@ -510,7 +511,7 @@ export default function WorkOrderLineItems({
                   that figure came off the quote and includes tax, travel, mileage and
                   fees, and this one is parts and labor. Both were labelled as totals,
                   so a correct pair of numbers read as a billing error. */}
-              <p className="text-xs mt-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+              <p className="text-xs mt-2" style={{ color: 'var(--hd-text-faint)' }}>
                 Parts and labor only. Tax, travel and fees are added when you bill
                 this job, so this will not match the Quoted Total above.
               </p>

@@ -51,8 +51,8 @@ export default function FleetAccountList({
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {rows.length === 0 ? (
           <div className="col-span-full py-16 text-center rounded-xl" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
-            <p className="text-sm mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>No fleet accounts yet</p>
-            <p className="text-xs mb-3" style={{ color: 'rgba(var(--hd-ink-rgb), 0.2)' }}>Add commercial fleet customers to organize your service accounts</p>
+            <p className="text-sm mb-1" style={{ color: 'var(--hd-text-faint)' }}>No fleet accounts yet</p>
+            <p className="text-xs mb-3" style={{ color: 'var(--hd-text-faint)' }}>Add commercial fleet customers to organize your service accounts</p>
             <Link href="?new=1" className="text-xs px-4 py-2 rounded-lg font-semibold" style={{ background: HD_ORANGE, color: 'var(--hd-text)' }}>
               + Add First Account
             </Link>
@@ -66,16 +66,16 @@ export default function FleetAccountList({
               <Link
                 href={`/hd/fleet-accounts/${a.id}?edit=1`}
                 className="absolute top-3 right-3 z-10 text-xs font-semibold px-2.5 py-1 rounded-lg"
-                style={{ color: '#60A5FA', border: '1px solid var(--hd-border)', background: 'var(--hd-card)' }}
+                style={{ color: 'var(--hd-info)', border: '1px solid var(--hd-border)', background: 'var(--hd-card)' }}
               >
                 Edit
               </Link>
               <div className="relative pointer-events-none pr-12">
                 <p className="font-condensed font-bold text-white text-lg tracking-wide">{a.fleet_name}</p>
-                {a.contact_name  && <p className="text-sm mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>{a.contact_name}</p>}
-                {a.contact_phone && <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>{a.contact_phone}</p>}
-                {a.contact_email && <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>{a.contact_email}</p>}
-                {a.address       && <p className="text-xs mt-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>📍 {a.address}</p>}
+                {a.contact_name  && <p className="text-sm mt-1" style={{ color: 'var(--hd-text-muted)' }}>{a.contact_name}</p>}
+                {a.contact_phone && <p className="text-sm" style={{ color: 'var(--hd-text-muted)' }}>{a.contact_phone}</p>}
+                {a.contact_email && <p className="text-sm" style={{ color: 'var(--hd-text-muted)' }}>{a.contact_email}</p>}
+                {a.address       && <p className="text-xs mt-2" style={{ color: 'var(--hd-text-faint)' }}>📍 {a.address}</p>}
               </div>
             </div>
           ))
@@ -83,14 +83,14 @@ export default function FleetAccountList({
       </div>
 
       {error && (
-        <p className="text-sm mt-3 px-4 py-2.5 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)' }}>
+        <p className="text-sm mt-3 px-4 py-2.5 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: 'var(--hd-negative)', border: '1px solid rgba(239,68,68,0.3)' }}>
           {error}
         </p>
       )}
 
       {hasMore && (
         <div className="flex flex-col items-center gap-2 mt-4">
-          <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+          <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>
             Showing {rows.length.toLocaleString()} of {total.toLocaleString()}
           </p>
           <button

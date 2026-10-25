@@ -32,7 +32,7 @@ const card: React.CSSProperties = {
 function Field({ label, children, wide }: { label: string; children: React.ReactNode; wide?: boolean }) {
   return (
     <div className={`flex flex-col gap-1 ${wide ? 'sm:col-span-2' : ''}`}>
-      <label className="text-xs uppercase tracking-wider" style={{ color: 'rgba(var(--hd-ink-rgb), 0.45)', fontSize: 10 }}>{label}</label>
+      <label className="text-xs uppercase tracking-wider" style={{ color: 'var(--hd-text-muted)', fontSize: 10 }}>{label}</label>
       {children}
     </div>
   )
@@ -119,17 +119,17 @@ export default function EditWorkOrderForm({ workOrder: wo }: { workOrder: Record
     <main className="flex-1 min-h-screen" style={{ background: 'var(--hd-bg)' }}>
       <div style={{ maxWidth: 860, margin: '0 auto', padding: '24px 20px' }}>
         <div className="flex items-center gap-3 mb-6">
-          <Link href={`/hd/work-orders/${id}`} style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)', fontSize: 13 }}>← Work Order</Link>
+          <Link href={`/hd/work-orders/${id}`} style={{ color: 'var(--hd-text-muted)', fontSize: 13 }}>← Work Order</Link>
           <span style={{ color: 'var(--hd-border)' }}>/</span>
           <span className="font-condensed font-bold text-2xl text-white">EDIT {str(wo.work_order_number)}</span>
         </div>
 
         {locked && (
-          <p className="text-sm mb-4" style={{ color: '#F59E0B' }}>
+          <p className="text-sm mb-4" style={{ color: 'var(--hd-warn)' }}>
             This work order has been invoiced, so it is locked. Edit the invoice, or reopen the work order first.
           </p>
         )}
-        <p className="text-xs mb-4" style={{ color: 'rgba(var(--hd-ink-rgb), 0.45)' }}>
+        <p className="text-xs mb-4" style={{ color: 'var(--hd-text-muted)' }}>
           Rates, tax and terms are not edited here: they came from the approved quote. Parts and labor are edited on the work order itself.
         </p>
 
@@ -177,7 +177,7 @@ export default function EditWorkOrderForm({ workOrder: wo }: { workOrder: Record
           </div>
         </div>
 
-        {message && <p className="text-sm mb-4" style={{ color: '#F59E0B' }}>{message}</p>}
+        {message && <p className="text-sm mb-4" style={{ color: 'var(--hd-warn)' }}>{message}</p>}
 
         <div className="flex gap-3 pb-8">
           <Link href={`/hd/work-orders/${id}`} className="flex-1 py-3 rounded-lg text-center font-semibold text-sm"
@@ -185,7 +185,7 @@ export default function EditWorkOrderForm({ workOrder: wo }: { workOrder: Record
             Cancel
           </Link>
           <button onClick={save} disabled={saving || locked}
-                  className="flex-1 py-3 rounded-lg font-semibold text-sm text-white disabled:opacity-50"
+                  className="flex-1 py-3 rounded-lg font-semibold text-sm text-on-accent disabled:opacity-50"
                   style={{ background: HD_ORANGE, minHeight: 48 }}>
             {saving ? 'Saving...' : 'Save Changes'}
           </button>

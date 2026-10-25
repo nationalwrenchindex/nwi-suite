@@ -6,6 +6,7 @@ import {
   EQUIPMENT_TYPE_LABEL, EQUIPMENT_INTERVAL_DAYS, isEquipmentType,
 } from '@/lib/hd/equipment/forms'
 import type { EquipmentType } from '@/types/equipment'
+import { textTone, tint } from '@/lib/hd/text-tone'
 
 export const metadata = { title: 'Equipment Inspections — NWI HD Suite' }
 
@@ -86,14 +87,14 @@ export default async function EquipmentInspectionsDashboard() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="font-condensed font-bold text-2xl text-white tracking-wide">EQUIPMENT INSPECTIONS</h1>
-            <p className="text-white/40 text-sm mt-0.5">
+            <p className="text-[color:var(--hd-text-faint)] text-sm mt-0.5">
               Latest inspection per machine and class, with overdue flagging.
             </p>
           </div>
           <Link
             href="/hd/equipment-inspections/new"
             className="px-4 py-2 rounded-lg text-xs font-condensed font-bold tracking-wide"
-            style={{ background: `${HD_ORANGE}18`, color: HD_ORANGE, border: `1px solid ${HD_ORANGE}55` }}
+            style={{ background: `${tint(HD_ORANGE, 9)}`, color: 'var(--hd-accent-text)', border: `1px solid ${tint(HD_ORANGE, 33)}` }}
           >
             + New Equipment Inspection
           </Link>
@@ -101,8 +102,8 @@ export default async function EquipmentInspectionsDashboard() {
 
         {machineList.length === 0 ? (
           <div className="rounded-xl p-8 text-center" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
-            <p className="text-white/40 text-sm">No equipment inspections recorded yet.</p>
-            <p className="text-white/25 text-xs mt-1">
+            <p className="text-[color:var(--hd-text-faint)] text-sm">No equipment inspections recorded yet.</p>
+            <p className="text-[color:var(--hd-text-faint)] text-xs mt-1">
               Start one from a work order, or with the button above.
             </p>
           </div>
@@ -111,7 +112,7 @@ export default async function EquipmentInspectionsDashboard() {
             <div key={m.label + (m.unitId ?? '')} className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
               <div className="px-5 py-3 flex items-center justify-between" style={{ background: 'var(--hd-sunken)', borderBottom: '1px solid var(--hd-border)' }}>
                 <p className="font-condensed font-bold text-white text-sm tracking-widest">{m.label.toUpperCase()}</p>
-                <span className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+                <span className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>
                   {m.latest.size} class{m.latest.size !== 1 ? 'es' : ''} inspected
                 </span>
               </div>
@@ -132,7 +133,7 @@ export default async function EquipmentInspectionsDashboard() {
                     >
                       <div className="min-w-0">
                         <p className="text-sm font-semibold text-white">{label}</p>
-                        <p className="text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                        <p className="text-xs mt-0.5" style={{ color: 'var(--hd-text-faint)' }}>
                           {new Date(`${r.inspection_date}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                           {' · '}{r.inspector_name ?? r.operator_name ?? 'Unsigned'}
                         </p>
@@ -141,20 +142,20 @@ export default async function EquipmentInspectionsDashboard() {
                       <div className="flex items-center gap-2 flex-shrink-0">
                         {r.removed_from_service && (
                           <span className="text-xs font-bold px-2.5 py-1 rounded-full"
-                            style={{ background: '#EF444420', color: '#EF4444', border: '1px solid #EF444450' }}>
+                            style={{ background: '#EF444420', color: 'var(--hd-negative)', border: '1px solid #EF444450' }}>
                             OUT OF SERVICE
                           </span>
                         )}
                         {overdue && (
                           <span className="text-xs font-bold px-2.5 py-1 rounded-full"
-                            style={{ background: `${HD_ORANGE}20`, color: HD_ORANGE, border: `1px solid ${HD_ORANGE}55` }}>
+                            style={{ background: `${tint(HD_ORANGE, 13)}`, color: 'var(--hd-accent-text)', border: `1px solid ${tint(HD_ORANGE, 33)}` }}>
                             OVERDUE · {age}d
                           </span>
                         )}
                         <span className="text-xs font-bold px-2.5 py-1 rounded-full"
                           style={{
                             background: passed ? '#22C55E20' : '#EF444420',
-                            color:      passed ? '#22C55E'   : '#EF4444',
+                            color: textTone(passed ? 'var(--hd-positive)'   : 'var(--hd-negative)'),
                             border:     `1px solid ${passed ? '#22C55E50' : '#EF444450'}`,
                           }}>
                           {passed ? 'PASS' : 'FAIL'}
@@ -162,7 +163,7 @@ export default async function EquipmentInspectionsDashboard() {
                         <Link
                           href={`/hd/equipment-inspections/${r.id}`}
                           className="px-3 py-1.5 rounded-lg text-xs font-semibold"
-                          style={{ background: `${HD_ORANGE}20`, color: HD_ORANGE, border: `1px solid ${HD_ORANGE}40` }}
+                          style={{ background: `${tint(HD_ORANGE, 13)}`, color: 'var(--hd-accent-text)', border: `1px solid ${tint(HD_ORANGE, 25)}` }}
                         >
                           View
                         </Link>

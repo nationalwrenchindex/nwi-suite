@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { BrandHeader, BrandFooter } from '@/components/BrandHeader'
 import { NWI_TRADEMARK_FOOTER, type Branding } from '@/lib/branding'
+import { textTone, tint } from '@/lib/hd/text-tone'
 import {
   INSPECTION_CATEGORIES,
   CATEGORY_ITEMS,
@@ -45,8 +46,8 @@ interface DOTInspection {
 }
 
 const RESULT_CFG = {
-  pass: { label: 'PASS', color: '#22C55E', bg: '#22C55E20', border: '#22C55E50' },
-  fail: { label: 'FAIL', color: '#EF4444', bg: '#EF444420', border: '#EF444450' },
+  pass: { label: 'PASS', color: 'var(--hd-positive)', bg: '#22C55E20', border: '#22C55E50' },
+  fail: { label: 'FAIL', color: 'var(--hd-negative)', bg: '#EF444420', border: '#EF444450' },
   na:   { label: 'N/A',  color: '#6B7280', bg: '#6B728020', border: '#6B728050' },
 }
 
@@ -55,7 +56,7 @@ function ResultBadge({ result }: { result: string }) {
   return (
     <span
       className="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0"
-      style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}` }}
+      style={{ background: cfg.bg, color: textTone(cfg.color), border: `1px solid ${cfg.border}` }}
     >
       {cfg.label}
     </span>
@@ -109,13 +110,13 @@ export default function DOTInspectionDetail({
         {/* Header */}
         <div className="flex items-start justify-between">
           <div>
-            <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+            <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>
               HD Suite — DOT Inspection Record
             </p>
             <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">
               {inspId}
             </h1>
-            <p className="text-sm mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+            <p className="text-sm mt-0.5" style={{ color: 'var(--hd-text-faint)' }}>
               {inspDate}
               {inspection.location && ` · ${inspection.location}`}
             </p>
@@ -124,14 +125,14 @@ export default function DOTInspectionDetail({
             <Link
               href="/hd/dot-inspections"
               className="px-3 py-2 rounded-lg text-sm"
-              style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)', border: '1px solid var(--hd-border)' }}
+              style={{ color: 'var(--hd-text-faint)', border: '1px solid var(--hd-border)' }}
             >
               ← Back
             </Link>
             <button
               type="button"
               onClick={() => window.print()}
-              className="px-4 py-2 rounded-lg text-sm font-semibold text-white flex items-center gap-2"
+              className="px-4 py-2 rounded-lg text-sm font-semibold text-on-fill flex items-center gap-2"
               style={{ background: HD_BLUE }}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -145,16 +146,16 @@ export default function DOTInspectionDetail({
         {/* Locked banner */}
         <div
           className="rounded-xl px-5 py-3 flex items-center gap-3"
-          style={{ background: 'var(--hd-sunken)', border: `1px solid ${HD_ORANGE}40` }}
+          style={{ background: 'var(--hd-sunken)', border: `1px solid ${tint(HD_ORANGE, 25)}` }}
         >
           <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke={HD_ORANGE} strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
           </svg>
-          <p className="text-xs font-bold tracking-wide" style={{ color: HD_ORANGE }}>
+          <p className="text-xs font-bold tracking-wide" style={{ color: 'var(--hd-accent-text)' }}>
             LOCKED RECORD — NOT EDITABLE
           </p>
           {lockedAt && (
-            <p className="text-xs ml-auto" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+            <p className="text-xs ml-auto" style={{ color: 'var(--hd-text-faint)' }}>
               Signed {lockedAt}
             </p>
           )}
@@ -168,12 +169,12 @@ export default function DOTInspectionDetail({
             border: `2px solid ${isPassed ? '#22C55E40' : '#EF444440'}`,
           }}
         >
-          <span className="font-condensed font-bold text-4xl" style={{ color: isPassed ? '#22C55E' : '#EF4444' }}>
+          <span className="font-condensed font-bold text-4xl" style={{ color: textTone(isPassed ? 'var(--hd-positive)' : 'var(--hd-negative)') }}>
             {isPassed ? 'PASS' : 'FAIL'}
           </span>
           <div>
             <p className="text-white font-semibold text-sm">Annual DOT Inspection</p>
-            <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+            <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>
               {violations.length > 0
                 ? `${violations.length} violation${violations.length !== 1 ? 's' : ''} found`
                 : 'No violations found'
@@ -197,7 +198,7 @@ export default function DOTInspectionDetail({
               { label: 'Location',       value: inspection.location              ?? '—' },
             ].map(({ label, value }) => (
               <div key={label}>
-                <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>{label}</p>
+                <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: 'var(--hd-text-faint)' }}>{label}</p>
                 <p className="text-sm text-white">{value}</p>
               </div>
             ))}
@@ -224,7 +225,7 @@ export default function DOTInspectionDetail({
                       border: `1px solid ${isFail ? '#EF444430' : 'var(--hd-border)'}`,
                     }}
                   >
-                    <span className="text-xs font-mono font-bold w-6 text-right flex-shrink-0" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>
+                    <span className="text-xs font-mono font-bold w-6 text-right flex-shrink-0" style={{ color: 'var(--hd-text-faint)' }}>
                       {cat.num}
                     </span>
                     <p className="flex-1 text-sm text-white">{cat.label}</p>
@@ -246,10 +247,10 @@ export default function DOTInspectionDetail({
                             border: `1px solid ${isItemFail ? '#EF444425' : 'var(--hd-border)'}`,
                           }}
                         >
-                          <p className="flex-1 text-xs leading-relaxed" style={{ color: isItemFail ? '#EF4444CC' : 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+                          <p className="flex-1 text-xs leading-relaxed" style={{ color: textTone(isItemFail ? '#EF4444CC' : 'var(--hd-text-muted)') }}>
                             {item.label}
                             {item.safetyCritical && (
-                              <span className="ml-1.5 text-xs font-bold" style={{ color: '#F59E0B', fontSize: 9 }}>⚠ SAFETY CRITICAL</span>
+                              <span className="ml-1.5 text-xs font-bold" style={{ color: 'var(--hd-warn)', fontSize: 9 }}>⚠ SAFETY CRITICAL</span>
                             )}
                             {isItemFail && itemData?.notes && (
                               <span className="block mt-0.5" style={{ color: '#EF4444AA', fontSize: 11 }}>
@@ -259,7 +260,7 @@ export default function DOTInspectionDetail({
                           </p>
                           <span
                             className="text-xs font-bold px-1.5 py-0.5 rounded flex-shrink-0"
-                            style={{ background: cfg.bg, color: cfg.color, fontSize: 10 }}
+                            style={{ background: cfg.bg, color: textTone(cfg.color), fontSize: 10 }}
                           >
                             {cfg.label}
                           </span>
@@ -275,8 +276,8 @@ export default function DOTInspectionDetail({
 
         {/* Violations summary */}
         {violations.length > 0 && (
-          <div className="rounded-xl p-5" style={{ background: '#1a0505', border: '1px solid #EF444440' }}>
-            <p className="font-condensed font-bold text-lg tracking-wide mb-3" style={{ color: '#EF4444' }}>
+          <div className="rounded-xl p-5" style={{ background: 'color-mix(in srgb, var(--hd-negative) 14%, var(--hd-card))', border: '1px solid #EF444440' }}>
+            <p className="font-condensed font-bold text-lg tracking-wide mb-3" style={{ color: 'var(--hd-negative)' }}>
               VIOLATIONS FOUND
             </p>
             <div className="space-y-2">
@@ -284,10 +285,10 @@ export default function DOTInspectionDetail({
                 <div key={i} className="rounded-lg p-3" style={{ background: '#EF444415', border: '1px solid #EF444430' }}>
                   <div className="flex items-start gap-2">
                     {v.safetyCritical && (
-                      <span className="text-xs font-bold flex-shrink-0 mt-0.5" style={{ color: '#F59E0B' }}>⚠</span>
+                      <span className="text-xs font-bold flex-shrink-0 mt-0.5" style={{ color: 'var(--hd-warn)' }}>⚠</span>
                     )}
                     <div>
-                      <p className="text-xs font-bold uppercase tracking-wide mb-0.5" style={{ color: '#EF4444' }}>
+                      <p className="text-xs font-bold uppercase tracking-wide mb-0.5" style={{ color: 'var(--hd-negative)' }}>
                         {categoryLabel(v.category)}
                       </p>
                       <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.7)' }}>{v.label}</p>
@@ -307,17 +308,17 @@ export default function DOTInspectionDetail({
           <p className="font-condensed font-bold text-white text-lg tracking-wide">INSPECTOR CERTIFICATION</p>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>Inspector</p>
+              <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: 'var(--hd-text-faint)' }}>Inspector</p>
               <p className="text-sm text-white">{inspection.inspector_name ?? '—'}</p>
             </div>
             <div>
-              <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>Cert #</p>
+              <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: 'var(--hd-text-faint)' }}>Cert #</p>
               <p className="text-sm text-white">{inspection.inspector_cert_number ?? '—'}</p>
             </div>
           </div>
           {inspection.signature_data && (
             <div>
-              <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>Signature</p>
+              <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--hd-text-faint)' }}>Signature</p>
               <div className="rounded-lg p-3" style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={inspection.signature_data} alt="Inspector signature" className="max-h-24 w-auto" />
@@ -328,7 +329,7 @@ export default function DOTInspectionDetail({
 
         {/* Footer */}
         <div className="rounded-xl p-4" style={{ background: 'var(--hd-sunken)', border: '1px solid var(--hd-border)' }}>
-          <p className="text-xs leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+          <p className="text-xs leading-relaxed" style={{ color: 'var(--hd-text-faint)' }}>
             Inspection ID: {inspId} · Generated {new Date(inspection.created_at).toLocaleString()} ·
             This record was electronically signed and is locked.
           </p>
@@ -366,7 +367,7 @@ export default function DOTInspectionDetail({
           </div>
         </div>
 
-        <div style={{ fontSize: 9, fontWeight: 700, color: '#E85D24', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>
+        <div style={{ fontSize: 9, fontWeight: 700, color: 'var(--hd-accent-text)', letterSpacing: 1, textTransform: 'uppercase', marginBottom: 8 }}>
           LOCKED RECORD — NOT EDITABLE · {inspId}
         </div>
 
@@ -417,7 +418,7 @@ export default function DOTInspectionDetail({
                   <span style={{ flex: 1, fontSize: 10 }}>{cat.label}</span>
                   <span style={{
                     fontSize: 8, fontWeight: 700, padding: '1px 6px', borderRadius: 8,
-                    background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}`,
+                    background: cfg.bg, color: textTone(cfg.color), border: `1px solid ${cfg.border}`,
                   }}>
                     {cfg.label}
                   </span>

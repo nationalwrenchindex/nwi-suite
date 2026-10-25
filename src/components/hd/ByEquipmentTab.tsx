@@ -40,7 +40,7 @@ function PartialTd({ p, kind }: { p: PartialSum; kind: 'money' | 'hours' }) {
   return (
     <td className="px-3 py-2.5 text-right whitespace-nowrap" title={c.note ?? undefined}>
       <span className="text-white">{c.text}</span>
-      {c.partial && <span style={{ color: HD_ORANGE }}>{DAGGER}</span>}
+      {c.partial && <span style={{ color: 'var(--hd-accent-text)' }}>{DAGGER}</span>}
       {c.partial && c.note && <span className="block text-[10px]" style={muted(0.35)}>{c.note}</span>}
     </td>
   )
@@ -64,7 +64,7 @@ function SortTh({ label, k, sort, onSort, right = false }: {
         type="button"
         onClick={() => onSort(k)}
         className="text-[10px] uppercase tracking-widest font-semibold"
-        style={active ? { color: HD_ORANGE } : muted(0.4)}
+        style={active ? { color: 'var(--hd-accent-text)' } : muted(0.4)}
         aria-sort={active ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}
       >
         {label}{active ? (sort.dir === 'asc' ? ' ▲' : ' ▼') : ''}
@@ -127,7 +127,7 @@ export default function ByEquipmentTab() {
             className="block mt-1 px-2 py-1.5 rounded-lg text-sm text-white" style={card} />
         </label>
         <button type="button" onClick={() => load({ from, to })} disabled={!from || !to || loading}
-          className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white disabled:opacity-50" style={{ background: HD_ORANGE }}>
+          className="px-3 py-1.5 rounded-lg text-xs font-semibold text-on-accent disabled:opacity-50" style={{ background: HD_ORANGE }}>
           Apply
         </button>
         <button type="button" onClick={() => load(null)} disabled={loading}
@@ -135,13 +135,13 @@ export default function ByEquipmentTab() {
           This year
         </button>
         <Link href={auditHref(range)} className="ml-auto px-3 py-1.5 rounded-lg text-xs font-semibold"
-          style={{ color: HD_ORANGE, border: `1px solid ${HD_ORANGE}` }}>
+          style={{ color: 'var(--hd-accent-text)', border: `1px solid ${HD_ORANGE}` }}>
           Audit export for this range
         </Link>
       </div>
 
       {error && (
-        <div className="rounded-xl px-4 py-3 text-sm" style={{ ...card, color: '#EF4444' }}>
+        <div className="rounded-xl px-4 py-3 text-sm" style={{ ...card, color: 'var(--hd-negative)' }}>
           By Equipment could not load: {error}
         </div>
       )}
@@ -271,7 +271,7 @@ export default function ByEquipmentTab() {
           {/* Legend - what the marks and the sources mean. */}
           <div className="rounded-xl px-4 py-3 text-xs space-y-1" style={{ ...card, ...muted(0.5) }}>
             <p><span className="text-white">-</span> means not recorded on any job in the row. It is not zero.</p>
-            <p><span style={{ color: HD_ORANGE }}>{DAGGER}</span> means the figure covers only some of the row&apos;s jobs; the note under it says how many were not recorded.</p>
+            <p><span style={{ color: 'var(--hd-accent-text)' }}>{DAGGER}</span> means the figure covers only some of the row&apos;s jobs; the note under it says how many were not recorded.</p>
             <p><span className="text-white">inv</span> = jobs from invoices. <span className="text-white">WO</span> = closed work orders with no invoice, which includes imported history (a total, but no hours, labor/parts split or payment record).</p>
             <p>Collected is the total of paid invoices. A work order records no payment and a partial invoice records no amount paid, so both count as not recorded rather than as $0.</p>
             <p>Jobs with no unit recorded appear in the category table as &quot;No unit recorded&quot;, not in the unit table. &quot;Uncategorized&quot; is units that have no category yet.</p>

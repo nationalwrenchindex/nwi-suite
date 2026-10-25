@@ -9,10 +9,10 @@ const ORANGE = '#FF6600'
 const BLUE   = '#2969B0'
 
 const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
-  draft:    { bg: '#F3F4F6', color: '#6B7280' },
+  draft:    { bg: '#F3F4F6', color: 'var(--paper-muted)' },
   sent:     { bg: '#DBEAFE', color: '#2969B0' },
-  approved: { bg: '#DCFCE7', color: '#16a34a' },
-  declined: { bg: '#FEE2E2', color: '#dc2626' },
+  approved: { bg: '#DCFCE7', color: '#15803d' },
+  declined: { bg: '#FEE2E2', color: '#b91c1c' },
 }
 
 function fmt(n: number | null) {
@@ -51,13 +51,13 @@ export default async function QuotesPage() {
             <h1 className="font-condensed text-3xl font-bold" style={{ color: '#1A1A1A', letterSpacing: '0.5px' }}>
               QUOTES
             </h1>
-            <p style={{ color: '#6B7280', fontSize: 14, marginTop: 2 }}>
+            <p style={{ color: 'var(--paper-muted)', fontSize: 14, marginTop: 2 }}>
               {rows.length} quote{rows.length !== 1 ? 's' : ''}
             </p>
           </div>
           <Link
             href="/hd/quotes/new"
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold text-sm text-white"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold text-sm text-on-accent"
             style={{ background: ORANGE, minHeight: 44 }}
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -74,10 +74,10 @@ export default async function QuotesPage() {
               <svg className="w-12 h-12 mx-auto mb-4" fill="none" stroke="#D1D5DB" strokeWidth={1.5} viewBox="0 0 24 24">
                 <path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              <p style={{ color: '#6B7280', fontSize: 15 }}>No quotes yet</p>
+              <p style={{ color: 'var(--paper-muted)', fontSize: 15 }}>No quotes yet</p>
               <Link
                 href="/hd/quotes/new"
-                className="inline-block mt-4 px-5 py-2 rounded-lg font-semibold text-sm text-white"
+                className="inline-block mt-4 px-5 py-2 rounded-lg font-semibold text-sm text-on-accent"
                 style={{ background: ORANGE }}
               >
                 Create your first quote
@@ -93,7 +93,7 @@ export default async function QuotesPage() {
                     gridTemplateColumns: '140px 1fr 1fr 90px 90px 120px auto',
                     background: '#F9FAFB',
                     borderBottom: '1px solid #E5E7EB',
-                    color: '#6B7280',
+                    color: 'var(--paper-muted)',
                   }}
                 >
                   <span>Quote #</span>
@@ -116,9 +116,9 @@ export default async function QuotesPage() {
                         borderBottom: '1px solid #F3F4F6',
                       }}
                     >
-                      <span className="font-mono text-xs font-semibold" style={{ color: ORANGE }}>{q.quote_number}</span>
+                      <span className="font-mono text-xs font-semibold" style={{ color: 'var(--paper-accent)' }}>{q.quote_number}</span>
                       <span className="text-sm font-medium truncate" style={{ color: '#1A1A1A' }}>{q.customer_name}</span>
-                      <span className="text-sm truncate" style={{ color: '#6B7280' }}>
+                      <span className="text-sm truncate" style={{ color: 'var(--paper-muted)' }}>
                         {[q.unit_manufacturer, q.unit_model].filter(Boolean).join(' ') || '—'}
                       </span>
                       <span className="text-sm font-semibold" style={{ color: '#1A1A1A' }}>{fmt(q.total)}</span>
@@ -130,7 +130,7 @@ export default async function QuotesPage() {
                           {q.status}
                         </span>
                       </span>
-                      <span className="text-xs" style={{ color: '#9CA3AF' }}>{fmtDate(q.created_at)}</span>
+                      <span className="text-xs" style={{ color: 'var(--paper-muted)' }}>{fmtDate(q.created_at)}</span>
                       <QuoteListActions quoteId={q.id} quoteNumber={q.quote_number} />
                     </div>
                   )
@@ -145,14 +145,14 @@ export default async function QuotesPage() {
                   return (
                     <div key={q.id} className="p-4" style={{ borderBottom: '1px solid #F3F4F6' }}>
                       <div className="flex items-center justify-between gap-2 mb-1">
-                        <span className="font-mono text-xs font-semibold" style={{ color: ORANGE }}>{q.quote_number}</span>
+                        <span className="font-mono text-xs font-semibold" style={{ color: 'var(--paper-accent)' }}>{q.quote_number}</span>
                         <span className="text-xs font-semibold px-2 py-1 rounded-full capitalize" style={{ background: st.bg, color: st.color }}>{q.status}</span>
                       </div>
                       <p className="text-sm font-medium" style={{ color: '#1A1A1A' }}>{q.customer_name}</p>
-                      {unit && <p className="text-xs" style={{ color: '#6B7280' }}>{unit}</p>}
+                      {unit && <p className="text-xs" style={{ color: 'var(--paper-muted)' }}>{unit}</p>}
                       <p className="text-sm mt-1" style={{ color: '#1A1A1A' }}>
                         <span className="font-semibold">{fmt(q.total)}</span>
-                        <span style={{ color: '#9CA3AF' }}> • {fmtDate(q.created_at)}</span>
+                        <span style={{ color: 'var(--paper-muted)' }}> • {fmtDate(q.created_at)}</span>
                       </p>
                       <div className="mt-3">
                         <QuoteListActions quoteId={q.id} quoteNumber={q.quote_number} />
@@ -174,7 +174,7 @@ export default async function QuotesPage() {
               return (
                 <div key={s} className="flex items-center gap-2">
                   <span className="w-2 h-2 rounded-full" style={{ background: st.color }} />
-                  <span className="text-xs" style={{ color: '#6B7280' }}>
+                  <span className="text-xs" style={{ color: 'var(--paper-muted)' }}>
                     {count} {s}
                   </span>
                 </div>

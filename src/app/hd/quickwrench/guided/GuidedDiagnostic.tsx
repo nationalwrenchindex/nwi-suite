@@ -444,7 +444,7 @@ export default function GuidedDiagnostic({ alarmCode }: { alarmCode: string }) {
           <span style={{ color: BORDER }}>/</span>
           <span
             className="text-xs font-bold px-2.5 py-1 rounded-full"
-            style={{ background: '#FFF7ED', color: ORANGE, border: '1px solid #FDBA74' }}
+            style={{ background: '#FFF7ED', color: 'var(--paper-accent)', border: '1px solid #FDBA74' }}
           >
             Code {alarmCode}
           </span>
@@ -466,7 +466,7 @@ export default function GuidedDiagnostic({ alarmCode }: { alarmCode: string }) {
               Step {history.length + 1} &bull; TK SB Series — Code 25 Alternator Check
             </p>
           ) : (
-            <p className="text-xs mt-1.5 font-semibold" style={{ color: ORANGE }}>
+            <p className="text-xs mt-1.5 font-semibold" style={{ color: 'var(--paper-accent)' }}>
               Diagnosis complete — {history.length} steps
             </p>
           )}
@@ -516,7 +516,7 @@ export default function GuidedDiagnostic({ alarmCode }: { alarmCode: string }) {
                     style={{
                       border:     `2px solid ${currentValue ? ORANGE : BORDER}`,
                       background: CARD,
-                      color:      TEXT,
+                      color: TEXT,
                       minHeight:  52,
                     }}
                   />
@@ -542,7 +542,7 @@ export default function GuidedDiagnostic({ alarmCode }: { alarmCode: string }) {
                         background: currentValue === answer
                           ? (answer === 'yes' ? GREEN : RED)
                           : CARD,
-                        color:      currentValue === answer ? '#fff' : TEXT,
+                        color: currentValue === answer ? '#fff' : TEXT,
                         border:     `2px solid ${currentValue === answer ? (answer === 'yes' ? GREEN : RED) : BORDER}`,
                       }}
                     >
@@ -618,7 +618,7 @@ export default function GuidedDiagnostic({ alarmCode }: { alarmCode: string }) {
 
               {/* Root cause */}
               <div className="p-4 rounded-xl" style={{ background: '#FFF7ED', border: '1px solid #FDBA74' }}>
-                <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: ORANGE }}>
+                <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--paper-accent)' }}>
                   Root Cause
                 </p>
                 <p className="text-sm leading-relaxed" style={{ color: TEXT }}>{conclusion.rootCause}</p>
@@ -636,7 +636,7 @@ export default function GuidedDiagnostic({ alarmCode }: { alarmCode: string }) {
                 <ul className="space-y-1.5">
                   {conclusion.parts.map((part, i) => (
                     <li key={i} className="flex gap-2 text-sm" style={{ color: TEXT }}>
-                      <span style={{ color: ORANGE, flexShrink: 0 }}>•</span>
+                      <span style={{ color: 'var(--paper-accent)', flexShrink: 0 }}>•</span>
                       {part}
                     </li>
                   ))}
@@ -679,7 +679,7 @@ export default function GuidedDiagnostic({ alarmCode }: { alarmCode: string }) {
                   <button
                     type="button"
                     onClick={handleGenerateQuote}
-                    className="w-full py-3.5 rounded-xl font-condensed font-bold text-lg text-white"
+                    className="w-full py-3.5 rounded-xl font-condensed font-bold text-lg text-on-accent"
                     style={{ background: ORANGE, minHeight: 52 }}
                   >
                     Generate Quote →

@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import HDTrialBanner from '@/components/hd/HDTrialBanner'
 import { provisionHdFromCheckoutSession } from '@/lib/hd-provision'
 import { money } from '@/lib/format'
+import { textTone, tint } from '@/lib/hd/text-tone'
 
 export const metadata = { title: 'Dashboard — NWI HD Suite' }
 
@@ -22,15 +23,16 @@ function KpiCard({
 }: {
   label: string; value: string | number; sub?: string; color?: string
 }) {
-  const textColor = color === 'orange' ? HD_ORANGE : color === 'blue' ? '#60A5FA' : color === 'red' ? '#EF4444' : color === 'green' ? '#22C55E' : '#ffffff'
+  // Theme tokens: '#ffffff' and the 400-weight hues were white / pastel on the light card.
+  const textColor = color === 'orange' ? 'var(--hd-accent-text)' : color === 'blue' ? 'var(--hd-info)' : color === 'red' ? 'var(--hd-negative)' : color === 'green' ? 'var(--hd-positive)' : 'var(--hd-text)'
   return (
     <div
       className="rounded-xl p-5 flex flex-col gap-1"
       style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}
     >
-      <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{label}</p>
-      <p className="font-condensed font-bold text-3xl leading-none" style={{ color: textColor }}>{value}</p>
-      {sub && <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>{sub}</p>}
+      <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--hd-text-faint)' }}>{label}</p>
+      <p className="font-condensed font-bold text-3xl leading-none" style={{ color: textTone(textColor) }}>{value}</p>
+      {sub && <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>{sub}</p>}
     </div>
   )
 }
@@ -183,15 +185,15 @@ export default async function HDDashboardPage({
         style={{ background: `linear-gradient(135deg, ${HD_BLUE} 0%, #0d3460 100%)` }}
       >
         <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full pointer-events-none" style={{ background: 'rgba(var(--hd-ink-rgb), 0.04)' }} />
-        <div className="absolute right-10 bottom-0 w-16 h-16 rounded-full pointer-events-none" style={{ background: `${HD_ORANGE}25` }} />
+        <div className="absolute right-10 bottom-0 w-16 h-16 rounded-full pointer-events-none" style={{ background: `${tint(HD_ORANGE, 15)}` }} />
         <div className="relative z-10">
-          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-muted)' }}>
             HD Suite · {dayLabel}
           </p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">
             {profile?.full_name ?? user.email}
           </h1>
-          <p className="text-sm mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>{profile?.business_name ?? 'HD Suite'}</p>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--hd-text-muted)' }}>{profile?.business_name ?? 'HD Suite'}</p>
         </div>
       </div>
 
@@ -228,16 +230,16 @@ export default async function HDDashboardPage({
             <p className="font-condensed font-bold text-white text-lg tracking-wide">OPEN WORK ORDERS</p>
             <Link href="/hd/work-orders"
               className="text-xs rounded-lg px-3 py-1.5 border transition-colors"
-              style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)', borderColor: 'var(--hd-border)' }}
+              style={{ color: 'var(--hd-text-faint)', borderColor: 'var(--hd-border)' }}
             >
               View all →
             </Link>
           </div>
           {!workOrders || workOrders.length === 0 ? (
             <div className="py-10 text-center">
-              <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>No open work orders</p>
+              <p className="text-sm" style={{ color: 'var(--hd-text-faint)' }}>No open work orders</p>
               <Link href="/hd/work-orders"
-                className="mt-2 inline-block text-xs" style={{ color: HD_ORANGE }}>
+                className="mt-2 inline-block text-xs" style={{ color: 'var(--hd-accent-text)' }}>
                 + New Work Order
               </Link>
             </div>
@@ -247,13 +249,13 @@ export default async function HDDashboardPage({
                 <div key={wo.id} className="py-3 flex items-center gap-3">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-white font-medium">{wo.work_order_number ?? `WO-${wo.id.slice(0, 6).toUpperCase()}`}</p>
-                    <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{wo.service_type ?? 'Service'}</p>
+                    <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>{wo.service_type ?? 'Service'}</p>
                   </div>
                   <span
                     className="text-xs px-2 py-0.5 rounded-full font-medium"
                     style={{
                       background: wo.status === 'in_progress' ? `${HD_ORANGE}25` : 'rgba(var(--hd-ink-rgb), 0.08)',
-                      color:      wo.status === 'in_progress' ? HD_ORANGE : 'rgba(var(--hd-ink-rgb), 0.5)',
+                      color:      textTone(wo.status === 'in_progress' ? 'var(--hd-accent-text)' : 'var(--hd-text-muted)'),
                     }}
                   >
                     {wo.status === 'in_progress' ? 'In Progress' : 'Open'}
@@ -271,14 +273,14 @@ export default async function HDDashboardPage({
         <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
           <div className="flex items-center justify-between mb-4">
             <p className="font-condensed font-bold text-white text-lg tracking-wide">EPA 608 LOG</p>
-            <Link href="/hd/epa-log" className="text-xs" style={{ color: HD_ORANGE }}>View all →</Link>
+            <Link href="/hd/epa-log" className="text-xs" style={{ color: 'var(--hd-accent-text)' }}>View all →</Link>
           </div>
           <div className="mb-3 p-3 rounded-lg" style={{ background: 'var(--hd-inner)' }}>
-            <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Total Refrigerant Tracked</p>
-            <p className="font-condensed font-bold text-2xl text-white">{totalEpaLbs.toFixed(1)} <span className="text-sm font-normal" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>lbs</span></p>
+            <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>Total Refrigerant Tracked</p>
+            <p className="font-condensed font-bold text-2xl text-white">{totalEpaLbs.toFixed(1)} <span className="text-sm font-normal" style={{ color: 'var(--hd-text-faint)' }}>lbs</span></p>
           </div>
           {!epaLog || epaLog.length === 0 ? (
-            <p className="text-xs text-center py-6" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>No EPA log entries</p>
+            <p className="text-xs text-center py-6" style={{ color: 'var(--hd-text-faint)' }}>No EPA log entries</p>
           ) : (
             <div className="space-y-2">
               {epaLog.slice(0, 4).map(e => (
@@ -286,7 +288,7 @@ export default async function HDDashboardPage({
                   <div className="flex-1 truncate" style={{ color: 'rgba(var(--hd-ink-rgb), 0.7)' }}>
                     {e.action} — {e.refrigerant_type}
                   </div>
-                  <span style={{ color: HD_ORANGE }}>{Number(e.pounds).toFixed(1)} lbs</span>
+                  <span style={{ color: 'var(--hd-accent-text)' }}>{Number(e.pounds).toFixed(1)} lbs</span>
                 </div>
               ))}
             </div>
@@ -298,16 +300,16 @@ export default async function HDDashboardPage({
       <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
         <div className="flex items-center justify-between mb-4">
           <p className="font-condensed font-bold text-white text-lg tracking-wide">PM DUE SOON</p>
-          <Link href="/hd/pm-schedules" className="text-xs" style={{ color: HD_ORANGE }}>PM Schedules →</Link>
+          <Link href="/hd/pm-schedules" className="text-xs" style={{ color: 'var(--hd-accent-text)' }}>PM Schedules →</Link>
         </div>
         {pmDueSoon.length === 0 ? (
           <div className="py-8 text-center">
-            <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>
+            <p className="text-sm" style={{ color: 'var(--hd-text-faint)' }}>
               {unitCount === 0 ? 'No fleet units added yet' : 'All units up to date on PMs'}
             </p>
             {unitCount === 0 && (
               <Link href="/hd/fleet-units"
-                className="mt-2 inline-block text-xs" style={{ color: HD_ORANGE }}>
+                className="mt-2 inline-block text-xs" style={{ color: 'var(--hd-accent-text)' }}>
                 + Add Fleet Units
               </Link>
             )}
@@ -323,7 +325,7 @@ export default async function HDDashboardPage({
                 <div key={u.id}>
                   <div className="flex items-center justify-between mb-1">
                     <p className="text-sm text-white">{u.unit_number} — {u.manufacturer} {u.model}</p>
-                    <p className="text-xs" style={{ color: hoursUntil !== null && hoursUntil <= 0 ? '#EF4444' : HD_ORANGE }}>
+                    <p className="text-xs" style={{ color: textTone(hoursUntil !== null && hoursUntil <= 0 ? 'var(--hd-negative)' : 'var(--hd-accent-text)') }}>
                       {hoursUntil !== null
                         ? hoursUntil <= 0 ? 'OVERDUE' : `${hoursUntil.toFixed(0)} hrs`
                         : 'No schedule'
@@ -348,10 +350,10 @@ export default async function HDDashboardPage({
 
       {/* HD QuickWrench quick access */}
       <div>
-        <p className="text-xs uppercase tracking-widest mb-3" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>Quick Access</p>
+        <p className="text-xs uppercase tracking-widest mb-3" style={{ color: 'var(--hd-text-faint)' }}>Quick Access</p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
-            { href: '/hd/quickwrench',   label: 'HD QUICKWRENCH', sub: 'Alarm codes & specs', color: HD_ORANGE },
+            { href: '/hd/quickwrench',   label: 'HD QUICKWRENCH', sub: 'Alarm codes & specs', color: 'var(--hd-accent-text)' },
             { href: '/hd/pm-checklist',  label: 'PM CHECKLIST',   sub: 'Start a new PM',      color: HD_BLUE   },
             { href: '/hd/fleet-units',   label: 'FLEET UNITS',    sub: 'Manage your fleet',   color: '#6B7280' },
             { href: '/hd/epa-log',       label: 'EPA 608 LOG',    sub: 'Refrigerant tracking', color: '#6B7280' },
@@ -360,10 +362,10 @@ export default async function HDDashboardPage({
               key={href}
               href={href}
               className="rounded-xl p-4 flex flex-col gap-1 transition-opacity hover:opacity-80"
-              style={{ background: `${color}18`, border: `1px solid ${color}35` }}
+              style={{ background: `${tint(color, 9)}`, border: `1px solid ${tint(color, 21)}` }}
             >
               <p className="font-condensed font-bold text-white text-sm tracking-wide">{label}</p>
-              <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{sub}</p>
+              <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>{sub}</p>
             </Link>
           ))}
         </div>

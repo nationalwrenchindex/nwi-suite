@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { tint } from '@/lib/hd/text-tone'
 import {
   EMPTY_DRAFT, EQUIPMENT_TYPES, LABOR_CODE_PREFIX, cardNamed, cleanLaborCard, draftFromCard, equipmentTypeLabel,
   filterLaborCards, hoursText, type EquipmentType, type LaborCard, type LaborCardDraft, type LaborCardSort,
@@ -164,8 +165,8 @@ export default function LaborCardManager({
   }
 
   const inputStyle = { background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }
-  const labelStyle = { color: 'rgba(var(--hd-ink-rgb), 0.55)' }
-  const muted      = { color: 'rgba(var(--hd-ink-rgb), 0.45)' }
+  const labelStyle = { color: 'var(--hd-text-muted)' }
+  const muted      = { color: 'var(--hd-text-muted)' }
   const smallBtn   = { color: 'rgba(var(--hd-ink-rgb), 0.7)', border: '1px solid var(--hd-border)' }
   const field      = 'w-full px-3 py-2 rounded-lg text-sm text-white placeholder-white/20'
   const hours      = 'w-24 px-3 py-2 rounded-lg text-sm text-white placeholder-white/20'
@@ -181,7 +182,7 @@ export default function LaborCardManager({
         style={{ background: 'var(--hd-card)', border: `1px solid ${editingId ? HD_ORANGE : `${HD_ORANGE}50`}` }}
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold uppercase tracking-widest" style={{ color: HD_ORANGE }}>
+          <h2 className="text-sm font-bold uppercase tracking-widest" style={{ color: 'var(--hd-accent-text)' }}>
             {editing ? `Edit operation ${editing.labor_code}` : 'New operation'}
           </h2>
           <span className="text-xs" style={muted}>Enter saves · Esc cancels an edit</span>
@@ -202,7 +203,7 @@ export default function LaborCardManager({
             style={inputStyle}
           />
           {sameName && (
-            <span data-testid="labor-card-same-name" className="block text-xs mt-1" style={{ color: '#F59E0B' }}>
+            <span data-testid="labor-card-same-name" className="block text-xs mt-1" style={{ color: 'var(--hd-warn)' }}>
               {`You already have a card named this (${sameName.labor_code}). Saving makes a second card with its own code.`}
             </span>
           )}
@@ -263,7 +264,7 @@ export default function LaborCardManager({
           </label>
         </div>
         {prefixKept && (
-          <p className="text-xs" style={{ color: '#F59E0B' }}>
+          <p className="text-xs" style={{ color: 'var(--hd-warn)' }}>
             {`The code stays ${prefixKept}. A labor code never changes once given.`}
           </p>
         )}
@@ -275,17 +276,17 @@ export default function LaborCardManager({
         </label>
 
         {error && (
-          <p role="alert" className="text-sm px-4 py-2.5 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)' }}>
+          <p role="alert" className="text-sm px-4 py-2.5 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: 'var(--hd-negative)', border: '1px solid rgba(239,68,68,0.3)' }}>
             {error}
           </p>
         )}
-        <p aria-live="polite" className="text-sm min-h-[1.25rem]" style={{ color: '#22C55E' }}>
+        <p aria-live="polite" className="text-sm min-h-[1.25rem]" style={{ color: 'var(--hd-positive)' }}>
           {notice ? `✓ ${notice}` : ''}
         </p>
 
         <div className="flex items-center gap-2">
           <button type="submit" disabled={busy} data-testid="labor-card-save"
-            className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50" style={{ background: HD_ORANGE }}>
+            className="px-4 py-2 rounded-lg text-sm font-semibold text-on-accent disabled:opacity-50" style={{ background: HD_ORANGE }}>
             {editingId ? 'Save changes' : 'Save and next'}
           </button>
           {editingId && (
@@ -341,7 +342,7 @@ export default function LaborCardManager({
               <div className="flex-1 min-w-[220px]">
                 <p className="text-sm font-semibold text-white">
                   <span data-testid="labor-card-code" className="font-mono text-xs mr-2 px-1.5 py-0.5 rounded"
-                    style={{ color: HD_ORANGE, border: `1px solid ${HD_ORANGE}50` }}>{c.labor_code}</span>
+                    style={{ color: 'var(--hd-accent-text)', border: `1px solid ${tint(HD_ORANGE, 31)}` }}>{c.labor_code}</span>
                   {c.description}
                 </p>
                 {c.detail && <p className="text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.65)' }}>{c.detail}</p>}
@@ -361,7 +362,7 @@ export default function LaborCardManager({
                 {confirmId === c.id ? (
                   <>
                     <button type="button" onClick={() => remove(c)} disabled={busy} autoFocus
-                      className="text-xs font-semibold px-3 py-2 rounded-lg text-white disabled:opacity-50" style={{ background: '#DC2626' }}>
+                      className="text-xs font-semibold px-3 py-2 rounded-lg text-on-fill disabled:opacity-50" style={{ background: '#DC2626' }}>
                       Confirm delete
                     </button>
                     <button type="button" onClick={() => setConfirmId(null)} disabled={busy}

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { tint } from '@/lib/hd/text-tone'
 
 export const metadata = { title: 'Upgrade — NWI HD Suite' }
 
@@ -11,22 +12,22 @@ export default function HDUpgradePage() {
       <div className="max-w-md w-full text-center">
         <div
           className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-5"
-          style={{ background: `${HD_ORANGE}20` }}
+          style={{ background: `${tint(HD_ORANGE, 13)}` }}
         >
           <svg className="w-8 h-8" fill="none" stroke={HD_ORANGE} strokeWidth={1.75} viewBox="0 0 24 24">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
           </svg>
         </div>
         <h1 className="font-condensed font-bold text-2xl text-white tracking-wide mb-2">HD STARTER REQUIRED</h1>
-        <p className="text-sm mb-6" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+        <p className="text-sm mb-6" style={{ color: 'var(--hd-text-muted)' }}>
           This module is available on HD Starter and above. Your current plan includes QuickWrench, EPA 608 Log, and PM intervals.
         </p>
         <div className="rounded-xl p-5 mb-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
-          <p className="text-xs uppercase tracking-widest mb-3" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Your Reefer Plan Includes</p>
+          <p className="text-xs uppercase tracking-widest mb-3" style={{ color: 'var(--hd-text-faint)' }}>Your Reefer Plan Includes</p>
           <div className="space-y-2 text-sm text-left">
             {['HD QuickWrench (alarm codes + web search)', 'EPA 608 Refrigerant Log', 'PM Interval Calculator', 'Alarm Code Lookup'].map(f => (
               <div key={f} className="flex items-center gap-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.7)' }}>
-                <span style={{ color: '#22C55E' }}>✓</span>{f}
+                <span style={{ color: 'var(--hd-positive)' }}>✓</span>{f}
               </div>
             ))}
           </div>
@@ -34,7 +35,7 @@ export default function HDUpgradePage() {
         <div className="space-y-3">
           <a
             href="/billing"
-            className="block w-full py-3 rounded-xl font-bold text-white text-sm"
+            className="block w-full py-3 rounded-xl font-bold text-on-accent text-sm"
             style={{ background: HD_ORANGE }}
           >
             Upgrade to HD Starter — $149/mo
@@ -42,7 +43,7 @@ export default function HDUpgradePage() {
           <Link
             href="/hd/dashboard"
             className="block w-full py-3 rounded-xl text-sm"
-            style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)', border: '1px solid var(--hd-border)' }}
+            style={{ color: 'var(--hd-text-faint)', border: '1px solid var(--hd-border)' }}
           >
             Back to Dashboard
           </Link>

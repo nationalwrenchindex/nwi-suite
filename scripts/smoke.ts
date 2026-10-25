@@ -2998,7 +2998,7 @@ async function flowDiscount(): Promise<void> {
   const usdc = (n: number) => '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   const qRow = qHtml.match(/data-testid="discount-row"[\s\S]*?<\/div>/)?.[0] ?? ''
   record(F, 'the customer quote prints Subtotal, the discount with its reason, then the total',
-    !!qPage?.ok && qText.includes(usdc(1692.39)) && visibleText(qRow).includes('Discount ($100.00)') &&
+    !!qPage?.ok && qText.includes(usdc(1692.39)) && visibleText(qRow).includes('Discount') && !visibleText(qRow).includes('($100.00)') &&
       visibleText(qRow).includes(REASON) && visibleText(qRow).includes('-$100.00') && qText.includes(usdc(1715.8)) &&
       qText.indexOf(usdc(1692.39)) < qText.indexOf('-$100.00') && qText.indexOf('-$100.00') < qText.lastIndexOf(usdc(1715.8)),
     !qPage ? 'no link' : qRow ? visibleText(qRow).slice(0, 90) : 'no discount-row')
@@ -3436,6 +3436,139 @@ async function flowHq(): Promise<void> {
   record(F, 'and offers Net 3', !!spg && spg.text.includes('Net 3'))
 }
 
+// ── Pe: the three customer documents - discount, terms, tax labels, contrast ──
+//
+// The PDF (/api/hd/invoices/[id]/pdf), the customer's quote (/hd/quote/[token]) and
+// the pay page (/hd/invoices/pay/[token]), read as HTML. Fixtures are SMOKE copies of
+// a real quote and a real invoice (their money, tax split and extras), with a discount
+// priced by the shared engine and a recorded terms snapshot.
+//
+// CONTRAST. Text that IS in the HTML can still be unreadable - the quote form's Tax %
+// rendered white on white and passed every check. So every text colour these pages set
+// is checked: a hardcoded hex must reach 4.5:1 on white - no hardcoded LIGHT text
+// colour. Pure white is allowed (it appears only on a dark fill), and theme tokens are
+// left to the in-browser audit, which knows the background they land on. That
+// measurement of every
+// HD screen in both themes is scripts/audit-contrast.ts (needs a browser; not smoke).
+const lumHex = (hex: string) => {
+  const h = hex.replace('#', ''); const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h
+  const ch = [0, 2, 4].map(i => parseInt(full.slice(i, i + 2), 16) / 255).map(v => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4))
+  return 0.2126 * ch[0] + 0.7152 * ch[1] + 0.0722 * ch[2]
+}
+const onWhite = (hex: string) => 1.05 / (lumHex(hex) + 0.05)
+/** Every text colour a page sets: inline style="color:..." and stylesheet `color:` (not background/border). */
+function textColours(html: string): string[] {
+  const out: string[] = []
+  for (const m of html.matchAll(/(?<![-\w])color:\s*(#[0-9a-fA-F]{3,6}\b|white\b|rgba?\([^)]*\)|var\([^)]*\))/g)) out.push(m[1])
+  return out
+}
+function hardcodedLight(html: string): string[] {
+  const bad = new Set<string>()
+  for (const c of textColours(html)) {
+    if (c.startsWith('var(')) continue
+    const hex = c === 'white' ? '#ffffff' : c.startsWith('#') ? c : null
+    if (!hex) { if (/rgba?\(\s*2[0-9]{2}/.test(c)) bad.add(c); continue }   // a light rgb()
+    if (!/^#(fff|ffffff)$/i.test(hex) && onWhite(hex) < 4.5) bad.add(hex)
+  }
+  return [...bad]
+}
+async function flowPe(): Promise<void> {
+  const F = 'Pe HD print surfaces'
+  const realQ = (await rest<Record<string, unknown>>(
+    `hd_quotes?user_id=eq.${OWNER}&status=eq.approved&tax_breakdown=not.is.null&customer_name=not.like.${MARK}*&select=*&order=created_at.desc&limit=1`))[0]
+  const realI = (await rest<Record<string, unknown>>(
+    `hd_invoices?user_id=eq.${OWNER}&tax_breakdown=not.is.null&customer_name=not.like.${MARK}*&select=*&order=created_at.desc&limit=20`))
+    .find(r => !invoiceDoesNotAddUp(r))
+  if (!record(F, 'a real quote and invoice to copy the shape of', !!realQ && !!realI,
+    `${realQ?.quote_number ?? 'no quote'} / ${realI?.invoice_number ?? 'no invoice'}`)) return
+
+  const REASON = `${MARK} fleet`
+  const TERMS = {
+    version: 1, captured_at: new Date().toISOString(),
+    warranty: `${MARK} 90 days on workmanship.`, customer_supplied_clause: `${MARK} customer parts carry no warranty.`,
+    payment_terms: 'net_7', payment_instructions: `${MARK} checks payable to the shop.`, pay_link: 'https://pay.example.com/smoke',
+  }
+  const discounted = (doc: Record<string, unknown>) => {
+    const lines = Array.isArray(doc.line_items) ? doc.line_items as Array<Record<string, unknown>> : []
+    const lab = r2(lines.filter(l => l.type === 'labor').reduce((s, l) => s + Number(l.amount ?? 0), 0))
+    const par = r2(lines.filter(l => l.type === 'parts').reduce((s, l) => s + Number(l.amount ?? 0), 0))
+    const sub = r2(lab + par + Number(doc.diagnostic_fee ?? 0) + Number(doc.road_call_fee ?? 0) +
+      Number(doc.travel_amount ?? 0) + Number(doc.mileage_amount ?? 0) + Number(doc.shop_supplies_fee ?? 0))
+    return hdApplyDiscount({ discount: normalizeDiscount({ type: 'flat', value: 25, scope: 'document', reason: REASON }),
+      laborLines: lab, partsLines: par, subtotal: sub, breakdown: parseBreakdown(doc.tax_breakdown),
+      taxAmount: Number(doc.tax_amount ?? 0), taxRatePct: null })
+  }
+  const tok = () => Array.from({ length: 32 }, () => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join('')
+  const DROP = ['id', 'created_at', 'updated_at', 'customer_id', 'fleet_account_id', 'unit_id', 'work_order_id', 'quote_id', 'public_token']
+  const strip = (r: Record<string, unknown>) => Object.fromEntries(Object.entries(r).filter(([k]) => !DROP.includes(k)))
+  const insert = async (table: string, row: Record<string, unknown>, bucket: Set<string>) => {
+    const res = await fetch(`${SUPA}/rest/v1/${table}`, { method: 'POST', headers: { ...SVC_H, Prefer: 'return=representation' }, body: JSON.stringify(row) })
+    const j = await res.json().catch(() => null)
+    const id = Array.isArray(j) ? String(j[0]?.id ?? '') : ''
+    if (id) bucket.add(id)
+    return id ? j[0] as Record<string, unknown> : null
+  }
+
+  const dq = discounted(realQ!), di = discounted(realI!)
+  if (!record(F, 'the discount prices on both real documents', dq.ok && di.ok, dq.ok && di.ok ? '' : `${dq.ok ? '' : dq.error} ${di.ok ? '' : di.error}`)) return
+  if (!dq.ok || !di.ok) return
+  const money = (d: typeof dq & { ok: true }) => ({ discount: d.discount, tax_amount: d.taxAmount, tax_breakdown: d.breakdown, total: d.grandTotal })
+  const q = await insert('hd_quotes', { ...strip(realQ!), ...money(dq), quote_number: `${MARK}-PE-${Date.now()}`,
+    customer_name: `${MARK} Pe quote`, status: 'sent', public_token: tok(), approved_at: null, approval_method: null,
+    payment_terms: 'net30', terms_snapshot: TERMS }, created.hdQuotes)
+  const inv = await insert('hd_invoices', { ...strip(realI!), ...money(di), invoice_number: `${MARK}-PE-${Date.now()}`,
+    customer_name: `${MARK} Pe invoice`, status: 'sent', public_token: tok(), payment_terms: null, terms_snapshot: TERMS }, created.hdInvoices)
+  // No discount, no terms anywhere: prints exactly as an old invoice did, with no Terms line.
+  const bare = await insert('hd_invoices', { ...strip(realI!), invoice_number: `${MARK}-PE0-${Date.now()}`,
+    customer_name: `${MARK} Pe bare`, status: 'sent', public_token: tok(), payment_terms: null, terms_snapshot: null, discount: null }, created.hdInvoices)
+  if (!record(F, 'the fixtures are stored', !!q && !!inv && !!bare)) return
+
+  const label = discountPrintLabel(dq.discount!)
+  const surfaces: Array<{ name: string; url: string; auth: boolean; themed: boolean; doc: Record<string, unknown>; ownTerms: string }> = [
+    { name: 'PDF', url: `/api/hd/invoices/${inv!.id}/pdf`, auth: true, themed: false, doc: inv!, ownTerms: 'Net 7' },
+    { name: 'pay page', url: `/hd/invoices/pay/${inv!.public_token}`, auth: false, themed: false, doc: inv!, ownTerms: 'Net 7' },
+    { name: 'customer quote', url: `/hd/quote/${q!.public_token}`, auth: false, themed: true, doc: q!, ownTerms: 'Net 30' },
+  ]
+  for (const s of surfaces) {
+    const res = await fetch(`${BASE}${s.url}`, { headers: s.auth ? { cookie } : {}, redirect: 'follow' })
+    const html = res.ok ? await res.text() : ''
+    const text = visibleText(html)
+    if (!record(F, `${s.name}: renders`, res.ok && !!html, `-> ${res.status}`)) continue
+    const d = parseDiscount(s.doc.discount)!
+    const rowHtml = html.match(/data-testid="discount-row"[\s\S]*?<\/div>/)?.[0] ?? ''
+    record(F, `${s.name}: the discount row, with its reason`, visibleText(rowHtml).includes(label), visibleText(rowHtml).slice(0, 80) || 'no discount-row')
+    record(F, `${s.name}: the minus sign and the amount are ONE text node`,
+      new RegExp(`>-\\$${usd(d.amount).replace('.', '\\.')}<`).test(rowHtml), rowHtml.replace(/\s+/g, ' ').slice(-90))
+    const iSub = text.indexOf('Subtotal'), iDisc = text.indexOf(label)
+    const firstTax = html.search(/data-testid="tax-row"/), discAt = html.indexOf('data-testid="discount-row"')
+    record(F, `${s.name}: subtotal, then the discount, then the tax`, iSub >= 0 && iSub < iDisc && discAt >= 0 && discAt < firstTax,
+      `subtotal ${iSub}, discount ${iDisc}, tax row ${firstTax}`)
+    // The tax label states the rate this document recorded.
+    const bd = parseBreakdown(s.doc.tax_breakdown)
+    const rates = bd ? (['parts', 'labor', 'services'] as const).map(k => bd[k]).filter(b => b && b.taxed && b.amount > 0).map(b => b!.rate) : [Number(s.doc.tax_rate)]
+    const taxLabels = [...html.matchAll(/data-testid="tax-row"[\s\S]*?<\/div>/g)].map(m => visibleText(m[0]))
+    record(F, `${s.name}: every tax label carries its recorded rate`,
+      rates.length > 0 && rates.every(r => taxLabels.some(l => l.includes(`${String(r)}%`))), `rates ${rates.join(', ')}; labels ${JSON.stringify(taxLabels).slice(0, 120)}`)
+    // The terms block: warranty, the clause, how to pay - recorded, at the bottom.
+    const block = visibleText(html.match(/data-testid="terms-block"[\s\S]*$/)?.[0] ?? '')
+    record(F, `${s.name}: the terms block prints what was recorded`,
+      block.includes(TERMS.warranty) && block.includes(TERMS.customer_supplied_clause) && block.includes(TERMS.payment_instructions) && block.includes(TERMS.pay_link),
+      block.slice(0, 100) || 'no terms-block')
+    const pt = visibleText(html.match(/data-testid="payment-terms"[^>]*>[\s\S]*?<\/p>/)?.[0] ?? '')
+    record(F, `${s.name}: payment terms are the document's own (${s.ownTerms}), else its recorded ones`, pt.includes(s.ownTerms), pt || 'no payment-terms line')
+    const light = hardcodedLight(html)
+    record(F, `${s.name}: no text uses a hardcoded light colour`, light.length === 0, light.join(', '))
+  }
+  // The bare invoice: no discount row, no terms block, and no invented "Terms:" line.
+  for (const [name, url, auth] of [['PDF', `/api/hd/invoices/${bare!.id}/pdf`, true], ['pay page', `/hd/invoices/pay/${bare!.public_token}`, false]] as const) {
+    const res = await fetch(`${BASE}${url}`, { headers: auth ? { cookie } : {}, redirect: 'follow' })
+    const html = res.ok ? await res.text() : ''
+    record(F, `${name}, nothing recorded: no discount row, no terms block, no payment terms line`,
+      res.ok && !html.includes('data-testid="discount-row"') && !html.includes('data-testid="terms-block"') && !html.includes('data-testid="payment-terms"'),
+      res.ok ? '' : `-> ${res.status}`)
+  }
+}
+
 // ── Z: equipment categories, By Equipment and the audit exports ─────────────
 //
 // docs/KURT-EQUIPMENT-TRACKING-SPEC.md, end to end through the routes a shop uses. The
@@ -3750,6 +3883,7 @@ async function main(): Promise<void> {
     await flowDiscount()
     await flowIe()
     await flowHq()
+    await flowPe()
     await flowY()
     await flowZ()
   } finally {

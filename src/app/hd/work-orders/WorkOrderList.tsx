@@ -4,11 +4,17 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { WORK_ORDER_PAGE_SIZE, type WorkOrderListRow } from '@/app/api/hd/work-orders/list'
 import { money } from '@/lib/format'
+import { textTone } from '@/lib/hd/text-tone'
 
-const HD_ORANGE = '#E85D24'
 
+/** Status TEXT colour - AA theme tokens, so it reads on light and dark. */
 function statusColor(s: string) {
-  return s === 'in_progress' ? HD_ORANGE : s === 'completed' ? '#22C55E' : s === 'invoiced' ? '#3B82F6' : 'rgba(var(--hd-ink-rgb), 0.4)'
+  return s === 'in_progress' ? 'var(--hd-accent-text)' : s === 'completed' ? 'var(--hd-positive)' : s === 'invoiced' ? 'var(--hd-info)' : 'var(--hd-text-faint)'
+}
+/** The pill's tint. color-mix, because a token cannot take a hex alpha suffix - the
+ *  `${colour}20` this replaced produced invalid CSS for the default status. */
+function statusTint(s: string) {
+  return `color-mix(in srgb, ${statusColor(s)} 14%, transparent)`
 }
 function statusLabel(s: string) {
   return s === 'in_progress' ? 'In Progress' : s === 'completed' ? 'Completed' : s === 'invoiced' ? 'Invoiced' : 'Open'
@@ -59,8 +65,8 @@ export default function WorkOrderList({
     return (
       <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
         <div className="py-16 text-center" style={{ background: 'var(--hd-card)' }}>
-          <p className="text-sm mb-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>No work orders yet</p>
-          <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.2)' }}>Create a work order to track service on a fleet unit</p>
+          <p className="text-sm mb-2" style={{ color: 'var(--hd-text-faint)' }}>No work orders yet</p>
+          <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>Create a work order to track service on a fleet unit</p>
         </div>
       </div>
     )
@@ -74,7 +80,7 @@ export default function WorkOrderList({
             <thead style={{ background: 'var(--hd-inner)' }}>
               <tr>
                 {['WO #', 'Fleet / Unit', 'Service', 'Tech', 'Status', 'Total', 'Date'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs uppercase tracking-wider" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{h}</th>
+                  <th key={h} className="px-4 py-3 text-left text-xs uppercase tracking-wider" style={{ color: 'var(--hd-text-faint)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -93,19 +99,19 @@ export default function WorkOrderList({
                       {(() => {
                         const label = [wo.unit_number || wo.unit?.unit_number, wo.unit_manufacturer || wo.unit?.manufacturer]
                           .filter(Boolean).join(' — ')
-                        return label ? <span className="block text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{label}</span> : null
+                        return label ? <span className="block text-xs" style={{ color: 'var(--hd-text-faint)' }}>{label}</span> : null
                       })()}
                     </Link>
                   </td>
-                  <td className="px-4 py-3 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>
+                  <td className="px-4 py-3 text-sm" style={{ color: 'var(--hd-text-muted)' }}>
                     <Link href={`/hd/work-orders/${wo.id}`} className="block">{wo.service_type ?? '—'}</Link>
                   </td>
-                  <td className="px-4 py-3 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>
+                  <td className="px-4 py-3 text-sm" style={{ color: 'var(--hd-text-muted)' }}>
                     <Link href={`/hd/work-orders/${wo.id}`} className="block">{wo.tech_name ?? '—'}</Link>
                   </td>
                   <td className="px-4 py-3">
                     <Link href={`/hd/work-orders/${wo.id}`} className="block">
-                      <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: `${statusColor(wo.status)}20`, color: statusColor(wo.status) }}>
+                      <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: statusTint(wo.status), color: textTone(statusColor(wo.status)) }}>
                         {statusLabel(wo.status)}
                       </span>
                     </Link>
@@ -115,7 +121,7 @@ export default function WorkOrderList({
                       {wo.total_amount ? `${money(Number(wo.total_amount))}` : '—'}
                     </Link>
                   </td>
-                  <td className="px-4 py-3 text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                  <td className="px-4 py-3 text-xs" style={{ color: 'var(--hd-text-faint)' }}>
                     <Link href={`/hd/work-orders/${wo.id}`} className="block">
                       {new Date(wo.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
                     </Link>
@@ -128,14 +134,14 @@ export default function WorkOrderList({
       </div>
 
       {error && (
-        <p className="text-sm mt-3 px-4 py-2.5 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)' }}>
+        <p className="text-sm mt-3 px-4 py-2.5 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: 'var(--hd-negative)', border: '1px solid rgba(239,68,68,0.3)' }}>
           {error}
         </p>
       )}
 
       {hasMore && (
         <div className="flex flex-col items-center gap-2 mt-4">
-          <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+          <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>
             Showing {rows.length.toLocaleString()} of {total.toLocaleString()}
           </p>
           <button

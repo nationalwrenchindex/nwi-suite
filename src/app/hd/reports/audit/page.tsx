@@ -47,9 +47,9 @@ export default async function HDAuditReportsPage({
   return (
     <main className="flex-1 p-4 sm:p-6 space-y-6">
       <div>
-        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>HD Suite · Reports</p>
+        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>HD Suite · Reports</p>
         <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">INSURANCE AUDIT</h1>
-        <p className="text-sm mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+        <p className="text-sm mt-1" style={{ color: 'var(--hd-text-muted)' }}>
           An equipment schedule and a work order documentation packet for a policy period, built from the
           work orders and invoices you recorded. Nothing is recomputed from current settings.
         </p>

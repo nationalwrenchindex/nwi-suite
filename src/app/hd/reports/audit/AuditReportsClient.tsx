@@ -10,7 +10,7 @@ import {
 } from '@/lib/hd/audit-labels'
 
 const HD_ORANGE = '#E85D24'
-const MUTED = { color: 'rgba(var(--hd-ink-rgb), 0.45)' }
+const MUTED = { color: 'var(--hd-text-muted)' }
 const CARD = { background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }
 const INPUT = { background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }
 
@@ -26,7 +26,7 @@ interface Props {
 function DownloadLink({ href, label, disabled, testId, primary }: { href: string; label: string; disabled: boolean; testId: string; primary?: boolean }) {
   const style = primary
     ? { background: HD_ORANGE, color: 'var(--hd-text)' }
-    : { border: `1px solid ${HD_ORANGE}`, color: HD_ORANGE }
+    : { border: `1px solid ${HD_ORANGE}`, color: 'var(--hd-accent-text)' }
   if (disabled) {
     return <span data-testid={testId} aria-disabled="true" className="px-5 py-2.5 rounded-lg text-sm font-semibold" style={{ ...style, opacity: 0.5 }}>{label}</span>
   }
@@ -135,7 +135,7 @@ export default function AuditReportsClient({ initialFrom, initialTo, shopName, l
         </button>
 
         {!available && (
-          <p className="text-sm" style={{ color: HD_ORANGE }} data-testid="audit-labels-unavailable">
+          <p className="text-sm" style={{ color: 'var(--hd-accent-text)' }} data-testid="audit-labels-unavailable">
             Labels cannot be saved yet: migration 162 has not been applied. The exports use the default labels.
           </p>
         )}

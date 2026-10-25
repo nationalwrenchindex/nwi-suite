@@ -1,6 +1,7 @@
 'use client'
 
 import { useRef, useState } from 'react'
+import { tint } from '@/lib/hd/text-tone'
 
 const HD_ORANGE = '#E85D24'
 
@@ -118,7 +119,7 @@ export default function HDSettingsForm({
   return (
     <form onSubmit={handleSave} className="space-y-4">
       <div>
-        <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+        <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
           Labor Rate ($/hr)
         </label>
         <input
@@ -139,7 +140,7 @@ export default function HDSettingsForm({
       {feesAvailable ? (
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+            <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
               Diagnostic Fee ($)
             </label>
             <input
@@ -154,7 +155,7 @@ export default function HDSettingsForm({
             />
           </div>
           <div>
-            <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+            <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
               Road Call Fee ($)
             </label>
             <input
@@ -168,20 +169,20 @@ export default function HDSettingsForm({
               style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
             />
           </div>
-          <p className="col-span-2 text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+          <p className="col-span-2 text-xs" style={{ color: 'var(--hd-text-faint)' }}>
             Seeded into new quotes and invoices. Leave blank to keep the old defaults
             ($125 diagnostic, no road call). Enter 0 if you do not charge one and it
             sticks. Changing these never reprices a document you already saved.
           </p>
         </div>
       ) : (
-        <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+        <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>
           Diagnostic and road call fee settings need migration 156.
         </p>
       )}
 
       <div>
-        <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+        <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
           Tech Name
         </label>
         <input
@@ -195,7 +196,7 @@ export default function HDSettingsForm({
       </div>
 
       <div>
-        <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+        <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
           EPA 608 Certification #
         </label>
         <input
@@ -206,7 +207,7 @@ export default function HDSettingsForm({
           className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20"
           style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
         />
-        <p className="text-xs mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+        <p className="text-xs mt-1" style={{ color: 'var(--hd-text-faint)' }}>
           Auto-populates EPA 608 log entries
         </p>
       </div>
@@ -217,7 +218,7 @@ export default function HDSettingsForm({
           endpoint the LD suite already uses, so there is one bucket, one column
           and one delete path rather than two half-features. */}
       <div>
-        <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+        <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
           Company Logo
         </label>
 
@@ -231,7 +232,7 @@ export default function HDSettingsForm({
               <img src={logoUrl} alt="Company logo" className="max-h-full max-w-full object-contain p-1"
                 onError={e => (e.currentTarget.style.display = 'none')} />
             ) : (
-              <span className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>No logo</span>
+              <span className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>No logo</span>
             )}
           </div>
 
@@ -248,20 +249,20 @@ export default function HDSettingsForm({
               disabled={uploadingLogo}
               onClick={() => fileRef.current?.click()}
               className="px-4 py-2 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
-              style={{ background: `${HD_ORANGE}18`, color: HD_ORANGE, border: `1px solid ${HD_ORANGE}55` }}
+              style={{ background: `${tint(HD_ORANGE, 9)}`, color: 'var(--hd-accent-text)', border: `1px solid ${tint(HD_ORANGE, 33)}` }}
             >
               {uploadingLogo ? 'Uploading…' : logoUrl ? 'Replace logo' : 'Upload logo'}
             </button>
             {logoUrl && !uploadingLogo && (
               <button type="button" onClick={() => void removeLogo()}
-                className="text-xs underline" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                className="text-xs underline" style={{ color: 'var(--hd-text-faint)' }}>
                 Remove logo
               </button>
             )}
           </div>
         </div>
 
-        <p className="text-xs mt-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+        <p className="text-xs mt-2" style={{ color: 'var(--hd-text-faint)' }}>
           Replaces NWI branding on work orders, invoices, inspection reports and your booking page.
           PNG, JPG, WEBP or SVG. If no logo is set, your business name is shown instead.
         </p>
@@ -269,12 +270,12 @@ export default function HDSettingsForm({
       </div>
 
       {error && <p className="text-sm text-red-400">{error}</p>}
-      {saved  && <p className="text-sm" style={{ color: '#22C55E' }}>Settings saved</p>}
+      {saved  && <p className="text-sm" style={{ color: 'var(--hd-positive)' }}>Settings saved</p>}
 
       <button
         type="submit"
         disabled={saving}
-        className="px-6 py-2.5 rounded-lg text-sm font-semibold text-white"
+        className="px-6 py-2.5 rounded-lg text-sm font-semibold text-on-accent"
         style={{ background: HD_ORANGE, opacity: saving ? 0.6 : 1 }}
       >
         {saving ? 'Saving…' : 'Save Settings'}

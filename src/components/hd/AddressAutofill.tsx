@@ -17,7 +17,6 @@ const CARD   = '#FFFFFF'
 const BORDER = '#E5E7EB'
 const TEXT   = '#1A1A1A'
 const MUTED  = '#6B7280'
-const ORANGE = '#FF6600'
 
 export interface AddressValue {
   address_line1: string
@@ -111,14 +110,14 @@ export default function AddressAutofill({
       {hint ? (
         <div className="text-xs mt-0.5" style={{ color: MUTED }}>
           {missing.length === 3 && !hint.address_line2 ? (
-            <span style={{ color: ORANGE }}>
+            <span style={{ color: 'var(--paper-accent)' }}>
               Couldn&apos;t read this one — the whole line went into Address Line 1. Split it by hand below.
             </span>
           ) : (
             <>
               <span>Parsed from what you typed → {current || '—'}</span>
               {missing.length > 0 && (
-                <span className="block" style={{ color: ORANGE }}>
+                <span className="block" style={{ color: 'var(--paper-accent)' }}>
                   No {missing.join(' / ')} found — fill {missing.length === 1 ? 'it' : 'them'} in below.
                 </span>
               )}

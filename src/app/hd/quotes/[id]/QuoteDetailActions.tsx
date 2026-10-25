@@ -164,7 +164,7 @@ function SendQuoteModal({
     border: 'none',
     cursor: 'pointer',
     background: tab === t ? ORANGE : '#F3F4F6',
-    color:      tab === t ? '#FFFFFF' : '#6B7280',
+    color: tab === t ? '#FFFFFF' : '#6B7280',
   })
 
   return (
@@ -183,11 +183,11 @@ function SendQuoteModal({
           <h2 className="font-condensed font-bold text-xl" style={{ color: '#1A1A1A' }}>
             Send {quote.customer_name ? `to ${quote.customer_name}` : 'Quote'}
           </h2>
-          <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', fontSize: 22, lineHeight: 1, color: '#9CA3AF', cursor: 'pointer' }}>
+          <button onClick={onClose} aria-label="Close" style={{ background: 'none', border: 'none', fontSize: 22, lineHeight: 1, color: 'var(--paper-muted)', cursor: 'pointer' }}>
             &times;
           </button>
         </div>
-        <p className="text-sm mb-4" style={{ color: '#6B7280' }}>
+        <p className="text-sm mb-4" style={{ color: 'var(--paper-muted)' }}>
           They can approve it with one tap, which creates the work order.
         </p>
 
@@ -199,7 +199,7 @@ function SendQuoteModal({
 
         {tab === 'sms' && (
           <div>
-            <label className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#9CA3AF' }}>Mobile Number</label>
+            <label className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--paper-muted)' }}>Mobile Number</label>
             <input
               value={phone}
               onChange={e => setPhone(e.target.value)}
@@ -219,7 +219,7 @@ function SendQuoteModal({
 
         {tab === 'email' && (
           <div>
-            <label className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#9CA3AF' }}>Email Address</label>
+            <label className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--paper-muted)' }}>Email Address</label>
             <input
               value={email}
               onChange={e => setEmail(e.target.value)}
@@ -239,7 +239,7 @@ function SendQuoteModal({
 
         {tab === 'link' && (
           <div>
-            <label className="text-xs font-semibold uppercase tracking-widest" style={{ color: '#9CA3AF' }}>Customer Approval Link</label>
+            <label className="text-xs font-semibold uppercase tracking-widest" style={{ color: 'var(--paper-muted)' }}>Customer Approval Link</label>
             <p style={{ marginTop: 6, marginBottom: 14, padding: '12px 14px', borderRadius: 10, border: '1px solid #E5E7EB', background: '#F9FAFB', fontSize: 12, fontFamily: 'monospace', wordBreak: 'break-all', color: '#374151' }}>
               {url || 'Creating the link...'}
             </p>
@@ -259,7 +259,7 @@ function SendQuoteModal({
             style={{
               padding: '10px 12px', borderRadius: 8,
               background: failed ? '#FEE2E2' : '#FEF3C7',
-              color:      failed ? '#B91C1C' : '#92400E',
+              color: failed ? '#B91C1C' : '#92400E',
             }}
           >
             {message}
@@ -413,7 +413,7 @@ export default function QuoteDetailActions({
   return (
     <div className="flex items-center gap-2 flex-wrap">
       {toast && (
-        <span className="text-xs px-3 py-1 rounded-lg" style={{ background: '#FEE2E2', color: '#dc2626' }}>{toast}</span>
+        <span className="text-xs px-3 py-1 rounded-lg" style={{ background: '#FEE2E2', color: '#b91c1c' }}>{toast}</span>
       )}
       {sendOpen && (
         <SendQuoteModal
@@ -429,7 +429,7 @@ export default function QuoteDetailActions({
       <button
         onClick={() => setSendOpen(true)}
         disabled={busy}
-        className="flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm text-white disabled:opacity-50"
+        className="flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm text-on-accent disabled:opacity-50"
         style={{ background: ORANGE, minHeight: 44 }}
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -449,7 +449,7 @@ export default function QuoteDetailActions({
           Edit
         </Link>
       ) : (
-        <span className="text-xs px-3 py-2 rounded-lg" style={{ background: '#F3F4F6', color: '#6B7280' }}
+        <span className="text-xs px-3 py-2 rounded-lg" style={{ background: '#F3F4F6', color: 'var(--paper-muted)' }}
               title={quoteLockReason(quoteData.status)}>
           Locked - {quoteData.status === 'approved' ? 'approved by the customer' : quoteData.status}
         </span>
@@ -457,7 +457,7 @@ export default function QuoteDetailActions({
       <button
         onClick={() => convertToWorkOrder()}
         disabled={busy}
-        className="flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm text-white disabled:opacity-50"
+        className="flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm text-on-fill disabled:opacity-50"
         style={{ background: BLUE, minHeight: 44 }}
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -483,7 +483,7 @@ export default function QuoteDetailActions({
         onClick={deleteQuote}
         disabled={busy}
         className="px-4 py-2 rounded-lg font-semibold text-sm disabled:opacity-50"
-        style={{ background: '#FEE2E2', color: '#dc2626', minHeight: 44 }}
+        style={{ background: '#FEE2E2', color: '#b91c1c', minHeight: 44 }}
       >
         Delete
       </button>

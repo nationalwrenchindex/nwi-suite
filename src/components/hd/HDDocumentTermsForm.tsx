@@ -23,8 +23,8 @@ export interface HDDocumentTerms {
 }
 
 const label = 'text-xs font-semibold uppercase tracking-wider block mb-1'
-const labelStyle = { color: 'rgba(var(--hd-ink-rgb), 0.5)' }
-const hint = { color: 'rgba(var(--hd-ink-rgb), 0.4)' }
+const labelStyle = { color: 'var(--hd-text-muted)' }
+const hint = { color: 'var(--hd-text-faint)' }
 
 export default function HDDocumentTermsForm({ initial }: { initial: HDDocumentTerms }) {
   // Normalised for the picker; sent only if the shop changes it, so a stored spelling
@@ -104,7 +104,7 @@ export default function HDDocumentTermsForm({ initial }: { initial: HDDocumentTe
         left empty prints nothing.
       </p>
       <button type="button" onClick={save} disabled={saving}
-        className="px-5 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50" style={{ background: '#E85D24' }}>
+        className="px-5 py-2.5 rounded-lg text-sm font-semibold text-on-accent disabled:opacity-50" style={{ background: '#E85D24' }}>
         {saving ? 'Saving...' : 'Save terms'}
       </button>
       {msg && <p className={`text-xs ${msg.ok ? 'text-emerald-400' : 'text-red-400'}`}>{msg.text}</p>}

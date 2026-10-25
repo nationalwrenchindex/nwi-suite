@@ -14,6 +14,7 @@ import WorkOrderLineItems from '@/components/hd/WorkOrderLineItems'
 import WorkOrderDiscount from '@/components/hd/WorkOrderDiscount'
 import type { Branding } from '@/lib/branding'
 import { money } from '@/lib/format'
+import { textTone, tint } from '@/lib/hd/text-tone'
 
 const HD_ORANGE = '#E85D24'
 
@@ -98,8 +99,14 @@ function docFirst(doc: string | number | null | undefined, record: string | numb
   return r || null
 }
 
+/** Status TEXT colour - AA theme tokens, so it reads on light and dark. */
 function statusColor(s: string) {
-  return s === 'in_progress' ? HD_ORANGE : s === 'completed' ? '#22C55E' : s === 'invoiced' ? '#3B82F6' : 'rgba(var(--hd-ink-rgb), 0.4)'
+  return s === 'in_progress' ? 'var(--hd-accent-text)' : s === 'completed' ? 'var(--hd-positive)' : s === 'invoiced' ? 'var(--hd-info)' : 'var(--hd-text-faint)'
+}
+/** The pill's tint. color-mix, because a token cannot take a hex alpha suffix - the
+ *  `${colour}20` this replaced produced invalid CSS for the default status. */
+function statusTint(s: string) {
+  return `color-mix(in srgb, ${statusColor(s)} 14%, transparent)`
 }
 function statusLabel(s: string) {
   return s === 'in_progress' ? 'In Progress' : s === 'completed' ? 'Completed' : s === 'invoiced' ? 'Invoiced' : 'Open'
@@ -367,15 +374,15 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div>
-          <Link href="/hd/work-orders" className="text-xs mb-2 inline-block" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+          <Link href="/hd/work-orders" className="text-xs mb-2 inline-block" style={{ color: 'var(--hd-text-faint)' }}>
             ← Work Orders
           </Link>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">{woLabel}</h1>
           <div className="flex flex-wrap items-center gap-3 mt-1">
-            <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: `${statusColor(status)}20`, color: statusColor(status) }}>
+            <span className="text-xs font-medium px-2 py-0.5 rounded-full" style={{ background: statusTint(status), color: textTone(statusColor(status)) }}>
               {statusLabel(status)}
             </span>
-            {wo.service_type && <span className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>{wo.service_type}</span>}
+            {wo.service_type && <span className="text-sm" style={{ color: 'var(--hd-text-muted)' }}>{wo.service_type}</span>}
             {/* An invoiced job is already billed, so offer the way back out instead of
                 a second Create Invoice that would quietly double-bill it. */}
             {status === 'invoiced' ? (
@@ -393,7 +400,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
                 onClick={() => void createInvoice()}
                 disabled={invoicing}
                 className="px-3 py-1.5 rounded-lg text-xs font-condensed font-bold tracking-wide disabled:opacity-50"
-                style={{ background: `${HD_ORANGE}18`, color: HD_ORANGE, border: `1px solid ${HD_ORANGE}55` }}
+                style={{ background: `${tint(HD_ORANGE, 9)}`, color: 'var(--hd-accent-text)', border: `1px solid ${tint(HD_ORANGE, 33)}` }}
               >
                 {invoicing ? 'Building invoice...' : '+ Create Invoice'}
               </button>
@@ -418,11 +425,11 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
             all and the button just stopped looking busy. */}
         {invoiceError && (
           <p className="mt-3 text-sm rounded-lg px-3 py-2"
-            style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: '#EF4444' }}>
+            style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: 'var(--hd-negative)' }}>
             {invoiceError}
           </p>
         )}
-        <p className="text-xs mt-1 flex-shrink-0" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+        <p className="text-xs mt-1 flex-shrink-0" style={{ color: 'var(--hd-text-faint)' }}>
           {new Date(wo.created_at).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
         </p>
       </div>
@@ -462,7 +469,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
             { label: 'Serial / VIN', value: [unitView.serial, unitView.vin].filter(Boolean).join(' / ') || '—' },
           ].map(({ label, value }) => (
             <div key={label}>
-              <span className="text-xs uppercase tracking-wider block mb-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)', fontSize: 10 }}>{label}</span>
+              <span className="text-xs uppercase tracking-wider block mb-0.5" style={{ color: 'var(--hd-text-faint)', fontSize: 10 }}>{label}</span>
               <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.85)' }}>{value}</span>
             </div>
           ))}
@@ -476,7 +483,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
               no write path for an HD work order at all before this - only /status
               and /line-items - so this field was read-only text. */}
           <div className="col-span-2">
-            <span className="text-xs uppercase tracking-wider block mb-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)', fontSize: 10 }}>
+            <span className="text-xs uppercase tracking-wider block mb-0.5" style={{ color: 'var(--hd-text-faint)', fontSize: 10 }}>
               Location
             </span>
             {editingLocation ? (
@@ -502,7 +509,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
                   type="button"
                   onClick={() => { setEditingLocation(false); setLocationDraft(location ?? '') }}
                   className="px-2 py-1.5 rounded text-xs"
-                  style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)', border: '1px solid var(--hd-border)' }}
+                  style={{ color: 'var(--hd-text-muted)', border: '1px solid var(--hd-border)' }}
                 >
                   Cancel
                 </button>
@@ -515,7 +522,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
                     type="button"
                     onClick={() => { setLocationDraft(location ?? ''); setEditingLocation(true) }}
                     className="text-xs font-semibold"
-                    style={{ color: HD_ORANGE, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                    style={{ color: 'var(--hd-accent-text)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
                   >
                     {location ? 'edit' : 'add'}
                   </button>
@@ -523,7 +530,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
               </div>
             )}
             {locationError && (
-              <p className="text-xs mt-1" style={{ color: '#EF4444' }}>{locationError}</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--hd-negative)' }}>{locationError}</p>
             )}
           </div>
         </div>
@@ -532,20 +539,20 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
             quote carried no serial and no VIN, so the gap travels with the job
             instead of being noticed when somebody opens the invoice. */}
         {unitNotIdentified && (
-          <p className="mt-3 text-xs px-3 py-2 rounded-lg" style={{ background: 'rgba(245,158,11,0.12)', color: '#F59E0B', border: '1px solid rgba(245,158,11,0.3)' }}>
+          <p className="mt-3 text-xs px-3 py-2 rounded-lg" style={{ background: 'rgba(245,158,11,0.12)', color: 'var(--hd-warn)', border: '1px solid rgba(245,158,11,0.3)' }}>
             Unit not identified - no serial number or VIN was recorded on the quote.
             Add it to the unit fields when you are on site.
           </p>
         )}
         {wo.service_requests && (
           <div className="mt-4 pt-4" style={{ borderTop: '1px solid var(--hd-border)' }}>
-            <span className="text-xs uppercase tracking-wider block mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)', fontSize: 10 }}>Service Requests</span>
+            <span className="text-xs uppercase tracking-wider block mb-1" style={{ color: 'var(--hd-text-faint)', fontSize: 10 }}>Service Requests</span>
             <p className="text-sm whitespace-pre-wrap" style={{ color: 'rgba(var(--hd-ink-rgb), 0.75)' }}>{wo.service_requests}</p>
           </div>
         )}
         {wo.comments && (
           <div className="mt-4 pt-4" style={{ borderTop: '1px solid var(--hd-border)' }}>
-            <span className="text-xs uppercase tracking-wider block mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)', fontSize: 10 }}>Comments</span>
+            <span className="text-xs uppercase tracking-wider block mb-1" style={{ color: 'var(--hd-text-faint)', fontSize: 10 }}>Comments</span>
             <p className="text-sm whitespace-pre-wrap" style={{ color: 'rgba(var(--hd-ink-rgb), 0.75)' }}>{wo.comments}</p>
           </div>
         )}
@@ -574,7 +581,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
       <div className="rounded-xl overflow-hidden mb-6" style={{ border: '1px solid var(--hd-border)' }}>
         <div className="px-5 py-3 flex items-center justify-between" style={{ background: 'var(--hd-sunken)', borderBottom: '1px solid var(--hd-border)' }}>
           <p className="font-condensed font-bold text-white text-sm tracking-widest">INSPECTIONS</p>
-          <span className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+          <span className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>
             {inspections.length} record{inspections.length !== 1 ? 's' : ''}
           </span>
         </div>
@@ -585,11 +592,11 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
             both inspection tables had no writer before this. The DOT form also
             takes the free-text unit fields, since it can run against a machine
             that is not a registered unit and would otherwise lose that context. */}
-        <div className="px-5 py-3 flex flex-wrap gap-2" style={{ background: '#0f1820', borderBottom: '1px solid var(--hd-border)' }}>
+        <div className="px-5 py-3 flex flex-wrap gap-2" style={{ background: 'var(--hd-sunken)', borderBottom: '1px solid var(--hd-border)' }}>
           <Link
             href={`/hd/aerial-inspections/new?work_order=${workOrderId}${wo.unit ? `&unit=${wo.unit.id}` : ''}`}
             className="px-4 py-2 rounded-lg text-xs font-condensed font-bold tracking-wide transition-colors"
-            style={{ background: `${HD_ORANGE}18`, color: HD_ORANGE, border: `1px solid ${HD_ORANGE}55` }}
+            style={{ background: `${tint(HD_ORANGE, 9)}`, color: 'var(--hd-accent-text)', border: `1px solid ${tint(HD_ORANGE, 33)}` }}
           >
             + Start Aerial Inspection
           </Link>
@@ -630,7 +637,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
           {/* Same two sources the Unit row in the details block reads. Checking only the
               joined hd_units row printed "No unit" directly under a Unit that named one. */}
           {!wo.unit && (
-            <p className="text-xs self-center" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+            <p className="text-xs self-center" style={{ color: 'var(--hd-text-faint)' }}>
               {unitLabel !== '—'
                 ? `Unit ${unitLabel} is not linked to a fleet unit record — confirm it on the form.`
                 : 'No unit on this work order — you will select one on the form.'}
@@ -641,7 +648,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
         <div style={{ background: 'var(--hd-card)' }}>
           {inspections.length === 0 ? (
             <div className="p-5">
-              <p className="text-xs py-4 text-center" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)', border: '1px dashed var(--hd-border)', borderRadius: 8 }}>
+              <p className="text-xs py-4 text-center" style={{ color: 'var(--hd-text-faint)', border: '1px dashed var(--hd-border)', borderRadius: 8 }}>
                 No inspections attached to this work order
               </p>
             </div>
@@ -656,7 +663,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
                 >
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-white">{ins.typeLabel}</p>
-                    <p className="text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--hd-text-faint)' }}>
                       {inspectionDateLabel(ins.date)} · {ins.inspectorName ?? 'Unsigned'}
                     </p>
                   </div>
@@ -665,7 +672,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
                       className="text-xs font-bold px-2.5 py-1 rounded-full"
                       style={{
                         background: isPassed ? '#22C55E20' : '#EF444420',
-                        color:      isPassed ? '#22C55E'   : '#EF4444',
+                        color: textTone(isPassed ? 'var(--hd-positive)'   : 'var(--hd-negative)'),
                         border:     `1px solid ${isPassed ? '#22C55E50' : '#EF444450'}`,
                       }}
                     >
@@ -674,7 +681,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
                     <Link
                       href={ins.href}
                       className="px-3 py-1.5 rounded-lg text-xs font-semibold"
-                      style={{ background: `${HD_ORANGE}20`, color: HD_ORANGE, border: `1px solid ${HD_ORANGE}40` }}
+                      style={{ background: `${tint(HD_ORANGE, 13)}`, color: 'var(--hd-accent-text)', border: `1px solid ${tint(HD_ORANGE, 25)}` }}
                     >
                       View
                     </Link>
@@ -690,7 +697,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
       <div className="rounded-xl overflow-hidden mb-6" style={{ border: '1px solid var(--hd-border)' }}>
         <div className="px-5 py-3 flex items-center justify-between" style={{ background: 'var(--hd-sunken)', borderBottom: '1px solid var(--hd-border)' }}>
           <p className="font-condensed font-bold text-white text-sm tracking-widest">PHOTO DOCUMENTATION</p>
-          <span className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>{photos.length} photo{photos.length !== 1 ? 's' : ''}</span>
+          <span className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>{photos.length} photo{photos.length !== 1 ? 's' : ''}</span>
         </div>
 
         <div className="divide-y" style={{ background: 'var(--hd-card)', '--tw-divide-opacity': 1, borderColor: 'var(--hd-border)' } as React.CSSProperties}>
@@ -714,11 +721,11 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
                       onClick={() => fileRefs.current[cat.id]?.click()}
                       disabled={isUploading}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold"
-                      style={{ background: isUploading ? 'var(--hd-border)' : `${HD_ORANGE}20`, color: isUploading ? 'rgba(var(--hd-ink-rgb), 0.4)' : HD_ORANGE, border: `1px solid ${HD_ORANGE}40` }}
+                      style={{ background: isUploading ? 'var(--hd-border)' : `${HD_ORANGE}20`, color: textTone(isUploading ? 'var(--hd-text-faint)' : 'var(--hd-accent-text)'), border: `1px solid ${tint(HD_ORANGE, 25)}` }}
                     >
                       {isUploading ? (
                         <>
-                          <span className="inline-block w-3 h-3 border-2 rounded-full animate-spin" style={{ borderColor: `${HD_ORANGE}40`, borderTopColor: HD_ORANGE }} />
+                          <span className="inline-block w-3 h-3 border-2 rounded-full animate-spin" style={{ borderColor: `${tint(HD_ORANGE, 25)}`, borderTopColor: HD_ORANGE }} />
                           Uploading…
                         </>
                       ) : (
@@ -729,7 +736,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
                 </div>
 
                 {catPhotos.length === 0 ? (
-                  <p className="text-xs py-4 text-center" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)', border: '1px dashed var(--hd-border)', borderRadius: 8 }}>
+                  <p className="text-xs py-4 text-center" style={{ color: 'var(--hd-text-faint)', border: '1px dashed var(--hd-border)', borderRadius: 8 }}>
                     No photos yet — tap Add Photo to capture
                   </p>
                 ) : (
@@ -746,13 +753,13 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center">
-                            <span className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>No preview</span>
+                            <span className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>No preview</span>
                           </div>
                         )}
                         <button
                           onClick={() => handleDelete(photo.id, photo.file_url)}
                           className="absolute top-1 right-1 w-5 h-5 rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                          style={{ background: 'rgba(0,0,0,0.7)', color: '#EF4444' }}
+                          style={{ background: 'rgba(0,0,0,0.7)', color: 'var(--hd-negative)' }}
                           title="Delete photo"
                         >
                           ×

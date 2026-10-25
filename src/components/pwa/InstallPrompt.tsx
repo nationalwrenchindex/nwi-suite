@@ -126,12 +126,14 @@ export default function InstallPrompt() {
       role="dialog"
       aria-label="Install NWI Suite"
       className="fixed inset-x-4 bottom-4 z-50 mx-auto max-w-md rounded-xl border p-4 shadow-2xl"
-      style={{ background: '#111920', borderColor: '#1e3040' }}
+      // Theme tokens, not a fixed dark panel: its text-white is remapped to dark ink in
+      // light mode, which put #1a1a1a on #111920 (1.02:1) on every screen.
+      style={{ background: 'var(--hd-card)', borderColor: 'var(--hd-border)' }}
     >
       <div className="flex items-start gap-3">
         <div
           className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
-          style={{ background: '#0f1923', border: '1px solid #1e3040' }}
+          style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
           aria-hidden="true"
         >
           <svg width="22" height="22" viewBox="0 0 24 24" fill="#ff6600">
@@ -140,8 +142,8 @@ export default function InstallPrompt() {
         </div>
 
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-white">Install NWI Suite</p>
-          <p className="mt-1 text-xs leading-relaxed text-slate-400">
+          <p className="text-sm font-semibold" style={{ color: 'var(--hd-text)' }}>Install NWI Suite</p>
+          <p className="mt-1 text-xs leading-relaxed" style={{ color: 'var(--hd-text-muted)' }}>
             {ios
               ? 'Tap the Share button, then choose "Add to Home Screen" for full-screen access.'
               : 'Add NWI to your home screen for faster, full-screen access in the field.'}
@@ -152,8 +154,8 @@ export default function InstallPrompt() {
               <button
                 type="button"
                 onClick={install}
-                className="rounded-md px-3 py-1.5 text-xs font-semibold text-white"
-                style={{ background: '#ff6600' }}
+                className="rounded-md px-3 py-1.5 text-xs font-semibold"
+                style={{ background: '#ff6600', color: '#1a1a1a' }}
               >
                 Install
               </button>
@@ -161,8 +163,8 @@ export default function InstallPrompt() {
             <button
               type="button"
               onClick={dismiss}
-              className="rounded-md border px-3 py-1.5 text-xs font-medium text-slate-300"
-              style={{ borderColor: '#1e3040' }}
+              className="rounded-md border px-3 py-1.5 text-xs font-medium"
+              style={{ borderColor: 'var(--hd-border)', color: 'var(--hd-text-muted)' }}
             >
               {ios ? 'Got it' : 'Not now'}
             </button>

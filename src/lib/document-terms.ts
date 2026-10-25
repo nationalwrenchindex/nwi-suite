@@ -174,3 +174,33 @@ export async function recordTermsSnapshot(
     return { written: false, reason: e instanceof Error ? e.message : 'unknown' }
   }
 }
+
+/**
+ * The payment terms a DOCUMENT prints (HD parity pass, Brock Oct 25): its own recorded
+ * payment_terms; failing that, the terms its snapshot recorded; failing both, nothing.
+ * No silent default - a blank must never print as "Due on receipt" or Net 30.
+ */
+export function documentPaymentTerms(
+  ownTerms: string | null | undefined,
+  snap: TermsSnapshot | null,
+): string | null {
+  const own = typeof ownTerms === 'string' && ownTerms.trim() ? ownTerms.trim() : null
+  const recorded = own ?? snap?.payment_terms ?? null
+  return recorded ? termsDisplay(recorded) : null
+}
+
+/**
+ * The terms block an HD document prints at its bottom: warranty, the customer-supplied
+ * parts clause and how to pay, all from what the document RECORDED. Payment terms are
+ * not here - they come from the document itself (documentPaymentTerms). No rows, no
+ * block.
+ */
+export function hdTermsBlockRows(snap: TermsSnapshot | null): TermsRow[] {
+  if (!snap) return []
+  const rows = termsBlockRows(snap, { includePayment: false })
+  if (snap.payment_instructions || snap.pay_link) {
+    rows.push({ key: 'how_to_pay', label: 'How to pay', text: snap.payment_instructions, link: snap.pay_link })
+  }
+  return rows
+}
+

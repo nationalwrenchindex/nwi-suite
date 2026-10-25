@@ -8,7 +8,7 @@ import {
 } from '@/lib/billable-extras'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { computeDueDate } from '@/lib/hd/payment-terms'
+import { computeDueDate, termsDisplay } from '@/lib/hd/payment-terms'
 import { useTaxSettings } from '@/lib/use-tax-settings'
 import { useHdFeeSettings } from '@/lib/hd/use-fee-settings'
 import { computeTax, taxDisplayRows, mergeBreakdowns } from '@/lib/tax'
@@ -27,7 +27,7 @@ const BG     = '#F4F5F7'
 const CARD   = '#FFFFFF'
 const BORDER = '#E5E7EB'
 const TEXT   = '#1A1A1A'
-const MUTED  = '#6B7280'
+const MUTED  = 'var(--paper-muted)'
 
 // The manufacturer picker only ships the two reefer brands. A work order can bill
 // any machine (tractor, box truck, aerial lift), so a prefilled value outside this
@@ -327,7 +327,8 @@ export default function NewInvoicePage() {
         has_corp_address:   !!c.has_corp_address,
         corp_address_line1: c.corp_address_line1 ?? '', corp_address_line2: c.corp_address_line2 ?? '',
         corp_city: c.corp_city ?? '', corp_state: c.corp_state ?? '', corp_zip: c.corp_zip ?? '',
-        payment_terms: c.payment_terms ?? 'net30',
+        // The account's terms set the invoice's; an account with none leaves them alone.
+        ...(typeof c.payment_terms === 'string' && c.payment_terms.trim() ? { payment_terms: c.payment_terms } : {}),
       }))
     } catch {
       setForm(f => ({ ...f, customer_name: `${hit.first_name} ${hit.last_name}`.trim(), customer_phone: hit.phone ?? '', customer_email: hit.email ?? '' }))
@@ -509,16 +510,16 @@ export default function NewInvoicePage() {
   const billingAddr = [form.address_line1, form.address_line2, [form.city, form.state].filter(Boolean).join(', '), form.zip].filter(Boolean).join(', ')
 
   return (
-    <div style={{ background: BG, minHeight: '100dvh', padding: '24px 20px' }}>
+    <div style={{ background: BG, color: TEXT, minHeight: '100dvh', padding: '24px 20px' }}>
       <div style={{ maxWidth: 860, margin: '0 auto' }}>
 
         {/* Header */}
         <div className="flex items-center gap-3 mb-6">
           <Link href="/hd/invoices" style={{ color: MUTED, fontSize: 13 }}>← Invoices</Link>
-          <span style={{ color: BORDER }}>/</span>
+          <span style={{ color: 'var(--paper-muted)' }}>/</span>
           <span className="font-condensed font-bold text-2xl" style={{ color: TEXT }}>NEW INVOICE</span>
           {form.work_order_number ? (
-            <Link href={`/hd/work-orders/${form.work_order_id}`} className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: '#FFF7ED', color: ORANGE }}>
+            <Link href={`/hd/work-orders/${form.work_order_id}`} className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{ background: '#FFF7ED', color: 'var(--paper-accent)' }}>
               From {form.work_order_number}
             </Link>
           ) : (
@@ -599,7 +600,7 @@ export default function NewInvoicePage() {
           {billingAddr && (
             <div className="mb-4 p-3 rounded-lg text-sm" style={{ background: '#F9FAFB', border: `1px solid ${BORDER}` }}>
               <p style={{ color: TEXT }}>📍 {billingAddr}</p>
-              <p className="mt-1 text-xs" style={{ color: MUTED }}>Payment Terms: <strong style={{ color: TEXT }}>{form.payment_terms.replace('net', 'Net ')}</strong></p>
+              <p className="mt-1 text-xs" style={{ color: MUTED }}>Payment Terms: <strong style={{ color: TEXT }}>{form.payment_terms ? termsDisplay(form.payment_terms) : 'none set'}</strong></p>
             </div>
           )}
 
@@ -681,7 +682,7 @@ export default function NewInvoicePage() {
         <div style={cardStyle}>
           <SectionTitle>Line Items</SectionTitle>
           <div className="flex gap-3 mb-4">
-            <button onClick={() => setLaborModal(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white" style={{ background: ORANGE, minHeight: 44 }}>+ Add Labor</button>
+            <button onClick={() => setLaborModal(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-on-accent" style={{ background: ORANGE, minHeight: 44 }}>+ Add Labor</button>
             <button onClick={() => setPartsModal(true)} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold" style={{ background: '#EBF5FF', color: BLUE, border: `1px solid #BFDBFE`, minHeight: 44 }}>+ Add Parts</button>
           </div>
 
@@ -689,7 +690,7 @@ export default function NewInvoicePage() {
             <div style={{ border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden' }}>
               {lineItems.map(item => (
                 <div key={item.id} className="flex items-center gap-3 px-4 py-3" style={{ borderBottom: `1px solid #F9FAFB` }}>
-                  <span className="text-xs px-1.5 py-0.5 rounded font-semibold shrink-0" style={item.type === 'labor' ? { background: '#FFF7ED', color: ORANGE } : { background: '#EBF5FF', color: BLUE }}>
+                  <span className="text-xs px-1.5 py-0.5 rounded font-semibold shrink-0" style={item.type === 'labor' ? { background: '#FFF7ED', color: 'var(--paper-accent)' } : { background: '#EBF5FF', color: BLUE }}>
                     {item.type === 'labor' ? 'LAB' : 'PRT'}
                   </span>
                   <div className="flex-1 min-w-0">
@@ -703,7 +704,7 @@ export default function NewInvoicePage() {
                     </p>
                   </div>
                   <span className="text-sm font-semibold" style={{ color: TEXT }}>{fmt(item.amount)}</span>
-                  <button onClick={() => removeItem(item.id)} style={{ color: '#9CA3AF' }}>
+                  <button onClick={() => removeItem(item.id)} style={{ color: 'var(--paper-muted)' }}>
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                   </button>
                 </div>
@@ -809,7 +810,7 @@ export default function NewInvoicePage() {
               </div>
               <div className="flex justify-between items-center pt-3" style={{ borderTop: `2px solid ${ORANGE}`, marginTop: 4 }}>
                 <span className="font-bold text-base" style={{ color: TEXT }}>TOTAL</span>
-                <span className="font-bold text-2xl" style={{ color: ORANGE }}>{fmt(totalWithExtras)}</span>
+                <span className="font-bold text-2xl" style={{ color: 'var(--paper-accent)' }}>{fmt(totalWithExtras)}</span>
               </div>
             </div>
           </div>
@@ -835,7 +836,7 @@ export default function NewInvoicePage() {
           <button onClick={() => save('unpaid')} disabled={saving} className="flex-1 py-3 rounded-lg font-semibold text-sm disabled:opacity-50" style={{ background: '#F3F4F6', color: '#374151', border: `1px solid ${BORDER}`, minHeight: 48 }}>
             {saving ? 'Saving...' : 'Save as Unpaid'}
           </button>
-          <button onClick={() => save('sent')} disabled={saving} className="flex-1 py-3 rounded-lg font-semibold text-sm text-white disabled:opacity-50" style={{ background: ORANGE, minHeight: 48 }}>
+          <button onClick={() => save('sent')} disabled={saving} className="flex-1 py-3 rounded-lg font-semibold text-sm text-on-accent disabled:opacity-50" style={{ background: ORANGE, minHeight: 48 }}>
             {saving ? 'Sending...' : 'Save & Send Invoice'}
           </button>
         </div>
@@ -856,7 +857,7 @@ export default function NewInvoicePage() {
               <p className="text-sm" style={{ color: MUTED }}>Amount: <strong style={{ color: TEXT }}>{fmt((parseFloat(labor.hours) || 0) * form.labor_rate)}</strong></p>
               <div className="flex gap-3">
                 <button onClick={() => setLaborModal(false)} className="flex-1 py-2.5 rounded-lg font-semibold text-sm" style={{ background: '#F3F4F6', color: '#374151' }}>Cancel</button>
-                <button onClick={addLabor} className="flex-1 py-2.5 rounded-lg font-semibold text-sm text-white" style={{ background: ORANGE }}>Add Line</button>
+                <button onClick={addLabor} className="flex-1 py-2.5 rounded-lg font-semibold text-sm text-on-accent" style={{ background: ORANGE }}>Add Line</button>
               </div>
             </div>
           </div>
@@ -895,7 +896,7 @@ export default function NewInvoicePage() {
               </p>
               <div className="flex gap-3">
                 <button onClick={() => setPartsModal(false)} className="flex-1 py-2.5 rounded-lg font-semibold text-sm" style={{ background: '#F3F4F6', color: '#374151' }}>Cancel</button>
-                <button onClick={addParts} className="flex-1 py-2.5 rounded-lg font-semibold text-sm text-white" style={{ background: BLUE }}>Add Line</button>
+                <button onClick={addParts} className="flex-1 py-2.5 rounded-lg font-semibold text-sm text-on-fill" style={{ background: BLUE }}>Add Line</button>
               </div>
             </div>
           </div>
@@ -904,7 +905,7 @@ export default function NewInvoicePage() {
 
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl text-sm font-semibold text-white shadow-xl" style={{ background: '#1A1A1A' }}>
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl text-sm font-semibold text-on-fill shadow-xl" style={{ background: '#1A1A1A' }}>
           {toast}
           <button className="ml-4 opacity-60 hover:opacity-100" onClick={() => setToast('')}>×</button>
         </div>

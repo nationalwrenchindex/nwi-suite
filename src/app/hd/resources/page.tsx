@@ -1,6 +1,7 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDStarterAccess } from '@/lib/hd-access'
+import { tint } from '@/lib/hd/text-tone'
 
 export const metadata = { title: 'OEM Resources — NWI HD Suite' }
 
@@ -37,7 +38,7 @@ export default async function ResourcesPage() {
       <div className="max-w-2xl">
 
         <div className="mb-6">
-          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>
             HD Suite — Reference
           </p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">OEM RESOURCES</h1>
@@ -46,9 +47,9 @@ export default async function ResourcesPage() {
         {/* Message */}
         <div
           className="rounded-xl p-5 mb-6"
-          style={{ background: '#1A1A1A', border: `1px solid ${HD_ORANGE}40` }}
+          style={{ background: 'var(--hd-card)', border: `1px solid ${tint(HD_ORANGE, 25)}` }}
         >
-          <p className="text-sm leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.75)' }}>
+          <p className="text-sm leading-relaxed" style={{ color: 'var(--hd-text-muted)' }}>
             NWI HD Suite exists because independent techs deserve better than being told to call a dealer.
             The resources below require separate access — everything else you need is already in HD QuickWrench.
           </p>
@@ -73,16 +74,16 @@ export default async function ResourcesPage() {
                   <p className="text-sm font-semibold text-white">{link.name}</p>
                   <svg
                     className="w-3 h-3 flex-shrink-0"
-                    style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}
+                    style={{ color: 'var(--hd-text-faint)' }}
                     fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"
                   >
                     <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                   </svg>
                 </div>
-                <p className="text-xs leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.45)' }}>
+                <p className="text-xs leading-relaxed" style={{ color: 'var(--hd-text-muted)' }}>
                   {link.note}
                 </p>
-                <p className="text-xs mt-1" style={{ color: HD_ORANGE, opacity: 0.65 }}>
+                <p className="text-xs mt-1" style={{ color: 'var(--hd-accent-text)', opacity: 0.65 }}>
                   {link.url.replace('https://', '').split('/')[0]}
                 </p>
               </div>

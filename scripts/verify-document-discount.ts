@@ -136,8 +136,10 @@ if (flatDoc?.ok) {
 check('garbage reads as no discount', parseDiscount('x') === null && parseDiscount({ version: 1, value: 0 }) === null && parseDiscount([]) === null)
 const reason = normalizeDiscount({ type: 'flat', value: 25, scope: 'parts', reason: '  fleet customer ' })
 check('the reason is trimmed and kept', reason?.reason === 'fleet customer')
-check('labels say what was given', discountLabel(normalizeDiscount({ type: 'percent', value: 10, scope: 'labor' })!) === 'Discount (10% on labor)' &&
-  discountLabel(normalizeDiscount({ type: 'flat', value: 100, scope: 'document' })!) === 'Discount ($100.00)')
+// The amount is in the amount column, so a flat label does not repeat it (Brock, Oct 25).
+check('labels say what was given, each fact once', discountLabel(normalizeDiscount({ type: 'percent', value: 10, scope: 'labor' })!) === 'Discount (10% on labor)' &&
+  discountLabel(normalizeDiscount({ type: 'flat', value: 100, scope: 'document' })!) === 'Discount' &&
+  discountLabel(normalizeDiscount({ type: 'flat', value: 20, scope: 'parts' })!) === 'Discount on parts')
 
 console.log('\nThrough the money layer (lib/document-money) - what the editors save')
 {

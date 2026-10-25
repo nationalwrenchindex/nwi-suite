@@ -40,8 +40,9 @@ export const SURFACES: Record<ProductVariant, SegmentSurface> = {
     inner:  { background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' },
     border: 'var(--hd-border)',
     text:   { color: 'var(--hd-text)' },
-    muted:  { color: 'rgba(var(--hd-ink-rgb), 0.60)' },
-    faint:  { color: 'rgba(var(--hd-ink-rgb), 0.35)' },
+    // AA tokens (globals.css), one value per theme - not alpha over whatever is behind.
+    muted:  { color: 'var(--hd-text-muted)' },
+    faint:  { color: 'var(--hd-text-faint)' },
     accent: '#E85D24',
   },
 }

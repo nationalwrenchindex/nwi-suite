@@ -13,10 +13,10 @@ const ORANGE = '#FF6600'
 const BLUE   = '#2969B0'
 
 const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
-  draft:    { bg: '#F3F4F6', color: '#6B7280' },
+  draft:    { bg: '#F3F4F6', color: 'var(--paper-muted)' },
   sent:     { bg: '#DBEAFE', color: '#2969B0' },
-  approved: { bg: '#DCFCE7', color: '#16a34a' },
-  declined: { bg: '#FEE2E2', color: '#dc2626' },
+  approved: { bg: '#DCFCE7', color: '#15803d' },
+  declined: { bg: '#FEE2E2', color: '#b91c1c' },
 }
 
 interface LineItem {
@@ -72,14 +72,14 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
   const taxRows = taxDisplayRows(parseBreakdown(q.tax_breakdown))
 
   return (
-    <div style={{ background: '#F4F5F7', minHeight: '100dvh', padding: '24px 20px' }}>
+    <div style={{ background: '#F4F5F7', color: '#1A1A1A', minHeight: '100dvh', padding: '24px 20px' }}>
       <div style={{ maxWidth: 860, margin: '0 auto' }}>
 
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 mb-6">
           <div className="flex items-center gap-3 flex-1">
-            <Link href="/hd/quotes" style={{ color: '#6B7280', fontSize: 13 }}>← Quotes</Link>
-            <span style={{ color: '#E5E7EB' }}>/</span>
+            <Link href="/hd/quotes" style={{ color: 'var(--paper-muted)', fontSize: 13 }}>← Quotes</Link>
+            <span style={{ color: 'var(--paper-muted)' }}>/</span>
             <span className="font-condensed font-bold text-2xl" style={{ color: '#1A1A1A' }}>{q.quote_number}</span>
             <span className="text-xs font-semibold px-2.5 py-1 rounded-full capitalize" style={{ background: st.bg, color: st.color }}>
               {q.status}
@@ -93,28 +93,28 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
           {/* Customer + Unit Info */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 mb-8 pb-8" style={{ borderBottom: '1px solid #E5E7EB' }}>
             <div>
-              <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: '#9CA3AF' }}>Customer</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--paper-muted)' }}>Customer</h3>
               <p className="font-semibold text-base" style={{ color: '#1A1A1A' }}>{q.customer_name}</p>
-              {q.customer_phone && <p className="text-sm mt-1" style={{ color: '#6B7280' }}>{q.customer_phone}</p>}
-              {q.customer_email && <p className="text-sm" style={{ color: '#6B7280' }}>{q.customer_email}</p>}
+              {q.customer_phone && <p className="text-sm mt-1" style={{ color: 'var(--paper-muted)' }}>{q.customer_phone}</p>}
+              {q.customer_email && <p className="text-sm" style={{ color: 'var(--paper-muted)' }}>{q.customer_email}</p>}
             </div>
             <div>
-              <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: '#9CA3AF' }}>Service Unit</h3>
+              <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--paper-muted)' }}>Service Unit</h3>
               {(q.unit_manufacturer || q.unit_model) && (
                 <p className="font-semibold text-base" style={{ color: '#1A1A1A' }}>{[q.unit_manufacturer, q.unit_model].filter(Boolean).join(' ')}</p>
               )}
-              {q.unit_number && <p className="text-sm mt-1" style={{ color: '#6B7280' }}>Unit #: {q.unit_number}</p>}
-              {q.unit_serial && <p className="text-sm mt-1" style={{ color: '#6B7280' }}>Serial: {q.unit_serial}</p>}
-              {q.unit_year   && <p className="text-sm" style={{ color: '#6B7280' }}>Year: {q.unit_year}</p>}
+              {q.unit_number && <p className="text-sm mt-1" style={{ color: 'var(--paper-muted)' }}>Unit #: {q.unit_number}</p>}
+              {q.unit_serial && <p className="text-sm mt-1" style={{ color: 'var(--paper-muted)' }}>Serial: {q.unit_serial}</p>}
+              {q.unit_year   && <p className="text-sm" style={{ color: 'var(--paper-muted)' }}>Year: {q.unit_year}</p>}
               {(q.truck_make || q.truck_model) && (
-                <p className="text-sm mt-1" style={{ color: '#6B7280' }}>
+                <p className="text-sm mt-1" style={{ color: 'var(--paper-muted)' }}>
                   Truck: {[q.truck_year, q.truck_make, q.truck_model].filter(Boolean).join(' ')}
                 </p>
               )}
-              {q.vin && <p className="text-sm" style={{ color: '#9CA3AF' }}>VIN: {q.vin}</p>}
+              {q.vin && <p className="text-sm" style={{ color: 'var(--paper-muted)' }}>VIN: {q.vin}</p>}
               {/* Who is doing the work (migration 160). Shop view only - the public
                   approval page does not select it. */}
-              {q.tech_name && <p className="text-sm mt-1" style={{ color: '#6B7280' }}>Tech: {q.tech_name}</p>}
+              {q.tech_name && <p className="text-sm mt-1" style={{ color: 'var(--paper-muted)' }}>Tech: {q.tech_name}</p>}
             </div>
           </div>
 
@@ -123,13 +123,13 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8 pb-8" style={{ borderBottom: '1px solid #E5E7EB' }}>
               {q.complaint && (
                 <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: '#9CA3AF' }}>Complaint</h3>
+                  <h3 className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--paper-muted)' }}>Complaint</h3>
                   <p className="text-sm leading-relaxed" style={{ color: '#374151' }}>{q.complaint}</p>
                 </div>
               )}
               {q.diagnosis && (
                 <div>
-                  <h3 className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: '#9CA3AF' }}>Diagnosis</h3>
+                  <h3 className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--paper-muted)' }}>Diagnosis</h3>
                   <p className="text-sm leading-relaxed" style={{ color: '#374151' }}>{q.diagnosis}</p>
                 </div>
               )}
@@ -138,27 +138,27 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
 
           {/* Line Items */}
           <div className="mb-8">
-            <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: '#9CA3AF' }}>Line Items</h3>
+            <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--paper-muted)' }}>Line Items</h3>
             {items.length === 0 ? (
-              <p className="text-sm" style={{ color: '#9CA3AF' }}>No line items</p>
+              <p className="text-sm" style={{ color: 'var(--paper-muted)' }}>No line items</p>
             ) : (
               <div style={{ border: '1px solid #E5E7EB', borderRadius: 8, overflow: 'hidden' }}>
-                <div className="grid text-xs font-semibold uppercase tracking-wide px-4 py-2.5" style={{ gridTemplateColumns: '70px 1fr 100px 100px 100px', background: '#F9FAFB', color: '#6B7280', borderBottom: '1px solid #E5E7EB' }}>
+                <div className="grid text-xs font-semibold uppercase tracking-wide px-4 py-2.5" style={{ gridTemplateColumns: '70px 1fr 100px 100px 100px', background: '#F9FAFB', color: 'var(--paper-muted)', borderBottom: '1px solid #E5E7EB' }}>
                   <span>Type</span><span>Description</span><span className="text-right">Hrs/Qty</span><span className="text-right">Rate</span><span className="text-right">Amount</span>
                 </div>
                 {items.map(item => (
                   <div key={item.id} className="grid px-4 py-3 items-center" style={{ gridTemplateColumns: '70px 1fr 100px 100px 100px', borderBottom: '1px solid #F9FAFB' }}>
-                    <span className="text-xs px-2 py-0.5 rounded-full font-semibold w-fit" style={item.type === 'labor' ? { background: '#FFF7ED', color: ORANGE } : { background: '#EBF5FF', color: BLUE }}>
+                    <span className="text-xs px-2 py-0.5 rounded-full font-semibold w-fit" style={item.type === 'labor' ? { background: '#FFF7ED', color: 'var(--paper-accent)' } : { background: '#EBF5FF', color: BLUE }}>
                       {item.type}
                     </span>
                     <div>
                       <span className="text-sm" style={{ color: '#1A1A1A' }}>{item.description}</span>
-                      {item.part_number && <span className="block text-xs font-mono" style={{ color: '#9CA3AF' }}>{item.part_number}</span>}
+                      {item.part_number && <span className="block text-xs font-mono" style={{ color: 'var(--paper-muted)' }}>{item.part_number}</span>}
                     </div>
-                    <span className="text-sm text-right" style={{ color: '#6B7280' }}>
+                    <span className="text-sm text-right" style={{ color: 'var(--paper-muted)' }}>
                       {item.type === 'labor' ? `${item.mobile_hours}h` : `${item.quantity}×`}
                     </span>
-                    <span className="text-sm text-right" style={{ color: '#6B7280' }}>
+                    <span className="text-sm text-right" style={{ color: 'var(--paper-muted)' }}>
                       {item.type === 'labor' ? `${fmt(q.labor_rate)}/hr` : fmt(item.unit_cost)}
                     </span>
                     <span className="text-sm font-semibold text-right" style={{ color: '#1A1A1A' }}>{fmt(item.amount)}</span>
@@ -201,19 +201,19 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
                   ? taxRows.filter(r => r.taxed && r.amount > 0).map(r => ({ label: r.text, val: r.amount }))
                   : Number(q.tax_amount) > 0 ? [{ label: `Tax (${q.tax_rate}%)`, val: q.tax_amount }] : []),
               ].map(r => (
-                <div key={r.label} className="flex justify-between py-1.5 text-sm" style={{ color: '#6B7280' }}>
+                <div key={r.label} className="flex justify-between py-1.5 text-sm" style={{ color: 'var(--paper-muted)' }}>
                   <span>{r.label}</span><span>{fmt(r.val)}</span>
                 </div>
               ))}
               <div className="flex justify-between items-center pt-3 mt-1" style={{ borderTop: `2px solid ${ORANGE}` }}>
                 <span className="font-bold" style={{ color: '#1A1A1A' }}>TOTAL</span>
-                <span className="font-bold text-2xl" style={{ color: ORANGE }}>{fmt(q.total)}</span>
+                <span className="font-bold text-2xl" style={{ color: 'var(--paper-accent)' }}>{fmt(q.total)}</span>
               </div>
             </div>
           </div>
 
           {/* Meta */}
-          <div className="flex flex-wrap gap-6 text-xs" style={{ color: '#9CA3AF', borderTop: '1px solid #E5E7EB', paddingTop: 16 }}>
+          <div className="flex flex-wrap gap-6 text-xs" style={{ color: 'var(--paper-muted)', borderTop: '1px solid #E5E7EB', paddingTop: 16 }}>
             <span>Created: {fmtDate(q.created_at)}</span>
             {/* The customer's PO, whether the tech typed it on the quote or the
                 customer typed it at the approval link. A fleet that pays on PO does

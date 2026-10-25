@@ -35,7 +35,7 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
           <p className="font-condensed font-bold text-xl" style={{ color: '#1A1A1A' }}>
             {String(q.quote_number ?? 'Quote')} is locked
           </p>
-          <p className="text-sm mt-2" style={{ color: '#6B7280' }}>{quoteLockReason(q.status)}</p>
+          <p className="text-sm mt-2" style={{ color: 'var(--paper-muted)' }}>{quoteLockReason(q.status)}</p>
           <Link href={`/hd/quotes/${id}`} className="inline-block mt-4 text-sm font-semibold" style={{ color: '#2969B0' }}>
             ← Back to the quote
           </Link>

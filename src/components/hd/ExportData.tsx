@@ -64,18 +64,18 @@ export default function ExportData() {
 
   return (
     <div className="space-y-3">
-      <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+      <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>
         Exports: Fleet Accounts, Units, Work Orders, PM Checklists, DOT Inspections, EPA Log
       </p>
       <button
         onClick={handleExport}
         disabled={status === 'loading'}
-        className="px-5 py-2.5 rounded-lg text-sm font-semibold text-white"
+        className="px-5 py-2.5 rounded-lg text-sm font-semibold text-on-accent"
         style={{ background: HD_ORANGE, opacity: status === 'loading' ? 0.6 : 1 }}
       >
         {status === 'loading' ? 'Preparing export…' : 'Download All Data (ZIP)'}
       </button>
-      {status === 'done' && <p className="text-sm" style={{ color: '#22C55E' }}>Download started</p>}
+      {status === 'done' && <p className="text-sm" style={{ color: 'var(--hd-positive)' }}>Download started</p>}
       {status === 'error' && <p className="text-sm text-red-400">{error}</p>}
     </div>
   )

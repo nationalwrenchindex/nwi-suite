@@ -12,6 +12,7 @@ import type { EquipmentFormDef, EquipmentInspectionRecord, ItemResult } from '@/
 import { EQUIPMENT_TYPE_LABEL } from '@/lib/hd/equipment/forms'
 import { BrandHeader, BrandFooter } from '@/components/BrandHeader'
 import type { Branding } from '@/lib/branding'
+import { textTone } from '@/lib/hd/text-tone'
 
 function fmtDate(d: string | null): string {
   if (!d) return '—'
@@ -69,7 +70,7 @@ export default function EquipmentInspectionDetail({
           <h1 className="font-condensed font-bold text-2xl text-white tracking-wide">
             {def.title.toUpperCase()}
           </h1>
-          <p className="text-white/40 text-xs mt-0.5">
+          <p className="text-[color:var(--hd-text-faint)] text-xs mt-0.5">
             {record.inspection_id ?? record.id.slice(0, 8)} · {EQUIPMENT_TYPE_LABEL[record.equipment_type]}
           </p>
         </div>
@@ -89,13 +90,13 @@ export default function EquipmentInspectionDetail({
         <div className="pb-4 mb-4" style={{ borderBottom: '2px solid var(--hd-border)' }}>
           <BrandHeader branding={branding} className="text-white mb-3" />
           <p className="font-condensed font-bold text-xl text-white tracking-wide">{def.title}</p>
-          <p className="text-white/50 text-xs mt-0.5">{def.citation}</p>
+          <p className="text-[color:var(--hd-text-muted)] text-xs mt-0.5">{def.citation}</p>
         </div>
 
         {/* Overall determination */}
         <div className="mb-5 px-4 py-3 rounded-lg print-section"
           style={{ background: failed ? '#2d0505' : '#052d10', border: `1px solid ${failed ? '#EF4444' : '#22C55E'}` }}>
-          <p className="text-sm font-bold" style={{ color: failed ? '#EF4444' : '#22C55E' }}>
+          <p className="text-sm font-bold" style={{ color: textTone(failed ? 'var(--hd-negative)' : 'var(--hd-positive)') }}>
             {failed ? 'FAIL — DEFICIENCIES FOUND' : 'PASS — NO DEFICIENCIES'}
           </p>
           {record.removed_from_service && (
@@ -125,7 +126,7 @@ export default function EquipmentInspectionDetail({
             ] as const : []),
           ].map(([label, value]) => (
             <div key={label as string}>
-              <p className="text-white/35 text-xs uppercase tracking-widest">{label}</p>
+              <p className="text-[color:var(--hd-text-faint)] text-xs uppercase tracking-widest">{label}</p>
               <p className="text-white/85">{value}</p>
             </div>
           ))}
@@ -135,7 +136,7 @@ export default function EquipmentInspectionDetail({
         {def.sections.map(section => (
           <div key={section.id} className="mb-4 print-section">
             <p className="text-white text-sm font-semibold mb-1.5">
-              <span className="text-white/30 mr-2">§{section.num}</span>{section.label}
+              <span className="text-[color:var(--hd-text-faint)] mr-2">§{section.num}</span>{section.label}
             </p>
             <div style={{ border: '1px solid var(--hd-border)', borderRadius: 6, overflow: 'hidden' }}>
               {section.items.map((item, i) => {
@@ -151,7 +152,7 @@ export default function EquipmentInspectionDetail({
                       </span>
                     </div>
                     {st?.result === 'fail' && st.notes && (
-                      <p className="px-3 pb-1.5 text-xs" style={{ color: '#EF4444' }}>↳ {st.notes}</p>
+                      <p className="px-3 pb-1.5 text-xs" style={{ color: 'var(--hd-negative)' }}>↳ {st.notes}</p>
                     )}
                   </div>
                 )
@@ -180,11 +181,11 @@ export default function EquipmentInspectionDetail({
             <p className="text-white text-sm font-semibold mb-1.5">Load Test</p>
             <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
               <div>
-                <p className="text-white/35 text-xs uppercase tracking-widest">Performed</p>
+                <p className="text-[color:var(--hd-text-faint)] text-xs uppercase tracking-widest">Performed</p>
                 <p className="text-white/85">{record.load_test_performed ? 'Yes' : 'No'}</p>
               </div>
               <div>
-                <p className="text-white/35 text-xs uppercase tracking-widest">Date</p>
+                <p className="text-[color:var(--hd-text-faint)] text-xs uppercase tracking-widest">Date</p>
                 <p className="text-white/85">{fmtDate(record.load_test_date)}</p>
               </div>
             </div>
@@ -198,24 +199,24 @@ export default function EquipmentInspectionDetail({
         <div className="pt-4 print-section" style={{ borderTop: '2px solid var(--hd-border)' }}>
           <div className="grid grid-cols-2 gap-6">
             <div>
-              <p className="text-white/35 text-xs uppercase tracking-widest mb-1">Inspector</p>
+              <p className="text-[color:var(--hd-text-faint)] text-xs uppercase tracking-widest mb-1">Inspector</p>
               <p className="text-white/85 text-sm">{record.inspector_name ?? '—'}</p>
               {def.requiresInspectorCert && (
-                <p className="text-white/50 text-xs mt-0.5">
+                <p className="text-[color:var(--hd-text-muted)] text-xs mt-0.5">
                   License / Cert: {record.inspector_cert_number ?? '—'}
                 </p>
               )}
             </div>
             <div>
-              <p className="text-white/35 text-xs uppercase tracking-widest mb-1">Signature</p>
+              <p className="text-[color:var(--hd-text-faint)] text-xs uppercase tracking-widest mb-1">Signature</p>
               {record.signature_data
                 ? <Image src={record.signature_data} alt="Inspector signature" width={240} height={70}
                     unoptimized style={{ height: 70, width: 'auto', objectFit: 'contain' }} />
-                : <p className="text-white/40 text-sm">—</p>}
+                : <p className="text-[color:var(--hd-text-faint)] text-sm">—</p>}
             </div>
           </div>
           {/* The lock stamp is the document's integrity claim — always printed. */}
-          <p className="text-white/35 text-xs mt-4">
+          <p className="text-[color:var(--hd-text-faint)] text-xs mt-4">
             Record locked {fmtStamp(record.locked_at)} · ID {record.inspection_id ?? record.id}
           </p>
         </div>

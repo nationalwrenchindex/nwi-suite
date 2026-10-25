@@ -1,6 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { textTone, tint } from '@/lib/hd/text-tone'
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts'
@@ -8,11 +9,13 @@ import {
 // ─── NWI brand colors (Cargo Watch) ─────────────────────────────────────────────
 const ORANGE   = '#FF6600'
 const BLUE     = '#2969B0'
-const BG       = '#1A1A1A'
-const SURFACE  = '#242424'
-const BORDER   = '#333333'
-const MUTED     = 'rgba(var(--hd-ink-rgb), 0.5)'
-const FAINT      = 'rgba(var(--hd-ink-rgb), 0.35)'
+// Theme surfaces, not a fixed dark palette: the text on them follows the theme, so a
+// fixed #242424 put dark ink on dark in light mode (1.1:1).
+const BG       = 'var(--hd-bg)'
+const SURFACE  = 'var(--hd-card)'
+const BORDER   = 'var(--hd-border)'
+const MUTED     = 'var(--hd-text-muted)'
+const FAINT      = 'var(--hd-text-faint)'
 
 const DEVICE_ID = 'dev:862063070141804'
 
@@ -210,7 +213,7 @@ export default function CargoWatchPage() {
             <span
               className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full"
               style={isOnline
-                ? { background: '#0f2f1c', color: '#22C55E', border: '1px solid #1c5c34' }
+                ? { background: 'color-mix(in srgb, var(--hd-positive) 14%, var(--hd-card))', color: 'var(--hd-positive)', border: '1px solid #1c5c34' }
                 : { background: '#2A2A2A', color: MUTED, border: `1px solid ${BORDER}` }}
             >
               <span
@@ -235,7 +238,7 @@ export default function CargoWatchPage() {
         {connError && (
           <div
             className="rounded-xl p-4 mb-4 text-sm"
-            style={{ background: '#2a1505', border: `1px solid ${ORANGE}55`, color: '#FBBF24' }}
+            style={{ background: 'color-mix(in srgb, var(--hd-warn) 14%, var(--hd-card))', border: `1px solid ${tint(ORANGE, 33)}`, color: 'var(--hd-warn)' }}
           >
             Unable to connect to device. Last known data shown.
           </div>
@@ -276,7 +279,7 @@ export default function CargoWatchPage() {
 
             <div>
               <p className="text-xs mb-1" style={{ color: MUTED }}>Battery</p>
-              <p className="text-lg font-bold" style={{ color: voltageColor(session?.voltage ?? null) }}>
+              <p className="text-lg font-bold" style={{ color: textTone(voltageColor(session?.voltage ?? null)) }}>
                 {session?.voltage != null ? `${session.voltage.toFixed(2)} V` : '—'}
               </p>
             </div>
@@ -302,14 +305,14 @@ export default function CargoWatchPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs mb-1" style={{ color: MUTED }}>Temp 1</p>
-                  <p className="text-4xl font-bold tracking-tight" style={{ color: tempColor(temp1) }}>
+                  <p className="text-4xl font-bold tracking-tight" style={{ color: textTone(tempColor(temp1)) }}>
                     {temp1 != null ? `${temp1.toFixed(1)}°` : '—'}
                     <span className="text-lg font-semibold" style={{ color: MUTED }}>F</span>
                   </p>
                 </div>
                 <div>
                   <p className="text-xs mb-1" style={{ color: MUTED }}>Temp 2</p>
-                  <p className="text-4xl font-bold tracking-tight" style={{ color: tempColor(temp2) }}>
+                  <p className="text-4xl font-bold tracking-tight" style={{ color: textTone(tempColor(temp2)) }}>
                     {temp2 != null ? `${temp2.toFixed(1)}°` : '—'}
                     <span className="text-lg font-semibold" style={{ color: MUTED }}>F</span>
                   </p>
@@ -373,8 +376,8 @@ export default function CargoWatchPage() {
               <span
                 className="inline-flex items-center gap-1.5 text-xs font-bold px-2 py-0.5 rounded-full"
                 style={isGpsFix
-                  ? { background: '#0f2f1c', color: '#22C55E', border: '1px solid #1c5c34' }
-                  : { background: '#2a2105', color: '#EAB308', border: '1px solid #5c4a0f' }}
+                  ? { background: 'color-mix(in srgb, var(--hd-positive) 14%, var(--hd-card))', color: 'var(--hd-positive)', border: '1px solid #1c5c34' }
+                  : { background: 'color-mix(in srgb, var(--hd-warn) 14%, var(--hd-card))', color: '#EAB308', border: '1px solid #5c4a0f' }}
               >
                 <span
                   className="w-1.5 h-1.5 rounded-full"
@@ -411,7 +414,7 @@ export default function CargoWatchPage() {
               href={mapsUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-4 flex items-center justify-center gap-2 w-full py-2.5 rounded-lg text-sm font-semibold text-white transition-opacity hover:opacity-90"
+              className="mt-4 flex items-center justify-center gap-2 w-full py-2.5 rounded-lg text-sm font-semibold text-on-fill transition-opacity hover:opacity-90"
               style={{ background: BLUE }}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">

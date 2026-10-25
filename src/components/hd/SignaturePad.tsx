@@ -111,13 +111,13 @@ export default function SignaturePad({
     <div>
       <canvas
         ref={canvasRef}
-        style={{ width: '100%', height, background: '#0f1820', border: '1px solid var(--hd-border)', borderRadius: 8, touchAction: 'none' }}
+        style={{ width: '100%', height, background: 'var(--hd-sunken)', border: '1px solid var(--hd-border)', borderRadius: 8, touchAction: 'none' }}
       />
       <div className="flex items-center justify-between mt-1.5">
-        <p className="text-white/25 text-xs">
+        <p className="text-[color:var(--hd-text-faint)] text-xs">
           {hasInk ? 'Signed' : 'Sign above using a finger, stylus or mouse'}
         </p>
-        <button type="button" onClick={clear} className="text-white/40 hover:text-white text-xs underline">
+        <button type="button" onClick={clear} className="text-[color:var(--hd-text-faint)] hover:text-white text-xs underline">
           Clear
         </button>
       </div>

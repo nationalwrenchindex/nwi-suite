@@ -3,10 +3,10 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
 import { buildPMReport } from '@/lib/hd/pm-report-items'
+import { textTone } from '@/lib/hd/text-tone'
 
 export const metadata = { title: 'PM Report — NWI HD Suite' }
 
-const HD_ORANGE = '#E85D24'
 
 interface Flagged { id?: string; text?: string; section?: string }
 
@@ -70,13 +70,13 @@ export default async function PMChecklistReportPage({ params }: { params: Promis
     <main className="flex-1 p-4 sm:p-6">
       <div className="max-w-2xl mx-auto">
         <div className="mb-6">
-          <Link href="/hd/dashboard" className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>← Dashboard</Link>
+          <Link href="/hd/dashboard" className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>← Dashboard</Link>
           <div className="flex items-center gap-2 mt-2">
             <span className="text-2xl">📋</span>
             <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">PM CHECKLIST REPORT</h1>
           </div>
           {pm.invoice_id && (
-            <Link href={`/hd/invoices/${pm.invoice_id}`} className="text-xs mt-1 inline-block" style={{ color: '#60A5FA' }}>
+            <Link href={`/hd/invoices/${pm.invoice_id}`} className="text-xs mt-1 inline-block" style={{ color: 'var(--hd-info)' }}>
               View linked invoice →
             </Link>
           )}
@@ -85,7 +85,7 @@ export default async function PMChecklistReportPage({ params }: { params: Promis
         <div className="rounded-xl overflow-hidden mb-6" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
           {rows.map(([label, value], i) => (
             <div key={label} className="flex justify-between gap-4 px-5 py-3 text-sm" style={{ borderTop: i > 0 ? '1px solid var(--hd-border)' : undefined }}>
-              <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{label}</span>
+              <span style={{ color: 'var(--hd-text-faint)' }}>{label}</span>
               <span className="text-right text-white">{value}</span>
             </div>
           ))}
@@ -94,14 +94,14 @@ export default async function PMChecklistReportPage({ params }: { params: Promis
         <div className="rounded-xl p-5 mb-6" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide mb-3">FLAGGED ITEMS — CUSTOMER REVIEW</p>
           {flagged.length === 0 ? (
-            <p className="text-sm" style={{ color: '#22C55E' }}>None — all inspected items passed.</p>
+            <p className="text-sm" style={{ color: 'var(--hd-positive)' }}>None — all inspected items passed.</p>
           ) : (
             <div className="divide-y" style={{ borderColor: 'var(--hd-border)' }}>
               {flagged.map((f, i) => (
                 <div key={f.id ?? i} className="py-2 text-sm">
-                  <span style={{ color: HD_ORANGE }}>⚑ </span>
+                  <span style={{ color: 'var(--hd-accent-text)' }}>⚑ </span>
                   <span className="text-white">{f.text}</span>
-                  {f.section && <span className="text-xs ml-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>{f.section}</span>}
+                  {f.section && <span className="text-xs ml-2" style={{ color: 'var(--hd-text-faint)' }}>{f.section}</span>}
                 </div>
               ))}
             </div>
@@ -117,7 +117,7 @@ export default async function PMChecklistReportPage({ params }: { params: Promis
           <div className="rounded-xl overflow-hidden mb-6" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
             <div className="px-5 py-3" style={{ background: 'var(--hd-sunken)', borderBottom: '1px solid var(--hd-border)' }}>
               <p className="font-condensed font-bold text-white text-lg tracking-wide">COMPLETE INSPECTION RECORD</p>
-              <p className="text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+              <p className="text-xs mt-0.5" style={{ color: 'var(--hd-text-faint)' }}>
                 Every point inspected on this unit, with its result.
               </p>
             </div>
@@ -125,7 +125,7 @@ export default async function PMChecklistReportPage({ params }: { params: Promis
             {report.sections.map(section => (
               <div key={section.id}>
                 <div className="px-5 py-2" style={{ background: 'var(--hd-inner)', borderTop: '1px solid var(--hd-border)', borderBottom: '1px solid var(--hd-border)' }}>
-                  <p className="font-condensed font-bold text-xs tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.55)' }}>
+                  <p className="font-condensed font-bold text-xs tracking-widest" style={{ color: 'var(--hd-text-muted)' }}>
                     {section.title.toUpperCase()}
                   </p>
                 </div>
@@ -133,8 +133,8 @@ export default async function PMChecklistReportPage({ params }: { params: Promis
                   const color =
                     item.state === 'pass' ? '#22C55E'
                     : item.state === 'flag' ? '#EF4444'
-                    : item.state === 'na'   ? 'rgba(var(--hd-ink-rgb), 0.35)'
-                    : 'rgba(var(--hd-ink-rgb), 0.25)'
+                    : item.state === 'na'   ? 'var(--hd-text-faint)'
+                    : 'var(--hd-text-faint)'
                   return (
                     <div
                       key={item.id}
@@ -144,8 +144,8 @@ export default async function PMChecklistReportPage({ params }: { params: Promis
                         background: item.failed ? 'rgba(239,68,68,0.07)' : undefined,
                       }}
                     >
-                      <span style={{ color: item.failed ? '#FCA5A5' : 'rgba(var(--hd-ink-rgb), 0.75)' }}>
-                        <span className="text-xs mr-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>{item.id}</span>
+                      <span style={{ color: textTone(item.failed ? '#FCA5A5' : 'rgba(var(--hd-ink-rgb), 0.75)') }}>
+                        <span className="text-xs mr-2" style={{ color: 'var(--hd-text-faint)' }}>{item.id}</span>
                         {item.text}
                       </span>
                       <span
@@ -168,12 +168,12 @@ export default async function PMChecklistReportPage({ params }: { params: Promis
             // eslint-disable-next-line @next/next/no-img-element
             <img src={sig} alt="Signature" style={{ maxHeight: 100, background: '#fff', borderRadius: 6, padding: 4 }} />
           ) : (
-            <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>Signed digitally</p>
+            <p className="text-sm" style={{ color: 'var(--hd-text-muted)' }}>Signed digitally</p>
           )}
           {/* Signing stamp, matching the aerial and DOT detail pages. Rows predating
               migration 126 have no locked_at and simply omit the line. */}
           {pm.locked && pm.locked_at != null && (
-            <p className="text-xs mt-3" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+            <p className="text-xs mt-3" style={{ color: 'var(--hd-text-faint)' }}>
               Record locked {new Date(pm.locked_at as string).toLocaleString('en-US', {
                 month: 'short', day: 'numeric', year: 'numeric',
                 hour: 'numeric', minute: '2-digit',

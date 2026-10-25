@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
+import { tint } from '@/lib/hd/text-tone'
 
 const HD_ORANGE = '#E85D24'
 
@@ -68,7 +69,7 @@ function SeverityBadge() {
   return (
     <span
       className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs font-bold uppercase tracking-wide"
-      style={{ background: `${HD_ORANGE}25`, color: HD_ORANGE, border: `1px solid ${HD_ORANGE}40` }}
+      style={{ background: `${tint(HD_ORANGE, 15)}`, color: 'var(--hd-accent-text)', border: `1px solid ${tint(HD_ORANGE, 25)}` }}
     >
       FIELD CRITICAL
     </span>
@@ -92,7 +93,7 @@ function PartRow({ part, expanded, onToggle }: {
     >
       {crossRefMatches.length > 0 && (
         <div
-          className="px-4 py-3 text-xs text-white"
+          className="px-4 py-3 text-xs text-on-fill"
           style={{ background: '#2969B0', borderRadius: '8px 8px 0 0' }}
         >
           {crossRefMatches.map(xr => (
@@ -109,7 +110,7 @@ function PartRow({ part, expanded, onToggle }: {
       >
         {/* Part number */}
         <div className="flex-shrink-0 min-w-[130px]">
-          <span className="font-mono text-sm font-bold" style={{ color: HD_ORANGE }}>
+          <span className="font-mono text-sm font-bold" style={{ color: 'var(--hd-accent-text)' }}>
             {part.part_number}
           </span>
         </div>
@@ -120,12 +121,12 @@ function PartRow({ part, expanded, onToggle }: {
             <span className="text-white text-sm font-medium">{part.description}</span>
             {part.field_critical && <SeverityBadge />}
             {part.superseded_by && (
-              <span className="px-1.5 py-0.5 rounded text-xs" style={{ background: '#2d1b0a', color: '#f59e0b', border: '1px solid #92400e' }}>
+              <span className="px-1.5 py-0.5 rounded text-xs" style={{ background: 'color-mix(in srgb, var(--hd-warn) 14%, var(--hd-card))', color: 'var(--hd-warn)', border: '1px solid #92400e' }}>
                 SUPERSEDED
               </span>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-3 text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+          <div className="flex flex-wrap items-center gap-3 text-xs" style={{ color: 'var(--hd-text-faint)' }}>
             <span>{part.manufacturer}</span>
             <span>·</span>
             <span>{categoryLabel(part.category)}</span>
@@ -142,7 +143,7 @@ function PartRow({ part, expanded, onToggle }: {
         {hasMeta && (
           <svg
             className="w-4 h-4 flex-shrink-0 mt-0.5 transition-transform"
-            style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)', transform: expanded ? 'rotate(90deg)' : undefined }}
+            style={{ color: 'var(--hd-text-faint)', transform: expanded ? 'rotate(90deg)' : undefined }}
             fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"
           >
             <polyline points="9 18 15 12 9 6" />
@@ -154,26 +155,26 @@ function PartRow({ part, expanded, onToggle }: {
         <div className="px-4 pb-4 space-y-3 border-t" style={{ borderColor: 'var(--hd-border)' }}>
 
           {part.superseded_by && (
-            <div className="mt-3 p-3 rounded-lg" style={{ background: '#1a1000', border: '1px solid #92400e' }}>
-              <p className="text-xs font-bold uppercase tracking-wide mb-1" style={{ color: '#f59e0b' }}>Superseded By</p>
-              <p className="font-mono text-sm font-bold" style={{ color: '#f59e0b' }}>{part.superseded_by}</p>
-              <p className="text-xs mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>Always order the current part number. Verify fitment.</p>
+            <div className="mt-3 p-3 rounded-lg" style={{ background: 'color-mix(in srgb, var(--hd-warn) 14%, var(--hd-card))', border: '1px solid #92400e' }}>
+              <p className="text-xs font-bold uppercase tracking-wide mb-1" style={{ color: 'var(--hd-warn)' }}>Superseded By</p>
+              <p className="font-mono text-sm font-bold" style={{ color: 'var(--hd-warn)' }}>{part.superseded_by}</p>
+              <p className="text-xs mt-1" style={{ color: 'var(--hd-text-muted)' }}>Always order the current part number. Verify fitment.</p>
             </div>
           )}
 
           {part.notes && (
             <div className="mt-3 p-3 rounded-lg" style={{ background: 'rgba(var(--hd-ink-rgb), 0.03)', border: '1px solid var(--hd-border)' }}>
-              <p className="text-xs font-bold uppercase tracking-wide mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>Field Notes</p>
+              <p className="text-xs font-bold uppercase tracking-wide mb-1" style={{ color: 'var(--hd-text-faint)' }}>Field Notes</p>
               <p className="text-sm leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.75)' }}>{part.notes}</p>
             </div>
           )}
 
           {(part.unit_models ?? []).length > 3 && (
             <div className="mt-2">
-              <p className="text-xs font-bold uppercase tracking-wide mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>All Compatible Models</p>
+              <p className="text-xs font-bold uppercase tracking-wide mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>All Compatible Models</p>
               <div className="flex flex-wrap gap-1.5">
                 {(part.unit_models ?? []).map(m => (
-                  <span key={m} className="px-2 py-0.5 rounded text-xs" style={{ background: 'rgba(var(--hd-ink-rgb), 0.06)', color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>
+                  <span key={m} className="px-2 py-0.5 rounded text-xs" style={{ background: 'rgba(var(--hd-ink-rgb), 0.06)', color: 'var(--hd-text-muted)' }}>
                     {m}
                   </span>
                 ))}
@@ -183,13 +184,13 @@ function PartRow({ part, expanded, onToggle }: {
 
           {hasXref && (
             <div className="mt-2">
-              <p className="text-xs font-bold uppercase tracking-wide mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>Cross References</p>
+              <p className="text-xs font-bold uppercase tracking-wide mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>Cross References</p>
               <div className="space-y-1.5">
                 {part.hd_parts_cross_ref!.map(xr => (
                   <div key={xr.id} className="flex items-center gap-3 text-sm">
-                    <span className="font-mono font-bold" style={{ color: '#60a5fa' }}>{xr.cross_part}</span>
-                    <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{xr.cross_mfr}</span>
-                    {xr.cross_notes && <span className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>{xr.cross_notes}</span>}
+                    <span className="font-mono font-bold" style={{ color: 'var(--hd-info)' }}>{xr.cross_part}</span>
+                    <span style={{ color: 'var(--hd-text-faint)' }}>{xr.cross_mfr}</span>
+                    {xr.cross_notes && <span className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>{xr.cross_notes}</span>}
                   </div>
                 ))}
               </div>
@@ -281,9 +282,9 @@ export default function PartsLookup() {
   return (
     <main className="flex-1 p-4 sm:p-6">
       <div className="mb-6">
-        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>HD Suite</p>
+        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>HD Suite</p>
         <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">PARTS LOOKUP</h1>
-        <p className="text-sm mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+        <p className="text-sm mt-1" style={{ color: 'var(--hd-text-faint)' }}>
           TK, Carrier Transicold, and Delco Remy parts with cross-references and field notes.
         </p>
       </div>
@@ -292,18 +293,18 @@ export default function PartsLookup() {
       {hasSeeded === false && (
         <div className="mb-6 rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
           <p className="text-white font-semibold mb-1">Parts database not loaded</p>
-          <p className="text-sm mb-4" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+          <p className="text-sm mb-4" style={{ color: 'var(--hd-text-muted)' }}>
             Load the built-in parts catalog (~210 TK and Carrier parts with cross-references) to get started.
           </p>
           <button
             onClick={seedDatabase}
             disabled={seeding}
-            className="px-5 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
+            className="px-5 py-2.5 rounded-lg text-sm font-semibold text-on-accent disabled:opacity-50"
             style={{ background: HD_ORANGE }}
           >
             {seeding ? 'Loading…' : 'Load Parts Database'}
           </button>
-          {seedMsg && <p className="mt-3 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>{seedMsg}</p>}
+          {seedMsg && <p className="mt-3 text-sm" style={{ color: 'var(--hd-text-muted)' }}>{seedMsg}</p>}
         </div>
       )}
 
@@ -337,14 +338,14 @@ export default function PartsLookup() {
 
       {/* Results */}
       {loading ? (
-        <div className="text-center py-12" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>Loading…</div>
+        <div className="text-center py-12" style={{ color: 'var(--hd-text-faint)' }}>Loading…</div>
       ) : parts.length === 0 ? (
-        <div className="text-center py-12" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+        <div className="text-center py-12" style={{ color: 'var(--hd-text-faint)' }}>
           {hasSeeded === false ? 'Load the parts database above to begin.' : 'No parts found.'}
         </div>
       ) : (
         <>
-          <p className="text-xs mb-3" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+          <p className="text-xs mb-3" style={{ color: 'var(--hd-text-faint)' }}>
             {parts.length} part{parts.length !== 1 ? 's' : ''} — click a row to expand field notes and cross-references
           </p>
           <div className="space-y-2">
@@ -363,20 +364,20 @@ export default function PartsLookup() {
       {/* Reload seed button (shown after seeded) */}
       {hasSeeded === true && (
         <div className="mt-8 pt-6 border-t" style={{ borderColor: 'var(--hd-border)' }}>
-          <p className="text-xs mb-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>Parts database management</p>
+          <p className="text-xs mb-2" style={{ color: 'var(--hd-text-faint)' }}>Parts database management</p>
           <button
             onClick={seedDatabase}
             disabled={seeding}
             className="px-4 py-2 rounded-lg text-xs font-medium disabled:opacity-50"
-            style={{ background: 'rgba(var(--hd-ink-rgb), 0.05)', color: 'rgba(var(--hd-ink-rgb), 0.4)', border: '1px solid var(--hd-border)' }}
+            style={{ background: 'rgba(var(--hd-ink-rgb), 0.05)', color: 'var(--hd-text-faint)', border: '1px solid var(--hd-border)' }}
           >
             {seeding ? 'Reloading…' : 'Reload Parts Catalog'}
           </button>
-          {seedMsg && <p className="mt-2 text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>{seedMsg}</p>}
+          {seedMsg && <p className="mt-2 text-xs" style={{ color: 'var(--hd-text-muted)' }}>{seedMsg}</p>}
         </div>
       )}
 
-      <p className="mt-6 text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.2)' }}>
+      <p className="mt-6 text-xs" style={{ color: 'var(--hd-text-faint)' }}>
         Part numbers are reference only. Verify fitment and supersession before ordering. Always replace superseded part numbers with current replacement.
       </p>
     </main>

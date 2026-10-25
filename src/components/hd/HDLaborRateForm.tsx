@@ -43,18 +43,18 @@ export default function HDLaborRateForm({ initialRate }: { initialRate: string |
           className="flex-1 px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
           style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
         />
-        <span className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>/hr</span>
+        <span className="text-sm" style={{ color: 'var(--hd-text-faint)' }}>/hr</span>
         <button
           onClick={handleSave}
           disabled={saving || !rate}
-          className="px-4 py-2.5 rounded-lg text-sm font-semibold text-white transition-opacity"
+          className="px-4 py-2.5 rounded-lg text-sm font-semibold text-on-accent transition-opacity"
           style={{ background: HD_ORANGE, opacity: saving || !rate ? 0.5 : 1 }}
         >
           {saving ? 'Saving…' : saved ? '✓ Saved' : 'Save'}
         </button>
       </div>
       {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
-      {saved && <p className="text-xs mt-1" style={{ color: '#22C55E' }}>Labor rate saved successfully</p>}
+      {saved && <p className="text-xs mt-1" style={{ color: 'var(--hd-positive)' }}>Labor rate saved successfully</p>}
     </div>
   )
 }

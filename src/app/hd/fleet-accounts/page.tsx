@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { checkHDStarterAccess } from '@/lib/hd-access'
 import { FLEET_ACCOUNT_LIST_SELECT, FLEET_ACCOUNT_PAGE_SIZE, type FleetAccountListRow } from '@/app/api/hd/fleet-accounts/list'
 import FleetAccountList from './FleetAccountList'
+import { tint } from '@/lib/hd/text-tone'
 
 export const metadata = { title: 'Fleet Accounts — NWI HD Suite' }
 
@@ -71,15 +72,15 @@ export default async function FleetAccountsPage({
     <main className="flex-1 p-4 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>HD Suite</p>
+          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>HD Suite</p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">FLEET ACCOUNTS</h1>
-          <p className="text-sm mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+          <p className="text-sm mt-1" style={{ color: 'var(--hd-text-faint)' }}>
             {total.toLocaleString()} account{total !== 1 ? 's' : ''}
           </p>
         </div>
         <Link
           href="?new=1"
-          className="px-4 py-2.5 rounded-lg text-sm font-semibold text-white"
+          className="px-4 py-2.5 rounded-lg text-sm font-semibold text-on-accent"
           style={{ background: HD_ORANGE }}
         >
           + Add Fleet Account
@@ -88,35 +89,35 @@ export default async function FleetAccountsPage({
 
       {/* Inline create form */}
       {showForm && (
-        <form action={addAccount} className="rounded-xl p-6 mb-6 space-y-4" style={{ background: 'var(--hd-card)', border: `1px solid ${HD_ORANGE}50` }}>
+        <form action={addAccount} className="rounded-xl p-6 mb-6 space-y-4" style={{ background: 'var(--hd-card)', border: `1px solid ${tint(HD_ORANGE, 31)}` }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide">ADD FLEET ACCOUNT</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="sm:col-span-2">
-              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Fleet / Company Name *</label>
+              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>Fleet / Company Name *</label>
               <input name="fleet_name" required placeholder="e.g. Smith Refrigerated Transport" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }} />
             </div>
             <div>
-              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Contact Name</label>
+              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>Contact Name</label>
               <input name="contact_name" placeholder="e.g. John Smith" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }} />
             </div>
             <div>
-              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Contact Phone</label>
+              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>Contact Phone</label>
               <input name="contact_phone" type="tel" placeholder="(555) 000-0000" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }} />
             </div>
             <div>
-              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Contact Email</label>
+              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>Contact Email</label>
               <input name="contact_email" type="email" placeholder="john@example.com" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }} />
             </div>
             <div>
-              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Address</label>
+              <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>Address</label>
               <input name="address" placeholder="123 Main St, City, ST" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }} />
             </div>
           </div>
           <div className="flex gap-3 pt-2">
-            <button type="submit" className="px-6 py-2.5 rounded-lg text-sm font-semibold text-white" style={{ background: HD_ORANGE }}>
+            <button type="submit" className="px-6 py-2.5 rounded-lg text-sm font-semibold text-on-accent" style={{ background: HD_ORANGE }}>
               Save Account
             </button>
-            <Link href="/hd/fleet-accounts" className="px-4 py-2.5 rounded-lg text-sm border" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)', borderColor: 'var(--hd-border)' }}>
+            <Link href="/hd/fleet-accounts" className="px-4 py-2.5 rounded-lg text-sm border" style={{ color: 'var(--hd-text-muted)', borderColor: 'var(--hd-border)' }}>
               Cancel
             </Link>
           </div>

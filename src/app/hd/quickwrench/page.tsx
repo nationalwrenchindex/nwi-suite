@@ -9,6 +9,7 @@ import PartsOnTheWay, { type PartInput } from '@/components/parts-delivery/Parts
 import PartText from '@/components/parts/PartText'
 import type { PartVendor } from '@/lib/parts/parse-part-numbers'
 import { money } from '@/lib/format'
+import { textTone, tint } from '@/lib/hd/text-tone'
 
 // Best-effort parse of the Parts Manager result text into structured parts for
 // delivery. Each meaningful line → { name, oem } with any part-number token pulled out.
@@ -188,16 +189,16 @@ interface AlarmCodeResult {
 }
 
 const AC_SEVERITY_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  immediate:   { label: 'IMMEDIATE ACTION', color: '#EF4444', bg: '#EF444415', border: '#EF444440' },
-  check:       { label: 'CHECK AS SPECIFIED', color: '#F59E0B', bg: '#F59E0B15', border: '#F59E0B40' },
-  maintenance: { label: 'MAINTENANCE DUE',  color: '#1A6BAF', bg: '#1A6BAF15', border: '#1A6BAF40' },
-  info:        { label: 'INFO',             color: '#22C55E', bg: '#22C55E15', border: '#22C55E40' },
+  immediate:   { label: 'IMMEDIATE ACTION', color: 'var(--hd-negative)', bg: '#EF444415', border: '#EF444440' },
+  check:       { label: 'CHECK AS SPECIFIED', color: 'var(--hd-warn)', bg: '#F59E0B15', border: '#F59E0B40' },
+  maintenance: { label: 'MAINTENANCE DUE',  color: 'var(--hd-info)', bg: '#1A6BAF15', border: '#1A6BAF40' },
+  info:        { label: 'INFO',             color: 'var(--hd-positive)', bg: '#22C55E15', border: '#22C55E40' },
 }
 
 const TK_SEVERITY_CONFIG: Record<TKSeverity, { label: string; color: string; bg: string; border: string }> = {
-  ok_to_run:        { label: 'OK TO RUN',             color: '#22C55E', bg: '#22C55E15', border: '#22C55E40' },
-  check_specified:  { label: 'CHECK AS SPECIFIED',    color: '#F59E0B', bg: '#F59E0B15', border: '#F59E0B40' },
-  immediate_action: { label: 'TAKE IMMEDIATE ACTION', color: '#EF4444', bg: '#EF444415', border: '#EF444440' },
+  ok_to_run:        { label: 'OK TO RUN',             color: 'var(--hd-positive)', bg: '#22C55E15', border: '#22C55E40' },
+  check_specified:  { label: 'CHECK AS SPECIFIED',    color: 'var(--hd-warn)', bg: '#F59E0B15', border: '#F59E0B40' },
+  immediate_action: { label: 'TAKE IMMEDIATE ACTION', color: 'var(--hd-negative)', bg: '#EF444415', border: '#EF444440' },
 }
 
 // ─── Refrigerant Pressure Calculator ─────────────────────────────────────────
@@ -233,13 +234,13 @@ function interpolatePressure(x: number, refs: [number, number, number][]): [numb
 
 const SECTION_DEFS = [
   { key: 'ALARM MEANING',      label: 'Alarm Meaning',       color: 'rgba(var(--hd-ink-rgb), 0.9)', bg: null,      accent: null      },
-  { key: 'MOST LIKELY CAUSES', label: 'Most Likely Causes',  color: HD_ORANGE,               bg: null,      accent: HD_ORANGE },
+  { key: 'MOST LIKELY CAUSES', label: 'Most Likely Causes',  color: 'var(--hd-accent-text)',               bg: null,      accent: HD_ORANGE },
   { key: 'DIAGNOSTIC STEPS',   label: 'Diagnostic Steps',    color: HD_BLUE,                 bg: null,      accent: HD_BLUE   },
-  { key: 'COMMON FIX',         label: 'Common Fix',          color: '#22C55E',               bg: 'var(--hd-inner)', accent: null      },
-  { key: 'PARTS NEEDED',       label: 'Parts Needed',        color: 'rgba(var(--hd-ink-rgb), 0.4)', bg: null,      accent: null      },
+  { key: 'COMMON FIX',         label: 'Common Fix',          color: 'var(--hd-positive)',               bg: 'var(--hd-inner)', accent: null      },
+  { key: 'PARTS NEEDED',       label: 'Parts Needed',        color: 'var(--hd-text-faint)', bg: null,      accent: null      },
   { key: 'SPECIAL TOOLS REQUIRED', label: 'Special Tools Required', color: 'rgba(var(--hd-ink-rgb), 0.7)', bg: null, accent: null   },
-  { key: 'SAFETY WARNINGS',    label: 'Safety & Compliance', color: '#F59E0B',               bg: null,      accent: null      },
-  { key: 'PM NOTE',            label: 'PM Note',             color: 'rgba(var(--hd-ink-rgb), 0.4)', bg: null,      accent: null      },
+  { key: 'SAFETY WARNINGS',    label: 'Safety & Compliance', color: 'var(--hd-warn)',               bg: null,      accent: null      },
+  { key: 'PM NOTE',            label: 'PM Note',             color: 'var(--hd-text-faint)', bg: null,      accent: null      },
 ] as const
 
 type SectionKey = typeof SECTION_DEFS[number]['key']
@@ -295,12 +296,12 @@ function SectionContent({ sectionKey, content, vendor = 'auto' }: { sectionKey: 
             {sectionKey === 'DIAGNOSTIC STEPS' ? (
               <span
                 className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5"
-                style={{ background: 'var(--hd-border)', color: HD_BLUE }}
+                style={{ background: 'var(--hd-border)', color: textTone(HD_BLUE) }}
               >
                 {i + 1}
               </span>
             ) : (
-              <span className="font-bold flex-shrink-0" style={{ color: HD_ORANGE }}>{i + 1}.</span>
+              <span className="font-bold flex-shrink-0" style={{ color: 'var(--hd-accent-text)' }}>{i + 1}.</span>
             )}
             {line}
           </li>
@@ -337,7 +338,7 @@ function SectionContent({ sectionKey, content, vendor = 'auto' }: { sectionKey: 
   return (
     <div className="space-y-1">
       {paragraphs.map((p, i) => (
-        <p key={i} className="text-sm leading-relaxed" style={{ color: def.color }}>
+        <p key={i} className="text-sm leading-relaxed" style={{ color: textTone(def.color) }}>
           {p}
         </p>
       ))}
@@ -352,7 +353,7 @@ function TKSeverityBadge({ severity }: { severity: TKSeverity }) {
   return (
     <span
       className="text-xs font-bold px-2.5 py-0.5 rounded-full tracking-wide whitespace-nowrap"
-      style={{ background: cfg.color, color: 'var(--hd-text)' }}
+      style={{ background: cfg.color, color: 'var(--hd-bg)' }}
     >
       {cfg.label}
     </span>
@@ -369,7 +370,7 @@ function PrimaryTKBanner({ src }: { src: TKSource }) {
       <div className="flex-1">
         <div className="flex items-center gap-2 mb-1.5">
           <TKSeverityBadge severity={src.severity} />
-          <span className="text-xs font-medium" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+          <span className="text-xs font-medium" style={{ color: 'var(--hd-text-faint)' }}>
             {src.source === 'tk_dsr' ? 'DSR Code' : 'TK Code'} · TK 40933-8-CH Rev 15
           </span>
         </div>
@@ -389,12 +390,12 @@ function TKCodeRow({ src }: { src: TKSource }) {
       <div className="flex items-center gap-2 mb-1">
         <span className="font-condensed font-bold text-white text-sm">Code {src.code}</span>
         <TKSeverityBadge severity={src.severity} />
-        <span className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+        <span className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>
           {src.source === 'tk_dsr' ? 'DSR' : 'TK'} · TK 40933-8-CH Rev 15
         </span>
       </div>
       <p className="text-sm text-white font-medium leading-snug">{src.description}</p>
-      <p className="text-xs mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.55)' }}>
+      <p className="text-xs mt-1" style={{ color: 'var(--hd-text-muted)' }}>
         Operator action: {src.operatorAction}
       </p>
     </div>
@@ -484,7 +485,7 @@ function ManifoldGauge({
             <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y}
               stroke="rgba(var(--hd-ink-rgb), 0.65)" strokeWidth="2" strokeLinecap="round" />
             <text x={lp.x} y={lp.y}
-              fill="rgba(var(--hd-ink-rgb), 0.6)" fontSize="9" fontFamily="monospace"
+              fill="var(--hd-text-muted)" fontSize="9" fontFamily="monospace"
               textAnchor="middle" dominantBaseline="middle">
               {v}
             </text>
@@ -499,7 +500,7 @@ function ManifoldGauge({
         {hasReading ? Math.round(actualPsi!) : '---'}
       </text>
       <text x={G.CX} y={G.CY + 38}
-        fill="rgba(var(--hd-ink-rgb), 0.25)" fontSize="7" fontFamily="monospace"
+        fill="var(--hd-text-faint)" fontSize="7" fontFamily="monospace"
         textAnchor="middle" letterSpacing="1">
         PSI
       </text>
@@ -672,7 +673,7 @@ function LaborEstimate({ book, mobile }: { book: number; mobile: number }) {
   const same = Math.abs(book - mobile) < 0.01
   const fee  = (h: number) => `$${Math.round(h * HD_LABOR_RATE)}`
   return (
-    <div className="rounded-lg px-4 py-3" style={{ background: '#0d2137', borderLeft: '3px solid #2969B0' }}>
+    <div className="rounded-lg px-4 py-3" style={{ background: 'color-mix(in srgb, var(--hd-info) 14%, var(--hd-card))', borderLeft: '3px solid #2969B0' }}>
       <p className="text-xs uppercase tracking-widest mb-1.5" style={{ color: '#2969B0' }}>
         Labor Estimate
       </p>
@@ -681,7 +682,7 @@ function LaborEstimate({ book, mobile }: { book: number; mobile: number }) {
           ? `Labor Time: ${book.toFixed(1)} hours`
           : `Book Time: ${book.toFixed(1)} hours  |  Mobile Field Time: ${mobile.toFixed(1)} hours`}
       </p>
-      <p className="text-sm mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.55)' }}>
+      <p className="text-sm mt-0.5" style={{ color: 'var(--hd-text-muted)' }}>
         At ${HD_LABOR_RATE}/hr: {same ? fee(mobile) : `${fee(book)} to ${fee(mobile)}`}
       </p>
     </div>
@@ -710,13 +711,13 @@ function PartsManager({
           type="button"
           onClick={onRun}
           disabled={loading}
-          className="w-full py-3 rounded-lg text-sm font-semibold text-white transition-colors disabled:opacity-60"
+          className="w-full py-3 rounded-lg text-sm font-semibold text-on-fill transition-colors disabled:opacity-60"
           style={{ background: '#2969B0', minHeight: 48 }}
         >
           {loading ? 'Looking up parts…' : 'Parts Manager'}
         </button>
       ) : (
-        <div className="rounded-lg overflow-hidden" style={{ background: '#0d1f35', borderLeft: '3px solid #2969B0' }}>
+        <div className="rounded-lg overflow-hidden" style={{ background: 'color-mix(in srgb, var(--hd-info) 14%, var(--hd-card))', borderLeft: '3px solid #2969B0' }}>
           <div className="flex items-start justify-between gap-3 px-4 pt-3">
             <p className="text-xs uppercase tracking-widest" style={{ color: '#2969B0' }}>Parts Manager</p>
             <button
@@ -724,7 +725,7 @@ function PartsManager({
               onClick={onClear}
               aria-label="Dismiss parts"
               className="flex-shrink-0 text-lg leading-none"
-              style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}
+              style={{ color: 'var(--hd-text-faint)' }}
             >
               ×
             </button>
@@ -737,14 +738,14 @@ function PartsManager({
             )}
           </div>
           <div className="px-4 pb-3">
-            <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+            <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>
               Parts data is AI-generated. Verify part numbers with your TK or Carrier dealer before ordering.
             </p>
           </div>
         </div>
       )}
       {error && (
-        <div className="rounded-lg px-4 py-2.5 text-sm" style={{ background: '#2d0a0a', border: '1px solid #7f1d1d', color: '#f87171' }}>
+        <div className="rounded-lg px-4 py-2.5 text-sm" style={{ background: 'color-mix(in srgb, var(--hd-negative) 14%, var(--hd-card))', border: '1px solid #7f1d1d', color: 'var(--hd-negative)' }}>
           {error}
         </div>
       )}
@@ -807,11 +808,11 @@ function SuggestedRepairs({
   return (
     <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
       <div className="px-4 py-3" style={{ background: 'var(--hd-sunken)', borderBottom: '1px solid var(--hd-border)' }}>
-        <p className="text-xs uppercase tracking-widest" style={{ color: HD_ORANGE }}>Suggested Repairs</p>
-        <p className="text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>Tap the repairs performed — they’ll be added to the quote.</p>
+        <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--hd-accent-text)' }}>Suggested Repairs</p>
+        <p className="text-xs mt-0.5" style={{ color: 'var(--hd-text-faint)' }}>Tap the repairs performed — they’ll be added to the quote.</p>
       </div>
       {loading ? (
-        <p className="px-4 py-4 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Loading repairs…</p>
+        <p className="px-4 py-4 text-sm" style={{ color: 'var(--hd-text-faint)' }}>Loading repairs…</p>
       ) : (
         <div className="divide-y" style={{ borderColor: 'var(--hd-border)' }}>
           {items.map(item => {
@@ -835,10 +836,10 @@ function SuggestedRepairs({
                   {sel ? '✓' : ''}
                 </span>
                 <span className="flex-1 min-w-0">
-                  <span className="block text-sm" style={{ color: sel ? '#fff' : 'rgba(var(--hd-ink-rgb), 0.8)' }}>
+                  <span className="block text-sm" style={{ color: textTone(sel ? '#fff' : 'rgba(var(--hd-ink-rgb), 0.8)') }}>
                     {item.description}
-                    {hoursLabel && <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}> — {hoursLabel}</span>}
-                    {!item.is_master && <span className="ml-1.5 text-[10px] uppercase" style={{ color: HD_BLUE }}>custom</span>}
+                    {hoursLabel && <span style={{ color: 'var(--hd-text-muted)' }}> — {hoursLabel}</span>}
+                    {!item.is_master && <span className="ml-1.5 text-[10px] uppercase" style={{ color: textTone(HD_BLUE) }}>custom</span>}
                   </span>
                 </span>
               </button>
@@ -904,19 +905,19 @@ function RepairLaborGuide({ items, category }: { items: RepairItem[]; category?:
   if (groups.length === 0) return null
 
   return (
-    <div className="rounded-xl overflow-hidden" style={{ background: '#0d1f35', border: '1px solid #14263f', borderLeft: `3px solid ${NWI_BLUE}` }}>
+    <div className="rounded-xl overflow-hidden" style={{ background: 'color-mix(in srgb, var(--hd-info) 14%, var(--hd-card))', border: '1px solid #14263f', borderLeft: `3px solid ${NWI_BLUE}` }}>
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
         className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left"
       >
         <span className="min-w-0">
-          <span className="text-xs uppercase tracking-widest" style={{ color: NWI_BLUE }}>Repair Labor Guide</span>
-          <span className="block text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+          <span className="text-xs uppercase tracking-widest" style={{ color: textTone(NWI_BLUE) }}>Repair Labor Guide</span>
+          <span className="block text-xs mt-0.5" style={{ color: 'var(--hd-text-faint)' }}>
             R&amp;R labor times — reference only. Read it to quote; select repairs below.
           </span>
         </span>
-        <span className="text-sm flex-shrink-0" style={{ color: NWI_BLUE }}>{open ? '▾' : '▸'}</span>
+        <span className="text-sm flex-shrink-0" style={{ color: textTone(NWI_BLUE) }}>{open ? '▾' : '▸'}</span>
       </button>
       {open && (
         <div className="px-4 pb-4 divide-y" style={{ borderColor: '#14263f' }}>
@@ -926,25 +927,25 @@ function RepairLaborGuide({ items, category }: { items: RepairItem[]; category?:
               <div className="mt-1 space-y-0.5">
                 {g.both != null && (
                   <div className="flex justify-between gap-3 text-xs">
-                    <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.45)' }}>Both</span>
+                    <span style={{ color: 'var(--hd-text-muted)' }}>Both</span>
                     <span style={{ color: 'var(--hd-text)' }}>{fmtGuideHours(g.both)}</span>
                   </div>
                 )}
                 {g.both == null && g.truck != null && (
                   <div className="flex justify-between gap-3 text-xs">
-                    <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.45)' }}>Truck unit</span>
+                    <span style={{ color: 'var(--hd-text-muted)' }}>Truck unit</span>
                     <span style={{ color: 'var(--hd-text)' }}>{fmtGuideHours(g.truck)}</span>
                   </div>
                 )}
                 {g.both == null && g.trailer != null && (
                   <div className="flex justify-between gap-3 text-xs">
-                    <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.45)' }}>Trailer unit</span>
+                    <span style={{ color: 'var(--hd-text-muted)' }}>Trailer unit</span>
                     <span style={{ color: 'var(--hd-text)' }}>{fmtGuideHours(g.trailer)}</span>
                   </div>
                 )}
                 {g.refrigeration && (
                   <div className="flex justify-between gap-3 text-xs">
-                    <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.45)' }}>
+                    <span style={{ color: 'var(--hd-text-muted)' }}>
                       + Refrigeration Service {g.refrigeration.service ?? ''}
                     </span>
                     <span style={{ color: 'var(--hd-text)' }}>{fmtGuideHours(g.refrigeration.hours)}</span>
@@ -1055,18 +1056,18 @@ function AnalysisCard({
                 border:     alarmPattern.severity === 'critical' ? '1px solid #EF444450' : `1px solid ${HD_ORANGE}50`,
               }}
             >
-              <span className="font-bold text-sm" style={{ color: alarmPattern.severity === 'critical' ? '#EF4444' : HD_ORANGE }}>
+              <span className="font-bold text-sm" style={{ color: textTone(alarmPattern.severity === 'critical' ? 'var(--hd-negative)' : 'var(--hd-accent-text)') }}>
                 DO NOT diagnose these alarms independently — they are related.
               </span>
             </div>
 
             <div>
-              <p className="text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Pattern</p>
+              <p className="text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>Pattern</p>
               <p className="text-sm text-white leading-relaxed">{alarmPattern.pattern}</p>
             </div>
 
             <div className="rounded-lg p-4" style={{ background: 'var(--hd-inner)' }}>
-              <p className="text-xs uppercase tracking-widest mb-1.5" style={{ color: alarmPattern.severity === 'critical' ? '#EF4444' : HD_ORANGE }}>
+              <p className="text-xs uppercase tracking-widest mb-1.5" style={{ color: textTone(alarmPattern.severity === 'critical' ? 'var(--hd-negative)' : 'var(--hd-accent-text)') }}>
                 Diagnose First
               </p>
               <p className="text-sm font-bold text-white leading-relaxed">{alarmPattern.diagnoseFirst}</p>
@@ -1074,7 +1075,7 @@ function AnalysisCard({
 
             {tkSources.length > 0 && (
               <div className="space-y-2">
-                <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Official TK Definitions</p>
+                <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--hd-text-faint)' }}>Official TK Definitions</p>
                 {tkSources.map(src => <TKCodeRow key={src.code} src={src} />)}
               </div>
             )}
@@ -1096,7 +1097,7 @@ function AnalysisCard({
               <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
             <div>
-              <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+              <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: 'var(--hd-text-faint)' }}>
                 Operator Action (TK Official)
               </p>
               <p className="text-sm font-medium text-white">{primaryTkSource.operatorAction}</p>
@@ -1110,7 +1111,7 @@ function AnalysisCard({
           {(tkSources.length > 0 || codeStatus === 'verified') ? (
             <span
               className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full tracking-wide"
-              style={{ background: '#0f2f1c', color: '#34D399', border: '1px solid #1c5c34' }}
+              style={{ background: 'color-mix(in srgb, var(--hd-positive) 14%, var(--hd-card))', color: '#34D399', border: '1px solid #1c5c34' }}
             >
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#34D399' }} />
               VERIFIED DATABASE ENTRY
@@ -1118,7 +1119,7 @@ function AnalysisCard({
           ) : codeStatus === 'unverified' ? (
             <span
               className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full tracking-wide"
-              style={{ background: '#172534', color: '#93C5FD', border: '1px solid #2c4a66' }}
+              style={{ background: 'color-mix(in srgb, var(--hd-info) 14%, var(--hd-card))', color: 'var(--hd-info)', border: '1px solid #2c4a66' }}
             >
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#93C5FD' }} />
               CODE NOT FOUND · DOUBLE-CHECK ENTRY
@@ -1126,7 +1127,7 @@ function AnalysisCard({
           ) : (
             <span
               className="inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-full tracking-wide"
-              style={{ background: '#352a06', color: '#FBBF24', border: '1px solid #6b520f' }}
+              style={{ background: '#352a06', color: 'var(--hd-warn)', border: '1px solid #6b520f' }}
             >
               <span className="w-1.5 h-1.5 rounded-full" style={{ background: '#FBBF24' }} />
               AI ASSISTED · VERIFY BEFORE RELYING
@@ -1141,7 +1142,7 @@ function AnalysisCard({
                   className={def.bg ? 'rounded-lg p-4' : ''}
                   style={def.bg ? { background: def.bg } : {}}
                 >
-                  <p className="text-xs uppercase tracking-widest mb-2" style={{ color: def.color }}>
+                  <p className="text-xs uppercase tracking-widest mb-2" style={{ color: textTone(def.color) }}>
                     {def.label}
                   </p>
                   <SectionContent sectionKey={key} content={content} vendor={partVendor} />
@@ -1156,7 +1157,7 @@ function AnalysisCard({
 
           {disclaimer && (
             <div className="rounded-lg p-3" style={{ background: 'var(--hd-sunken)', border: '1px solid var(--hd-border)' }}>
-              <p className="text-xs leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+              <p className="text-xs leading-relaxed" style={{ color: 'var(--hd-text-faint)' }}>
                 {disclaimer}
               </p>
             </div>
@@ -1242,10 +1243,10 @@ function VisualReference({ buttons }: { buttons: VisualButton[] }) {
   if (buttons.length === 0) return null
   return (
     <div className="rounded-xl p-5" style={{ background: 'var(--hd-sunken)', border: '1px solid var(--hd-border)' }}>
-      <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+      <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>
         Visual Reference
       </p>
-      <p className="text-xs mb-3" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+      <p className="text-xs mb-3" style={{ color: 'var(--hd-text-faint)' }}>
         Opens Google Images (SafeSearch on) in a new tab — diagrams &amp; component locations.
       </p>
       <div className="flex flex-wrap gap-2">
@@ -1256,7 +1257,7 @@ function VisualReference({ buttons }: { buttons: VisualButton[] }) {
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs px-3 py-2 rounded-lg transition-colors"
-            style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)', color: 'rgba(var(--hd-ink-rgb), 0.55)' }}
+            style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)', color: 'var(--hd-text-muted)' }}
           >
             {b.label}
           </a>
@@ -2100,11 +2101,11 @@ export default function HDQuickWrenchPage() {
       <div className="max-w-3xl mx-auto space-y-6">
 
         <div>
-          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>
             HD Diagnostic Assistant
           </p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">HD QUICKWRENCH</h1>
-          <p className="text-sm mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+          <p className="text-sm mt-1" style={{ color: 'var(--hd-text-faint)' }}>
             Alarm codes, specs, and repair procedures from a 17-year field veteran.
           </p>
         </div>
@@ -2127,7 +2128,7 @@ export default function HDQuickWrenchPage() {
               className="flex-1 sm:flex-none px-5 py-3 rounded-lg text-sm font-semibold transition-colors"
               style={activeTab === tab.key
                 ? { background: HD_ORANGE, color: 'var(--hd-text)', minHeight: 44 }
-                : { background: 'var(--hd-card)', color: 'rgba(var(--hd-ink-rgb), 0.45)', border: '1px solid var(--hd-border)', minHeight: 44 }
+                : { background: 'var(--hd-card)', color: 'var(--hd-text-muted)', border: '1px solid var(--hd-border)', minHeight: 44 }
               }
             >
               {tab.label}
@@ -2153,12 +2154,12 @@ export default function HDQuickWrenchPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 <div className="flex-1">
-                  <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>Verified Database</p>
+                  <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: 'var(--hd-text-faint)' }}>Verified Database</p>
                   <p className="font-condensed font-bold text-white text-lg tracking-wide">Alarm Code Lookup</p>
                 </div>
                 <svg
                   className="w-4 h-4 flex-shrink-0 transition-transform duration-200"
-                  style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)', transform: acOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                  style={{ color: 'var(--hd-text-faint)', transform: acOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
                   fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
@@ -2170,7 +2171,7 @@ export default function HDQuickWrenchPage() {
 
                   {/* Manufacturer toggle */}
                   <div className="pt-4">
-                    <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Manufacturer</p>
+                    <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--hd-text-faint)' }}>Manufacturer</p>
                     <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
                       {(['TK', 'Carrier'] as const).map(m => (
                         <button
@@ -2180,7 +2181,7 @@ export default function HDQuickWrenchPage() {
                           className="flex-1 py-2.5 text-sm font-semibold transition-colors"
                           style={acManuf === m
                             ? { background: HD_ORANGE, color: 'var(--hd-text)' }
-                            : { background: 'var(--hd-inner)', color: 'rgba(var(--hd-ink-rgb), 0.45)' }}
+                            : { background: 'var(--hd-inner)', color: 'var(--hd-text-muted)' }}
                         >
                           {m === 'TK' ? 'Thermo King' : 'Carrier Transicold'}
                         </button>
@@ -2191,7 +2192,7 @@ export default function HDQuickWrenchPage() {
                   {/* Carrier unit family */}
                   {acManuf === 'Carrier' && (
                     <div>
-                      <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Unit Model Family</p>
+                      <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--hd-text-faint)' }}>Unit Model Family</p>
                       <div className="flex gap-2 flex-wrap">
                         {(['All', 'X2', 'Vector'] as const).map(f => (
                           <button
@@ -2201,7 +2202,7 @@ export default function HDQuickWrenchPage() {
                             className="px-4 py-2 rounded-lg text-sm font-semibold transition-colors"
                             style={acFamily === f
                               ? { background: HD_BLUE, color: 'var(--hd-text)' }
-                              : { background: 'var(--hd-inner)', color: 'rgba(var(--hd-ink-rgb), 0.45)', border: '1px solid var(--hd-border)' }}
+                              : { background: 'var(--hd-inner)', color: 'var(--hd-text-muted)', border: '1px solid var(--hd-border)' }}
                           >
                             {f === 'All' ? 'All Models' : f}
                           </button>
@@ -2212,7 +2213,7 @@ export default function HDQuickWrenchPage() {
 
                   {/* Search mode toggle */}
                   <div>
-                    <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Search By</p>
+                    <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--hd-text-faint)' }}>Search By</p>
                     <div className="flex gap-2">
                       {([
                         { key: 'code', label: 'Alarm Code Number' },
@@ -2225,7 +2226,7 @@ export default function HDQuickWrenchPage() {
                           className="flex-1 py-2 rounded-lg text-xs font-semibold transition-colors"
                           style={acMode === opt.key
                             ? { background: 'var(--hd-border)', color: 'var(--hd-text)', border: `1px solid ${HD_ORANGE}` }
-                            : { background: 'var(--hd-inner)', color: 'rgba(var(--hd-ink-rgb), 0.4)', border: '1px solid var(--hd-border)' }}
+                            : { background: 'var(--hd-inner)', color: 'var(--hd-text-faint)', border: '1px solid var(--hd-border)' }}
                         >
                           {opt.label}
                         </button>
@@ -2236,7 +2237,7 @@ export default function HDQuickWrenchPage() {
                   {/* Search input */}
                   {acMode === 'code' ? (
                     <div>
-                      <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                      <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
                         Alarm Code Number
                       </label>
                       <div className="flex gap-2">
@@ -2262,7 +2263,7 @@ export default function HDQuickWrenchPage() {
                     </div>
                   ) : (
                     <div>
-                      <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                      <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
                         Description or Keyword
                       </label>
                       <div className="flex gap-2">
@@ -2290,21 +2291,21 @@ export default function HDQuickWrenchPage() {
 
                   {/* Multi-family warning */}
                   {acWarning && (
-                    <div className="rounded-lg px-4 py-3" style={{ background: '#1a1000', border: '1px solid #F59E0B40' }}>
-                      <p className="text-sm" style={{ color: '#F59E0B' }}>⚠ {acWarning}</p>
+                    <div className="rounded-lg px-4 py-3" style={{ background: 'color-mix(in srgb, var(--hd-warn) 14%, var(--hd-card))', border: '1px solid #F59E0B40' }}>
+                      <p className="text-sm" style={{ color: 'var(--hd-warn)' }}>⚠ {acWarning}</p>
                     </div>
                   )}
 
                   {/* Error */}
                   {acError && (
-                    <div className="rounded-lg px-4 py-3" style={{ background: '#1a0000', border: '1px solid #EF444440' }}>
-                      <p className="text-sm" style={{ color: '#EF4444' }}>{acError}</p>
+                    <div className="rounded-lg px-4 py-3" style={{ background: 'color-mix(in srgb, var(--hd-negative) 14%, var(--hd-card))', border: '1px solid #EF444440' }}>
+                      <p className="text-sm" style={{ color: 'var(--hd-negative)' }}>{acError}</p>
                     </div>
                   )}
 
                   {/* No results */}
                   {!acLoading && !acError && acResults.length === 0 && (acCode.trim() || acText.trim()) && (
-                    <p className="text-sm text-center py-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+                    <p className="text-sm text-center py-2" style={{ color: 'var(--hd-text-faint)' }}>
                       No results found. Try a different code or keyword.
                     </p>
                   )}
@@ -2327,19 +2328,19 @@ export default function HDQuickWrenchPage() {
                               {r.alarm_code && (
                                 <span
                                   className="text-sm font-bold px-2.5 py-0.5 rounded"
-                                  style={{ background: 'var(--hd-sunken)', color: HD_ORANGE, fontFamily: 'monospace', border: `1px solid ${HD_ORANGE}40` }}
+                                  style={{ background: 'var(--hd-sunken)', color: 'var(--hd-accent-text)', fontFamily: 'monospace', border: `1px solid ${tint(HD_ORANGE, 25)}` }}
                                 >
                                   {r.manufacturer === 'TK' ? `Code ${r.alarm_code}` : r.alarm_code}
                                 </span>
                               )}
                               <span
                                 className="text-xs font-bold px-2.5 py-0.5 rounded-full tracking-wide"
-                                style={{ background: sev.color, color: 'var(--hd-text)' }}
+                                style={{ background: sev.color, color: 'var(--hd-bg)' }}
                               >
                                 {sev.label}
                               </span>
                               {acManuf === 'Carrier' && (
-                                <span className="text-xs px-2 py-0.5 rounded" style={{ background: 'var(--hd-inner)', color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+                                <span className="text-xs px-2 py-0.5 rounded" style={{ background: 'var(--hd-inner)', color: 'var(--hd-text-muted)' }}>
                                   {r.unit_family}
                                 </span>
                               )}
@@ -2350,15 +2351,15 @@ export default function HDQuickWrenchPage() {
 
                         {/* Meaning */}
                         <div className="px-4 py-3" style={{ borderTop: '1px solid var(--hd-border)' }}>
-                          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>Alarm Meaning</p>
+                          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>Alarm Meaning</p>
                           <p className="text-sm leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.85)' }}>{r.meaning}</p>
                         </div>
 
                         {/* Shore power warning — always first if applicable */}
                         {r.shore_power_warning && (
-                          <div className="px-4 py-3" style={{ background: '#1a0505', borderTop: '1px solid #EF444440' }}>
-                            <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: '#EF4444' }}>⚡ High Voltage Warning</p>
-                            <p className="text-sm leading-relaxed" style={{ color: '#EF4444' }}>
+                          <div className="px-4 py-3" style={{ background: 'color-mix(in srgb, var(--hd-negative) 14%, var(--hd-card))', borderTop: '1px solid #EF444440' }}>
+                            <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: 'var(--hd-negative)' }}>⚡ High Voltage Warning</p>
+                            <p className="text-sm leading-relaxed" style={{ color: 'var(--hd-negative)' }}>
                               Shore power on this unit operates at 460–480V three-phase. This is LETHAL VOLTAGE.
                               Only qualified electricians may work on shore power connections.
                               Disconnect and lock out power before servicing the power inlet.
@@ -2369,15 +2370,15 @@ export default function HDQuickWrenchPage() {
                         {/* Safety warning */}
                         {r.safety_warning && (
                           <div className="px-4 py-3" style={{ borderTop: '1px solid var(--hd-border)' }}>
-                            <p className="text-xs uppercase tracking-widest mb-1" style={{ color: '#F59E0B' }}>⚠ Safety</p>
+                            <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-warn)' }}>⚠ Safety</p>
                             <p className="text-sm leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.7)' }}>{r.safety_warning}</p>
                           </div>
                         )}
 
                         {/* Battery warning — always shown */}
-                        <div className="px-4 py-3" style={{ background: '#0d1c10', borderTop: '1px solid #22C55E30' }}>
-                          <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: '#22C55E' }}>🔋 Field Protocol</p>
-                          <p className="text-xs leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>
+                        <div className="px-4 py-3" style={{ background: 'color-mix(in srgb, var(--hd-positive) 14%, var(--hd-card))', borderTop: '1px solid #22C55E30' }}>
+                          <p className="text-xs font-bold uppercase tracking-widest mb-1" style={{ color: 'var(--hd-positive)' }}>🔋 Field Protocol</p>
+                          <p className="text-xs leading-relaxed" style={{ color: 'var(--hd-text-muted)' }}>
                             Always perform a battery load test before any other diagnosis on TK and Carrier units.
                             A weak battery causes false sensor readings and false alarm codes on microprocessor controlled units.
                           </p>
@@ -2386,11 +2387,11 @@ export default function HDQuickWrenchPage() {
                         {/* Most likely causes */}
                         {causes.length > 0 && (
                           <div className="px-4 py-3" style={{ borderTop: '1px solid var(--hd-border)' }}>
-                            <p className="text-xs uppercase tracking-widest mb-2" style={{ color: HD_ORANGE }}>Most Likely Causes</p>
+                            <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--hd-accent-text)' }}>Most Likely Causes</p>
                             <ol className="space-y-1">
                               {causes.map((c, i) => (
                                 <li key={i} className="flex gap-2 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.8)' }}>
-                                  <span className="font-bold flex-shrink-0" style={{ color: HD_ORANGE }}>{i + 1}.</span>
+                                  <span className="font-bold flex-shrink-0" style={{ color: 'var(--hd-accent-text)' }}>{i + 1}.</span>
                                   {c}
                                 </li>
                               ))}
@@ -2401,13 +2402,13 @@ export default function HDQuickWrenchPage() {
                         {/* Diagnostic steps */}
                         {steps.length > 0 && (
                           <div className="px-4 py-3" style={{ borderTop: '1px solid var(--hd-border)' }}>
-                            <p className="text-xs uppercase tracking-widest mb-2" style={{ color: HD_BLUE }}>Diagnostic Steps</p>
+                            <p className="text-xs uppercase tracking-widest mb-2" style={{ color: textTone(HD_BLUE) }}>Diagnostic Steps</p>
                             <ol className="space-y-2">
                               {steps.map((step, i) => (
                                 <li key={i} className="flex gap-2 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.82)' }}>
                                   <span
                                     className="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5"
-                                    style={{ background: 'var(--hd-border)', color: HD_BLUE }}
+                                    style={{ background: 'var(--hd-border)', color: textTone(HD_BLUE) }}
                                   >
                                     {i + 1}
                                   </span>
@@ -2421,7 +2422,7 @@ export default function HDQuickWrenchPage() {
                         {/* Common fix */}
                         {r.common_fix && (
                           <div className="px-4 py-3" style={{ background: 'var(--hd-inner)', borderTop: '1px solid var(--hd-border)' }}>
-                            <p className="text-xs uppercase tracking-widest mb-1" style={{ color: '#22C55E' }}>Common Fix</p>
+                            <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-positive)' }}>Common Fix</p>
                             <p className="text-sm leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.85)' }}>{r.common_fix}</p>
                           </div>
                         )}
@@ -2429,7 +2430,7 @@ export default function HDQuickWrenchPage() {
                         {/* Parts needed */}
                         {r.parts_needed && r.parts_needed !== 'None' && (
                           <div className="px-4 py-3" style={{ borderTop: '1px solid var(--hd-border)' }}>
-                            <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Parts Needed</p>
+                            <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--hd-text-faint)' }}>Parts Needed</p>
                             <div className="flex flex-wrap gap-1.5">
                               {r.parts_needed.split(',').map(p => p.trim()).filter(Boolean).map((p, i) => (
                                 <span key={i} className="text-xs px-2.5 py-1 rounded-full" style={{ background: 'var(--hd-border)', color: 'rgba(var(--hd-ink-rgb), 0.7)' }}>
@@ -2443,16 +2444,16 @@ export default function HDQuickWrenchPage() {
                         {/* Wiring reference */}
                         {r.wiring_reference && (
                           <div className="px-4 py-3" style={{ borderTop: '1px solid var(--hd-border)' }}>
-                            <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>Wiring Reference</p>
-                            <p className="text-xs leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.55)' }}>{r.wiring_reference}</p>
+                            <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>Wiring Reference</p>
+                            <p className="text-xs leading-relaxed" style={{ color: 'var(--hd-text-muted)' }}>{r.wiring_reference}</p>
                           </div>
                         )}
 
                         {/* Field notes */}
                         {r.field_notes && (
                           <div className="px-4 py-3" style={{ background: 'var(--hd-sunken)', borderTop: '1px solid var(--hd-border)' }}>
-                            <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>Field Notes</p>
-                            <p className="text-xs leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>{r.field_notes}</p>
+                            <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>Field Notes</p>
+                            <p className="text-xs leading-relaxed" style={{ color: 'var(--hd-text-muted)' }}>{r.field_notes}</p>
                           </div>
                         )}
 
@@ -2463,14 +2464,14 @@ export default function HDQuickWrenchPage() {
                               <circle cx="12" cy="12" r="10" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2" />
                             </svg>
                             {r.book_time != null && (
-                              <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
-                                <span className="font-semibold" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>Book: </span>
+                              <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>
+                                <span className="font-semibold" style={{ color: 'var(--hd-text-muted)' }}>Book: </span>
                                 {r.book_time}h
                               </p>
                             )}
                             {r.mobile_time != null && (
-                              <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
-                                <span className="font-semibold" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>Mobile: </span>
+                              <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>
+                                <span className="font-semibold" style={{ color: 'var(--hd-text-muted)' }}>Mobile: </span>
                                 {r.mobile_time}h
                               </p>
                             )}
@@ -2481,7 +2482,7 @@ export default function HDQuickWrenchPage() {
                     )
                   })}
 
-                  <p className="text-xs text-center" style={{ color: 'rgba(var(--hd-ink-rgb), 0.2)' }}>
+                  <p className="text-xs text-center" style={{ color: 'var(--hd-text-faint)' }}>
                     Field-verified data · Battery load test required before all diagnoses
                   </p>
                 </div>
@@ -2502,12 +2503,12 @@ export default function HDQuickWrenchPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8 6h2m4 0h2M8 10h2m4 0h2M8 14h2m4 0h2M8 18h2m4 0h2" />
                 </svg>
                 <div className="flex-1">
-                  <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>Reference Tool</p>
+                  <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: 'var(--hd-text-faint)' }}>Reference Tool</p>
                   <p className="font-condensed font-bold text-white text-lg tracking-wide">Refrigerant Pressure Calculator</p>
                 </div>
                 <svg
                   className="w-4 h-4 flex-shrink-0 transition-transform duration-200"
-                  style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)', transform: calcOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                  style={{ color: 'var(--hd-text-faint)', transform: calcOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
                   fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
@@ -2519,7 +2520,7 @@ export default function HDQuickWrenchPage() {
 
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3 pt-4">
                     <div>
-                      <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                      <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
                         Ambient Temp (°F)
                       </label>
                       <input
@@ -2532,7 +2533,7 @@ export default function HDQuickWrenchPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                      <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
                         Box Setpoint (°F)
                       </label>
                       <input
@@ -2545,7 +2546,7 @@ export default function HDQuickWrenchPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                      <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
                         Actual Box Temp (°F)
                       </label>
                       <input
@@ -2558,7 +2559,7 @@ export default function HDQuickWrenchPage() {
                       />
                     </div>
                     <div>
-                      <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                      <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
                         Refrigerant
                       </label>
                       <select
@@ -2574,11 +2575,11 @@ export default function HDQuickWrenchPage() {
                   </div>
 
                   {isPulldown && (
-                    <div className="rounded-lg p-3 flex gap-3 items-start" style={{ background: '#1a1200', border: '1px solid #F59E0B50' }}>
-                      <span style={{ color: '#F59E0B', fontSize: 18, lineHeight: 1.2 }}>⚠</span>
+                    <div className="rounded-lg p-3 flex gap-3 items-start" style={{ background: 'color-mix(in srgb, var(--hd-warn) 14%, var(--hd-card))', border: '1px solid #F59E0B50' }}>
+                      <span style={{ color: 'var(--hd-warn)', fontSize: 18, lineHeight: 1.2 }}>⚠</span>
                       <div>
-                        <p className="text-xs font-bold mb-0.5" style={{ color: '#F59E0B' }}>PULLDOWN MODE DETECTED</p>
-                        <p className="text-xs leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>
+                        <p className="text-xs font-bold mb-0.5" style={{ color: 'var(--hd-warn)' }}>PULLDOWN MODE DETECTED</p>
+                        <p className="text-xs leading-relaxed" style={{ color: 'var(--hd-text-muted)' }}>
                           Unit is in pulldown mode — pressures will be higher than steady state. This is normal.
                           Suction target is calculated from actual box temp ({actualBoxTempNum}°F) rather than setpoint.
                         </p>
@@ -2597,9 +2598,9 @@ export default function HDQuickWrenchPage() {
                         normalHigh={hasCalcInputs ? suctionHigh : null}
                         actualPsi={hasSuctionActual ? actualSuction : null}
                       />
-                      <p className="text-xs font-bold tracking-widest" style={{ color: HD_BLUE }}>LOW SIDE SUCTION</p>
+                      <p className="text-xs font-bold tracking-widest" style={{ color: textTone(HD_BLUE) }}>LOW SIDE SUCTION</p>
                       {hasCalcInputs && (
-                        <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+                        <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>
                           Target: {suctionLow}–{suctionHigh} PSI
                         </p>
                       )}
@@ -2614,7 +2615,7 @@ export default function HDQuickWrenchPage() {
                       {hasSuctionActual && hasCalcInputs && (
                         <span className="text-xs font-bold px-3 py-1 rounded-full" style={{
                           background: suctionInRange ? '#22C55E20' : '#EF444420',
-                          color:      suctionInRange ? '#22C55E'   : '#EF4444',
+                          color: textTone(suctionInRange ? 'var(--hd-positive)'   : 'var(--hd-negative)'),
                           border:     `1px solid ${suctionInRange ? '#22C55E50' : '#EF444450'}`,
                         }}>
                           {suctionInRange ? 'IN RANGE' : actualSuction < suctionLow ? 'LOW' : 'HIGH'}
@@ -2632,9 +2633,9 @@ export default function HDQuickWrenchPage() {
                         normalHigh={hasCalcInputs ? dischargeHigh : null}
                         actualPsi={hasDischargeActual ? actualDischarge : null}
                       />
-                      <p className="text-xs font-bold tracking-widest" style={{ color: '#EF4444' }}>HIGH SIDE DISCHARGE</p>
+                      <p className="text-xs font-bold tracking-widest" style={{ color: 'var(--hd-negative)' }}>HIGH SIDE DISCHARGE</p>
                       {hasCalcInputs && (
-                        <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+                        <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>
                           Target: {dischargeLow}–{dischargeHigh} PSI
                         </p>
                       )}
@@ -2649,7 +2650,7 @@ export default function HDQuickWrenchPage() {
                       {hasDischargeActual && hasCalcInputs && (
                         <span className="text-xs font-bold px-3 py-1 rounded-full" style={{
                           background: dischargeInRange ? '#22C55E20' : '#EF444420',
-                          color:      dischargeInRange ? '#22C55E'   : '#EF4444',
+                          color: textTone(dischargeInRange ? 'var(--hd-positive)'   : 'var(--hd-negative)'),
                           border:     `1px solid ${dischargeInRange ? '#22C55E50' : '#EF444450'}`,
                         }}>
                           {dischargeInRange ? 'IN RANGE' : actualDischarge < dischargeLow ? 'LOW' : 'HIGH'}
@@ -2664,10 +2665,10 @@ export default function HDQuickWrenchPage() {
 
                       {/* Danger alert — discharge > 400 PSI */}
                       {gaugeDiag.dangerAlert && (
-                        <div className="rounded-lg p-4 flex gap-3 items-start" style={{ background: '#1a0000', border: '2px solid #EF4444' }}>
+                        <div className="rounded-lg p-4 flex gap-3 items-start" style={{ background: 'color-mix(in srgb, var(--hd-negative) 14%, var(--hd-card))', border: '2px solid #EF4444' }}>
                           <span style={{ fontSize: 20, lineHeight: 1.2, flexShrink: 0 }}>⛔</span>
                           <div>
-                            <p className="text-sm font-bold mb-1" style={{ color: '#EF4444' }}>DANGER — DISCHARGE CRITICALLY HIGH (&gt;400 PSI)</p>
+                            <p className="text-sm font-bold mb-1" style={{ color: 'var(--hd-negative)' }}>DANGER — DISCHARGE CRITICALLY HIGH (&gt;400 PSI)</p>
                             <p className="text-xs leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.75)' }}>
                               Shut unit off immediately. Do not disconnect fittings or open any valves until discharge pressure drops below 250 PSI.
                             </p>
@@ -2681,7 +2682,7 @@ export default function HDQuickWrenchPage() {
 
                           {/* Header */}
                           <div className="px-4 pt-4 pb-3" style={{ background: 'var(--hd-inner)' }}>
-                            <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+                            <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>
                               Pressure Pattern
                             </p>
                             <p className="font-bold text-white text-base leading-tight mb-3">
@@ -2689,12 +2690,12 @@ export default function HDQuickWrenchPage() {
                             </p>
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="text-xs font-bold px-3 py-1 rounded-full"
-                                style={{ background: diagSev.color + '25', color: diagSev.color, border: `1px solid ${diagSev.color}50` }}>
+                                style={{ background: tint(diagSev.color, 15), color: textTone(diagSev.color), border: `1px solid ${tint(diagSev.color, 31)}` }}>
                                 {diagSev.label.toUpperCase()}
                               </span>
                               {diagPattern.recoveryRequired && (
                                 <span className="text-xs px-2.5 py-1 rounded-full"
-                                  style={{ background: '#F59E0B18', color: '#F59E0B', border: '1px solid #F59E0B40' }}>
+                                  style={{ background: '#F59E0B18', color: 'var(--hd-warn)', border: '1px solid #F59E0B40' }}>
                                   Recovery Required
                                 </span>
                               )}
@@ -2703,7 +2704,7 @@ export default function HDQuickWrenchPage() {
 
                           {/* Most likely causes */}
                           <div className="px-4 py-4" style={{ background: 'var(--hd-card)', borderTop: '1px solid var(--hd-border)' }}>
-                            <p className="text-xs uppercase tracking-widest mb-3" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+                            <p className="text-xs uppercase tracking-widest mb-3" style={{ color: 'var(--hd-text-faint)' }}>
                               Most Likely Causes — Ranked by Probability
                             </p>
                             <ol className="space-y-2">
@@ -2712,11 +2713,11 @@ export default function HDQuickWrenchPage() {
                                   <span className="w-5 h-5 rounded flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5"
                                     style={{
                                       background: i === 0 ? HD_ORANGE + '25' : 'var(--hd-border)',
-                                      color:      i === 0 ? HD_ORANGE        : 'rgba(var(--hd-ink-rgb), 0.35)',
+                                      color:      textTone(i === 0 ? HD_ORANGE        : 'rgba(var(--hd-ink-rgb), 0.35)'),
                                     }}>
                                     {i + 1}
                                   </span>
-                                  <span style={{ color: i === 0 ? 'rgba(var(--hd-ink-rgb), 0.9)' : 'rgba(var(--hd-ink-rgb), 0.6)' }}>
+                                  <span style={{ color: textTone(i === 0 ? 'rgba(var(--hd-ink-rgb), 0.9)' : 'var(--hd-text-muted)') }}>
                                     {stripListNumber(cause)}
                                   </span>
                                 </li>
@@ -2726,7 +2727,7 @@ export default function HDQuickWrenchPage() {
 
                           {/* Field verification */}
                           <div className="px-4 py-4" style={{ background: 'var(--hd-card)', borderTop: '1px solid var(--hd-border)' }}>
-                            <p className="text-xs uppercase tracking-widest mb-3" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+                            <p className="text-xs uppercase tracking-widest mb-3" style={{ color: 'var(--hd-text-faint)' }}>
                               Field Verification
                             </p>
                             <ul className="space-y-2">
@@ -2741,13 +2742,13 @@ export default function HDQuickWrenchPage() {
 
                           {/* Recommended action */}
                           <div className="px-4 py-4" style={{ background: 'var(--hd-card)', borderTop: '1px solid var(--hd-border)' }}>
-                            <p className="text-xs uppercase tracking-widest mb-3" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+                            <p className="text-xs uppercase tracking-widest mb-3" style={{ color: 'var(--hd-text-faint)' }}>
                               Recommended Action
                             </p>
                             <ol className="space-y-2">
                               {diagPattern.recommendedAction.map((step, i) => (
                                 <li key={i} className="flex gap-3 text-sm leading-snug" style={{ color: 'rgba(var(--hd-ink-rgb), 0.82)' }}>
-                                  <span className="font-bold flex-shrink-0 mt-0.5" style={{ color: HD_ORANGE, minWidth: '1.1rem' }}>{i + 1}.</span>
+                                  <span className="font-bold flex-shrink-0 mt-0.5" style={{ color: 'var(--hd-accent-text)', minWidth: '1.1rem' }}>{i + 1}.</span>
                                   {stripListNumber(step)}
                                 </li>
                               ))}
@@ -2756,16 +2757,16 @@ export default function HDQuickWrenchPage() {
 
                           {/* Refrigerant note */}
                           {(diagPattern.refrigerantNote || calcRefrigerant === 'R-452A') && (
-                            <div className="px-4 py-3" style={{ background: '#0f1a12', borderTop: '1px solid var(--hd-border)' }}>
+                            <div className="px-4 py-3" style={{ background: 'color-mix(in srgb, var(--hd-positive) 14%, var(--hd-card))', borderTop: '1px solid var(--hd-border)' }}>
                               {diagPattern.refrigerantNote && (
-                                <p className="text-xs leading-relaxed mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>
-                                  <span className="font-bold" style={{ color: '#22C55E' }}>Refrigerant Note: </span>
+                                <p className="text-xs leading-relaxed mb-1.5" style={{ color: 'var(--hd-text-muted)' }}>
+                                  <span className="font-bold" style={{ color: 'var(--hd-positive)' }}>Refrigerant Note: </span>
                                   {diagPattern.refrigerantNote}
                                 </p>
                               )}
                               {calcRefrigerant === 'R-452A' && (
-                                <p className="text-xs leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>
-                                  <span className="font-bold" style={{ color: '#F59E0B' }}>R-452A: </span>
+                                <p className="text-xs leading-relaxed" style={{ color: 'var(--hd-text-muted)' }}>
+                                  <span className="font-bold" style={{ color: 'var(--hd-warn)' }}>R-452A: </span>
                                   Never top off after a leak — fractionation changes the blend ratio. Full recovery and recharge to nameplate weight required.
                                 </p>
                               )}
@@ -2777,8 +2778,8 @@ export default function HDQuickWrenchPage() {
                             <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="rgba(var(--hd-ink-rgb), 0.25)" strokeWidth={1.5} viewBox="0 0 24 24">
                               <circle cx="12" cy="12" r="10" /><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2" />
                             </svg>
-                            <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
-                              <span className="font-semibold" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>Labor estimate: </span>
+                            <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>
+                              <span className="font-semibold" style={{ color: 'var(--hd-text-muted)' }}>Labor estimate: </span>
                               {diagPattern.laborEstimate}
                             </p>
                           </div>
@@ -2786,7 +2787,7 @@ export default function HDQuickWrenchPage() {
                         </div>
                       )}
 
-                      <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>
+                      <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>
                         Diagnostic guidance only. Verify all readings with calibrated instruments before performing repairs.
                       </p>
                     </div>
@@ -2794,24 +2795,24 @@ export default function HDQuickWrenchPage() {
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="rounded-lg p-3" style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}>
-                      <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>Subcooling Target</p>
+                      <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>Subcooling Target</p>
                       <p className="text-sm font-bold text-white">10–15°F</p>
                     </div>
                     <div className="rounded-lg p-3" style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}>
-                      <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>Superheat Target</p>
+                      <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>Superheat Target</p>
                       <p className="text-sm font-bold text-white">10–20°F</p>
-                      <p className="text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>at evaporator outlet</p>
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--hd-text-faint)' }}>at evaporator outlet</p>
                     </div>
                   </div>
 
-                  <p className="text-xs text-center leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>
+                  <p className="text-xs text-center leading-relaxed" style={{ color: 'var(--hd-text-faint)' }}>
                     Visual reference only. Always use calibrated manifold gauges for actual pressure readings.
                     All refrigerant work requires EPA 608 certification.
                   </p>
 
-                  <div className="rounded-lg p-3" style={{ background: '#1a1000', border: '1px solid #F59E0B30' }}>
-                    <p className="text-xs leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
-                      <span style={{ color: '#F59E0B' }}>⚠</span>{' '}
+                  <div className="rounded-lg p-3" style={{ background: 'color-mix(in srgb, var(--hd-warn) 14%, var(--hd-card))', border: '1px solid #F59E0B30' }}>
+                    <p className="text-xs leading-relaxed" style={{ color: 'var(--hd-text-muted)' }}>
+                      <span style={{ color: 'var(--hd-warn)' }}>⚠</span>{' '}
                       Pressure values are reference ranges only. Always verify against unit-specific service documentation.
                       All refrigerant work must be performed by EPA 608 certified technicians only.
                       {calcRefrigerant === 'R-452A' && ' R-452A values are approximate — consult the service manual for your specific unit.'}
@@ -2825,7 +2826,7 @@ export default function HDQuickWrenchPage() {
             {/* ── Guided Diagnostics ── */}
             <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
               <div className="px-5 py-3" style={{ background: 'var(--hd-sunken)', borderBottom: '1px solid var(--hd-border)' }}>
-                <p className="text-xs uppercase tracking-widest font-bold" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+                <p className="text-xs uppercase tracking-widest font-bold" style={{ color: 'var(--hd-text-faint)' }}>
                   Guided Diagnostics
                 </p>
               </div>
@@ -2843,7 +2844,7 @@ export default function HDQuickWrenchPage() {
                 >
                   <span
                     className="text-xs font-bold px-2 py-0.5 rounded"
-                    style={{ background: HD_ORANGE + '20', color: HD_ORANGE, fontFamily: 'monospace', border: `1px solid ${HD_ORANGE}40` }}
+                    style={{ background: tint(HD_ORANGE, 13), color: 'var(--hd-accent-text)', fontFamily: 'monospace', border: `1px solid ${tint(HD_ORANGE, 25)}` }}
                   >
                     CODE 25
                   </span>
@@ -2860,7 +2861,7 @@ export default function HDQuickWrenchPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
                     Manufacturer
                   </label>
                   <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
@@ -2872,7 +2873,7 @@ export default function HDQuickWrenchPage() {
                         className="flex-1 text-xs font-semibold transition-colors"
                         style={{
                           background: manufacturer === m ? HD_ORANGE : 'var(--hd-inner)',
-                          color:      manufacturer === m ? '#fff' : 'rgba(var(--hd-ink-rgb), 0.4)',
+                          color:      textTone(manufacturer === m ? '#fff' : 'var(--hd-text-faint)'),
                           minHeight: 44,
                         }}
                       >
@@ -2882,7 +2883,7 @@ export default function HDQuickWrenchPage() {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
                     Unit Type
                   </label>
                   <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
@@ -2894,7 +2895,7 @@ export default function HDQuickWrenchPage() {
                         className="flex-1 text-xs font-semibold transition-colors capitalize"
                         style={{
                           background: unitType === t ? HD_BLUE : 'var(--hd-inner)',
-                          color:      unitType === t ? '#fff' : 'rgba(var(--hd-ink-rgb), 0.4)',
+                          color:      textTone(unitType === t ? '#fff' : 'var(--hd-text-faint)'),
                           minHeight: 44,
                         }}
                       >
@@ -2906,7 +2907,7 @@ export default function HDQuickWrenchPage() {
               </div>
 
               <div>
-                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
                   Model
                 </label>
                 <select
@@ -2929,8 +2930,8 @@ export default function HDQuickWrenchPage() {
               </div>
 
               <div>
-                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
-                  Serial Number <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>(optional)</span>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
+                  Serial Number <span style={{ color: 'var(--hd-text-faint)' }}>(optional)</span>
                 </label>
                 <input
                   type="text"
@@ -2946,8 +2947,8 @@ export default function HDQuickWrenchPage() {
               {/* ── Unit identification (optional) — BM (TK) / Model number (Carrier) ── */}
               {manufacturer === 'Thermo King' ? (
                 <div>
-                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
-                    BM Number <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>(optional)</span>
+                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
+                    BM Number <span style={{ color: 'var(--hd-text-faint)' }}>(optional)</span>
                   </label>
                   <input
                     type="text"
@@ -2961,8 +2962,8 @@ export default function HDQuickWrenchPage() {
                 </div>
               ) : (
                 <div>
-                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
-                    Model Number <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>(optional)</span>
+                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
+                    Model Number <span style={{ color: 'var(--hd-text-faint)' }}>(optional)</span>
                   </label>
                   <input
                     type="text"
@@ -2978,7 +2979,7 @@ export default function HDQuickWrenchPage() {
 
               {/* Green "unit identified" banner, sourced from the global BM map */}
               {identifiedModel && (
-                <div className="rounded-lg px-4 py-3 flex items-center gap-2" style={{ background: '#0f2f1c', border: '1px solid #1c5c34' }}>
+                <div className="rounded-lg px-4 py-3 flex items-center gap-2" style={{ background: 'color-mix(in srgb, var(--hd-positive) 14%, var(--hd-card))', border: '1px solid #1c5c34' }}>
                   <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#34D399' }} />
                   <p className="text-sm font-medium" style={{ color: '#34D399' }}>
                     Unit identified — {identifiedModel}{identifiedRefrigerant ? `, ${identifiedRefrigerant}` : ''}
@@ -2986,14 +2987,14 @@ export default function HDQuickWrenchPage() {
                 </div>
               )}
               {unitLookupLoading && (
-                <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>Looking up unit…</p>
+                <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>Looking up unit…</p>
               )}
 
               {/* Engine hours + notes (optional) — saved to the tech's private profile */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
-                    Engine Hours <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>(optional)</span>
+                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
+                    Engine Hours <span style={{ color: 'var(--hd-text-faint)' }}>(optional)</span>
                   </label>
                   <input
                     type="number"
@@ -3006,8 +3007,8 @@ export default function HDQuickWrenchPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
-                    Unit Notes <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>(optional)</span>
+                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
+                    Unit Notes <span style={{ color: 'var(--hd-text-faint)' }}>(optional)</span>
                   </label>
                   <input
                     type="text"
@@ -3021,7 +3022,7 @@ export default function HDQuickWrenchPage() {
               </div>
 
               <div>
-                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
                   Alarm Code
                 </label>
                 <input
@@ -3035,7 +3036,7 @@ export default function HDQuickWrenchPage() {
               </div>
 
               <div>
-                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
                   Unit Display Message
                 </label>
                 <input
@@ -3049,8 +3050,8 @@ export default function HDQuickWrenchPage() {
               </div>
 
               <div>
-                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
-                  Additional Alarm Codes <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>(optional)</span>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
+                  Additional Alarm Codes <span style={{ color: 'var(--hd-text-faint)' }}>(optional)</span>
                 </label>
                 <input
                   type="text"
@@ -3060,13 +3061,13 @@ export default function HDQuickWrenchPage() {
                   className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
                   style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
                 />
-                <p className="text-xs mt-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+                <p className="text-xs mt-1.5" style={{ color: 'var(--hd-text-faint)' }}>
                   Enter multiple codes separated by commas — example: 10, 42, 48
                 </p>
               </div>
 
               <div>
-                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
                   Symptom / Question
                 </label>
                 <textarea
@@ -3082,7 +3083,7 @@ export default function HDQuickWrenchPage() {
               <button
                 type="submit"
                 disabled={loading || !model || (!alarmCode && !symptom)}
-                className="w-full py-3 rounded-xl font-bold text-white text-sm transition-opacity"
+                className="w-full py-3 rounded-xl font-bold text-on-accent text-sm transition-opacity"
                 style={{
                   background: HD_ORANGE,
                   opacity:    loading || !model || (!alarmCode && !symptom) ? 0.5 : 1,
@@ -3101,7 +3102,7 @@ export default function HDQuickWrenchPage() {
             </form>
 
             {error && (
-              <div className="rounded-xl p-4" style={{ background: '#2d0a0a', border: '1px solid #7f1d1d' }}>
+              <div className="rounded-xl p-4" style={{ background: 'color-mix(in srgb, var(--hd-negative) 14%, var(--hd-card))', border: '1px solid #7f1d1d' }}>
                 <p className="text-sm text-red-400">{error}</p>
               </div>
             )}
@@ -3136,7 +3137,7 @@ export default function HDQuickWrenchPage() {
               <button
                 type="button"
                 onClick={() => setShowDelivery(true)}
-                className="w-full py-3 rounded-lg text-sm font-semibold text-white flex items-center justify-center gap-2"
+                className="w-full py-3 rounded-lg text-sm font-semibold text-on-fill flex items-center justify-center gap-2"
                 style={{ background: '#2969B0', minHeight: 48 }}
               >
                 <span>🚚</span> Get Parts Delivered
@@ -3158,7 +3159,7 @@ export default function HDQuickWrenchPage() {
 
             {analysis !== null && (
               <div className="space-y-2.5">
-                <label className="flex items-center gap-2 text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+                <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--hd-text-muted)' }}>
                   <input
                     type="checkbox"
                     checked={includeDiagFee}
@@ -3191,12 +3192,12 @@ export default function HDQuickWrenchPage() {
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
                 <div className="flex-1">
-                  <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>SAE J1939 Standard</p>
+                  <p className="text-xs uppercase tracking-widest mb-0.5" style={{ color: 'var(--hd-text-faint)' }}>SAE J1939 Standard</p>
                   <p className="font-condensed font-bold text-white text-lg tracking-wide">FMI Reference Guide</p>
                 </div>
                 <svg
                   className="w-4 h-4 flex-shrink-0 transition-transform duration-200"
-                  style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)', transform: fmiGuideOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
+                  style={{ color: 'var(--hd-text-faint)', transform: fmiGuideOpen ? 'rotate(180deg)' : 'rotate(0deg)' }}
                   fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
@@ -3205,14 +3206,14 @@ export default function HDQuickWrenchPage() {
 
               {fmiGuideOpen && (
                 <div className="px-5 pb-5 pt-4 space-y-1" style={{ background: 'var(--hd-card)', borderTop: '1px solid var(--hd-border)' }}>
-                  <p className="text-xs mb-3" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+                  <p className="text-xs mb-3" style={{ color: 'var(--hd-text-faint)' }}>
                     Failure Mode Identifier — defines how a parameter has failed, independent of which parameter (SPN) is faulting.
                   </p>
                   {FMI_CODES.map(({ fmi: f, desc }) => (
                     <div key={f} className="flex gap-3 py-1.5 items-baseline" style={{ borderBottom: '1px solid var(--hd-border)50' }}>
                       <span
                         className="text-xs font-bold font-mono flex-shrink-0 w-8 text-right"
-                        style={{ color: HD_BLUE }}
+                        style={{ color: textTone(HD_BLUE) }}
                       >
                         {f}
                       </span>
@@ -3228,8 +3229,8 @@ export default function HDQuickWrenchPage() {
 
               {/* VIN decode (optional) — auto-populates year/make/model/engine */}
               <div>
-                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
-                  VIN <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>(optional — auto-decodes vehicle info)</span>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
+                  VIN <span style={{ color: 'var(--hd-text-faint)' }}>(optional — auto-decodes vehicle info)</span>
                 </label>
                 <div className="flex gap-2">
                   <input
@@ -3246,24 +3247,24 @@ export default function HDQuickWrenchPage() {
                     type="button"
                     onClick={decodeVin}
                     disabled={vinLoading || vin.trim().length !== 17}
-                    className="px-4 py-2.5 rounded-lg text-sm font-bold text-white whitespace-nowrap transition-opacity"
+                    className="px-4 py-2.5 rounded-lg text-sm font-bold text-on-fill whitespace-nowrap transition-opacity"
                     style={{ background: HD_BLUE, opacity: vinLoading || vin.trim().length !== 17 ? 0.5 : 1 }}
                   >
                     {vinLoading ? 'Decoding…' : 'Decode'}
                   </button>
                 </div>
                 {vinError && (
-                  <p className="text-xs mt-1.5" style={{ color: '#F59E0B' }}>{vinError}</p>
+                  <p className="text-xs mt-1.5" style={{ color: 'var(--hd-warn)' }}>{vinError}</p>
                 )}
                 {vinDecoded && !vinError && (
-                  <p className="text-xs mt-1.5" style={{ color: '#22C55E' }}>✓ {vinDecoded} — confirm or edit below before running.</p>
+                  <p className="text-xs mt-1.5" style={{ color: 'var(--hd-positive)' }}>✓ {vinDecoded} — confirm or edit below before running.</p>
                 )}
               </div>
 
               {/* Vehicle — Year / Make / Model / Engine (editable; override decoded values) */}
               <div>
-                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
-                  Vehicle <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>(year, make, model — for vehicle-specific results)</span>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
+                  Vehicle <span style={{ color: 'var(--hd-text-faint)' }}>(year, make, model — for vehicle-specific results)</span>
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <input
@@ -3303,7 +3304,7 @@ export default function HDQuickWrenchPage() {
 
               {/* Engine Brand */}
               <div>
-                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
                   Engine Brand
                 </label>
                 <div className="grid grid-cols-3 rounded-lg overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
@@ -3315,7 +3316,7 @@ export default function HDQuickWrenchPage() {
                       className="text-xs font-semibold transition-colors px-1 leading-tight"
                       style={{
                         background: truckBrand === b ? HD_ORANGE : 'var(--hd-inner)',
-                        color:      truckBrand === b ? '#fff' : 'rgba(var(--hd-ink-rgb), 0.4)',
+                        color:      textTone(truckBrand === b ? '#fff' : 'var(--hd-text-faint)'),
                         minHeight: 44,
                       }}
                     >
@@ -3327,7 +3328,7 @@ export default function HDQuickWrenchPage() {
 
               {/* Engine Model */}
               <div>
-                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
                   Engine Model
                 </label>
                 <select
@@ -3345,8 +3346,8 @@ export default function HDQuickWrenchPage() {
               {/* SPN + FMI */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
-                    SPN <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>(Suspect Parameter Number)</span>
+                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
+                    SPN <span style={{ color: 'var(--hd-text-faint)' }}>(Suspect Parameter Number)</span>
                   </label>
                   <input
                     type="number"
@@ -3358,8 +3359,8 @@ export default function HDQuickWrenchPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
-                    FMI <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>(Failure Mode Identifier)</span>
+                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
+                    FMI <span style={{ color: 'var(--hd-text-faint)' }}>(Failure Mode Identifier)</span>
                   </label>
                   <input
                     type="number"
@@ -3376,7 +3377,7 @@ export default function HDQuickWrenchPage() {
 
               {/* Symptom */}
               <div>
-                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
                   Symptom / Question
                 </label>
                 <textarea
@@ -3392,7 +3393,7 @@ export default function HDQuickWrenchPage() {
               <button
                 type="submit"
                 disabled={truckLoading || !engineModel || (!spn && !fmi && !truckSymptom)}
-                className="w-full py-3 rounded-xl font-bold text-white text-sm transition-opacity"
+                className="w-full py-3 rounded-xl font-bold text-on-accent text-sm transition-opacity"
                 style={{
                   background: HD_ORANGE,
                   opacity:    truckLoading || !engineModel || (!spn && !fmi && !truckSymptom) ? 0.5 : 1,
@@ -3411,7 +3412,7 @@ export default function HDQuickWrenchPage() {
             </form>
 
             {truckError && (
-              <div className="rounded-xl p-4" style={{ background: '#2d0a0a', border: '1px solid #7f1d1d' }}>
+              <div className="rounded-xl p-4" style={{ background: 'color-mix(in srgb, var(--hd-negative) 14%, var(--hd-card))', border: '1px solid #7f1d1d' }}>
                 <p className="text-sm text-red-400">{truckError}</p>
               </div>
             )}
@@ -3443,7 +3444,7 @@ export default function HDQuickWrenchPage() {
               <button
                 type="button"
                 onClick={() => setShowDelivery(true)}
-                className="w-full py-3 rounded-lg text-sm font-semibold text-white flex items-center justify-center gap-2"
+                className="w-full py-3 rounded-lg text-sm font-semibold text-on-fill flex items-center justify-center gap-2"
                 style={{ background: '#2969B0', minHeight: 48 }}
               >
                 <span>🚚</span> Get Parts Delivered
@@ -3465,7 +3466,7 @@ export default function HDQuickWrenchPage() {
 
             {truckAnalysis !== null && (
               <div className="space-y-2.5">
-                <label className="flex items-center gap-2 text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+                <label className="flex items-center gap-2 text-xs" style={{ color: 'var(--hd-text-muted)' }}>
                   <input
                     type="checkbox"
                     checked={includeDiagFee}
@@ -3482,7 +3483,7 @@ export default function HDQuickWrenchPage() {
             {truckAnalysis !== null && (
               <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
                 <div className="px-5 py-3" style={{ background: 'var(--hd-sunken)', borderBottom: '1px solid var(--hd-border)' }}>
-                  <p className="text-xs uppercase tracking-widest font-bold" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                  <p className="text-xs uppercase tracking-widest font-bold" style={{ color: 'var(--hd-text-faint)' }}>
                     OEM Service Resources
                   </p>
                 </div>
@@ -3509,9 +3510,9 @@ export default function HDQuickWrenchPage() {
                     >
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-white">{link.name}</p>
-                        <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{link.note}</p>
+                        <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>{link.note}</p>
                       </div>
-                      <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+                      <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24" style={{ color: 'var(--hd-text-faint)' }}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                       </svg>
                     </a>
@@ -3519,7 +3520,7 @@ export default function HDQuickWrenchPage() {
                   <a
                     href="/hd/resources"
                     className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition-colors"
-                    style={{ color: HD_ORANGE, border: `1px solid ${HD_ORANGE}30` }}
+                    style={{ color: 'var(--hd-accent-text)', border: `1px solid ${tint(HD_ORANGE, 19)}` }}
                     onMouseEnter={e => (e.currentTarget.style.background = `${HD_ORANGE}10`)}
                     onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                   >
@@ -3539,7 +3540,7 @@ export default function HDQuickWrenchPage() {
             {/* Topic selector */}
             <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
               <div className="px-5 py-3" style={{ background: 'var(--hd-sunken)', borderBottom: '1px solid var(--hd-border)' }}>
-                <p className="text-xs uppercase tracking-widest font-bold" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                <p className="text-xs uppercase tracking-widest font-bold" style={{ color: 'var(--hd-text-faint)' }}>
                   Select Topic
                 </p>
               </div>
@@ -3551,17 +3552,17 @@ export default function HDQuickWrenchPage() {
                     onClick={() => setElecTopic(t.key)}
                     className="text-left px-4 py-3 rounded-lg transition-colors"
                     style={elecTopic === t.key
-                      ? { background: `${HD_ORANGE}20`, border: `1px solid ${HD_ORANGE}60`, minHeight: 44 }
+                      ? { background: `${tint(HD_ORANGE, 13)}`, border: `1px solid ${tint(HD_ORANGE, 38)}`, minHeight: 44 }
                       : { background: 'var(--hd-sunken)',         border: '1px solid var(--hd-border)',         minHeight: 44 }
                     }
                   >
                     <p
                       className="text-sm font-semibold leading-tight"
-                      style={{ color: elecTopic === t.key ? HD_ORANGE : 'rgba(var(--hd-ink-rgb), 0.75)' }}
+                      style={{ color: textTone(elecTopic === t.key ? HD_ORANGE : 'rgba(var(--hd-ink-rgb), 0.75)') }}
                     >
                       {t.key}
                     </p>
-                    <p className="text-xs mt-0.5 leading-snug" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+                    <p className="text-xs mt-0.5 leading-snug" style={{ color: 'var(--hd-text-faint)' }}>
                       {t.desc}
                     </p>
                   </button>
@@ -3576,7 +3577,7 @@ export default function HDQuickWrenchPage() {
               style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}
             >
               <div>
-                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
                   {elecTopic === 'Component Library'  && 'Which component do you need to understand or test?'}
                   {elecTopic === 'Schematic Reading'  && 'What do you need help reading or understanding?'}
                   {elecTopic === 'Fault Tracing'      && 'Describe the fault — what is not working and what you have checked so far'}
@@ -3602,7 +3603,7 @@ export default function HDQuickWrenchPage() {
               <button
                 type="submit"
                 disabled={elecLoading || !elecQuestion.trim()}
-                className="w-full py-3 rounded-xl font-bold text-white text-sm transition-opacity"
+                className="w-full py-3 rounded-xl font-bold text-on-accent text-sm transition-opacity"
                 style={{ background: HD_ORANGE, opacity: elecLoading || !elecQuestion.trim() ? 0.5 : 1 }}
               >
                 {elecLoading ? (
@@ -3618,7 +3619,7 @@ export default function HDQuickWrenchPage() {
             </form>
 
             {elecError && (
-              <div className="rounded-xl p-4" style={{ background: '#2d0a0a', border: '1px solid #7f1d1d' }}>
+              <div className="rounded-xl p-4" style={{ background: 'color-mix(in srgb, var(--hd-negative) 14%, var(--hd-card))', border: '1px solid #7f1d1d' }}>
                 <p className="text-sm text-red-400">{elecError}</p>
               </div>
             )}
@@ -3820,7 +3821,7 @@ function ProceduresPanel() {
           type="button"
           onClick={() => setSelectedId(null)}
           className="flex items-center gap-2 text-sm font-semibold"
-          style={{ color: 'rgba(var(--hd-ink-rgb), 0.55)' }}
+          style={{ color: 'var(--hd-text-muted)' }}
         >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
@@ -3830,17 +3831,17 @@ function ProceduresPanel() {
 
         <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
           <div className="px-5 py-4" style={{ background: 'var(--hd-inner)' }}>
-            <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+            <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>
               {selected.category} · {selected.appliesTo}
             </p>
             <h2 className="font-condensed font-bold text-xl text-white tracking-wide">{selected.name}</h2>
-            <p className="text-xs mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>Labor: {selected.labor}</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--hd-text-faint)' }}>Labor: {selected.labor}</p>
           </div>
 
           <div className="p-5 space-y-5" style={{ background: 'var(--hd-card)' }}>
             {/* Safety warnings */}
-            <div className="rounded-lg p-4" style={{ background: '#1a0a00', border: '1px solid #F59E0B40' }}>
-              <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: '#F59E0B' }}>⚠ Safety Requirements</p>
+            <div className="rounded-lg p-4" style={{ background: 'color-mix(in srgb, var(--hd-warn) 14%, var(--hd-card))', border: '1px solid #F59E0B40' }}>
+              <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: 'var(--hd-warn)' }}>⚠ Safety Requirements</p>
               <ul className="space-y-1.5">
                 {selected.safetyWarnings.map((w, i) => (
                   <li key={i} className="text-sm leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.75)' }}>
@@ -3852,19 +3853,19 @@ function ProceduresPanel() {
 
             {/* Prerequisites */}
             <div>
-              <p className="text-xs uppercase tracking-widest mb-2" style={{ color: HD_ORANGE }}>Prerequisites</p>
+              <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--hd-accent-text)' }}>Prerequisites</p>
               <p className="text-sm leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.8)' }}>{selected.prerequisites}</p>
             </div>
 
             {/* Steps */}
             <div>
-              <p className="text-xs uppercase tracking-widest mb-3" style={{ color: HD_BLUE }}>Steps</p>
+              <p className="text-xs uppercase tracking-widest mb-3" style={{ color: textTone(HD_BLUE) }}>Steps</p>
               <ol className="space-y-3">
                 {selected.steps.map((step, i) => (
                   <li key={i} className="flex gap-3">
                     <span
                       className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5"
-                      style={{ background: 'var(--hd-border)', color: HD_BLUE }}
+                      style={{ background: 'var(--hd-border)', color: textTone(HD_BLUE) }}
                     >
                       {i + 1}
                     </span>
@@ -3877,7 +3878,7 @@ function ProceduresPanel() {
             {/* Notes */}
             {selected.notes && (
               <div className="rounded-lg p-4" style={{ background: 'var(--hd-inner)' }}>
-                <p className="text-xs uppercase tracking-widest mb-1.5" style={{ color: '#22C55E' }}>Field Notes / Closeout</p>
+                <p className="text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-positive)' }}>Field Notes / Closeout</p>
                 <p className="text-sm leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.75)' }}>{selected.notes}</p>
               </div>
             )}
@@ -3890,10 +3891,10 @@ function ProceduresPanel() {
   return (
     <div className="space-y-4">
       <div>
-        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>
           Field-Verified · 17-Year Reefer Tech
         </p>
-        <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+        <p className="text-sm" style={{ color: 'var(--hd-text-muted)' }}>
           Standard refrigeration procedures. Tap any card for full step-by-step walkthrough.
         </p>
       </div>
@@ -3919,10 +3920,10 @@ function ProceduresPanel() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-condensed font-bold text-white text-base leading-tight">{proc.name}</p>
-                <p className="text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--hd-text-faint)' }}>
                   {proc.category} · {proc.appliesTo} · {proc.labor}
                 </p>
-                <p className="text-xs mt-1.5 font-medium" style={{ color: '#F59E0B' }}>
+                <p className="text-xs mt-1.5 font-medium" style={{ color: 'var(--hd-warn)' }}>
                   {proc.steps.length} steps
                 </p>
               </div>
@@ -3934,7 +3935,7 @@ function ProceduresPanel() {
         ))}
       </div>
 
-      <p className="text-xs text-center" style={{ color: 'rgba(var(--hd-ink-rgb), 0.2)' }}>
+      <p className="text-xs text-center" style={{ color: 'var(--hd-text-faint)' }}>
         Field-verified procedures · EPA 608 certification required for all refrigerant work
       </p>
     </div>
@@ -3965,15 +3966,15 @@ interface PartsRefEntry {
 type PartsFilter = 'all' | 'Filter' | 'Belt' | 'Thermostat' | 'Note' | 'TK' | 'Carrier'
 
 const CHIP_CONFIG: Record<string, { label: string; bg: string; color: string }> = {
-  baldwin:     { label: 'Baldwin',     bg: '#1A6BAF25', color: '#60A5FA' },
-  napa_gold:   { label: 'NAPA Gold',   bg: '#F59E0B25', color: '#F59E0B' },
-  luber_finer: { label: 'Luber-finer', bg: '#22C55E25', color: '#4ADE80' },
+  baldwin:     { label: 'Baldwin',     bg: '#1A6BAF25', color: 'var(--hd-info)' },
+  napa_gold:   { label: 'NAPA Gold',   bg: '#F59E0B25', color: 'var(--hd-warn)' },
+  luber_finer: { label: 'Luber-finer', bg: '#22C55E25', color: 'var(--hd-positive)' },
   donaldson:   { label: 'Donaldson',   bg: '#E85D2425', color: '#FB923C' },
-  fleetguard:  { label: 'Fleetguard',  bg: '#EF444425', color: '#F87171' },
+  fleetguard:  { label: 'Fleetguard',  bg: '#EF444425', color: 'var(--hd-negative)' },
   wix:         { label: 'WIX',         bg: '#8B5CF625', color: '#A78BFA' },
   dayco:       { label: 'Dayco',       bg: '#0EA5E925', color: '#38BDF8' },
   continental: { label: 'Continental', bg: '#6B728025', color: '#9CA3AF' },
-  gates:       { label: 'Gates',       bg: '#1D4ED825', color: '#93C5FD' },
+  gates:       { label: 'Gates',       bg: '#1D4ED825', color: 'var(--hd-info)' },
 }
 
 // Aftermarket cross-reference columns, in counter-preference order. Drives both the
@@ -4188,7 +4189,7 @@ function PartsReferencePanel({ onOpenTrailer }: { onOpenTrailer: (query: string)
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke={HD_ORANGE} strokeWidth="4" />
             <path className="opacity-75" fill={HD_ORANGE} d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>
-          <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Loading parts reference...</p>
+          <p className="text-sm" style={{ color: 'var(--hd-text-faint)' }}>Loading parts reference...</p>
         </div>
       </div>
     )
@@ -4196,7 +4197,7 @@ function PartsReferencePanel({ onOpenTrailer }: { onOpenTrailer: (query: string)
 
   if (error) {
     return (
-      <div className="rounded-xl p-4" style={{ background: '#2d0a0a', border: '1px solid #7f1d1d' }}>
+      <div className="rounded-xl p-4" style={{ background: 'color-mix(in srgb, var(--hd-negative) 14%, var(--hd-card))', border: '1px solid #7f1d1d' }}>
         <p className="text-sm text-red-400">{error}</p>
       </div>
     )
@@ -4206,10 +4207,10 @@ function PartsReferencePanel({ onOpenTrailer }: { onOpenTrailer: (query: string)
     <div className="space-y-4">
 
       <div>
-        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>
           Field-Verified Cross-Reference
         </p>
-        <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+        <p className="text-sm" style={{ color: 'var(--hd-text-muted)' }}>
           Search by unit model and what the part does — then buy it from whatever supplier is nearby.
         </p>
       </div>
@@ -4220,7 +4221,7 @@ function PartsReferencePanel({ onOpenTrailer }: { onOpenTrailer: (query: string)
           <label
             htmlFor="parts-model"
             className="block text-xs uppercase tracking-widest mb-1.5"
-            style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}
+            style={{ color: 'var(--hd-text-faint)' }}
           >
             Unit Model
           </label>
@@ -4239,7 +4240,7 @@ function PartsReferencePanel({ onOpenTrailer }: { onOpenTrailer: (query: string)
           <label
             htmlFor="parts-function"
             className="block text-xs uppercase tracking-widest mb-1.5"
-            style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}
+            style={{ color: 'var(--hd-text-faint)' }}
           >
             Part / Function
           </label>
@@ -4274,7 +4275,7 @@ function PartsReferencePanel({ onOpenTrailer }: { onOpenTrailer: (query: string)
             className="px-4 py-2 rounded-lg text-xs font-semibold transition-colors"
             style={filter === f.key
               ? { background: HD_ORANGE, color: 'var(--hd-text)' }
-              : { background: 'var(--hd-card)', color: 'rgba(var(--hd-ink-rgb), 0.45)', border: '1px solid var(--hd-border)' }
+              : { background: 'var(--hd-card)', color: 'var(--hd-text-muted)', border: '1px solid var(--hd-border)' }
             }
           >
             {f.label}
@@ -4285,7 +4286,7 @@ function PartsReferencePanel({ onOpenTrailer }: { onOpenTrailer: (query: string)
       {/* Result count / clear */}
       {!idle && (
         <div className="flex items-center justify-between gap-3">
-          <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+          <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>
             {regularParts.length === 0
               ? 'No matching parts'
               : `${regularParts.length} part${regularParts.length === 1 ? '' : 's'}${
@@ -4297,7 +4298,7 @@ function PartsReferencePanel({ onOpenTrailer }: { onOpenTrailer: (query: string)
               type="button"
               onClick={() => { setModelText(''); setPartText('') }}
               className="text-xs font-semibold flex-shrink-0"
-              style={{ color: HD_ORANGE }}
+              style={{ color: 'var(--hd-accent-text)' }}
             >
               Clear search
             </button>
@@ -4308,18 +4309,18 @@ function PartsReferencePanel({ onOpenTrailer }: { onOpenTrailer: (query: string)
       {/* Stocking notes — always ride at the top of whatever matched */}
       {stockingNotes.length > 0 && (
         <div className="space-y-2">
-          <p className="text-xs uppercase tracking-widest" style={{ color: HD_ORANGE }}>
+          <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--hd-accent-text)' }}>
             Stocking Notes
           </p>
           {stockingNotes.map(note => (
             <div
               key={note.id}
               className="rounded-xl p-4"
-              style={{ background: '#1a0a00', border: `1px solid ${HD_ORANGE}40` }}
+              style={{ background: 'color-mix(in srgb, var(--hd-warn) 14%, var(--hd-card))', border: `1px solid ${tint(HD_ORANGE, 25)}` }}
             >
               <div className="flex items-start gap-2 mb-2">
-                <span style={{ color: HD_ORANGE, fontSize: 15, lineHeight: '1.3', flexShrink: 0 }}>⚑</span>
-                <p className="font-semibold text-sm leading-snug" style={{ color: HD_ORANGE }}>
+                <span style={{ color: 'var(--hd-accent-text)', fontSize: 15, lineHeight: '1.3', flexShrink: 0 }}>⚑</span>
+                <p className="font-semibold text-sm leading-snug" style={{ color: 'var(--hd-accent-text)' }}>
                   {note.part_function}
                 </p>
               </div>
@@ -4329,11 +4330,11 @@ function PartsReferencePanel({ onOpenTrailer }: { onOpenTrailer: (query: string)
                 </p>
               )}
               <div className="flex gap-2 mt-2 flex-wrap">
-                <span className="text-xs px-2 py-0.5 rounded" style={{ background: 'var(--hd-inner)', color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                <span className="text-xs px-2 py-0.5 rounded" style={{ background: 'var(--hd-inner)', color: 'var(--hd-text-faint)' }}>
                   {note.manufacturer === 'Both' ? 'TK + Carrier' : note.manufacturer}
                 </span>
                 {fitsLabel(note) && (
-                  <span className="text-xs px-2 py-0.5 rounded" style={{ background: 'var(--hd-inner)', color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                  <span className="text-xs px-2 py-0.5 rounded" style={{ background: 'var(--hd-inner)', color: 'var(--hd-text-faint)' }}>
                     {fitsLabel(note)}
                   </span>
                 )}
@@ -4345,19 +4346,19 @@ function PartsReferencePanel({ onOpenTrailer }: { onOpenTrailer: (query: string)
 
       {/* Trailer cross-surface — the query matched the trailer reference library */}
       {trailerHits.length > 0 && (
-        <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${HD_BLUE}55` }}>
+        <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${tint(HD_BLUE, 33)}` }}>
           <div
             className="px-4 py-2.5 flex items-center justify-between gap-3"
             style={{ background: 'var(--hd-inner)' }}
           >
-            <p className="text-xs uppercase tracking-widest" style={{ color: '#60A5FA' }}>
+            <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--hd-info)' }}>
               Also in Trailer Systems · {trailerHits.length}
             </p>
             <button
               type="button"
               onClick={() => onOpenTrailer(partText.trim())}
               className="text-xs font-semibold flex-shrink-0"
-              style={{ color: HD_ORANGE }}
+              style={{ color: 'var(--hd-accent-text)' }}
             >
               Open Trailer Systems →
             </button>
@@ -4371,14 +4372,14 @@ function PartsReferencePanel({ onOpenTrailer }: { onOpenTrailer: (query: string)
               >
                 <div className="min-w-0">
                   <p className="text-sm text-white leading-snug">{row.component}</p>
-                  <p className="text-xs mt-0.5 leading-snug" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                  <p className="text-xs mt-0.5 leading-snug" style={{ color: 'var(--hd-text-faint)' }}>
                     {row.system} · {row.description}
                   </p>
                 </div>
                 {row.value && (
                   <span
                     className="text-sm font-bold flex-shrink-0 font-mono"
-                    style={{ color: HD_ORANGE }}
+                    style={{ color: 'var(--hd-accent-text)' }}
                   >
                     {formatSpec(row)}
                   </span>
@@ -4388,7 +4389,7 @@ function PartsReferencePanel({ onOpenTrailer }: { onOpenTrailer: (query: string)
             {trailerHits.length > 4 && (
               <p
                 className="px-4 py-2 text-xs"
-                style={{ borderTop: '1px solid var(--hd-border)', color: 'rgba(var(--hd-ink-rgb), 0.3)' }}
+                style={{ borderTop: '1px solid var(--hd-border)', color: 'var(--hd-text-faint)' }}
               >
                 {trailerHits.length - 4} more trailer {trailerHits.length - 4 === 1 ? 'spec' : 'specs'} match this search.
               </p>
@@ -4403,7 +4404,7 @@ function PartsReferencePanel({ onOpenTrailer }: { onOpenTrailer: (query: string)
           <p className="text-sm font-semibold mb-1.5 text-white">
             {parts.length.toLocaleString()} parts searchable
           </p>
-          <p className="text-xs leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+          <p className="text-xs leading-relaxed" style={{ color: 'var(--hd-text-faint)' }}>
             Type a unit model, a part description, or both — &ldquo;S-600&rdquo; + &ldquo;belt&rdquo;.
             Either box works on its own. A part number in the Part / Function box finds
             its cross-references. Or pick a category below.
@@ -4417,13 +4418,13 @@ function PartsReferencePanel({ onOpenTrailer }: { onOpenTrailer: (query: string)
           filter that makes the answer correct. An empty result now says what it means. */}
       {!idle && regularParts.length === 0 && stockingNotes.length === 0 && trailerHits.length === 0 && (
         <div className="text-center py-8">
-          <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.55)' }}>
+          <p className="text-sm" style={{ color: 'var(--hd-text-muted)' }}>
             Nothing is recorded for that.
           </p>
-          <p className="text-xs mt-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+          <p className="text-xs mt-2" style={{ color: 'var(--hd-text-faint)' }}>
             That means nobody has recorded a part for it yet - not that no part exists.
           </p>
-          <Link href="/parts/find" className="inline-block mt-3 text-xs underline" style={{ color: HD_ORANGE }}>
+          <Link href="/parts/find" className="inline-block mt-3 text-xs underline" style={{ color: 'var(--hd-accent-text)' }}>
             Search the full parts catalog by unit
           </Link>
         </div>
@@ -4458,39 +4459,39 @@ function PartsReferencePanel({ onOpenTrailer }: { onOpenTrailer: (query: string)
                 <div className="px-4 pt-3 pb-3" style={{ background: 'var(--hd-inner)' }}>
                   <div className="flex items-start gap-2 justify-between">
                     <div className="flex-1 min-w-0">
-                      <p className="text-xs mb-1 leading-snug" style={{ color: 'rgba(var(--hd-ink-rgb), 0.55)' }}>
+                      <p className="text-xs mb-1 leading-snug" style={{ color: 'var(--hd-text-muted)' }}>
                         {part.part_function}
                       </p>
                       {part.oem_part_number ? (
                         <p
                           className="font-bold text-2xl leading-tight"
-                          style={{ color: HD_ORANGE, fontFamily: 'monospace', wordBreak: 'break-all' }}
+                          style={{ color: 'var(--hd-accent-text)', fontFamily: 'monospace', wordBreak: 'break-all' }}
                         >
                           {part.oem_part_number}
                         </p>
                       ) : (
-                        <p className="text-sm italic" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+                        <p className="text-sm italic" style={{ color: 'var(--hd-text-faint)' }}>
                           No OEM number
                         </p>
                       )}
                     </div>
                     <span
                       className="text-xs font-bold px-2 py-0.5 rounded flex-shrink-0 mt-0.5"
-                      style={{ background: mfgBg, color: mfgColor }}
+                      style={{ background: mfgBg, color: textTone(mfgColor) }}
                     >
                       {part.manufacturer === 'Both' ? 'TK+CT' : part.manufacturer}
                     </span>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 mt-2">
-                    <span className="text-xs px-2 py-0.5 rounded" style={{ background: 'var(--hd-sunken)', color: 'rgba(var(--hd-ink-rgb), 0.45)' }}>
+                    <span className="text-xs px-2 py-0.5 rounded" style={{ background: 'var(--hd-sunken)', color: 'var(--hd-text-muted)' }}>
                       {part.part_category}
                     </span>
                     {fits && (
                       <span
                         className="text-xs px-2 py-0.5 rounded"
                         style={universal
-                          ? { background: 'var(--hd-sunken)', color: 'rgba(var(--hd-ink-rgb), 0.55)', fontStyle: 'italic' }
-                          : { background: 'var(--hd-sunken)', color: 'rgba(var(--hd-ink-rgb), 0.45)' }
+                          ? { background: 'var(--hd-sunken)', color: 'var(--hd-text-muted)', fontStyle: 'italic' }
+                          : { background: 'var(--hd-sunken)', color: 'var(--hd-text-muted)' }
                         }
                       >
                         {fits}
@@ -4502,7 +4503,7 @@ function PartsReferencePanel({ onOpenTrailer }: { onOpenTrailer: (query: string)
                 {/* Cross-reference chips */}
                 {chips.length > 0 && (
                   <div className="px-4 py-3" style={{ background: 'var(--hd-card)', borderTop: '1px solid var(--hd-border)' }}>
-                    <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>
+                    <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--hd-text-faint)' }}>
                       Cross-Reference
                     </p>
                     <div className="flex flex-wrap gap-2">
@@ -4512,9 +4513,9 @@ function PartsReferencePanel({ onOpenTrailer }: { onOpenTrailer: (query: string)
                           <div
                             key={c.key}
                             className="flex flex-col px-2.5 py-1.5 rounded-lg"
-                            style={{ background: cfg.bg, border: `1px solid ${cfg.color}30` }}
+                            style={{ background: cfg.bg, border: `1px solid ${tint(cfg.color, 19)}` }}
                           >
-                            <span className="text-xs font-bold leading-none mb-0.5" style={{ color: cfg.color }}>
+                            <span className="text-xs font-bold leading-none mb-0.5" style={{ color: textTone(cfg.color) }}>
                               {cfg.label}
                             </span>
                             <span className="text-xs font-mono text-white leading-none">{c.val}</span>
@@ -4531,17 +4532,17 @@ function PartsReferencePanel({ onOpenTrailer }: { onOpenTrailer: (query: string)
                   <div
                     className="px-4 py-3"
                     style={flagNote
-                      ? { background: '#1a0a00', borderTop: `1px solid ${HD_ORANGE}40` }
+                      ? { background: 'color-mix(in srgb, var(--hd-warn) 14%, var(--hd-card))', borderTop: `1px solid ${tint(HD_ORANGE, 25)}` }
                       : { background: 'var(--hd-sunken)', borderTop: '1px solid var(--hd-border)' }
                     }
                   >
                     <div className="flex items-start gap-2">
                       {flagNote && (
-                        <span style={{ color: HD_ORANGE, fontSize: 14, lineHeight: '1.4', flexShrink: 0 }}>⚑</span>
+                        <span style={{ color: 'var(--hd-accent-text)', fontSize: 14, lineHeight: '1.4', flexShrink: 0 }}>⚑</span>
                       )}
                       <p
                         className="text-sm leading-relaxed"
-                        style={{ color: flagNote ? HD_ORANGE : 'rgba(var(--hd-ink-rgb), 0.6)' }}
+                        style={{ color: textTone(flagNote ? HD_ORANGE : 'rgba(var(--hd-ink-rgb), 0.6)') }}
                       >
                         {part.notes}
                       </p>
@@ -4553,7 +4554,7 @@ function PartsReferencePanel({ onOpenTrailer }: { onOpenTrailer: (query: string)
           })}
 
           {regularParts.length > RESULT_LIMIT && (
-            <p className="text-xs text-center py-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+            <p className="text-xs text-center py-2" style={{ color: 'var(--hd-text-faint)' }}>
               {regularParts.length - RESULT_LIMIT} more matches — add a unit model or part description to narrow.
             </p>
           )}
@@ -4562,7 +4563,7 @@ function PartsReferencePanel({ onOpenTrailer }: { onOpenTrailer: (query: string)
 
       {/* Disclaimer */}
       <div className="rounded-lg p-3" style={{ background: 'var(--hd-sunken)', border: '1px solid var(--hd-border)' }}>
-        <p className="text-xs leading-relaxed text-center" style={{ color: 'rgba(var(--hd-ink-rgb), 0.2)' }}>
+        <p className="text-xs leading-relaxed text-center" style={{ color: 'var(--hd-text-faint)' }}>
           Part numbers provided for cross-reference and field reference purposes only.
           Always verify fitment for your specific unit model, engine type, and year before ordering.
           National Wrench Index is not responsible for incorrect part selection.
@@ -4626,7 +4627,7 @@ const TRAILER_SYSTEM_COLOR: Record<TrailerSystem, string> = {
 }
 
 function trailerSystemColor(system: string): string {
-  return TRAILER_SYSTEM_COLOR[system as TrailerSystem] ?? 'rgba(var(--hd-ink-rgb), 0.45)'
+  return TRAILER_SYSTEM_COLOR[system as TrailerSystem] ?? 'var(--hd-text-muted)'
 }
 
 // '450-500' + 'PSI' → '450-500 PSI'. A value with no units renders bare; a row
@@ -4770,7 +4771,7 @@ function TrailerSystemsPanel({ initialQuery }: { initialQuery: string }) {
             <circle className="opacity-25" cx="12" cy="12" r="10" stroke={HD_ORANGE} strokeWidth="4" />
             <path className="opacity-75" fill={HD_ORANGE} d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>
-          <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Loading trailer reference...</p>
+          <p className="text-sm" style={{ color: 'var(--hd-text-faint)' }}>Loading trailer reference...</p>
         </div>
       </div>
     )
@@ -4778,7 +4779,7 @@ function TrailerSystemsPanel({ initialQuery }: { initialQuery: string }) {
 
   if (error) {
     return (
-      <div className="rounded-xl p-4" style={{ background: '#2d0a0a', border: '1px solid #7f1d1d' }}>
+      <div className="rounded-xl p-4" style={{ background: 'color-mix(in srgb, var(--hd-negative) 14%, var(--hd-card))', border: '1px solid #7f1d1d' }}>
         <p className="text-sm text-red-400">{error}</p>
       </div>
     )
@@ -4791,7 +4792,7 @@ function TrailerSystemsPanel({ initialQuery }: { initialQuery: string }) {
     return (
       <div className="rounded-xl p-6 text-center" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
         <p className="text-sm font-semibold mb-1.5 text-white">Trailer reference not loaded yet</p>
-        <p className="text-xs leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+        <p className="text-xs leading-relaxed" style={{ color: 'var(--hd-text-faint)' }}>
           {available
             ? 'The trailer systems library is published but has no entries yet. Air brakes, brake chambers, slack adjusters, shoes and drums, ABS, electrical and torque specs will appear here as soon as it is loaded.'
             : 'The trailer systems library has not been published to this account yet. Everything else in QuickWrench works normally.'}
@@ -4804,10 +4805,10 @@ function TrailerSystemsPanel({ initialQuery }: { initialQuery: string }) {
     <div className="space-y-4">
 
       <div>
-        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>
           Trailer Systems Reference
         </p>
-        <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+        <p className="text-sm" style={{ color: 'var(--hd-text-muted)' }}>
           Air brakes, chambers, slack adjusters, shoes and drums, ABS, electrical and torque specs.
         </p>
       </div>
@@ -4817,7 +4818,7 @@ function TrailerSystemsPanel({ initialQuery }: { initialQuery: string }) {
         <label
           htmlFor="trailer-search"
           className="block text-xs uppercase tracking-widest mb-1.5"
-          style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}
+          style={{ color: 'var(--hd-text-faint)' }}
         >
           Component / Spec
         </label>
@@ -4846,7 +4847,7 @@ function TrailerSystemsPanel({ initialQuery }: { initialQuery: string }) {
             className="px-4 py-2 rounded-lg text-xs font-semibold transition-colors"
             style={system === f.key
               ? { background: HD_ORANGE, color: 'var(--hd-text)' }
-              : { background: 'var(--hd-card)', color: 'rgba(var(--hd-ink-rgb), 0.45)', border: '1px solid var(--hd-border)' }
+              : { background: 'var(--hd-card)', color: 'var(--hd-text-muted)', border: '1px solid var(--hd-border)' }
             }
           >
             {f.label}
@@ -4856,7 +4857,7 @@ function TrailerSystemsPanel({ initialQuery }: { initialQuery: string }) {
 
       {/* Result count / clear */}
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+        <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>
           {matches.length === 0
             ? 'No matching entries'
             : `${relaxed ? 'No exact match — closest: ' : ''}${matches.length} ${
@@ -4868,7 +4869,7 @@ function TrailerSystemsPanel({ initialQuery }: { initialQuery: string }) {
             type="button"
             onClick={() => { setSearchText(''); setSystem('all') }}
             className="text-xs font-semibold flex-shrink-0"
-            style={{ color: HD_ORANGE }}
+            style={{ color: 'var(--hd-accent-text)' }}
           >
             Clear search
           </button>
@@ -4876,7 +4877,7 @@ function TrailerSystemsPanel({ initialQuery }: { initialQuery: string }) {
       </div>
 
       {matches.length === 0 && (
-        <p className="text-sm text-center py-8" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+        <p className="text-sm text-center py-8" style={{ color: 'var(--hd-text-faint)' }}>
           No entries match. Try a single word (&ldquo;chamber&rdquo; rather than &ldquo;type 30 brake chamber&rdquo;)
           or pick a system above.
         </p>
@@ -4885,7 +4886,7 @@ function TrailerSystemsPanel({ initialQuery }: { initialQuery: string }) {
       {/* Grouped results */}
       {groups.map(group => (
         <div key={group.name} className="space-y-3">
-          <p className="text-xs uppercase tracking-widest" style={{ color: trailerSystemColor(group.name) }}>
+          <p className="text-xs uppercase tracking-widest" style={{ color: textTone(trailerSystemColor(group.name)) }}>
             {group.name}
           </p>
 
@@ -4906,7 +4907,7 @@ function TrailerSystemsPanel({ initialQuery }: { initialQuery: string }) {
                       {spec && (
                         <p
                           className="font-bold text-2xl leading-tight mt-1"
-                          style={{ color: HD_ORANGE, fontFamily: 'monospace', wordBreak: 'break-word' }}
+                          style={{ color: 'var(--hd-accent-text)', fontFamily: 'monospace', wordBreak: 'break-word' }}
                         >
                           {spec}
                         </p>
@@ -4914,7 +4915,7 @@ function TrailerSystemsPanel({ initialQuery }: { initialQuery: string }) {
                     </div>
                     <span
                       className="text-xs font-bold px-2 py-0.5 rounded flex-shrink-0 mt-0.5"
-                      style={{ background: `${color}22`, color }}
+                      style={{ background: `${tint(color, 13)}`, color }}
                     >
                       {TRAILER_SYSTEM_LABEL[row.system] ?? row.system}
                     </span>
@@ -4923,7 +4924,7 @@ function TrailerSystemsPanel({ initialQuery }: { initialQuery: string }) {
                     <div className="flex flex-wrap items-center gap-2 mt-2">
                       <span
                         className="text-xs px-2 py-0.5 rounded"
-                        style={{ background: 'var(--hd-sunken)', color: 'rgba(var(--hd-ink-rgb), 0.45)' }}
+                        style={{ background: 'var(--hd-sunken)', color: 'var(--hd-text-muted)' }}
                       >
                         {row.manufacturer}
                       </span>
@@ -4941,10 +4942,10 @@ function TrailerSystemsPanel({ initialQuery }: { initialQuery: string }) {
                 {/* Notes — procedure detail, cautions, diagnosis steps */}
                 {row.notes && (
                   <div className="px-4 py-3" style={{ background: 'var(--hd-sunken)', borderTop: '1px solid var(--hd-border)' }}>
-                    <p className="text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>
+                    <p className="text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
                       Notes
                     </p>
-                    <p className="text-sm leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>
+                    <p className="text-sm leading-relaxed" style={{ color: 'var(--hd-text-muted)' }}>
                       {row.notes}
                     </p>
                   </div>
@@ -4956,14 +4957,14 @@ function TrailerSystemsPanel({ initialQuery }: { initialQuery: string }) {
       ))}
 
       {matches.length > RESULT_LIMIT && (
-        <p className="text-xs text-center py-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+        <p className="text-xs text-center py-2" style={{ color: 'var(--hd-text-faint)' }}>
           {matches.length - RESULT_LIMIT} more entries — narrow the search or pick a system.
         </p>
       )}
 
       {/* Disclaimer */}
       <div className="rounded-lg p-3" style={{ background: 'var(--hd-sunken)', border: '1px solid var(--hd-border)' }}>
-        <p className="text-xs leading-relaxed text-center" style={{ color: 'rgba(var(--hd-ink-rgb), 0.2)' }}>
+        <p className="text-xs leading-relaxed text-center" style={{ color: 'var(--hd-text-faint)' }}>
           Trailer specifications provided for field reference only. Always verify against the axle,
           brake, and ABS manufacturer service literature for the specific trailer, and follow FMCSA
           brake adjustment limits. National Wrench Index is not responsible for out-of-adjustment
@@ -5357,10 +5358,10 @@ function TrailerABSPanel({
     <div className="space-y-4">
 
       <div>
-        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>
           Trailer ABS Diagnostic
         </p>
-        <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+        <p className="text-sm" style={{ color: 'var(--hd-text-muted)' }}>
           Blink-code diagnosis for WABCO, Bendix and Haldex trailer ABS — fault meaning,
           test procedure, specs and labor.
         </p>
@@ -5369,7 +5370,7 @@ function TrailerABSPanel({
       {/* ── Session history ── */}
       {history.length > 0 && (
         <div>
-          <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+          <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--hd-text-faint)' }}>
             This session
           </p>
           <div className="flex gap-2 overflow-x-auto pb-1">
@@ -5387,18 +5388,18 @@ function TrailerABSPanel({
                 >
                   <span
                     className="block text-sm font-bold leading-tight"
-                    style={{ color: on ? HD_ORANGE : '#fff', fontFamily: 'monospace' }}
+                    style={{ color: textTone(on ? 'var(--hd-accent-text)' : '#fff'), fontFamily: 'monospace' }}
                   >
                     {h.blink}
                   </span>
-                  <span className="block text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+                  <span className="block text-xs mt-0.5" style={{ color: 'var(--hd-text-faint)' }}>
                     {absBrand(h.manufacturer).wordmark} · {absAgo(h.at)}
                   </span>
                 </button>
               )
             })}
           </div>
-          <p className="text-xs mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.2)' }}>
+          <p className="text-xs mt-1" style={{ color: 'var(--hd-text-faint)' }}>
             Last {ABS_HISTORY_LIMIT} diagnoses, held in memory for this session only — a reload clears them.
           </p>
         </div>
@@ -5406,7 +5407,7 @@ function TrailerABSPanel({
 
       {/* ── 1. Manufacturer ── */}
       <div>
-        <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+        <p className="text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--hd-text-faint)' }}>
           ABS Manufacturer
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
@@ -5424,14 +5425,14 @@ function TrailerABSPanel({
               >
                 <span
                   className="block font-condensed font-bold text-2xl"
-                  style={{ color: on ? HD_ORANGE : 'rgba(var(--hd-ink-rgb), 0.75)', letterSpacing: '0.18em' }}
+                  style={{ color: textTone(on ? HD_ORANGE : 'rgba(var(--hd-ink-rgb), 0.75)'), letterSpacing: '0.18em' }}
                 >
                   {b.wordmark}
                 </span>
-                <span className="block text-xs mt-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                <span className="block text-xs mt-2" style={{ color: 'var(--hd-text-faint)' }}>
                   {b.label}
                 </span>
-                <span className="block text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.28)' }}>
+                <span className="block text-xs mt-0.5" style={{ color: 'var(--hd-text-faint)' }}>
                   {b.systems}
                 </span>
               </button>
@@ -5444,7 +5445,7 @@ function TrailerABSPanel({
       {manufacturer !== null && (
         <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
           <div className="px-4 py-3" style={{ background: 'var(--hd-inner)' }}>
-            <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+            <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--hd-text-faint)' }}>
               Fault Detail
             </p>
           </div>
@@ -5456,9 +5457,9 @@ function TrailerABSPanel({
               <label
                 htmlFor="abs-ecu"
                 className="block text-xs uppercase tracking-widest mb-1.5"
-                style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}
+                style={{ color: 'var(--hd-text-faint)' }}
               >
-                ECU Generation <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.2)' }}>· optional</span>
+                ECU Generation <span style={{ color: 'var(--hd-text-faint)' }}>· optional</span>
               </label>
               <input
                 id="abs-ecu"
@@ -5477,7 +5478,7 @@ function TrailerABSPanel({
               <label
                 htmlFor="abs-blink"
                 className="block text-xs uppercase tracking-widest mb-1.5"
-                style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}
+                style={{ color: 'var(--hd-text-faint)' }}
               >
                 Blink Code
               </label>
@@ -5492,7 +5493,7 @@ function TrailerABSPanel({
                 className="w-full px-4 py-3 rounded-xl text-xl font-bold text-white placeholder-white/20"
                 style={{ background: 'var(--hd-sunken)', border: '1px solid var(--hd-border)', fontFamily: 'monospace' }}
               />
-              <p className="text-xs mt-1.5 leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+              <p className="text-xs mt-1.5 leading-relaxed" style={{ color: 'var(--hd-text-faint)' }}>
                 Count the flashes: primary flashes — pause — secondary flashes. Enter as 2-1
               </p>
             </div>
@@ -5502,9 +5503,9 @@ function TrailerABSPanel({
               <label
                 htmlFor="abs-symptoms"
                 className="block text-xs uppercase tracking-widest mb-1.5"
-                style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}
+                style={{ color: 'var(--hd-text-faint)' }}
               >
-                Symptoms <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.2)' }}>· optional</span>
+                Symptoms <span style={{ color: 'var(--hd-text-faint)' }}>· optional</span>
               </label>
               <textarea
                 id="abs-symptoms"
@@ -5526,12 +5527,12 @@ function TrailerABSPanel({
                 className="w-full rounded-xl font-condensed font-bold text-lg tracking-wide transition-colors"
                 style={ready && !loading
                   ? { background: HD_ORANGE, color: 'var(--hd-text)', minHeight: 56 }
-                  : { background: 'var(--hd-inner)', color: 'rgba(var(--hd-ink-rgb), 0.28)', border: '1px solid var(--hd-border)', minHeight: 56 }}
+                  : { background: 'var(--hd-inner)', color: 'var(--hd-text-faint)', border: '1px solid var(--hd-border)', minHeight: 56 }}
               >
                 {loading ? 'DIAGNOSING...' : 'DIAGNOSE'}
               </button>
               {!ready && (
-                <p className="text-xs mt-1.5 text-center" style={{ color: 'rgba(var(--hd-ink-rgb), 0.28)' }}>
+                <p className="text-xs mt-1.5 text-center" style={{ color: 'var(--hd-text-faint)' }}>
                   Pick a manufacturer and enter a blink code to run the diagnostic.
                 </p>
               )}
@@ -5552,7 +5553,7 @@ function TrailerABSPanel({
             <p className="text-sm font-semibold text-white flex-1">{loadingMessage}</p>
             <span
               className="text-xs flex-shrink-0"
-              style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)', fontFamily: 'monospace' }}
+              style={{ color: 'var(--hd-text-faint)', fontFamily: 'monospace' }}
             >
               {elapsed}s
             </span>
@@ -5565,7 +5566,7 @@ function TrailerABSPanel({
                 style={{ background: 'var(--hd-inner)', height: i === 0 ? 18 : 12, width: w }}
               />
             ))}
-            <p className="text-xs pt-1 leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>
+            <p className="text-xs pt-1 leading-relaxed" style={{ color: 'var(--hd-text-faint)' }}>
               The procedure is written for this specific fault, which takes longer than a table
               lookup. Leave this open — the results land here.
             </p>
@@ -5576,12 +5577,12 @@ function TrailerABSPanel({
       {/* ── 9. Error, with the static reference as the way forward ── */}
       {error !== null && !loading && (
         <div className="rounded-xl overflow-hidden" style={{ border: '1px solid #7f1d1d' }}>
-          <div className="px-4 py-3" style={{ background: '#2d0a0a' }}>
+          <div className="px-4 py-3" style={{ background: 'color-mix(in srgb, var(--hd-negative) 14%, var(--hd-card))' }}>
             <p className="text-sm font-semibold text-red-400">ABS diagnostic unavailable</p>
-            <p className="text-xs mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>{error}</p>
+            <p className="text-xs mt-1" style={{ color: 'var(--hd-text-muted)' }}>{error}</p>
           </div>
           <div className="px-4 py-4 space-y-3" style={{ background: 'var(--hd-card)' }}>
-            <p className="text-sm leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>
+            <p className="text-sm leading-relaxed" style={{ color: 'var(--hd-text-muted)' }}>
               The Trailer Systems tab holds the ABS reference entries — code meanings, sensor
               and modulator specs, wiring and torque values. That library is stored data, so it
               works whether or not this diagnostic does.
@@ -5617,19 +5618,19 @@ function TrailerABSPanel({
               look like the rest of the result, because answering it changes the answer. */}
           {showClarify && (
             <div className="rounded-xl overflow-hidden" style={{ border: '2px solid #F59E0B' }}>
-              <div className="px-4 py-3 flex items-center gap-2" style={{ background: '#2a1c05' }}>
+              <div className="px-4 py-3 flex items-center gap-2" style={{ background: 'color-mix(in srgb, var(--hd-warn) 14%, var(--hd-card))' }}>
                 <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="#F59E0B" strokeWidth={2} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
-                <p className="text-sm font-bold" style={{ color: '#F59E0B' }}>
+                <p className="text-sm font-bold" style={{ color: 'var(--hd-warn)' }}>
                   One thing needs confirming first
                 </p>
               </div>
-              <div className="px-4 py-4 space-y-3" style={{ background: '#1a1204' }}>
+              <div className="px-4 py-4 space-y-3" style={{ background: 'color-mix(in srgb, var(--hd-warn) 14%, var(--hd-card))' }}>
                 <p className="text-base font-semibold leading-snug text-white">
                   {result.clarificationQuestion}
                 </p>
-                <p className="text-xs leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.45)' }}>
+                <p className="text-xs leading-relaxed" style={{ color: 'var(--hd-text-muted)' }}>
                   The same blink code means different things depending on this. Everything below
                   is preliminary until it is answered — answer it and the procedure is rewritten
                   for your case.
@@ -5651,7 +5652,7 @@ function TrailerABSPanel({
                   className="w-full py-3 rounded-lg text-sm font-bold"
                   style={answer.trim().length > 0
                     ? { background: '#F59E0B', color: '#1a1204', minHeight: 48 }
-                    : { background: '#2a1c05', color: 'rgba(var(--hd-ink-rgb), 0.28)', border: '1px solid #78500c', minHeight: 48 }}
+                    : { background: 'color-mix(in srgb, var(--hd-warn) 14%, var(--hd-card))', color: 'var(--hd-text-faint)', border: '1px solid #78500c', minHeight: 48 }}
                 >
                   Answer &amp; refine diagnosis
                 </button>
@@ -5665,17 +5666,17 @@ function TrailerABSPanel({
               <div className="px-4 py-3 flex items-center gap-2" style={{ background: 'var(--hd-inner)' }}>
                 <span
                   className="text-lg font-bold"
-                  style={{ color: HD_ORANGE, fontFamily: 'monospace' }}
+                  style={{ color: 'var(--hd-accent-text)', fontFamily: 'monospace' }}
                 >
                   {code}
                 </span>
-                <span className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+                <span className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>
                   {brand?.wordmark}{ecu.trim() ? ` · ${ecu.trim()}` : ''}
                 </span>
                 {showClarify && (
                   <span
                     className="ml-auto text-xs font-bold px-2 py-0.5 rounded flex-shrink-0"
-                    style={{ background: 'rgba(245,158,11,0.15)', color: '#F59E0B' }}
+                    style={{ background: 'rgba(245,158,11,0.15)', color: 'var(--hd-warn)' }}
                   >
                     Preliminary
                   </span>
@@ -5693,7 +5694,7 @@ function TrailerABSPanel({
           {result.steps.length > 0 && (
             <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
               <div className="px-4 py-3" style={{ background: 'var(--hd-inner)' }}>
-                <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+                <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--hd-text-faint)' }}>
                   Diagnostic Steps
                 </p>
               </div>
@@ -5719,7 +5720,7 @@ function TrailerABSPanel({
           {result.specs.length > 0 && (
             <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
               <div className="px-4 py-3" style={{ background: 'var(--hd-inner)' }}>
-                <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+                <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--hd-text-faint)' }}>
                   Specs To Check
                 </p>
               </div>
@@ -5735,7 +5736,7 @@ function TrailerABSPanel({
                           <th
                             key={h}
                             className="text-left px-4 py-2 text-xs uppercase tracking-widest font-semibold"
-                            style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)', borderBottom: '1px solid var(--hd-border)' }}
+                            style={{ color: 'var(--hd-text-faint)', borderBottom: '1px solid var(--hd-border)' }}
                           >
                             {h}
                           </th>
@@ -5747,13 +5748,13 @@ function TrailerABSPanel({
                         <tr key={i} style={{ borderBottom: '1px solid var(--hd-border)' }}>
                           <td className="px-4 py-3 align-top text-white">{s.measure || '—'}</td>
                           {specHasWhere && (
-                            <td className="px-4 py-3 align-top" style={{ color: 'rgba(var(--hd-ink-rgb), 0.55)' }}>
+                            <td className="px-4 py-3 align-top" style={{ color: 'var(--hd-text-muted)' }}>
                               {s.where || '—'}
                             </td>
                           )}
                           <td
                             className="px-4 py-3 align-top font-semibold"
-                            style={{ color: HD_ORANGE, fontFamily: 'monospace' }}
+                            style={{ color: 'var(--hd-accent-text)', fontFamily: 'monospace' }}
                           >
                             {s.passFail || '—'}
                           </td>
@@ -5784,7 +5785,7 @@ function TrailerABSPanel({
           {result.tools.length > 0 && (
             <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
               <div className="px-4 py-3" style={{ background: 'var(--hd-inner)' }}>
-                <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+                <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--hd-text-faint)' }}>
                   Tools Needed
                 </p>
               </div>
@@ -5811,13 +5812,13 @@ function TrailerABSPanel({
           {hasDiagnosis && (
           <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
             <div className="px-4 py-3" style={{ background: 'var(--hd-inner)' }}>
-              <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+              <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--hd-text-faint)' }}>
                 Parts
               </p>
             </div>
             <div className="px-4 py-4" style={{ background: 'var(--hd-card)' }}>
               {result.parts.length === 0 ? (
-                <p className="text-sm leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.45)' }}>
+                <p className="text-sm leading-relaxed" style={{ color: 'var(--hd-text-muted)' }}>
                   No stocked parts match this fault. Order ABS components against the part number
                   on the ECU housing label or the component itself.
                 </p>
@@ -5828,13 +5829,13 @@ function TrailerABSPanel({
                       <div className="flex items-baseline gap-2 flex-wrap">
                         <span className="text-sm font-semibold text-white">{p.name || p.partNumber}</span>
                         {p.partNumber && p.name && (
-                          <span className="text-xs" style={{ color: HD_ORANGE, fontFamily: 'monospace' }}>
+                          <span className="text-xs" style={{ color: 'var(--hd-accent-text)', fontFamily: 'monospace' }}>
                             {p.partNumber}
                           </span>
                         )}
                       </div>
                       {p.note && (
-                        <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                        <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'var(--hd-text-faint)' }}>
                           {p.note}
                         </p>
                       )}
@@ -5850,24 +5851,24 @@ function TrailerABSPanel({
           {hasDiagnosis && (
           <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
             <div className="px-4 py-3" style={{ background: 'var(--hd-inner)' }}>
-              <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+              <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--hd-text-faint)' }}>
                 Labor Estimate
               </p>
             </div>
             <div className="px-4 py-4" style={{ background: 'var(--hd-card)' }}>
               {result.labor === null || (result.labor.low === null && result.labor.high === null) ? (
-                <p className="text-sm leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.45)' }}>
+                <p className="text-sm leading-relaxed" style={{ color: 'var(--hd-text-muted)' }}>
                   {result.labor?.description
                     || 'No labor estimate for this fault — price it from your own book time.'}
                 </p>
               ) : (
                 <>
-                  <p className="font-bold text-3xl leading-tight" style={{ color: HD_ORANGE }}>
+                  <p className="font-bold text-3xl leading-tight" style={{ color: 'var(--hd-accent-text)' }}>
                     {result.labor.low !== null && result.labor.high !== null && result.labor.low !== result.labor.high
                       ? `${absHours(result.labor.low)}–${absHours(result.labor.high)} hrs`
                       : `${absHours((result.labor.low ?? result.labor.high) as number)} hrs`}
                   </p>
-                  <p className="text-sm mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+                  <p className="text-sm mt-1" style={{ color: 'var(--hd-text-muted)' }}>
                     {absMoney((result.labor.low ?? result.labor.high ?? 0) * laborRate)}
                     {result.labor.high !== null && result.labor.low !== null && result.labor.high !== result.labor.low
                       ? ` – ${absMoney(result.labor.high * laborRate)}`
@@ -5875,7 +5876,7 @@ function TrailerABSPanel({
                     {' '}at your {absMoney(laborRate)}/hr HD rate
                   </p>
                   {result.labor.description && (
-                    <p className="text-sm mt-2 leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>
+                    <p className="text-sm mt-2 leading-relaxed" style={{ color: 'var(--hd-text-muted)' }}>
                       {result.labor.description}
                     </p>
                   )}
@@ -5895,7 +5896,7 @@ function TrailerABSPanel({
                 if (payload) onPush(payload, dest)
               }}
             />
-            <p className="text-xs text-center leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>
+            <p className="text-xs text-center leading-relaxed" style={{ color: 'var(--hd-text-faint)' }}>
               Pre-filled with the fault, the estimated hours at your {absMoney(laborRate)}/hr HD rate,
               and any matched parts.
             </p>
@@ -5904,7 +5905,7 @@ function TrailerABSPanel({
 
           {/* Disclaimer */}
           <div className="rounded-lg p-3" style={{ background: 'var(--hd-sunken)', border: '1px solid var(--hd-border)' }}>
-            <p className="text-xs leading-relaxed text-center" style={{ color: 'rgba(var(--hd-ink-rgb), 0.2)' }}>
+            <p className="text-xs leading-relaxed text-center" style={{ color: 'var(--hd-text-faint)' }}>
               AI-assisted diagnosis for field reference only. Confirm the blink code and every
               specification against the ABS manufacturer service literature for the specific ECU
               before replacing components, and follow FMCSA brake requirements. National Wrench

@@ -19,6 +19,7 @@ import {
   collectDeficiencies, emptyData, hasCriticalDeficiency, overallResult, unansweredCount,
 } from '@/types/equipment'
 import SignaturePad from '@/components/hd/SignaturePad'
+import { textTone } from '@/lib/hd/text-tone'
 
 interface UnitOption { id: string; unit_number: string | null; manufacturer: string | null; model: string | null; serial_number?: string | null }
 
@@ -50,12 +51,12 @@ function ItemRow({
     <div style={{ background: isFail ? '#1a0505' : even ? '#0f1820' : 'var(--hd-card)', borderTop: '1px solid var(--hd-border)' }}>
       <div className="flex items-center gap-3 px-4 py-2">
         <div className="flex-1 min-w-0">
-          <p className="text-xs leading-snug" style={{ color: isFail ? '#EF4444CC' : 'rgba(var(--hd-ink-rgb), 0.65)' }}>
+          <p className="text-xs leading-snug" style={{ color: textTone(isFail ? '#EF4444CC' : 'rgba(var(--hd-ink-rgb), 0.65)') }}>
             {label}
           </p>
           {safetyCritical && (
             <span className="inline-block font-bold px-1.5 py-0.5 rounded mt-0.5"
-              style={{ background: '#EF444415', color: '#EF4444', fontSize: 9 }}>
+              style={{ background: '#EF444415', color: 'var(--hd-negative)', fontSize: 9 }}>
               ⚠ SAFETY CRITICAL
             </span>
           )}
@@ -69,7 +70,7 @@ function ItemRow({
                 background: state.result === r
                   ? r === 'pass' ? '#22C55E' : r === 'fail' ? '#EF4444' : '#4B5563'
                   : 'var(--hd-inner)',
-                color: state.result === r ? '#fff' : 'rgba(var(--hd-ink-rgb), 0.28)',
+                color: textTone(state.result === r ? '#fff' : 'var(--hd-text-faint)'),
               }}>
               {r === 'na' ? 'N/A' : r.toUpperCase()}
             </button>
@@ -81,7 +82,7 @@ function ItemRow({
           <textarea value={state.notes} onChange={e => onChange('notes', e.target.value)}
             placeholder="Describe the deficiency found…" rows={2}
             className="w-full px-3 py-1.5 rounded text-xs text-white placeholder-white/20 resize-none"
-            style={{ background: '#2d0505', border: '1px solid #EF444440', borderLeft: '3px solid #EF4444' }} />
+            style={{ background: 'color-mix(in srgb, var(--hd-negative) 14%, var(--hd-card))', border: '1px solid #EF444440', borderLeft: '3px solid #EF4444' }} />
         </div>
       )}
       {/* The second decision. A fail is not a shutdown by itself. */}
@@ -269,8 +270,8 @@ export default function EquipmentChecklist({
   }
 
   const inp = 'w-full px-3 py-2 rounded text-sm text-white placeholder-white/20'
-  const inpStyle = { background: '#0f1820', border: '1px solid var(--hd-border)' } as const
-  const lbl = 'text-white/40 text-xs uppercase tracking-widest block mb-1.5'
+  const inpStyle = { background: 'var(--hd-sunken)', border: '1px solid var(--hd-border)' } as const
+  const lbl = 'text-[color:var(--hd-text-faint)] text-xs uppercase tracking-widest block mb-1.5'
 
   return (
     <div className="space-y-5">
@@ -278,8 +279,8 @@ export default function EquipmentChecklist({
       {/* Heading */}
       <div className="rounded-xl p-4" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
         <h1 className="font-condensed font-bold text-xl text-white tracking-wide">{def.title}</h1>
-        <p className="text-white/40 text-xs mt-0.5">{def.citation}</p>
-        <p className="text-white/30 text-xs mt-1.5">{def.cadence}</p>
+        <p className="text-[color:var(--hd-text-faint)] text-xs mt-0.5">{def.citation}</p>
+        <p className="text-[color:var(--hd-text-faint)] text-xs mt-1.5">{def.cadence}</p>
       </div>
 
       {/* Unit + context */}
@@ -360,9 +361,9 @@ export default function EquipmentChecklist({
       {/* Sections */}
       {def.sections.map(section => (
         <div key={section.id} className="rounded-xl overflow-hidden" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
-          <div className="px-4 py-2.5" style={{ background: '#0d151c' }}>
+          <div className="px-4 py-2.5" style={{ background: 'var(--hd-sunken)' }}>
             <p className="text-white text-sm font-semibold">
-              <span className="text-white/30 mr-2">§{section.num}</span>{section.label}
+              <span className="text-[color:var(--hd-text-faint)] mr-2">§{section.num}</span>{section.label}
             </p>
           </div>
           {section.items.map((item, i) => (
@@ -380,7 +381,7 @@ export default function EquipmentChecklist({
 
       {/* Critical banner — out-of-service determination */}
       {critical && (
-        <div className="rounded-xl p-4" style={{ background: '#2d0505', border: '1px solid #EF4444' }}>
+        <div className="rounded-xl p-4" style={{ background: 'color-mix(in srgb, var(--hd-negative) 14%, var(--hd-card))', border: '1px solid #EF4444' }}>
           <p className="text-danger text-sm font-semibold mb-2">
             Safety-critical deficiency found — this machine may not be operated.
           </p>
@@ -432,19 +433,19 @@ export default function EquipmentChecklist({
       {/* Summary + submit */}
       <div className="rounded-xl p-4" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
         <div className="flex items-center justify-between mb-3">
-          <p className="text-white/50 text-sm">
+          <p className="text-[color:var(--hd-text-muted)] text-sm">
             Result:{' '}
             <span className={result === 'pass' ? 'text-green-400 font-semibold' : 'text-danger font-semibold'}>
               {result.toUpperCase()}
             </span>
             {deficiencies.length > 0 && (
-              <span className="text-white/40"> · {deficiencies.length} deficienc{deficiencies.length === 1 ? 'y' : 'ies'}</span>
+              <span className="text-[color:var(--hd-text-faint)]"> · {deficiencies.length} deficienc{deficiencies.length === 1 ? 'y' : 'ies'}</span>
             )}
           </p>
         </div>
 
         {blockers.length > 0 && (
-          <ul className="text-white/40 text-xs mb-3 space-y-0.5">
+          <ul className="text-[color:var(--hd-text-faint)] text-xs mb-3 space-y-0.5">
             {blockers.map(b => <li key={b}>• {b}</li>)}
           </ul>
         )}
@@ -458,7 +459,7 @@ export default function EquipmentChecklist({
         >
           {saving ? 'Saving…' : 'Sign and Submit Inspection'}
         </button>
-        <p className="text-white/25 text-xs mt-2 text-center">
+        <p className="text-[color:var(--hd-text-faint)] text-xs mt-2 text-center">
           Submission locks this record and stamps the time. It cannot be edited afterwards.
         </p>
       </div>

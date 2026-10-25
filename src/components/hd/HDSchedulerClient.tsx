@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { tint } from '@/lib/hd/text-tone'
 
 const HD_ORANGE = '#E85D24'
 const HD_BLUE   = '#1A6BAF'
@@ -118,7 +119,7 @@ function JobCard({ wo, laborRate }: { wo: WorkOrder; laborRate: number }) {
   return (
     <div
       className="rounded-xl p-5 flex flex-col gap-4"
-      style={{ background: 'var(--hd-card)', border: `1px solid ${color}50` }}
+      style={{ background: 'var(--hd-card)', border: `1px solid ${tint(color, 31)}` }}
     >
       {/* Header */}
       <div className="flex items-start justify-between">
@@ -126,7 +127,7 @@ function JobCard({ wo, laborRate }: { wo: WorkOrder; laborRate: number }) {
           <div className="flex items-center gap-2 mb-1">
             <span
               className="text-xs font-bold px-2 py-0.5 rounded-full"
-              style={{ background: `${color}20`, color }}
+              style={{ background: `${tint(color, 13)}`, color }}
             >
               {STATUS_LABELS[status]}
             </span>
@@ -134,12 +135,12 @@ function JobCard({ wo, laborRate }: { wo: WorkOrder; laborRate: number }) {
           <p className="font-condensed font-bold text-white text-lg tracking-wide leading-tight">
             {wo.work_order_number ?? `WO-${wo.id.slice(0, 6).toUpperCase()}`}
           </p>
-          <p className="text-sm mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--hd-text-muted)' }}>
             {wo.service_type ?? 'Service'}
           </p>
         </div>
         {wo.total_amount && (
-          <p className="font-condensed font-bold text-xl" style={{ color: HD_ORANGE }}>${Number(wo.total_amount).toFixed(0)}</p>
+          <p className="font-condensed font-bold text-xl" style={{ color: 'var(--hd-accent-text)' }}>${Number(wo.total_amount).toFixed(0)}</p>
         )}
       </div>
 
@@ -152,20 +153,20 @@ function JobCard({ wo, laborRate }: { wo: WorkOrder; laborRate: number }) {
             </p>
           )}
           {wo.fleet_account && (
-            <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>{wo.fleet_account.fleet_name}</p>
+            <p className="text-xs" style={{ color: 'var(--hd-text-muted)' }}>{wo.fleet_account.fleet_name}</p>
           )}
         </div>
       )}
 
       {/* Timer display */}
       {status === 'in_progress' && (
-        <div className="rounded-lg p-4 text-center" style={{ background: `${HD_ORANGE}15`, border: `1px solid ${HD_ORANGE}30` }}>
-          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>On Job</p>
-          <p className="font-condensed font-bold text-4xl" style={{ color: HD_ORANGE }}>
+        <div className="rounded-lg p-4 text-center" style={{ background: `${tint(HD_ORANGE, 8)}`, border: `1px solid ${tint(HD_ORANGE, 19)}` }}>
+          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>On Job</p>
+          <p className="font-condensed font-bold text-4xl" style={{ color: 'var(--hd-accent-text)' }}>
             {timerOn ? formatElapsed(elapsed) : '--:--'}
           </p>
           {elapsed > 0 && (
-            <p className="text-xs mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+            <p className="text-xs mt-1" style={{ color: 'var(--hd-text-faint)' }}>
               est. ${laborEst.toFixed(0)} @ ${laborRate}/hr
             </p>
           )}
@@ -178,7 +179,7 @@ function JobCard({ wo, laborRate }: { wo: WorkOrder; laborRate: number }) {
           <button
             onClick={() => transition('on_the_way')}
             disabled={loading}
-            className="py-4 rounded-xl font-bold text-white text-sm tracking-wide"
+            className="py-4 rounded-xl font-bold text-on-fill text-sm tracking-wide"
             style={{ background: HD_BLUE, opacity: loading ? 0.6 : 1 }}
           >
             On My Way
@@ -186,7 +187,7 @@ function JobCard({ wo, laborRate }: { wo: WorkOrder; laborRate: number }) {
           <button
             onClick={() => transition('in_progress')}
             disabled={loading}
-            className="py-4 rounded-xl font-bold text-white text-sm tracking-wide"
+            className="py-4 rounded-xl font-bold text-on-accent text-sm tracking-wide"
             style={{ background: HD_ORANGE, opacity: loading ? 0.6 : 1 }}
           >
             Arrived — Start Timer
@@ -198,7 +199,7 @@ function JobCard({ wo, laborRate }: { wo: WorkOrder; laborRate: number }) {
         <button
           onClick={() => transition('in_progress')}
           disabled={loading}
-          className="w-full py-5 rounded-xl font-bold text-white text-lg tracking-wide"
+          className="w-full py-5 rounded-xl font-bold text-on-accent text-lg tracking-wide"
           style={{ background: HD_ORANGE, opacity: loading ? 0.6 : 1 }}
         >
           Arrived — Start Timer
@@ -209,7 +210,7 @@ function JobCard({ wo, laborRate }: { wo: WorkOrder; laborRate: number }) {
         <button
           onClick={() => transition('completed')}
           disabled={loading}
-          className="w-full py-5 rounded-xl font-bold text-white text-lg tracking-wide"
+          className="w-full py-5 rounded-xl font-bold text-on-fill text-lg tracking-wide"
           style={{ background: '#22C55E', opacity: loading ? 0.6 : 1 }}
         >
           Complete Job — Stop Timer
@@ -218,7 +219,7 @@ function JobCard({ wo, laborRate }: { wo: WorkOrder; laborRate: number }) {
 
       {(status === 'completed' || status === 'invoiced') && (
         <div className="py-3 text-center rounded-xl" style={{ background: '#22C55E15', border: '1px solid #22C55E30' }}>
-          <p className="text-sm font-semibold" style={{ color: '#22C55E' }}>
+          <p className="text-sm font-semibold" style={{ color: 'var(--hd-positive)' }}>
             {status === 'invoiced' ? 'Invoiced' : 'Job Complete'}
           </p>
         </div>
@@ -252,8 +253,8 @@ export default function HDSchedulerClient({
             onClick={() => setFilter(f.key)}
             className="px-4 py-2 rounded-lg text-sm font-medium"
             style={filter === f.key
-              ? { background: `${HD_ORANGE}20`, color: HD_ORANGE, border: `1px solid ${HD_ORANGE}50` }
-              : { color: 'rgba(var(--hd-ink-rgb), 0.4)', border: '1px solid var(--hd-border)' }
+              ? { background: `${tint(HD_ORANGE, 13)}`, color: 'var(--hd-accent-text)', border: `1px solid ${tint(HD_ORANGE, 31)}` }
+              : { color: 'var(--hd-text-faint)', border: '1px solid var(--hd-border)' }
             }
           >
             {f.label}
@@ -263,7 +264,7 @@ export default function HDSchedulerClient({
 
       {displayed.length === 0 ? (
         <div className="py-16 text-center rounded-xl" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
-          <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+          <p className="text-sm" style={{ color: 'var(--hd-text-faint)' }}>
             {filter === 'active' ? 'No active jobs' : 'No work orders'}
           </p>
         </div>

@@ -17,6 +17,7 @@ import {
   initialInspectionData,
 } from '@/lib/hd/dot-categories'
 import { money } from '@/lib/format'
+import { textTone, tint } from '@/lib/hd/text-tone'
 
 const HD_ORANGE = '#E85D24'
 const HD_BLUE   = '#1A6BAF'
@@ -89,12 +90,12 @@ function SubItemRow({
     <div style={{ background: isFail ? '#1a0505' : even ? '#0f1820' : 'var(--hd-card)', borderTop: '1px solid var(--hd-border)' }}>
       <div className="flex items-center gap-3 px-4 py-2">
         <div className="flex-1 min-w-0">
-          <p className="text-xs leading-snug" style={{ color: isFail ? '#EF4444CC' : 'rgba(var(--hd-ink-rgb), 0.65)' }}>
+          <p className="text-xs leading-snug" style={{ color: textTone(isFail ? '#EF4444CC' : 'rgba(var(--hd-ink-rgb), 0.65)') }}>
             {label}
           </p>
           {safetyCritical && (
             <span className="inline-block text-xs font-bold px-1.5 py-0.5 rounded mt-0.5"
-              style={{ background: '#EF444415', color: '#EF4444', fontSize: 9 }}>
+              style={{ background: '#EF444415', color: 'var(--hd-negative)', fontSize: 9 }}>
               ⚠ SAFETY CRITICAL
             </span>
           )}
@@ -108,7 +109,7 @@ function SubItemRow({
                 background: state.result === r
                   ? r === 'pass' ? '#22C55E' : r === 'fail' ? '#EF4444' : '#4B5563'
                   : 'var(--hd-inner)',
-                color: state.result === r ? '#fff' : 'rgba(var(--hd-ink-rgb), 0.28)',
+                color: textTone(state.result === r ? '#fff' : 'var(--hd-text-faint)'),
               }}>
               {r === 'na' ? 'N/A' : r.toUpperCase()}
             </button>
@@ -120,7 +121,7 @@ function SubItemRow({
           <textarea value={state.notes} onChange={e => onChange('notes', e.target.value)}
             placeholder="Describe violation found…" rows={2}
             className="w-full px-3 py-1.5 rounded text-xs text-white placeholder-white/20 resize-none"
-            style={{ background: '#2d0505', border: '1px solid #EF444440', borderLeft: '3px solid #EF4444' }} />
+            style={{ background: 'color-mix(in srgb, var(--hd-negative) 14%, var(--hd-card))', border: '1px solid #EF444440', borderLeft: '3px solid #EF4444' }} />
         </div>
       )}
       {/* The second decision. On a DOT annual this is the CVSA question: does the
@@ -158,21 +159,21 @@ function CategoryBlock({ num, catId, label, state, onChange, onOos }: {
         className="w-full flex items-center gap-3 px-4 py-2.5 text-left"
         style={{ background: isFail ? '#1a0000' : 'var(--hd-sunken)' }}>
         <span className="text-xs font-mono font-bold w-5 text-right flex-shrink-0"
-          style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{num}</span>
+          style={{ color: 'var(--hd-text-faint)' }}>{num}</span>
         <p className="flex-1 text-sm font-bold text-white tracking-wide uppercase">{label}</p>
         {failCt > 0 && (
           <span className="text-xs font-bold px-2 py-0.5 rounded"
-            style={{ background: '#EF444420', color: '#EF4444' }}>{failCt} FAIL</span>
+            style={{ background: '#EF444420', color: 'var(--hd-negative)' }}>{failCt} FAIL</span>
         )}
         <span className="text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0"
           style={{
             background: isFail ? '#EF444420' : derived === 'na' ? '#6B728020' : '#22C55E20',
-            color:      isFail ? '#EF4444'   : derived === 'na' ? '#9CA3AF'   : '#22C55E',
+            color: textTone(isFail ? 'var(--hd-negative)'   : derived === 'na' ? '#9CA3AF'   : 'var(--hd-positive)'),
           }}>
           {isFail ? 'FAIL' : derived === 'na' ? 'N/A' : 'PASS'}
         </span>
         <svg className="w-4 h-4 transition-transform duration-150 flex-shrink-0"
-          style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)', transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
+          style={{ color: 'var(--hd-text-faint)', transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
           fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
         </svg>
@@ -240,7 +241,7 @@ function InfoCell({ label, value, editable, type = 'text', onChange, children }:
 }) {
   return (
     <td className="px-3 py-2 align-top" style={{ borderBottom: '1px solid var(--hd-border)', borderRight: '1px solid var(--hd-border)', width: '50%', verticalAlign: 'top' }}>
-      <div className="text-xs uppercase tracking-wider mb-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)', fontSize: 9, letterSpacing: '0.08em' }}>{label}</div>
+      <div className="text-xs uppercase tracking-wider mb-0.5" style={{ color: 'var(--hd-text-faint)', fontSize: 9, letterSpacing: '0.08em' }}>{label}</div>
       {children ?? (
         editable ? (
           <input type={type} value={value ?? ''} onChange={e => onChange?.(e.target.value)}
@@ -494,13 +495,13 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
 
       {/* ── Error ── */}
       {error && (
-        <div className="no-print mx-6 mt-4 rounded-xl p-4" style={{ background: '#2d0a0a', border: '1px solid #7f1d1d' }}>
+        <div className="no-print mx-6 mt-4 rounded-xl p-4" style={{ background: 'color-mix(in srgb, var(--hd-negative) 14%, var(--hd-card))', border: '1px solid #7f1d1d' }}>
           <p className="text-sm text-red-400">{error}</p>
         </div>
       )}
       {notice && (
         <div className="no-print mx-6 mt-4 rounded-xl p-4" style={{ background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.4)' }}>
-          <p className="text-sm" style={{ color: '#22C55E' }}>{notice}</p>
+          <p className="text-sm" style={{ color: 'var(--hd-positive)' }}>{notice}</p>
         </div>
       )}
 
@@ -527,7 +528,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
             <p className="font-condensed font-bold text-white text-xl tracking-widest leading-tight">
               ANNUAL VEHICLE INSPECTION REPORT
             </p>
-            <p className="text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.45)' }}>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--hd-text-muted)' }}>
               Per 49 CFR Part 396 — Federal Motor Carrier Safety Regulations
             </p>
           </div>
@@ -535,21 +536,21 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
           {/* Right — ID + date */}
           <div className="flex-shrink-0 w-44 text-right">
             <p className="text-sm font-mono font-bold text-white">{inspectionId}</p>
-            <p className="text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{printDate}</p>
-            <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>Page 1</p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--hd-text-faint)' }}>{printDate}</p>
+            <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>Page 1</p>
           </div>
         </div>
 
         {/* ── Customer / unit / invoice selectors (screen only) ── */}
         <div className="px-6 py-3 border-b no-print space-y-3" style={{ background: 'var(--hd-card)', borderColor: 'var(--hd-border)' }}>
           <div className="flex items-center justify-between gap-3">
-            <p className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Inspection Setup</p>
-            <Link href="/hd/dot-inspections" className="text-xs px-3 py-1.5 rounded-lg flex-shrink-0" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)', border: '1px solid var(--hd-border)' }}>← Back</Link>
+            <p className="text-xs uppercase tracking-widest" style={{ color: 'var(--hd-text-faint)' }}>Inspection Setup</p>
+            <Link href="/hd/dot-inspections" className="text-xs px-3 py-1.5 rounded-lg flex-shrink-0" style={{ color: 'var(--hd-text-faint)', border: '1px solid var(--hd-border)' }}>← Back</Link>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {/* Customer search */}
             <div style={{ position: 'relative' }}>
-              <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Customer</label>
+              <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>Customer</label>
               <div style={{ position: 'relative' }}>
                 <input
                   value={customerName}
@@ -560,7 +561,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
                   style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
                 />
                 {selectedAccountId && (
-                  <button type="button" onClick={clearAccount} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold px-2 py-0.5 rounded" style={{ background: 'var(--hd-border)', color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>Clear</button>
+                  <button type="button" onClick={clearAccount} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-semibold px-2 py-0.5 rounded" style={{ background: 'var(--hd-border)', color: 'var(--hd-text-muted)' }}>Clear</button>
                 )}
               </div>
               {showAccts && acctMatches.length > 0 && !selectedAccountId && (
@@ -577,7 +578,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
 
             {/* Unit (filtered by customer) */}
             <div>
-              <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Unit</label>
+              <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>Unit</label>
               <select value={selectedUnitId} onChange={e => setSelectedUnitId(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg text-base sm:text-sm text-white"
                 style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}>
@@ -590,7 +591,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
 
             {/* Invoice options */}
             <div>
-              <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Invoice</label>
+              <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>Invoice</label>
               <select value={selectedInvoice} onChange={e => setSelectedInvoice(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg text-base sm:text-sm text-white"
                 style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}>
@@ -672,7 +673,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
                   <span className="inline-block text-sm font-bold px-3 py-0.5 rounded-full"
                     style={{
                       background: overallPass ? '#22C55E20' : '#EF444420',
-                      color:      overallPass ? '#22C55E'   : '#EF4444',
+                      color: textTone(overallPass ? 'var(--hd-positive)'   : 'var(--hd-negative)'),
                       border:     `1px solid ${overallPass ? '#22C55E50' : '#EF444450'}`,
                     }}>
                     {overallPass ? '● PASS' : '● FAIL'}
@@ -693,7 +694,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
               CVSA INSPECTION ITEMS
             </p>
             <Link href="/hd/dot-inspections" className="text-xs no-print"
-              style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+              style={{ color: 'var(--hd-text-faint)' }}>
               ← Back to inspections
             </Link>
           </div>
@@ -701,8 +702,8 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
           {hasSafetyCriticalFail && (
             <div className="rounded-lg px-4 py-3 flex items-center gap-3 mb-3"
               style={{ background: '#EF444420', border: '1px solid #EF444450' }}>
-              <span style={{ color: '#F59E0B', fontSize: 18 }}>⚠</span>
-              <p className="text-sm font-bold" style={{ color: '#EF4444' }}>
+              <span style={{ color: 'var(--hd-warn)', fontSize: 18 }}>⚠</span>
+              <p className="text-sm font-bold" style={{ color: 'var(--hd-negative)' }}>
                 SAFETY-CRITICAL VIOLATION — Vehicle must be taken out of service immediately.
               </p>
             </div>
@@ -722,8 +723,8 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
         <div className="px-6 py-4 mx-6 mb-4 rounded-xl" style={{ border: '1px solid var(--hd-border)', background: 'var(--hd-card)' }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide mb-3">INSPECTOR CERTIFICATION</p>
 
-          <div className="rounded-lg p-4 mb-4" style={{ background: 'var(--hd-sunken)', border: `1px solid ${HD_BLUE}30` }}>
-            <p className="text-xs leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.55)' }}>
+          <div className="rounded-lg p-4 mb-4" style={{ background: 'var(--hd-sunken)', border: `1px solid ${tint(HD_BLUE, 19)}` }}>
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--hd-text-muted)' }}>
               By signing below, I certify that this vehicle has been inspected in accordance with FMCSA 49 CFR Part 396,
               that all defects found have been noted, and that I am a qualified inspector as defined by 49 CFR 396.19.
               This electronic signature is legally equivalent to a handwritten signature.
@@ -732,7 +733,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
 
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
-              <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+              <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>
                 Inspector Printed Name *
               </label>
               <input type="text" value={inspectorName} onChange={e => setInspectorName(e.target.value)}
@@ -741,7 +742,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
                 style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }} />
             </div>
             <div>
-              <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+              <label className="block text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>
                 Certification Number
               </label>
               <input type="text" value={inspectorCert} onChange={e => setInspectorCert(e.target.value)}
@@ -751,7 +752,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
             </div>
           </div>
 
-          <label className="block text-xs uppercase tracking-widest mb-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+          <label className="block text-xs uppercase tracking-widest mb-2" style={{ color: 'var(--hd-text-faint)' }}>
             Electronic Signature *
           </label>
           <canvas id="sig-canvas" className="w-full rounded-lg touch-none"
@@ -766,11 +767,11 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
 
           <div className="flex items-center justify-between mt-2">
             {hasSignature && signedAt ? (
-              <p className="text-xs font-semibold" style={{ color: '#22C55E' }}>
+              <p className="text-xs font-semibold" style={{ color: 'var(--hd-positive)' }}>
                 ✓ Signature captured — {signedAt}
               </p>
             ) : (
-              <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.25)' }}>Sign above with mouse or touch</p>
+              <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>Sign above with mouse or touch</p>
             )}
             <button type="button"
               onClick={() => {
@@ -779,7 +780,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
                 c.getContext('2d')!.clearRect(0, 0, c.width, c.height)
                 setHasSignature(false); setSignedAt(null)
               }}
-              className="text-xs px-2 py-1 rounded" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)', border: '1px solid var(--hd-border)' }}>
+              className="text-xs px-2 py-1 rounded" style={{ color: 'var(--hd-text-faint)', border: '1px solid var(--hd-border)' }}>
               Clear
             </button>
           </div>
@@ -787,12 +788,12 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
 
         {/* ── Submit ── */}
         <div className="px-6 pb-6 no-print">
-          <p className="text-xs mb-2 text-center" style={{ color: unansweredCount > 0 ? '#F59E0B' : '#22C55E' }}>
+          <p className="text-xs mb-2 text-center" style={{ color: textTone(unansweredCount > 0 ? 'var(--hd-warn)' : 'var(--hd-positive)') }}>
             {answeredCount} of {allItems.length} items marked
             {unansweredCount > 0 ? ` · ${unansweredCount} still blank` : ' · complete'}
           </p>
           <button type="submit" disabled={loading || !inspDate || !inspectorName.trim() || !hasSignature || unansweredCount > 0}
-            className="w-full py-4 rounded-xl font-bold text-white text-sm tracking-wide transition-opacity"
+            className="w-full py-4 rounded-xl font-bold text-on-accent text-sm tracking-wide transition-opacity"
             style={{ background: HD_ORANGE, opacity: loading || !inspDate || !inspectorName.trim() || !hasSignature || unansweredCount > 0 ? 0.45 : 1 }}>
             {loading ? (
               <span className="flex items-center justify-center gap-2">
@@ -811,7 +812,7 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
               </span>
             )}
           </button>
-          <p className="text-xs text-center mt-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.2)' }}>
+          <p className="text-xs text-center mt-2" style={{ color: 'var(--hd-text-faint)' }}>
             Once signed, this record is permanently locked and cannot be edited. A PDF can be generated after submission.
           </p>
         </div>
@@ -821,22 +822,22 @@ export default function DOTInspectionForm({ units, fleetAccounts, invoices, prof
       {/* ── Sticky bottom totals bar ── */}
       <div className="no-print fixed bottom-0 inset-x-0 lg:left-56 z-40 flex items-center gap-4 px-5 py-3"
         style={{ background: 'var(--hd-bg)', borderTop: '2px solid var(--hd-border)' }}>
-        <span className="text-xs uppercase tracking-widest" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>Items:</span>
-        <span className="text-sm font-bold" style={{ color: '#22C55E' }}>✓ {passCount} Pass</span>
-        {failCount > 0 && <span className="text-sm font-bold" style={{ color: '#EF4444' }}>✗ {failCount} Fail</span>}
-        <span className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{naCount} N/A</span>
+        <span className="text-xs uppercase tracking-widest" style={{ color: 'var(--hd-text-faint)' }}>Items:</span>
+        <span className="text-sm font-bold" style={{ color: 'var(--hd-positive)' }}>✓ {passCount} Pass</span>
+        {failCount > 0 && <span className="text-sm font-bold" style={{ color: 'var(--hd-negative)' }}>✗ {failCount} Fail</span>}
+        <span className="text-sm" style={{ color: 'var(--hd-text-faint)' }}>{naCount} N/A</span>
         <div className="flex-1" />
-        <span className="text-xs uppercase tracking-widest mr-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>Overall</span>
+        <span className="text-xs uppercase tracking-widest mr-1" style={{ color: 'var(--hd-text-faint)' }}>Overall</span>
         <span className="text-sm font-bold px-3 py-1 rounded-full"
           style={{
             background: overallPass ? '#22C55E20' : '#EF444420',
-            color:      overallPass ? '#22C55E'   : '#EF4444',
+            color: textTone(overallPass ? 'var(--hd-positive)'   : 'var(--hd-negative)'),
             border:     `1px solid ${overallPass ? '#22C55E50' : '#EF444450'}`,
           }}>
           {overallPass ? 'PASS' : `FAIL — ${failCount} violation${failCount !== 1 ? 's' : ''}`}
         </span>
         {inspectionId && (
-          <span className="text-xs font-mono ml-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.2)' }}>{inspectionId}</span>
+          <span className="text-xs font-mono ml-2" style={{ color: 'var(--hd-text-faint)' }}>{inspectionId}</span>
         )}
       </div>
     </>

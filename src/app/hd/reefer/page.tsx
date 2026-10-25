@@ -1,10 +1,10 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDReeferAccess } from '@/lib/hd-access'
+import { tint } from '@/lib/hd/text-tone'
 
 export const metadata = { title: 'Reefer Module — NWI HD Suite' }
 
-const HD_ORANGE = '#E85D24'
 const HD_BLUE   = '#1A6BAF'
 
 export default async function ReeferPage() {
@@ -25,15 +25,15 @@ export default async function ReeferPage() {
   return (
     <main className="flex-1 p-4 sm:p-6">
       <div className="mb-6">
-        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>HD Suite</p>
+        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>HD Suite</p>
         <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">REEFER MODULE</h1>
-        <p className="text-sm mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+        <p className="text-sm mt-1" style={{ color: 'var(--hd-text-faint)' }}>
           Transport refrigeration unit monitoring, alarm tracking, and temperature logging.
         </p>
       </div>
 
-      <div className="rounded-xl p-4 mb-6" style={{ background: '#2d0a0a', border: '1px solid #7f1d1d' }}>
-        <p className="text-xs font-bold" style={{ color: '#EF4444' }}>
+      <div className="rounded-xl p-4 mb-6" style={{ background: 'color-mix(in srgb, var(--hd-negative) 14%, var(--hd-card))', border: '1px solid #7f1d1d' }}>
+        <p className="text-xs font-bold" style={{ color: 'var(--hd-negative)' }}>
           ⚠ ALL REFRIGERANT WORK REQUIRES EPA 608 CERTIFICATION. Never work on refrigerant systems without proper PPE and certification.
         </p>
       </div>
@@ -42,7 +42,7 @@ export default async function ReeferPage() {
       <h2 className="font-condensed font-bold text-white text-xl tracking-wide mb-4">ACTIVE REEFER UNITS</h2>
       {!units || units.length === 0 ? (
         <div className="rounded-xl py-16 text-center" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
-          <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>No active reefer units — add fleet units to track them here</p>
+          <p className="text-sm" style={{ color: 'var(--hd-text-faint)' }}>No active reefer units — add fleet units to track them here</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -51,17 +51,17 @@ export default async function ReeferPage() {
               <div className="flex items-start justify-between mb-3">
                 <div>
                   <p className="font-condensed font-bold text-white tracking-wide">{u.unit_number}</p>
-                  <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>{u.manufacturer} {u.model}</p>
+                  <p className="text-xs" style={{ color: 'var(--hd-text-muted)' }}>{u.manufacturer} {u.model}</p>
                 </div>
-                <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: '#22C55E20', color: '#22C55E' }}>Active</span>
+                <span className="text-xs px-2 py-0.5 rounded-full font-medium" style={{ background: '#22C55E20', color: 'var(--hd-positive)' }}>Active</span>
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div>
-                  <p style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Refrigerant</p>
-                  <p className="font-medium" style={{ color: HD_ORANGE }}>{u.refrigerant_type ?? 'R-404A'}</p>
+                  <p style={{ color: 'var(--hd-text-faint)' }}>Refrigerant</p>
+                  <p className="font-medium" style={{ color: 'var(--hd-accent-text)' }}>{u.refrigerant_type ?? 'R-404A'}</p>
                 </div>
                 <div>
-                  <p style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>Total Hours</p>
+                  <p style={{ color: 'var(--hd-text-faint)' }}>Total Hours</p>
                   <p className="font-medium text-white">{u.total_hours !== null ? `${Number(u.total_hours).toFixed(0)} hrs` : '—'}</p>
                 </div>
               </div>
@@ -70,9 +70,9 @@ export default async function ReeferPage() {
         </div>
       )}
 
-      <div className="mt-6 rounded-xl p-8 text-center" style={{ background: 'var(--hd-card)', border: `1px solid ${HD_BLUE}40` }}>
+      <div className="mt-6 rounded-xl p-8 text-center" style={{ background: 'var(--hd-card)', border: `1px solid ${tint(HD_BLUE, 25)}` }}>
         <p className="font-condensed font-bold text-white text-xl tracking-wide mb-2">REAL-TIME MONITORING COMING IN PHASE 2</p>
-        <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+        <p className="text-sm" style={{ color: 'var(--hd-text-faint)' }}>
           Live setpoint tracking, temperature logging, alarm code streaming, geolocation, and automated alerts
         </p>
       </div>

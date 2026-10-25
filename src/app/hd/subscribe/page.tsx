@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { textTone, tint } from '@/lib/hd/text-tone'
 
 const HD_ORANGE = '#E85D24'
 const HD_BLUE   = '#1A6BAF'
@@ -146,14 +147,14 @@ export default function HDSubscribePage() {
 
         {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: `${HD_ORANGE}18`, border: `1px solid ${HD_ORANGE}40`, borderRadius: 999, padding: '0.375rem 0.875rem', marginBottom: '1rem' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: `${tint(HD_ORANGE, 9)}`, border: `1px solid ${tint(HD_ORANGE, 25)}`, borderRadius: 999, padding: '0.375rem 0.875rem', marginBottom: '1rem' }}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: HD_ORANGE, display: 'inline-block' }} />
-            <span style={{ fontSize: 11, color: HD_ORANGE, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>HD Suite</span>
+            <span style={{ fontSize: 11, color: 'var(--hd-accent-text)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' }}>HD Suite</span>
           </div>
           <h1 style={{ fontSize: 28, fontWeight: 900, margin: '0 0 0.5rem', letterSpacing: '-0.01em' }}>
             Choose Your HD Plan
           </h1>
-          <p style={{ fontSize: 14, color: 'rgba(var(--hd-ink-rgb), 0.45)', margin: 0 }}>
+          <p style={{ fontSize: 14, color: 'var(--hd-text-muted)', margin: 0 }}>
             Select a plan to activate your HD Suite access
           </p>
         </div>
@@ -223,15 +224,15 @@ export default function HDSubscribePage() {
 
                 <p style={{ fontWeight: 800, fontSize: 15, color: 'var(--hd-text)', margin: '0 0 0.25rem' }}>{name}</p>
                 <div style={{ display: 'flex', alignItems: 'baseline', gap: 3, margin: '0 0 1rem' }}>
-                  <span style={{ fontSize: 30, fontWeight: 900, color: isSelected ? HD_ORANGE : '#fff', lineHeight: 1 }}>
+                  <span style={{ fontSize: 30, fontWeight: 900, color: textTone(isSelected ? 'var(--hd-accent-text)' : '#fff'), lineHeight: 1 }}>
                     {priceOf({ key, price }) === null ? '—' : `$${priceOf({ key, price })}`}
                   </span>
-                  <span style={{ fontSize: 12, color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>/month</span>
+                  <span style={{ fontSize: 12, color: 'var(--hd-text-faint)' }}>/month</span>
                 </div>
                 <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
                   {features.map(f => (
-                    <li key={f} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>
-                      <span style={{ color: isSelected ? HD_ORANGE : '#22C55E', fontSize: 13, lineHeight: 1 }}>✓</span>
+                    <li key={f} style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: 'var(--hd-text-muted)' }}>
+                      <span style={{ color: textTone(isSelected ? 'var(--hd-accent-text)' : 'var(--hd-positive)'), fontSize: 13, lineHeight: 1 }}>✓</span>
                       {f}
                     </li>
                   ))}
@@ -243,7 +244,7 @@ export default function HDSubscribePage() {
 
         {/* Promo code */}
         <div style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)', borderRadius: 12, padding: '1.125rem 1.25rem', marginBottom: '1.25rem' }}>
-          <p style={{ fontSize: 12, color: 'rgba(var(--hd-ink-rgb), 0.4)', margin: '0 0 0.625rem', fontWeight: 500 }}>
+          <p style={{ fontSize: 12, color: 'var(--hd-text-faint)', margin: '0 0 0.625rem', fontWeight: 500 }}>
             Promo Code (optional)
           </p>
           <div style={{ display: 'flex', gap: '0.625rem' }}>
@@ -290,12 +291,12 @@ export default function HDSubscribePage() {
             </button>
           </div>
           {promoStatus === 'valid' && (
-            <p style={{ fontSize: 12, color: '#22C55E', margin: '0.5rem 0 0' }}>
+            <p style={{ fontSize: 12, color: 'var(--hd-positive)', margin: '0.5rem 0 0' }}>
               ✓ Promo applied
             </p>
           )}
           {promoStatus === 'invalid' && (
-            <p style={{ fontSize: 12, color: '#EF4444', margin: '0.5rem 0 0' }}>
+            <p style={{ fontSize: 12, color: 'var(--hd-negative)', margin: '0.5rem 0 0' }}>
               {promoError ?? 'Invalid promo code'}
             </p>
           )}
@@ -303,7 +304,7 @@ export default function HDSubscribePage() {
 
         {/* Error */}
         {error && (
-          <div style={{ background: '#450a0a', border: '1px solid #ef444440', borderRadius: 10, padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: 13, color: '#FCA5A5' }}>
+          <div style={{ background: '#450a0a', border: '1px solid #ef444440', borderRadius: 10, padding: '0.75rem 1rem', marginBottom: '1rem', fontSize: 13, color: 'var(--hd-negative)' }}>
             {error}
           </div>
         )}
@@ -333,7 +334,7 @@ export default function HDSubscribePage() {
           {loading ? <><Spinner /> Processing…</> : `Continue to Checkout — ${selectedPlan.name}${selectedPrice === null ? '' : ` $${selectedPrice}/mo`}`}
         </button>
 
-        <p style={{ fontSize: 11, color: 'rgba(var(--hd-ink-rgb), 0.25)', textAlign: 'center', marginTop: '1rem' }}>
+        <p style={{ fontSize: 11, color: 'var(--hd-text-faint)', textAlign: 'center', marginTop: '1rem' }}>
           Secure checkout via Stripe · Cancel anytime
         </p>
       </div>

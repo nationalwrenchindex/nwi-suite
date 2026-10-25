@@ -98,12 +98,12 @@ export default function ContactPreferences({ customerId, canEdit }: Props) {
   }, [customerId])
 
   const card = 'rounded-xl p-4 sm:p-5'
-  const cardStyle = { background: '#111b28', border: '1px solid var(--hd-border)' }
+  const cardStyle = { background: 'color-mix(in srgb, var(--hd-info) 14%, var(--hd-card))', border: '1px solid var(--hd-border)' }
 
   if (loading) {
     return (
       <div className={card} style={cardStyle}>
-        <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>Loading contact preferences…</p>
+        <p className="text-sm" style={{ color: 'var(--hd-text-faint)' }}>Loading contact preferences…</p>
       </div>
     )
   }
@@ -132,7 +132,7 @@ export default function ContactPreferences({ customerId, canEdit }: Props) {
       <div className="flex items-start justify-between gap-3 mb-3">
         <div>
           <h3 className="text-sm font-semibold text-white">Contact Preferences</h3>
-          <p className="text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--hd-text-faint)' }}>
             Stops automated texts and emails. Does not affect calls you place yourself.
           </p>
         </div>
@@ -143,7 +143,7 @@ export default function ContactPreferences({ customerId, canEdit }: Props) {
         <label className={`flex items-center justify-between gap-3 ${canEdit ? 'cursor-pointer' : ''}`}>
           <div>
             <span className="text-sm font-semibold text-white">Do not send SMS</span>
-            <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>No review requests, reminders, or invoice texts.</p>
+            <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>No review requests, reminders, or invoice texts.</p>
           </div>
           <input
             type="checkbox"
@@ -158,7 +158,7 @@ export default function ContactPreferences({ customerId, canEdit }: Props) {
         <label className={`flex items-center justify-between gap-3 ${canEdit ? 'cursor-pointer' : ''}`}>
           <div>
             <span className="text-sm font-semibold text-white">Do not send email</span>
-            <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>No emailed invoices, receipts, or reports.</p>
+            <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>No emailed invoices, receipts, or reports.</p>
           </div>
           <input
             type="checkbox"
@@ -171,7 +171,7 @@ export default function ContactPreferences({ customerId, canEdit }: Props) {
         </label>
 
         <div>
-          <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+          <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
             Note (optional)
           </label>
           <textarea
@@ -190,10 +190,10 @@ export default function ContactPreferences({ customerId, canEdit }: Props) {
       </div>
 
       {error && <p className="text-sm text-red-400 mt-3">{error}</p>}
-      {saved && <p className="text-sm mt-3" style={{ color: '#22C55E' }}>Saved</p>}
+      {saved && <p className="text-sm mt-3" style={{ color: 'var(--hd-positive)' }}>Saved</p>}
 
       {prefs.contact_prefs_updated_at && (
-        <p className="text-xs mt-3" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+        <p className="text-xs mt-3" style={{ color: 'var(--hd-text-faint)' }}>
           Last updated {new Date(prefs.contact_prefs_updated_at).toLocaleDateString()}
         </p>
       )}
@@ -213,7 +213,7 @@ export function SuppressionBadge({ suppression }: { suppression: ContactSuppress
   return (
     <span
       className="inline-flex items-center shrink-0 px-2 py-0.5 rounded-md text-xs font-semibold whitespace-nowrap"
-      style={{ background: 'rgba(232,93,36,0.12)', color: HD_ORANGE, border: `1px solid rgba(232,93,36,0.3)` }}
+      style={{ background: 'rgba(232,93,36,0.12)', color: 'var(--hd-accent-text)', border: `1px solid rgba(232,93,36,0.3)` }}
       title={suppression?.note ?? undefined}
     >
       {label}

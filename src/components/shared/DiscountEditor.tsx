@@ -57,23 +57,25 @@ const LIGHT_INPUT: React.CSSProperties = {
 }
 
 const THEMES: Record<DiscountTheme, {
-  box: string; heading: string; remove: string; toggle: string; off: string
+  box: string; heading: string; remove: string; toggle: string; on: string; off: string
   input: string; inputStyle?: React.CSSProperties; note: string; amount: string; error: string
 }> = {
   ld: {
     box: 'border-white/10', heading: 'text-white/50', remove: 'text-white/40 hover:text-white/70',
-    toggle: 'border-white/15', off: 'text-white/60 hover:text-white',
+    toggle: 'border-white/15', on: 'bg-[#FF6600] text-white', off: 'text-white/60 hover:text-white',
     input: 'nwi-input text-sm', note: 'text-white/40', amount: 'text-emerald-400', error: 'text-danger',
   },
+  // Paper and HD use the AA text tokens (globals.css), so nothing here is a low-alpha
+  // white that disappears on the other theme.
   light: {
-    box: 'border-gray-200', heading: 'text-gray-500', remove: 'text-gray-500 hover:text-gray-800',
-    toggle: 'border-gray-300', off: 'text-gray-500 hover:text-gray-900',
-    input: 'text-sm', inputStyle: LIGHT_INPUT, note: 'text-gray-500', amount: 'text-emerald-700', error: 'text-red-600',
+    box: 'border-gray-200', heading: 'text-[color:var(--paper-muted)]', remove: 'text-[color:var(--paper-muted)] hover:text-gray-900',
+    toggle: 'border-gray-300', on: 'bg-[#FF6600] text-on-accent', off: 'text-[color:var(--paper-muted)] hover:text-gray-900',
+    input: 'text-sm', inputStyle: LIGHT_INPUT, note: 'text-[color:var(--paper-muted)]', amount: 'text-emerald-700', error: 'text-red-700',
   },
   hd: {
-    box: 'border-white/10', heading: 'text-white/50', remove: 'text-white/40 hover:text-white/70',
-    toggle: 'border-white/15', off: 'text-white/60 hover:text-white',
-    input: 'nwi-input text-sm', note: 'text-white/50', amount: 'text-emerald-400', error: 'text-red-400',
+    box: 'border-white/10', heading: 'text-[color:var(--hd-text-muted)]', remove: 'text-[color:var(--hd-text-faint)] hover:text-white',
+    toggle: 'border-white/15', on: 'bg-[#FF6600] text-on-accent', off: 'text-[color:var(--hd-text-muted)] hover:text-white',
+    input: 'nwi-input text-sm', note: 'text-[color:var(--hd-text-muted)]', amount: 'text-[color:var(--hd-positive)]', error: 'text-[color:var(--hd-negative)]',
   },
 }
 
@@ -130,7 +132,7 @@ export function DiscountEditor({
               disabled={disabled}
               aria-pressed={value.type === kind}
               onClick={() => set({ type: kind })}
-              className={`px-3 text-sm ${value.type === kind ? 'bg-[#FF6600] text-white' : t.off}`}
+              className={`px-3 text-sm ${value.type === kind ? t.on : t.off}`}
             >
               {kind === 'flat' ? '$' : '%'}
             </button>
@@ -181,7 +183,7 @@ export function DiscountEditor({
           . Tax is on the discounted amount.
         </p>
       ) : null}
-      {notice && !error && <p className={`${theme === 'light' ? 'text-amber-700' : 'text-amber-400'} text-xs`} data-testid="discount-notice">{notice}</p>}
+      {notice && !error && <p className={`${theme === 'light' ? 'text-amber-800' : theme === 'hd' ? 'text-[color:var(--hd-warn)]' : 'text-amber-400'} text-xs`} data-testid="discount-notice">{notice}</p>}
     </div>
   )
 }

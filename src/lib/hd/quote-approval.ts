@@ -129,6 +129,8 @@ export const HD_QUOTE_PUBLIC_SELECT = [
   'payment_terms', 'valid_until', 'created_at',
   'approved_at', 'declined_at', 'approval_method',
   'customer_response_note', 'customer_po_number',
+  // Migration 168: the discount and the recorded terms, both printed for the customer.
+  'discount', 'terms_snapshot',
 ].join(', ')
 
 /**

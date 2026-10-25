@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDStarterAccess } from '@/lib/hd-access'
 import HDSchedulerTabsClient from '@/components/hd/HDSchedulerTabsClient'
+import { tint } from '@/lib/hd/text-tone'
 
 export const metadata = { title: 'Scheduler — NWI HD Suite' }
 
@@ -50,17 +51,17 @@ export default async function HDSchedulerPage() {
 
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>HD Suite</p>
+          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>HD Suite</p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">SCHEDULER</h1>
           {techName && (
-            <p className="text-sm mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{techName}</p>
+            <p className="text-sm mt-0.5" style={{ color: 'var(--hd-text-faint)' }}>{techName}</p>
           )}
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
           {activeCount > 0 && (
             <span
               className="text-sm font-bold px-3 py-1.5 rounded-full"
-              style={{ background: `${HD_ORANGE}25`, color: HD_ORANGE }}
+              style={{ background: `${tint(HD_ORANGE, 15)}`, color: 'var(--hd-accent-text)' }}
             >
               {activeCount} active
             </span>
@@ -69,7 +70,7 @@ export default async function HDSchedulerPage() {
               booking modal via ?new=1 even when already on the scheduler page. */}
           <a
             href="/hd/scheduler?new=1"
-            className="px-4 py-2.5 rounded-lg text-sm font-semibold text-white"
+            className="px-4 py-2.5 rounded-lg text-sm font-semibold text-on-accent"
             style={{ background: HD_ORANGE }}
           >
             + New Job

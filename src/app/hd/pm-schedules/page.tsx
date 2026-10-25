@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { ensureEquipmentCategories } from '@/lib/hd/equipment-categories'
 import { unitCategoryChip, TRUCK_BLUE as UNIT_TRUCK_BLUE } from '@/components/hd/UnitCategoryChip'
+import { textTone, tint } from '@/lib/hd/text-tone'
 
 export const metadata = { title: 'PM Schedules — NWI HD Suite' }
 
@@ -31,14 +32,14 @@ export default async function PMSchedulesPage() {
     <main className="flex-1 p-4 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>HD Suite</p>
+          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>HD Suite</p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">PM SCHEDULES</h1>
-          <p className="text-sm mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+          <p className="text-sm mt-1" style={{ color: 'var(--hd-text-faint)' }}>
             Thermo King: every 3000 hrs (1500 hr visual) · Carrier: every 1500 hrs (750 hr visual)
           </p>
         </div>
         <Link href="/hd/pm-checklist"
-          className="px-4 py-2.5 rounded-lg text-sm font-semibold text-white"
+          className="px-4 py-2.5 rounded-lg text-sm font-semibold text-on-accent"
           style={{ background: HD_ORANGE }}
         >
           Start PM Checklist
@@ -50,7 +51,7 @@ export default async function PMSchedulesPage() {
         {[
           {
             brand: 'Thermo King',
-            color: HD_ORANGE,
+            color: 'var(--hd-accent-text)',
             intervals: [
               { type: 'Visual Inspection',            hours: '1,500 hrs' },
               { type: 'Full Service — TK Filters',    hours: '3,000 hrs' },
@@ -70,7 +71,7 @@ export default async function PMSchedulesPage() {
             ],
           },
         ].map(({ brand, color, intervals }) => (
-          <div key={brand} className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: `1px solid ${color}40` }}>
+          <div key={brand} className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: `1px solid ${tint(color, 25)}` }}>
             <p className="font-condensed font-bold text-white text-lg tracking-wide mb-3" style={{ color }}>{brand}</p>
             {intervals.map(({ type, hours }) => (
               <Link
@@ -86,7 +87,7 @@ export default async function PMSchedulesPage() {
           </div>
         ))}
       </div>
-      <p className="text-xs mb-6" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>Tap any interval to start a new invoice pre-filled for that PM service.</p>
+      <p className="text-xs mb-6" style={{ color: 'var(--hd-text-faint)' }}>Tap any interval to start a new invoice pre-filled for that PM service.</p>
 
       {/* Truck & trailer PM intervals (chassis, mileage/time based) */}
       <h2 className="font-condensed font-bold text-white text-xl tracking-wide mb-4">TRUCK &amp; TRAILER PM INTERVALS</h2>
@@ -116,7 +117,7 @@ export default async function PMSchedulesPage() {
             ],
           },
         ].map(({ brand, mfr, color, intervals }) => (
-          <div key={brand} className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: `1px solid ${color}40` }}>
+          <div key={brand} className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: `1px solid ${tint(color, 25)}` }}>
             <p className="font-condensed font-bold text-white text-lg tracking-wide mb-3" style={{ color }}>{brand}</p>
             {intervals.map(({ type, when, detail }) => (
               <Link
@@ -131,7 +132,7 @@ export default async function PMSchedulesPage() {
                   <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.7)' }}>{type}</span>
                   <span className="font-medium whitespace-nowrap" style={{ color }}>{when} ›</span>
                 </div>
-                <p className="text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}>{detail}</p>
+                <p className="text-xs mt-0.5" style={{ color: 'var(--hd-text-faint)' }}>{detail}</p>
               </Link>
             ))}
           </div>
@@ -143,7 +144,7 @@ export default async function PMSchedulesPage() {
       <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
         {!units || units.length === 0 ? (
           <div className="py-16 text-center" style={{ background: 'var(--hd-card)' }}>
-            <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>No active units — add fleet units to track PM schedules</p>
+            <p className="text-sm" style={{ color: 'var(--hd-text-faint)' }}>No active units — add fleet units to track PM schedules</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -151,7 +152,7 @@ export default async function PMSchedulesPage() {
             <thead style={{ background: 'var(--hd-inner)' }}>
               <tr>
                 {['Unit', 'Type', 'Manufacturer / Model', 'Total Hours', 'Last PM', 'Next PM Due', 'Hours Until PM', 'Status'].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs uppercase tracking-wider" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{h}</th>
+                  <th key={h} className="px-4 py-3 text-left text-xs uppercase tracking-wider" style={{ color: 'var(--hd-text-faint)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -177,27 +178,27 @@ export default async function PMSchedulesPage() {
                     <td className="px-4 py-3 text-sm text-white font-medium">{u.unit_number}</td>
                     <td className="px-4 py-3">
                       <span className="text-xs font-medium px-2 py-0.5 rounded-full whitespace-nowrap"
-                        style={{ background: `${chip.color}20`, color: chip.color }}>
+                        style={{ background: `${tint(chip.color, 13)}`, color: textTone(chip.color) }}>
                         {chip.label}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.7)' }}>{u.manufacturer} {u.model}</td>
-                    <td className="px-4 py-3 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>
+                    <td className="px-4 py-3 text-sm" style={{ color: 'var(--hd-text-muted)' }}>
                       {u.total_hours !== null ? `${Number(u.total_hours).toFixed(0)} hrs` : '—'}
                     </td>
-                    <td className="px-4 py-3 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+                    <td className="px-4 py-3 text-sm" style={{ color: 'var(--hd-text-muted)' }}>
                       {u.last_pm_date ? new Date(u.last_pm_date + 'T12:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—'}
                     </td>
-                    <td className="px-4 py-3 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>
+                    <td className="px-4 py-3 text-sm" style={{ color: 'var(--hd-text-muted)' }}>
                       {u.next_pm_due_hours !== null ? `${Number(u.next_pm_due_hours).toFixed(0)} hrs` : '—'}
                     </td>
-                    <td className="px-4 py-3 text-sm font-medium" style={{ color: statusClr }}>
+                    <td className="px-4 py-3 text-sm font-medium" style={{ color: textTone(statusClr) }}>
                       {hoursUntil === null ? '—' : hoursUntil <= 0 ? 'OVERDUE' : `${hoursUntil.toFixed(0)} hrs`}
                     </td>
                     <td className="px-4 py-3">
                       <Link href="/hd/pm-checklist"
                         className="text-xs px-2.5 py-1 rounded-lg font-medium transition-opacity hover:opacity-80"
-                        style={{ background: `${statusClr}20`, color: statusClr }}>
+                        style={{ background: `${tint(statusClr, 13)}`, color: textTone(statusClr) }}>
                         {pmStatus === 'overdue' ? 'Start PM Now' : pmStatus === 'due_soon' ? 'PM Due Soon' : 'Schedule PM'}
                       </Link>
                     </td>

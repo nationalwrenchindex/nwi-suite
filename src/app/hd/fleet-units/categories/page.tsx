@@ -34,11 +34,11 @@ export default async function EquipmentCategoriesPage() {
   return (
     <main className="flex-1 p-4 sm:p-6 max-w-3xl">
       <div className="mb-6">
-        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+        <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>
           <Link href="/hd/fleet-units" className="underline">Fleet Units</Link>
         </p>
         <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">EQUIPMENT CATEGORIES</h1>
-        <p className="text-sm mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+        <p className="text-sm mt-1" style={{ color: 'var(--hd-text-faint)' }}>
           The kinds of equipment your shop works on. Rename them to match your own words, put them in the
           order you want, or deactivate the ones you never use. A deactivated category is hidden from the
           pickers; units already in it keep it.

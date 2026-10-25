@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDStarterAccess } from '@/lib/hd-access'
+import { textTone, tint } from '@/lib/hd/text-tone'
 
 export const metadata = { title: 'DOT Inspections — NWI HD Suite' }
 
@@ -64,11 +65,11 @@ export default async function DOTInspectionsPage({
     <main className="flex-1 p-4 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
         <div>
-          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>
             HD Suite — Compliance
           </p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">DOT INSPECTIONS</h1>
-          <p className="text-sm mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+          <p className="text-sm mt-1" style={{ color: 'var(--hd-text-faint)' }}>
             Annual CVSA inspection records — digitally signed and locked.
           </p>
         </div>
@@ -77,13 +78,13 @@ export default async function DOTInspectionsPage({
         <Link
           href="/hd/inspections/follow-ups"
           className="px-4 py-2.5 rounded-lg border text-sm font-semibold flex-shrink-0 transition-colors"
-          style={{ borderColor: 'rgba(var(--hd-ink-rgb), 0.15)', color: 'rgba(var(--hd-ink-rgb), 0.6)' }}
+          style={{ borderColor: 'rgba(var(--hd-ink-rgb), 0.15)', color: 'var(--hd-text-muted)' }}
         >
           Follow-Ups
         </Link>
         <Link
           href="/hd/dot-inspections/new"
-          className="px-4 py-2.5 rounded-lg text-sm font-semibold text-white flex-shrink-0"
+          className="px-4 py-2.5 rounded-lg text-sm font-semibold text-on-accent flex-shrink-0"
           style={{ background: HD_ORANGE }}
         >
           + New Inspection
@@ -125,7 +126,7 @@ export default async function DOTInspectionsPage({
         <div className="col-span-1 md:col-span-4 flex gap-2">
           <button
             type="submit"
-            className="px-4 py-2 rounded-lg text-sm font-semibold text-white"
+            className="px-4 py-2 rounded-lg text-sm font-semibold text-on-fill"
             style={{ background: HD_BLUE }}
           >
             Filter
@@ -134,7 +135,7 @@ export default async function DOTInspectionsPage({
             <Link
               href="/hd/dot-inspections"
               className="px-4 py-2 rounded-lg text-sm"
-              style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)', border: '1px solid var(--hd-border)' }}
+              style={{ color: 'var(--hd-text-faint)', border: '1px solid var(--hd-border)' }}
             >
               Clear
             </Link>
@@ -149,8 +150,8 @@ export default async function DOTInspectionsPage({
             href={`/hd/dot-inspections?${new URLSearchParams({ ...(q && { q }), ...(result && { result }), ...(unitId && { unit: unitId }) }).toString()}`}
             className="px-3 py-1 rounded-full text-xs font-medium transition-colors"
             style={!acctId
-              ? { background: `${HD_ORANGE}25`, color: HD_ORANGE, border: `1px solid ${HD_ORANGE}50` }
-              : { color: 'rgba(var(--hd-ink-rgb), 0.4)', border: '1px solid var(--hd-border)' }
+              ? { background: `${tint(HD_ORANGE, 15)}`, color: 'var(--hd-accent-text)', border: `1px solid ${tint(HD_ORANGE, 31)}` }
+              : { color: 'var(--hd-text-faint)', border: '1px solid var(--hd-border)' }
             }
           >
             All Accounts
@@ -161,8 +162,8 @@ export default async function DOTInspectionsPage({
               href={`/hd/dot-inspections?${new URLSearchParams({ ...(q && { q }), ...(result && { result }), ...(unitId && { unit: unitId }), acct: a.id }).toString()}`}
               className="px-3 py-1 rounded-full text-xs font-medium transition-colors"
               style={acctId === a.id
-                ? { background: `${HD_ORANGE}25`, color: HD_ORANGE, border: `1px solid ${HD_ORANGE}50` }
-                : { color: 'rgba(var(--hd-ink-rgb), 0.4)', border: '1px solid var(--hd-border)' }
+                ? { background: `${tint(HD_ORANGE, 15)}`, color: 'var(--hd-accent-text)', border: `1px solid ${tint(HD_ORANGE, 31)}` }
+                : { color: 'var(--hd-text-faint)', border: '1px solid var(--hd-border)' }
               }
             >
               {a.fleet_name}
@@ -174,11 +175,11 @@ export default async function DOTInspectionsPage({
       {/* List */}
       {rows.length === 0 ? (
         <div className="py-20 text-center rounded-xl" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
-          <p className="text-sm mb-2" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+          <p className="text-sm mb-2" style={{ color: 'var(--hd-text-faint)' }}>
             {q || result || unitId || acctId ? 'No inspections match your filters' : 'No inspections recorded yet'}
           </p>
           {!q && !result && !unitId && !acctId && (
-            <Link href="/hd/dot-inspections/new" className="text-xs" style={{ color: HD_ORANGE }}>
+            <Link href="/hd/dot-inspections/new" className="text-xs" style={{ color: 'var(--hd-accent-text)' }}>
               + Complete your first DOT inspection
             </Link>
           )}
@@ -188,7 +189,7 @@ export default async function DOTInspectionsPage({
           {/* Table header — desktop only */}
           <div
             className="hidden sm:grid text-xs uppercase tracking-widest px-5 py-3"
-            style={{ gridTemplateColumns: '1fr 1fr 80px 1fr 120px', background: 'var(--hd-sunken)', color: 'rgba(var(--hd-ink-rgb), 0.35)' }}
+            style={{ gridTemplateColumns: '1fr 1fr 80px 1fr 120px', background: 'var(--hd-sunken)', color: 'var(--hd-text-faint)' }}
           >
             <span>Unit</span>
             <span>Date</span>
@@ -217,19 +218,19 @@ export default async function DOTInspectionsPage({
                         {unit?.unit_number ?? '—'}
                       </p>
                       {unit?.manufacturer && (
-                        <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                        <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>
                           {unit.manufacturer} {unit.model}
                         </p>
                       )}
                       {acct?.fleet_name && (
-                        <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>{acct.fleet_name}</p>
+                        <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>{acct.fleet_name}</p>
                       )}
                     </div>
                     <span
                       className="text-xs font-bold px-2.5 py-1 rounded-full flex-shrink-0"
                       style={{
                         background: isPassed ? '#22C55E20' : '#EF444420',
-                        color:      isPassed ? '#22C55E'   : '#EF4444',
+                        color: textTone(isPassed ? 'var(--hd-positive)'   : 'var(--hd-negative)'),
                         border:     `1px solid ${isPassed ? '#22C55E50' : '#EF444450'}`,
                       }}
                     >
@@ -243,13 +244,13 @@ export default async function DOTInspectionsPage({
                           year: 'numeric', month: 'short', day: 'numeric',
                         })}
                       </p>
-                      <p className="text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                      <p className="text-xs mt-0.5" style={{ color: 'var(--hd-text-faint)' }}>
                         {ins.inspector_name ?? '—'}
                       </p>
                     </div>
                     <Link
                       href={`/hd/dot-inspections/${ins.id}`}
-                      className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white flex-shrink-0"
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold text-on-fill flex-shrink-0"
                       style={{ background: HD_BLUE }}
                     >
                       View
@@ -271,12 +272,12 @@ export default async function DOTInspectionsPage({
                       {unit?.unit_number ?? '—'}
                     </p>
                     {unit?.manufacturer && (
-                      <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+                      <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>
                         {unit.manufacturer} {unit.model}
                       </p>
                     )}
                     {acct?.fleet_name && (
-                      <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>{acct.fleet_name}</p>
+                      <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>{acct.fleet_name}</p>
                     )}
                   </div>
 
@@ -287,7 +288,7 @@ export default async function DOTInspectionsPage({
                         year: 'numeric', month: 'short', day: 'numeric',
                       })}
                     </p>
-                    <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+                    <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>
                       {ins.inspection_id ?? `DOT-${ins.id.slice(0, 8).toUpperCase()}`}
                     </p>
                   </div>
@@ -298,7 +299,7 @@ export default async function DOTInspectionsPage({
                       className="text-xs font-bold px-2.5 py-1 rounded-full"
                       style={{
                         background: isPassed ? '#22C55E20' : '#EF444420',
-                        color:      isPassed ? '#22C55E'   : '#EF4444',
+                        color: textTone(isPassed ? 'var(--hd-positive)'   : 'var(--hd-negative)'),
                         border:     `1px solid ${isPassed ? '#22C55E50' : '#EF444450'}`,
                       }}
                     >
@@ -313,7 +314,7 @@ export default async function DOTInspectionsPage({
                   <div className="flex gap-2 justify-end">
                     <Link
                       href={`/hd/dot-inspections/${ins.id}`}
-                      className="px-3 py-1.5 rounded-lg text-xs font-semibold text-white"
+                      className="px-3 py-1.5 rounded-lg text-xs font-semibold text-on-fill"
                       style={{ background: HD_BLUE }}
                     >
                       View

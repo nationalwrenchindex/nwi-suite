@@ -9,7 +9,9 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess } from '@/lib/hd-access'
-import { termsDisplay, termsWithDueDate } from '@/lib/hd/payment-terms'
+import { termsWithDueDate } from '@/lib/hd/payment-terms'
+import { discountPrintLabel, parseDiscount } from '@/lib/document-discount'
+import { hdTermsBlockRows, parseTermsSnapshot } from '@/lib/document-terms'
 import { AERIAL_TYPE_LABEL } from '@/lib/hd/aerial/forms'
 import type { AerialInspectionType } from '@/types/aerial'
 import { money } from '@/lib/format'
@@ -250,8 +252,30 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   // paid or voided invoice does not ask for money.
   const payInstructions = (profile as { default_payment_instructions?: string | null } | null)
     ?.default_payment_instructions?.trim() || null
-  const payBlock = payInstructions && inv.status !== 'paid' && inv.status !== 'void'
+  // Migration 168. An invoice that RECORDED its terms (at send, or from its quote)
+  // prints them in the terms block below - warranty, customer-supplied parts, how to
+  // pay - and not today's profile text. An older invoice keeps the block it printed.
+  const snap = parseTermsSnapshot((inv as { terms_snapshot?: unknown }).terms_snapshot)
+  const asksForMoney = inv.status !== 'paid' && inv.status !== 'void'
+  const payBlock = !snap && payInstructions && asksForMoney
     ? `<div class="pay-box"><h3>How to Pay</h3><p>${esc(payInstructions)}</p></div>`
+    : ''
+  const termsRows = hdTermsBlockRows(snap).filter(r => r.key !== 'how_to_pay' || asksForMoney)
+  const termsBlock = termsRows.length > 0
+    ? `<div class="terms-box" data-testid="terms-block"><h3>Terms</h3>${termsRows.map(r =>
+        `<div class="terms-row"><p class="terms-label">${esc(r.label)}</p>${r.text ? `<p>${esc(r.text)}</p>` : ''}${r.link ? `<p><a href="${esc(r.link)}">${esc(r.link)}</a></p>` : ''}</div>`).join('')}</div>`
+    : ''
+
+  // The invoice's own payment terms, else the ones it recorded, else no line at all.
+  // termsWithDueDate on a NULL printed "Due on receipt" - a default nobody chose.
+  const termsCode = (typeof inv.payment_terms === 'string' && inv.payment_terms.trim()) || snap?.payment_terms || null
+
+  // The discount: between the subtotal and the tax, only when there is one. The
+  // amount is ONE text node: "-$25.00" inside a single span, no entity, no split.
+  const discount = parseDiscount((inv as { discount?: unknown }).discount)
+  const discountHtml = discount
+    ? `<div class="totals-row divider"><span>Subtotal</span><span>${fmt(discount.subtotal_before)}</span></div>` +
+      `<div class="totals-row" data-testid="discount-row"><span>${esc(discountPrintLabel(discount))}</span><span>${'-' + fmt(discount.amount)}</span></div>`
     : ''
 
   const html = `<!DOCTYPE html>
@@ -262,7 +286,10 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 <title>Invoice ${inv.invoice_number}</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #1a1a1a; background: #f5f5f5; }
+  /* WCAG AA on white, measured. #888 was 3.54:1 and #aaa 2.32:1; #FF6600 as text is
+     2.94:1, below AA even at the invoice number's size. Orange stays for the rules. */
+  :root { --paper-text: #1a1a1a; --paper-muted: #4b5563; --paper-accent: #FF6600; }
+  body { font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: var(--paper-text); background: #f5f5f5; }
   .page { background: #fff; max-width: 800px; margin: 24px auto; padding: 48px; box-shadow: 0 2px 12px rgba(0,0,0,0.1); }
   .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 36px; border-bottom: 3px solid #FF6600; padding-bottom: 20px; }
   .brand { display: flex; align-items: flex-start; gap: 12px; }
@@ -272,13 +299,13 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   .brand-name { font-size: 20px; font-weight: 800; letter-spacing: 0.5px; color: #1a1a1a; }
   .brand-sub { font-size: 11px; color: #666; margin-top: 2px; line-height: 1.45; }
   .inv-meta { text-align: right; }
-  .inv-number { font-size: 22px; font-weight: 700; color: #FF6600; }
+  .inv-number { font-size: 22px; font-weight: 700; color: var(--paper-accent); }
   .inv-meta p { font-size: 12px; color: #555; margin-top: 4px; }
   .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 28px; }
-  .info-box h3 { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #888; margin-bottom: 8px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
+  .info-box h3 { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--paper-muted); margin-bottom: 8px; border-bottom: 1px solid #e5e7eb; padding-bottom: 4px; }
   .info-box p { font-size: 13px; color: #1a1a1a; line-height: 1.6; }
-  .info-box p.label { font-size: 11px; color: #888; }
-  .section-label { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #888; margin-bottom: 6px; }
+  .info-box p.label { font-size: 11px; color: var(--paper-muted); }
+  .section-label { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--paper-muted); margin-bottom: 6px; }
   .complaint-box { background: #f9f9f9; border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px; margin-bottom: 20px; }
   .complaint-box p { font-size: 13px; color: #333; line-height: 1.5; }
   table { width: 100%; border-collapse: collapse; margin-bottom: 24px; }
@@ -294,24 +321,30 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   .totals-row { display: flex; justify-content: space-between; padding: 5px 0; font-size: 13px; }
   .totals-row.divider { border-top: 1px solid #e5e7eb; margin-top: 4px; padding-top: 8px; }
   /* TOTAL DUE is the largest thing on the page — bigger than the invoice number. */
-  .totals-row.total { font-size: 26px; font-weight: 800; color: #FF6600; border-top: 2px solid #FF6600; margin-top: 4px; padding-top: 10px; align-items: baseline; }
+  .totals-row.total { font-size: 26px; font-weight: 800; color: var(--paper-accent); border-top: 2px solid #FF6600; margin-top: 4px; padding-top: 10px; align-items: baseline; }
   .totals-row.total span:first-child { font-size: 14px; font-weight: 700; color: #1a1a1a; text-transform: uppercase; letter-spacing: 0.5px; }
   .pay-box { margin-top: 24px; padding: 16px; border: 2px solid #FF6600; border-radius: 8px; }
-  .pay-box h3 { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #888; margin-bottom: 6px; }
+  .pay-box h3 { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--paper-muted); margin-bottom: 6px; }
   .pay-box p { font-size: 13px; color: #333; line-height: 1.55; white-space: pre-wrap; }
+  .terms-box { margin-top: 28px; padding-top: 14px; border-top: 1px solid #e5e7eb; }
+  .terms-box h3 { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--paper-muted); margin-bottom: 8px; }
+  .terms-row { margin-bottom: 10px; }
+  .terms-row p { font-size: 12px; color: var(--paper-text); line-height: 1.5; white-space: pre-wrap; }
+  .terms-row p.terms-label { font-size: 11px; font-weight: 700; color: var(--paper-muted); }
+  .terms-row a { color: #1d4ed8; word-break: break-all; }
   .notes-box { margin-top: 28px; padding: 12px; background: #f9f9f9; border-radius: 6px; border: 1px solid #e5e7eb; }
-  .notes-box h3 { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: #888; margin-bottom: 6px; }
-  .footer { margin-top: 36px; text-align: center; font-size: 11px; color: #aaa; border-top: 1px solid #e5e7eb; padding-top: 16px; }
+  .notes-box h3 { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; color: var(--paper-muted); margin-bottom: 6px; }
+  .footer { margin-top: 36px; text-align: center; font-size: 11px; color: var(--paper-muted); border-top: 1px solid #e5e7eb; padding-top: 16px; }
   .status-badge { display: inline-block; padding: 3px 10px; border-radius: 99px; font-size: 11px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; }
-  .status-unpaid { background: #fee2e2; color: #dc2626; }
-  .status-sent { background: #dbeafe; color: #2563eb; }
+  .status-unpaid { background: #fee2e2; color: #b91c1c; }
+  .status-sent { background: #dbeafe; color: #1d4ed8; }
   .status-overdue { background: #fee2e2; color: #b91c1c; }
-  .status-paid { background: #dcfce7; color: #16a34a; }
-  .status-partial { background: #fef3c7; color: #d97706; }
-  .status-void { background: #f3f4f6; color: #6b7280; }
+  .status-paid { background: #dcfce7; color: #15803d; }
+  .status-partial { background: #fef3c7; color: #92400e; }
+  .status-void { background: #f3f4f6; color: #4b5563; }
   .due-highlight { color: #b91c1c; font-weight: 700; }
   .no-print { text-align: center; margin-bottom: 24px; }
-  .print-btn { background: #FF6600; color: white; border: none; padding: 10px 28px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  .print-btn { background: #FF6600; color: #1a1a1a; border: none; padding: 10px 28px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; }
   /* Single column at phone width, and no horizontal scroll. A customer opening
      this from a text has a 360px viewport; the two-column grid and the five-column
      table both overflowed it. */
@@ -347,7 +380,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     <div class="inv-meta">
       <div class="inv-number">${inv.invoice_number}</div>
       <p>Date: ${fmtDate(inv.created_at, shopTz)}</p>
-      <p${inv.due_date && inv.status === 'overdue' ? ' class="due-highlight"' : ''}>Terms: ${esc(termsWithDueDate(inv.payment_terms, inv.due_date))}</p>
+      ${termsCode ? `<p${inv.due_date && inv.status === 'overdue' ? ' class="due-highlight"' : ''} data-testid="payment-terms">Terms: ${esc(termsWithDueDate(termsCode, inv.due_date))}</p>` : ''}
       <p>Status: <span class="status-badge status-${inv.status}">${inv.status}</span></p>
       ${inv.late_fee_applied && Number(inv.late_fee_amount) > 0 ? `<p class="due-highlight">Late Fee: ${fmt(inv.late_fee_amount)}</p>` : ''}
       ${inv.paid_at ? `<p>Paid: ${fmtDate(inv.paid_at, shopTz)}</p>` : ''}
@@ -399,11 +432,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       <div class="totals-row"><span>Parts Subtotal</span><span>${fmt(inv.subtotal_parts)}</span></div>
       ${feeRows(inv as Record<string, unknown>).map(r => `<div class="totals-row"><span>${esc(r.label)}</span><span>${fmt(r.amount)}</span></div>`).join('')}
       ${extrasDisplayRows(extrasFromDocument(inv as Record<string, unknown>)).map(r =>
-        `<div class="totals-row"><span>${esc(r.label)}${r.detail ? ` <small style="color:#888">(${esc(r.detail)})</small>` : ''}</span><span>${fmt(r.amount)}</span></div>`,
+        `<div class="totals-row"><span>${esc(r.label)}${r.detail ? ` <small style="color:var(--paper-muted)">(${esc(r.detail)})</small>` : ''}</span><span>${fmt(r.amount)}</span></div>`,
       ).join('')}
+      ${discountHtml}
       ${pdfTaxRows.length > 0
-        ? pdfTaxRows.map((r, i) => `<div class="totals-row${i === 0 ? ' divider' : ''}"><span>${r.text}</span><span>${r.taxed ? fmt(r.amount) : '—'}</span></div>`).join('')
-        : Number(inv.tax_amount) > 0 ? `<div class="totals-row divider"><span>Tax (${inv.tax_rate}%)</span><span>${fmt(inv.tax_amount)}</span></div>` : ''}
+        ? pdfTaxRows.map((r, i) => `<div class="totals-row${i === 0 ? ' divider' : ''}" data-testid="tax-row"><span>${esc(r.text)}</span><span>${r.taxed ? fmt(r.amount) : '—'}</span></div>`).join('')
+        : Number(inv.tax_amount) > 0 ? `<div class="totals-row divider" data-testid="tax-row"><span>Tax (${esc(inv.tax_rate)}%)</span><span>${fmt(inv.tax_amount)}</span></div>` : ''}
       <div class="totals-row total"><span>${inv.status === 'paid' ? 'Total Paid' : inv.status === 'void' ? 'Total' : 'Total Due'}</span><span>${fmt(inv.total)}</span></div>
     </div>
   </div>
@@ -417,6 +451,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     <h3>Notes</h3>
     <p style="color:#444;line-height:1.5;font-size:13px">${esc(inv.notes)}</p>
   </div>` : ''}
+
+  ${termsBlock}
 
   ${footerHtml}
 </div>

@@ -77,15 +77,15 @@ export default async function WorkOrdersPage({
     <main className="flex-1 p-4 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>HD Suite</p>
+          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>HD Suite</p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">WORK ORDERS</h1>
-          <p className="text-sm mt-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+          <p className="text-sm mt-1" style={{ color: 'var(--hd-text-faint)' }}>
             {total.toLocaleString()} work order{total !== 1 ? 's' : ''}
           </p>
         </div>
         <Link
           href="?new=1"
-          className="px-4 py-2.5 rounded-lg text-sm font-semibold text-white"
+          className="px-4 py-2.5 rounded-lg text-sm font-semibold text-on-accent"
           style={{ background: HD_ORANGE }}
         >
           + New Work Order

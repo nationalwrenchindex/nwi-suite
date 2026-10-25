@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { tint } from '@/lib/hd/text-tone'
 
 const HD_ORANGE = '#E85D24'
 
@@ -38,7 +39,7 @@ export default function HDTrialBanner({
   return (
     <div
       className="rounded-xl px-5 py-4 flex items-start gap-3"
-      style={{ background: `${HD_ORANGE}12`, border: `1px solid ${HD_ORANGE}40` }}
+      style={{ background: `${tint(HD_ORANGE, 7)}`, border: `1px solid ${tint(HD_ORANGE, 25)}` }}
       suppressHydrationWarning
     >
       <span className="text-xl leading-none mt-0.5" aria-hidden>🎉</span>
@@ -46,7 +47,7 @@ export default function HDTrialBanner({
         <p className="font-semibold text-sm text-white">
           Free Trial Active — {daysLeft} day{daysLeft !== 1 ? 's' : ''} remaining
         </p>
-        <p className="text-xs mt-0.5" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+        <p className="text-xs mt-0.5" style={{ color: 'var(--hd-text-muted)' }}>
           Your first payment of ${monthlyPrice}/month will be on {dateFmt}.
           {' '}Cancel anytime before then — you will never be charged.
         </p>
@@ -54,7 +55,7 @@ export default function HDTrialBanner({
           onClick={handleCancel}
           disabled={loading}
           className="text-xs mt-1.5 underline disabled:opacity-50"
-          style={{ color: 'rgba(var(--hd-ink-rgb), 0.35)' }}
+          style={{ color: 'var(--hd-text-faint)' }}
         >
           {loading ? 'Opening portal…' : `Cancel anytime before ${dateFmt}`}
         </button>

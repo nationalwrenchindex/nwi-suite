@@ -16,12 +16,12 @@ import { money } from '@/lib/format'
 const ORANGE = '#FF6600'
 
 const STATUS_STYLE: Record<string, { bg: string; color: string }> = {
-  unpaid:  { bg: '#FEE2E2', color: '#dc2626' },
-  sent:    { bg: '#DBEAFE', color: '#2563eb' },
+  unpaid:  { bg: '#FEE2E2', color: '#b91c1c' },
+  sent:    { bg: '#DBEAFE', color: '#1d4ed8' },
   overdue: { bg: '#FEE2E2', color: '#b91c1c' },
-  paid:    { bg: '#DCFCE7', color: '#16a34a' },
-  partial: { bg: '#FEF3C7', color: '#d97706' },
-  void:    { bg: '#F3F4F6', color: '#6B7280' },
+  paid:    { bg: '#DCFCE7', color: '#15803d' },
+  partial: { bg: '#FEF3C7', color: '#92400e' },
+  void:    { bg: '#F3F4F6', color: 'var(--paper-muted)' },
 }
 
 /** Statuses that still owe money — the "outstanding" figure in the header. */
@@ -104,12 +104,12 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
             <h1 className="font-condensed text-3xl font-bold" style={{ color: '#1A1A1A', letterSpacing: '0.5px' }}>
               INVOICES
             </h1>
-            <p style={{ color: '#6B7280', fontSize: 14, marginTop: 2 }}>
+            <p style={{ color: 'var(--paper-muted)', fontSize: 14, marginTop: 2 }}>
               {listFilter === 'overdue' && <span className="font-semibold" style={{ color: '#b91c1c' }}>Overdue · </span>}
               {total.toLocaleString()} invoice{total !== 1 ? 's' : ''}
-              {listFilter === 'overdue' && <Link href="/hd/invoices" className="ml-2 underline" style={{ color: '#6B7280' }}>show all</Link>}
+              {listFilter === 'overdue' && <Link href="/hd/invoices" className="ml-2 underline" style={{ color: 'var(--paper-muted)' }}>show all</Link>}
               {totalUnpaid > 0 && (
-                <span className="ml-3 font-semibold" style={{ color: '#dc2626' }}>
+                <span className="ml-3 font-semibold" style={{ color: '#b91c1c' }}>
                   {fmt(totalUnpaid)} outstanding
                 </span>
               )}
@@ -119,7 +119,7 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
             <Link
               href="/hd/quotes/new"
               className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold text-sm"
-              style={{ background: '#FFFFFF', color: ORANGE, border: `1px solid ${ORANGE}`, minHeight: 44 }}
+              style={{ background: '#FFFFFF', color: 'var(--paper-accent)', border: `1px solid ${ORANGE}`, minHeight: 44 }}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                 <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
@@ -128,7 +128,7 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
             </Link>
             <Link
               href="/hd/invoices/new"
-              className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold text-sm text-white"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold text-sm text-on-accent"
               style={{ background: ORANGE, minHeight: 44 }}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -157,7 +157,7 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
             {HD_INVOICE_STATUSES.map(s => (
               <div key={s} className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full" style={{ background: STATUS_STYLE[s].color }} />
-                <span className="text-xs" style={{ color: '#6B7280' }}>{statusCounts[s] ?? 0} {s}</span>
+                <span className="text-xs" style={{ color: 'var(--paper-muted)' }}>{statusCounts[s] ?? 0} {s}</span>
               </div>
             ))}
           </div>

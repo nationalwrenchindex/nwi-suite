@@ -59,7 +59,7 @@ export default function QuoteListActions({
       <button
         onClick={convertToInvoice}
         disabled={busy}
-        className="text-xs font-medium px-2.5 py-1.5 rounded-lg text-white disabled:opacity-50"
+        className="text-xs font-medium px-2.5 py-1.5 rounded-lg text-on-fill disabled:opacity-50"
         style={{ background: BLUE, minHeight: 32 }}
       >
         Invoice
@@ -68,7 +68,7 @@ export default function QuoteListActions({
         onClick={deleteQuote}
         disabled={busy}
         className="text-xs font-medium px-2.5 py-1.5 rounded-lg disabled:opacity-50"
-        style={{ background: '#FEE2E2', color: '#dc2626', minHeight: 32 }}
+        style={{ background: '#FEE2E2', color: '#b91c1c', minHeight: 32 }}
       >
         Delete
       </button>

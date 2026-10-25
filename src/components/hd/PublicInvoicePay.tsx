@@ -22,6 +22,9 @@ import {
 import { addressFrom } from '@/lib/address'
 import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
 import { money } from '@/lib/format'
+import { discountPrintLabel, parseDiscount } from '@/lib/document-discount'
+import { hdTermsBlockRows, parseTermsSnapshot } from '@/lib/document-terms'
+import DocumentTermsBlock from '@/components/hd/DocumentTermsBlock'
 import { shopTimeZone, fmtShopDate } from '@/lib/shop-time'
 
 // The light "document" palette HD invoices use, not the dark HD suite chrome.
@@ -29,9 +32,17 @@ const BG     = '#F4F5F7'
 const CARD   = '#FFFFFF'
 const BORDER = '#E5E7EB'
 const TEXT   = '#1A1A1A'
-const MUTED  = '#6B7280'
-const FAINT  = '#9CA3AF'
+// Paper tokens (globals.css): this page is white in both themes, and its text must
+// pass WCAG AA on it. #6B7280 measured 4.43:1 on BG and #9CA3AF 2.54:1 on white.
+const MUTED  = 'var(--paper-muted)'
+const FAINT  = 'var(--paper-muted)'
+// Orange stays the brand for rules and the logo tile. As TEXT it is the darker paper
+// accent - #FF6600 is 2.94:1 on white, below AA even for the large invoice number.
 const ORANGE = '#FF6600'
+const ACCENT = 'var(--paper-accent)'
+// The brand orange as a button fill, with DARK text: #1A1A1A is 5.93:1 on #FF6600
+// (white was 2.94:1). Brand standards lock #FF6600; the text is what changes.
+const ON_ACCENT = '#1A1A1A'
 const BLUE   = '#2969B0'
 
 interface LineItem {
@@ -103,6 +114,16 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
   // Empty on a pre-140 invoice, which then keeps the single Tax line it was sent with.
   const payTaxRows = taxDisplayRows(parseBreakdown((inv as { tax_breakdown?: unknown }).tax_breakdown))
 
+  // Migration 168. The discount, and the terms this invoice recorded (at send, or
+  // carried from its quote). Neither exists on an older invoice, which prints as before.
+  const discount = parseDiscount(inv.discount)
+  const snap = parseTermsSnapshot(inv.terms_snapshot)
+  // A paid or voided invoice does not ask for money: no How to pay on it.
+  const termsRows = hdTermsBlockRows(snap).filter(r => r.key !== 'how_to_pay' || canPay)
+  // The invoice's own terms, else the ones it recorded, else none - never a default.
+  const termsCode: string | null =
+    (typeof inv.payment_terms === 'string' && inv.payment_terms.trim()) || snap?.payment_terms || null
+
   const summaryRows = [
     ...(Number(inv.subtotal_labor)  > 0 ? [{ label: 'Labor Subtotal',  val: inv.subtotal_labor  }] : []),
     ...(Number(inv.subtotal_parts)  > 0 ? [{ label: 'Parts Subtotal',  val: inv.subtotal_parts  }] : []),
@@ -116,6 +137,11 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
       label: r.detail ? `${r.label} (${r.detail})` : r.label,
       val:   r.amount,
     })),
+    // The discount sits between the subtotal and the tax, and only when there is one.
+    ...(discount ? [
+      { label: 'Subtotal', val: discount.subtotal_before },
+      { label: discountPrintLabel(discount), val: -discount.amount, testid: 'discount-row' },
+    ] : []),
     // tax_rate is stored as a percent (7.5 means 7.5%), not a fraction.
     //
     // When the invoice carries a breakdown, each category becomes its own row --
@@ -123,12 +149,12 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
     // taxed rather than having to work it out from a total. Pre-140 invoices have no
     // breakdown and keep the single Tax line they were sent with.
     ...(payTaxRows.length > 0
-      ? payTaxRows.map(r => ({ label: r.text, val: r.taxed ? r.amount : 0 }))
-      : Number(inv.tax_amount) > 0 ? [{ label: `Tax (${inv.tax_rate}%)`, val: inv.tax_amount }] : []),
-  ]
+      ? payTaxRows.map(r => ({ label: r.text, val: r.taxed ? r.amount : 0, testid: 'tax-row' }))
+      : Number(inv.tax_amount) > 0 ? [{ label: `Tax (${inv.tax_rate}%)`, val: inv.tax_amount, testid: 'tax-row' }] : []),
+  ] as Array<{ label: string; val: number; testid?: string }>
 
   return (
-    <div style={{ background: BG, minHeight: '100dvh', padding: '16px 12px 40px' }}>
+    <div style={{ background: BG, color: TEXT, minHeight: '100dvh', padding: '16px 12px 40px' }}>
       <div style={{ maxWidth: 720, margin: '0 auto' }}>
 
         {/* ── Subscriber branding. The shop's mark leads the document. ───────── */}
@@ -162,7 +188,7 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
         {isPaid && (
           <div className="mb-4 px-4 py-3 rounded-xl" style={{ background: '#DCFCE7', border: '1px solid #86EFAC' }}>
             <p className="font-bold text-sm" style={{ color: '#15803d' }}>Paid in Full</p>
-            <p className="text-xs mt-0.5" style={{ color: '#16a34a' }}>
+            <p className="text-xs mt-0.5" style={{ color: '#15803d' }}>
               {inv.paid_at ? `Received ${fmtDate(inv.paid_at)}. Thank you!` : 'Thank you!'}
             </p>
           </div>
@@ -185,7 +211,7 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
           >
             <div>
               <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: FAINT }}>Invoice</p>
-              <p className="font-bold text-2xl" style={{ color: ORANGE }}>{inv.invoice_number}</p>
+              <p className="font-bold text-2xl" style={{ color: ACCENT }}>{inv.invoice_number}</p>
             </div>
             <div className="sm:text-right text-sm" style={{ color: MUTED }}>
               <p>Date: {fmtDate(inv.created_at)}</p>
@@ -196,13 +222,16 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
               {inv.customer_po_number && (
                 <p className="font-semibold" style={{ color: '#374151' }}>PO #: {inv.customer_po_number}</p>
               )}
-              {/* "Net 30 — due 10/14/2026", one phrasing on every surface. */}
-              <p className={inv.due_date && !isPaid && !isVoid ? 'font-semibold' : undefined}
-                 style={{ color: inv.due_date && !isPaid && !isVoid && inv.status === 'overdue' ? '#b91c1c' : MUTED }}>
-                Terms: {isPaid || isVoid
-                  ? termsDisplay(inv.payment_terms)
-                  : termsWithDueDate(inv.payment_terms, inv.due_date)}
-              </p>
+              {/* "Net 30 — due 10/14/2026", one phrasing on every surface. No terms
+                  recorded anywhere prints no line - it used to print "Due on receipt". */}
+              {termsCode && (
+                <p className={inv.due_date && !isPaid && !isVoid ? 'font-semibold' : undefined} data-testid="payment-terms"
+                   style={{ color: inv.due_date && !isPaid && !isVoid && inv.status === 'overdue' ? '#b91c1c' : MUTED }}>
+                  Terms: {isPaid || isVoid
+                    ? termsDisplay(termsCode)
+                    : termsWithDueDate(termsCode, inv.due_date)}
+                </p>
+              )}
             </div>
           </div>
 
@@ -293,8 +322,10 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
                   <div
                     key={r.label}
                     className="flex justify-between py-2 text-sm"
+                    data-testid={r.testid}
                     style={{ color: MUTED, borderBottom: '1px solid #F3F4F6' }}
                   >
+                    {/* fmt(-25) is ONE text node: "-$25.00". */}
                     <span>{r.label}</span><span>{fmt(r.val)}</span>
                   </div>
                 ))}
@@ -302,7 +333,7 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
                   <span className="font-bold text-base" style={{ color: TEXT }}>
                     {isPaid ? 'TOTAL PAID' : isVoid ? 'TOTAL' : 'AMOUNT DUE'}
                   </span>
-                  <span className="font-bold text-3xl" style={{ color: isVoid ? MUTED : ORANGE }}>{fmt(inv.total)}</span>
+                  <span className="font-bold text-3xl" style={{ color: isVoid ? MUTED : ACCENT }}>{fmt(inv.total)}</span>
                 </div>
               </div>
             </div>
@@ -345,7 +376,7 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
                 <a
                   href={telHref(bizPhone)}
                   className="inline-block w-full font-bold text-base rounded-lg py-3.5"
-                  style={{ background: ORANGE, color: 'var(--hd-text)' }}
+                  style={{ background: ORANGE, color: ON_ACCENT }}
                 >
                   Call {bizPhone}
                 </a>
@@ -360,7 +391,9 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
 
         {/* ── HOW TO PAY. The shop's default instructions, in their own bordered
             block. Without it the customer has an amount and no way to settle it. */}
-        {canPay && branding.default_payment_instructions?.trim() && (
+        {/* Older invoices (no recorded terms) keep the block they always printed. One
+            with recorded terms prints its How to pay in the terms block below. */}
+        {canPay && !snap && branding.default_payment_instructions?.trim() && (
           <div
             className="mt-5 px-5 py-4 rounded-xl"
             style={{ background: CARD, border: `2px solid ${ORANGE}` }}
@@ -369,6 +402,14 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
             <p className="text-sm leading-relaxed whitespace-pre-wrap" style={{ color: '#374151' }}>
               {branding.default_payment_instructions.trim()}
             </p>
+          </div>
+        )}
+
+        {/* ── The terms block: warranty, customer-supplied parts, how to pay - what
+            this invoice recorded. Nothing recorded, no block. */}
+        {termsRows.length > 0 && (
+          <div className="mt-5 px-5 py-4 rounded-xl" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+            <DocumentTermsBlock rows={termsRows} text={TEXT} muted={MUTED} border="transparent" />
           </div>
         )}
 

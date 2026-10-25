@@ -23,11 +23,13 @@ export default function NotFound() {
   return (
     <div className="min-h-dvh bg-dark flex items-center justify-center px-6">
       <div className="max-w-md text-center space-y-3">
-        <p className="font-condensed font-bold text-5xl tracking-wide text-white/25">404</p>
+        <p className="font-condensed font-bold text-5xl tracking-wide text-white/60">404</p>
         <h1 className="font-condensed font-bold text-2xl tracking-wide text-white">
           This page isn&rsquo;t here
         </h1>
-        <p className="text-sm text-white/50 leading-relaxed">
+        {/* /70, not /50: this is what a customer with an expired link reads, and /50 was
+            3.3:1 in light mode. */}
+        <p className="text-sm text-white/70 leading-relaxed">
           The link may have expired, or it may have been mistyped. If someone sent you
           here, ask them for a fresh link &mdash; the one you have cannot be reopened.
         </p>

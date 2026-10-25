@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import type { EquipmentCategory } from '@/lib/hd/equipment-categories'
+import { tint } from '@/lib/hd/text-tone'
 
 const HD_ORANGE = '#E85D24'
 
@@ -82,19 +83,19 @@ export default function EquipmentCategoryManager({
   return (
     <div className="space-y-4">
       {error && (
-        <p role="alert" className="text-sm px-4 py-2.5 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)' }}>
+        <p role="alert" className="text-sm px-4 py-2.5 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: 'var(--hd-negative)', border: '1px solid rgba(239,68,68,0.3)' }}>
           {error}
         </p>
       )}
       {notice && (
-        <p className="text-sm px-4 py-2.5 rounded-lg" style={{ background: 'rgba(34,197,94,0.12)', color: '#22C55E', border: '1px solid rgba(34,197,94,0.3)' }}>
+        <p className="text-sm px-4 py-2.5 rounded-lg" style={{ background: 'rgba(34,197,94,0.12)', color: 'var(--hd-positive)', border: '1px solid rgba(34,197,94,0.3)' }}>
           ✓ {notice}
         </p>
       )}
 
       <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hd-border)', background: 'var(--hd-card)' }}>
         {cats.length === 0 && (
-          <p className="px-4 py-6 text-sm text-center" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+          <p className="px-4 py-6 text-sm text-center" style={{ color: 'var(--hd-text-faint)' }}>
             No categories yet — add your first one below.
           </p>
         )}
@@ -111,9 +112,9 @@ export default function EquipmentCategoryManager({
             >
               <div className="flex flex-col">
                 <button type="button" aria-label={`Move ${c.name} up`} disabled={busy || i === 0}
-                  onClick={() => move(i, -1)} className="text-xs px-1.5 leading-none disabled:opacity-30" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>▲</button>
+                  onClick={() => move(i, -1)} className="text-xs px-1.5 leading-none disabled:opacity-30" style={{ color: 'var(--hd-text-muted)' }}>▲</button>
                 <button type="button" aria-label={`Move ${c.name} down`} disabled={busy || i === cats.length - 1}
-                  onClick={() => move(i, 1)} className="text-xs px-1.5 leading-none disabled:opacity-30" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>▼</button>
+                  onClick={() => move(i, 1)} className="text-xs px-1.5 leading-none disabled:opacity-30" style={{ color: 'var(--hd-text-muted)' }}>▼</button>
               </div>
               <input
                 aria-label={`Name for ${c.name}`}
@@ -126,15 +127,15 @@ export default function EquipmentCategoryManager({
               />
               {dirty && (
                 <button type="button" disabled={busy || !draft.trim()} onClick={() => rename(c)}
-                  className="text-xs font-semibold px-3 py-2 rounded-lg text-white disabled:opacity-50" style={{ background: HD_ORANGE }}>
+                  className="text-xs font-semibold px-3 py-2 rounded-lg text-on-accent disabled:opacity-50" style={{ background: HD_ORANGE }}>
                   Rename
                 </button>
               )}
-              <span className="text-xs w-20 text-right" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+              <span className="text-xs w-20 text-right" style={{ color: 'var(--hd-text-faint)' }}>
                 {count} unit{count !== 1 ? 's' : ''}
               </span>
               {!c.is_active && (
-                <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: 'rgba(var(--hd-ink-rgb), 0.1)', color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>
+                <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: 'rgba(var(--hd-ink-rgb), 0.1)', color: 'var(--hd-text-muted)' }}>
                   Inactive
                 </span>
               )}
@@ -155,14 +156,14 @@ export default function EquipmentCategoryManager({
         })}
       </div>
 
-      <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>
+      <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>
         {uncategorizedCount} unit{uncategorizedCount !== 1 ? 's are' : ' is'} Uncategorized. Set them from the Category column on the units list.
       </p>
 
       <form
         onSubmit={e => { e.preventDefault(); add() }}
         className="flex flex-wrap items-center gap-2 rounded-xl px-4 py-3"
-        style={{ background: 'var(--hd-card)', border: `1px solid ${HD_ORANGE}50` }}
+        style={{ background: 'var(--hd-card)', border: `1px solid ${tint(HD_ORANGE, 31)}` }}
       >
         <input
           name="new_category"
@@ -175,7 +176,7 @@ export default function EquipmentCategoryManager({
           style={inputStyle}
         />
         <button type="submit" disabled={busy || !newName.trim()}
-          className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50" style={{ background: HD_ORANGE }}>
+          className="px-4 py-2 rounded-lg text-sm font-semibold text-on-accent disabled:opacity-50" style={{ background: HD_ORANGE }}>
           Add category
         </button>
       </form>

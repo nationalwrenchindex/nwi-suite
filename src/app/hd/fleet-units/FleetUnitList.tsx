@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { FLEET_UNIT_PAGE_SIZE, type FleetUnitListRow } from '@/app/api/hd/fleet-units/list'
 import type { EquipmentCategory } from '@/lib/hd/equipment-categories'
+import { textTone, tint } from '@/lib/hd/text-tone'
 
 const HD_ORANGE = '#E85D24'
 
@@ -13,9 +14,9 @@ const UNCATEGORIZED = '__none__'
 function pmBadge(totalHours: number | null, nextDue: number | null): { label: string; color: string } | null {
   if (nextDue == null || totalHours == null) return null
   const t = Number(totalHours), n = Number(nextDue)
-  if (t > n)       return { label: 'PM OVERDUE',  color: '#EF4444' }
-  if (t > n - 150) return { label: 'PM DUE SOON', color: '#F59E0B' }
-  return { label: 'PM Current', color: '#22C55E' }
+  if (t > n)       return { label: 'PM OVERDUE',  color: 'var(--hd-negative)' }
+  if (t > n - 150) return { label: 'PM DUE SOON', color: 'var(--hd-warn)' }
+  return { label: 'PM Current', color: 'var(--hd-positive)' }
 }
 
 /** POST /api/hd/fleet-units/category. Throws the server's readable error. */
@@ -162,14 +163,14 @@ export default function FleetUnitList({
     return (
       <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
         <div className="py-16 text-center" style={{ background: 'var(--hd-card)' }}>
-          <svg className="w-10 h-10 mx-auto mb-3" style={{ color: 'rgba(var(--hd-ink-rgb), 0.15)' }} fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
+          <svg className="w-10 h-10 mx-auto mb-3" style={{ color: 'var(--hd-text-faint)' }} fill="none" stroke="currentColor" strokeWidth={1.5} viewBox="0 0 24 24">
             <rect x="1" y="3" width="15" height="13" rx="2" />
             <path d="M16 8h4l3 5v3h-7V8z" /><circle cx="5.5" cy="18.5" r="2.5" /><circle cx="18.5" cy="18.5" r="2.5" />
           </svg>
-          <p className="text-sm mb-1" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+          <p className="text-sm mb-1" style={{ color: 'var(--hd-text-faint)' }}>
             {fleetAccountName ? `No units for ${fleetAccountName} yet` : 'No fleet units yet'}
           </p>
-          <p className="text-xs mb-3" style={{ color: 'rgba(var(--hd-ink-rgb), 0.2)' }}>Add your refrigerated units to start tracking PMs and work orders</p>
+          <p className="text-xs mb-3" style={{ color: 'var(--hd-text-faint)' }}>Add your refrigerated units to start tracking PMs and work orders</p>
           <Link href={scopedAccountId ? `?new=1&fleet_account_id=${scopedAccountId}` : '?new=1'} className="text-xs px-4 py-2 rounded-lg font-semibold" style={{ background: HD_ORANGE, color: 'var(--hd-text)' }}>
             + Add First Unit
           </Link>
@@ -184,7 +185,7 @@ export default function FleetUnitList({
     <>
       {/* Bulk categorize - shown once anything is ticked. */}
       {selected.size > 0 && (
-        <div className="flex flex-wrap items-center gap-3 mb-3 px-4 py-3 rounded-xl" style={{ background: 'var(--hd-card)', border: `1px solid ${HD_ORANGE}50` }}>
+        <div className="flex flex-wrap items-center gap-3 mb-3 px-4 py-3 rounded-xl" style={{ background: 'var(--hd-card)', border: `1px solid ${tint(HD_ORANGE, 31)}` }}>
           <span className="text-sm text-white font-semibold">{selected.size} selected</span>
           <select
             aria-label="Category for selected units"
@@ -201,7 +202,7 @@ export default function FleetUnitList({
             type="button"
             onClick={applyBulk}
             disabled={!bulkCat || saving.size > 0}
-            className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
+            className="px-4 py-2 rounded-lg text-sm font-semibold text-on-accent disabled:opacity-50"
             style={{ background: HD_ORANGE }}
           >
             Set category for selected
@@ -210,7 +211,7 @@ export default function FleetUnitList({
             type="button"
             onClick={() => setSelected(new Set())}
             className="text-xs underline"
-            style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}
+            style={{ color: 'var(--hd-text-muted)' }}
           >
             Clear selection
           </button>
@@ -218,12 +219,12 @@ export default function FleetUnitList({
       )}
 
       {catError && (
-        <p className="text-sm mb-3 px-4 py-2.5 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)' }}>
+        <p className="text-sm mb-3 px-4 py-2.5 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: 'var(--hd-negative)', border: '1px solid rgba(239,68,68,0.3)' }}>
           {catError}
         </p>
       )}
       {catNotice && (
-        <p className="text-sm mb-3 px-4 py-2.5 rounded-lg" style={{ background: 'rgba(34,197,94,0.12)', color: '#22C55E', border: '1px solid rgba(34,197,94,0.3)' }}>
+        <p className="text-sm mb-3 px-4 py-2.5 rounded-lg" style={{ background: 'rgba(34,197,94,0.12)', color: 'var(--hd-positive)', border: '1px solid rgba(34,197,94,0.3)' }}>
           ✓ {catNotice}
         </p>
       )}
@@ -242,7 +243,7 @@ export default function FleetUnitList({
                   />
                 </th>
                 {['Unit #', 'Category', 'Fleet', 'Manufacturer / Model', 'Serial / BM', 'Total Hours', 'Next PM', 'PM Status', ''].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs uppercase tracking-wider" style={{ color: 'rgba(var(--hd-ink-rgb), 0.4)' }}>{h}</th>
+                  <th key={h} className="px-4 py-3 text-left text-xs uppercase tracking-wider" style={{ color: 'var(--hd-text-faint)' }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -279,9 +280,9 @@ export default function FleetUnitList({
                         ))}
                       </select>
                     </td>
-                    <td className="px-4 py-3 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)' }}>{u.fleet_account?.fleet_name ?? '—'}</td>
+                    <td className="px-4 py-3 text-sm" style={{ color: 'var(--hd-text-muted)' }}>{u.fleet_account?.fleet_name ?? '—'}</td>
                     <td className="px-4 py-3 text-sm text-white">{u.manufacturer} {u.model}</td>
-                    <td className="px-4 py-3 text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.5)' }}>
+                    <td className="px-4 py-3 text-xs" style={{ color: 'var(--hd-text-muted)' }}>
                       {u.serial_number ?? '—'}{u.bm_number ? ` · BM ${u.bm_number}` : ''}
                     </td>
                     <td className="px-4 py-3 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.7)' }}>
@@ -289,18 +290,18 @@ export default function FleetUnitList({
                     </td>
                     <td className="px-4 py-3 text-sm">
                       {hoursUntil !== null ? (
-                        <span style={{ color: hoursUntil <= 0 ? '#EF4444' : hoursUntil <= 150 ? HD_ORANGE : '#22C55E' }}>
+                        <span style={{ color: textTone(hoursUntil <= 0 ? 'var(--hd-negative)' : hoursUntil <= 150 ? 'var(--hd-accent-text)' : 'var(--hd-positive)') }}>
                           {hoursUntil <= 0 ? 'OVERDUE' : `${hoursUntil.toFixed(0)} hrs`}
                         </span>
                       ) : '—'}
                     </td>
                     <td className="px-4 py-3">
                       {badge ? (
-                        <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: `${badge.color}20`, color: badge.color }}>
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full" style={{ background: `${tint(badge.color, 13)}`, color: textTone(badge.color) }}>
                           {badge.label}
                         </span>
                       ) : (
-                        <span className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>—</span>
+                        <span className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>—</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
@@ -308,14 +309,14 @@ export default function FleetUnitList({
                         <Link
                           href={`/hd/fleet-units/${u.id}/inspections`}
                           className="text-xs font-semibold px-3 py-1 rounded-lg whitespace-nowrap"
-                          style={{ color: 'rgba(var(--hd-ink-rgb), 0.6)', border: '1px solid var(--hd-border)' }}
+                          style={{ color: 'var(--hd-text-muted)', border: '1px solid var(--hd-border)' }}
                         >
                           Inspections
                         </Link>
                         <Link
                           href={scopedAccountId ? `?edit=${u.id}&fleet_account_id=${scopedAccountId}` : `?edit=${u.id}`}
                           className="text-xs font-semibold px-3 py-1 rounded-lg"
-                          style={{ color: '#60A5FA', border: '1px solid var(--hd-border)' }}
+                          style={{ color: 'var(--hd-info)', border: '1px solid var(--hd-border)' }}
                         >
                           Edit
                         </Link>
@@ -330,14 +331,14 @@ export default function FleetUnitList({
       </div>
 
       {error && (
-        <p className="text-sm mt-3 px-4 py-2.5 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: '#EF4444', border: '1px solid rgba(239,68,68,0.3)' }}>
+        <p className="text-sm mt-3 px-4 py-2.5 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: 'var(--hd-negative)', border: '1px solid rgba(239,68,68,0.3)' }}>
           {error}
         </p>
       )}
 
       {hasMore && (
         <div className="flex flex-col items-center gap-2 mt-4">
-          <p className="text-xs" style={{ color: 'rgba(var(--hd-ink-rgb), 0.3)' }}>
+          <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>
             Showing {rows.length.toLocaleString()} of {total.toLocaleString()}
           </p>
           <button

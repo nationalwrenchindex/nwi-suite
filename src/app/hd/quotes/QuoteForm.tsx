@@ -22,6 +22,7 @@ import { DEFAULT_HD_PARTS_MARKUP, sellPrice, lineAmount } from '@/lib/hd/parts-p
 import AddressAutofill from '@/components/hd/AddressAutofill'
 import { money } from '@/lib/format'
 import PaymentTermsSelect from '@/components/hd/PaymentTermsSelect'
+import { termsDisplay } from '@/lib/hd/payment-terms'
 import { documentExtras } from '@/lib/document-money'
 import { discountPrintLabel, parseDiscount } from '@/lib/document-discount'
 import { hdApplyDiscount } from '@/lib/hd/hd-discount'
@@ -35,7 +36,7 @@ const BG      = '#F4F5F7'
 const CARD    = '#FFFFFF'
 const BORDER  = '#E5E7EB'
 const TEXT    = '#1A1A1A'
-const MUTED   = '#6B7280'
+const MUTED   = 'var(--paper-muted)'
 
 // HD Suite dark theme — used by the labor modal
 const D_BG       = 'var(--hd-sunken)'
@@ -473,6 +474,9 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
   const [fleetUnits, setFleetUnits]               = useState<FleetUnitHit[]>([])
   // What the link did, said out loud: which account, and whether it filled the unit.
   const [fleetNote, setFleetNote]                 = useState('')
+  // The linked customer's terms, when linking set this quote's. Shown beside the picker
+  // while the quote still matches them, so a Net 30 account visibly gets a Net 30 quote.
+  const [termsFrom, setTermsFrom] = useState<{ name: string; terms: string } | null>(null)
   // Which picker source did not answer on the last search, or ''.
   const [pickerFailure, setPickerFailure]         = useState('')
 
@@ -674,6 +678,8 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
     // does not resolve, and logHDCustomer will create or match the real customers
     // row on save anyway.
     if (hit.source === 'fleet') {
+      // hd_fleet_accounts records no payment terms, so linking one leaves the quote's.
+      setTermsFrom(null)
       const parsed = hit.addressLine ? parseAddress(hit.addressLine) : null
       setForm(f => ({
         ...f,
@@ -725,6 +731,10 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
       // The company leads, same as in the dropdown, so what the tech picked and what
       // lands in the field are the same words.
       const fullName = (c.company_name as string | null) || person || hit.label
+      // The account's terms SET this quote's - visibly, and still overridable below. An
+      // account with none leaves the quote's terms as they are: no guessed net30.
+      const accountTerms = typeof c.payment_terms === 'string' && c.payment_terms.trim() ? c.payment_terms : null
+      setTermsFrom(accountTerms ? { name: fullName || hit.label, terms: accountTerms } : null)
       setForm(f => ({
         ...f,
         customer_id:    c.id ?? hit.id,
@@ -743,7 +753,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
         corp_city:          c.corp_city ?? '',
         corp_state:         c.corp_state ?? '',
         corp_zip:           c.corp_zip ?? '',
-        payment_terms:      c.payment_terms ?? 'net30',
+        ...(accountTerms ? { payment_terms: accountTerms } : {}),
       }))
     } catch {
       // Search-hit fields are already applied above; nothing more to do.
@@ -1412,7 +1422,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <div style={{ background: BG, minHeight: '100dvh', padding: '24px 20px' }}>
+    <div style={{ background: BG, color: TEXT, minHeight: '100dvh', padding: '24px 20px' }}>
       <div style={{ maxWidth: 860, margin: '0 auto' }}>
 
         {/* Page header */}
@@ -1420,7 +1430,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
           <Link href={editing ? `/hd/quotes/${quoteId}` : '/hd/quotes'} style={{ color: MUTED, fontSize: 13 }}>
             {editing ? '← Quote' : '← Quotes'}
           </Link>
-          <span style={{ color: BORDER }}>/</span>
+          <span style={{ color: 'var(--paper-muted)' }}>/</span>
           <span className="font-condensed font-bold text-2xl" style={{ color: TEXT }}>
             {editing ? `EDIT QUOTE ${String(initial.quote_number ?? '')}` : 'NEW QUOTE'}
           </span>
@@ -1476,7 +1486,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                       <span
                         className="text-xs px-1.5 py-0.5 rounded font-semibold"
                         style={hit.source === 'fleet'
-                          ? { background: '#FFF7ED', color: ORANGE }
+                          ? { background: '#FFF7ED', color: 'var(--paper-accent)' }
                           : { background: '#EBF5FF', color: BLUE }}
                       >
                         {hit.source === 'fleet' ? 'Fleet' : 'Customer'}
@@ -1585,7 +1595,8 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                 </p>
               )}
               <p className="mt-1 text-xs" style={{ color: MUTED }}>
-                Payment Terms: <strong style={{ color: TEXT }}>{form.payment_terms.replace('net', 'Net ')}</strong>
+                Payment Terms: <strong style={{ color: TEXT }}>{form.payment_terms ? termsDisplay(form.payment_terms) : 'none set'}</strong>
+                {termsFrom && termsFrom.terms === form.payment_terms && ' (from this account - set on the quote below)'}
                 {!billingAddr && ' · no address on file for this customer'}
               </p>
             </div>
@@ -1690,7 +1701,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
               <button
                 onClick={getLaborSuggestions}
                 disabled={suggestLoading}
-                className="flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg text-white disabled:opacity-60"
+                className="flex items-center gap-2 text-sm font-semibold px-4 py-2 rounded-lg text-on-fill disabled:opacity-60"
                 style={{ background: BLUE, minHeight: 44 }}
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -1708,12 +1719,12 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                         <p className="text-sm font-semibold" style={{ color: TEXT }}>{s.description}</p>
                         <p className="text-xs mt-0.5" style={{ color: MUTED }}>
                           {s.mobile_hours} hrs mobile &nbsp;•&nbsp; {fmt(s.mobile_hours * form.labor_rate)}
-                          {s.category && <span className="ml-1" style={{ color: '#9CA3AF' }}>· {s.category}</span>}
+                          {s.category && <span className="ml-1" style={{ color: 'var(--paper-muted)' }}>· {s.category}</span>}
                         </p>
                       </div>
                       <button
                         onClick={() => addSuggestion(s)}
-                        className="self-start text-xs font-semibold px-3 py-1.5 rounded-lg text-white"
+                        className="self-start text-xs font-semibold px-3 py-1.5 rounded-lg text-on-accent"
                         style={{ background: ORANGE }}
                       >
                         + Add to Quote
@@ -1810,7 +1821,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
           <div className="flex gap-3 mb-4">
             <button
               onClick={() => setLaborModal(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-on-accent"
               style={{ background: ORANGE, minHeight: 44 }}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -1855,7 +1866,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                       {/* Editable description */}
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs px-1.5 py-0.5 rounded font-semibold shrink-0" style={{ background: '#FFF7ED', color: ORANGE }}>LAB</span>
+                          <span className="text-xs px-1.5 py-0.5 rounded font-semibold shrink-0" style={{ background: '#FFF7ED', color: 'var(--paper-accent)' }}>LAB</span>
                           <input
                             value={item.description}
                             onChange={e => updateLineDescription(item.id, e.target.value)}
@@ -1911,7 +1922,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                       <span className="text-sm font-semibold text-right" style={{ color: TEXT }}>{fmt(item.amount)}</span>
                     </>
                   )}
-                  <button onClick={() => removeItem(item.id)} style={{ color: '#9CA3AF', lineHeight: 1 }}>
+                  <button onClick={() => removeItem(item.id)} style={{ color: 'var(--paper-muted)', lineHeight: 1 }}>
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                       <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                     </svg>
@@ -2047,7 +2058,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
               </div>
               <div className="flex justify-between items-center pt-3" style={{ borderTop: `2px solid ${ORANGE}`, marginTop: 4 }}>
                 <span className="font-bold text-base" style={{ color: TEXT }}>TOTAL</span>
-                <span className="font-bold text-2xl" style={{ color: ORANGE }}>{fmt(totalFinal)}</span>
+                <span className="font-bold text-2xl" style={{ color: 'var(--paper-accent)' }}>{fmt(totalFinal)}</span>
               </div>
               {/* Labor and parts lines only. Travel, mileage, supplies and the fees are
                   never discounted. */}
@@ -2078,6 +2089,9 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
             </Field>
             <Field label="Payment Terms">
               <PaymentTermsSelect style={inp} value={form.payment_terms} onChange={v => setField('payment_terms', v)} />
+              {termsFrom && (termsFrom.terms === form.payment_terms
+                ? <p className="text-xs mt-1" style={{ color: MUTED }} data-testid="terms-from-account">{`Set from ${termsFrom.name}'s account.`}</p>
+                : <p className="text-xs mt-1" style={{ color: '#92400E' }} data-testid="terms-overridden">{`Changed from ${termsFrom.name}'s account terms (${termsDisplay(termsFrom.terms)}).`}</p>)}
             </Field>
             {/* THE CUSTOMER'S PO NUMBER.
                 Migration 153 added hd_quotes.customer_po_number, and the only thing
@@ -2115,7 +2129,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
             <button
               onClick={() => save('sent')}
               disabled={saving}
-              className="flex-1 py-3 rounded-lg font-semibold text-sm text-white disabled:opacity-50"
+              className="flex-1 py-3 rounded-lg font-semibold text-sm text-on-accent disabled:opacity-50"
               style={{ background: ORANGE, minHeight: 48 }}
             >
               {saving ? 'Saving...' : 'Save Changes'}
@@ -2133,7 +2147,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
               <button
                 onClick={() => save('sent')}
                 disabled={saving}
-                className="flex-1 py-3 rounded-lg font-semibold text-sm text-white disabled:opacity-50"
+                className="flex-1 py-3 rounded-lg font-semibold text-sm text-on-accent disabled:opacity-50"
                 style={{ background: ORANGE, minHeight: 48 }}
               >
                 {saving ? 'Sending...' : 'Send Quote'}
@@ -2209,7 +2223,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                           }}
                         >
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate" style={{ color: isSel ? ORANGE : '#FFFFFF' }}>
+                            <p className="text-sm font-medium truncate" style={{ color: isSel ? 'var(--paper-accent)' : '#FFFFFF' }}>
                               {i.labor_code && <span className="font-mono text-xs mr-2" style={{ color: '#8a9bad' }}>{i.labor_code}</span>}
                               {i.description}
                             </p>
@@ -2219,14 +2233,14 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                           </div>
                           {/* Only tech's own saved items get the badge; master items look native */}
                           {!i.is_master && (
-                            <span className="text-xs px-1.5 py-0.5 rounded font-semibold shrink-0 text-white" style={{ background: BLUE }}>saved</span>
+                            <span className="text-xs px-1.5 py-0.5 rounded font-semibold shrink-0 text-on-fill" style={{ background: BLUE }}>saved</span>
                           )}
                         </button>
                       )
                     })}
 
                     {libTrimmed && (
-                      <p className="px-4 py-2 text-xs" style={{ color: '#F59E0B', borderBottom: `1px solid ${D_BORDER}` }}>
+                      <p className="px-4 py-2 text-xs" style={{ color: '#92400e', borderBottom: `1px solid ${D_BORDER}` }}>
                         {`Your library: ${libTrimmed}`}
                       </p>
                     )}
@@ -2247,13 +2261,13 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                           }}
                         >
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate" style={{ color: isSel ? ORANGE : '#FFFFFF' }}>{item.label}</p>
+                            <p className="text-sm font-medium truncate" style={{ color: isSel ? 'var(--paper-accent)' : '#FFFFFF' }}>{item.label}</p>
                             <p className="text-xs mt-0.5" style={{ color: '#8a9bad' }}>
                               Book: {fmtHrs(item.book_min, item.book_max, item.shop_only)}
                               &nbsp;&bull;&nbsp;
                               Mobile: {fmtHrs(item.mobile_min, item.mobile_max, item.shop_only)}
                               {item.requires_refrigeration && (
-                                <span className="ml-2 font-semibold" style={{ color: '#60A5FA' }}>❄ Refrig.</span>
+                                <span className="ml-2 font-semibold" style={{ color: '#1d4ed8' }}>❄ Refrig.</span>
                               )}
                             </p>
                           </div>
@@ -2261,14 +2275,14 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                       )
                     })}
                     {guideTrimmed && (
-                      <p className="px-4 py-2 text-xs" style={{ color: '#F59E0B' }}>
+                      <p className="px-4 py-2 text-xs" style={{ color: '#92400e' }}>
                         {`Labor guide: ${guideTrimmed}`}
                       </p>
                     )}
                   </div>
                 )}
                 {sameNameCard && (
-                  <p className="text-xs mt-1" style={{ color: '#F59E0B' }}>
+                  <p className="text-xs mt-1" style={{ color: '#92400e' }}>
                     {`You already have a card named this (${sameNameCard.labor_code ?? 'no code'}).`}
                   </p>
                 )}
@@ -2303,7 +2317,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                         }
                       }}
                       className="text-xs font-semibold"
-                      style={{ color: '#60A5FA', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                      style={{ color: '#1d4ed8', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
                     >
                       {laborRange ? 'use one number' : '+ add a range'}
                     </button>
@@ -2347,8 +2361,8 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                   </span>
                 </div>
                 {pickedShopOnly && (
-                  <div className="flex flex-wrap items-center gap-2 mt-1 px-3 py-2 rounded-lg" style={{ background: '#2a2213', border: '1px solid #6b5417' }}>
-                    <p className="text-xs flex-1 min-w-[200px]" style={{ color: '#FCD34D' }}>
+                  <div className="flex flex-wrap items-center gap-2 mt-1 px-3 py-2 rounded-lg" style={{ background: 'color-mix(in srgb, var(--hd-warn) 14%, var(--hd-card))', border: '1px solid #6b5417' }}>
+                    <p className="text-xs flex-1 min-w-[200px]" style={{ color: 'var(--hd-warn)' }}>
                       {pickedShopText
                         ? `This card has no field time. Shop time is ${pickedShopText}; field work usually takes longer. Enter the billed hours.`
                         : 'This card has no field time and no shop time. Enter the billed hours.'}
@@ -2356,7 +2370,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                     {pickedShopText && (
                       <button type="button" onClick={billShopTime}
                         className="text-xs font-semibold px-3 py-1.5 rounded-lg"
-                        style={{ color: '#FCD34D', border: '1px solid #6b5417', background: 'transparent', cursor: 'pointer' }}>
+                        style={{ color: 'var(--hd-warn)', border: '1px solid #6b5417', background: 'transparent', cursor: 'pointer' }}>
                         {`Bill shop time (${pickedShopText})`}
                       </button>
                     )}
@@ -2366,13 +2380,13 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
 
               {/* Refrigeration: explicit service (separate line) vs fixed-recovery checkbox */}
               {laborRefrig ? (
-                <div className="flex items-start gap-3 p-3 rounded-lg" style={{ background: '#132132', border: `1px solid ${D_BORDER}` }}>
+                <div className="flex items-start gap-3 p-3 rounded-lg" style={{ background: 'color-mix(in srgb, var(--hd-info) 14%, var(--hd-card))', border: `1px solid ${D_BORDER}` }}>
                   <svg className="w-4 h-4 mt-0.5 shrink-0" fill="none" stroke="#93C5FD" strokeWidth={2} viewBox="0 0 24 24">
                     <line x1="12" y1="2" x2="12" y2="22"/><line x1="2" y1="12" x2="22" y2="12"/>
                     <path d="M4.9 4.9l14.2 14.2M19.1 4.9L4.9 19.1"/>
                   </svg>
                   <div>
-                    <p className="text-sm font-semibold" style={{ color: '#93C5FD' }}>
+                    <p className="text-sm font-semibold" style={{ color: 'var(--hd-info)' }}>
                       Separate refrigeration service line will be added
                     </p>
                     <p className="text-xs mt-0.5" style={{ color: '#8a9bad' }}>
@@ -2381,7 +2395,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                   </div>
                 </div>
               ) : (
-                <label className="flex items-start gap-3 p-3 rounded-lg cursor-pointer" style={{ background: '#132132', border: `1px solid ${D_BORDER}` }}>
+                <label className="flex items-start gap-3 p-3 rounded-lg cursor-pointer" style={{ background: 'color-mix(in srgb, var(--hd-info) 14%, var(--hd-card))', border: `1px solid ${D_BORDER}` }}>
                   <input
                     type="checkbox"
                     checked={laborRecharge}
@@ -2396,7 +2410,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                     style={{ accentColor: BLUE }}
                   />
                   <div>
-                    <p className="text-sm font-semibold" style={{ color: '#93C5FD' }}>Add refrigeration recovery &amp; recharge</p>
+                    <p className="text-sm font-semibold" style={{ color: 'var(--hd-info)' }}>Add refrigeration recovery &amp; recharge</p>
                     <p className="text-xs mt-0.5" style={{ color: '#8a9bad' }}>Adds 1.5 to 2.5 hrs to mobile field time</p>
                   </div>
                 </label>
@@ -2404,12 +2418,12 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
 
               {/* Filter drier reminder */}
               {(laborRecharge || laborRefrig) && (
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: '#2a2213', border: '1px solid #6b5417' }}>
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg" style={{ background: 'color-mix(in srgb, var(--hd-warn) 14%, var(--hd-card))', border: '1px solid #6b5417' }}>
                   <svg className="w-4 h-4 shrink-0" fill="none" stroke="#F59E0B" strokeWidth={2} viewBox="0 0 24 24">
                     <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
                     <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
                   </svg>
-                  <p className="text-xs font-semibold" style={{ color: '#FCD34D' }}>Remember to add filter drier to the parts list.</p>
+                  <p className="text-xs font-semibold" style={{ color: 'var(--hd-warn)' }}>Remember to add filter drier to the parts list.</p>
                 </div>
               )}
 
@@ -2444,8 +2458,8 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                   line it was about to add.
 
                   One sentence now: hours x rate = amount, at the real cent. */}
-              <div className="p-3 rounded-lg" style={{ background: '#132132', border: `1px solid ${D_BORDER}` }}>
-                <p className="text-sm font-semibold" style={{ color: ORANGE }}>
+              <div className="p-3 rounded-lg" style={{ background: 'color-mix(in srgb, var(--hd-info) 14%, var(--hd-card))', border: `1px solid ${D_BORDER}` }}>
+                <p className="text-sm font-semibold" style={{ color: 'var(--paper-accent)' }}>
                   {laborMath()}
                 </p>
                 {laborRecharge && (
@@ -2460,7 +2474,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                   </p>
                 )}
                 {laborRefrig && (
-                  <p className="text-xs mt-1" style={{ color: '#93C5FD' }}>
+                  <p className="text-xs mt-1" style={{ color: 'var(--hd-info)' }}>
                     + Refrigeration Service{laborRefrig.service ? ` ${laborRefrig.service}` : ''} — {laborRefrig.hours} hrs
                     {' '}&times; {money(form.labor_rate)}/hr = {money(laborRefrig.hours * form.labor_rate)} (separate line)
                   </p>
@@ -2480,7 +2494,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
               <button
                 onClick={addLaborItem}
                 disabled={!laborDesc.trim()}
-                className="flex-1 py-2.5 rounded-lg font-semibold text-sm text-white disabled:opacity-40"
+                className="flex-1 py-2.5 rounded-lg font-semibold text-sm text-on-accent disabled:opacity-40"
                 style={{ background: ORANGE }}
               >
                 Add Line
@@ -2506,7 +2520,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                   <button
                     onClick={searchParts}
                     disabled={partsSearching}
-                    className="px-4 py-2.5 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
+                    className="px-4 py-2.5 rounded-lg text-sm font-semibold text-on-fill disabled:opacity-50"
                     style={{ background: BLUE, minHeight: 44 }}
                   >
                     {partsSearching ? '...' : 'Lookup'}
@@ -2523,7 +2537,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                       className="w-full text-left px-3 py-2 hover:bg-gray-50 flex items-start gap-3"
                       style={{ borderBottom: `1px solid #F9FAFB` }}
                     >
-                      <span className="font-mono text-xs font-semibold" style={{ color: ORANGE, minWidth: 100 }}>{p.part_number}</span>
+                      <span className="font-mono text-xs font-semibold" style={{ color: 'var(--paper-accent)', minWidth: 100 }}>{p.part_number}</span>
                       <span className="text-sm" style={{ color: TEXT }}>{p.description}</span>
                     </button>
                   ))}
@@ -2565,7 +2579,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                 >
                   Cancel
                 </button>
-                <button onClick={addPartsItem} className="flex-1 py-2.5 rounded-lg font-semibold text-sm text-white" style={{ background: BLUE }}>
+                <button onClick={addPartsItem} className="flex-1 py-2.5 rounded-lg font-semibold text-sm text-on-fill" style={{ background: BLUE }}>
                   Add Line
                 </button>
               </div>
@@ -2576,14 +2590,14 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
 
       {/* Customer-saved toast (green, auto-dismisses at 3s) */}
       {customerToast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl text-sm font-semibold text-white shadow-xl" style={{ background: '#16A34A' }}>
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl text-sm font-semibold text-on-fill shadow-xl" style={{ background: '#16A34A' }}>
           Customer saved to your contacts
         </div>
       )}
 
       {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl text-sm font-semibold text-white shadow-xl" style={{ background: '#1A1A1A' }}>
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl text-sm font-semibold text-on-fill shadow-xl" style={{ background: '#1A1A1A' }}>
           {toast}
           <button className="ml-4 opacity-60 hover:opacity-100" onClick={() => setToast('')}>×</button>
         </div>
