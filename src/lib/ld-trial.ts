@@ -25,6 +25,13 @@ import type { PlanTier } from '@/lib/stripe-plans'
 export const LD_TRIAL_TIER: PlanTier = 'full_suite_plus'
 export const LD_TRIAL_DAYS = 15
 
+// THE HD TRIAL (Oct 26): 15 days of HD Elite, the same rules - card always, once per
+// customer, cancel if the trial ends with no card. HD Elite ONLY: the HD Elite + LD
+// bundle resolves to the same hd_elite tier but does not trial, so eligibility is
+// decided by the PRICE (STRIPE_PRICE_HD_ELITE), never by the tier alone.
+export const HD_TRIAL_TIER = 'hd_elite'
+export const HD_TRIAL_DAYS = 15
+
 /** What the checkout route knows about the buyer's history. */
 export interface TrialHistory {
   /** The buyer's subscriptions row, if any. */
@@ -58,6 +65,23 @@ export function trialDaysFor(verifiedTier: PlanTier | null, history: TrialHistor
   if (verifiedTier !== LD_TRIAL_TIER) return null
   if (isReturningCustomer(history)) return null
   return LD_TRIAL_DAYS
+}
+
+/**
+ * Trial days for an HD checkout, or null for none. priceId is the price being sold,
+ * elitePriceId the HD Elite price (STRIPE_PRICE_HD_ELITE) and verifiedTier the tier
+ * that price maps to. The bundle price - same tier, different price - never trials.
+ */
+export function hdTrialDaysFor(input: {
+  priceId:      string
+  elitePriceId: string | undefined
+  verifiedTier: string | null
+  history:      TrialHistory
+}): number | null {
+  if (!input.elitePriceId || input.priceId !== input.elitePriceId) return null
+  if (input.verifiedTier !== HD_TRIAL_TIER) return null
+  if (isReturningCustomer(input.history)) return null
+  return HD_TRIAL_DAYS
 }
 
 /**

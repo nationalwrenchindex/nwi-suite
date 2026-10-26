@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server'
 import { stripe } from '@/lib/stripe'
 import { HD_ELITE_BUNDLE_PRICE_ID, getHdTierFromPriceId } from '@/lib/hd-plans'
 import { getSubscription } from '@/lib/subscription'
+import { checkoutTrialParams, hdTrialDaysFor, returningReason, type TrialHistory } from '@/lib/ld-trial'
+import { countStripeSubscriptions, countSameEmailSubscriptions } from '@/lib/trial-history'
 
 const HD_PRICE_MAP: Record<string, string | undefined> = {
   hd_reefer: process.env.STRIPE_PRICE_HD_REEFER,
@@ -46,6 +48,25 @@ export async function POST(req: NextRequest) {
   // tagged with the user id the webhook resolves.
   const existingSub = await getSubscription(user.id)
   let customerId = existingSub?.stripe_customer_id ?? undefined
+
+  // ── Free trial: HD Elite only (not the bundle), never a second time ──
+  // The same rules as the LD trial (src/lib/ld-trial.ts), read BEFORE a new Stripe
+  // customer is created so the brand-new customer cannot pass for the history. Only
+  // looked up for the HD Elite price - nothing else trials.
+  let trialDays: number | null = null
+  const elitePriceId = process.env.STRIPE_PRICE_HD_ELITE
+  if (elitePriceId && priceId === elitePriceId) {
+    const email = profile?.email ?? user.email ?? null
+    const history: TrialHistory = {
+      subscriptionRow:                existingSub,
+      stripeSubscriptionsOnCustomer:  await countStripeSubscriptions(customerId ? [customerId] : []),
+      stripeSubscriptionsOnSameEmail: await countSameEmailSubscriptions(email, customerId),
+    }
+    trialDays = hdTrialDaysFor({ priceId, elitePriceId, verifiedTier: getHdTierFromPriceId(priceId), history })
+    const why = trialDays ? String(trialDays) + ' days' : 'none (' + String(returningReason(history)) + ')'
+    console.log('[hd/checkout] trial for user=' + user.id + ': ' + why)
+  }
+
   if (!customerId) {
     const customer = await stripe.customers.create({
       email:    profile?.email ?? user.email ?? undefined,
@@ -69,8 +90,15 @@ export async function POST(req: NextRequest) {
   // both the webhook and the dashboard re-derive it from the price themselves.
   const tier = getHdTierFromPriceId(priceId)
 
+  // Card ALWAYS (a trial's first invoice is $0, the one case Stripe would otherwise let
+  // finish with no card), and a trial that ends with no card cancels instead of running
+  // unpaid. Trial days only when hdTrialDaysFor granted them.
+  const trial = checkoutTrialParams(trialDays)
+
   const session = await stripe.checkout.sessions.create({
     mode:           'subscription',
+    payment_method_types:      ['card'],
+    payment_method_collection: trial.payment_method_collection,
     line_items:     [{ price: priceId, quantity: 1 }],
     customer:       customerId,
     metadata:       { user_id: user.id, vertical: 'heavy_duty', product: 'hd_suite', plan, ...(tier ? { tier } : {}) },
@@ -79,6 +107,7 @@ export async function POST(req: NextRequest) {
     success_url:    `${baseUrl}/hd/dashboard?upgraded=1&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url:     `${baseUrl}/hd/signup`,
     subscription_data: {
+      ...trial.subscription_data,
       metadata:  { user_id: user.id, vertical: 'heavy_duty', ...(tier ? { tier } : {}) },
     },
     // allow_promotion_codes omitted when promotionCodeId is pre-validated

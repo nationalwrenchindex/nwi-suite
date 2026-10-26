@@ -52,8 +52,7 @@ export async function checkHDStarterAccess(userId: string): Promise<boolean> {
 }
 
 // ── Reefer Module access ───────────────────────────────────────────────────────
-// Requires a PAID (non-trial) active subscription on a reefer-capable tier.
-// Trial users — regardless of tier — are locked out of the Reefer Module.
+// A paid subscription on a reefer-capable tier, or an HD Elite free trial.
 // Used by: /hd/reefer page, /api/hd/alarm-codes.
 export async function checkHDReeferAccess(userId: string): Promise<boolean> {
   const supabase = await createClient()
@@ -66,14 +65,25 @@ export async function checkHDReeferAccess(userId: string): Promise<boolean> {
   if (!data) return false
   if (data.is_comped && data.vertical === 'heavy_duty') return true
 
-  // ToS 8.2 ASSERTS NO FREE TRIALS. This trial machinery is left in place deliberately,
-  // but it is dormant: no Stripe price carries trial_period_days, no subscription is
-  // trialing, and the checkout session sets no trial. Re-enabling a trial makes section
-  // 8.2 of the published Terms FALSE on the day it ships, so the Terms must be updated
-  // FIRST. See docs/tos-draft-clauses.md clause 8.
-  // Deliberately excludes 'trialing' — reefer is locked during free trial
+  // REEFER IS OPEN DURING THE HD ELITE TRIAL (Brock, Oct 26). It is the one thing in
+  // the product nobody else has, and a trial that hides it proves nothing to the
+  // customer it was built for. So: a paid subscription on a Reefer tier, OR an HD Elite
+  // trial. Reefer Standalone (hd_reefer) still needs a paid subscription - no trial is
+  // offered on it, so a trialing hd_reefer row is not one this product created.
+  //
+  // Foreman is the opposite and stays paid-only on a trial: see checkHDForemanAccess.
+  // The trial itself (15 days, card, once per customer) is decided in src/lib/ld-trial.ts.
+  return reeferAllowed(data)
+}
+
+type GateRow = { tier: string | null; status: string | null; is_comped: boolean | null; vertical: string | null }
+
+/** checkHDReeferAccess's rule on a row already read. Pure, so the trial check tests it. */
+export function reeferAllowed(data: GateRow): boolean {
+  if (data.is_comped && data.vertical === 'heavy_duty') return true
   const paidActive = ['active', 'past_due'].includes(data.status ?? '')
-  return paidActive && HD_REEFER_TIERS.includes(data.tier ?? '')
+  const eliteTrial = data.status === 'trialing' && data.tier === 'hd_elite'
+  return (paidActive || eliteTrial) && HD_REEFER_TIERS.includes(data.tier ?? '')
 }
 
 // ── Foreman AI access ──────────────────────────────────────────────────────────
@@ -91,7 +101,13 @@ export async function checkHDForemanAccess(userId: string): Promise<boolean> {
   if (!data) return false
   if (data.is_comped && data.vertical === 'heavy_duty') return true
 
-  // Deliberately excludes 'trialing' — Foreman is never bundled with trials
+  return hdForemanAllowed(data)
+}
+
+/** checkHDForemanAccess's rule on a row already read. Pure, so the trial check tests it. */
+export function hdForemanAllowed(data: GateRow): boolean {
+  if (data.is_comped && data.vertical === 'heavy_duty') return true
+  // Deliberately excludes 'trialing' — Foreman is never included in a trial
   const paidActive = ['active', 'past_due'].includes(data.status ?? '')
   return paidActive && HD_FOREMAN_TIERS.includes(data.tier ?? '')
 }

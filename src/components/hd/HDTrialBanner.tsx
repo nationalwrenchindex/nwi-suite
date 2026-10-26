@@ -5,8 +5,9 @@ import { tint } from '@/lib/hd/text-tone'
 
 const HD_ORANGE = '#E85D24'
 
-// ToS 8.2 asserts NO FREE TRIALS. Dormant, not deleted: re-enabling a trial makes
-// section 8.2 of the published Terms false, so update the Terms FIRST.
+// The HD Elite free trial's notice (15 days, card required - src/lib/ld-trial.ts).
+// Shown by /hd/dashboard while the subscription is trialing; current_period_end is the
+// trial's end, which the webhook and hd-provision.ts both record from Stripe.
 export default function HDTrialBanner({
   trialEndISO,
   monthlyPrice,

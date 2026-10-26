@@ -305,10 +305,15 @@ export async function POST(request: NextRequest) {
             user_id:                userId,
             stripe_customer_id:     typeof session.customer === 'string' ? session.customer : session.customer?.id ?? null,
             stripe_subscription_id: subId,
-            status:                 'active',
+            // Stripe's own status, not a hardcoded 'active': an HD Elite trial must read
+            // 'trialing', or Reefer/Foreman treat it as paid and the dashboard's trial
+            // banner never shows. During a trial current_period_end is the trial's end -
+            // the first charge date. Same as the LD branch below and hd-provision.ts.
+            status:                 stripeSub.status,
             tier:                   hdTier,
             modules:                HD_TIER_MODULES[hdTier],
-            current_period_end:     null,
+            current_period_end:     stripeSub.current_period_end
+              ? new Date(stripeSub.current_period_end * 1000).toISOString() : null,
             cancel_at_period_end:   false,
             vertical:               'heavy_duty',
           })

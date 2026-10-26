@@ -27,6 +27,7 @@ import { stripe, getPriceId, getTierFromPriceId, TIER_MODULES, type PlanTier } f
 import { getSubscription } from '@/lib/subscription'
 import { sendFounderAlert } from '@/lib/email-alerts'
 import { buildLdCheckoutParams, returningReason, trialDaysFor, LD_TRIAL_TIER, type TrialHistory } from '@/lib/ld-trial'
+import { countStripeSubscriptions, countSameEmailSubscriptions } from '@/lib/trial-history'
 
 const VALID_TIERS: PlanTier[] = ['starter', 'pro', 'full_suite', 'full_suite_plus', 'elite', 'foreman_standalone', 'quickwrench', 'detailer']
 // Tiers that never show Stripe's promo-code field when a code was pre-validated.
@@ -170,31 +171,5 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ url: session.url })
 }
 
-// Subscriptions of ANY status (cancelled included) across these Stripe customers.
-// null when Stripe cannot be read - the trial rules treat that as "has history".
-async function countStripeSubscriptions(customerIds: string[]): Promise<number | null> {
-  try {
-    let n = 0
-    for (const customer of customerIds) {
-      const subs = await stripe.subscriptions.list({ customer, status: 'all', limit: 1 })
-      n += subs.data.length
-    }
-    return n
-  } catch (err) {
-    console.error('[stripe/checkout] subscription history lookup failed:', err)
-    return null
-  }
-}
-
-// Other Stripe customers with the same email: catches cancel-then-sign-up-again on a
-// new NWI account with the same address. A different email cannot be caught here.
-async function countSameEmailSubscriptions(email: string | null, exclude: string | undefined): Promise<number | null> {
-  if (!email) return 0
-  try {
-    const customers = await stripe.customers.list({ email, limit: 20 })
-    return countStripeSubscriptions(customers.data.map(c => c.id).filter(id => id !== exclude))
-  } catch (err) {
-    console.error('[stripe/checkout] same-email lookup failed:', err)
-    return null
-  }
-}
+// countStripeSubscriptions / countSameEmailSubscriptions: src/lib/trial-history.ts,
+// shared with /api/hd/checkout.

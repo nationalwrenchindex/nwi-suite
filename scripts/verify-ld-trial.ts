@@ -13,6 +13,8 @@ import {
   returningReason, trialDaysFor, trialNotice, type TrialHistory,
 } from '../src/lib/ld-trial'
 import { subscriptionGrantsModule } from '../src/lib/subscription'
+import { HD_TRIAL_DAYS, checkoutTrialParams, hdTrialDaysFor } from '../src/lib/ld-trial'
+import { reeferAllowed, hdForemanAllowed } from '../src/lib/hd-access'
 import { PLANS, TIER_MODULES, type PlanTier } from '../src/lib/stripe-plans'
 
 // TrialBanner.tsx is compiled with the classic JSX transform here.
@@ -139,6 +141,41 @@ async function main(): Promise<void> {
   check('rendered: nothing for an active subscriber', none === '')
   check('a $0 next charge reads $0.00, not "unknown"',
     trialNotice({ status: 'trialing', trialEnd: '2026-11-04T15:00:00Z', amountCents: 0, currency: 'usd', planName: 'P', planPriceCents: 9900, timeZone: 'UTC' })?.amount === '$0.00')
+
+  // ── The HD Elite trial (Oct 26) ──────────────────────────────────────────────
+  console.log('\nHD Elite trial')
+  const ELITE = 'price_hd_elite_test', BUNDLE = 'price_hd_elite_bundle_test', PRO = 'price_hd_pro_test'
+  const clean: TrialHistory = { subscriptionRow: null, stripeSubscriptionsOnCustomer: 0, stripeSubscriptionsOnSameEmail: 0 }
+  check('HD Elite, new customer: 15 days',
+    hdTrialDaysFor({ priceId: ELITE, elitePriceId: ELITE, verifiedTier: 'hd_elite', history: clean }) === 15 && HD_TRIAL_DAYS === 15)
+  check('the HD Elite + LD bundle does NOT trial (same tier, different price)',
+    hdTrialDaysFor({ priceId: BUNDLE, elitePriceId: ELITE, verifiedTier: 'hd_elite', history: clean }) === null)
+  check('HD Pro does not trial', hdTrialDaysFor({ priceId: PRO, elitePriceId: ELITE, verifiedTier: 'hd_pro', history: clean }) === null)
+  check('no STRIPE_PRICE_HD_ELITE configured: no trial', hdTrialDaysFor({ priceId: ELITE, elitePriceId: undefined, verifiedTier: 'hd_elite', history: clean }) === null)
+  check('a price that maps to another tier never trials', hdTrialDaysFor({ priceId: ELITE, elitePriceId: ELITE, verifiedTier: 'hd_pro', history: clean }) === null)
+  check('a returning customer (subscription on the Stripe customer) gets none',
+    hdTrialDaysFor({ priceId: ELITE, elitePriceId: ELITE, verifiedTier: 'hd_elite', history: { ...clean, stripeSubscriptionsOnCustomer: 1 } }) === null)
+  check('a returning customer (same email elsewhere) gets none',
+    hdTrialDaysFor({ priceId: ELITE, elitePriceId: ELITE, verifiedTier: 'hd_elite', history: { ...clean, stripeSubscriptionsOnSameEmail: 1 } }) === null)
+  check('an account that already took the LD trial gets none (one trial per account)',
+    hdTrialDaysFor({ priceId: ELITE, elitePriceId: ELITE, verifiedTier: 'hd_elite', history: { ...clean, subscriptionRow: { stripe_subscription_id: 'sub_x', status: 'canceled', tier: 'full_suite_plus' } } }) === null)
+  check('unreadable history: no trial',
+    hdTrialDaysFor({ priceId: ELITE, elitePriceId: ELITE, verifiedTier: 'hd_elite', history: { ...clean, stripeSubscriptionsOnSameEmail: null } }) === null)
+  const tp = checkoutTrialParams(15)
+  check('trial params: card always, 15 days, cancel if the trial ends with no card',
+    tp.payment_method_collection === 'always' && tp.subscription_data.trial_period_days === 15 &&
+    tp.subscription_data.trial_settings?.end_behavior.missing_payment_method === 'cancel')
+  check('no trial: card still always, no trial days', checkoutTrialParams(null).payment_method_collection === 'always' &&
+    checkoutTrialParams(null).subscription_data.trial_period_days === undefined)
+
+  const row = (tier: string, status: string, is_comped = false) => ({ tier, status, is_comped, vertical: 'heavy_duty' })
+  check('Reefer OPEN for a trialing HD Elite', reeferAllowed(row('hd_elite', 'trialing')) === true)
+  check('Reefer stays CLOSED for a trialing Reefer Standalone (no trial offered on it)', reeferAllowed(row('hd_reefer', 'trialing')) === false)
+  check('Reefer open for paid Elite and paid Standalone', reeferAllowed(row('hd_elite', 'active')) && reeferAllowed(row('hd_reefer', 'active')))
+  check('Reefer closed for HD Pro, trialing or paid', !reeferAllowed(row('hd_pro', 'trialing')) && !reeferAllowed(row('hd_pro', 'active')))
+  check('Reefer closed once the trial ends unpaid (canceled)', reeferAllowed(row('hd_elite', 'canceled')) === false)
+  check('Foreman stays CLOSED on the HD Elite trial', hdForemanAllowed(row('hd_elite', 'trialing')) === false)
+  check('Foreman open for paid HD Elite', hdForemanAllowed(row('hd_elite', 'active')) === true)
 
   console.log(`\n${passes} passed, ${failures} failed`)
   if (failures) process.exit(1)
