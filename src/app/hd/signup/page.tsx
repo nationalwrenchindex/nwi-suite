@@ -17,6 +17,8 @@ const PLANS: {
   name:    string
   price:   number
   badge?:  string
+  /** Display only. The trial itself is decided at checkout (src/lib/ld-trial.ts). */
+  trial?:  string
   features: string[]
 }[] = [
   {
@@ -43,6 +45,8 @@ const PLANS: {
     name:     'HD Elite',
     price:    159,
     badge:    'RECOMMENDED',
+    // The HD Elite free trial (82719672): 15 days, card required, once per customer.
+    trial:    '15 days free · card required',
     // Foreman is a separately billed $59/mo add-on with its own checkout route, not
     // an Elite entitlement — listing it here promised something the subscription
     // does not grant.
@@ -223,6 +227,29 @@ function HDSignupForm() {
   }
 
   // Compute first-payment date for promo confirmation
+  // COPY ONLY - the trial is granted or refused at checkout (src/lib/ld-trial.ts), and a
+  // returning customer is refused there. Shown so ad traffic sees the offer before it
+  // ever reaches Stripe. Day 15 from today is the first charge date Stripe will set.
+  const isEliteTrialPlan = plan === 'elite' && promoStatus !== 'valid'
+  const trialFirstPaymentDate = (() => {
+    const d = new Date()
+    d.setDate(d.getDate() + 15)
+    return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+  })()
+
+  // The same words on both steps: an ad link with ?plan=elite skips the plan cards and
+  // lands on Account Details, so that step must carry the offer too.
+  const trialNotice = (
+    <div className="rounded-xl px-4 py-3" data-testid="trial-notice"
+      style={{ background: 'color-mix(in srgb, var(--hd-positive) 10%, var(--hd-card))', border: '1px solid color-mix(in srgb, var(--hd-positive) 35%, transparent)' }}>
+      <p className="text-sm font-semibold" style={{ color: 'var(--hd-positive)' }}>15-day free trial on HD Elite</p>
+      <p className="text-xs mt-0.5" style={{ color: 'var(--hd-text-muted)' }}>
+        Card required at checkout. You will not be charged until {trialFirstPaymentDate}, then $159/month.
+        Cancel before then and you pay nothing. One free trial per customer.
+      </p>
+    </div>
+  )
+
   const promoFirstPaymentDate = (() => {
     const d = new Date()
     d.setDate(d.getDate() + 90)
@@ -301,6 +328,11 @@ function HDSignupForm() {
                     <p className="font-condensed font-bold text-3xl mt-1 mb-3" style={{ color: 'var(--hd-accent-text)' }}>
                       {priceOf(p) === null ? '—' : `$${priceOf(p)}`}<span className="text-base font-normal" style={{ color: 'var(--hd-text-faint)' }}>/mo</span>
                     </p>
+                    {p.trial && (
+                      <p className="text-xs font-semibold -mt-2 mb-3" style={{ color: 'var(--hd-positive)' }} data-testid="trial-offer">
+                        {p.trial} · then ${p.price}/mo
+                      </p>
+                    )}
                     <ul className="space-y-1.5">
                       {p.features.map(f => (
                         <li key={f} className="flex items-start gap-2 text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.7)' }}>
@@ -372,16 +404,19 @@ function HDSignupForm() {
               )}
             </div>
 
+            {/* The HD Elite trial, spelled out before checkout. */}
+            {isEliteTrialPlan && <div className="mb-4">{trialNotice}</div>}
+
             {/* Continue */}
             <button
               onClick={() => setStep('account')}
               className="w-full py-3 rounded-xl font-bold text-on-accent text-sm"
               style={{ background: HD_ORANGE }}
             >
-              Continue with {selectedPlan.name} →
+              {isEliteTrialPlan ? 'Start your 15-day free trial →' : `Continue with ${selectedPlan.name} →`}
             </button>
             <p className="text-center text-xs mt-3" style={{ color: 'var(--hd-text-faint)' }}>
-              {promoStatus === 'valid'
+              {promoStatus === 'valid' || isEliteTrialPlan
                 ? 'Card required · Cancel anytime'
                 : 'Cancel anytime'}
             </p>
@@ -405,6 +440,8 @@ function HDSignupForm() {
                   )}
                 </div>
               </div>
+
+              {isEliteTrialPlan && trialNotice}
 
               {[
                 { label: 'Full Name',      value: name,  setter: setName,  type: 'text',     placeholder: 'John Smith'           },
@@ -453,7 +490,7 @@ function HDSignupForm() {
                 className="w-full py-3 rounded-xl font-bold text-on-accent text-sm"
                 style={{ background: HD_ORANGE, opacity: loading || captcha.pending || !acceptedTerms ? 0.6 : 1 }}
               >
-                {loading ? 'Creating Account…' : 'Start Today'}
+                {loading ? 'Creating Account…' : isEliteTrialPlan ? 'Start My Free Trial' : 'Start Today'}
               </button>
             </div>
 
