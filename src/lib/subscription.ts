@@ -143,6 +143,29 @@ export async function hasForemanAccess(userId: string): Promise<boolean> {
   return data?.foreman_addon_active ?? false
 }
 
+/**
+ * May this account USE Foreman - provision a number, change its settings? The same
+ * condition /foreman enforces: the Foreman add-on is active on the profile
+ * (foreman_addon_active, set only by the Stripe webhook when the add-on is bought) AND
+ * hasForemanAccess.
+ *
+ * hasForemanAccess alone is NOT enough: it goes through canAccessModule, whose
+ * PAID_TIERS shortcut passes starter, pro, full_suite, hd_pro and hd_elite - trialing
+ * included - so a Scheduler-only account, or any trial with a card, could reach
+ * /api/foreman/provision-number and buy a Twilio number. Every /api/foreman route that
+ * acts goes through this.
+ */
+export async function canUseForeman(userId: string): Promise<boolean> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('profiles')
+    .select('foreman_addon_active')
+    .eq('id', userId)
+    .single()
+  if (!(data?.foreman_addon_active ?? false)) return false
+  return hasForemanAccess(userId)
+}
+
 // Resolves user_id from a Stripe customer ID (used in webhooks)
 export async function getUserIdByStripeCustomer(
   stripeCustomerId: string,

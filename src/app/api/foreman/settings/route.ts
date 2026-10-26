@@ -1,12 +1,13 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { hasForemanAccess } from '@/lib/subscription'
+import { canUseForeman } from '@/lib/subscription'
 
 export async function GET() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!await hasForemanAccess(user.id)) {
+  // The Foreman add-on must be active, as on /foreman - see canUseForeman.
+  if (!await canUseForeman(user.id)) {
     return NextResponse.json({ error: 'Foreman access required.' }, { status: 403 })
   }
 
@@ -23,7 +24,8 @@ export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!await hasForemanAccess(user.id)) {
+  // The Foreman add-on must be active, as on /foreman - see canUseForeman.
+  if (!await canUseForeman(user.id)) {
     return NextResponse.json({ error: 'Foreman access required.' }, { status: 403 })
   }
 

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { hasForemanAccess } from '@/lib/subscription'
+import { canUseForeman } from '@/lib/subscription'
 import { provisionForemanNumber } from '@/lib/foreman/provision'
 
 export async function POST() {
@@ -8,8 +8,9 @@ export async function POST() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const hasAccess = await hasForemanAccess(user.id)
-  if (!hasAccess) {
+  // The Foreman add-on must be active, as on /foreman. A plan tier alone - or a trial -
+  // must never be able to buy a Twilio number. See canUseForeman.
+  if (!await canUseForeman(user.id)) {
     return NextResponse.json({ error: 'Foreman access required.' }, { status: 403 })
   }
 

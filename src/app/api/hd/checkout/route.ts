@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { stripe } from '@/lib/stripe'
 import { HD_ELITE_BUNDLE_PRICE_ID, getHdTierFromPriceId } from '@/lib/hd-plans'
+import { getSubscription } from '@/lib/subscription'
 
 const HD_PRICE_MAP: Record<string, string | undefined> = {
   hd_reefer: process.env.STRIPE_PRICE_HD_REEFER,
@@ -34,9 +35,25 @@ export async function POST(req: NextRequest) {
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('email')
+    .select('email, full_name, business_name')
     .eq('id', user.id)
     .single()
+
+  // REUSE THE ACCOUNT'S STRIPE CUSTOMER, as /api/stripe/checkout does. This passed
+  // customer_email, so Stripe created a brand-new customer on every HD checkout: a
+  // customer with no history (which blinds any once-per-customer check) and a duplicate
+  // in the Stripe dashboard each time. One is created only when the account has none,
+  // tagged with the user id the webhook resolves.
+  const existingSub = await getSubscription(user.id)
+  let customerId = existingSub?.stripe_customer_id ?? undefined
+  if (!customerId) {
+    const customer = await stripe.customers.create({
+      email:    profile?.email ?? user.email ?? undefined,
+      name:     profile?.business_name ?? profile?.full_name ?? undefined,
+      metadata: { user_id: user.id },
+    })
+    customerId = customer.id
+  }
 
   const hasPromo = !!body.promotionCodeId
   // NEXT_PUBLIC_APP_URL (the app host, tools.nationalwrenchindex.com) — NOT
@@ -55,7 +72,7 @@ export async function POST(req: NextRequest) {
   const session = await stripe.checkout.sessions.create({
     mode:           'subscription',
     line_items:     [{ price: priceId, quantity: 1 }],
-    customer_email: profile?.email ?? user.email ?? undefined,
+    customer:       customerId,
     metadata:       { user_id: user.id, vertical: 'heavy_duty', product: 'hd_suite', plan, ...(tier ? { tier } : {}) },
     // session_id lets the dashboard provision access on arrival instead of waiting
     // on the webhook, which can land after the user is already looking at the page.
