@@ -299,8 +299,9 @@ export default function WorkOrderLineItems({
             + Add Part
           </button>
           <div className="flex-1" />
+          {/* A warning, so it reads like one: the amber token (AA in both themes). */}
           {dirty && (
-            <span className="text-xs" style={{ color: 'var(--hd-text)' }}>Unsaved changes</span>
+            <span className="text-xs" style={{ color: 'var(--hd-warn)' }}>Unsaved changes</span>
           )}
           <button
             type="button" onClick={save} disabled={saving || !dirty}

@@ -400,7 +400,9 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
                 onClick={() => void createInvoice()}
                 disabled={invoicing}
                 className="px-3 py-1.5 rounded-lg text-xs font-condensed font-bold tracking-wide disabled:opacity-50"
-                style={{ background: `${tint(HD_ORANGE, 9)}`, color: 'var(--hd-text)', border: `1px solid ${tint(HD_ORANGE, 33)}` }}
+                // THE PRIMARY ACTION: the one orange-filled button on the screen, dark text
+                // on brand #FF6600 (5.93:1). Every other action is dark ink (Brock, Oct 25).
+                style={{ background: '#FF6600', color: '#1A1A1A', border: '1px solid #FF6600' }}
               >
                 {invoicing ? 'Building invoice...' : '+ Create Invoice'}
               </button>
