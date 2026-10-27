@@ -190,7 +190,7 @@ traffic to `/reefer/signup`.
 
 ## Commit
 
-Committed and pushed to master: a **Preview**, not promoted. Preview and production share
+Commit **549df424**, pushed to master: a **Preview**, not promoted. (This report line was added in a docs-only follow-up commit.) Preview and production share
 one database. Migration 169 (net30 defaults) is still uncommitted and was left out.
 
 ## Worries
