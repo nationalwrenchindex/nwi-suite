@@ -1,7 +1,7 @@
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { checkHDAccess } from '@/lib/hd-access'
+import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import InvoiceDetailActions from './InvoiceDetailActions'
 import { termsWithDueDate, formatDueDate } from '@/lib/hd/payment-terms'
 import { AERIAL_TYPE_LABEL } from '@/lib/hd/aerial/forms'
@@ -55,7 +55,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
 
-  const hasAccess = await checkHDAccess(user.id)
+  const hasAccess = (await checkHDAccess(user.id)) || (await reeferStandaloneCan(user.id, 'reefer_invoices'))
   if (!hasAccess) redirect('/hd/signup')
 
   const [{ data: inv }, { data: profile }, { data: dotInspection }, { data: aerialInspection }] = await Promise.all([

@@ -1,13 +1,16 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
+import { isReeferSurfacePath } from '@/lib/reefer-standalone'
 import { createClient } from '@/lib/supabase/client'
 import { useCaptcha } from '@/components/auth/CaptchaField'
 
 const HD_ORANGE = '#E85D24'
 
 export default function HDLoginPage() {
+  // The same sign-in on /reefer/login, landing on the reefer dashboard.
+  const base = isReeferSurfacePath(usePathname()) ? '/reefer' : '/hd'
   const router  = useRouter()
   const [email, setEmail]   = useState('')
   const [pass,  setPass]    = useState('')
@@ -31,7 +34,7 @@ export default function HDLoginPage() {
       setError(err.message)
       setLoading(false)
     } else {
-      router.push('/hd/dashboard')
+      router.push(base + '/dashboard')
     }
   }
 
@@ -47,7 +50,7 @@ export default function HDLoginPage() {
                 <circle cx="5.5" cy="18.5" r="2.5" /><circle cx="18.5" cy="18.5" r="2.5" />
               </svg>
             </div>
-            <p className="font-condensed font-bold text-white text-lg tracking-wide">NWI HD SUITE</p>
+            <p className="font-condensed font-bold text-white text-lg tracking-wide">{base === '/reefer' ? 'NWI REEFER' : 'NWI HD SUITE'}</p>
           </div>
           <h1 className="font-condensed font-bold text-2xl text-white tracking-wide">SIGN IN</h1>
         </div>
@@ -91,7 +94,7 @@ export default function HDLoginPage() {
 
         <p className="text-center text-xs mt-4" style={{ color: 'var(--hd-text-faint)' }}>
           No account?{' '}
-          <a href="/hd/signup" style={{ color: 'var(--hd-accent-text)' }}>Start today</a>
+          <a href={base + '/signup'} style={{ color: 'var(--hd-accent-text)' }}>Start today</a>
         </p>
       </div>
     </div>

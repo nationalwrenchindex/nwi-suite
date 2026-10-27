@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { ensureEquipmentCategories } from '@/lib/hd/equipment-categories'
 import { unitCategoryChip, TRUCK_BLUE as UNIT_TRUCK_BLUE } from '@/components/hd/UnitCategoryChip'
 import { textTone, tint } from '@/lib/hd/text-tone'
+import { onReeferSurface } from '@/lib/reefer-surface'
 
 export const metadata = { title: 'PM Schedules — NWI HD Suite' }
 
@@ -16,6 +17,8 @@ export default async function PMSchedulesPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
+  // On /reefer: the TK and Carrier reefer intervals only - no truck or trailer cards.
+  const reefer = await onReeferSurface()
 
   // Seed the shop's categories first, so a shop that has never opened the units list
   // still sees Truck / Trailer on its units here instead of all-Uncategorized.
@@ -90,6 +93,7 @@ export default async function PMSchedulesPage() {
       <p className="text-xs mb-6" style={{ color: 'var(--hd-text-faint)' }}>Tap any interval to start a new invoice pre-filled for that PM service.</p>
 
       {/* Truck & trailer PM intervals (chassis, mileage/time based) */}
+      {!reefer && (<>
       <h2 className="font-condensed font-bold text-white text-xl tracking-wide mb-4">TRUCK &amp; TRAILER PM INTERVALS</h2>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         {[
@@ -138,9 +142,10 @@ export default async function PMSchedulesPage() {
           </div>
         ))}
       </div>
+      </>)}
 
       {/* Unit PM status */}
-      <h2 className="font-condensed font-bold text-white text-xl tracking-wide mb-4">FLEET UNIT STATUS</h2>
+      <h2 className="font-condensed font-bold text-white text-xl tracking-wide mb-4">{reefer ? 'REEFER UNIT STATUS' : 'FLEET UNIT STATUS'}</h2>
       <div className="rounded-xl overflow-hidden" style={{ border: '1px solid var(--hd-border)' }}>
         {!units || units.length === 0 ? (
           <div className="py-16 text-center" style={{ background: 'var(--hd-card)' }}>

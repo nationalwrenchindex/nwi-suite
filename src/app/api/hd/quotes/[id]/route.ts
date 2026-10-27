@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { checkHDAccess } from '@/lib/hd-access'
+import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 
 import { mintQuoteToken } from '@/lib/hd/quote-approval'
 import { EDITABLE_QUOTE_STATUSES, isQuoteEditable, quoteEditUpdate, quoteLockReason } from '@/lib/hd/quote-edit'
@@ -15,7 +15,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const hasAccess = await checkHDAccess(user.id)
+  const hasAccess = (await checkHDAccess(user.id)) || (await reeferStandaloneCan(user.id, 'reefer_quotes'))
   if (!hasAccess) return NextResponse.json({ error: 'HD subscription required' }, { status: 403 })
 
   const { data, error } = await supabase
@@ -35,7 +35,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const hasAccess = await checkHDAccess(user.id)
+  const hasAccess = (await checkHDAccess(user.id)) || (await reeferStandaloneCan(user.id, 'reefer_quotes'))
   if (!hasAccess) return NextResponse.json({ error: 'HD subscription required' }, { status: 403 })
 
   let body: Record<string, unknown>
@@ -131,7 +131,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const hasAccess = await checkHDAccess(user.id)
+  const hasAccess = (await checkHDAccess(user.id)) || (await reeferStandaloneCan(user.id, 'reefer_quotes'))
   if (!hasAccess) return NextResponse.json({ error: 'HD subscription required' }, { status: 403 })
 
   const { error } = await supabase

@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { checkHDStarterAccess } from '@/lib/hd-access'
+import { checkHDStarterAccess, reeferStandaloneCan } from '@/lib/hd-access'
+import { isReeferCategoryName } from '@/lib/reefer-standalone'
 import { shopTimeZone } from '@/lib/shop-time'
 import { ensureEquipmentCategories } from '@/lib/hd/equipment-categories'
 import { loadRollupInput } from '@/lib/hd/equipment-rollup-load'
@@ -31,7 +32,8 @@ export async function GET(request: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const hasAccess = await checkHDStarterAccess(user.id)
+  const hdAccess  = await checkHDStarterAccess(user.id)
+  const hasAccess = hdAccess || (await reeferStandaloneCan(user.id, 'reefer_financials'))
   if (!hasAccess) return NextResponse.json({ error: 'HD subscription required' }, { status: 403 })
 
   const { data: profile } = await supabase.from('profiles').select('state').eq('id', user.id).maybeSingle()
@@ -46,7 +48,10 @@ export async function GET(request: NextRequest) {
     // A shop opening this view before it has any category gets the nine defaults (and
     // its units mapped from unit_type) first. Never throws; the rollup still runs.
     await ensureEquipmentCategories(supabase)
-    const input = await loadRollupInput(supabase, user.id, range, timeZone)
+    const loaded = await loadRollupInput(supabase, user.id, range, timeZone)
+    // Reefer Standalone: its reefer categories only - never a Boom, Aerial or Truck row.
+    // Totals are untouched: a unit outside them falls into the rollup's Uncategorized.
+    const input = hdAccess ? loaded : { ...loaded, categories: loaded.categories.filter(c => isReeferCategoryName(c.name)) }
     const jobs = jobsFor(input)
     const categories = rollupByCategory(input, jobs)
     const units = rollupByUnit(input, jobs)

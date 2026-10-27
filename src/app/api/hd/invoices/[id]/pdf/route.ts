@@ -8,7 +8,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
 import { createClient } from '@/lib/supabase/server'
-import { checkHDAccess } from '@/lib/hd-access'
+import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { termsWithDueDate } from '@/lib/hd/payment-terms'
 import { discountPrintLabel, parseDiscount } from '@/lib/document-discount'
 import { hdTermsBlockRows, parseTermsSnapshot } from '@/lib/document-terms'
@@ -68,7 +68,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return new NextResponse('Unauthorized', { status: 401 })
 
-  const hasAccess = await checkHDAccess(user.id)
+  const hasAccess = (await checkHDAccess(user.id)) || (await reeferStandaloneCan(user.id, 'reefer_invoices'))
   if (!hasAccess) return new NextResponse('HD subscription required', { status: 403 })
 
   const { data: inv, error } = await supabase

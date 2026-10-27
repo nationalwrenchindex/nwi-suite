@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { checkHDAccess } from '@/lib/hd-access'
+import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { hasQuickWrenchAccess } from '@/lib/subscription'
 import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import {
@@ -24,10 +24,12 @@ async function authed() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) } as const
   const [hdAccess, qwAccess] = await Promise.all([checkHDAccess(user.id), hasQuickWrenchAccess(user.id)])
-  if (!hdAccess && !qwAccess) {
+  if (!hdAccess && !qwAccess && !(await reeferStandaloneCan(user.id, 'reefer_labor_cards'))) {
     return { error: NextResponse.json({ error: 'HD or QuickWrench subscription required' }, { status: 403 }) } as const
   }
-  return { supabase, user } as const
+  // reeferOnly: let in by the Reefer Standalone check alone. Its library is reefer work
+  // only - read and written as equipment_type 'reefer'. Never true for HD or QuickWrench.
+  return { supabase, user, reeferOnly: !hdAccess && !qwAccess } as const
 }
 
 // GET - the NWI catalog + the tech's own rows (RLS: own, or user_id NULL and is_master).
@@ -59,6 +61,7 @@ export async function GET(req: NextRequest) {
 
   const build = (count?: 'exact') => {
     let query = supabase.from('hd_repair_items').select(COLS, count ? { count } : undefined).eq('active', true)
+    if (a.reeferOnly) query = query.eq('equipment_type', 'reefer')
     if (category)   query = query.eq('category', category)
     if (categories) query = query.or(categories)
     if (q)          query = query.or(librarySearchFilter(q))
@@ -173,6 +176,8 @@ export async function POST(req: NextRequest) {
       use_count:             1,
       last_used_at:          now,
       source,
+      // Reefer Standalone saves are reefer cards (RF- code), so they show on its screens.
+      ...(a.reeferOnly ? { equipment_type: 'reefer' } : {}),
     })
     .select(COLS)
     .single()

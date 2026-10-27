@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { checkHDAccess } from '@/lib/hd-access'
+import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import {
   HD_INVOICE_LIST_SELECT,
@@ -36,7 +36,7 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
 
-  const hasAccess = await checkHDAccess(user.id)
+  const hasAccess = (await checkHDAccess(user.id)) || (await reeferStandaloneCan(user.id, 'reefer_invoices'))
   if (!hasAccess) redirect('/hd/signup')
 
   const { filter } = await searchParams

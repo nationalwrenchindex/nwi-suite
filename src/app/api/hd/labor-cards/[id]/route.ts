@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import {
   LABOR_CARD_COLUMNS, cleanLaborCard, isMissing166Column, MIGRATION_166_MESSAGE, isMissing167Column, MIGRATION_167_MESSAGE,
 } from '@/lib/hd/labor-cards'
-import { authedHD, ownsCategory } from '../shared'
+import { authedHD, ownsCategory, reeferCardProblem } from '../shared'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,13 +33,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!(await ownsCategory(a.supabase, a.user.id, clean.row.equipment_category_id))) {
     return NextResponse.json({ error: 'Unknown equipment category.' }, { status: 400 })
   }
+  if (a.reeferOnly) {
+    const problem = await reeferCardProblem(a.supabase, a.user.id, clean.row)
+    if (problem) return NextResponse.json({ error: problem }, { status: 400 })
+  }
 
-  const { data, error } = await a.supabase
+  let upd = a.supabase
     .from('hd_repair_items')
     .update({ ...clean.row, updated_at: new Date().toISOString() })
     .eq('id', id)
     .eq('user_id', a.user.id)
     .eq('active', true)
+  // Reefer Standalone edits its reefer cards only.
+  if (a.reeferOnly) upd = upd.eq('equipment_type', 'reefer')
+  const { data, error } = await upd
     .select(LABOR_CARD_COLUMNS)
     .maybeSingle()
 
@@ -59,12 +66,14 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const a = await authedHD()
   if ('error' in a) return a.error
 
-  const { data, error } = await a.supabase
+  let del = a.supabase
     .from('hd_repair_items')
     .update({ active: false, updated_at: new Date().toISOString() })
     .eq('id', id)
     .eq('user_id', a.user.id)
     .eq('active', true)
+  if (a.reeferOnly) del = del.eq('equipment_type', 'reefer')
+  const { data, error } = await del
     .select('id')
     .maybeSingle()
 

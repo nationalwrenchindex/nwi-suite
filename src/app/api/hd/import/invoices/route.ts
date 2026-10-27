@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { isReeferStandaloneUser } from '@/lib/hd-access'
 
 function normalize(name: string) {
   return name.toLowerCase().trim().replace(/\s+/g, ' ')
@@ -37,6 +38,9 @@ export async function POST(req: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Not part of Reefer Standalone. Only a reefer_standalone account is refused here;
+  // every other account gets exactly what it got before.
+  if (await isReeferStandaloneUser(user.id)) return NextResponse.json({ error: 'Not available on Reefer Standalone' }, { status: 403 })
 
   let body: { rows: InvoiceRow[] }
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid body' }, { status: 400 }) }

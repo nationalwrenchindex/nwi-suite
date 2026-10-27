@@ -84,6 +84,26 @@ export function hdTrialDaysFor(input: {
   return HD_TRIAL_DAYS
 }
 
+// THE REEFER STANDALONE TRIAL (Oct 27): 15 days of the /reefer product on the same rules
+// as HD Elite - card always, once per customer, cancel if the trial ends with no card.
+// Its own function so trialDaysFor and hdTrialDaysFor above are untouched. Decided by
+// the PRICE (STRIPE_PRICE_REEFER_STANDALONE): no env price, no trial.
+export const REEFER_TRIAL_TIER = 'reefer_standalone'
+export const REEFER_TRIAL_DAYS = 15
+
+/** Trial days for a Reefer Standalone checkout, or null for none. */
+export function reeferTrialDaysFor(input: {
+  priceId:       string
+  reeferPriceId: string | undefined
+  verifiedTier:  string | null
+  history:       TrialHistory
+}): number | null {
+  if (!input.reeferPriceId || input.priceId !== input.reeferPriceId) return null
+  if (input.verifiedTier !== REEFER_TRIAL_TIER) return null
+  if (isReturningCustomer(input.history)) return null
+  return REEFER_TRIAL_DAYS
+}
+
 /**
  * The trial-related part of the Checkout Session params. Every LD checkout gets
  * payment_method_collection 'always'; only a trial adds trial days and the

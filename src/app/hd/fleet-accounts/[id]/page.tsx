@@ -2,7 +2,7 @@ import { redirect, notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { checkHDStarterAccess } from '@/lib/hd-access'
+import { checkHDStarterAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { textTone, tint } from '@/lib/hd/text-tone'
 
 export const metadata = { title: 'Fleet Account — NWI HD Suite' }
@@ -70,7 +70,7 @@ export default async function FleetAccountDetailPage({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
 
-  const hasStarterAccess = await checkHDStarterAccess(user.id)
+  const hasStarterAccess = (await checkHDStarterAccess(user.id)) || (await reeferStandaloneCan(user.id, 'reefer_customers'))
   if (!hasStarterAccess) redirect('/hd/upgrade')
 
   // Update the fleet account (edit form submit).

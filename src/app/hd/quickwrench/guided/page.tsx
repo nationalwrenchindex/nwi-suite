@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { checkHDAccess } from '@/lib/hd-access'
+import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import GuidedDiagnostic from './GuidedDiagnostic'
 
 export default async function GuidedDiagnosticPage({
@@ -12,7 +12,7 @@ export default async function GuidedDiagnosticPage({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
 
-  const hasAccess = await checkHDAccess(user.id)
+  const hasAccess = (await checkHDAccess(user.id)) || (await reeferStandaloneCan(user.id, 'reefer_diagnostics'))
   if (!hasAccess) redirect('/hd/signup')
 
   const { alarm } = await searchParams

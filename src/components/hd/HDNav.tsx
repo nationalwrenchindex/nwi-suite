@@ -202,19 +202,50 @@ const NAV_ITEMS: NavItem[] = [
   icon: navIcon(item.href.replace('/hd/', '')),
 }))
 
-export default function HDNav({ businessName }: { businessName?: string }) {
+// Reefer Standalone (/reefer). ONLY the screens that product carries - nothing truck,
+// trailer, inspection, Foreman, import or category-management. Each /reefer path renders
+// the same page as its /hd twin (src/app/reefer). The icon keys are the HD ones.
+const REEFER_NAV_ITEMS: NavItem[] = [
+  { href: '/reefer/dashboard',      label: 'Dashboard'          },
+  { href: '/reefer/scheduler',      label: 'Calendar'           },
+  { href: '/reefer/quickwrench',    label: 'Reefer Diagnostics' },
+  { href: '/reefer/intel',          label: 'Intel Hub'          },
+  { href: '/reefer/financials',     label: 'Financials'         },
+  { href: '/reefer/parts',          label: 'Parts Lookup'       },
+  { href: '/reefer/work-orders',    label: 'Work Orders'        },
+  { href: '/reefer/fleet-units',    label: 'Reefer Units'       },
+  { href: '/reefer/fleet-accounts', label: 'Customers'          },
+  { href: '/reefer/invoicing',      label: 'Invoicing'          },
+  { href: '/reefer/quotes',         label: 'Quotes'             },
+  { href: '/reefer/labor-cards',    label: 'Labor Cards'        },
+  { href: '/reefer/invoices',       label: 'Invoices'           },
+  { href: '/reefer/pm-schedules',   label: 'PM Schedules'       },
+  { href: '/reefer/epa-log',        label: 'EPA 608 Log'        },
+  { href: '/reefer/reefer',         label: 'Reefer Module'      },
+  { href: '/reefer/settings',       label: 'Settings'           },
+].map(item => ({
+  ...item,
+  icon: navIcon(item.href.replace('/reefer/', '')),
+}))
+
+/** variant 'hd' (the default) is the HD nav exactly as it always was. */
+export default function HDNav({ businessName, variant = 'hd' }: { businessName?: string; variant?: 'hd' | 'reefer' }) {
   const pathname = usePathname()
   const router   = useRouter()
   const [open, setOpen] = useState(false)
+  const reefer    = variant === 'reefer'
+  const navItems  = reefer ? REEFER_NAV_ITEMS : NAV_ITEMS
+  const base      = reefer ? '/reefer' : '/hd'
+  const brand     = reefer ? 'NWI REEFER' : 'NWI HD SUITE'
 
   async function signOut() {
     const supabase = createClient()
     await supabase.auth.signOut()
-    router.push('/hd/login')
+    router.push(base + '/login')
   }
 
   function NavLink({ item }: { item: NavItem }) {
-    const isActive = item.href === '/hd/dashboard'
+    const isActive = item.href === base + '/dashboard'
       ? pathname === item.href
       : pathname.startsWith(item.href)
     return (
@@ -248,9 +279,9 @@ export default function HDNav({ businessName }: { businessName?: string }) {
           </svg>
         </div>
         <div className="min-w-0">
-          <p className="font-condensed font-bold text-white text-sm leading-tight tracking-wide">NWI HD SUITE</p>
+          <p className="font-condensed font-bold text-white text-sm leading-tight tracking-wide">{brand}</p>
           <p className="text-xs truncate" style={{ color: 'var(--hd-text-faint)' }}>
-            {businessName ?? 'Heavy Duty'}
+            {businessName ?? (reefer ? 'Transport Refrigeration' : 'Heavy Duty')}
           </p>
         </div>
       </div>
@@ -258,7 +289,7 @@ export default function HDNav({ businessName }: { businessName?: string }) {
       {/* PM Checklist — prominent CTA */}
       <div className="px-3 pt-3 pb-1">
         <Link
-          href="/hd/pm-checklist"
+          href={base + '/pm-checklist'}
           onClick={() => setOpen(false)}
           className="flex items-center gap-2 w-full px-3 py-2.5 rounded-lg text-sm font-semibold text-white transition-opacity hover:opacity-90"
           style={{ background: `linear-gradient(135deg, ${HD_ORANGE}, #c44a1a)` }}
@@ -272,7 +303,7 @@ export default function HDNav({ businessName }: { businessName?: string }) {
 
       {/* Nav items */}
       <nav className="flex-1 px-3 py-2 overflow-y-auto space-y-0.5">
-        {NAV_ITEMS.map(item => <NavLink key={item.href} item={item} />)}
+        {navItems.map(item => <NavLink key={item.href} item={item} />)}
       </nav>
 
       {/* Footer */}
@@ -327,10 +358,10 @@ export default function HDNav({ businessName }: { businessName?: string }) {
               <circle cx="5.5" cy="18.5" r="2.5" /><circle cx="18.5" cy="18.5" r="2.5" />
             </svg>
           </div>
-          <span className="font-condensed font-bold text-white text-sm tracking-wide">NWI HD SUITE</span>
+          <span className="font-condensed font-bold text-white text-sm tracking-wide">{brand}</span>
         </div>
         <Link
-          href="/hd/pm-checklist"
+          href={base + '/pm-checklist'}
           className="ml-auto px-3 py-1.5 rounded-lg text-xs font-semibold text-on-accent"
           style={{ background: HD_ORANGE }}
         >

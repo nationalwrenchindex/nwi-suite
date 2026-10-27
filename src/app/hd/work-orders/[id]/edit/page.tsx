@@ -1,6 +1,6 @@
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { checkHDStarterAccess } from '@/lib/hd-access'
+import { checkHDStarterAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import EditWorkOrderForm from '../EditWorkOrderForm'
 
 export const metadata = { title: 'Edit Work Order — NWI HD Suite' }
@@ -14,7 +14,7 @@ export default async function EditWorkOrderPage({ params }: { params: Promise<{ 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
 
-  const hasAccess = await checkHDStarterAccess(user.id)
+  const hasAccess = (await checkHDStarterAccess(user.id)) || (await reeferStandaloneCan(user.id, 'reefer_work_orders'))
   if (!hasAccess) redirect('/hd/upgrade')
 
   // '*' so the migration-159 unit columns are read when they exist and the page still

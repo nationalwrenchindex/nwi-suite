@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { checkHDStarterAccess } from '@/lib/hd-access'
+import { checkHDStarterAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import HDFinancialsClient from '@/components/hd/HDFinancialsClient'
 import QuickBooksExport from '@/components/hd/QuickBooksExport'
 
@@ -47,7 +47,7 @@ export default async function HDFinancialsPage({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
 
-  const hasStarterAccess = await checkHDStarterAccess(user.id)
+  const hasStarterAccess = (await checkHDStarterAccess(user.id)) || (await reeferStandaloneCan(user.id, 'reefer_financials'))
   if (!hasStarterAccess) redirect('/hd/upgrade')
 
   const params = await searchParams

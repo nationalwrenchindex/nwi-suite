@@ -13,7 +13,8 @@ import {
   returningReason, trialDaysFor, trialNotice, type TrialHistory,
 } from '../src/lib/ld-trial'
 import { subscriptionGrantsModule } from '../src/lib/subscription'
-import { HD_TRIAL_DAYS, checkoutTrialParams, hdTrialDaysFor } from '../src/lib/ld-trial'
+import { HD_TRIAL_DAYS, checkoutTrialParams, hdTrialDaysFor, reeferTrialDaysFor, REEFER_TRIAL_DAYS } from '../src/lib/ld-trial'
+import { canStartReeferCheckout } from '../src/lib/reefer-standalone'
 import { reeferAllowed, hdForemanAllowed } from '../src/lib/hd-access'
 import { PLANS, TIER_MODULES, type PlanTier } from '../src/lib/stripe-plans'
 
@@ -176,6 +177,30 @@ async function main(): Promise<void> {
   check('Reefer closed once the trial ends unpaid (canceled)', reeferAllowed(row('hd_elite', 'canceled')) === false)
   check('Foreman stays CLOSED on the HD Elite trial', hdForemanAllowed(row('hd_elite', 'trialing')) === false)
   check('Foreman open for paid HD Elite', hdForemanAllowed(row('hd_elite', 'active')) === true)
+
+  // ── The Reefer Standalone trial (Oct 27) ─────────────────────────────────────
+  console.log('\nReefer Standalone trial')
+  const RS = 'price_reefer_standalone_test'
+  check('Reefer Standalone, new customer: 15 days',
+    reeferTrialDaysFor({ priceId: RS, reeferPriceId: RS, verifiedTier: 'reefer_standalone', history: clean }) === 15 && REEFER_TRIAL_DAYS === 15)
+  check('no STRIPE_PRICE_REEFER_STANDALONE: no trial', reeferTrialDaysFor({ priceId: RS, reeferPriceId: undefined, verifiedTier: 'reefer_standalone', history: clean }) === null)
+  check('a price that maps to another tier never trials', reeferTrialDaysFor({ priceId: RS, reeferPriceId: RS, verifiedTier: 'hd_reefer', history: clean }) === null)
+  check('a different price never trials', reeferTrialDaysFor({ priceId: ELITE, reeferPriceId: RS, verifiedTier: 'reefer_standalone', history: clean }) === null)
+  check('a returning customer (Stripe customer history) gets none',
+    reeferTrialDaysFor({ priceId: RS, reeferPriceId: RS, verifiedTier: 'reefer_standalone', history: { ...clean, stripeSubscriptionsOnCustomer: 1 } }) === null)
+  check('a returning customer (same email elsewhere) gets none',
+    reeferTrialDaysFor({ priceId: RS, reeferPriceId: RS, verifiedTier: 'reefer_standalone', history: { ...clean, stripeSubscriptionsOnSameEmail: 1 } }) === null)
+  check('an account that took the HD Elite trial gets none',
+    reeferTrialDaysFor({ priceId: RS, reeferPriceId: RS, verifiedTier: 'reefer_standalone', history: { ...clean, subscriptionRow: { stripe_subscription_id: 'sub_x', status: 'canceled', tier: 'hd_elite' } } }) === null)
+  check('unreadable history: no trial',
+    reeferTrialDaysFor({ priceId: RS, reeferPriceId: RS, verifiedTier: 'reefer_standalone', history: { ...clean, stripeSubscriptionsOnCustomer: null } }) === null)
+  check('the HD and LD trials are unchanged by it: HD Elite still 15, reefer price never an HD trial',
+    hdTrialDaysFor({ priceId: ELITE, elitePriceId: ELITE, verifiedTier: 'hd_elite', history: clean }) === 15 &&
+    hdTrialDaysFor({ priceId: RS, elitePriceId: ELITE, verifiedTier: 'reefer_standalone', history: clean }) === null)
+  check('checkout open to an account with no live subscription', canStartReeferCheckout(null) && canStartReeferCheckout({ tier: 'hd_elite', status: 'canceled' }))
+  check('checkout refused to a live subscriber of any tier (no second subscription)',
+    !canStartReeferCheckout({ tier: 'hd_elite', status: 'active' }) && !canStartReeferCheckout({ tier: 'reefer_standalone', status: 'trialing' }) &&
+    !canStartReeferCheckout({ tier: 'full_suite_plus', status: 'past_due' }) && !canStartReeferCheckout({ tier: 'hd_elite', status: 'active', is_comped: true }))
 
   console.log(`\n${passes} passed, ${failures} failed`)
   if (failures) process.exit(1)

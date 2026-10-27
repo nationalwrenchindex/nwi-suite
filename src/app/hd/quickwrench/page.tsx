@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useRef, useMemo } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
+import { isReeferSurfacePath } from '@/lib/reefer-standalone'
 import { runGaugeDiagnostic, SEVERITY_CONFIG } from '@/lib/hd/gauge-diagnostic'
 import type { TrailerSystem } from '@/lib/hd/trailer/types'
 import PartsOnTheWay, { type PartInput } from '@/components/parts-delivery/PartsOnTheWay'
@@ -142,6 +143,10 @@ type Manufacturer     = 'Thermo King' | 'Carrier Transicold'
 type UnitType         = 'truck' | 'trailer'
 type EngineBrand      = 'Cummins' | 'Detroit Diesel' | 'Mercedes-Benz' | 'PACCAR' | 'Volvo' | 'Mack' | 'International' | 'Caterpillar'
 type ActiveTab        = 'reefer' | 'truck' | 'electrical' | 'procedures' | 'parts' | 'trailer' | 'abs'
+// On /reefer (Reefer Standalone) only these tabs exist. Truck Engine, Electrical Systems
+// (a heavy-duty vehicle electrical tutor), Trailer Systems and Trailer ABS are HD only,
+// and their APIs refuse a reefer account anyway.
+const REEFER_SURFACE_TABS: ActiveTab[] = ['reefer', 'procedures', 'parts']
 type ElectricalTopic  = 'Component Library' | 'Schematic Reading' | 'Fault Tracing' | 'Multimeter Guide' | 'Wire Repair'
 
 const ELECTRICAL_TOPICS: { key: ElectricalTopic; desc: string }[] = [
@@ -1272,9 +1277,14 @@ function VisualReference({ buttons }: { buttons: VisualButton[] }) {
 export default function HDQuickWrenchPage() {
 
   const router = useRouter()
+  const reeferSurface = isReeferSurfacePath(usePathname())
 
   // ── Tab ──
-  const [activeTab, setActiveTab] = useState<ActiveTab>('reefer')
+  const [activeTab, setActiveTabRaw] = useState<ActiveTab>('reefer')
+  // Every tab change goes through here, so on /reefer no path - a tab button or a
+  // hand-off like "Open Trailer Systems" - can land on a tab Reefer does not carry.
+  const setActiveTab = (t: ActiveTab) =>
+    setActiveTabRaw(reeferSurface && !REEFER_SURFACE_TABS.includes(t) ? 'reefer' : t)
 
   // Seed text for the Trailer Systems panel. Set when the Parts Ref panel hands a
   // search across ("brake chamber" typed at the parts counter, trailer specs matched),
@@ -2102,9 +2112,9 @@ export default function HDQuickWrenchPage() {
 
         <div>
           <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>
-            HD Diagnostic Assistant
+            {reeferSurface ? 'Reefer Diagnostic Assistant' : 'HD Diagnostic Assistant'}
           </p>
-          <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">HD QUICKWRENCH</h1>
+          <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">{reeferSurface ? 'REEFER DIAGNOSTICS' : 'HD QUICKWRENCH'}</h1>
           <p className="text-sm mt-1" style={{ color: 'var(--hd-text-faint)' }}>
             Alarm codes, specs, and repair procedures from a 17-year field veteran.
           </p>
@@ -2120,7 +2130,7 @@ export default function HDQuickWrenchPage() {
             { key: 'parts',       label: 'Parts Ref'          },
             { key: 'trailer',     label: 'Trailer Systems'    },
             { key: 'abs',         label: 'Trailer ABS'        },
-          ] as { key: ActiveTab; label: string }[]).map(tab => (
+          ] as { key: ActiveTab; label: string }[]).filter(tab => !reeferSurface || REEFER_SURFACE_TABS.includes(tab.key)).map(tab => (
             <button
               key={tab.key}
               type="button"

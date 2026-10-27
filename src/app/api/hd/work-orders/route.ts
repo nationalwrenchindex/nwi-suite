@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { checkHDStarterAccess } from '@/lib/hd-access'
+import { checkHDStarterAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { WORK_ORDER_LIST_SELECT, WORK_ORDER_PAGE_SIZE } from './list'
 
 export const dynamic = 'force-dynamic'
@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const ok = await checkHDStarterAccess(user.id)
+  const ok = (await checkHDStarterAccess(user.id)) || (await reeferStandaloneCan(user.id, 'reefer_work_orders'))
   if (!ok) return NextResponse.json({ error: 'HD access required' }, { status: 403 })
 
   const sp     = req.nextUrl.searchParams
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const ok = await checkHDStarterAccess(user.id)
+  const ok = (await checkHDStarterAccess(user.id)) || (await reeferStandaloneCan(user.id, 'reefer_work_orders'))
   if (!ok) return NextResponse.json({ error: 'HD access required' }, { status: 403 })
 
   let body: Record<string, unknown>

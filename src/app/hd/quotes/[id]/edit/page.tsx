@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { checkHDAccess } from '@/lib/hd-access'
+import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { isQuoteEditable, quoteLockReason } from '@/lib/hd/quote-edit'
 import QuoteForm from '../../QuoteForm'
 
@@ -15,7 +15,7 @@ export default async function EditQuotePage({ params }: { params: Promise<{ id: 
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
 
-  const hasAccess = await checkHDAccess(user.id)
+  const hasAccess = (await checkHDAccess(user.id)) || (await reeferStandaloneCan(user.id, 'reefer_quotes'))
   if (!hasAccess) redirect('/hd/signup')
 
   const { data: q } = await supabase

@@ -1,5 +1,6 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { isReeferPath, REEFER_SURFACE_COOKIE } from '@/lib/reefer-standalone'
 
 export async function middleware(request: NextRequest) {
   const hostname = request.headers.get('host') ?? ''
@@ -15,6 +16,49 @@ export async function middleware(request: NextRequest) {
 
   const effectivePath = targetUrl?.pathname ?? path
 
+  // ── Reefer Standalone surface (/reefer) ────────────────────────────────────
+  // Main host only: on the hd. subdomain /reefer already means /hd/reefer (the HD
+  // Reefer Module) through the rewrite above, and that must not change.
+  //
+  // /reefer/X renders the same page as /hd/X (src/app/reefer re-exports them). While a
+  // browser is on it, the nwi_surface cookie is set, and an /hd link followed from
+  // inside a reused HD screen comes back to /reefer/X - or to the reefer dashboard when
+  // X is not a reefer screen (DOT, aerial, truck ...). Customer-facing pages
+  // (/hd/quote/<token>, /hd/invoices/pay) and the bare /hd marketing page are never
+  // redirected, and nothing here runs for a browser without the cookie - an HD
+  // subscriber's requests take exactly the path they took before.
+  // ?leave_reefer=1 on an /hd URL clears the cookie (the reefer layout sends a non-reefer
+  // account there), so a browser can always get back out.
+  const isReeferSurface = !isHD && (path === '/reefer' || path.startsWith('/reefer/'))
+  if (isReeferSurface) {
+    const suffix = path.slice('/reefer'.length)
+    if (!isReeferPath(suffix)) {
+      const to = request.nextUrl.clone()
+      to.pathname = '/reefer/dashboard'
+      to.search = ''
+      return NextResponse.redirect(to)
+    }
+  } else if (
+    !isHD &&
+    path.startsWith('/hd/') &&
+    request.cookies.get(REEFER_SURFACE_COOKIE)?.value === 'reefer' &&
+    !path.startsWith('/hd/quote/') &&
+    !path.startsWith('/hd/invoices/pay')
+  ) {
+    if (request.nextUrl.searchParams.get('leave_reefer') === '1') {
+      const to = request.nextUrl.clone()
+      to.searchParams.delete('leave_reefer')
+      const res = NextResponse.redirect(to)
+      res.cookies.delete(REEFER_SURFACE_COOKIE)
+      return res
+    }
+    const suffix = path.slice('/hd'.length)
+    const to = request.nextUrl.clone()
+    to.pathname = isReeferPath(suffix) ? '/reefer' + suffix : '/reefer/dashboard'
+    if (!isReeferPath(suffix)) to.search = ''
+    return NextResponse.redirect(to)
+  }
+
   // x-pathname has to travel on the REQUEST, not the response. Setting it on the
   // response (as this did) sends it to the browser, where nothing reads it, while
   // `headers()` inside a server layout sees nothing — so every layout branching on
@@ -22,6 +66,11 @@ export async function middleware(request: NextRequest) {
   // exempted /hd/signup and /hd/login from its subscription gate.
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-pathname', effectivePath)
+  // The reefer layout gates before the dashboard page can provision from a fresh Stripe
+  // session, so it is handed the session id to provision first (src/app/reefer/layout.tsx).
+  requestHeaders.delete('x-reefer-checkout-session')
+  const reeferCheckoutSession = isReeferSurface ? request.nextUrl.searchParams.get('session_id') : null
+  if (reeferCheckoutSession) requestHeaders.set('x-reefer-checkout-session', reeferCheckoutSession)
 
   const buildResponse = () =>
     targetUrl
@@ -79,6 +128,13 @@ export async function middleware(request: NextRequest) {
   const isHDProtected =
     effectivePath.startsWith('/hd/') && !isHDAuthRoute && !isHDPublicRoute
 
+  // /reefer/login is an auth route. /reefer/signup is NOT treated as one: a signed-in
+  // reefer account with no subscription yet (closed Stripe, came back) must be able to
+  // reach it to finish checkout, and the layout - not this - decides who belongs.
+  const isReeferAuthRoute   = isReeferSurface && effectivePath.startsWith('/reefer/login')
+  const isReeferSignupRoute = isReeferSurface && effectivePath.startsWith('/reefer/signup')
+  const isReeferProtected   = isReeferSurface && !isReeferAuthRoute && !isReeferSignupRoute
+
   const isLegacyAuthRoute =
     effectivePath.startsWith('/login') ||
     effectivePath.startsWith('/signup') ||
@@ -101,23 +157,28 @@ export async function middleware(request: NextRequest) {
     effectivePath.startsWith('/fleet-pro') &&
     !effectivePath.startsWith('/fleet-pro/accept-invite')
 
-  const isProtected = isHDProtected || isLegacyProtected || isFleetProProtected
-  const isAuthRoute  = isHDAuthRoute || isLegacyAuthRoute
+  const isProtected = isHDProtected || isLegacyProtected || isFleetProProtected || isReeferProtected
+  const isAuthRoute  = isHDAuthRoute || isLegacyAuthRoute || isReeferAuthRoute
 
   if (!user && isProtected) {
     const loginUrl = request.nextUrl.clone()
-    loginUrl.pathname = isHD ? '/hd/login' : '/login'
+    loginUrl.pathname = isHD ? '/hd/login' : isReeferSurface ? '/reefer/login' : '/login'
     loginUrl.searchParams.set('redirect', effectivePath)
     return NextResponse.redirect(loginUrl)
   }
 
   if (user && isAuthRoute && !effectivePath.startsWith('/update-password')) {
     const homeUrl = request.nextUrl.clone()
-    homeUrl.pathname = isHD ? '/hd/dashboard' : '/dashboard'
+    homeUrl.pathname = isHD ? '/hd/dashboard' : isReeferSurface ? '/reefer/dashboard' : '/dashboard'
     return NextResponse.redirect(homeUrl)
   }
 
   supabaseResponse.headers.set('x-pathname', effectivePath)
+  if (isReeferSurface) {
+    supabaseResponse.cookies.set(REEFER_SURFACE_COOKIE, 'reefer', {
+      path: '/', sameSite: 'lax', maxAge: 60 * 60 * 24 * 30,
+    })
+  }
   return supabaseResponse
 }
 

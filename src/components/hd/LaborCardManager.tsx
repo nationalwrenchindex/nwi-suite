@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { tint } from '@/lib/hd/text-tone'
 import {
   EMPTY_DRAFT, EQUIPMENT_TYPES, LABOR_CODE_PREFIX, cardNamed, cleanLaborCard, draftFromCard, equipmentTypeLabel,
@@ -25,12 +25,22 @@ const STICKY_KEY = 'nwi.hd.laborCards.lastEquipment'
 export default function LaborCardManager({
   initialCards,
   categories,
+  reeferOnly = false,
 }: {
   initialCards: LaborCard[]
   categories: { id: string; name: string }[]
+  /** Reefer Standalone: every card is a reefer card. The type picker and type filter are
+   *  hidden and the type is fixed at reefer; the API enforces the same. */
+  reeferOnly?: boolean
 }) {
   const [cards,     setCards]     = useState(initialCards)
-  const [draft,     setDraft]     = useState<LaborCardDraft>(EMPTY_DRAFT)
+  const [draft,     setDraftRaw]  = useState<LaborCardDraft>(reeferOnly ? { ...EMPTY_DRAFT, equipment_type: 'reefer' } : EMPTY_DRAFT)
+  // Every draft change passes through here, so in reefer-only mode no path (a restored
+  // sticky type, a cleared form, an edit) can leave the type anything but reefer.
+  const setDraft = useCallback<typeof setDraftRaw>(v => setDraftRaw(d => {
+    const next = typeof v === 'function' ? v(d) : v
+    return reeferOnly && next.equipment_type !== 'reefer' ? { ...next, equipment_type: 'reefer' } : next
+  }), [reeferOnly])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [busy,      setBusy]      = useState(false)
   const [error,     setError]     = useState<string | null>(null)
@@ -55,7 +65,7 @@ export default function LaborCardManager({
       const cat  = categories.some(c => c.id === s.equipment_category_id) ? s.equipment_category_id! : ''
       setDraft(d => ({ ...d, equipment_type: type, equipment_category_id: cat }))
     } catch { /* storage unavailable */ }
-  }, [categories])
+  }, [categories, setDraft])
 
   const editing  = editingId ? cards.find(c => c.id === editingId) ?? null : null
   // Display only: a hint that the name is already taken, never a block or a merge.
@@ -248,13 +258,13 @@ export default function LaborCardManager({
         </label>
 
         <div className="grid sm:grid-cols-2 gap-3">
-          <label className="block">
+          {!reeferOnly && <label className="block">
             <span className="text-xs font-semibold" style={labelStyle}>Equipment type (required, sets the code)</span>
             <select name="equipment_type" required value={draft.equipment_type} onChange={set('equipment_type')} className={field} style={inputStyle}>
               <option value="" disabled>Pick one</option>
               {EQUIPMENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
-          </label>
+          </label>}
           <label className="block">
             <span className="text-xs font-semibold" style={labelStyle}>My category</span>
             <select name="equipment_category_id" value={draft.equipment_category_id} onChange={set('equipment_category_id')} className={field} style={inputStyle}>
@@ -306,11 +316,11 @@ export default function LaborCardManager({
         </p>
         <input aria-label="Search labor cards" type="search" value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Search name or code" className="px-3 py-2 rounded-lg text-sm text-white placeholder-white/20 w-48" style={inputStyle} />
-        <select aria-label="Filter by equipment type" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
+        {!reeferOnly && <select aria-label="Filter by equipment type" value={typeFilter} onChange={e => setTypeFilter(e.target.value)}
           className="px-3 py-2 rounded-lg text-sm text-white" style={inputStyle}>
           <option value="">All equipment types</option>
           {EQUIPMENT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-        </select>
+        </select>}
         <select aria-label="Filter by my category" value={catFilter} onChange={e => setCatFilter(e.target.value)}
           className="px-3 py-2 rounded-lg text-sm text-white" style={inputStyle}>
           <option value="">All my categories</option>

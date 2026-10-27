@@ -1,6 +1,6 @@
 import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { checkHDStarterAccess } from '@/lib/hd-access'
+import { checkHDStarterAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { fetchWorkOrderInspections } from '@/lib/hd/inspections'
 import { BRANDING_SELECT, resolveBranding, type BrandingSource } from '@/lib/branding'
 import WorkOrderDetail from './WorkOrderDetail'
@@ -17,7 +17,7 @@ export default async function WorkOrderDetailPage({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
 
-  const hasAccess = await checkHDStarterAccess(user.id)
+  const hasAccess = (await checkHDStarterAccess(user.id)) || (await reeferStandaloneCan(user.id, 'reefer_work_orders'))
   if (!hasAccess) redirect('/hd/upgrade')
 
   const [{ data: wo }, { data: photos }, inspections, { data: brandingRow }] = await Promise.all([

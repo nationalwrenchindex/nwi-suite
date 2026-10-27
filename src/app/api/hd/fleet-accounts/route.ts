@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { checkHDStarterAccess } from '@/lib/hd-access'
+import { checkHDStarterAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { FLEET_ACCOUNT_LIST_SELECT, FLEET_ACCOUNT_PAGE_SIZE } from './list'
 
 export const dynamic = 'force-dynamic'
@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const ok = await checkHDStarterAccess(user.id)
+  const ok = (await checkHDStarterAccess(user.id)) || (await reeferStandaloneCan(user.id, 'reefer_customers'))
   if (!ok) return NextResponse.json({ error: 'HD access required' }, { status: 403 })
 
   const sp     = req.nextUrl.searchParams

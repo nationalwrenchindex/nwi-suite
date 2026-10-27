@@ -2,7 +2,9 @@
 
 import { useState, useRef } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
+import { isReeferSurfacePath } from '@/lib/reefer-standalone'
 import { compressImage } from '@/lib/image'
 // Safe from a client component: the module's only server dependency is a type-only
 // import of the Supabase server client, which is erased at build time.
@@ -114,6 +116,8 @@ function statusLabel(s: string) {
 
 
 export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, inspections, workOrderId, branding }: Props) {
+  // On /reefer only the Reefer PM inspection is offered - no aerial, DOT or equipment.
+  const reeferSurface = isReeferSurfacePath(usePathname())
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos)
   const [uploading, setUploading] = useState<Record<string, boolean>>({})
   const [lightbox, setLightbox] = useState<string | null>(null)
@@ -595,6 +599,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
             takes the free-text unit fields, since it can run against a machine
             that is not a registered unit and would otherwise lose that context. */}
         <div className="px-5 py-3 flex flex-wrap gap-2" style={{ background: 'var(--hd-sunken)', borderBottom: '1px solid var(--hd-border)' }}>
+          {!reeferSurface && (<>
           <Link
             href={`/hd/aerial-inspections/new?work_order=${workOrderId}${wo.unit ? `&unit=${wo.unit.id}` : ''}`}
             className="px-4 py-2 rounded-lg text-xs font-condensed font-bold tracking-wide transition-colors"
@@ -626,6 +631,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
           >
             + Start Equipment Inspection
           </Link>
+          </>)}
           {/* Reefer PM. The transport-refrigeration inspection is the PM checklist —
               same signed record, same unit link — so this starts that form rather than
               introducing a second reefer inspection type alongside it. */}

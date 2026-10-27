@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
+import { isReeferStandaloneUser } from '@/lib/hd-access'
 import { getEquipmentCategories, listEquipmentCategories } from '@/lib/hd/equipment-categories'
 import { cleanCategoryName, findNameClash, clashMessage, nextSortOrder, planReorder } from './rules'
 
@@ -54,6 +55,9 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const { supabase, user } = await authed()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Not part of Reefer Standalone. Only a reefer_standalone account is refused here;
+  // every other account gets exactly what it got before.
+  if (await isReeferStandaloneUser(user.id)) return NextResponse.json({ error: 'Not available on Reefer Standalone' }, { status: 403 })
 
   let body: { name?: unknown }
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid body' }, { status: 400 }) }
@@ -78,6 +82,9 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const { supabase, user } = await authed()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Not part of Reefer Standalone. Only a reefer_standalone account is refused here;
+  // every other account gets exactly what it got before.
+  if (await isReeferStandaloneUser(user.id)) return NextResponse.json({ error: 'Not available on Reefer Standalone' }, { status: 403 })
 
   let body: { id?: unknown; name?: unknown; is_active?: unknown; order?: unknown }
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid body' }, { status: 400 }) }

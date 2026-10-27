@@ -4,6 +4,8 @@ import { getEquipmentCategories } from '@/lib/hd/equipment-categories'
 import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import { LABOR_CARD_COLUMNS, type LaborCard } from '@/lib/hd/labor-cards'
 import LaborCardManager from '@/components/hd/LaborCardManager'
+import { onReeferSurface } from '@/lib/reefer-surface'
+import { isReeferCategoryName } from '@/lib/reefer-standalone'
 
 export const metadata = { title: 'Labor Cards — NWI HD Suite' }
 export const dynamic = 'force-dynamic'
@@ -17,22 +19,29 @@ export default async function LaborCardsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
 
-  const [categories, cards] = await Promise.all([
+  // On /reefer (Reefer Standalone): reefer cards and reefer categories only.
+  const reeferOnly = await onReeferSurface()
+
+  const [allCategories, cards] = await Promise.all([
     getEquipmentCategories(supabase, user.id),
-    fetchAllRows<LaborCard>((from, to) =>
-      supabase
+    fetchAllRows<LaborCard>((from, to) => {
+      let q = supabase
         .from('hd_repair_items')
         .select(LABOR_CARD_COLUMNS)
         .eq('user_id', user.id)
         .eq('active', true)
+      if (reeferOnly) q = q.eq('equipment_type', 'reefer')
+      return q
         .order('updated_at', { ascending: false })
         .order('id', { ascending: true })
-        .range(from, to) as unknown as PromiseLike<{ data: LaborCard[] | null; error: null }>)
+        .range(from, to) as unknown as PromiseLike<{ data: LaborCard[] | null; error: null }>
+    })
       .catch(e => {
         console.error('[hd/labor-cards] page read failed', e instanceof Error ? e.message : e)
         return null
       }),
   ])
+  const categories = reeferOnly ? allCategories.filter(c => isReeferCategoryName(c.name)) : allCategories
 
   return (
     <main className="flex-1 p-4 sm:p-6 max-w-5xl">
@@ -48,7 +57,7 @@ export default async function LaborCardsPage() {
           Your labor cards could not be loaded. Reload the page; if it keeps happening, migration 166 or 167 may not be applied.
         </p>
       ) : (
-        <LaborCardManager initialCards={cards} categories={categories.map(c => ({ id: c.id, name: c.name }))} />
+        <LaborCardManager initialCards={cards} categories={categories.map(c => ({ id: c.id, name: c.name }))} reeferOnly={reeferOnly} />
       )}
     </main>
   )

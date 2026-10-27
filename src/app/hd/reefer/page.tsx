@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { checkHDReeferAccess } from '@/lib/hd-access'
+import { checkHDReeferAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { tint } from '@/lib/hd/text-tone'
 
 export const metadata = { title: 'Reefer Module — NWI HD Suite' }
@@ -12,7 +12,7 @@ export default async function ReeferPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
 
-  const hasReeferAccess = await checkHDReeferAccess(user.id)
+  const hasReeferAccess = (await checkHDReeferAccess(user.id)) || (await reeferStandaloneCan(user.id, 'reefer_alarm_codes'))
   if (!hasReeferAccess) redirect('/hd/upgrade')
 
   const { data: units } = await supabase

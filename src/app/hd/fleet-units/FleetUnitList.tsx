@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { usePathname } from 'next/navigation'
+import { isReeferSurfacePath } from '@/lib/reefer-standalone'
 import { FLEET_UNIT_PAGE_SIZE, type FleetUnitListRow } from '@/app/api/hd/fleet-units/list'
 import type { EquipmentCategory } from '@/lib/hd/equipment-categories'
 import { textTone, tint } from '@/lib/hd/text-tone'
@@ -64,6 +66,8 @@ export default function FleetUnitList({
   scopedAccountId:  string | null
   categories:       EquipmentCategory[]   // every category, inactive included
 }) {
+  // On /reefer there is no per-unit inspection history (DOT / aerial / equipment).
+  const reeferSurface = isReeferSurfacePath(usePathname())
   const [rows,      setRows]      = useState(initialRows)
   const [exhausted, setExhausted] = useState(false)
   const [loading,   setLoading]   = useState(false)
@@ -306,13 +310,13 @@ export default function FleetUnitList({
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-2 justify-end">
-                        <Link
+                        {!reeferSurface && <Link
                           href={`/hd/fleet-units/${u.id}/inspections`}
                           className="text-xs font-semibold px-3 py-1 rounded-lg whitespace-nowrap"
                           style={{ color: 'var(--hd-text-muted)', border: '1px solid var(--hd-border)' }}
                         >
                           Inspections
-                        </Link>
+                        </Link>}
                         <Link
                           href={scopedAccountId ? `?edit=${u.id}&fleet_account_id=${scopedAccountId}` : `?edit=${u.id}`}
                           className="text-xs font-semibold px-3 py-1 rounded-lg"

@@ -5,6 +5,8 @@ import HDTrialBanner from '@/components/hd/HDTrialBanner'
 import { provisionHdFromCheckoutSession } from '@/lib/hd-provision'
 import { money } from '@/lib/format'
 import { textTone, tint } from '@/lib/hd/text-tone'
+import { REEFER_STANDALONE_TIER, REEFER_STANDALONE_PRICE_DOLLARS } from '@/lib/reefer-standalone'
+import { onReeferSurface } from '@/lib/reefer-surface'
 
 export const metadata = { title: 'Dashboard — NWI HD Suite' }
 
@@ -13,6 +15,8 @@ const HD_TIER_PRICES: Record<string, number> = {
   hd_starter: 49,
   hd_pro:     99,
   hd_elite:   159,
+  // The /reefer product renders this same dashboard; its trial banner names its price.
+  [REEFER_STANDALONE_TIER]: REEFER_STANDALONE_PRICE_DOLLARS,
 }
 
 const HD_ORANGE = '#E85D24'
@@ -45,6 +49,10 @@ export default async function HDDashboardPage({
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
+
+  // The same dashboard on /reefer, in reefer words. Nothing it reads or counts changes.
+  const reefer = await onReeferSurface()
+  const product = reefer ? 'NWI Reefer' : 'HD Suite'
 
   // Arriving straight from Stripe checkout. Grant access from the session now
   // rather than waiting on the webhook, which can land after this page renders
@@ -188,19 +196,19 @@ export default async function HDDashboardPage({
         <div className="absolute right-10 bottom-0 w-16 h-16 rounded-full pointer-events-none" style={{ background: `${tint(HD_ORANGE, 15)}` }} />
         <div className="relative z-10">
           <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-muted)' }}>
-            HD Suite · {dayLabel}
+            {product} · {dayLabel}
           </p>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">
             {profile?.full_name ?? user.email}
           </h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--hd-text-muted)' }}>{profile?.business_name ?? 'HD Suite'}</p>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--hd-text-muted)' }}>{profile?.business_name ?? product}</p>
         </div>
       </div>
 
       {/* KPI grid */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <KpiCard label="MTD Revenue" value={`$${mtdRevenue.toLocaleString()}`} color="green" sub="Invoiced this month" />
-        <KpiCard label="Active Fleet Units" value={unitCount ?? 0} color="blue" sub="Active units" />
+        <KpiCard label={reefer ? 'Active Reefer Units' : 'Active Fleet Units'} value={unitCount ?? 0} color="blue" sub="Active units" />
         <KpiCard label="Open Work Orders" value={openWOCount ?? 0} color="orange" />
         <KpiCard label="Active Alarm Codes" value={alarmCount} color={alarmCount > 0 ? 'red' : 'white'} sub="From recent PMs" />
         <Link href="/hd/fleet-units" className="rounded-xl transition-opacity hover:opacity-80">
@@ -310,7 +318,7 @@ export default async function HDDashboardPage({
             {unitCount === 0 && (
               <Link href="/hd/fleet-units"
                 className="mt-2 inline-block text-xs" style={{ color: 'var(--hd-accent-text)' }}>
-                + Add Fleet Units
+                {reefer ? '+ Add Reefer Units' : '+ Add Fleet Units'}
               </Link>
             )}
           </div>
@@ -353,9 +361,9 @@ export default async function HDDashboardPage({
         <p className="text-xs uppercase tracking-widest mb-3" style={{ color: 'var(--hd-text-faint)' }}>Quick Access</p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
-            { href: '/hd/quickwrench',   label: 'HD QUICKWRENCH', sub: 'Alarm codes & specs', color: 'var(--hd-accent-text)' },
+            { href: '/hd/quickwrench',   label: reefer ? 'REEFER DIAGNOSTICS' : 'HD QUICKWRENCH', sub: 'Alarm codes & specs', color: 'var(--hd-accent-text)' },
             { href: '/hd/pm-checklist',  label: 'PM CHECKLIST',   sub: 'Start a new PM',      color: HD_BLUE   },
-            { href: '/hd/fleet-units',   label: 'FLEET UNITS',    sub: 'Manage your fleet',   color: '#6B7280' },
+            { href: '/hd/fleet-units',   label: reefer ? 'REEFER UNITS' : 'FLEET UNITS', sub: reefer ? 'Manage your reefer units' : 'Manage your fleet', color: '#6B7280' },
             { href: '/hd/epa-log',       label: 'EPA 608 LOG',    sub: 'Refrigerant tracking', color: '#6B7280' },
           ].map(({ href, label, sub, color }) => (
             <Link

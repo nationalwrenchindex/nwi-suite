@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/server'
+import { reeferStandaloneAllowed, isReeferStandaloneRow, type ReeferModule } from '@/lib/reefer-standalone'
 
 // Tiers that carry any HD Suite access
 const HD_TIERS         = ['hd_starter', 'hd_pro', 'hd_elite', 'hd_reefer']
@@ -27,8 +28,12 @@ export async function checkHDAccess(userId: string): Promise<boolean> {
     .single()
 
   if (!data) return false
-  if (data.is_comped && data.vertical === 'heavy_duty') return true
+  return hdAccessAllowed(data)
+}
 
+/** checkHDAccess's rule on a row already read. Pure, so the gate matrix tests it. */
+export function hdAccessAllowed(data: GateRow): boolean {
+  if (data.is_comped && data.vertical === 'heavy_duty') return true
   const active = ['active', 'trialing', 'past_due'].includes(data.status ?? '')
   return active && HD_TIERS.includes(data.tier ?? '')
 }
@@ -45,8 +50,12 @@ export async function checkHDStarterAccess(userId: string): Promise<boolean> {
     .single()
 
   if (!data) return false
-  if (data.is_comped && data.vertical === 'heavy_duty') return true
+  return hdStarterAllowed(data)
+}
 
+/** checkHDStarterAccess's rule on a row already read. Pure, so the gate matrix tests it. */
+export function hdStarterAllowed(data: GateRow): boolean {
+  if (data.is_comped && data.vertical === 'heavy_duty') return true
   const active = ['active', 'trialing', 'past_due'].includes(data.status ?? '')
   return active && HD_STARTER_TIERS.includes(data.tier ?? '')
 }
@@ -102,6 +111,33 @@ export async function checkHDForemanAccess(userId: string): Promise<boolean> {
   if (data.is_comped && data.vertical === 'heavy_duty') return true
 
   return hdForemanAllowed(data)
+}
+
+// ── Reefer Standalone ──────────────────────────────────────────────────────────
+// The /reefer product (src/lib/reefer-standalone.ts). Never called on its own to open a
+// route: always as the SECOND half of `checkHDAccess(id) || reeferStandaloneCan(id, m)`,
+// so an HD subscriber's result is exactly what the HD gate says, and the extra read only
+// happens for someone the HD gate already refused.
+export async function reeferStandaloneCan(userId: string, module: ReeferModule): Promise<boolean> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('subscriptions')
+    .select('tier, status')
+    .eq('user_id', userId)
+    .maybeSingle()
+  return reeferStandaloneAllowed(data, module)
+}
+
+/** True when the signed-in account is on Reefer Standalone (any module). For narrowing
+ *  what a shared route returns - equipment types, categories - never for opening one. */
+export async function isReeferStandaloneUser(userId: string): Promise<boolean> {
+  const supabase = await createClient()
+  const { data } = await supabase
+    .from('subscriptions')
+    .select('tier, status')
+    .eq('user_id', userId)
+    .maybeSingle()
+  return isReeferStandaloneRow(data)
 }
 
 /** checkHDForemanAccess's rule on a row already read. Pure, so the trial check tests it. */

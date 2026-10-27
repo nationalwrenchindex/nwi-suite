@@ -48,6 +48,16 @@ async function main() {
     if (typeof n === 'number' && n > 0) dirty += n
     console.log(`  ${String(n).padStart(4)}  ${table}`)
   }
+  // Flow Rf's throwaway Reefer Standalone accounts (smoke-reefer-<n>@example.com).
+  const usersRes = await fetch(`${S}/auth/v1/admin/users?per_page=200`, { headers: H })
+  const usersJson = await usersRes.json()
+  const users = (Array.isArray(usersJson) ? usersJson : usersJson.users ?? []) as Array<{ email?: string }>
+  const reeferLeft = users.filter(u => /^smoke-reefer-\d+@example\.com$/.test(u.email ?? '')).length
+  dirty += reeferLeft
+  console.log(`  ${String(reeferLeft).padStart(4)}  auth users smoke-reefer-*`)
+  const rsSubs = await count('subscriptions', 'select=id&tier=eq.reefer_standalone')
+  if (typeof rsSubs === 'number') dirty += rsSubs
+  console.log(`  ${String(rsSubs).padStart(4)}  subscriptions tier reefer_standalone (none exist outside a run yet)`)
   console.log('')
   console.log(dirty === 0
     ? 'CLEAN: the suite left nothing behind.'

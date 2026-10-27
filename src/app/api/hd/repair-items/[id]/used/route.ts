@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { checkHDAccess } from '@/lib/hd-access'
+import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { hasQuickWrenchAccess } from '@/lib/subscription'
 
 export const dynamic = 'force-dynamic'
@@ -25,7 +25,7 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const [hdAccess, qwAccess] = await Promise.all([checkHDAccess(user.id), hasQuickWrenchAccess(user.id)])
-  if (!hdAccess && !qwAccess) return NextResponse.json({ error: 'HD or QuickWrench subscription required' }, { status: 403 })
+  if (!hdAccess && !qwAccess && !(await reeferStandaloneCan(user.id, 'reefer_labor_cards'))) return NextResponse.json({ error: 'HD or QuickWrench subscription required' }, { status: 403 })
 
   const { data: row, error: readErr } = await supabase
     .from('hd_repair_items')

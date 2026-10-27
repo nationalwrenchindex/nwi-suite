@@ -10,6 +10,12 @@ import {
 import { getEquipmentCategories } from '@/lib/hd/equipment-categories'
 import FleetUnitList from './FleetUnitList'
 import { tint } from '@/lib/hd/text-tone'
+import { onReeferSurface } from '@/lib/reefer-surface'
+import { isReeferCategoryName } from '@/lib/reefer-standalone'
+import {
+  EMPTY_REEFER_UNIT_DETAILS, REEFER_UNIT_DETAILS_COLUMNS, isEmptyReeferUnitDetails, isMissingReeferUnitDetailsTable,
+  reeferUnitDetailsFromForm, type ReeferUnitDetails,
+} from '@/lib/reefer-unit-details'
 
 export const metadata = { title: 'Fleet Units — NWI HD Suite' }
 
@@ -43,6 +49,10 @@ export default async function FleetUnitsPage({
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
+
+  // On /reefer (Reefer Standalone) this is the Reefer Units screen: reefer categories
+  // only, no category manager, and the setpoint + tractor fields (migration 170).
+  const reeferSurface = await onReeferSurface()
 
   const params    = await searchParams
   const saveError  = params.error === '1'
@@ -80,7 +90,8 @@ export default async function FleetUnitsPage({
   // Seeds the nine defaults (and each unit's category from its unit_type) the first time
   // this shop opens the list - so it has to run BEFORE the units are read below.
   // Inactive ones are included so a unit still in a deactivated category shows its name.
-  const categories       = await getEquipmentCategories(supabase, user.id, { includeInactive: true })
+  const allCategories    = await getEquipmentCategories(supabase, user.id, { includeInactive: true })
+  const categories       = reeferSurface ? allCategories.filter(c => isReeferCategoryName(c.name)) : allCategories
   const activeCategories = categories.filter(c => c.is_active)
   const editCategoryId   = (editUnit?.category_id as string | null | undefined) ?? null
   const editCategory     = editCategoryId ? categories.find(c => c.id === editCategoryId) : undefined
@@ -101,6 +112,17 @@ export default async function FleetUnitsPage({
     fleetAccountName = (fa?.fleet_name as string | undefined) ?? null
   }
   const scopedAccountId = fleetAccountName ? fleetAccountId : null
+
+  // The unit's reefer details (Reefer only). A missing table (170 not applied) reads as none.
+  let editDetails: ReeferUnitDetails = EMPTY_REEFER_UNIT_DETAILS
+  let detailsTableMissing = false
+  if (reeferSurface && editUnit) {
+    const { data, error } = await supabase
+      .from('reefer_unit_details').select(REEFER_UNIT_DETAILS_COLUMNS).eq('unit_id', editId!).maybeSingle()
+    if (error) detailsTableMissing = isMissingReeferUnitDetailsTable(error)
+    if (data) editDetails = data as unknown as ReeferUnitDetails
+  }
+  const detailsPending = params.details === 'pending'
 
   // Always scoped to this user; additionally narrowed to one fleet account whenever the
   // param is present (filter on the raw id so it holds even if the name lookup fails —
@@ -192,9 +214,15 @@ export default async function FleetUnitsPage({
     }
 
     let error
+    let savedId: string | null = unitId
     if (unitId) {
       const res = await supabase.from('hd_units').update(record).eq('id', unitId).eq('user_id', user.id)
       error = res.error
+    } else if (reeferSurface) {
+      // Reefer needs the new id to attach the details row.
+      const res = await supabase.from('hd_units').insert({ ...record, user_id: user.id, fleet_account_id: accountId, status: 'active' }).select('id').single()
+      error = res.error
+      savedId = (res.data as { id: string } | null)?.id ?? null
     } else {
       const res = await supabase.from('hd_units').insert({ ...record, user_id: user.id, fleet_account_id: accountId, status: 'active' })
       error = res.error
@@ -223,8 +251,29 @@ export default async function FleetUnitsPage({
       return
     }
 
+    // Reefer: setpoint and tractor fields, one row per unit (migration 170). The unit is
+    // already saved; if the table is not there yet the page says so instead of failing.
+    let detailsQS = ''
+    if (reeferSurface && savedId) {
+      const details = reeferUnitDetailsFromForm(formData)
+      const { data: existing, error: readErr } = await supabase
+        .from('reefer_unit_details').select('unit_id').eq('unit_id', savedId).maybeSingle()
+      if (readErr) {
+        if (isMissingReeferUnitDetailsTable(readErr)) { if (!isEmptyReeferUnitDetails(details)) detailsQS = '&details=pending' }
+        else console.error('[fleet-units saveUnit] reefer details read failed:', readErr.message)
+      } else if (existing || !isEmptyReeferUnitDetails(details)) {
+        const { error: dErr } = await supabase
+          .from('reefer_unit_details')
+          .upsert({ unit_id: savedId, user_id: user.id, ...details, updated_at: new Date().toISOString() }, { onConflict: 'unit_id' })
+        if (dErr) {
+          if (isMissingReeferUnitDetailsTable(dErr)) detailsQS = '&details=pending'
+          else console.error('[fleet-units saveUnit] reefer details save failed:', dErr.message)
+        }
+      }
+    }
+
     revalidatePath('/hd/fleet-units')
-    redirect(`/hd/fleet-units?saved=${unitId ? 'updated' : 'created'}${accountId ? `&fleet_account_id=${accountId}` : ''}`)
+    redirect(`/hd/fleet-units?saved=${unitId ? 'updated' : 'created'}${accountId ? `&fleet_account_id=${accountId}` : ''}${detailsQS}`)
   }
 
   const inputStyle = { background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }
@@ -234,8 +283,8 @@ export default async function FleetUnitsPage({
     <main className="flex-1 p-4 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <div>
-          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>HD Suite</p>
-          <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">FLEET UNITS</h1>
+          <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>{reeferSurface ? 'Reefer' : 'HD Suite'}</p>
+          <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">{reeferSurface ? 'REEFER UNITS' : 'FLEET UNITS'}</h1>
           <p className="text-sm mt-1" style={{ color: 'var(--hd-text-faint)' }}>
             {unitTotal.toLocaleString()} unit{unitTotal !== 1 ? 's' : ''}
           </p>
@@ -247,13 +296,13 @@ export default async function FleetUnitsPage({
           )}
         </div>
         <div className="flex flex-wrap items-center gap-3">
-          <Link
+          {!reeferSurface && <Link
             href="/hd/fleet-units/categories"
             className="px-4 py-2.5 rounded-lg text-sm font-semibold"
             style={{ color: 'rgba(var(--hd-ink-rgb), 0.7)', border: '1px solid var(--hd-border)' }}
           >
             Manage categories
-          </Link>
+          </Link>}
           <Link
             href={scopedAccountId ? `?new=1&fleet_account_id=${scopedAccountId}` : '?new=1'}
             className="px-4 py-2.5 rounded-lg text-sm font-semibold text-on-accent"
@@ -264,6 +313,12 @@ export default async function FleetUnitsPage({
         </div>
       </div>
 
+      {detailsPending && (
+        <p className="text-sm px-4 py-3 mb-4 rounded-lg" style={{ background: 'rgba(245,158,11,0.12)', color: 'var(--hd-warn)', border: '1px solid rgba(245,158,11,0.3)' }}>
+          The unit was saved, but its setpoint and tractor details were not: that part of the database is not set up yet (migration 170).
+        </p>
+      )}
+
       {savedMsg && (
         <p className="text-sm px-4 py-3 mb-4 rounded-lg" style={{ background: 'rgba(34,197,94,0.12)', color: 'var(--hd-positive)', border: '1px solid rgba(34,197,94,0.3)' }}>
           ✓ {savedMsg}
@@ -273,7 +328,7 @@ export default async function FleetUnitsPage({
       {/* Inline create / edit form */}
       {showForm && (
         <form action={saveUnit} className="rounded-xl p-6 mb-6 space-y-4" style={{ background: 'var(--hd-card)', border: `1px solid ${tint(HD_ORANGE, 31)}` }}>
-          <p className="font-condensed font-bold text-white text-lg tracking-wide">{isEdit ? 'EDIT FLEET UNIT' : 'ADD FLEET UNIT'}</p>
+          <p className="font-condensed font-bold text-white text-lg tracking-wide">{reeferSurface ? (isEdit ? 'EDIT REEFER UNIT' : 'ADD REEFER UNIT') : (isEdit ? 'EDIT FLEET UNIT' : 'ADD FLEET UNIT')}</p>
           {isEdit && <input type="hidden" name="unit_id" value={editId!} />}
           {fleetAccountName && scopedAccountId && !isEdit && (
             <div className="flex items-center gap-2 text-sm">
@@ -337,6 +392,10 @@ export default async function FleetUnitsPage({
               <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>BM Number</label>
               <input name="bm_number" defaultValue={ev('bm_number')} placeholder="e.g. 363xxx" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={inputStyle} />
             </div>
+            {/* Reefer with one reefer category: it is the answer, so it is set, not asked. */}
+            {reeferSurface && formCategories.length === 1 ? (
+              <input type="hidden" name="category_id" value={formCategories[0].id} />
+            ) : (
             <div>
               <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>Category{isEdit ? '' : ' *'}</label>
               {/* Required on a new unit, with no preselected answer: the shop says what it is. */}
@@ -349,6 +408,7 @@ export default async function FleetUnitsPage({
                 ))}
               </select>
             </div>
+            )}
             <div>
               <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>Year</label>
               <input name="year" type="number" defaultValue={ev('year')} placeholder="e.g. 2020" min="1990" max="2030" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={inputStyle} />
@@ -367,6 +427,38 @@ export default async function FleetUnitsPage({
               <input name="total_hours" type="number" defaultValue={ev('total_hours')} placeholder="e.g. 4500" min="0" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={inputStyle} />
             </div>
           </div>
+
+          {/* Reefer: the setpoint, and the tractor the unit rides on (migration 170). */}
+          {reeferSurface && (
+            <div className="pt-2">
+              <p className="text-xs uppercase tracking-widest mb-2 font-semibold" style={{ color: 'var(--hd-text-muted)' }}>Setpoint and Tractor</p>
+              {detailsTableMissing && (
+                <p className="text-xs mb-2" style={{ color: 'var(--hd-warn)' }}>These fields save once migration 170 is applied.</p>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>Setpoint (°F)</label>
+                  <input name="setpoint_f" type="number" step="0.1" min="-40" max="90" defaultValue={editDetails.setpoint_f ?? ''} placeholder="e.g. 34" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={inputStyle} />
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>Truck Make</label>
+                  <input name="truck_make" defaultValue={editDetails.truck_make ?? ''} placeholder="e.g. Freightliner" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={inputStyle} />
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>Truck Model</label>
+                  <input name="truck_model" defaultValue={editDetails.truck_model ?? ''} placeholder="e.g. Cascadia" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={inputStyle} />
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>Truck Year</label>
+                  <input name="truck_year" type="number" min="1950" max="2100" defaultValue={editDetails.truck_year ?? ''} placeholder="e.g. 2021" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={inputStyle} />
+                </div>
+                <div>
+                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>VIN</label>
+                  <input name="vin" maxLength={17} defaultValue={editDetails.vin ?? ''} placeholder="17 characters" className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20" style={inputStyle} />
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* PM History */}
           <div className="pt-2">

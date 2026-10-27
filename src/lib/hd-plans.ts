@@ -11,8 +11,12 @@
 // drift apart.
 
 import { TIER_MODULES } from '@/lib/stripe-plans'
+import { REEFER_STANDALONE_MODULES } from '@/lib/reefer-standalone'
 
-export type HdTier = 'hd_starter' | 'hd_pro' | 'hd_elite' | 'hd_reefer'
+// reefer_standalone is the /reefer product (src/lib/reefer-standalone.ts), not hd_reefer.
+// It is listed here only so the webhook and on-arrival provisioning can recognise its
+// price and record it - it is in none of the HD gate tier lists (hd-access.ts).
+export type HdTier = 'hd_starter' | 'hd_pro' | 'hd_elite' | 'hd_reefer' | 'reefer_standalone'
 
 /** env var suffix → tier. STRIPE_PRICE_<suffix> holds the Stripe price ID. */
 const HD_PRICE_KEYS: Record<HdTier, string> = {
@@ -20,6 +24,7 @@ const HD_PRICE_KEYS: Record<HdTier, string> = {
   hd_pro:     'HD_PRO',
   hd_elite:   'HD_ELITE',
   hd_reefer:  'HD_REEFER',
+  reefer_standalone: 'REEFER_STANDALONE',
 }
 
 /**
@@ -49,6 +54,8 @@ export const HD_TIER_MODULES: Record<HdTier, string[]> = {
   // Elite is the one HD tier that also carries the light-duty suite, so an Elite
   // subscriber gets both verticals from a single subscription row.
   hd_elite:   [...HD_ELITE_MODULES, ...TIER_MODULES.elite],
+  // Its own list, every name reefer_-prefixed: nothing here can read as an LD or HD module.
+  reefer_standalone: [...REEFER_STANDALONE_MODULES],
 }
 
 /**

@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { checkHDAccess } from '@/lib/hd-access'
+import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { generateDiagnostic, isGeminiConfigured } from '@/lib/gemini/client'
 
 export const dynamic = 'force-dynamic'
@@ -94,7 +94,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const hasAccess = await checkHDAccess(user.id)
+  const hasAccess = (await checkHDAccess(user.id)) || (await reeferStandaloneCan(user.id, 'reefer_quotes'))
   if (!hasAccess) {
     logAttempt({ outcome: 'forbidden', reason: 'no HD subscription', user: user.id, api_called: false, ms: ms() })
     return NextResponse.json({ error: 'HD subscription required' }, { status: 403 })

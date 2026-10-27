@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { checkHDStarterAccess } from '@/lib/hd-access'
+import { checkHDStarterAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import PartsComingSoon from '@/components/hd/PartsComingSoon'
 import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import { WORK_ORDER_LIST_SELECT, WORK_ORDER_PAGE_SIZE, type WorkOrderListRow } from '@/app/api/hd/work-orders/list'
@@ -21,7 +21,7 @@ export default async function WorkOrdersPage({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
 
-  const hasStarterAccess = await checkHDStarterAccess(user.id)
+  const hasStarterAccess = (await checkHDStarterAccess(user.id)) || (await reeferStandaloneCan(user.id, 'reefer_work_orders'))
   if (!hasStarterAccess) redirect('/hd/upgrade')
 
   const params   = await searchParams

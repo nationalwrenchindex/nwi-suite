@@ -1,12 +1,12 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { checkHDReeferAccess } from '@/lib/hd-access'
+import { checkHDReeferAccess, reeferStandaloneCan } from '@/lib/hd-access'
 
 export async function GET(req: NextRequest) {
   const supabase  = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const hasAccess = await checkHDReeferAccess(user.id)
+  const hasAccess = (await checkHDReeferAccess(user.id)) || (await reeferStandaloneCan(user.id, 'reefer_alarm_codes'))
   if (!hasAccess) return NextResponse.json({ error: 'Reefer Module access required' }, { status: 403 })
 
   const { searchParams } = req.nextUrl

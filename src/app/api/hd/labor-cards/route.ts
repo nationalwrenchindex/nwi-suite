@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { fetchAllRows } from '@/lib/supabase/fetch-all'
-import { authedHD, ownsCategory } from './shared'
+import { authedHD, ownsCategory, reeferCardProblem } from './shared'
 import {
   LABOR_CARD_COLUMNS, cleanLaborCard, isMissing166Column, MIGRATION_166_MESSAGE, isMissing167Column, MIGRATION_167_MESSAGE, type LaborCard,
 } from '@/lib/hd/labor-cards'
@@ -29,15 +29,19 @@ export async function GET() {
   const a = await authedHD()
   if ('error' in a) return a.error
   try {
-    const cards = await fetchAllRows<LaborCard>((from, to) =>
-      a.supabase
+    const cards = await fetchAllRows<LaborCard>((from, to) => {
+      let q = a.supabase
         .from('hd_repair_items')
         .select(LABOR_CARD_COLUMNS)
         .eq('user_id', a.user.id)
         .eq('active', true)
+      // Reefer Standalone sees its reefer cards only.
+      if (a.reeferOnly) q = q.eq('equipment_type', 'reefer')
+      return q
         .order('updated_at', { ascending: false })
         .order('id', { ascending: true })
-        .range(from, to) as unknown as PromiseLike<{ data: LaborCard[] | null; error: null }>)
+        .range(from, to) as unknown as PromiseLike<{ data: LaborCard[] | null; error: null }>
+    })
     return NextResponse.json({ cards })
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
@@ -63,6 +67,10 @@ export async function POST(req: NextRequest) {
   if (!clean.ok) return NextResponse.json({ error: clean.error }, { status: 400 })
   if (!(await ownsCategory(a.supabase, a.user.id, clean.row.equipment_category_id))) {
     return NextResponse.json({ error: 'Unknown equipment category.' }, { status: 400 })
+  }
+  if (a.reeferOnly) {
+    const problem = await reeferCardProblem(a.supabase, a.user.id, clean.row)
+    if (problem) return NextResponse.json({ error: problem }, { status: 400 })
   }
 
   const now = new Date().toISOString()

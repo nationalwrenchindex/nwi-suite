@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest, after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
-import { checkHDAccess } from '@/lib/hd-access'
+import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import Anthropic from '@anthropic-ai/sdk'
 import { generateDiagnostic, generateText, isGeminiConfigured } from '@/lib/gemini/client'
 import { formatDiagnostic } from '@/lib/gemini/formatter'
@@ -1074,7 +1074,9 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const hasAccess = await checkHDAccess(user.id)
+  // Reefer Standalone reaches the REEFER mode only (checked below, once the mode is known).
+  const hdAccess  = await checkHDAccess(user.id)
+  const hasAccess = hdAccess || (await reeferStandaloneCan(user.id, 'reefer_diagnostics'))
   if (!hasAccess) return NextResponse.json({ error: 'HD subscription required' }, { status: 403 })
 
   if (!isGeminiConfigured()) return NextResponse.json({ error: 'AI service not configured' }, { status: 503 })
@@ -1113,6 +1115,9 @@ export async function POST(req: NextRequest) {
   }
 
   const mode = body.mode ?? 'reefer'
+  if (!hdAccess && mode !== 'reefer') {
+    return NextResponse.json({ error: 'Reefer diagnostics only on this plan' }, { status: 403 })
+  }
 
   // ── Electrical branch ────────────────────────────────────────────────────
   if (mode === 'electrical') {

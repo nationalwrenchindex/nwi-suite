@@ -1,7 +1,7 @@
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { checkHDAccess } from '@/lib/hd-access'
+import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { buildPMReport } from '@/lib/hd/pm-report-items'
 import { textTone } from '@/lib/hd/text-tone'
 
@@ -22,7 +22,7 @@ export default async function PMChecklistReportPage({ params }: { params: Promis
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
 
-  const hasAccess = await checkHDAccess(user.id)
+  const hasAccess = (await checkHDAccess(user.id)) || (await reeferStandaloneCan(user.id, 'reefer_pm'))
   if (!hasAccess) redirect('/hd/upgrade')
 
   const { data: pm } = await supabase

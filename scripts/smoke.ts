@@ -37,6 +37,7 @@ import { applyDiscount, laborFromLines, normalizeDiscount, parseDiscount, discou
 import { hdApplyDiscount } from '../src/lib/hd/hd-discount'
 import { termsSnapshotFrom, parseTermsSnapshot } from '../src/lib/document-terms'
 import { createClient as createSupabase } from '@supabase/supabase-js'
+import { REEFER_STANDALONE_MODULES } from '../src/lib/reefer-standalone'
 import { loadRollupInput } from '../src/lib/hd/equipment-rollup-load'
 import { jobsFor, rollupByCategory, rollupByUnit } from '../src/lib/hd/equipment-rollup'
 import { loadEnv, openSession, visibleText } from './lib/smoke-session'
@@ -93,7 +94,7 @@ async function page(path: string): Promise<{ html: string; text: string } | null
   const res = await fetch(`${BASE}${path}`, { headers: { cookie }, redirect: 'follow' })
   const finalPath = new URL(res.url).pathname
   if (!res.ok) return null
-  if (/^\/(hd\/)?(login|signup)$/.test(finalPath)) return null
+  if (/^\/((hd|reefer)\/)?(login|signup)$/.test(finalPath)) return null
   const html = await res.text()
   return { html, text: visibleText(html) }
 }
@@ -122,6 +123,9 @@ const created = {
   // Equipment categories this run adds (migration 161). Deleted AFTER the units, which
   // are set null by the FK anyway.
   equipmentCategories: new Set<string>(),
+  // Flow Rf's throwaway Reefer Standalone accounts (auth user + everything it made).
+  // Removed LAST, after every document above, so no foreign key still points at them.
+  reeferUsers: new Set<string>(),
 }
 
 async function del(table: string, id: string): Promise<void> {
@@ -226,6 +230,37 @@ async function cleanup(): Promise<void> {
   for (const id of created.equipmentCategories) await del('hd_equipment_categories', id)
   // Customers last: an HD document may still have been pointing at one.
   for (const id of created.customers)     await del('customers', id)
+
+  // Flow Rf: the throwaway reefer account(s), and any a crashed run left (by the
+  // smoke-reefer- email the flow gives them - nothing else uses it). Every row below
+  // belongs to an account this suite created and nobody else can sign in to.
+  try {
+    const usersRes = await fetch(`${SUPA}/auth/v1/admin/users?per_page=200`, { headers: SVC_H })
+    const usersJson = await usersRes.json()
+    const users = (Array.isArray(usersJson) ? usersJson : usersJson.users ?? []) as Array<{ id: string; email?: string }>
+    for (const u of users) if (/^smoke-reefer-\d+@example\.com$/.test(u.email ?? '')) created.reeferUsers.add(u.id)
+  } catch { /* a failed sweep must not mask the real result */ }
+  const OWNED = ['hd_invoices', 'hd_work_orders', 'hd_quotes', 'hd_repair_items', 'reefer_unit_details', 'hd_units',
+    'hd_fleet_accounts', 'hd_equipment_categories', 'customers', 'subscriptions']
+  for (const uid of created.reeferUsers) {
+    for (const w of await rest<{ id: string }>(`hd_work_orders?select=id&user_id=eq.${uid}`).catch(() => [])) {
+      await fetch(`${SUPA}/rest/v1/hd_work_order_line_items?work_order_id=eq.${w.id}`, { method: 'DELETE', headers: SVC_H })
+    }
+    for (const t of OWNED) {
+      await fetch(`${SUPA}/rest/v1/${t}?user_id=eq.${uid}`, { method: 'DELETE', headers: SVC_H })
+    }
+    const gone = await fetch(`${SUPA}/auth/v1/admin/users/${uid}`, { method: 'DELETE', headers: SVC_H })
+    // Proved, not assumed: nothing of the account is left in any table it touched.
+    const left: string[] = []
+    for (const t of [...OWNED, 'profiles']) {
+      const col = t === 'profiles' ? 'id' : 'user_id'
+      const res = await fetch(`${SUPA}/rest/v1/${t}?select=${col}&${col}=eq.${uid}`, { headers: { ...SVC_H, Prefer: 'count=exact' } })
+      const n = Number((res.headers.get('content-range') ?? '/0').split('/')[1] ?? 0)
+      if (res.ok && n > 0) left.push(`${t} ${n}`)
+    }
+    record('Rf reefer standalone', 'cleanup: the throwaway account and every row it made are gone',
+      gone.ok && left.length === 0, gone.ok ? left.join(', ') : `auth delete -> ${gone.status}`)
+  }
 
   console.log(`  removed ${created.invoices.size} invoice(s), ${created.workOrders.size} work order(s), ${created.quotes.size} quote(s)`)
   console.log(`  removed ${created.hdInvoices.size} HD invoice(s), ${created.hdWorkOrders.size} HD work order(s), ${created.hdQuotes.size} HD quote(s)`)
@@ -3818,6 +3853,238 @@ async function flowZ(): Promise<void> {
   }
 }
 
+// ── Rf: Reefer Standalone, end to end as a REAL reefer_standalone account ──────
+//
+// A throwaway account is made for the run (auth user + its profile, from the signup
+// trigger) and given a reefer_standalone subscriptions row - the row the webhook writes.
+// Everything is then driven as that account, through the deployed routes and screens:
+//   - the /reefer surface renders with its own nav and none of HD's truck, trailer,
+//     inspection, import or Foreman screens; /hd refuses it
+//   - the APIs it must not reach answer 403, the ones it must reach answer
+//   - labor cards are reefer-only (RF- codes), on the same hd_repair_items table
+//   - quote -> work order -> invoice, from a REAL saved HD quote's shape, with every
+//     total read back from the database at each step and compared to the cent
+// The account, its subscription and every row it made are deleted in cleanup.
+// If the subscriptions insert is refused, a live CHECK constraint on tier is still
+// in place - that is reported as the failure, in its own words.
+async function flowReefer(): Promise<void> {
+  const F = 'Rf reefer standalone'
+  const email = `smoke-reefer-${Date.now()}@example.com`
+  const made = await fetch(`${SUPA}/auth/v1/admin/users`, {
+    method: 'POST', headers: SVC_H,
+    body: JSON.stringify({ email, password: `Smk-${Date.now()}-x9!`, email_confirm: true,
+      user_metadata: { full_name: `${MARK} reefer tech`, business_name: `${MARK} Reefer Shop` } }),
+  })
+  const u = await made.json().catch(() => ({})) as { id?: string; msg?: string; message?: string }
+  if (!record(F, 'a throwaway reefer account is created', made.ok && !!u.id, made.ok ? '' : `-> ${made.status} ${u.msg ?? u.message ?? ''}`)) return
+  const uid = u.id!
+  created.reeferUsers.add(uid)
+
+  const prof = (await rest<Record<string, unknown>>(`profiles?id=eq.${uid}&select=id`))[0]
+  if (!record(F, 'its profile exists (signup trigger)', !!prof)) return
+
+  const subIns = await fetch(`${SUPA}/rest/v1/subscriptions`, {
+    method: 'POST', headers: { ...SVC_H, Prefer: 'return=representation' },
+    body: JSON.stringify({ user_id: uid, tier: 'reefer_standalone', status: 'active', is_comped: false,
+      vertical: 'heavy_duty', modules: [...REEFER_STANDALONE_MODULES], cancel_at_period_end: false }),
+  })
+  const subTxt = await subIns.text()
+  if (!record(F, 'a reefer_standalone subscriptions row can be written (no tier CHECK refuses it)', subIns.ok,
+    subIns.ok ? '' : `-> ${subIns.status} ${subTxt.slice(0, 200)}`)) return
+
+  const ownerCookie = cookie
+  try {
+    const s = await openSession(uid)
+    cookie = s.cookie
+    record(F, 'signed in as the reefer account', true, s.email)
+
+    // ── The surface ──
+    const dash = await page('/reefer/dashboard')
+    record(F, '/reefer/dashboard renders for it', !!dash, dash ? '' : 'bounced or errored')
+    const navWant = ['NWI REEFER', 'Reefer Diagnostics', 'Reefer Units', 'Labor Cards', 'Intel Hub', 'Financials', 'Calendar', 'Quotes', 'Work Orders', 'Invoices']
+    const navGone = ['DOT Inspections', 'Equipment Inspections', 'Inspection Status', 'Foreman', 'Import Data', 'OEM Resources', 'NWI HD SUITE']
+    record(F, 'its nav carries the reefer screens', !!dash && missingControls(dash.text, navWant).length === 0,
+      dash ? missingControls(dash.text, navWant).join(', ') : '')
+    record(F, 'and none of the HD-only ones', !!dash && navGone.every(x => !dash.text.includes(x)),
+      dash ? navGone.filter(x => dash.text.includes(x)).join(', ') : '')
+
+    const landing = async (path: string, extraCookie = '') => {
+      const res = await fetch(`${BASE}${path}`, { headers: { cookie: extraCookie ? `${cookie}; ${extraCookie}` : cookie }, redirect: 'follow' })
+      return new URL(res.url).pathname
+    }
+    for (const p of ['/reefer/dot-inspections', '/reefer/aerial-inspections/new', '/reefer/equipment-inspections', '/reefer/import',
+                     '/reefer/fleet-units/categories', '/reefer/resources', '/reefer/reports/audit', '/reefer/foreman']) {
+      const to = await landing(p)
+      record(F, `${p} is not a reefer screen - sent to the dashboard`, to === '/reefer/dashboard', `-> ${to}`)
+    }
+    // First hop only: the HD layout sends a non-HD account to /hd/signup, and the middleware
+    // sends a signed-in visitor on /hd/signup back to /hd/dashboard - an existing loop for
+    // ANY signed-in non-HD account (LD too), reported in the plan, not changed here.
+    const hdRes = await fetch(`${BASE}/hd/quotes`, { headers: { cookie }, redirect: 'manual' })
+    const hdLoc = hdRes.headers.get('location') ?? ''
+    record(F, '/hd refuses it (the HD layout gate sends it to /hd/signup)', hdRes.status >= 300 && hdRes.status < 400 && hdLoc.includes('/hd/signup'),`-> ${hdRes.status} ${hdLoc}`)
+    const linkTo = await landing('/hd/quotes', 'nwi_surface=reefer')
+    record(F, 'an /hd link followed on the reefer surface comes back to /reefer', linkTo === '/reefer/quotes', `-> ${linkTo}`)
+    const dotTo = await landing('/hd/dot-inspections', 'nwi_surface=reefer')
+    record(F, 'an /hd link to a non-reefer screen goes to the reefer dashboard', dotTo === '/reefer/dashboard', `-> ${dotTo}`)
+
+    const qw = await page('/reefer/quickwrench')
+    record(F, 'Reefer Diagnostics: Reefer, Procedures and Parts tabs only',
+      !!qw && qw.text.includes('REEFER DIAGNOSTICS') && qw.text.includes('Reefer Unit') && qw.text.includes('Parts Ref') &&
+      !['Truck Engine', 'Trailer Systems', 'Trailer ABS', 'Electrical Systems'].some(t => qw.text.includes(t)),
+      qw ? '' : 'did not load')
+
+    const units = await page('/reefer/fleet-units?new=1')
+    record(F, 'Reefer Units: setpoint and tractor fields, no category manager, no boom/aerial',
+      !!units && ['REEFER UNITS', 'ADD REEFER UNIT', 'Setpoint', 'Truck Make', 'Truck Model', 'Truck Year', 'VIN', 'BM Number', 'Serial Number'].every(x => units.text.includes(x)) &&
+      !units.text.includes('Manage categories') && !/Boom|Aerial|Digger Derrick|Genset/.test(units.text),
+      units ? missingControls(units.text, ['REEFER UNITS', 'ADD REEFER UNIT', 'Setpoint', 'VIN']).join(', ') : 'did not load')
+
+    const pms = await page('/reefer/pm-schedules')
+    record(F, 'PM Schedules: TK and Carrier only, no truck or trailer intervals',
+      !!pms && pms.text.includes('Thermo King') && !pms.text.includes('TRUCK & TRAILER PM INTERVALS') && !pms.text.includes('Kingpin'),
+      pms ? '' : 'did not load')
+    const set = await page('/reefer/settings')
+    record(F, 'Settings: no data import', !!set && !set.text.includes('DATA IMPORT'), set ? '' : 'did not load')
+
+    // ── APIs ──
+    const refused: [string, string, unknown][] = [
+      ['POST', '/api/hd/truck-diagnostic', { truckBrand: 'Cummins', spn: '1', fmi: '1' }],
+      ['GET',  '/api/hd/trailer-reference', undefined],
+      ['POST', '/api/hd/trailer-abs-diagnostic', { code: '1-1' }],
+      ['POST', '/api/hd/quickwrench', { mode: 'electrical', question: 'test' }],
+      ['POST', '/api/hd/quickwrench', { mode: 'truck' }],
+      ['POST', '/api/hd/dot-inspections', {}],
+      ['POST', '/api/hd/aerial-inspections', {}],
+      ['POST', '/api/hd/equipment-inspections', {}],
+      ['POST', '/api/hd/import', {}],
+      ['POST', '/api/hd/equipment-categories', { name: `${MARK} cat` }],
+      ['POST', '/api/hd/parts-manager', { manufacturer: 'Cummins', model: 'X15' }],
+      ['POST', '/api/reefer/checkout', {}],
+    ]
+    for (const [m, p, b] of refused) {
+      const r = await api(m, p, b)
+      const want = p === '/api/reefer/checkout' ? 409 : 403
+      record(F, `${m} ${p}${b && typeof b === 'object' && 'mode' in (b as object) ? ` (${(b as { mode: string }).mode})` : ''} is refused`,
+        r.status === want, `-> ${r.status} ${String(r.json.error ?? '')}`)
+    }
+    const ac = await api('GET', '/api/hd/alarm-codes?manufacturer=TK&alarm_code=10')
+    record(F, 'GET /api/hd/alarm-codes answers (the verified alarm-code lookup)', ac.status === 200, `-> ${ac.status} ${String(ac.json.error ?? '')}`)
+    const pr = await api('GET', '/api/hd/parts-reference')
+    record(F, 'GET /api/hd/parts-reference answers', pr.status === 200 && Array.isArray(pr.json.parts) && (pr.json.parts as unknown[]).length > 0,
+      `-> ${pr.status}, ${Array.isArray(pr.json.parts) ? (pr.json.parts as unknown[]).length : 0} parts`)
+
+    // ── Labor cards: the same table, reefer only ──
+    const truckCard = await api('POST', '/api/hd/labor-cards', { description: `${MARK} rf truck card`, mobile_hours: 1, equipment_type: 'truck' })
+    record(F, 'a truck labor card is refused', truckCard.status === 400, `-> ${truckCard.status} ${String(truckCard.json.error ?? '')}`)
+    const rfCard = await api('POST', '/api/hd/labor-cards', { description: `${MARK} rf reefer card`, mobile_hours: 1.5, equipment_type: 'reefer' })
+    const card = (rfCard.json.card ?? {}) as Record<string, unknown>
+    if (card.id) created.libraryItems.add(String(card.id))
+    record(F, 'a reefer labor card saves, with an RF- code, in hd_repair_items', rfCard.status === 201 && /^RF-\d{4,}$/.test(String(card.labor_code ?? '')),
+      `-> ${rfCard.status} ${String(card.labor_code ?? rfCard.json.error ?? '')}`)
+    const stored = card.id ? (await rest<Record<string, unknown>>(`hd_repair_items?id=eq.${card.id}&select=user_id,equipment_type,is_master`))[0] : null
+    record(F, 'read back: the shop\'s own reefer row', !!stored && stored.user_id === uid && stored.equipment_type === 'reefer' && stored.is_master === false,
+      JSON.stringify(stored))
+    const lcp = await page('/reefer/labor-cards')
+    record(F, 'the labor cards screen has no equipment-type picker',
+      !!lcp && lcp.text.includes(`${MARK} rf reefer card`) && !lcp.text.includes('Equipment type (required') && !lcp.text.includes('All equipment types'),
+      lcp ? '' : 'did not load')
+    const lib = await api('GET', '/api/hd/repair-items')
+    const libItems = (lib.json.items ?? []) as Array<Record<string, unknown>>
+    record(F, 'the labor library it picks from is reefer only, NWI catalog included',
+      lib.status === 200 && libItems.length > 0 && libItems.every(i => i.equipment_type === 'reefer') && libItems.some(i => i.is_master === true),
+      `-> ${lib.status}, ${libItems.length} items`)
+
+    // ── Money: quote -> work order -> invoice, from a real saved quote's shape ──
+    const real = (await rest<Record<string, unknown>>(
+      `hd_quotes?user_id=eq.${OWNER}&status=eq.approved&tax_breakdown=not.is.null&customer_name=not.like.${MARK}*&select=*&order=created_at.desc&limit=20`))
+      .find(q => Array.isArray(q.line_items) && (q.line_items as unknown[]).length > 0 &&
+        (q.line_items as Array<Record<string, unknown>>).some(l => l.type === 'labor'))
+    if (!record(F, 'a real approved HD quote to copy the money shape of', !!real, real ? String(real.quote_number) : 'none')) return
+    const lines = (real!.line_items as Array<Record<string, unknown>>).map((l, i) => ({
+      ...l, id: `zz-rf-${i}`, description: `${MARK} rf line ${i}`, part_number: l.type === 'parts' ? `${MARK}-RF-${i}` : '',
+    }))
+    const pick = (k: string) => real![k] ?? null
+    const body: Record<string, unknown> = {
+      customer_name: `${MARK} reefer customer`, customer_phone: '+15555550177', status: 'sent',
+      unit_manufacturer: 'Thermo King', unit_model: 'Precedent S-600', unit_serial: 'ZZ-RF-TEST',
+      truck_make: 'Freightliner', truck_model: 'Cascadia', truck_year: '2021', vin: '1FUJGLDR0ZZRF0001',
+      payment_terms: pick('payment_terms'), labor_rate: pick('labor_rate'), labor_hours: pick('labor_hours'),
+      parts_markup_percent: pick('parts_markup_percent'), line_items: lines,
+      subtotal_labor: pick('subtotal_labor'), subtotal_parts: pick('subtotal_parts'),
+      diagnostic_fee: pick('diagnostic_fee'), road_call_fee: pick('road_call_fee'),
+      travel_hours: pick('travel_hours'), travel_rate: pick('travel_rate'), travel_amount: pick('travel_amount'),
+      mileage_miles: pick('mileage_miles'), mileage_rate: pick('mileage_rate'), mileage_amount: pick('mileage_amount'),
+      shop_supplies_percent_applied: pick('shop_supplies_percent_applied'), shop_supplies_cap_applied: pick('shop_supplies_cap_applied'),
+      shop_supplies_fee: pick('shop_supplies_fee'),
+      tax_rate: pick('tax_rate'), tax_amount: pick('tax_amount'), tax_breakdown: pick('tax_breakdown'), total: pick('total'),
+    }
+    const q = await api('POST', '/api/hd/quotes', body)
+    await adoptSmokeCustomer(q.json.customer_id)
+    const quote = (q.json.quote ?? {}) as Record<string, unknown>
+    const quoteId = String(quote.id ?? '')
+    if (quoteId) created.hdQuotes.add(quoteId)
+    if (!record(F, 'the reefer account saves a quote', q.status === 201 && !!quoteId, `-> ${q.status} ${String(q.json.error ?? '')}`)) return
+    const qRow = (await rest<Record<string, unknown>>(`hd_quotes?id=eq.${quoteId}&select=*`))[0] ?? {}
+    const moneyKeys = ['subtotal_labor', 'subtotal_parts', 'diagnostic_fee', 'road_call_fee', 'travel_amount', 'mileage_amount', 'shop_supplies_fee', 'tax_amount', 'total']
+    const qDiff = moneyKeys.filter(k => usd(qRow[k]) !== usd(real![k]))
+    record(F, 'read back: the quote is the reefer account\'s, every money field to the cent',
+      qRow.user_id === uid && qDiff.length === 0 && JSON.stringify(parseBreakdown(qRow.tax_breakdown)) === JSON.stringify(parseBreakdown(real!.tax_breakdown)),
+      qDiff.length ? `differs: ${qDiff.map(k => `${k} ${usd(qRow[k])} vs ${usd(real![k])}`).join(', ')}` : `total ${usd(qRow.total)}`)
+    record(F, 'the tractor fields are kept beside the unit fields', qRow.truck_make === 'Freightliner' && qRow.vin === '1FUJGLDR0ZZRF0001',
+      `${String(qRow.truck_make)} ${String(qRow.vin)}`)
+    const money = (n: unknown) => '$' + Number(n ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    const qpg = await page(`/reefer/quotes/${quoteId}`)
+    record(F, '/reefer/quotes/<id> shows the total', !!qpg && qpg.text.includes(money(qRow.total)), qpg ? money(qRow.total) : 'did not load')
+
+    const token = String(qRow.public_token ?? '')
+    const appr = await fetch(`${BASE}/api/hd/quotes/public/${token}/respond`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision: 'approve' }) })
+    record(F, 'the customer approves it', appr.ok, `-> ${appr.status}`)
+    const wo = (await rest<Record<string, unknown>>(`hd_work_orders?quote_id=eq.${quoteId}&select=*`))[0]
+    if (wo) created.hdWorkOrders.add(String(wo.id))
+    if (!record(F, 'the work order exists, on the reefer account', !!wo && wo.user_id === uid)) return
+    record(F, 'read back: the work order carries the quote total and tax to the cent',
+      usd(wo.total_amount) === usd(qRow.total) && usd(wo.tax_amount) === usd(qRow.tax_amount),
+      `${usd(wo.total_amount)} / ${usd(wo.tax_amount)} (quote ${usd(qRow.total)} / ${usd(qRow.tax_amount)})`)
+    const wpg = await page(`/reefer/work-orders/${wo.id}`)
+    record(F, '/reefer/work-orders/<id> renders, Reefer PM offered, no DOT/aerial/equipment inspection',
+      !!wpg && wpg.text.includes('Start Reefer PM Inspection') &&
+      !['Start DOT Inspection', 'Start Aerial Inspection', 'Start Equipment Inspection'].some(x => wpg.text.includes(x)),
+      wpg ? '' : 'did not load')
+
+    const built = await api('GET', `/api/hd/work-orders/${wo.id}/convert`)
+    const payload = (built.json.invoice_payload ?? {}) as Record<string, unknown>
+    record(F, 'the converter bills the quote total exactly', built.status === 200 && usd(payload.total) === usd(qRow.total) && usd(payload.tax_amount) === usd(qRow.tax_amount),
+      `-> ${built.status} total ${usd(payload.total)} (quote ${usd(qRow.total)}) ${String(built.json.error ?? '')}`)
+    const inv = await api('POST', '/api/hd/invoices', payload)
+    await adoptSmokeCustomer(inv.json.customer_id)
+    const invRow = (inv.json.invoice ?? {}) as Record<string, unknown>
+    const invId = String(invRow.id ?? '')
+    if (invId) created.hdInvoices.add(invId)
+    if (!record(F, 'the invoice is created', (inv.status === 201 || inv.status === 200) && !!invId, `-> ${inv.status} ${String(inv.json.error ?? '')}`)) return
+    const st = (await rest<Record<string, unknown>>(`hd_invoices?id=eq.${invId}&select=*`))[0] ?? {}
+    record(F, 'read back: the invoice is the reefer account\'s, quote total and tax to the cent, and it adds up',
+      st.user_id === uid && usd(st.total) === usd(qRow.total) && usd(st.tax_amount) === usd(qRow.tax_amount) && !invoiceDoesNotAddUp(st),
+      `total ${usd(st.total)} tax ${usd(st.tax_amount)}`)
+    const ipg = await page(`/reefer/invoices/${invId}`)
+    record(F, '/reefer/invoices/<id> shows the total', !!ipg && ipg.text.includes(money(st.total)), ipg ? money(st.total) : 'did not load')
+    const fin = await page('/reefer/financials')
+    record(F, '/reefer/financials renders for it', !!fin, fin ? '' : 'did not load')
+    const eq = await api('GET', '/api/hd/financials/equipment')
+    const cats = (eq.json.categories ?? []) as Array<Record<string, unknown>>
+    record(F, 'By Equipment lists no boom, aerial, truck or trailer category',
+      eq.status === 200 && !cats.some(c => /boom|aerial|digger|truck|trailer|apu|genset/i.test(String(c.name ?? ''))),
+      `-> ${eq.status}: ${cats.map(c => String(c.name)).join(', ')}`)
+    for (const p of ['/reefer/scheduler', '/reefer/intel', '/reefer/reefer', '/reefer/epa-log', '/reefer/parts', '/reefer/fleet-accounts', '/reefer/invoicing']) {
+      const pg = await page(p)
+      record(F, `${p} renders for it`, !!pg, pg ? '' : 'bounced or errored')
+    }
+  } finally {
+    cookie = ownerCookie
+  }
+}
+
 async function main(): Promise<void> {
   console.log('='.repeat(96))
   console.log(`SMOKE  ${BASE}`)
@@ -3886,6 +4153,7 @@ async function main(): Promise<void> {
     await flowPe()
     await flowY()
     await flowZ()
+    await flowReefer()
   } finally {
     await cleanup()
   }

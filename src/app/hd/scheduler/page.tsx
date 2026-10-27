@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { checkHDStarterAccess } from '@/lib/hd-access'
+import { checkHDStarterAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import HDSchedulerTabsClient from '@/components/hd/HDSchedulerTabsClient'
 import { tint } from '@/lib/hd/text-tone'
 
@@ -13,7 +13,7 @@ export default async function HDSchedulerPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
 
-  const hasStarterAccess = await checkHDStarterAccess(user.id)
+  const hasStarterAccess = (await checkHDStarterAccess(user.id)) || (await reeferStandaloneCan(user.id, 'reefer_scheduler'))
   if (!hasStarterAccess) redirect('/hd/upgrade')
 
   const [

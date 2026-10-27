@@ -15,7 +15,7 @@
 
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { checkHDAccess } from '@/lib/hd-access'
+import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { buildInvoicePayload, type WorkOrderLineRow } from '@/lib/hd/wo-to-invoice'
 import { TAX_SETTINGS_SELECT, taxSettingsFrom } from '@/lib/tax'
 
@@ -30,7 +30,7 @@ export async function GET(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const hasAccess = await checkHDAccess(user.id)
+  const hasAccess = (await checkHDAccess(user.id)) || (await reeferStandaloneCan(user.id, 'reefer_work_orders'))
   if (!hasAccess) return NextResponse.json({ error: 'HD subscription required' }, { status: 403 })
 
   // '*' rather than a column list on purpose: this reads the migration-153 columns

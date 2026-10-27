@@ -1,7 +1,8 @@
 'use client'
 
 import { Suspense, useEffect, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter, useSearchParams, usePathname } from 'next/navigation'
+import { isReeferSurfacePath, REEFER_STANDALONE_PRICE_DOLLARS } from '@/lib/reefer-standalone'
 import { createClient } from '@/lib/supabase/client'
 import { useCaptcha } from '@/components/auth/CaptchaField'
 import { resolveHdSlug, describeSlugResolution } from '@/lib/plan-slugs'
@@ -63,6 +64,17 @@ const PLANS: {
   },
 ]
 
+// /reefer/signup renders this same page for the ONE Reefer Standalone plan: no plan
+// picker, no promo code, checkout through /api/reefer/checkout. Display only - the price
+// and the trial are decided at checkout from STRIPE_PRICE_REEFER_STANDALONE.
+const REEFER_PLAN = {
+  key:      'reefer_standalone',
+  name:     'NWI Reefer',
+  price:    REEFER_STANDALONE_PRICE_DOLLARS,
+  trial:    '15 days free · card required',
+  features: ['Reefer Diagnostics & Alarm Codes (TK, Carrier)', 'Quotes, Work Orders & Invoices', 'Calendar, Intel Hub & Financials', 'Labor Cards & Reefer Parts Reference', 'PM Checklists'],
+}
+
 function Spinner() {
   return (
     <svg className="animate-spin w-4 h-4 inline-block" fill="none" viewBox="0 0 24 24">
@@ -75,6 +87,8 @@ function Spinner() {
 function HDSignupForm() {
   const router       = useRouter()
   const searchParams = useSearchParams()
+  const reefer       = isReeferSurfacePath(usePathname())
+  const base         = reefer ? '/reefer' : '/hd'
 
   // ?plan=<key> deep-links straight into account creation with that plan chosen, so
   // a visitor who has already picked a tier is not asked to pick it a second time.
@@ -101,8 +115,8 @@ function HDSignupForm() {
 
   // Signup form state. Both are lazy initial values, not an effect: deriving them on
   // the first render means the plan picker never paints before being skipped.
-  const [step,    setStep]    = useState<'plan' | 'account'>(presetPlan ? 'account' : 'plan')
-  const [plan,    setPlan]    = useState<string>(presetPlan ?? 'pro')
+  const [step,    setStep]    = useState<'plan' | 'account'>(reefer || presetPlan ? 'account' : 'plan')
+  const [plan,    setPlan]    = useState<string>(reefer ? REEFER_PLAN.key : presetPlan ?? 'pro')
   const [email,   setEmail]   = useState('')
   const [pass,    setPass]    = useState('')
   const [name,    setName]    = useState('')
@@ -133,7 +147,7 @@ function HDSignupForm() {
   const priceOf = (p: { key: string; price: number }) =>
     p.key === 'elite_bundle' ? bundlePrice : p.price
 
-  const selectedPlan = PLANS.find(p => p.key === plan)!
+  const selectedPlan = reefer ? REEFER_PLAN : PLANS.find(p => p.key === plan)!
   const selectedPrice = priceOf(selectedPlan)
 
   async function handleApplyPromo() {
@@ -166,6 +180,36 @@ function HDSignupForm() {
     setPromoStatus('idle')
     setPromoError(null)
     setPromotionCodeId(null)
+  }
+
+  // Reefer: an account that already exists and is signed in (back from a closed Stripe
+  // page) skips straight to checkout instead of failing a second sign-up.
+  const [signedIn, setSignedIn] = useState(false)
+  useEffect(() => {
+    if (!reefer) return
+    createClient().auth.getUser().then(({ data }) => setSignedIn(!!data.user)).catch(() => {})
+  }, [reefer])
+
+  async function startCheckout(userId: string | null) {
+    const body: Record<string, unknown> = { plan, userId }
+    if (promotionCodeId) body.promotionCodeId = promotionCodeId
+    const res  = await fetch(reefer ? '/api/reefer/checkout' : '/api/hd/checkout', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
+    })
+    const json = await res.json()
+    if (!res.ok) throw new Error(json.error ?? 'Checkout failed')
+    if (json.url) window.location.href = json.url
+    else router.push(base + '/dashboard')
+  }
+
+  async function handleContinueCheckout() {
+    setLoading(true)
+    setError(null)
+    try { await startCheckout(null) }
+    catch (err) { setError(err instanceof Error ? err.message : 'Something went wrong') }
+    finally { setLoading(false) }
   }
 
   async function handleSignup(e: React.FormEvent) {
@@ -206,19 +250,8 @@ function HDSignupForm() {
         })
       } catch { /* non-fatal - the columns stay null and the prompt reappears */ }
 
-      console.log(describeSlugResolution('hd', requestedPlan, presetPlan))
-      const body: Record<string, unknown> = { plan, userId: data.user.id }
-      if (promotionCodeId) body.promotionCodeId = promotionCodeId
-
-      const res  = await fetch('/api/hd/checkout', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify(body),
-      })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? 'Checkout failed')
-      if (json.url) window.location.href = json.url
-      else router.push('/hd/dashboard')
+      if (!reefer) console.log(describeSlugResolution('hd', requestedPlan, presetPlan))
+      await startCheckout(data.user.id)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
     } finally {
@@ -230,7 +263,9 @@ function HDSignupForm() {
   // COPY ONLY - the trial is granted or refused at checkout (src/lib/ld-trial.ts), and a
   // returning customer is refused there. Shown so ad traffic sees the offer before it
   // ever reaches Stripe. Day 15 from today is the first charge date Stripe will set.
-  const isEliteTrialPlan = plan === 'elite' && promoStatus !== 'valid'
+  const isEliteTrialPlan = reefer || (plan === 'elite' && promoStatus !== 'valid')
+  const trialProduct = reefer ? 'NWI Reefer' : 'HD Elite'
+  const trialPrice   = reefer ? REEFER_PLAN.price : 159
   const trialFirstPaymentDate = (() => {
     const d = new Date()
     d.setDate(d.getDate() + 15)
@@ -242,9 +277,9 @@ function HDSignupForm() {
   const trialNotice = (
     <div className="rounded-xl px-4 py-3" data-testid="trial-notice"
       style={{ background: 'color-mix(in srgb, var(--hd-positive) 10%, var(--hd-card))', border: '1px solid color-mix(in srgb, var(--hd-positive) 35%, transparent)' }}>
-      <p className="text-sm font-semibold" style={{ color: 'var(--hd-positive)' }}>15-day free trial on HD Elite</p>
+      <p className="text-sm font-semibold" style={{ color: 'var(--hd-positive)' }}>15-day free trial on {trialProduct}</p>
       <p className="text-xs mt-0.5" style={{ color: 'var(--hd-text-muted)' }}>
-        Card required at checkout. You will not be charged until {trialFirstPaymentDate}, then $159/month.
+        Card required at checkout. You will not be charged until {trialFirstPaymentDate}, then ${trialPrice}/month.
         Cancel before then and you pay nothing. One free trial per customer.
       </p>
     </div>
@@ -271,8 +306,8 @@ function HDSignupForm() {
               </svg>
             </div>
             <div className="text-left">
-              <p className="font-condensed font-bold text-white text-xl tracking-wide leading-none">NWI HD SUITE</p>
-              <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>Heavy Duty &amp; Transport Refrigeration</p>
+              <p className="font-condensed font-bold text-white text-xl tracking-wide leading-none">{reefer ? 'NWI REEFER' : 'NWI HD SUITE'}</p>
+              <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>{reefer ? 'Transport Refrigeration' : <>Heavy Duty &amp; Transport Refrigeration</>}</p>
             </div>
           </div>
           <h1 className="font-condensed font-bold text-3xl text-white tracking-wide">
@@ -423,8 +458,21 @@ function HDSignupForm() {
           </>
         )}
 
+        {/* Reefer, already signed in: no second account - straight to checkout. */}
+        {reefer && signedIn && (
+          <div className="max-w-md mx-auto rounded-xl p-6 space-y-4" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
+            {trialNotice}
+            {error && <p className="text-sm text-red-400">{error}</p>}
+            <button type="button" onClick={handleContinueCheckout} disabled={loading}
+              className="w-full py-3 rounded-xl font-bold text-on-accent text-sm"
+              style={{ background: HD_ORANGE, opacity: loading ? 0.6 : 1 }}>
+              {loading ? 'Opening checkout…' : 'Continue to checkout'}
+            </button>
+          </div>
+        )}
+
         {/* ── Step 2: Account creation ── */}
-        {step === 'account' && (
+        {step === 'account' && !(reefer && signedIn) && (
           <form onSubmit={handleSignup} className="max-w-md mx-auto">
             <div className="rounded-xl p-6 space-y-4" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
               <div className="flex items-center justify-between">
@@ -494,20 +542,20 @@ function HDSignupForm() {
               </button>
             </div>
 
-            <button
+            {!reefer && <button
               type="button"
               onClick={() => setStep('plan')}
               className="mt-3 text-xs w-full text-center"
               style={{ color: 'var(--hd-text-faint)' }}
             >
               ← Change plan
-            </button>
+            </button>}
           </form>
         )}
 
         <p className="text-center text-xs mt-6" style={{ color: 'var(--hd-text-faint)' }}>
           Already have an account?{' '}
-          <a href="/hd/login" style={{ color: 'var(--hd-accent-text)' }}>Sign in</a>
+          <a href={base + '/login'} style={{ color: 'var(--hd-accent-text)' }}>Sign in</a>
         </p>
       </div>
     </div>

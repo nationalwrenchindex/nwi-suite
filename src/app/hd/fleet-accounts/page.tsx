@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { checkHDStarterAccess } from '@/lib/hd-access'
+import { checkHDStarterAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { FLEET_ACCOUNT_LIST_SELECT, FLEET_ACCOUNT_PAGE_SIZE, type FleetAccountListRow } from '@/app/api/hd/fleet-accounts/list'
 import FleetAccountList from './FleetAccountList'
 import { tint } from '@/lib/hd/text-tone'
@@ -19,7 +19,7 @@ export default async function FleetAccountsPage({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
 
-  const hasStarterAccess = await checkHDStarterAccess(user.id)
+  const hasStarterAccess = (await checkHDStarterAccess(user.id)) || (await reeferStandaloneCan(user.id, 'reefer_customers'))
   if (!hasStarterAccess) redirect('/hd/upgrade')
 
   const params   = await searchParams

@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest, after } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
-import { checkHDAccess } from '@/lib/hd-access'
+import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { generateDiagnostic } from '@/lib/gemini/client'
 import { formatParts } from '@/lib/gemini/formatter'
 import { sendNewCacheAlert } from '@/lib/email-alerts'
@@ -45,7 +45,9 @@ export async function POST(req: NextRequest) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const hasAccess = await checkHDAccess(user.id)
+  // Reefer Standalone reaches the reefer (Thermo King / Carrier) lookup only - checked below.
+  const hdAccess  = await checkHDAccess(user.id)
+  const hasAccess = hdAccess || (await reeferStandaloneCan(user.id, 'reefer_diagnostics'))
   if (!hasAccess) return NextResponse.json({ error: 'HD subscription required' }, { status: 403 })
 
   let body: {
@@ -70,6 +72,9 @@ export async function POST(req: NextRequest) {
 
   if (!manufacturer || !model) {
     return NextResponse.json({ error: 'manufacturer and model required' }, { status: 400 })
+  }
+  if (!hdAccess && !/thermo|^tk\b|carrier/i.test(manufacturer)) {
+    return NextResponse.json({ error: 'Reefer parts only on this plan' }, { status: 403 })
   }
 
   const cacheKey = `parts-${manufacturer}-${model}-${alarmCode}`

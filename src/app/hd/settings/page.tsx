@@ -8,6 +8,7 @@ import ExportData from '@/components/hd/ExportData'
 import ThemeToggle from '@/components/layout/ThemeToggle'
 import TaxSettingsFields from '@/components/settings/TaxSettingsFields'
 import HDDocumentTermsForm, { type HDDocumentTerms } from '@/components/hd/HDDocumentTermsForm'
+import { onReeferSurface } from '@/lib/reefer-surface'
 
 export const metadata = { title: 'Settings — NWI HD Suite' }
 
@@ -15,6 +16,7 @@ export default async function HDSettingsPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/hd/login')
+  const reefer = await onReeferSurface()
 
   const PROFILE_BASE = 'full_name, email, business_name, phone, hd_labor_rate, hd_tech_name, hd_epa_cert_number, hd_company_logo_url, business_logo_url'
   // Migration 156. Applied by hand while the code deploys on its own, so there is a
@@ -192,6 +194,8 @@ export default async function HDSettingsPage() {
           <ExportData />
         </div>
 
+        {/* Import is HD only - not part of Reefer Standalone. */}
+        {!reefer && (
         <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide mb-1">DATA IMPORT</p>
           <p className="text-sm mb-4" style={{ color: 'var(--hd-text-muted)' }}>
@@ -205,6 +209,7 @@ export default async function HDSettingsPage() {
             Open Import Wizard →
           </Link>
         </div>
+        )}
 
         <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
           <p className="font-condensed font-bold text-white text-lg tracking-wide mb-2">BILLING</p>
