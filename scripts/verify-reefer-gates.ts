@@ -49,7 +49,7 @@ const ROWS: Record<string, Row> = {
 }
 
 // ── Gate terms ──────────────────────────────────────────────────────────────────────
-type Term = string // 'hd' | 'starter' | 'reeferHD' | 'foreman' | 'rs:<module>' | 'ld:<module>' | 'gm:<module>' | 'noReefer' | 'ownerOnly'
+type Term = string // 'hd' | 'starter' | 'reeferHD' | 'foreman' | 'rs:<module>' | 'ld:<module>' | 'gm:<module>' | 'noReefer' | 'ownerOnly' | 'founder'
 
 function evalTerm(t: Term, r: Row): boolean {
   const g = { tier: r.tier, status: r.status, is_comped: r.is_comped, vertical: r.vertical }
@@ -67,6 +67,7 @@ function evalTerm(t: Term, r: Row): boolean {
   }
   if (t === 'noLiveSub') return canStartReeferCheckout(r)
   if (t === 'canUseForeman') return false   // needs profiles.foreman_addon_active; none of these rows has it
+  if (t === 'founder') return false         // one account by id; no subscription row is the founder
   throw new Error('unknown term ' + t)
 }
 
@@ -88,6 +89,8 @@ function gateTerms(raw: string): Term[] {
   if (/getModuleAccess\(/.test(src)) for (const m of src.matchAll(/\.includes\('([a-z_]+)'\)/g)) push('gm:' + m[1])
   if (/isReeferStandaloneUser\(/.test(src)) push('noReefer')
   if (/canStartReeferCheckout\(/.test(src)) push('noLiveSub')
+  // A founder check refuses every subscriber, whatever else the handler calls.
+  if (/user\.id\s*!==\s*FOUNDER_ID/.test(src)) return ['founder']
   return out
 }
 
@@ -162,7 +165,7 @@ const REEFER_PAGES_EXPECTED = new Set([
 // API routes Reefer Standalone must reach (method-level where a route mixes).
 const API_ALLOWED: Record<string, string[] | 'ALL'> = {
   '/api/hd/alarm-codes': 'ALL', '/api/hd/unit-profile': 'ALL', '/api/hd/parts-reference': 'ALL', '/api/hd/parts': 'ALL',
-  '/api/hd/parts/seed': 'ALL', '/api/hd/pm-checklist': 'ALL', '/api/hd/pm-checklist/[id]/email': 'ALL', '/api/hd/pm-checklist/[id]/pdf': 'ALL',
+  '/api/hd/pm-checklist': 'ALL', '/api/hd/pm-checklist/[id]/email': 'ALL', '/api/hd/pm-checklist/[id]/pdf': 'ALL',
   '/api/hd/labor-cards': 'ALL', '/api/hd/labor-cards/[id]': 'ALL', '/api/hd/repair-items': 'ALL', '/api/hd/repair-items/[id]/used': 'ALL',
   '/api/hd/quickwrench': 'ALL', '/api/hd/parts-manager': 'ALL',
   '/api/hd/work-orders': 'ALL', '/api/hd/work-orders/calendar': 'ALL', '/api/hd/work-orders/[id]': 'ALL', '/api/hd/work-orders/[id]/status': 'ALL',

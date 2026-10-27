@@ -202,7 +202,9 @@ function PartRow({ part, expanded, onToggle }: {
   )
 }
 
-export default function PartsLookup() {
+// canSeed: only the founder may (re)load the shared catalog; the seed route
+// refuses everyone else, so nobody else is shown the button.
+export default function PartsLookup({ canSeed = false }: { canSeed?: boolean }) {
   const [parts,        setParts]       = useState<Part[]>([])
   const [loading,      setLoading]     = useState(false)
   const [seeding,      setSeeding]     = useState(false)
@@ -290,7 +292,7 @@ export default function PartsLookup() {
       </div>
 
       {/* Seed CTA — shown when DB is empty */}
-      {hasSeeded === false && (
+      {hasSeeded === false && canSeed && (
         <div className="mb-6 rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
           <p className="text-white font-semibold mb-1">Parts database not loaded</p>
           <p className="text-sm mb-4" style={{ color: 'var(--hd-text-muted)' }}>
@@ -341,7 +343,7 @@ export default function PartsLookup() {
         <div className="text-center py-12" style={{ color: 'var(--hd-text-faint)' }}>Loading…</div>
       ) : parts.length === 0 ? (
         <div className="text-center py-12" style={{ color: 'var(--hd-text-faint)' }}>
-          {hasSeeded === false ? 'Load the parts database above to begin.' : 'No parts found.'}
+          {hasSeeded === false && canSeed ? 'Load the parts database above to begin.' : 'No parts found.'}
         </div>
       ) : (
         <>
@@ -362,7 +364,7 @@ export default function PartsLookup() {
       )}
 
       {/* Reload seed button (shown after seeded) */}
-      {hasSeeded === true && (
+      {hasSeeded === true && canSeed && (
         <div className="mt-8 pt-6 border-t" style={{ borderColor: 'var(--hd-border)' }}>
           <p className="text-xs mb-2" style={{ color: 'var(--hd-text-faint)' }}>Parts database management</p>
           <button
