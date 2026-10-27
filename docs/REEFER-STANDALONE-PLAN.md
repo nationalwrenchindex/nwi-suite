@@ -1,37 +1,29 @@
 # Reefer Standalone - plan and build report (Oct 27, 2026, overnight)
 
-## READ THIS FIRST - what did not get verified
+## Status - verified Oct 27, 2026 (morning run)
 
-**The smoke suite was NOT run, and the second cold build was NOT run.** At about the
-halfway point of verification the system killed my second cold build because the laptop
-was critically low on memory. Its instruction was not to start it again unprompted, and
-you asked for nothing to run alongside a build, so I stopped running heavy things.
+Verification finished on the morning of Oct 27, one step at a time with nothing else
+running. Full results are under "Verification results - Oct 27 morning run".
 
-What that means:
-- **Cold build #1 PASSED (exit 0)** on the full feature, all 31 `/reefer` routes compiled.
-  After it I changed only two things: a hook-dependency fix in LaborCardManager.tsx (the
-  one new lint warning) and the smoke/strays scripts. A full `tsc --noEmit` over the
-  whole repo (app + scripts) is clean after those changes. Build #2 was to confirm that.
-- **The full HD + LD smoke and the new reefer flow (Rf) did not run.** The Rf flow is
-  written into scripts/smoke.ts and typechecks; it has never executed. Nothing about the
-  screens is proven by a rendered page yet.
-- Everything that needs no build DID run: the gate matrix (ALL MATCH), the trial rules
-  (83/0), the 27-invoice replay (0/0/3), a database snapshot.
-- `.next` was removed by the killed build, so there is no local build on disk.
+- **Cold build:** exit 0, 86 warnings - the same 86 as before this build.
+- **HD + LD smoke:** 499 passed, 1 failed. All 500 checks have the same result as the
+  baseline run before the build, compared by name. The one failure is the known missing
+  SMOKE_LD_ONLY_ID test account.
+- **Reefer flow (Rf):** 63 passed, 1 failed. The quote -> work order -> invoice money
+  matched to the cent. The one failure is the 409 guard below.
+- **Strays:** none. **Database:** no existing row edited or removed in the 17 shared tables.
+- **Not tested: the second-subscription guard on /api/reefer/checkout (409).**
+  STRIPE_PRICE_REEFER_STANDALONE is not set locally, and the route checks the price
+  before the existing subscription, so it answered 503 and never reached the 409 check.
 
-**Nothing is promoted. Nothing was applied to the database. No SQL was run by me.** The
-code is committed and pushed to master, which makes a Preview only (see "Commit").
+**Nothing is promoted. Migration 170 is not applied. No SQL was run by me.** The code is
+pushed to master, which makes a Preview only (see "Commit").
 
-To finish verification in the morning, in this order, one at a time:
-1. Run the read-only constraint check in "Worries" #1. If it lists tiers without
-   reefer_standalone, billing cannot record this product - tell me.
-2. Apply migration 170 (on the clipboard, byte-checked, read back). It is optional for
-   everything except the setpoint/tractor fields on Reefer Units.
-3. `rm -rf .next && npm run build`, then `npm run start`, then
-   `PAGECHECK_BASE=http://localhost:3000 npm run smoke`, then
-   `npx tsx scripts/check-smoke-strays.ts`. (Or point PAGECHECK_BASE at the Preview URL.)
-   Expect the existing baseline (499 passed, 1 failed - the known SMOKE_LD_ONLY_ID) plus
-   the new Rf rows.
+Still to do:
+1. Apply migration 170 (re-copied to the clipboard Oct 27, byte-checked and read back).
+   It is needed only for the setpoint and tractor fields on Reefer Units.
+2. Create the Stripe price and set STRIPE_PRICE_REEFER_STANDALONE (see "Billing"). Then
+   run smoke against the Preview, which also exercises the 409 guard.
 
 ---------------------------------------------------------------------------------------
 
@@ -178,15 +170,111 @@ traffic to `/reefer/signup`.
 
 | Step | Result |
 |---|---|
-| 5.1 Cold build | **#1 exit 0** (87 warnings = the 86 baseline + 1 new from me, a hook-dependency warning in LaborCardManager, fixed after). **#2 NOT RUN - killed by the system for low memory.** Full `tsc --noEmit` after the fix: clean |
-| 5.2 Full smoke HD + LD | **NOT RUN** (needs a build and a server) |
-| 5.3 Reefer smoke flow (Rf) | **Written, NOT RUN.** It makes a throwaway account (smoke-reefer-<n>@example.com) with a reefer_standalone row, drives the surface, the refused and allowed APIs, labor cards, and quote -> work order -> invoice from a real saved quote's shape with every total read back from the database; then deletes the account and every row it made and proves none is left |
+| 5.1 Cold build (overnight - superseded by the morning run) | **#1 exit 0** (87 warnings = the 86 baseline + 1 new from me, a hook-dependency warning in LaborCardManager, fixed after). **#2 NOT RUN - killed by the system for low memory.** Full `tsc --noEmit` after the fix: clean |
+| 5.2 Full smoke HD + LD (overnight - superseded) | **NOT RUN overnight; ran in the morning, see below** (needs a build and a server) |
+| 5.3 Reefer smoke flow (Rf) (overnight - superseded) | **Written, not run overnight; ran in the morning, see below.** It makes a throwaway account (smoke-reefer-<n>@example.com) with a reefer_standalone row, drives the surface, the refused and allowed APIs, labor cards, and quote -> work order -> invoice from a real saved quote's shape with every total read back from the database; then deletes the account and every row it made and proves none is left |
 | 5.4 Gate matrix | **ALL MATCH** - 172 reefer rows, 4 in-route checks, 0 of 3,115 HD/LD answers changed |
 | 5.5 27-invoice replay | **0 of 27 totals change; 0 of 27 with any stored field changing; 3 refused** |
 | 5.6 Stray test rows | No smoke run, so none created. check-smoke-strays.ts now also checks for smoke-reefer accounts and any reefer_standalone subscription |
 | 5.7 No table altered, no row changed | No SQL executed; migration 170 creates one NEW table and is not applied. A read-only snapshot of 17 shared tables (subscriptions 8, profiles 42, hd_alarm_codes 100, hd_parts_reference 960, hd_procedures 4, hd_bm_map 4, hd_repair_items 40, hd_cached_diagnostics 46, hd_equipment_categories 27, hd_units 44, hd_fleet_accounts 151, hd_quotes 13, hd_work_orders 3,316, hd_invoices 27, line items 53, customers 877, hd_unit_profiles 4) matches the counts read before the build started. Its row hashes are saved to compare after the smoke run |
 | Trial rules | scripts/verify-ld-trial.ts **83 passed, 0 failed** (72 before + 11 reefer) |
 | Byte scan | 114 changed/new files: 0 control bytes (one backspace byte from shell escaping was found by the gate matrix in parts-manager and fixed) |
+
+The 5.1, 5.2, 5.3, 5.6 and 5.7 rows above are the overnight state. The morning run below
+replaces them.
+
+## Verification results - Oct 27 morning run
+
+Run one step at a time with nothing else running: a cold build, `npm run start`, then
+`PAGECHECK_BASE=http://localhost:3000 npm run smoke`, then the strays check and the
+database comparison, then the server was stopped. Migration 170 was not applied during
+this run. The smoke script cannot run one flow on its own, so flow Rf ran in the same
+smoke run as HD + LD.
+
+| Step | Result |
+|---|---|
+| Cold build (`rm -rf .next && npm run build`) | **Exit 0.** 86 warnings - the same 86 as before this build. The 87th from overnight build #1 was the LaborCardManager hook dependency, which was fixed. Compiled in 83s, 200/200 static pages, no out-of-memory errors |
+| Server | `npm run start` ready in 2.1s. Signed out: `/hd/login` 200; `/reefer` 307 -> `/reefer/dashboard` 307 -> `/reefer/login?redirect=...`; `/reefer/login` 200 (title "Sign In - NWI Reefer"); `/reefer/signup` 200. The `nwi_surface=reefer` cookie is set |
+| Full smoke, HD + LD | **499 passed, 1 failed.** All 500 checks were compared by name with the last baseline run (smoke-N): the same 500 checks, with the same results. Nothing that passed before fails. The one failure is the known `SMOKE_LD_ONLY_ID is not set` (Z equipment, LD-only subscriber) |
+| Reefer flow Rf | **63 passed, 1 failed.** The failure is the 409 guard, described below |
+| Strays | **Clean.** 0 smoke-marked rows in hd_quotes, hd_work_orders, hd_invoices, work_orders, quotes, hd_fleet_accounts, hd_units and customers; 0 `smoke-reefer-*` auth users; 0 `reefer_standalone` subscriptions |
+| 17 shared tables, compared row by row | **No existing row edited or removed.** 16 tables have the same counts as before the build. `customers` went 877 -> 879: two real customers added at 12:16 and 12:19 UTC by a shop account, about five hours before the smoke run. They are not test rows |
+
+### Flow Rf - the money, every total read back from the database
+
+It ran on a throwaway account, `smoke-reefer-1793121686921@example.com`, with a
+`reefer_standalone` subscriptions row. The row was accepted: there is no tier CHECK
+constraint. The quote copies the money shape of a real approved HD quote, Q-2026-0011.
+
+| Field | Q-2026-0011 (template) | Reefer quote | Work order | Invoice |
+|---|---|---|---|---|
+| Labor subtotal | 202.50 | 202.50 | - | - |
+| Parts subtotal | 86.45 | 86.45 | - | - |
+| Diagnostic, road call, travel, mileage, shop supplies | 0.00 each | 0.00 each | - | - |
+| Labor tax, 7.75% on 202.50 | 15.69 | 15.69 | - | - |
+| Parts tax, 7.75% on 86.45 | 6.70 | 6.70 | - | - |
+| **Tax** | 22.39 | **22.39** | **22.39** | **22.39** |
+| **Total** | 311.34 | **311.34** | **311.34** | **311.34** |
+
+- **Quote:** it matched the template on all nine money fields and on its tax breakdown.
+  The check: 202.50 + 86.45 + 22.39 = 311.34.
+- **Work order and invoice:** these checks compare total and tax against the quote, and
+  both are exact.
+  - The converter billed 311.34.
+  - The stored invoice passes the check that it adds up.
+- **Screens and fields:**
+  - The quote, work order and invoice pages under `/reefer` each show $311.34.
+  - The quote kept the tractor fields (Freightliner, VIN 1FUJGLDR0ZZRF0001).
+  - The work order offers Reefer PM and no DOT, aerial or equipment inspection.
+
+Also passed:
+- **Surface and redirects:**
+  - The surface and nav are reefer-only.
+  - 8 non-reefer paths under /reefer go to the dashboard: dot-inspections,
+    aerial-inspections/new, equipment-inspections, import, fleet-units/categories,
+    resources, reports/audit and foreman.
+  - `/hd` sends the account to /hd/signup.
+  - On the reefer surface, an /hd link comes back to /reefer: /reefer/quotes, or the
+    dashboard for a screen that is not on the reefer surface.
+- **Screens:**
+  - Reefer Diagnostics shows the Reefer, Procedures and Parts tabs only.
+  - Reefer Units shows the setpoint and tractor fields.
+  - PM Schedules shows TK and Carrier only.
+  - Settings has no data import.
+- **Refused APIs, 11 of them:**
+  - 403 "HD subscription required": truck-diagnostic, trailer-reference,
+    trailer-abs-diagnostic, dot-inspections, equipment-inspections.
+  - 403 "Reefer diagnostics only on this plan": quickwrench, both electrical and truck.
+  - 403 "Not available on Reefer Standalone": aerial-inspections, import,
+    equipment-categories.
+  - 403 "Reefer parts only on this plan": parts-manager.
+- **Allowed APIs:** alarm-codes 200; parts-reference 200 with 960 parts.
+- **Labor cards:**
+  - A truck card is refused (400).
+  - A reefer card saves as RF-0059 on the account's own row.
+  - The screen has no type picker.
+  - The library it picks from is reefer-only: 21 items, NWI catalog included.
+- **Financials:** By Equipment lists only "Reefer Unit" and "No unit recorded".
+- **Pages:** /reefer/scheduler, intel, reefer, epa-log, parts, fleet-accounts and
+  invoicing all render.
+- **Cleanup:** the throwaway account and every row it made are gone. This is checked
+  table by table.
+
+### Not tested: the second-subscription guard (409)
+
+The check "POST /api/reefer/checkout is refused" expects 409 for an account that already
+has a live subscription. It got **503** ("Reefer Standalone is not available for checkout
+yet").
+
+STRIPE_PRICE_REEFER_STANDALONE is not set locally, and the route checks the price before
+the existing subscription. So the request was refused, but for the wrong reason, and the
+guard itself has not run.
+
+The test is right about the product, so it was left as written:
+- Once the env var is set and smoke runs against the Preview, it exercises the guard.
+- Run locally without the var, it will keep failing.
+- The other fix is to check the existing subscription before the price in the route.
+  That has not been made.
 
 ## Commit
 
@@ -195,7 +283,10 @@ one database. Migration 169 (net30 defaults) is still uncommitted and was left o
 
 ## Worries
 
-1. **The subscriptions.tier CHECK is unknown.** Migration 018 allows only
+1. **RESOLVED Oct 27:** Brock's read-only constraint query shows there is no tier CHECK
+   on subscriptions, only the pkey, the user_id foreign key and unique(user_id). Flow Rf
+   wrote a `reefer_standalone` row without refusal. The original worry follows:
+   **The subscriptions.tier CHECK is unknown.** Migration 018 allows only
    starter/pro/full_suite/quickwrench/elite, but live rows hold hd_elite and
    full_suite_plus, so it was changed outside the repo. If a CHECK still lists tiers, the
    webhook's write of `reefer_standalone` will fail and a paying customer gets no access.
