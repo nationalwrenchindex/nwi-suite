@@ -24,6 +24,7 @@
 import fs from 'fs'
 import path from 'path'
 import { loadEnv } from './lib/smoke-session'
+import { parsePartNumber, partNumberKey } from '../src/lib/parts/part-number'
 
 loadEnv()
 const S = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -65,14 +66,26 @@ function parseCsv(text: string): Record<string, string>[] {
     .map(r => Object.fromEntries(header.map((h, i) => [h.trim(), (r[i] ?? '').trim()])))
 }
 
+// Every number column goes through the one normalizer (src/lib/parts/part-number.ts)
+// on the way in, so a vendor's "37-" never lands in the catalog as part of a number.
+// Cross-brand numbers (brand_number) are another maker's and are left as printed.
+const NUMBER_COLUMNS = ['part_number', 'old_number', 'new_number']
 function read(name: string): Record<string, string>[] {
   const file = path.join(DIR, name)
   if (!fs.existsSync(file)) { console.log(`  MISSING: ${file}`); return [] }
-  return parseCsv(fs.readFileSync(file, 'utf8'))
+  return parseCsv(fs.readFileSync(file, 'utf8')).map(r => {
+    for (const c of NUMBER_COLUMNS) {
+      if (!r[c]) continue
+      const p = parsePartNumber(r[c])
+      if (p.canonical !== r[c]) console.log(`  ${name}: ${c} "${r[c]}" read as ${p.canonical} (${p.form})`)
+      r[c] = p.canonical
+    }
+    return r
+  })
 }
 
 // ── the same rules the database enforces ────────────────────────────────────
-const normalize = (v: string) => v.toUpperCase().replace(/[^A-Z0-9]/g, '')
+const normalize = partNumberKey
 
 // Mirrors public.is_single_model. Kept in step deliberately: if the loader thinks a
 // value is fine and the database does not, the insert fails and the row is lost in a

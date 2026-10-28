@@ -27,6 +27,7 @@ import {
   typeSynonymMatches, type CounterScope, type Trust,
 } from '@/lib/parts/counter'
 import { readCatalog, readStockByPart, type CatalogFitment, type CatalogPart } from '@/lib/parts/catalog'
+import { parsePartNumber, partNumberSearchKeys } from '@/lib/parts/part-number'
 
 export const dynamic = 'force-dynamic'
 
@@ -124,9 +125,10 @@ export async function GET(request: NextRequest) {
   } else if (q || partType) {
     // ── by number, cross number or words ────────────────────────────────────
     const digits = !!q && /[0-9]/.test(q)
-    const wanted = q ? normalizePartNumber(q) : ''
+    // Every typed number goes through the one normalizer: 37-11-9959 is 11-9959.
+    const keys = q ? partNumberSearchKeys(q) : []
     const crossHit = new Set(digits
-      ? catalog.crosses.filter(c => normalizePartNumber(c.brand_number).includes(wanted)).map(c => c.part_id)
+      ? catalog.crosses.filter(c => keys.some(k => normalizePartNumber(c.brand_number).includes(k))).map(c => c.part_id)
       : [])
     for (const pt of parts) {
       if (!typeOk(pt)) continue
@@ -141,7 +143,8 @@ export async function GET(request: NextRequest) {
     // A number printed on an old part may be in no part row at all - only in a
     // supersession. Start the chain from what was typed so it still finds the part.
     if (digits && !cards.length) {
-      const chain = followChain(q!, wanted, catalog.links)
+      const typed = parsePartNumber(q!)
+      const chain = followChain(typed.canonical, typed.key, catalog.links)
       const cur = byId.get(byNumber.get(chain.currentNormalized)?.id ?? '')
       if (cur && chain.was.length) {
         cards.push({ part: cur, matchedFitment: [], trust: partTrust(cur), matchedOn: `matched on superseded number ${q}`, was: [], unresolvedSerial: false })

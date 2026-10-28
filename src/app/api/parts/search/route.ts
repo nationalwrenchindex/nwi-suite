@@ -32,8 +32,8 @@ import {
   // inside modelMatches, so this route cannot apply it inconsistently or forget it.
   canonicalManufacturer, manufacturerMatches, modelMatches,
   serialApplies, serialLabel, serialSide, fitmentRank, textMatches, typeMatches,
-  normalizePartNumber,
 } from '@/lib/parts/search'
+import { partNumberSearchKeys } from '@/lib/parts/part-number'
 
 export const dynamic = 'force-dynamic'
 
@@ -141,8 +141,9 @@ export async function GET(request: NextRequest) {
   let supersededNote: { from: string; to: string; note: string | null; verified: boolean } | null = null
   let effectiveQuery = q
   if (q && /[0-9]/.test(q)) {
-    const wanted = normalizePartNumber(q)
-    const hit = supersessions.find(s => s.old_number_normalized === wanted)
+    // Through the one normalizer, so a 37- number finds its supersession too.
+    const keys = partNumberSearchKeys(q)
+    const hit = supersessions.find(s => keys.includes(String(s.old_number_normalized)))
     if (hit) {
       supersededNote = {
         from: String(hit.old_number), to: String(hit.new_number),

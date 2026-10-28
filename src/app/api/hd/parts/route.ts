@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
+import { partNumberMatches } from '@/lib/parts/part-number'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,7 +55,7 @@ export async function GET(req: NextRequest) {
 
     // 1. Filter main results — normalized part_number + plain description/notes
     parts = parts.filter(p =>
-      normalize(p.part_number).includes(normSearch) ||
+      partNumberMatches(p.part_number, search) ||
       p.description.toLowerCase().includes(lower) ||
       (p.notes ?? '').toLowerCase().includes(lower)
     )

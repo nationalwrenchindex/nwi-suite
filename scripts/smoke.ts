@@ -4143,7 +4143,17 @@ async function flowPartsCounter(): Promise<void> {
   const n = await q('q=306014301')
   record(F, 'a number typed without dashes finds the part',
     ((n.json.results ?? []) as Array<Record<string, unknown>>).some(r => r.part_number === '30-60143-01'))
-  const syn = await q(`maker=${encodeURIComponent('Carrier Transicold')}&model=${encodeURIComponent('Supra 660')}&q=${encodeURIComponent('lube filter')}`)
+  // Brock's rule: a leading 37- is the vendor's, not the number. 37-11-9959 IS 11-9959.
+  for (const typed of ['37-11-9959', '37119959', '119959']) {
+    const v = await q(`q=${encodeURIComponent(typed)}`)
+    const vr = (v.json.results ?? []) as Array<Record<string, unknown>>
+    record(F, `the counter finds 11-9959 when ${typed} is typed`, vr.some(r => r.part_number === '11-9959'),
+      vr.map(r => String(r.part_number)).join(', ') || `-> ${v.status}`)
+  }
+  const v37 = await api('GET', '/api/parts/search?q=37-11-9959')
+  record(F, 'the parts search finds 11-9959 when 37-11-9959 is typed',
+    ((v37.json.results ?? []) as Array<Record<string, unknown>>).some(r => r.part_number === '11-9959'), `-> ${v37.status}`)
+  const syn =await q(`maker=${encodeURIComponent('Carrier Transicold')}&model=${encodeURIComponent('Supra 660')}&q=${encodeURIComponent('lube filter')}`)
   const synRes = (syn.json.results ?? []) as Array<Record<string, unknown>>
   record(F, '"lube filter" means the oil filter', synRes.length > 0 && synRes.every(r => String(r.part_type).startsWith('Filter - oil')),
     synRes.map(r => String(r.part_number)).join(', '))

@@ -20,8 +20,10 @@
 //      is which makes the technician guess, which is the failure the whole feature is
 //      meant to remove.
 
-export const normalizePartNumber = (value: string): string =>
-  value.toUpperCase().replace(/[^A-Z0-9]/g, '')
+import { partNumberKey, partNumberSearchKeys } from './part-number'
+
+/** The stored key (public.normalize_part_number). For what a TYPED number means, use part-number.ts. */
+export const normalizePartNumber = (value: string): string => partNumberKey(value)
 
 export const normalizeModel = (value: string): string =>
   value.toUpperCase().replace(/[^A-Z0-9]/g, '')
@@ -217,12 +219,13 @@ export function textMatches(
   if (!q) return true
 
   if (/[0-9]/.test(q)) {
-    const wanted = normalizePartNumber(q)
-    if (!wanted) return false
+    // Through the one normalizer, so 37-11-9959 finds 11-9959 (src/lib/parts/part-number.ts).
+    const keys = partNumberSearchKeys(q)
+    if (!keys.length) return false
     const stored = part.part_number_normalized ?? (part.part_number ? normalizePartNumber(part.part_number) : '')
-    if (stored.includes(wanted)) return true
+    if (keys.some(k => stored.includes(k))) return true
     // A number can also appear in a description - "Belt 3VX630", "Air filter 196mm".
-    return [part.description, part.part_type].some(v => v && normalizePartNumber(v).includes(wanted))
+    return [part.description, part.part_type].some(v => v && keys.some(k => normalizePartNumber(v).includes(k)))
   }
 
   const lower = q.toLowerCase()

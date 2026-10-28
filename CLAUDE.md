@@ -84,6 +84,29 @@ PAGECHECK_BASE=https://nwi-suite-git-branch.vercel.app npm run smoke
   Correcting an assertion that was wrong about the app is not loosening — but say plainly
   which it was.
 
+## Part numbers - Brock's rules, ground truth, do not re-derive
+
+From 17 years in the trade (Oct 28, 2026):
+
+- **Thermo King OEM:** 6 digits, dash after the first two. `11-9959`
+- **Carrier Transicold:** 9 digits, dashes after the first two and before the last two.
+  `30-60143-01`
+- **A leading `37-` is a vendor's catalog addition, NOT part of the number. Strip it.**
+  `37-11-9959` IS `11-9959`, the same part.
+- **A leading `20-` on a TK number** is Carrier selling an aftermarket part for a TK
+  application. `20-11-9959` relates to TK `11-9959`.
+- **An `8` added to the front of the first segment means reman.** `845-1234` is the reman
+  of OEM-new `45-1234`.
+
+Every parts search and every parts import goes through one function:
+`parsePartNumber` in `src/lib/parts/part-number.ts` (tests: `npx tsx
+scripts/verify-part-number.ts`). Only the `37-` rule changes what a number IS. `20-` and
+reman are recognized and reported but **never merged, linked or rewritten** - whether they
+merge, cross-reference or stay separate is Brock's decision, not code's.
+
+Not covered by the rules, so never guessed at: leading zeros (`78-603` vs `78-0603`),
+5-digit TK numbers (`78-266`), suffixes (`SV`, `K`, `KIT`, `SS`, `FA`, `E`).
+
 ## Money rules that are settled, do not re-litigate
 
 - **Tax is rounded per bucket where it is first agreed, then summed — never recomputed.**
