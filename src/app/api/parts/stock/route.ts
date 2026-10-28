@@ -24,11 +24,6 @@ import { createServiceClient } from '@/lib/supabase/service'
 
 export const dynamic = 'force-dynamic'
 
-// The ledger rows whose unit_cost is what the shop PAID. A 'used' row carries the
-// figure from the invoice line, which on an HD invoice is the SELL price (a known,
-// unfixed ledger bug - see the parts counter report), so it is never shown as a cost.
-const COST_REASONS = new Set(['received', 'opening', 'transferred_in', 'transferred_out', 'returned'])
-
 async function gate() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -87,7 +82,6 @@ export async function GET(request: NextRequest) {
     locations: locs.data ?? [],
     movements: (moves.data ?? []).map(m => ({
       ...m,
-      unit_cost: COST_REASONS.has(String(m.reason)) ? m.unit_cost : null,
       part_number: parts.get(String(m.part_id))?.part_number ?? '?',
     })),
   })

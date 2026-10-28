@@ -188,9 +188,13 @@ async function walk(F: string, userId: string, cookie: string, surface: '/hd' | 
   check(F, 'the allocation is released as invoiced', alloc3.length === 1 && !!alloc3[0].released_at && alloc3[0].released_reason === 'invoiced')
   const used = mv3.find(m => m.reason === 'used')
   check(F, 'ledger: one used movement, -2, against the invoice', !!used && Number(used.delta) === -WO_QTY && used.source_ref === inv?.invoice_number)
-  // KNOWN, UNFIXED (reported, not changed here): the deduction copies the invoice line's
-  // unit_cost, which on an HD invoice is the SELL price. Printed so it is on the record.
-  console.log(`         NOTE: the used movement records ${usd(used?.unit_cost)} as unit_cost - the SELL price (${usd(expSell)}), not the cost (${usd(RECEIVE_COST)}). Known ledger bug, not fixed in this build.`)
+  // The movement records the COST the part was billed against (unit_cost_base), never the
+  // sell price. Before Oct 28 it recorded the sell price here.
+  check(F, `ledger: the used movement records the COST ${usd(RECEIVE_COST)}, not the sell ${usd(expSell)}`,
+    Number(used?.unit_cost) === RECEIVE_COST, `recorded ${usd(used?.unit_cost)}`)
+  const hist = await c.api('GET', `/api/parts/stock?part_id=${part.id}`)
+  const histUsed = ((hist.json.movements ?? []) as Array<Record<string, unknown>>).find(m => m.reason === 'used')
+  check(F, 'inventory history shows that cost on the used movement', Number(histUsed?.unit_cost) === RECEIVE_COST, `shown ${usd(histUsed?.unit_cost)}`)
   const after = await c.api('GET', `/api/parts/counter?scope=${scope}&q=${PART_NUMBER}`)
   const afterStock = ((((after.json.results ?? []) as Array<Record<string, unknown>>)[0]?.stock) ?? {}) as Record<string, number>
   check(F, 'counter: 1 on hand, 0 on jobs, 1 available', afterStock.on_hand === 1 && afterStock.allocated === 0 && afterStock.available === 1,

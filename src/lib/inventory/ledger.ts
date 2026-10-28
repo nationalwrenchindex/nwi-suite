@@ -79,7 +79,13 @@ export function partLinesFromJson(lineItems: unknown): StockLine[] {
     const qty = Number(li.quantity ?? 1)
     if (!Number.isFinite(qty) || qty <= 0) continue
 
-    const cost = li.unit_cost == null ? null : Number(li.unit_cost)
+    // THE COST IS unit_cost_base, NEVER unit_cost. On an HD invoice line unit_cost is
+    // the SELL price and unit_cost_base is what the shop paid (the Oct 14 column trap),
+    // and reading unit_cost wrote the sell price into the ledger as cost: a part bought
+    // at $12.34 and billed at $16.04 left a "used" movement at $16.04. LD invoice lines
+    // carry no cost at all (unit_price only). A line with no unit_cost_base - a part
+    // priced by hand with no cost entered - records an UNKNOWN cost, not its sell price.
+    const cost = li.unit_cost_base == null || li.unit_cost_base === '' ? null : Number(li.unit_cost_base)
     out.push({
       partNumber,
       quantity: Math.round(qty),

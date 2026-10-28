@@ -130,7 +130,8 @@ async function main() {
 
     // ── 3. finalizing deducts, and available returns ────────────────────
     console.log('\n  3. FINALIZING THE INVOICE DEDUCTS IT, AND AVAILABLE RETURNS\n')
-    const lineItems = [{ type: 'parts', part_number: partNumber, quantity: 2, unit_cost: 10.00, description: 'ZZ test' }]
+    // The stored invoice shape: unit_cost is the SELL (13.00), unit_cost_base the COST (10.00).
+    const lineItems = [{ type: 'parts', part_number: partNumber, quantity: 2, unit_cost: 13.00, unit_cost_base: 10.00, markup_percent: 30, description: 'ZZ test' }]
     const d1 = await deductForInvoice({
       userId: OWNER, invoiceKind: 'ld', invoiceId: FAKE_INVOICE, invoiceRef: 'ZZ-INV-1',
       lineItems, locationId: shopId,
@@ -229,7 +230,7 @@ async function main() {
     const hdBefore = (await position(partId, shopId)).onHand
     const dHd = await deductForInvoice({
       userId: OWNER, invoiceKind: 'hd', invoiceId: HD_INVOICE, invoiceRef: 'ZZ-HD-INV-1',
-      lineItems: [{ type: 'part', part_number: partNumber, quantity: 1, unit_cost: 25.50 }],
+      lineItems: [{ type: 'parts', part_number: partNumber, quantity: 1, unit_cost: 33.15, unit_cost_base: 25.50, markup_percent: 30 }],
       locationId: shopId,
     })
     const hdAfter = (await position(partId, shopId)).onHand
@@ -239,11 +240,21 @@ async function main() {
     record('and recorded source_type hd_invoice', hdRow?.source_type === 'hd_invoice', String(hdRow?.source_type))
 
     // The two readers differ, the aggregation does not.
-    const fromJson = partLinesFromJson([{ type: 'parts', part_number: 'A-1', quantity: 2, unit_cost: 5 }])
-    const fromRows = partLinesFromRows([{ type: 'part', part_number: 'A-1', quantity: 2, unit_cost: 5 }])
-    record('LD and HD line readers produce the same StockLine',
-      JSON.stringify(fromJson) === JSON.stringify(fromRows),
+    // FIXTURES IN THE SHAPES THE PRODUCT STORES. This used to pass an invoice line whose
+    // unit_cost was the cost - a shape no invoice has - so it agreed with the work-order
+    // row and hid that the ledger wrote the SELL price as cost. Real shapes (Oct 28):
+    //   hd_invoices.line_items      unit_cost = SELL, unit_cost_base = COST
+    //   hd_work_order_line_items    unit_cost = COST, unit_price = SELL
+    const fromJson = partLinesFromJson([{ type: 'parts', part_number: 'A-1', quantity: 2, unit_cost: 6.5, unit_cost_base: 5, markup_percent: 30 }])
+    const fromRows = partLinesFromRows([{ type: 'part', part_number: 'A-1', quantity: 2, unit_cost: 5, unit_price: 6.5, markup_percent: 30 }])
+    record('the invoice and work-order readers produce the same StockLine - the COST, 5',
+      JSON.stringify(fromJson) === JSON.stringify(fromRows) && fromJson[0]?.unitCost === 5,
       JSON.stringify(fromJson))
+    const handPriced = partLinesFromJson([{ type: 'parts', part_number: 'A-1', quantity: 1, unit_cost: 40 }])
+    record('a hand-priced invoice line (no unit_cost_base) records an UNKNOWN cost, not its sell price',
+      handPriced[0]?.unitCost === null, JSON.stringify(handPriced))
+    const ldLine = partLinesFromJson([{ type: 'parts', part_number: 'A-1', quantity: 1, unit_price: 40, total: 40 }])
+    record('an LD invoice line (unit_price only) records an unknown cost', ldLine[0]?.unitCost === null, JSON.stringify(ldLine))
     const agg = aggregateLines([
       { partNumber: '78-1341', quantity: 2, unitCost: null },
       { partNumber: '781341',  quantity: 3, unitCost: 7 },
@@ -258,7 +269,7 @@ async function main() {
     const NEG_INVOICE = crypto.randomUUID()
     const dNeg = await deductForInvoice({
       userId: OWNER, invoiceKind: 'ld', invoiceId: NEG_INVOICE,
-      lineItems: [{ type: 'parts', part_number: partNumber, quantity: cur + 3, unit_cost: 1 }],
+      lineItems: [{ type: 'parts', part_number: partNumber, quantity: cur + 3, unit_cost: 1.30, unit_cost_base: 1, markup_percent: 30 }],
       locationId: truckId,
     })
     const negPos = await position(partId, truckId)

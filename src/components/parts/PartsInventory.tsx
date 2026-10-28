@@ -375,7 +375,7 @@ function HistoryPanel({ row, locations, onCancel }: { row: StockRow; locations: 
               <span className="font-semibold">{REASON_LABEL[m.reason] ?? m.reason}</span>
               <span>{m.delta > 0 ? `+${m.delta}` : m.delta}</span>
               <span>{locName(m.location_id)}</span>
-              {m.unit_cost != null && <span>paid {money(m.unit_cost)} each</span>}
+              {m.unit_cost != null && <span>{m.reason === 'used' ? 'cost' : 'paid'} {money(m.unit_cost)} each</span>}
               {m.source_ref && <span>ref {m.source_ref}</span>}
               {m.note && <span style={{ color: 'var(--hd-text-muted)' }}>{m.note}</span>}
             </li>
