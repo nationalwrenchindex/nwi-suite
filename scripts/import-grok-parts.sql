@@ -5,7 +5,7 @@
 -- ENDS IN ROLLBACK. Read the summary table it prints, then change the last line to
 -- COMMIT to keep it. Any check that fails raises an error and nothing is applied.
 --
--- store before ......................... 329 parts, 789 fitment
+-- store before ......................... 329 parts, 784 fitment
 -- NEW parts added ...................... 656
 -- DUPLICATES of a store part (not added) 140  (88 carry fitment the store row lacks)
 -- fitment rows added ................... 1806  (1324 for new parts, 482 extracted onto store parts)
@@ -2594,7 +2594,7 @@ DO $$
 BEGIN
   IF (SELECT count(*) FROM _imp_parts) <> 656 OR (SELECT count(*) FROM _imp_fitment) <> 1806 THEN
     RAISE EXCEPTION 'import: staged row counts are not what the plan says'; END IF;
-  IF (SELECT count(*) FROM public.parts) <> 329 OR (SELECT count(*) FROM public.part_fitment) <> 789 THEN
+  IF (SELECT count(*) FROM public.parts) <> 329 OR (SELECT count(*) FROM public.part_fitment) <> 784 THEN
     RAISE EXCEPTION 'import: the store is not the size this file was built against - rebuild it'; END IF;
   IF EXISTS (SELECT 1 FROM _imp_parts f JOIN public.parts p
              ON p.manufacturer = f.manufacturer AND p.part_number_normalized = public.normalize_part_number(f.part_number)) THEN
