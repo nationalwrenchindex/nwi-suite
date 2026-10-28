@@ -20,6 +20,9 @@
 //   * It never hides that a row is unverified. The badge is not decoration: a vendor
 //     listing and a manufacturer chart are not the same claim, and the person putting
 //     the part in a unit is the one who needs to know which it is.
+//   * It never shows where a row came from. For the vendor-listing rows that is a
+//     store's name, and it sat in the same card as the cost and sell price. The
+//     verified / unverified badge is the trust signal; the source stays in the database.
 //   * It never says "try a shorter model". That hint was a workaround for the search
 //     being broken, and it taught people to defeat the filter that makes the answer
 //     correct.
@@ -304,8 +307,7 @@ export default function PartsFinder({ mode, lockedUnit, onPick, markupPercent }:
           </p>
           {data.superseded.note && <p className="text-white/50 text-xs mt-1">{data.superseded.note}</p>}
           <p className="text-white/30 text-xs mt-1">
-            Showing the replacement. Source: {data.superseded.source}
-            {data.superseded.verified ? '' : ' (unverified)'}
+            Showing the replacement.{data.superseded.verified ? '' : ' The replacement link is unverified.'}
           </p>
         </div>
       )}
@@ -411,7 +413,6 @@ export default function PartsFinder({ mode, lockedUnit, onPick, markupPercent }:
                       {f.qty_per_unit && <span className="text-white/40">qty {f.qty_per_unit}</span>}
                       {f.note && <span className="text-white/40">{f.note}</span>}
                       {!f.verified && <span className="text-warning">unverified fitment</span>}
-                      <span className="text-white/20">{f.source}</span>
                     </li>
                   ))}
                 </ul>

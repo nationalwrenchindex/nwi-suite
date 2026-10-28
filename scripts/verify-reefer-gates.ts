@@ -182,7 +182,16 @@ const API_ALLOWED: Record<string, string[] | 'ALL'> = {
   '/api/hd/checkout': 'ALL', '/api/hd/bundle-price': 'ALL', '/api/hd/feature-waitlist': 'ALL',
   // Owner-scoped PDFs: open to any signed-in account, and a reefer shop owns no such record.
   '/api/hd/dot-inspections/[id]/pdf': 'ALL', '/api/hd/aerial-inspections/[id]/pdf': 'ALL',
+  // The parts counter and inventory (Oct 28): one route set for HD and Reefer Standalone.
+  '/api/parts/counter': 'ALL', '/api/parts/counter/options': 'ALL', '/api/parts/stock': 'ALL',
 }
+
+// New routes that are SHARED with HD on purpose. Every other new route is reefer-only
+// and must be open to no other plan; these must be open to exactly the plans the HD gate
+// admits - no more (an LD plan) and no fewer (an HD plan).
+const NEW_SHARED_WITH_HD = new Set([
+  'GET /api/parts/counter', 'GET /api/parts/counter/options', 'GET /api/parts/stock', 'POST /api/parts/stock',
+])
 // API routes Reefer Standalone must NOT reach.
 const API_REFUSED = new Set([
   // A LIVE reefer account has nothing to buy (canStartReeferCheckout). The route serves
@@ -300,6 +309,13 @@ for (const k of newRoutes) {
   const a = now.get(k)!.ans
   // /reefer/login and /reefer/signup are public sign-in pages, like /hd/login.
   if (k === 'PAGE /reefer/login' || k === 'PAGE /reefer/signup') continue
+  if (NEW_SHARED_WITH_HD.has(k)) {
+    for (const n of others) {
+      const want = evalTerm('hd', ROWS[n])
+      if (a[n] !== want) { fail++; console.log(`  NEW SHARED ROUTE ${k}: ${n} ${a[n]}, expected ${want} (the HD gate)`) }
+    }
+    continue
+  }
   for (const n of others) if (a[n]) { fail++; console.log(`  NEW ROUTE OPEN TO ${n}: ${k}`) }
 }
 console.log(`  ${compared} (route, plan) answers compared across ${others.length} plans: ${changed} changed.`)

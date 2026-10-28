@@ -240,7 +240,7 @@ async function cleanup(): Promise<void> {
     const users = (Array.isArray(usersJson) ? usersJson : usersJson.users ?? []) as Array<{ id: string; email?: string }>
     for (const u of users) if (/^smoke-reefer-\d+@example\.com$/.test(u.email ?? '')) created.reeferUsers.add(u.id)
   } catch { /* a failed sweep must not mask the real result */ }
-  const OWNED = ['hd_invoices', 'hd_work_orders', 'hd_quotes', 'hd_repair_items', 'reefer_unit_details', 'hd_units',
+  const OWNED = ['stock_allocation', 'stock_movement', 'inventory', 'stock_location', 'hd_invoices', 'hd_work_orders', 'hd_quotes', 'hd_repair_items', 'reefer_unit_details', 'hd_units',
     'hd_fleet_accounts', 'hd_equipment_categories', 'customers', 'subscriptions']
   for (const uid of created.reeferUsers) {
     for (const w of await rest<{ id: string }>(`hd_work_orders?select=id&user_id=eq.${uid}`).catch(() => [])) {
@@ -4080,9 +4080,80 @@ async function flowReefer(): Promise<void> {
       const pg = await page(p)
       record(F, `${p} renders for it`, !!pg, pg ? '' : 'bounced or errored')
     }
+
+    // The parts counter and inventory are the SAME screen as HD's, scoped to reefer parts.
+    const rp = await page('/reefer/parts')
+    record(F, '/reefer/parts is the parts counter, with Counter and Inventory tabs',
+      !!rp && ['PARTS COUNTER', 'Counter', 'Inventory', 'Find parts', 'Thermo King', 'Carrier Transicold'].every(x => rp.text.includes(x)),
+      rp ? missingControls(rp.text, ['PARTS COUNTER', 'Counter', 'Inventory', 'Find parts']).join(', ') : 'did not load')
+    const ri = await page('/reefer/parts?tab=inventory')
+    record(F, '/reefer/parts?tab=inventory is the parts inventory',
+      !!ri && ri.text.includes('PARTS INVENTORY') && ri.text.includes('Receive stock'), ri ? '' : 'did not load')
+    const rc = await api('GET', `/api/parts/counter?scope=all&maker=${encodeURIComponent('Carrier Transicold')}&model=${encodeURIComponent('Supra 660')}`)
+    record(F, 'the counter answers a reefer account, held to the reefer scope',
+      rc.status === 200 && rc.json.scope === 'reefer' && Number(rc.json.count) > 0, `-> ${rc.status} scope ${rc.json.scope} count ${rc.json.count}`)
+    const rs = await api('GET', '/api/parts/stock')
+    record(F, 'its inventory reads (empty for a new account)',
+      rs.status === 200 && Array.isArray(rs.json.stock) && (rs.json.stock as unknown[]).length === 0, `-> ${rs.status}`)
   } finally {
     cookie = ownerCookie
   }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FLOW Pc - the parts counter and inventory (HD). Read-only: it receives nothing.
+// The end-to-end money walk (receive -> work order -> invoice) is
+// scripts/walk-parts-stock.ts, which prints every figure.
+// ═══════════════════════════════════════════════════════════════════════════
+async function flowPartsCounter(): Promise<void> {
+  const F = 'Pc parts counter'
+  const pg = await page('/hd/parts')
+  record(F, '/hd/parts is the counter: maker, unit, part type, search',
+    !!pg && ['PARTS COUNTER', 'Thermo King', 'Carrier Transicold', 'Unit model', 'BM number', 'Serial', 'Find parts'].every(x => pg.text.includes(x)),
+    pg ? missingControls(pg.text, ['PARTS COUNTER', 'Thermo King', 'Unit model', 'BM number', 'Find parts']).join(', ') : 'did not load')
+  const inv = await page('/hd/parts?tab=inventory')
+  record(F, '/hd/parts?tab=inventory is the inventory, with Receive stock',
+    !!inv && inv.text.includes('PARTS INVENTORY') && inv.text.includes('Receive stock') && inv.text.includes('Add a location'), inv ? '' : 'did not load')
+  const old = await page('/hd/parts?tab=lookup')
+  record(F, 'the old Parts Lookup is still reachable until it is folded in', !!old && old.text.includes('PARTS LOOKUP'), old ? '' : 'did not load')
+
+  const opts = await api('GET', '/api/parts/counter/options')
+  const carrierModels = ((opts.json.models ?? {}) as Record<string, string[]>)['Carrier Transicold'] ?? []
+  record(F, 'options: the model list comes from fitment (Supra 660 is offered)', opts.status === 200 && carrierModels.includes('Supra 660'),
+    `-> ${opts.status}, ${carrierModels.length} Carrier models`)
+
+  // Brock's chart, verified: a Supra 660 takes 30-60143-01 oil, 30-60049-20 air, 30-01090-05 fuel.
+  const q = (s: string) => api('GET', `/api/parts/counter?${s}`)
+  const u = await q(`maker=${encodeURIComponent('Carrier Transicold')}&model=${encodeURIComponent('Supra 660')}&part_type=${encodeURIComponent('Filter - oil (engine)')}`)
+  const res = (u.json.results ?? []) as Array<Record<string, unknown>>
+  record(F, 'Supra 660 + oil filter returns 30-60143-01, verified, shown plainly',
+    res.some(r => r.part_number === '30-60143-01' && r.display === 'plain' && r.badge === 'verified'),
+    res.map(r => `${r.part_number} [${r.badge}]`).join(', ') || `-> ${u.status}`)
+  record(F, 'a Carrier unit never returns a Thermo King part', res.length > 0 && res.every(r => /carrier/i.test(String(r.manufacturer))))
+  record(F, 'the answer carries no price and no source',
+    u.status === 200 && !/last_cost|sell_price|unit_cost|vendor|"source"/.test(JSON.stringify(u.json)))
+  const o = await q('q=30-01121-00')
+  const first = ((o.json.results ?? []) as Array<Record<string, unknown>>)[0]
+  record(F, 'the superseded number 30-01121-00 answers with 30-60143-01, was 30-01121-00',
+    first?.part_number === '30-60143-01' && (first?.was as string[] | undefined)?.includes('30-01121-00') === true,
+    `${first?.part_number} was ${(first?.was as string[] | undefined)?.join(',')}`)
+  const n = await q('q=306014301')
+  record(F, 'a number typed without dashes finds the part',
+    ((n.json.results ?? []) as Array<Record<string, unknown>>).some(r => r.part_number === '30-60143-01'))
+  const syn = await q(`maker=${encodeURIComponent('Carrier Transicold')}&model=${encodeURIComponent('Supra 660')}&q=${encodeURIComponent('lube filter')}`)
+  const synRes = (syn.json.results ?? []) as Array<Record<string, unknown>>
+  record(F, '"lube filter" means the oil filter', synRes.length > 0 && synRes.every(r => String(r.part_type).startsWith('Filter - oil')),
+    synRes.map(r => String(r.part_number)).join(', '))
+  const unv = await q('q=78-1341')
+  const unvHit = ((unv.json.results ?? []) as Array<Record<string, unknown>>)[0]
+  record(F, 'an unverified vendor-listing part says one source, verify by serial',
+    !!unvHit && unvHit.display === 'one_source' && /verify by serial/.test(String(unvHit.advice)),
+    unvHit ? `${unvHit.part_number} [${unvHit.badge}] ${unvHit.advice}` : `-> ${unv.status}`)
+  const st = await api('GET', '/api/parts/stock')
+  record(F, 'the inventory route reads this shop\'s stock and locations',
+    st.status === 200 && Array.isArray(st.json.stock) && Array.isArray(st.json.locations), `-> ${st.status}`)
+  const bad = await api('POST', '/api/parts/stock', { action: 'receive', part_id: '00000000-0000-0000-0000-000000000000', quantity: 1 })
+  record(F, 'receiving a part that is not in the catalog is refused', bad.status === 422, `-> ${bad.status}`)
 }
 
 async function main(): Promise<void> {
@@ -4154,6 +4225,7 @@ async function main(): Promise<void> {
     await flowY()
     await flowZ()
     await flowReefer()
+    await flowPartsCounter()
   } finally {
     await cleanup()
   }
