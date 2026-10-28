@@ -13,6 +13,8 @@
 //      part for a TK application.              20-11-9959 relates to 11-9959
 //   5. An "8" on the front of the first segment means reman.
 //                                         845-1234 is the reman of 45-1234
+//   6. A LOST LEADING ZERO IS DAMAGED DATA, NOT A DIFFERENT PART (Oct 28).
+//      The canonical form keeps the zero.          78-603 IS 78-0603
 //
 // Only rule 3 changes what a number IS. Rules 4 and 5 are RECOGNIZED and reported
 // (form + relatesTo) but the canonical number is left alone: whether a 20- part or a
@@ -23,9 +25,17 @@
 // public.normalize_part_number stores in parts.part_number_normalized, so a search
 // key from here compares directly against the database.
 //
-// Real numbers in the store do not all fit rules 1 and 2 (TK 78-266, 306-221,
-// 204-2436; Carrier 18-00091-105, 50-00215-01SV). A number typed WITH dashes therefore
-// keeps its own dash positions; only a bare run of digits is laid out by rule 1 or 2.
+// Rule 6, exactly as far as it goes and no further. A dashed number is padded only
+// where ONE leading zero restores the shape:
+//   TK       NN-NNN -> NN-0NNN      N-NNNN -> 0N-NNNN
+//   Carrier  NN-NNNNN-N -> NN-NNNNN-0N      N-NNNNN-NN -> 0N-NNNNN-NN
+// Never padded, only reported in shortSegment: a Carrier MIDDLE segment that is short
+// (30-6143-01 could be 30-06143-01 or a different part with a digit missing anywhere),
+// and any number short in two places at once (8-603). A bare run of digits is never
+// padded - with no dashes there is no telling which segment lost the zero.
+//
+// Real numbers that fit no shape (306-221, 204-2436, 18-00091-105, 96-153-01K) keep
+// their own dash positions and are matched as written.
 
 export type PartNumberForm =
   | 'thermo_king'              // rule 1
@@ -55,27 +65,50 @@ export interface ParsedPartNumber {
   relatesTo: string | null
   /** Trailing letters (SV, K, KIT, ...), kept on the number. Their meaning is not one of the rules. */
   suffix: string | null
+  /** True when rule 6 restored a lost leading zero. */
+  padded: boolean
+  /** Set when the number looks like a TK/Carrier number short a digit that rule 6 will NOT guess at. */
+  shortSegment: string | null
 }
 
 /** Uppercase alphanumerics. Identical to public.normalize_part_number in SQL. */
 export const partNumberKey = (value: string): string =>
   String(value ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
 
-type Shape = { canonical: string; maker: 'thermo_king' | 'carrier' }
+type Shape = { canonical: string; maker: 'thermo_king' | 'carrier'; padded: boolean }
+
+// Rule 6 for dashed digits: the shape after restoring ONE lost leading zero, or why not.
+const zero = (g: string) => `0${g}`
+function paddedShape(groups: string[]): Shape | null {
+  const lens = groups.map(g => g.length).join(',')
+  if (lens === '2,3') return { canonical: `${groups[0]}-${zero(groups[1])}`, maker: 'thermo_king', padded: true }
+  if (lens === '1,4') return { canonical: `${zero(groups[0])}-${groups[1]}`, maker: 'thermo_king', padded: true }
+  if (lens === '2,5,1') return { canonical: `${groups[0]}-${groups[1]}-${zero(groups[2])}`, maker: 'carrier', padded: true }
+  if (lens === '1,5,2') return { canonical: `${zero(groups[0])}-${groups[1]}-${groups[2]}`, maker: 'carrier', padded: true }
+  return null
+}
+function shortNote(groups: string[]): string | null {
+  const lens = groups.map(g => g.length).join(',')
+  if (groups.length === 3 && groups[0].length <= 2 && groups[2].length <= 2 && groups[1].length < 5)
+    return `Carrier middle segment has ${groups[1].length} digits, not 5 - not padded`
+  if (lens === '1,3') return 'TK number short in both segments - not padded'
+  if (lens === '1,5,1') return 'Carrier number short in both end segments - not padded'
+  return null
+}
 
 // Rule 1 or rule 2, from the digit groups. Bare digits are laid out by count; dashed
-// digits must already sit in the rule's positions.
+// digits must already sit in the rule's positions, or be one lost zero away (rule 6).
 function oemShape(groups: string[]): Shape | null {
   const digits = groups.join('')
   if (groups.length === 1) {
-    if (digits.length === 6) return { canonical: `${digits.slice(0, 2)}-${digits.slice(2)}`, maker: 'thermo_king' }
-    if (digits.length === 9) return { canonical: `${digits.slice(0, 2)}-${digits.slice(2, 7)}-${digits.slice(7)}`, maker: 'carrier' }
+    if (digits.length === 6) return { canonical: `${digits.slice(0, 2)}-${digits.slice(2)}`, maker: 'thermo_king', padded: false }
+    if (digits.length === 9) return { canonical: `${digits.slice(0, 2)}-${digits.slice(2, 7)}-${digits.slice(7)}`, maker: 'carrier', padded: false }
     return null
   }
   const lens = groups.map(g => g.length).join(',')
-  if (lens === '2,4') return { canonical: groups.join('-'), maker: 'thermo_king' }
-  if (lens === '2,5,2') return { canonical: groups.join('-'), maker: 'carrier' }
-  return null
+  if (lens === '2,4') return { canonical: groups.join('-'), maker: 'thermo_king', padded: false }
+  if (lens === '2,5,2') return { canonical: groups.join('-'), maker: 'carrier', padded: false }
+  return paddedShape(groups)
 }
 
 /**
@@ -88,7 +121,7 @@ function oemShape(groups: string[]): Shape | null {
 export function parsePartNumber(input: string): ParsedPartNumber {
   const raw = String(input ?? '')
   const cleaned = raw.toUpperCase().trim().replace(/[\s._/\\-]+/g, '-').replace(/^-+|-+$/g, '')
-  const base = { input: raw, stripped37: false, relatesTo: null, suffix: null, maker: null }
+  const base = { input: raw, stripped37: false, relatesTo: null, suffix: null, maker: null, padded: false, shortSegment: null }
   if (!cleaned) return { ...base, canonical: '', key: '', form: 'empty' }
 
   // Digits in dash-separated groups, then optional trailing letters (with or without
@@ -113,7 +146,7 @@ export function parsePartNumber(input: string): ParsedPartNumber {
   // Rules 1 and 2 on the whole number come first. A number that already IS a TK or a
   // Carrier number is never stripped or reinterpreted - 37-1234 is TK 37-1234.
   const whole = oemShape(groups)
-  if (whole) return done(withSuffix(whole.canonical), whole.maker, { maker: whole.maker })
+  if (whole) return done(withSuffix(whole.canonical), whole.maker, { maker: whole.maker, padded: whole.padded })
 
   const digits = groups.join('')
 
@@ -124,8 +157,8 @@ export function parsePartNumber(input: string): ParsedPartNumber {
     : null
   if (after37) {
     const rest = oemShape(after37)
-    if (rest) return done(withSuffix(rest.canonical), rest.maker === 'thermo_king' ? 'thermo_king_37' : 'carrier_37', { maker: rest.maker, stripped37: true })
-    return done(withSuffix(after37.join('-')), 'other_37', { stripped37: true })
+    if (rest) return done(withSuffix(rest.canonical), rest.maker === 'thermo_king' ? 'thermo_king_37' : 'carrier_37', { maker: rest.maker, stripped37: true, padded: rest.padded })
+    return done(withSuffix(after37.join('-')), 'other_37', { stripped37: true, shortSegment: shortNote(after37) })
   }
 
   // Rule 4: 20- in front of a TK number. Recognized, not rewritten.
@@ -135,8 +168,7 @@ export function parsePartNumber(input: string): ParsedPartNumber {
   if (after20) {
     const tk = oemShape(after20)
     if (tk?.maker === 'thermo_king') {
-      const canonical = groups.length === 1 ? `20-${tk.canonical}` : groups.join('-')
-      return done(withSuffix(canonical), 'carrier_for_thermo_king', { relatesTo: tk.canonical })
+      return done(withSuffix(`20-${tk.canonical}`), 'carrier_for_thermo_king', { relatesTo: tk.canonical, padded: tk.padded })
     }
   }
 
@@ -148,12 +180,11 @@ export function parsePartNumber(input: string): ParsedPartNumber {
   if (reman) {
     const oem = oemShape(reman)
     if (oem) {
-      const canonical = groups.length === 1 ? `8${oem.canonical}` : groups.join('-')
-      return done(withSuffix(canonical), oem.maker === 'thermo_king' ? 'thermo_king_reman' : 'carrier_reman', { maker: oem.maker, relatesTo: oem.canonical })
+      return done(withSuffix(`8${oem.canonical}`), oem.maker === 'thermo_king' ? 'thermo_king_reman' : 'carrier_reman', { maker: oem.maker, relatesTo: oem.canonical, padded: oem.padded })
     }
   }
 
-  return done(withSuffix(groups.join('-')), 'other')
+  return done(withSuffix(groups.join('-')), 'other', { shortSegment: shortNote(groups) })
 }
 
 /**

@@ -15,14 +15,16 @@ function check(step: string, ok: boolean, detail = ''): void {
   if (!ok) failed++
   console.log(`  ${ok ? 'pass' : 'FAIL'}  ${step}${detail ? '  -- ' + detail : ''}`)
 }
-function is(input: string, canonical: string, form: PartNumberForm, extra: { relatesTo?: string | null; stripped37?: boolean; suffix?: string | null } = {}) {
+function is(input: string, canonical: string, form: PartNumberForm, extra: { relatesTo?: string | null; stripped37?: boolean; suffix?: string | null; padded?: boolean; short?: boolean } = {}) {
   const p = parsePartNumber(input)
   const ok = p.canonical === canonical && p.form === form && p.key === partNumberKey(canonical) &&
     (extra.relatesTo === undefined || p.relatesTo === extra.relatesTo) &&
     (extra.stripped37 === undefined || p.stripped37 === extra.stripped37) &&
-    (extra.suffix === undefined || p.suffix === extra.suffix)
+    (extra.suffix === undefined || p.suffix === extra.suffix) &&
+    (extra.padded === undefined || p.padded === extra.padded) &&
+    (extra.short === undefined || !!p.shortSegment === extra.short)
   check(`${JSON.stringify(input)} -> ${canonical} (${form})`, ok,
-    ok ? '' : `got ${p.canonical} (${p.form}) relatesTo=${p.relatesTo} stripped37=${p.stripped37} suffix=${p.suffix}`)
+    ok ? '' : `got ${p.canonical} (${p.form}) relatesTo=${p.relatesTo} stripped37=${p.stripped37} suffix=${p.suffix} padded=${p.padded} short=${p.shortSegment}`)
 }
 
 console.log('\nRULE 1: Thermo King OEM, 6 digits, dash after the first two')
@@ -51,7 +53,7 @@ is('37-30-60143-01', '30-60143-01', 'carrier_37', { stripped37: true })
 is('37306014301', '30-60143-01', 'carrier_37', { stripped37: true })
 check('37-11-9959 and 11-9959 are the same key', parsePartNumber('37-11-9959').key === parsePartNumber('11-9959').key)
 console.log('  real 37- shapes from hd_parts:')
-is('37-13-506', '13-506', 'other_37', { stripped37: true })
+is('37-13-506', '13-0506', 'thermo_king_37', { stripped37: true, padded: true })   // rule 6 (was 13-506 before Oct 28)
 is('37-203-799', '203-799', 'other_37', { stripped37: true })
 is('37-11-6182E', '11-6182E', 'thermo_king_37', { stripped37: true, suffix: 'E' })
 is('37-44-9181-KIT', '44-9181-KIT', 'thermo_king_37', { stripped37: true, suffix: 'KIT' })
@@ -85,13 +87,37 @@ is('50-00215-01sv', '50-00215-01SV', 'carrier', { suffix: 'SV' })
 is(' 37-41-5459-kit ', '41-5459-KIT', 'thermo_king_37', { suffix: 'KIT' })
 
 console.log('\nREAL SHAPES OUTSIDE THE RULES: kept exactly, still searchable')
-is('78-266', '78-266', 'other')
 is('306-221', '306-221', 'other')
 is('204-2436', '204-2436', 'other')
 is('18-00091-105', '18-00091-105', 'other')
 is('96-153-01K', '96-153-01K', 'other', { suffix: 'K' })
 is('023Z0050', '023Z0050', 'other')
 is('038-00034-001', '038-00034-001', 'other')
+
+console.log('\nRULE 6: a lost leading zero is damaged data - pad ONE zero back, no further')
+is('78-603', '78-0603', 'thermo_king', { padded: true })
+check('78-603 and 78-0603 are the same key', parsePartNumber('78-603').key === parsePartNumber('78-0603').key)
+is('78-0603', '78-0603', 'thermo_king', { padded: false })
+is('78-266', '78-0266', 'thermo_king', { padded: true })   // TK is six digits (was "kept as 78-266" before Oct 28)
+is('8-1234', '08-1234', 'thermo_king', { padded: true })
+is('30-60143-1', '30-60143-01', 'carrier', { padded: true })
+is('3-60143-01', '03-60143-01', 'carrier', { padded: true })
+is('37-61-800', '61-0800', 'thermo_king_37', { stripped37: true, padded: true })
+is('20-11-959', '20-11-0959', 'carrier_for_thermo_king', { relatesTo: '11-0959', padded: true })
+is('845-123', '845-0123', 'thermo_king_reman', { relatesTo: '45-0123', padded: true })
+console.log('  must NOT pad:')
+is('30-6143-01', '30-6143-01', 'other', { padded: false, short: true })      // Carrier middle short: never guessed
+is('96-153-01K', '96-153-01K', 'other', { padded: false, short: true, suffix: 'K' })
+is('8-603', '8-603', 'other', { padded: false, short: true })                // short in two places
+is('3-60143-1', '3-60143-1', 'other', { padded: false, short: true })
+is('78-63', '78-63', 'other', { padded: false })                             // two zeros lost: not guessed
+is('78603', '78603', 'other', { padded: false })                             // bare digits: which segment?
+is('306-221', '306-221', 'other', { padded: false, short: false })
+is('204-2436', '204-2436', 'other', { padded: false })
+is('18-00091-105', '18-00091-105', 'other', { padded: false })
+is('11-9959', '11-9959', 'thermo_king', { padded: false, short: false })
+check('typing 78-603 finds a part stored as 78-0603', partNumberMatches('78-0603', '78-603'))
+check('typing 78-603 still finds a row not yet repaired (78-603)', partNumberMatches('78-603', '78-603'))
 
 console.log('\nFAILURE CASES: nothing invented')
 is('', '', 'empty')

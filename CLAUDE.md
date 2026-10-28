@@ -97,6 +97,14 @@ From 17 years in the trade (Oct 28, 2026):
   application. `20-11-9959` relates to TK `11-9959`.
 - **An `8` added to the front of the first segment means reman.** `845-1234` is the reman
   of OEM-new `45-1234`.
+- **A lost leading zero is damaged data, not a different part.** `78-603` and `78-0603`
+  are the SAME part; the canonical form keeps the zero. A TK number is six digits - two,
+  a dash, four. `78-603` lost its zero in an import.
+  - Pad back exactly ONE zero: TK `78-603` -> `78-0603`, `8-1234` -> `08-1234`; Carrier
+    `30-60143-1` -> `30-60143-01`.
+  - Never pad a Carrier MIDDLE segment (`30-6143-01` could be a different part with a
+    digit lost anywhere), a number short in two places (`8-603`), or bare digits
+    (`78603` - no telling which segment lost it). Report those; do not guess.
 
 Every parts search and every parts import goes through one function:
 `parsePartNumber` in `src/lib/parts/part-number.ts` (tests: `npx tsx
@@ -104,8 +112,9 @@ scripts/verify-part-number.ts`). Only the `37-` rule changes what a number IS. `
 reman are recognized and reported but **never merged, linked or rewritten** - whether they
 merge, cross-reference or stay separate is Brock's decision, not code's.
 
-Not covered by the rules, so never guessed at: leading zeros (`78-603` vs `78-0603`),
-5-digit TK numbers (`78-266`), suffixes (`SV`, `K`, `KIT`, `SS`, `FA`, `E`).
+Not covered by the rules, so never guessed at: suffixes (`SV`, `K`, `KIT`, `SS`, `FA`,
+`E`), and shapes that fit no rule (`306-221`, `204-2436`, `18-00091-105`, `96-153-01K`) -
+those stay exactly as written and are matched as written.
 
 ## Money rules that are settled, do not re-litigate
 

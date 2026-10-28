@@ -18,11 +18,15 @@
 // ("SB-series"), the supersessions 45-2323 -> 45-2324 and 37-11-9098 -> 37-11-9341,
 // and the six part-type disagreements (the store's type is never overwritten).
 //
-// ALSO HELD (found while building this, Oct 28): a new number that differs from a store
-// number of the same maker only by a leading zero in a segment (78-0603 vs the store's
-// 78-603). Probably one part, but a leading zero is not one of Brock's numbering rules,
-// so it is neither merged nor added - adding it would create the duplicate the fold-in
-// exists to avoid. The part, its fitment and its crosses wait for his call.
+// STEP 1 OF THE SAME FILE - REPAIR THE STORE FIRST (rule 6, Brock Oct 28: a lost
+// leading zero is damaged data; 78-603 IS 78-0603). Every store part whose number is not
+// canonical is renumbered to its padded form BEFORE the fold-in, so the fold-in merges
+// against repaired numbers. Only rule-6 padding may renumber a store row; anything else
+// stops the build. Store rows that would become duplicates of each other also stop the
+// build (none on Oct 28) - merging two catalog rows is planned, not improvised.
+//
+// A look-alike that padding does NOT resolve (same digits but for a leading zero, after
+// padding) is still held rather than added as a duplicate.
 
 import fs from 'fs'
 import { loadEnv } from './lib/smoke-session'
@@ -101,13 +105,29 @@ async function main() {
   const [legacy, xref, parts, fit, sup, cross] = await Promise.all([
     all('hd_parts'), all('hd_parts_cross_ref'), all('parts'), all('part_fitment'), all('part_supersession'), all('part_cross_reference'),
   ])
-  const store = new Map(parts.map(p => [`${p.manufacturer}|${p.part_number_normalized}`, p]))
+  // Step 1: the store as it will be after the rule-6 repair. Every later step plans
+  // against the repaired numbers, which is the order the SQL runs in.
+  const repairs: Array<{ id: string; manufacturer: string; old: string; new: string; type: string }> = []
+  for (const p of parts) {
+    const c = parsePartNumber(p.part_number)
+    if (c.canonical === p.part_number) continue
+    if (!c.padded) throw new Error(`store part ${p.part_number} is not canonical (${c.canonical}, ${c.form}) for a reason other than a lost zero - stop`)
+    repairs.push({ id: p.id, manufacturer: p.manufacturer, old: p.part_number, new: c.canonical, type: p.part_type })
+    p.part_number = c.canonical
+    p.part_number_normalized = c.key
+  }
+  const store = new Map<string, Record<string, any>>()
+  for (const p of parts) {
+    const k = `${p.manufacturer}|${p.part_number_normalized}`
+    if (store.has(k)) throw new Error(`after repair, store parts ${store.get(k)!.id} and ${p.id} are both ${p.part_number} - a store merge needs planning; stop`)
+    store.set(k, p)
+  }
   const storeModels = new Map<string, Set<string>>()
   for (const f of fit) for (const v of [f.unit_model, f.engine_model, f.compressor_model]) if (v)
     storeModels.set(f.part_id, (storeModels.get(f.part_id) ?? new Set()).add(modelKey(v)))
 
   // 1. Through the normalizer; fold any duplicates the normalizer reveals INSIDE hd_parts.
-  type Row = { r: Record<string, any>; maker: string; canonical: string; key: string; form: string; models: string[] }
+  type Row = { r: Record<string, any>; maker: string; canonical: string; key: string; form: string; suffix: string | null; models: string[] }
   const byKey = new Map<string, Row>()
   const innerFolds: string[] = []
   for (const r of [...legacy].sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)) || String(a.id).localeCompare(String(b.id)))) {
@@ -121,11 +141,14 @@ async function main() {
       innerFolds.push(`${r.part_number} folded into ${prior.r.part_number}`)
       continue
     }
-    byKey.set(k, { r, maker, canonical: p.canonical, key: p.key, form: p.form, models })
+    byKey.set(k, { r, maker, canonical: p.canonical, key: p.key, form: p.form, suffix: p.suffix, models })
   }
 
   const storeZeroless = new Map(parts.map(p => [`${p.manufacturer}|${partNumberKey(zeroless(p.part_number))}`, p]))
   const heldZero: Array<{ number: string; store: string; models: number }> = []
+  // Suffixes (SV, K, KIT, SS, FA, E) are Brock's to decide: loading 11-6182E as its own
+  // part would decide that it is NOT 11-6182. Held, with their fitment and crosses.
+  const heldSuffix: Array<{ hd: string; number: string; models: number }> = []
   const newParts: Array<Row & { type: string; description: string }> = []
   const merges: Array<{ hd: string; store: string; storeType: string; hdType: string; via37: boolean; extract: string[]; heldType: boolean }> = []
   const newFitment: Array<{ maker: string; number: string; model: string; why: string }> = []
@@ -139,6 +162,7 @@ async function main() {
     const unusable = row.models.filter(m => !isSingleModel(m))
     if (unusable.length) groups.push({ number: r.part_number, models: unusable })
     const type = partTypeOf(r.category, r.subcategory)
+    if (row.suffix || /KIT$/.test(row.canonical)) { heldSuffix.push({ hd: r.part_number, number: row.canonical, models: loadable.length }); continue }
     const kept = store.get(`${maker}|${row.key}`)
     if (kept) {
       const have = storeModels.get(kept.id) ?? new Set()
@@ -183,7 +207,7 @@ async function main() {
     const row = [...byKey.values()].find(v => v.key === parsePartNumber(x.part_number).key)
     if (!row) throw new Error(`cross ${x.part_number} has no hd_parts row`)
     if (STORE_NAMES.test(String(x.cross_mfr))) throw new Error(`cross brand looks like a store: ${x.cross_mfr}`)
-    if (heldZero.some(z => partNumberKey(z.number) === row.key)) { heldCross.push(`${x.part_number} ${x.cross_mfr} ${x.cross_part}`); continue }
+    if ([...heldZero, ...heldSuffix].some(z => partNumberKey(z.number) === row.key)) { heldCross.push(`${x.part_number} ${x.cross_mfr} ${x.cross_part}`); continue }
     const kept = store.get(`${row.maker}|${row.key}`)
     if (kept && cross.some(c => c.part_id === kept.id && c.brand === x.cross_mfr && c.brand_number_normalized === partNumberKey(x.cross_part))) continue
     crosses.push({ maker: row.maker, number: kept ? kept.part_number : row.canonical, brand: x.cross_mfr, brandNumber: x.cross_part })
@@ -194,12 +218,20 @@ async function main() {
   const L: string[] = []
   const push = (...s: string[]) => L.push(...s)
   push(
-    '-- Fold hd_parts (053) into the one parts store (148). GENERATED by',
-    '-- scripts/build-fold-hd-parts-sql.ts on ' + new Date().toISOString().slice(0, 10) + ' from the live tables. Approved Oct 28.',
+    '-- (1) Repair store part numbers to canonical form (rule 6: a lost leading zero is',
+    '-- damaged data), then (2) fold hd_parts (053) into the one parts store (148).',
+    '-- GENERATED by scripts/build-fold-hd-parts-sql.ts on ' + new Date().toISOString().slice(0, 10) + ' from the live tables.',
+    '-- Approved Oct 28. One file, one run, in this order.',
     '--',
     '-- ENDS IN ROLLBACK. Read the summary table it prints, then change the last line to',
     '-- COMMIT to keep it. Any check that fails raises an error and nothing is applied.',
     '--',
+    `-- (1) REPAIR: ${repairs.length} store parts renumbered. Store rows that become duplicates of`,
+    '--     each other: 0 (the build stops if there are any). No fitment, cross or',
+    '--     inventory row moves - they hang on parts.id, which does not change.',
+    ...repairs.map(r => `--   ${r.old.padEnd(10)} -> ${r.new.padEnd(10)} ${r.manufacturer} ${ascii(r.type)}`),
+    '--',
+    '-- (2) FOLD-IN:',
     `-- hd_parts rows ......................... ${legacy.length}`,
     `--   folded inside hd_parts by the normalizer ${innerFolds.length}`,
     `--   NEW parts added ...................... ${newParts.length}`,
@@ -218,6 +250,7 @@ async function main() {
     '-- HELD, NOT LOADED:',
     ...heldSupers.map(s => `--   supersession ${s}`),
     ...heldZero.map(z => `--   part ${z.number} (and its ${z.models} fitment rows): differs from store part ${z.store} only by a leading zero`),
+    ...heldSuffix.map(z => `--   part ${z.hd} (would be ${z.number}; ${z.models} fitment rows): suffix - Brock's call`),
     ...heldCross.map(c => `--   cross ${c} (its part is held)`),
     ...groups.map(g => `--   group model strings on ${g.number}: ${g.models.map(ascii).join('; ')}`),
     '',
@@ -227,6 +260,42 @@ async function main() {
     'SELECT (SELECT count(*) FROM public.parts) AS parts, (SELECT count(*) FROM public.part_fitment) AS part_fitment,',
     '       (SELECT count(*) FROM public.part_supersession) AS part_supersession, (SELECT count(*) FROM public.part_cross_reference) AS part_cross_reference;',
     '',
+    '-- ---------------------------------------------------------------------------',
+    '-- (1) REPAIR: renumber store parts to canonical form. Same rows, same ids.',
+    '-- ---------------------------------------------------------------------------',
+    'CREATE TEMP TABLE _repair (id UUID, manufacturer TEXT, old_number TEXT, new_number TEXT) ON COMMIT DROP;',
+    'INSERT INTO _repair VALUES',
+    repairs.map(r => `  ('${r.id}', ${lit(r.manufacturer)}, ${lit(r.old)}, ${lit(r.new)})`).join(',\n') + ';',
+    '',
+    'DO $$',
+    'BEGIN',
+    `  IF (SELECT count(*) FROM _repair) <> ${repairs.length} THEN RAISE EXCEPTION 'repair: staged count is not ${repairs.length}'; END IF;`,
+    '  IF (SELECT count(*) FROM _repair r JOIN public.parts p ON p.id = r.id AND p.part_number = r.old_number AND p.manufacturer = r.manufacturer)',
+    `     <> ${repairs.length} THEN RAISE EXCEPTION 'repair: a store part is not the number this file was built from - rebuild it'; END IF;`,
+    '  IF EXISTS (SELECT 1 FROM _repair r JOIN public.parts p ON p.manufacturer = r.manufacturer',
+    '             AND p.part_number_normalized = public.normalize_part_number(r.new_number) AND p.id <> r.id) THEN',
+    "    RAISE EXCEPTION 'repair: a padded number is already another store part - that is a merge this file does not plan; stop';",
+    '  END IF;',
+    'END $$;',
+    '',
+    'UPDATE public.parts p SET part_number = r.new_number, updated_at = now()',
+    '  FROM _repair r WHERE p.id = r.id AND p.part_number = r.old_number;',
+    '',
+    'DO $$',
+    'DECLARE b RECORD;',
+    'BEGIN',
+    '  SELECT * INTO b FROM _fold_before;',
+    `  IF (SELECT count(*) FROM _repair r JOIN public.parts p ON p.id = r.id AND p.part_number = r.new_number) <> ${repairs.length} THEN`,
+    `    RAISE EXCEPTION 'repair: not every part was renumbered'; END IF;`,
+    '  IF (SELECT count(*) FROM public.parts) <> b.parts OR (SELECT count(*) FROM public.part_fitment) <> b.part_fitment THEN',
+    "    RAISE EXCEPTION 'repair: a row count changed - a renumber must not add or remove rows'; END IF;",
+    "  IF EXISTS (SELECT 1 FROM public.parts WHERE manufacturer = 'Thermo King' AND part_number ~ '^[0-9]{2}-[0-9]{3}$') THEN",
+    "    RAISE EXCEPTION 'repair: a five-digit TK number is still in the store'; END IF;",
+    'END $$;',
+    '',
+    '-- ---------------------------------------------------------------------------',
+    '-- (2) FOLD-IN: against the repaired numbers.',
+    '-- ---------------------------------------------------------------------------',
     'CREATE TEMP TABLE _fold_parts (manufacturer TEXT, part_number TEXT, part_type TEXT, description TEXT) ON COMMIT DROP;',
     'INSERT INTO _fold_parts VALUES',
     newParts.map(p => `  (${lit(p.maker)}, ${lit(p.canonical)}, ${lit(p.type)}, ${p.description ? lit(p.description) : 'NULL'})`).join(',\n') + ';',
@@ -298,7 +367,8 @@ async function main() {
     'END $$;',
     '',
     '-- What it did (this is the table the SQL editor shows).',
-    "SELECT 'parts' AS table_name, b.parts AS before, (SELECT count(*) FROM public.parts) AS after, " + newParts.length + ' AS planned FROM _fold_before b',
+    "SELECT 'parts renumbered (rule 6)' AS table_name, 0 AS before, (SELECT count(*) FROM _repair r JOIN public.parts p ON p.id = r.id AND p.part_number = r.new_number) AS after, " + repairs.length + ' AS planned',
+    "UNION ALL SELECT 'parts', b.parts, (SELECT count(*) FROM public.parts), " + newParts.length + ' FROM _fold_before b',
     "UNION ALL SELECT 'part_fitment', b.part_fitment, (SELECT count(*) FROM public.part_fitment), " + newFitment.length + ' FROM _fold_before b',
     "UNION ALL SELECT 'part_supersession', b.part_supersession, (SELECT count(*) FROM public.part_supersession), " + supers.length + ' FROM _fold_before b',
     "UNION ALL SELECT 'part_cross_reference', b.part_cross_reference, (SELECT count(*) FROM public.part_cross_reference), " + crosses.length + ' FROM _fold_before b;',
@@ -314,7 +384,7 @@ async function main() {
   console.log(`new parts with no model ${noModel.length}; group strings ${groups.reduce((s, g) => s + g.models.length, 0)} on ${groups.length} parts`)
   console.log(`stripped 37- on new parts: ${newParts.filter(p => p.form.endsWith('_37')).length}; forms: ${JSON.stringify(newParts.reduce((m: Record<string, number>, p) => (m[p.form] = (m[p.form] ?? 0) + 1, m), {}))}`)
   console.log('MERGES'); for (const m of merges) console.log(`  ${m.hd} = ${m.store}  ${m.storeType === m.hdType ? 'same type' : `store "${m.storeType}" kept, hd_parts "${m.hdType}"`}${m.heldType ? '  FLAG' : ''}  +${m.extract.length}`)
-  console.log('HELD LEADING-ZERO', JSON.stringify(heldZero), 'HELD CROSSES', heldCross)
+  console.log('REPAIRS', repairs.length, 'HELD LEADING-ZERO', JSON.stringify(heldZero), 'HELD SUFFIX', JSON.stringify(heldSuffix), 'HELD CROSSES', heldCross)
   console.log('HELD SUPERS', heldSupers); console.log('GROUPS', JSON.stringify(groups)); console.log('NO MODEL', noModel.join(' '))
   console.log('NEW 37- / other forms:', newParts.filter(p => p.form !== 'thermo_king' && p.form !== 'carrier').map(p => `${p.r.part_number}->${p.canonical}(${p.form})`).join('  '))
   console.log(`wrote ${OUT}`)

@@ -204,7 +204,9 @@ async function main() {
     vendor_price?: number | null; vendor_price_source?: string | null
   }
   const wanted = new Map<string, PartRow>()
-  const key = (mfr: string, num: string) => `${mfr.trim().toUpperCase()}|${normalize(num)}`
+  // Canonical on BOTH sides: a store row still printed 78-603 (not yet repaired by rule 6)
+  // is the same part as a CSV's 78-603 read as 78-0603, never a second row.
+  const key = (mfr: string, num: string) => `${mfr.trim().toUpperCase()}|${normalize(parsePartNumber(num).canonical)}`
 
   for (const r of partsCsv) {
     const profile = r.belt_profile?.trim().toLowerCase()
