@@ -3907,6 +3907,8 @@ async function flowReefer(): Promise<void> {
       dash ? missingControls(dash.text, navWant).join(', ') : '')
     record(F, 'and none of the HD-only ones', !!dash && navGone.every(x => !dash.text.includes(x)),
       dash ? navGone.filter(x => dash.text.includes(x)).join(', ') : '')
+    const hdLinks = dash ? [...dash.html.matchAll(/href="(\/hd\/[^"]*)"/g)].map(m => m[1]) : []
+    record(F, 'the reefer dashboard links to /reefer, never /hd', !!dash && hdLinks.length === 0, hdLinks.join(', '))
 
     const landing = async (path: string, extraCookie = '') => {
       const res = await fetch(`${BASE}${path}`, { headers: { cookie: extraCookie ? `${cookie}; ${extraCookie}` : cookie }, redirect: 'follow' })

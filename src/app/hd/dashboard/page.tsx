@@ -53,6 +53,9 @@ export default async function HDDashboardPage({
   // The same dashboard on /reefer, in reefer words. Nothing it reads or counts changes.
   const reefer = await onReeferSurface()
   const product = reefer ? 'NWI Reefer' : 'HD Suite'
+  // Every link stays on the surface the dashboard is shown on. /reefer used to link to
+  // /hd/... and relied on the middleware to bounce each click back to /reefer.
+  const base = reefer ? '/reefer' : '/hd'
 
   // Arriving straight from Stripe checkout. Grant access from the session now
   // rather than waiting on the webhook, which can land after this page renders
@@ -211,7 +214,7 @@ export default async function HDDashboardPage({
         <KpiCard label={reefer ? 'Active Reefer Units' : 'Active Fleet Units'} value={unitCount ?? 0} color="blue" sub="Active units" />
         <KpiCard label="Open Work Orders" value={openWOCount ?? 0} color="orange" />
         <KpiCard label="Active Alarm Codes" value={alarmCount} color={alarmCount > 0 ? 'red' : 'white'} sub="From recent PMs" />
-        <Link href="/hd/fleet-units" className="rounded-xl transition-opacity hover:opacity-80">
+        <Link href={`${base}/fleet-units`} className="rounded-xl transition-opacity hover:opacity-80">
           <KpiCard
             label="Units Due for PM"
             value={pmDueCount}
@@ -219,7 +222,7 @@ export default async function HDDashboardPage({
             sub={pmDueCount > 0 ? 'Overdue or within 150 hrs' : 'All up to date'}
           />
         </Link>
-        <Link href="/hd/invoices?filter=overdue" className="rounded-xl transition-opacity hover:opacity-80">
+        <Link href={`${base}/invoices?filter=overdue`} className="rounded-xl transition-opacity hover:opacity-80">
           <KpiCard
             label="Overdue Invoices"
             value={overdueCount}
@@ -236,7 +239,7 @@ export default async function HDDashboardPage({
         <div className="lg:col-span-2 rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
           <div className="flex items-center justify-between mb-4">
             <p className="font-condensed font-bold text-white text-lg tracking-wide">OPEN WORK ORDERS</p>
-            <Link href="/hd/work-orders"
+            <Link href={`${base}/work-orders`}
               className="text-xs rounded-lg px-3 py-1.5 border transition-colors"
               style={{ color: 'var(--hd-text-faint)', borderColor: 'var(--hd-border)' }}
             >
@@ -246,7 +249,7 @@ export default async function HDDashboardPage({
           {!workOrders || workOrders.length === 0 ? (
             <div className="py-10 text-center">
               <p className="text-sm" style={{ color: 'var(--hd-text-faint)' }}>No open work orders</p>
-              <Link href="/hd/work-orders"
+              <Link href={`${base}/work-orders`}
                 className="mt-2 inline-block text-xs" style={{ color: 'var(--hd-accent-text)' }}>
                 + New Work Order
               </Link>
@@ -281,7 +284,7 @@ export default async function HDDashboardPage({
         <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
           <div className="flex items-center justify-between mb-4">
             <p className="font-condensed font-bold text-white text-lg tracking-wide">EPA 608 LOG</p>
-            <Link href="/hd/epa-log" className="text-xs" style={{ color: 'var(--hd-accent-text)' }}>View all →</Link>
+            <Link href={`${base}/epa-log`} className="text-xs" style={{ color: 'var(--hd-accent-text)' }}>View all →</Link>
           </div>
           <div className="mb-3 p-3 rounded-lg" style={{ background: 'var(--hd-inner)' }}>
             <p className="text-xs uppercase tracking-widest mb-1" style={{ color: 'var(--hd-text-faint)' }}>Total Refrigerant Tracked</p>
@@ -308,7 +311,7 @@ export default async function HDDashboardPage({
       <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
         <div className="flex items-center justify-between mb-4">
           <p className="font-condensed font-bold text-white text-lg tracking-wide">PM DUE SOON</p>
-          <Link href="/hd/pm-schedules" className="text-xs" style={{ color: 'var(--hd-accent-text)' }}>PM Schedules →</Link>
+          <Link href={`${base}/pm-schedules`} className="text-xs" style={{ color: 'var(--hd-accent-text)' }}>PM Schedules →</Link>
         </div>
         {pmDueSoon.length === 0 ? (
           <div className="py-8 text-center">
@@ -316,7 +319,7 @@ export default async function HDDashboardPage({
               {unitCount === 0 ? 'No fleet units added yet' : 'All units up to date on PMs'}
             </p>
             {unitCount === 0 && (
-              <Link href="/hd/fleet-units"
+              <Link href={`${base}/fleet-units`}
                 className="mt-2 inline-block text-xs" style={{ color: 'var(--hd-accent-text)' }}>
                 {reefer ? '+ Add Reefer Units' : '+ Add Fleet Units'}
               </Link>
@@ -361,10 +364,10 @@ export default async function HDDashboardPage({
         <p className="text-xs uppercase tracking-widest mb-3" style={{ color: 'var(--hd-text-faint)' }}>Quick Access</p>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
-            { href: '/hd/quickwrench',   label: reefer ? 'REEFER DIAGNOSTICS' : 'HD QUICKWRENCH', sub: 'Alarm codes & specs', color: 'var(--hd-accent-text)' },
-            { href: '/hd/pm-checklist',  label: 'PM CHECKLIST',   sub: 'Start a new PM',      color: HD_BLUE   },
-            { href: '/hd/fleet-units',   label: reefer ? 'REEFER UNITS' : 'FLEET UNITS', sub: reefer ? 'Manage your reefer units' : 'Manage your fleet', color: '#6B7280' },
-            { href: '/hd/epa-log',       label: 'EPA 608 LOG',    sub: 'Refrigerant tracking', color: '#6B7280' },
+            { href: `${base}/quickwrench`,   label: reefer ? 'REEFER DIAGNOSTICS' : 'HD QUICKWRENCH', sub: 'Alarm codes & specs', color: 'var(--hd-accent-text)' },
+            { href: `${base}/pm-checklist`,  label: 'PM CHECKLIST',   sub: 'Start a new PM',      color: HD_BLUE   },
+            { href: `${base}/fleet-units`,   label: reefer ? 'REEFER UNITS' : 'FLEET UNITS', sub: reefer ? 'Manage your reefer units' : 'Manage your fleet', color: '#6B7280' },
+            { href: `${base}/epa-log`,       label: 'EPA 608 LOG',    sub: 'Refrigerant tracking', color: '#6B7280' },
           ].map(({ href, label, sub, color }) => (
             <Link
               key={href}
