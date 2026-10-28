@@ -39,11 +39,14 @@ export const dynamic = 'force-dynamic'
 
 const PART_COLUMNS =
   'id, part_number, part_number_normalized, manufacturer, part_type, description, ' +
-  'belt_section, belt_section_canonical, belt_length, belt_profile, notes, verified, source'
+  'belt_section, belt_section_canonical, belt_length, belt_profile, notes, verified'
+
+// No `source` in this response: for the vendor-listing rows it is a store's name, and
+// the screens that read this route show a cost beside each part.
 
 const FITMENT_COLUMNS =
   'id, part_id, unit_model, engine_model, compressor_model, serial_from, serial_before, ' +
-  'build_date_from, build_date_before, qty_per_unit, note, verified, source'
+  'build_date_from, build_date_before, qty_per_unit, note, verified'
 
 interface PartRow {
   id: string
@@ -58,7 +61,6 @@ interface PartRow {
   belt_profile: string | null
   notes: string | null
   verified: boolean
-  source: string
   vendor_price?: number | null
 }
 
@@ -75,7 +77,6 @@ interface FitmentRow {
   qty_per_unit: number | null
   note: string | null
   verified: boolean
-  source: string
 }
 
 export async function GET(request: NextRequest) {
@@ -128,7 +129,7 @@ export async function GET(request: NextRequest) {
 
   const { data: superData } = await supabase
     .from('part_supersession')
-    .select('old_number, new_number, old_number_normalized, new_number_normalized, manufacturer, note, verified, source')
+    .select('old_number, new_number, old_number_normalized, new_number_normalized, manufacturer, note, verified')
 
   const supersessions = superData ?? []
 
@@ -137,7 +138,7 @@ export async function GET(request: NextRequest) {
   // A number typed in from a part in hand may be superseded. The search must find the
   // replacement and SAY what happened, rather than returning nothing for a number
   // that is printed on the part the technician is holding.
-  let supersededNote: { from: string; to: string; note: string | null; verified: boolean; source: string } | null = null
+  let supersededNote: { from: string; to: string; note: string | null; verified: boolean } | null = null
   let effectiveQuery = q
   if (q && /[0-9]/.test(q)) {
     const wanted = normalizePartNumber(q)
@@ -146,7 +147,7 @@ export async function GET(request: NextRequest) {
       supersededNote = {
         from: String(hit.old_number), to: String(hit.new_number),
         note: (hit.note as string | null) ?? null,
-        verified: !!hit.verified, source: String(hit.source),
+        verified: !!hit.verified,
       }
       // Search for the REPLACEMENT. The old number is kept in the response so the
       // screen can explain why it is showing a different number than was typed.

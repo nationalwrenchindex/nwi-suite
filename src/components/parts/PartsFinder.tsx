@@ -41,7 +41,6 @@ export interface FitmentRow {
   qty_per_unit: number | null
   note: string | null
   verified: boolean
-  source: string
   serial_label: string | null
   serial_side: string
 }
@@ -59,7 +58,6 @@ export interface PartResult {
   belt_profile: string | null
   notes: string | null
   verified: boolean
-  source: string
   vendor_price?: number | null
   superseded_by: { to: string; note: string | null } | null
   matched_by: string
@@ -80,7 +78,7 @@ export interface StockRow {
 
 interface SearchResponse {
   query: { catch_all_excluded: boolean; include_unfitted: boolean }
-  superseded: { from: string; to: string; note: string | null; verified: boolean; source: string } | null
+  superseded: { from: string; to: string; note: string | null; verified: boolean } | null
   prices_available: boolean
   count: number
   unresolved_serial_count: number

@@ -75,10 +75,13 @@ export interface PartWithSuppliers extends RawPart {
   included:         boolean
   selected_supplier: Supplier
   custom_price:     number
-  price_autozone:   number
-  price_orielly:    number
-  price_napa:       number
-  price_rockauto:   number
+  // LEGACY, never written since Oct 28. These held invented "retailer" prices (the AI
+  // estimate times a fixed factor) labelled with store names. The client now sends one
+  // price, custom_price. Kept optional only so a quote saved before then still reads.
+  price_autozone?:  number
+  price_orielly?:   number
+  price_napa?:      number
+  price_rockauto?:  number
 }
 
 // ─── Quote ────────────────────────────────────────────────────────────────────

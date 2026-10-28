@@ -55,11 +55,12 @@ export default function PartsComingSoon() {
           </div>
 
           <p className="text-sm leading-relaxed mb-4" style={{ color: 'var(--hd-text-muted)' }}>
-            NWI HD Suite is pending approval for{' '}
-            <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.85)' }}>O&apos;Reilly Auto Parts</span> and{' '}
-            <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.85)' }}>NAPA</span> API integration for real-time
-            heavy duty parts pricing and availability. Once approved, parts lookup will be available directly
-            from work orders and HD QuickWrench results — no more tab-switching.
+            {/* No retailer or store is named: NWI has no parts-store partnerships, and no
+                store name may sit beside a price. This card used to say NWI was "pending
+                approval" for two named chains' pricing APIs. */}
+            NWI HD Suite will add real-time heavy duty parts pricing and availability. Once it is
+            ready, parts lookup will be available directly from work orders and HD QuickWrench
+            results — no more tab-switching.
           </p>
 
           <div className="flex flex-wrap gap-3 text-xs mb-4">

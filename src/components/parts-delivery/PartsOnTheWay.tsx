@@ -377,7 +377,9 @@ export default function PartsOnTheWay({
           {screen === 'quote' && quote && (
             <>
               <div className="p-4 rounded-lg" style={{ background: INPUT, border: `1px solid ${BORDER}` }}>
-                <p className="text-sm font-semibold text-white mb-1">Delivery from {quote.storeName}</p>
+                {/* The store is not named on the screen that shows the fees and the total: no store
+                    name sits beside a price. The tech picked and called it on the previous screen. */}
+                <p className="text-sm font-semibold text-white mb-1">Delivery from the store you called</p>
                 {store && <p className="text-xs" style={{ color: '#c9d5e0' }}>📍 {store.distanceMiles} miles away</p>}
                 <p className="text-xs" style={{ color: '#c9d5e0' }}>⏱ Estimated arrival: {quote.etaMinutes} minutes</p>
                 <div className="my-3" style={{ borderTop: `1px solid ${BORDER}` }} />

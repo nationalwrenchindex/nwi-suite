@@ -252,11 +252,13 @@ export async function POST(req: NextRequest) {
           .filter((p) => p.included)
           .map((p) => {
             const supplierPrice =
-              p.selected_supplier === 'autozone' ? p.price_autozone :
-              p.selected_supplier === 'orielly'  ? p.price_orielly  :
-              p.selected_supplier === 'napa'     ? p.price_napa     :
-              p.selected_supplier === 'rockauto' ? p.price_rockauto :
-              p.custom_price
+              // The client sends custom_price only (selected_supplier 'custom'). The legacy
+              // branches stay so a request carrying them prices exactly as before.
+              (p.selected_supplier === 'autozone' ? p.price_autozone :
+               p.selected_supplier === 'orielly'  ? p.price_orielly  :
+               p.selected_supplier === 'napa'     ? p.price_napa     :
+               p.selected_supplier === 'rockauto' ? p.price_rockauto :
+               undefined) ?? p.custom_price
             const unitPrice = supplierPrice * (1 + markup_percent / 100)
             return {
               description: p.name,
@@ -276,11 +278,13 @@ export async function POST(req: NextRequest) {
         .filter(p => p.included)
         .reduce((s, p) => {
           const supplierPrice =
-            p.selected_supplier === 'autozone' ? p.price_autozone :
-            p.selected_supplier === 'orielly'  ? p.price_orielly  :
-            p.selected_supplier === 'napa'     ? p.price_napa     :
-            p.selected_supplier === 'rockauto' ? p.price_rockauto :
-            p.custom_price
+            // The client sends custom_price only (selected_supplier 'custom'). The legacy
+            // branches stay so a request carrying them prices exactly as before.
+            (p.selected_supplier === 'autozone' ? p.price_autozone :
+             p.selected_supplier === 'orielly'  ? p.price_orielly  :
+             p.selected_supplier === 'napa'     ? p.price_napa     :
+             p.selected_supplier === 'rockauto' ? p.price_rockauto :
+             undefined) ?? p.custom_price
           return s + supplierPrice * p.qty
         }, 0)
       jobCategoryLabel = job.categoryLabel

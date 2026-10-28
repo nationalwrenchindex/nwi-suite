@@ -81,13 +81,14 @@ export function linkifyPartNumbers(text: string, vendor: PartVendor = 'auto'): P
   return segments
 }
 
-// Google search URL for a part number, so the tech lands on retailer prices and
-// local availability. Reefer parts (TK / Carrier) filter to the two reefer OEMs;
-// every other suite filters to the major automotive chains.
+// Google search URL for a part number. Reefer parts (TK / Carrier) narrow to the two
+// reefer OEMs; everything else searches the number as a part. It no longer narrows to
+// named auto-parts chains - that sent the tech to those stores' prices, and NWI has no
+// parts-store partnerships.
 export function partSearchUrl(partNumber: string, vendor: PartVendor = 'auto'): string {
   const filter =
     vendor === 'tk' || vendor === 'carrier'
       ? 'thermo+king+parts+OR+%22carrier+transicold%22+parts'
-      : 'AutoZone+OR+%22O%27Reilly%22+OR+NAPA+OR+%22Advance+Auto%22'
+      : 'part'
   return `https://www.google.com/search?q=${encodeURIComponent(partNumber)}+${filter}`
 }

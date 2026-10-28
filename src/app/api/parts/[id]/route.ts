@@ -1,6 +1,6 @@
 // GET /api/parts/[id]   one part, with everything known about it
 //
-// Fitment, cross-references with their source, what superseded it or what it
+// Fitment, cross-references, what superseded it or what it
 // supersedes, this shop's stock, and the derived belt cross. Assembled server-side so
 // the detail screen is one request rather than six.
 
@@ -12,7 +12,11 @@ export const dynamic = 'force-dynamic'
 
 const PART_COLUMNS =
   'id, part_number, part_number_normalized, manufacturer, part_type, description, ' +
-  'belt_section, belt_section_canonical, belt_length, belt_profile, notes, verified, source, created_at'
+  'belt_section, belt_section_canonical, belt_length, belt_profile, notes, verified, created_at'
+
+// No `source` anywhere in this response. For the vendor-listing rows it is a store's
+// name, and this response also carries the cost - NWI has no parts-store partnerships, so
+// no store name travels beside a price. The verified flag is the trust signal.
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -25,7 +29,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   let part: Record<string, unknown> | null = null
   let pricesAvailable = true
   {
-    const first = await supabase.from('parts').select(`${PART_COLUMNS}, vendor_price, vendor_price_source`).eq('id', id).single()
+    const first = await supabase.from('parts').select(`${PART_COLUMNS}, vendor_price`).eq('id', id).single()
     if (first.error) {
       pricesAvailable = false
       const retry = await supabase.from('parts').select(PART_COLUMNS).eq('id', id).single()
@@ -40,10 +44,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
 
   const [fitment, crosses, stock, supersedes, supersededBy] = await Promise.all([
     supabase.from('part_fitment')
-      .select('id, unit_model, engine_model, compressor_model, serial_from, serial_before, build_date_from, build_date_before, qty_per_unit, note, verified, source')
+      .select('id, unit_model, engine_model, compressor_model, serial_from, serial_before, build_date_from, build_date_before, qty_per_unit, note, verified')
       .eq('part_id', id),
     supabase.from('part_cross_reference')
-      .select('id, brand, brand_number, verified, source')
+      .select('id, brand, brand_number, verified')
       .eq('part_id', id),
     supabase.from('inventory')
       .select('id, on_hand, min_qty, bin, location_type, location_name, last_cost, sell_price')
@@ -51,11 +55,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       .eq('user_id', user.id),
     // What THIS part replaces.
     supabase.from('part_supersession')
-      .select('old_number, new_number, note, verified, source')
+      .select('old_number, new_number, note, verified')
       .eq('new_number_normalized', normalized),
     // What replaced THIS part.
     supabase.from('part_supersession')
-      .select('old_number, new_number, note, verified, source')
+      .select('old_number, new_number, note, verified')
       .eq('old_number_normalized', normalized),
   ])
 

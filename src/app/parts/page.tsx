@@ -59,8 +59,8 @@ export default async function PartsPage() {
 
           {/* Body */}
           <p className="text-white/60 text-sm leading-relaxed mb-6">
-            Real-time parts pricing and availability from major suppliers — integrated directly into your repair workflow.
-            Search by VIN, get verified part numbers, and order from the supplier nearest to your location.
+            Real-time parts pricing and availability, integrated directly into your repair workflow.
+            Search by VIN, get verified part numbers, and see what is in stock near you.
           </p>
 
           {/* Features list */}
@@ -68,11 +68,12 @@ export default async function PartsPage() {
             <p className="text-white/30 text-[11px] uppercase tracking-widest mb-3">Features coming soon</p>
             <ul className="space-y-2.5">
               {[
-                '17 million verified part numbers powered by Epicor PartExpert',
-                'Live pricing from AutoZone, O\'Reilly, NAPA, and more',
-                'Nearest store availability by your current location',
+                // No retailer, store or vendor is named on this page: NWI has no
+                // parts-store partnerships, and no store name may sit beside a price.
+                'Verified part numbers by VIN',
+                'Live pricing and availability',
+                'Availability near your current location',
                 'One tap to add parts directly to your quote',
-                'O\'Reilly Auto Parts integration arriving Q3 2026',
               ].map(feature => (
                 <li key={feature} className="flex items-start gap-2.5">
                   <span
@@ -88,11 +89,7 @@ export default async function PartsPage() {
           {/* Divider */}
           <div className="border-t border-dark-border pt-5">
             <p className="text-white/30 text-xs leading-relaxed">
-              In the meantime — search parts at{' '}
-              <span className="text-white/55">oreillyauto.com</span>,{' '}
-              <span className="text-white/55">autozone.com</span>, or{' '}
-              <span className="text-white/55">napaonline.com</span>{' '}
-              using your decoded VIN for fitment accuracy.
+              In the meantime, use your decoded VIN when you look a part up, for fitment accuracy.
             </p>
           </div>
 

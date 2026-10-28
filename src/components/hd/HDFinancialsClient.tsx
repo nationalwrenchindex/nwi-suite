@@ -741,7 +741,7 @@ function ExpensesTab() {
                 type="text"
                 value={form.description}
                 onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                placeholder="e.g. O'Reilly filters"
+                placeholder="e.g. Oil filters"
                 className="w-full px-3 py-2 rounded-lg text-sm text-white placeholder-white/20"
                 style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
               />

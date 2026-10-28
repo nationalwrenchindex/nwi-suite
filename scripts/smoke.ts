@@ -4152,6 +4152,15 @@ async function flowPartsCounter(): Promise<void> {
   const st = await api('GET', '/api/parts/stock')
   record(F, 'the inventory route reads this shop\'s stock and locations',
     st.status === 200 && Array.isArray(st.json.stock) && Array.isArray(st.json.locations), `-> ${st.status}`)
+  // NWI has no parts-store partnerships: no store or vendor name beside a price, anywhere.
+  const STORES = /auto ?zone|o.?reilly|\bnapa\b|advance auto|rock ?auto|carquest|mincarone|epicor/i
+  const ldParts = await page('/parts')
+  record(F, 'LD /parts names no store, retailer or vendor', !!ldParts && !STORES.test(ldParts.html),
+    ldParts ? (ldParts.html.match(STORES)?.[0] ?? '') : 'did not load')
+  const srch = await api('GET', '/api/parts/search?q=78-1341')
+  record(F, 'the parts search response carries no source and no store name beside its cost',
+    srch.status === 200 && Number(srch.json.count) > 0 && !STORES.test(JSON.stringify(srch.json)) && !/"source"/.test(JSON.stringify(srch.json)),
+    `-> ${srch.status}`)
   const bad = await api('POST', '/api/parts/stock', { action: 'receive', part_id: '00000000-0000-0000-0000-000000000000', quantity: 1 })
   record(F, 'receiving a part that is not in the catalog is refused', bad.status === 422, `-> ${bad.status}`)
 }

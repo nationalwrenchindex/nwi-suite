@@ -193,16 +193,6 @@ function shortPartLabel(full: string): string {
   return base
 }
 
-function supplierPrices(estimate: number) {
-  const seed = estimate
-  return {
-    price_autozone:  Math.round(seed * 1.06 * 100) / 100,
-    price_orielly:   Math.round(seed * 1.02 * 100) / 100,
-    price_napa:      Math.round(seed * 1.10 * 100) / 100,
-    price_rockauto:  Math.round(seed * 0.76 * 100) / 100,
-  }
-}
-
 // `scope` is the job key. Without it two jobs both produce `part-0-…`, and
 // since partCosts and partPriceOverrides are keyed by part id, editing a price
 // on one job silently rewrote the same-index part on the other.
@@ -218,21 +208,18 @@ function enrichParts(raw: Array<TechGuidePart | string>, scope = ''): PartWithSu
       price_estimate:    cost,
       id:                `part-${scope}-${i}-${name.slice(0, 8).replace(/\s/g, '')}`,
       included:          true,
-      selected_supplier: 'orielly' as Supplier,
+      // ONE price, the shop's own, starting at the estimate. There used to be four
+      // invented "retailer" prices here (the estimate x 1.06 / 1.02 / 1.10 / 0.76,
+      // labelled AutoZone, O'Reilly, NAPA, RockAuto) with O'Reilly preselected. NWI has
+      // no retailer partnerships, and no store name may sit beside a price.
+      selected_supplier: 'custom' as Supplier,
       custom_price:      cost,
-      ...supplierPrices(cost),
     }
   })
 }
 
 function partPrice(p: PartWithSuppliers): number {
-  switch (p.selected_supplier) {
-    case 'autozone': return p.price_autozone
-    case 'orielly':  return p.price_orielly
-    case 'napa':     return p.price_napa
-    case 'rockauto': return p.price_rockauto
-    case 'custom':   return p.custom_price
-  }
+  return p.custom_price
 }
 
 // ─── Category icons ───────────────────────────────────────────────────────────
@@ -1234,14 +1221,6 @@ function TechGuideTab({
 
 // ─── Tab 4: Parts ─────────────────────────────────────────────────────────────
 
-const SUPPLIERS: { key: Supplier; label: string; color: string }[] = [
-  { key: 'autozone', label: 'AutoZone',  color: 'text-red-400' },
-  { key: 'orielly',  label: "O'Reilly",  color: 'text-blue-light' },
-  { key: 'napa',     label: 'NAPA',      color: 'text-yellow-400' },
-  { key: 'rockauto', label: 'RockAuto',  color: 'text-green-400' },
-  { key: 'custom',   label: 'Custom',    color: 'text-white/50' },
-]
-
 function PartCard({
   p,
   onChange,
@@ -1250,8 +1229,7 @@ function PartCard({
   onChange: (updated: PartWithSuppliers) => void
 }) {
   function toggle()                       { onChange({ ...p, included: !p.included }) }
-  function setSupplier(s: Supplier)       { onChange({ ...p, selected_supplier: s }) }
-  function setCustomPrice(val: string)    { onChange({ ...p, custom_price: Number(val) || 0 }) }
+  function setCustomPrice(val: string)    { onChange({ ...p, selected_supplier: 'custom', custom_price: Number(val) || 0 }) }
   function setQty(val: string)            { onChange({ ...p, qty: Math.max(1, Number(val) || 1) }) }
 
   return (
@@ -1283,42 +1261,17 @@ function PartCard({
             </div>
           </div>
 
-          <div className="mt-3 flex flex-wrap gap-2">
-            {SUPPLIERS.map(s => {
-              const price =
-                s.key === 'autozone'  ? p.price_autozone  :
-                s.key === 'orielly'   ? p.price_orielly   :
-                s.key === 'napa'      ? p.price_napa      :
-                s.key === 'rockauto'  ? p.price_rockauto  :
-                p.custom_price
-              const isSel = p.selected_supplier === s.key
-              return (
-                <button
-                  key={s.key}
-                  onClick={() => setSupplier(s.key)}
-                  className={`
-                    flex flex-col items-center px-3 py-1.5 rounded-lg border text-xs transition-colors
-                    ${isSel ? 'border-orange/60 bg-orange/10' : 'border-dark-border hover:border-white/20'}
-                  `}
-                >
-                  <span className={`font-medium ${isSel ? 'text-orange' : s.color}`}>{s.label}</span>
-                  {s.key === 'custom' ? (
-                    <input
-                      type="number"
-                      min={0}
-                      step={0.01}
-                      value={p.custom_price}
-                      onClick={e => e.stopPropagation()}
-                      onChange={e => { setSupplier('custom'); setCustomPrice(e.target.value) }}
-                      className="w-16 bg-transparent border-0 text-white/60 text-xs text-center p-0 focus:outline-none"
-                    />
-                  ) : (
-                    <span className="text-white/60">{fmt(price)}</span>
-                  )}
-                </button>
-              )
-            })}
-          </div>
+          <label className="mt-3 flex items-center gap-2">
+            <span className="text-white/40 text-xs">Price each</span>
+            <input
+              type="number"
+              min={0}
+              step={0.01}
+              value={p.custom_price}
+              onChange={e => setCustomPrice(e.target.value)}
+              className="nwi-input w-24 text-sm py-1"
+            />
+          </label>
 
           <div className="mt-2 flex items-center justify-between">
             <span className="text-white/30 text-xs">{p.qty} × {fmt(partPrice(p))}</span>
@@ -2333,10 +2286,6 @@ export default function QuickWrenchClient({
                 included:         true,
                 selected_supplier: 'custom' as Supplier,
                 custom_price:      p.unit_cost,
-                price_autozone:    p.unit_cost,
-                price_orielly:     p.unit_cost,
-                price_napa:        p.unit_cost,
-                price_rockauto:    p.unit_cost,
               }
             })
           }
@@ -2417,10 +2366,6 @@ export default function QuickWrenchClient({
                 included:         true,
                 selected_supplier: 'custom' as Supplier,
                 custom_price:      cost,
-                price_autozone:    cost,
-                price_orielly:     cost,
-                price_napa:        cost,
-                price_rockauto:    cost,
               }
             }
           )

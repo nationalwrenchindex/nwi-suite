@@ -2,12 +2,14 @@
 
 // SCREEN 2: one part, in full.
 //
-// Fitment rows, cross-references WITH THEIR SOURCE, supersession in both directions,
-// this shop's stock, and the service interval where one applies.
+// Fitment rows, cross-references, supersession in both directions, this shop's stock,
+// and the service interval where one applies.
 //
-// The source is on screen next to every claim, not tucked away. "30-60143-01 fits a
-// Supra 660" and "a vendor listing says it might" are different statements, and the
-// person about to fit the part is the one who needs to tell them apart.
+// Every claim carries its verified / unverified badge. "30-60143-01 fits a Supra 660"
+// and "a vendor listing says it might" are different statements, and the person about
+// to fit the part needs to tell them apart. The SOURCE is not shown: for the vendor
+// rows it is a store's name, and this screen shows a cost. NWI has no parts-store
+// partnerships, so no store name sits beside a price.
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -24,24 +26,23 @@ interface Fitment {
   qty_per_unit: number | null
   note: string | null
   verified: boolean
-  source: string
 }
 
-interface Cross { id: string; brand: string; brand_number: string; verified: boolean; source: string }
+interface Cross { id: string; brand: string; brand_number: string; verified: boolean }
 interface Stock {
   id: string; on_hand: number; min_qty: number | null; bin: string | null
   location_type: string; location_name: string | null
   last_cost: number | null; sell_price: number | null
 }
-interface Supersession { old_number: string; new_number: string; note: string | null; verified: boolean; source: string }
+interface Supersession { old_number: string; new_number: string; note: string | null; verified: boolean }
 
 interface Detail {
   part: {
     id: string; part_number: string; manufacturer: string; part_type: string
     description: string | null; belt_section: string | null; belt_section_canonical: string | null
     belt_length: string | null; belt_profile: string | null; notes: string | null
-    verified: boolean; source: string
-    vendor_price?: number | null; vendor_price_source?: string | null
+    verified: boolean
+    vendor_price?: number | null
   }
   prices_available: boolean
   fitment: Fitment[]
@@ -118,15 +119,15 @@ export default function PartDetail({ partId }: { partId: string }) {
             </div>
             <p className="text-white/70 text-sm mt-1">{part.description ?? part.part_type}</p>
             <p className="text-white/35 text-xs mt-1">
-              {part.manufacturer} &middot; {part.part_type} &middot; source {part.source}
+              {part.manufacturer} &middot; {part.part_type}
             </p>
           </div>
+          {/* No source and no vendor name beside the cost. For the vendor-listing rows the
+              source IS a store's name, and NWI has no parts-store partnerships. The
+              verified / unverified badge is the trust signal. */}
           <div className="text-right">
             <p className="text-white/40 text-xs">Cost</p>
             <p className="text-white text-lg font-semibold">{money(cost)}</p>
-            {part.vendor_price_source && (
-              <p className="text-white/25 text-[11px]">list price from {part.vendor_price_source}</p>
-            )}
             {!data.prices_available && (
               <p className="text-warning text-[11px]">prices not stored yet (migration 149)</p>
             )}
@@ -143,14 +144,14 @@ export default function PartDetail({ partId }: { partId: string }) {
             <p key={`by-${s.new_number}`} className="text-sm text-white">
               Replaced by <Link href={`/parts/catalog?q=${encodeURIComponent(s.new_number)}`} className="text-orange hover:underline">{s.new_number}</Link>
               {s.note && <span className="text-white/45"> - {s.note}</span>}
-              <span className="text-white/25 text-xs"> ({s.source}{s.verified ? '' : ', unverified'})</span>
+              {!s.verified && <span className="text-white/25 text-xs"> (unverified)</span>}
             </p>
           ))}
           {data.supersedes.map(s => (
             <p key={`for-${s.old_number}`} className="text-sm text-white/70">
               Replaces {s.old_number}
               {s.note && <span className="text-white/45"> - {s.note}</span>}
-              <span className="text-white/25 text-xs"> ({s.source}{s.verified ? '' : ', unverified'})</span>
+              {!s.verified && <span className="text-white/25 text-xs"> (unverified)</span>}
             </p>
           ))}
         </Section>
@@ -180,7 +181,6 @@ export default function PartDetail({ partId }: { partId: string }) {
                 {f.qty_per_unit && <span className="text-white/45 text-xs">qty {f.qty_per_unit}</span>}
                 {f.note && <span className="text-white/45 text-xs">{f.note}</span>}
                 <Badge verified={f.verified} />
-                <span className="text-white/20 text-xs">{f.source}</span>
               </li>
             ))}
           </ul>
@@ -211,7 +211,6 @@ export default function PartDetail({ partId }: { partId: string }) {
                 <span className="text-white/60 w-28">{c.brand}</span>
                 <span className="text-white font-medium">{c.brand_number}</span>
                 <Badge verified={c.verified} />
-                <span className="text-white/20 text-xs">{c.source}</span>
               </li>
             ))}
           </ul>

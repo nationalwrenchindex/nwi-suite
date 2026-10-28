@@ -258,7 +258,7 @@ export default function ExpensesTab({ businessType }: { businessType?: string })
               </div>
               <div>
                 <label className="nwi-label">Vendor <span className="normal-case text-white/20">(optional)</span></label>
-                <input className="nwi-input" placeholder="e.g. AutoZone, Shell, Amazon"
+                <input className="nwi-input" placeholder="e.g. parts supplier, fuel station"
                   value={form.vendor}
                   onChange={e => setForm(p => ({ ...p, vendor: e.target.value }))} />
               </div>
