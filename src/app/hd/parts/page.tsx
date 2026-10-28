@@ -3,7 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { onReeferSurface } from '@/lib/reefer-surface'
 import PartsHome, { type PartsTab } from './PartsHome'
 
-export const metadata = { title: 'Parts — NWI HD Suite' }
+export const metadata = { title: 'Parts Counter — NWI HD Suite' }
 export const dynamic = 'force-dynamic'
 
 // The catalog seed is founder-only (see /api/hd/parts/seed).

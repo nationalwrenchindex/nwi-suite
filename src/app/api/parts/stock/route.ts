@@ -191,7 +191,7 @@ export async function POST(request: NextRequest) {
   if (action === 'settings') {
     const loc = await ownLocation(body.location_id)
     if (!loc) return NextResponse.json({ error: 'That location is not one of yours.' }, { status: 422 })
-    // Three states for the minimum, as /api/parts/inventory documents: absent leaves it,
+    // Three states for the minimum: absent leaves it,
     // null clears it to "no minimum set", 0 means the shop deliberately stocks none.
     const patch: Record<string, unknown> = {}
     if ('bin' in body) patch.bin = text(body.bin, 30)

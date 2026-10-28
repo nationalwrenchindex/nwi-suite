@@ -4111,6 +4111,7 @@ async function flowPartsCounter(): Promise<void> {
   record(F, '/hd/parts is the counter: maker, unit, part type, search',
     !!pg && ['PARTS COUNTER', 'Thermo King', 'Carrier Transicold', 'Unit model', 'BM number', 'Serial', 'Find parts'].every(x => pg.text.includes(x)),
     pg ? missingControls(pg.text, ['PARTS COUNTER', 'Thermo King', 'Unit model', 'BM number', 'Find parts']).join(', ') : 'did not load')
+  record(F, 'the sidebar names it what it is: Parts Counter', !!pg && pg.text.includes('Parts Counter'), pg ? '' : 'did not load')
   const inv = await page('/hd/parts?tab=inventory')
   record(F, '/hd/parts?tab=inventory is the inventory, with Receive stock',
     !!inv && inv.text.includes('PARTS INVENTORY') && inv.text.includes('Receive stock') && inv.text.includes('Add a location'), inv ? '' : 'did not load')
