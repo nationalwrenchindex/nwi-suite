@@ -114,6 +114,25 @@ PAGECHECK_BASE=https://nwi-suite-git-branch.vercel.app npm run smoke
   independently, so any write path touching a new column needs a missing-column retry.
 - Destructive SQL is handed over, never run. End it in `ROLLBACK` with the checks above it,
   or arm it with `COMMIT` only when asked.
+- **Every new view sets `security_invoker = true` and revokes anon explicitly.** Supabase
+  grants anon and authenticated SELECT on every new view in `public` by default, and a view
+  without `security_invoker` runs as its owner (postgres), which skips row level security.
+  Together that hands every row to anyone holding the anon key, which ships in every page.
+  `inventory_position` (151) shipped exactly that way and needed migration 173.
+
+  ```sql
+  CREATE VIEW public.x WITH (security_invoker = true) AS ...;
+  REVOKE ALL ON public.x FROM anon, PUBLIC;
+  GRANT SELECT ON public.x TO authenticated;
+  ```
+
+  The migration's self-check must fail if `has_table_privilege('anon', 'public.x',
+  'SELECT')` is true. The one deliberate exception is `profiles_booking` (122), a definer
+  view whose column list is the public booking surface. Any other exception needs Brock's
+  explicit sign-off.
+- **Every policy names its role** with `TO authenticated` (or `TO service_role`). A policy
+  with no `TO` clause applies to PUBLIC, which includes anon. `pm_items_select` (144) leaked
+  its catalog rows that way and needed migration 174.
 
 ## Gotchas that have cost real time
 
