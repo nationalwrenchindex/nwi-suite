@@ -219,6 +219,7 @@ export async function GET(request: NextRequest) {
           engine: f.engine_code ?? f.engine_model,
           compressor_model: f.compressor_model,
           serial_label: serialLabel(f),
+          build_date_from: f.build_date_from,
           build_date_before: f.build_date_before,
           qty_per_unit: f.qty_per_unit,
           note: f.note,

@@ -45,7 +45,7 @@ interface CounterResult {
   unresolved_serial: boolean
   fitment: Array<{
     id: string; unit_model: string | null; engine: string | null; compressor_model: string | null
-    serial_label: string | null; build_date_before: string | null; qty_per_unit: number | null
+    serial_label: string | null; build_date_from: string | null; build_date_before: string | null; qty_per_unit: number | null
     note: string | null; badge: string; display: string
   }>
   crosses: Array<{ brand: string; numbers: Array<{ number: string; badge: string; display: string }> }>
@@ -334,6 +334,7 @@ function ResultCard({ r }: { r: CounterResult }) {
             <li key={f.id} className="text-xs flex flex-wrap items-center gap-x-2 gap-y-1 text-white">
               <span>{f.unit_model ?? (f.engine ? `engine ${f.engine}` : `compressor ${f.compressor_model}`)}</span>
               {f.serial_label && <span style={{ color: 'var(--hd-warn)' }}>{f.serial_label}</span>}
+              {f.build_date_from && <span style={{ color: 'var(--hd-warn)' }}>built from {f.build_date_from}</span>}
               {f.build_date_before && <span style={{ color: 'var(--hd-warn)' }}>built before {f.build_date_before}</span>}
               {f.qty_per_unit && <span style={{ color: 'var(--hd-text-muted)' }}>qty {f.qty_per_unit}</span>}
               {f.note && <span style={{ color: 'var(--hd-text-muted)' }}>{f.note}</span>}

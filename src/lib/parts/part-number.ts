@@ -203,3 +203,42 @@ export function partNumberMatches(stored: string | null | undefined, input: stri
   if (!s) return false
   return partNumberSearchKeys(input).some(k => s.includes(k))
 }
+
+// ── listing markers (Brock, Oct 29) ─────────────────────────────────────────
+//
+// 7. A VENDOR LISTING MARKS CONDITION ON THE NUMBER, AND THE MARK IS NOT PART OF IT.
+//    845-2648-U is a USED 845-2648. The condition suffixes -U, -R, -RB, -K and SV,
+//    and the vendor prefixes CA- and CTK- (can.ca's own), come off; what is left is
+//    the part number, and it then goes through parsePartNumber like any other.
+//
+// Used by IMPORTS to find the base part a listing is for. It is NOT applied to search,
+// and it does not make a condition a distinct part - the condition is reported beside
+// the base number and never stored as a part. Any other suffix (SL, RM, PB, SRV, KIT...)
+// is not one Brock named and is left on the number exactly as rule-less suffixes are.
+
+export type ListingCondition = 'used' | 'rebuilt' | 'kit' | 'service'
+
+const CONDITION_MARKERS: Record<string, ListingCondition> = { U: 'used', R: 'rebuilt', RB: 'rebuilt', K: 'kit', SV: 'service' }
+
+export interface ListingNumber {
+  /** The base part number, parsed. */
+  base: ParsedPartNumber
+  /** The condition marker that came off, when there was one. */
+  condition: ListingCondition | null
+  /** The marker as written (U, RB, SV...). */
+  marker: string | null
+  /** A vendor prefix that came off (CA, CTK). */
+  vendorPrefix: string | null
+}
+
+export function parseListingNumber(input: string): ListingNumber {
+  let s = (input ?? '').trim().toUpperCase()
+  let vendorPrefix: string | null = null
+  const pre = s.match(/^(CA|CTK)[\s._/\-]+(?=[0-9])/)
+  if (pre) { vendorPrefix = pre[1]; s = s.slice(pre[0].length) }
+  let marker: string | null = null
+  // A dashed marker (-U, -RB) or one written straight onto the last digit group (00SV).
+  const m = s.match(/^(.*[0-9])(?:[\s._/\-]+|)(U|RB|R|K|SV)$/)
+  if (m && /[0-9]$/.test(m[1])) { marker = m[2]; s = m[1] }
+  return { base: parsePartNumber(s), condition: marker ? CONDITION_MARKERS[marker] : null, marker, vendorPrefix }
+}

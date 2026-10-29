@@ -8,7 +8,7 @@
 // The "real shapes" cases are numbers that are actually in parts / hd_parts / the
 // Grok CSV today (Oct 28 survey), not invented ones.
 
-import { parsePartNumber, partNumberSearchKeys, partNumberMatches, partNumberKey, type PartNumberForm } from '../src/lib/parts/part-number'
+import { parsePartNumber, parseListingNumber, partNumberSearchKeys, partNumberMatches, partNumberKey, type PartNumberForm } from '../src/lib/parts/part-number'
 
 let failed = 0
 function check(step: string, ok: boolean, detail = ''): void {
@@ -138,6 +138,32 @@ check('a row still stored as 37-11-9959 is found by 11-9959', partNumberMatches(
 check('a row still stored as 37-11-9959 is found by 37-11-9959', partNumberMatches('37-11-9959', '37-11-9959'))
 check('11-9959 does not find 11-9958', !partNumberMatches('11-9958', '11-9959'))
 check('the key matches the database generator (uppercase alphanumerics)', partNumberKey('ab-12 3/4') === 'AB1234')
+
+console.log('\nRULE 7: LISTING MARKERS COME OFF FOR IMPORTS, NEVER FOR SEARCH')
+const listing = (input: string, base: string, condition: string | null, prefix: string | null = null) => {
+  const l = parseListingNumber(input)
+  check(`listing ${JSON.stringify(input)} -> base ${base}, ${condition ?? 'no condition'}${prefix ? `, prefix ${prefix}` : ''}`,
+    l.base.canonical === base && l.condition === condition && l.vendorPrefix === prefix,
+    `got ${l.base.canonical} / ${l.condition} / ${l.vendorPrefix}`)
+}
+listing('845-2648-U', '845-2648', 'used')
+listing('30-00402-01-U', '30-00402-01', 'used')
+listing('18-60000-05-R', '18-60000-05', 'rebuilt')
+listing('18-00059-72-RB', '18-00059-72', 'rebuilt')
+listing('25-39335-00-K', '25-39335-00', 'kit')
+listing('50-01172-00SV', '50-01172-00', 'service')
+listing('81-04232-00sv', '81-04232-00', 'service')
+listing('CA-11-9959', '11-9959', null, 'CA')
+listing('CTK-30-60143-01-U', '30-60143-01', 'used', 'CTK')
+listing('11-9959', '11-9959', null)
+listing('25-39476-00SL', '25-39476-00SL', null)        // SL is not a marker Brock named
+listing('26-60000-16SRV', '26-60000-16SRV', null)      // nor SRV
+listing('17-44015-00PB', '17-44015-00PB', null)
+listing('TM16-8PK', 'TM16-8PK', null)
+listing('X430LS-FULL-KIT', 'X430LS-FULL-KIT', null)
+listing('96-101-24K', '96-101-24', 'kit')                // the base still fits no rule
+check('the base of 96-101-24K still fits no rule', parseListingNumber('96-101-24K').base.form === 'other')
+check('search is untouched: 845-2648-U keeps its suffix in parsePartNumber', parsePartNumber('845-2648-U').suffix === 'U')
 
 console.log(failed ? `\n${failed} FAILED` : '\nALL PASS')
 process.exit(failed ? 1 : 0)

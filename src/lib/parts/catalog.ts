@@ -40,6 +40,7 @@ export interface CatalogFitment {
   compressor_model: string | null
   serial_from: string | null
   serial_before: string | null
+  build_date_from: string | null
   build_date_before: string | null
   qty_per_unit: number | null
   note: string | null
@@ -72,7 +73,7 @@ export interface Catalog {
 // `source` is deliberately NOT read. It holds where a row came from - for the vendor
 // rows that is a store's name - and the counter shows a trust tier, never a source.
 const PART_148 = 'id, part_number, part_number_normalized, manufacturer, part_type, description, belt_section_canonical, belt_length, belt_profile, notes, verified'
-const FIT_148  = 'id, part_id, unit_model, engine_model, compressor_model, serial_from, serial_before, build_date_before, qty_per_unit, note, verified'
+const FIT_148  = 'id, part_id, unit_model, engine_model, compressor_model, serial_from, serial_before, build_date_from, build_date_before, qty_per_unit, note, verified'
 const LINK_148 = 'id, old_number, new_number, old_number_normalized, new_number_normalized, manufacturer, note, verified'
 const CROSS_148 = 'id, part_id, brand, brand_number, verified'
 
@@ -127,6 +128,7 @@ export async function readCatalog(supabase: Supabase): Promise<Catalog> {
       compressor_model: str(r.compressor_model),
       serial_from: str(r.serial_from),
       serial_before: str(r.serial_before),
+      build_date_from: str(r.build_date_from),
       build_date_before: str(r.build_date_before),
       qty_per_unit: r.qty_per_unit == null ? null : Number(r.qty_per_unit),
       note: str(r.note),

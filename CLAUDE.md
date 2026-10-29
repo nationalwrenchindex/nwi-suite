@@ -112,8 +112,15 @@ scripts/verify-part-number.ts`). Only the `37-` rule changes what a number IS. `
 reman are recognized and reported but **never merged, linked or rewritten** - whether they
 merge, cross-reference or stay separate is Brock's decision, not code's.
 
-Not covered by the rules, so never guessed at: suffixes (`SV`, `K`, `KIT`, `SS`, `FA`,
-`E`), and shapes that fit no rule (`306-221`, `204-2436`, `18-00091-105`, `96-153-01K`) -
+- **A vendor listing's condition marker is not part of the number** (Oct 29). `845-2648-U`
+  is a USED `845-2648`. The suffixes `-U`, `-R`, `-RB`, `-K`, `SV` and the vendor prefixes
+  `CA-`, `CTK-` (can.ca's own) come off, and the base number goes through
+  `parsePartNumber`. `parseListingNumber` does this for IMPORTS only: the condition is
+  reported beside the base part, never loaded as a distinct part, and search is unchanged.
+- **Reman and OEM-new are RELATED, never the same part** - link them, never merge them.
+
+Not covered by the rules, so never guessed at: other suffixes (`SL`, `RM`, `PB`, `SRV`,
+`KIT`, `SS`, `FA`, `E`), and shapes that fit no rule (`306-221`, `204-2436`, `18-00091-105`, `96-153-01K`) -
 those stay exactly as written and are matched as written.
 
 ## Money rules that are settled, do not re-litigate

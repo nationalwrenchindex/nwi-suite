@@ -1,0 +1,933 @@
+Seed + reference load - every item that does not load as-is. Generated 2026-10-29.
+Store before: 985 parts, 2586 fitment, 7 supersessions, 18 crosses, 0 engines.
+Adds: 258 parts, 743 fitment, 28 supersessions, 227 crosses, 32 engines.
+Crosses by brand: Fleetguard 26, Baldwin 23, WIX 22, Hitachi 20, Dayco 20, NAPA 18, Delco Remy 17, Carquest 17, Luber-finer 15, NAPA Gold 15, Continental 13, Denso 12, Donaldson 9
+Seed fitment tallies: A fitment: group / prose model 53; A fitment: already in the store 162; A fitment: carried to the replacement 45; A fitment: repeated in the file 43; A fitment: break recovered into columns 154; A fitment: break with no serial or date 10; A fitment: note says superseded 19; A fitment: listed with and without a break 4; A fitment: would straddle a split 133
+Rule-7 markers stripped in Source B: {"U":29,"K":7,"R":4,"SV":11,"RB":2}
+Source B unit_family not loaded as fitment (family name or list - cannot answer a model search): 236
+    25  family or not a known model: 05G
+    14  family or not a known model: ESSN
+    13  family or not a known model: APX
+    9  family or not a known model: Supra
+    5  family or not a known model: Vector
+    5  family or not a known model: 05K
+    5  list or group: Supra, D722
+    5  list or group: ALL-TK
+    4  family or not a known model: SV1
+    4  family or not a known model: Advance
+    4  family or not a known model: X4
+    3  list or group: CT2-29-TV, Z482
+    3  family or not a known model: Ultra
+    3  list or group: Supra 9xx, D1105
+    3  list or group: Supra, Solara
+    3  family or not a known model: Supra S
+    3  list or group: X2,X4
+    3  family or not a known model: TM-16
+    2  family or not a known model: V2203-DI-E2B
+    2  list or group: 05G, 06D
+    2  list or group: D722, CT3-44
+    2  list or group: D722, CT3-44-TV
+    2  list or group: TM1000, XT
+    2  family or not a known model: Precedent
+    2  list or group: Solara, Ultra
+    2  list or group: Vector 8500, Vector 8600
+    2  family or not a known model: EVXV
+    1  list or group: SB-III,Super II legacy
+    1  list or group: X426, X430
+    1  list or group: Supra S, Supra S10
+    1  list or group: 50x, 40x
+    1  list or group: XTC, 2100A
+    1  list or group: Supra 450, Supra 460, Supra 550, Supra 560
+    1  family or not a known model: Yanmar engine units
+    1  list or group: 30-01108-03
+    1  family or not a known model: Flywheel
+    1  list or group: SV2, SV4
+    1  list or group: Ultra, Solara
+    1  list or group: Vector 6500, Vector 6600
+    1  family or not a known model: tier 1
+    1  list or group: 05G, 05K, 06D
+    1  list or group: SB, Yanmar TK 4.82, 4.86
+    1  list or group: CT3-69-TV, D1105
+    1  family or not a known model: 05K2
+    1  family or not a known model: X2
+    1  family or not a known model: 05K4
+    1  family or not a known model: 2.2 Engine
+    1  list or group: Solara, CT2-29-TV, Z482
+    1  list or group: XTC, 2100
+    1  list or group: SV1, SV3
+    1  family or not a known model: TM1000
+    1  list or group: X2, XTC, 2100, 2500
+    1  list or group: Supra 944, Supra 950, Supra 960, Supra 950MT
+    1  list or group: Precedent S-series
+    1  list or group: V-SERIES
+    1  family or not a known model: TriPac
+    1  list or group: X4, APX
+    1  list or group: Supra 844,Supra 850
+    1  list or group: MD-100,MD-200,MD-300,TS-200,TS-300,T-570R,T-600,T-600M,T-600R,T-680S,T-800,T-800M,T-800R,T-580R,T-680R,T-880R,T-880S
+    1  list or group: 05K4, 05K2, 05G
+    1  family or not a known model: IntelligAIRE III
+    1  family or not a known model: tier-2 Engine
+    1  list or group: EVXV, ECXV
+    1  list or group: Supra, D1105, CT3-69-TV
+    1  list or group: Supra 950, Supra 960, D1105, CT3-69-TV
+    1  list or group: 05K4, 05K2, 05G, 06D
+    1  list or group: T-Series, TS, MD, RD
+    1  list or group: 40X, 50X
+    1  list or group: Supra S-9, Supra S-10
+    1  list or group: V2203-DI, V2203-TV
+    1  list or group: 7300, 7500
+    1  list or group: Supra 860, Supra 960
+    1  list or group: SR2, SR3
+    1  list or group: Supra 5xx, Supra 6xx, Supra 7xx, Supra 8xx
+    1  list or group: X2 early Tier 2,X2 Tier 4i
+    1  family or not a known model: ATC
+    1  list or group: Supra, D722, CT3-44-TV
+    1  list or group: X426LS, X430LS
+    1  family or not a known model: SB
+    1  family or not a known model: SV4
+    1  family or not a known model: X430
+    1  list or group: D722, Z482
+    1  list or group: Supra 950, Supra 960
+    1  list or group: V-200, 300, 500, 220, 320, 520
+    1  family or not a known model: 2.2-DI
+    1  list or group: 2100A, 2500
+    1  list or group: Supra 644, Supra 650, Supra 722, Supra 744, Supra 750, Supra 760
+    1  list or group: 2100, 7300
+    1  family or not a known model: Tier 2
+    1  list or group: 482/486, Yanmar
+    1  list or group: RD-II SR (TK 3.76),TS-500,TS-600,T-1080S Spectrum,T-1090,T-1090 Spectrum,T-1200R,T-1200R Spectrum,T-1280R Spectrum
+    1  list or group: MD-100,MD-200,MD-300
+    1  list or group: Supra 922, Supra 944, Supra 950
+    1  family or not a known model: engine mount compressors
+    1  list or group: RD-II,RD-II MAX
+    1  list or group: Supra 5xx, Solara, CT2-29
+    1  list or group: Precedent,SB series
+    1  family or not a known model: T-Spectrum HMI
+    1  family or not a known model: T-1090
+    1  list or group: RD-II,RD-II MAX,RD-II SR (TK 3.95)
+    1  family or not a known model: Ultima
+    1  list or group: Supra,Maxima
+    1  list or group: all units
+    1  list or group: TS-200,TS-300,TS-500
+    1  family or not a known model: Three-Way Valve
+    1  list or group: Yanmar 388, 395
+    1  list or group: XTC, 2100A, 2500A
+    1  list or group: 05G, Supra
+    1  list or group: SMV, EVXV, ETV
+    1  list or group: Phoenix, Advantage
+    1  list or group: T-1000,T-1000R,T-1000R Spectrum,T-1080R,T-1080S,T-1090 Spectrum
+    1  list or group: RD-II,RD-II MAX,RD-II SR
+    1  list or group: YANMAR 482, 486
+    1  list or group: 2100A, XTC
+    1  list or group: SB-III,SB-200
+    1  family or not a known model: GEN X 600X
+    1  list or group: Thunderbird, ESSN
+    1  list or group: Supra 6xx, Supra 7xx, Supra 8xx
+    1  list or group: X2, X4, XTC
+    1  list or group: ALL-Carrier
+    1  family or not a known model: MOD IV
+    1  list or group: Ultra XT, TM1000
+    1  list or group: 42-100
+    1  list or group: D1105, CT3-69-TV
+    1  list or group: 05K, 05G, 06D
+    1  list or group: Vector 1800,Vector 6500,Vector 6600
+    1  list or group: T-series
+    1  family or not a known model: mP IV
+    1  list or group: Supra, CT3-44TV, D722
+    1  family or not a known model: NDX
+    1  family or not a known model: Genset
+Part type disagreements (store type kept, not changed): 7
+    11-9321      store "Filter - fuel"  seed "Filter - oil (engine)"
+    11-9341      store "Filter - fuel/water separator"  seed "Filter - fuel"
+    11-9342      store "Filter - fuel"  seed "Filter - water separator"
+    11-9954      store "Filter - fuel/water separator"  seed "Filter - fuel"
+    11-6285      store "Filter - fuel/water separator"  seed "Filter - fuel"
+    11-7264      store "Filter - fuel/water separator"  seed "Filter - water separator"
+    11-9970      store "Fuel filter (primary)"  seed "Filter - fuel"
+
+== A supersessions (8)
+  HELD  45-2323 -> 45-2324 [unconfirmed] - your decision (held Oct 28)
+  RESOLVED  25-39476-00SV -> 25-39476-00 [unconfirmed] - SV is the service marker on 25-39476-00 itself; one part, nothing to link
+  HELD  25-39476-00SL -> 25-39476-00 [unconfirmed] - suffix SL is not one of the rule-7 markers
+  RECOVERED  25-39420-00SV -> 25-39476-00 [unconfirmed] (old number's SV marker = service, base 25-39420-00) - loads as 25-39420-00 -> 25-39476-00
+  RECOVERED  25-39700-00SV -> 25-39587-00 [conflict] (old number's SV marker = service, base 25-39700-00) - loads as 25-39700-00 -> 25-39587-00
+  RECOVERED  25-39880-00SV -> 25-39610-00 [confirmed] (old number's SV marker = service, base 25-39880-00) - loads as 25-39880-00 -> 25-39610-00
+  DUPLICATE  30-01121-00 -> 30-60143-01 [confirmed] - already in the store
+  HELD  11-9098 -> 11-9341 [confirmed] - your decision (held Oct 28)
+
+== A fitment (446)
+  HELD  45-2326: standard TriPac auxiliary power units - group or prose model string - your decision
+  LOADED  45-1718: TK270 -> 45-2326 - carried from superseded 45-1718; note "Carried from superseded 45-1718."
+  HELD  45-1718: T-500R to T-1200R - group or prose model string - your decision
+  LOADED  45-1718: MD-II -> 45-2326 - carried from superseded 45-1718; note "Carried from superseded 45-1718."
+  LOADED  45-1718: RD-II -> 45-2326 - carried from superseded 45-1718; note "Carried from superseded 45-1718."
+  LOADED  45-1718: XDS -> 45-2326 - carried from superseded 45-1718; note "Carried from superseded 45-1718."
+  HELD  45-1718: MD-100 to MD-300 - group or prose model string - your decision
+  LOADED  45-1718: LND-II -> 45-2326 - carried from superseded 45-1718; note "Carried from superseded 45-1718."
+  HELD  45-1718: TS-200 to TS-600 - group or prose model string - your decision
+  LOADED  45-1718: Spectrum TS -> 45-2326 - carried from superseded 45-1718; note "Carried from superseded 45-1718."
+  LOADED  45-1718: UMD-II -> 45-2326 - carried from superseded 45-1718; note "Carried from superseded 45-1718."
+  LOADED  45-1718: URD-III -> 45-2326 - carried from superseded 45-1718; note "Carried from superseded 45-1718."
+  LOADED  45-1718: UTS -> 45-2326 - carried from superseded 45-1718; note "Carried from superseded 45-1718."
+  LOADED  45-1718: UT-800 -> 45-2326 - carried from superseded 45-1718; note "Carried from superseded 45-1718."
+  LOADED  45-1718: UT-1200 -> 45-2326 - carried from superseded 45-1718; note "Carried from superseded 45-1718."
+  LOADED  45-1718: UT-1200X -> 45-2326 - carried from superseded 45-1718; note "Carried from superseded 45-1718."
+  LOADED  45-1718: UT Xtreme -> 45-2326 - carried from superseded 45-1718; note "Carried from superseded 45-1718."
+  LOADED  45-1718: UT Spectrum -> 45-2326 - carried from superseded 45-1718; note "Carried from superseded 45-1718."
+  HELD  45-2325: SB-III with DI/SE 2.2 - group or prose model string - your decision
+  HELD  45-2325: SMX-II with DI/SE 2.2 - group or prose model string - your decision
+  HELD  45-1993: SB-III with DI/SE 2.2 - group or prose model string - your decision
+  HELD  45-1993: SMX-II with DI/SE 2.2 - group or prose model string - your decision
+  LOADED  45-2324: SL-e -> 45-2324 - break from note: built from 2006-08-01
+  HELD  45-2324: SLXi 100-400 - group or prose model string - your decision
+  HELD  45-2324: SB-100 to SB-400 - group or prose model string - your decision
+  HELD  45-2324: Precedent C & S series - group or prose model string - your decision
+  HELD  45-2323: Spectrum SL up to 08.06 - group or prose model string - your decision
+  LOADED  45-1688: TK486 -> 45-2323 - carried from superseded 45-1688; note "Carried from superseded 45-1688."
+  LOADED  45-1688: SL-100e -> 45-2323 - carried from superseded 45-1688; note "Carried from superseded 45-1688."
+  LOADED  45-1688: SL-200e -> 45-2323 - carried from superseded 45-1688; note "Carried from superseded 45-1688."
+  LOADED  45-1688: SL-400e -> 45-2323 - carried from superseded 45-1688; note "Carried from superseded 45-1688."
+  HELD  45-1688: Spectrum SL up to 08.06 - group or prose model string - your decision
+  HELD  45-1285: SB-II with C201 - group or prose model string - your decision
+  HELD  25-15198-00: 922/944 - group or prose model string - your decision
+  HELD  25-15198-00: 950 - group or prose model string - your decision
+  HELD  25-15198-00: R90 (Carrier matrix 62-10443); 960 - group or prose model string - your decision
+  HELD  25-15371-00: 422 - group or prose model string - your decision
+  HELD  25-15371-00: 550 (Carrier matrix); 560 - group or prose model string - your decision
+  HELD  25-15520-00: 1000/1200/1300 - group or prose model string - your decision
+  HELD  25-34525-00: 322 - group or prose model string - your decision
+  HELD  25-34525-00: 422 - group or prose model string - your decision
+  HELD  25-34525-00: 444 - group or prose model string - your decision
+  HELD  25-34525-00: 522 - group or prose model string - your decision
+  HELD  25-34525-00: 544 - group or prose model string - your decision
+  HELD  25-34525-00: 550 - group or prose model string - your decision
+  HELD  25-35465-00: 6XX - group or prose model string - your decision
+  HELD  25-35465-00: 7XX - group or prose model string - your decision
+  HELD  25-35465-00: 8XX - group or prose model string - your decision
+  HELD  25-35465-00: R70 (Carrier matrix); 650/660/750/760/850/860 - group or prose model string - your decision
+  HELD  25-38750-00: Phoenix (Carrier matrix); Phoenix Advantage - group or prose model string - your decision
+  HELD  25-38750-00: GU genset (Kubota engine) - group or prose model string - your decision
+  HELD  25-39135-00: Tier 2 or earlier (Carrier matrix); 18XX/19XX - group or prose model string - your decision
+  HELD  25-39135-00: UG / RG genset - group or prose model string - your decision
+  HELD  25-39135-00: Tier 2 or earlier - group or prose model string - your decision
+  HELD  25-39476-00: Ultra XT/XTC - group or prose model string - your decision
+  HELD  25-39476-00: X2 1800/2100/2100 A/R/2500 A/R - group or prose model string - your decision
+  HELD  25-39476-00: X4 7300/7500 (Tier 4) - group or prose model string - your decision
+  HELD  25-39476-00: UG / RG genset Tier 4i - group or prose model string - your decision
+  HELD  25-39476-00: Genesis TM900/1000 - group or prose model string - your decision
+  HELD  25-39587-00: 6500/6600 - group or prose model string - your decision
+  HELD  25-39587-00: 8500/8600 (Tier 4) - group or prose model string - your decision
+  HELD  25-39610-00: ComfortPro 6000 series (Thermo-By-Products); ComfortPro PC5008/5009/5011 - group or prose model string - your decision
+  HELD  25-39610-00: PC6000/6002/6003/6011-6015/6018/6019/6021-6024/6028/6111/6112 - group or prose model string - your decision
+  HELD  25-39700-00: X2 1800/2100/2100 A/R/2500 A/R - group or prose model string - your decision
+  HELD  25-39700-00: Genesis TM900/TM1000/TR100 - group or prose model string - your decision
+  HELD  25-39700-00: 6500/6600 series - group or prose model string - your decision
+  HELD  30-01090-05: TM1000 (1st Gen) - group or prose model string - your decision
+  HELD  30-00323-00: TM1000 (1st Gen) - group or prose model string - your decision
+  HELD  30-01077-01: TM1000 (1st Gen) - group or prose model string - your decision
+  HELD  30-01090-05: TM1000 (2nd Gen) - group or prose model string - your decision
+  HELD  30-00463-00: TM1000 (2nd Gen) - group or prose model string - your decision
+  HELD  30-00430-23: TM1000 (2nd Gen) - group or prose model string - your decision
+  HELD  11-6285: SB-II - note gives a break with no serial or date: "Fuel filter element - later DI 2.2 units (SB-III 50 TC2, SR MP IV, Super-II SR /"
+  HELD  11-6285: SB-III - note gives a break with no serial or date: "Fuel filter element - later DI 2.2 units (SB-III 50 TC2, SR MP IV, Super-II SR /"
+  HELD  11-6285: Sentry - note gives a break with no serial or date: "Fuel filter element - later DI 2.2 units (SB-III 50 TC2, SR MP IV, Super-II SR /"
+  HELD  11-6285: Super II - note gives a break with no serial or date: "Fuel filter element - later DI 2.2 units (SB-III 50 TC2, SR MP IV, Super-II SR /"
+  HELD  11-7382: SB-III Whisper - note gives a break with no serial or date: "Full-flow oil filter (standard, early units)"
+  HELD  11-7382: Magnum Whisper - note gives a break with no serial or date: "Full-flow oil filter (standard, early units)"
+  HELD  11-7382: SB-III Tier 2 - note gives a break with no serial or date: "Full-flow oil filter (standard, early units)"
+  HELD  11-7382: Super-II Whisper - note gives a break with no serial or date: "Full-flow oil filter (standard, early units)"
+  HELD  11-7382: 190Y - note gives a break with no serial or date: "Full-flow oil filter (standard, early units)"
+  LOADED  11-9954: SB-100 -> 11-9954 - as given; note "Only with the fuel pre-filter."
+  LOADED  11-9954: SB-110 -> 11-9954 - as given; note "Only with the fuel pre-filter."
+  LOADED  11-9954: SB-190 -> 11-9954 - as given; note "Only with the fuel pre-filter."
+  LOADED  11-9954: SB-300 -> 11-9954 - as given; note "Only with the fuel pre-filter."
+  LOADED  11-9954: SB-400 -> 11-9954 - as given; note "Only with the fuel pre-filter."
+  LOADED  11-9954: SB Classic -> 11-9954 - as given; note "Only with the fuel pre-filter."
+  LOADED  11-9954: Spectrum DE -> 11-9954 - as given; note "Only with the fuel pre-filter."
+  LOADED  11-7382: SB-100 -> 11-7382 - break from note: serial before L32014
+  LOADED  11-7382: SB-110 -> 11-7382 - break from note: serial before L32014
+  LOADED  11-7382: SB-190 -> 11-7382 - break from note: serial before L32014
+  LOADED  11-7382: SB-200 -> 11-7382 - break from note: serial before L32014
+  LOADED  11-7382: SB-210 -> 11-7382 - break from note: serial before L32014
+  LOADED  11-7382: SB-300 -> 11-7382 - break from note: serial before L32014
+  LOADED  11-7382: SB-310 -> 11-7382 - break from note: serial before L32014
+  LOADED  11-7382: SB-400 -> 11-7382 - break from note: serial before L32014
+  LOADED  11-7382: SB Classic -> 11-7382 - break from note: serial before L32014
+  LOADED  11-7382: Spectrum SB -> 11-7382 - break from note: serial before L32014
+  LOADED  11-7382: Spectrum DE -> 11-7382 - break from note: serial before L32014
+  LOADED  11-7400: SB-100 -> 11-7400 - break from note: serial before L32014
+  LOADED  11-7400: SB-110 -> 11-7400 - break from note: serial before L32014
+  LOADED  11-7400: SB-190 -> 11-7400 - break from note: serial before L32014
+  LOADED  11-7400: SB-200 -> 11-7400 - break from note: serial before L32014
+  LOADED  11-7400: SB-210 -> 11-7400 - break from note: serial before L32014
+  LOADED  11-7400: SB-300 -> 11-7400 - break from note: serial before L32014
+  LOADED  11-7400: SB-310 -> 11-7400 - break from note: serial before L32014
+  LOADED  11-7400: SB-400 -> 11-7400 - break from note: serial before L32014
+  LOADED  11-7400: SB Classic -> 11-7400 - break from note: serial before L32014
+  LOADED  11-7400: Spectrum SB -> 11-7400 - break from note: serial before L32014
+  LOADED  11-7400: Spectrum DE -> 11-7400 - break from note: serial before L32014
+  LOADED  11-7382: SL-100 -> 11-7382 - break from note: built before 2001-01-01
+  LOADED  11-7382: SL-200 -> 11-7382 - break from note: built before 2001-01-01
+  LOADED  11-7382: SL-300 -> 11-7382 - break from note: built before 2001-01-01
+  LOADED  11-7382: SL-400 -> 11-7382 - break from note: built before 2001-01-01
+  LOADED  11-7382: SL TCI -> 11-7382 - break from note: built before 2001-01-01
+  LOADED  11-7382: SL-100e -> 11-7382 - break from note: built before 2001-01-01
+  LOADED  11-7382: SL-200e -> 11-7382 - break from note: built before 2001-01-01
+  LOADED  11-7382: SL-400e -> 11-7382 - break from note: built before 2001-01-01
+  LOADED  11-7382: Spectrum SL -> 11-7382 - break from note: built before 2001-01-01
+  LOADED  11-9182: SL-100 -> 11-9182 - break from note: built from 2001-01-01
+  LOADED  11-9182: SL-200 -> 11-9182 - break from note: built from 2001-01-01
+  LOADED  11-9182: SL-300 -> 11-9182 - break from note: built from 2001-01-01
+  LOADED  11-9182: SL-400 -> 11-9182 - break from note: built from 2001-01-01
+  LOADED  11-9182: SL TCI -> 11-9182 - break from note: built from 2001-01-01
+  LOADED  11-9182: SL-100e -> 11-9182 - break from note: built from 2001-01-01
+  LOADED  11-9182: SL-200e -> 11-9182 - break from note: built from 2001-01-01
+  LOADED  11-9182: SL-400e -> 11-9182 - break from note: built from 2001-01-01
+  LOADED  11-9182: Spectrum SL -> 11-9182 - break from note: built from 2001-01-01
+  LOADED  11-7400: SL-100 -> 11-7400 - break from note: built before 2001-01-01
+  LOADED  11-7400: SL-200 -> 11-7400 - break from note: built before 2001-01-01
+  LOADED  11-7400: SL-300 -> 11-7400 - break from note: built before 2001-01-01
+  LOADED  11-7400: SL-400 -> 11-7400 - break from note: built before 2001-01-01
+  LOADED  11-7400: SL TCI -> 11-7400 - break from note: built before 2001-01-01
+  LOADED  11-7400: SL-100e -> 11-7400 - break from note: built before 2001-01-01
+  LOADED  11-7400: SL-200e -> 11-7400 - break from note: built before 2001-01-01
+  LOADED  11-7400: SL-400e -> 11-7400 - break from note: built before 2001-01-01
+  LOADED  11-7400: Spectrum SL -> 11-7400 - break from note: built before 2001-01-01
+  LOADED  11-9954: SLXi-100 -> 11-9954 - conflict recorded; note "Listed in TK SLXi kit 100574; conflicts with 11-9342."
+  LOADED  11-9954: SLXi-200 -> 11-9954 - conflict recorded; note "Listed in TK SLXi kit 100574; conflicts with 11-9342."
+  LOADED  11-9954: SLXi-300 -> 11-9954 - conflict recorded; note "Listed in TK SLXi kit 100574; conflicts with 11-9342."
+  LOADED  11-9954: SLXi-400 -> 11-9954 - conflict recorded; note "Listed in TK SLXi kit 100574; conflicts with 11-9342."
+  LOADED  11-9954: SLXi Spectrum -> 11-9954 - conflict recorded; note "Listed in TK SLXi kit 100574; conflicts with 11-9342."
+  LOADED  11-9954: Whisper Pro -> 11-9954 - conflict recorded; note "Listed in TK SLXi kit 100574; conflicts with 11-9342."
+  LOADED  11-9959: SLXi-100 -> 11-9959 - conflict recorded; note "Listed in TK SLXi kit 100574; conflicts with 11-9182."
+  LOADED  11-9959: SLXi-200 -> 11-9959 - conflict recorded; note "Listed in TK SLXi kit 100574; conflicts with 11-9182."
+  LOADED  11-9959: SLXi-300 -> 11-9959 - conflict recorded; note "Listed in TK SLXi kit 100574; conflicts with 11-9182."
+  LOADED  11-9959: SLXi-400 -> 11-9959 - conflict recorded; note "Listed in TK SLXi kit 100574; conflicts with 11-9182."
+  LOADED  11-9959: SLXi Spectrum -> 11-9959 - conflict recorded; note "Listed in TK SLXi kit 100574; conflicts with 11-9182."
+  LOADED  11-9959: Whisper Pro -> 11-9959 - conflict recorded; note "Listed in TK SLXi kit 100574; conflicts with 11-9182."
+  LOADED  11-9965: S-600 -> 11-9965 - break from note: built before 2021-06-01
+  LOADED  11-9965: S-610DE -> 11-9965 - break from note: built before 2021-06-01
+  LOADED  11-9965: S-610M -> 11-9965 - break from note: built before 2021-06-01
+  LOADED  11-9965: S-700 -> 11-9965 - break from note: built before 2021-06-01
+  LOADED  11-9965: S-750i -> 11-9965 - break from note: built before 2021-06-01
+  LOADED  11-9969: S-600 -> 11-9969 - break from note: built from 2021-06-01; note "Standard duty."
+  LOADED  11-9969: S-610DE -> 11-9969 - break from note: built from 2021-06-01; note "Standard duty."
+  LOADED  11-9969: S-610M -> 11-9969 - break from note: built from 2021-06-01; note "Standard duty."
+  LOADED  11-9969: S-700 -> 11-9969 - break from note: built from 2021-06-01; note "Standard duty."
+  LOADED  11-9969: S-750i -> 11-9969 - break from note: built from 2021-06-01; note "Standard duty."
+  LOADED  11-9967: S-600 -> 11-9967 - break from note: built from 2021-06-01; note "Standard duty."
+  LOADED  11-9967: S-610DE -> 11-9967 - break from note: built from 2021-06-01; note "Standard duty."
+  LOADED  11-9967: S-610M -> 11-9967 - break from note: built from 2021-06-01; note "Standard duty."
+  LOADED  11-9967: S-700 -> 11-9967 - break from note: built from 2021-06-01; note "Standard duty."
+  LOADED  11-9967: S-750i -> 11-9967 - break from note: built from 2021-06-01; note "Standard duty."
+  LOADED  11-9966: S-600 -> 11-9966 - break from note: built before 2021-06-01; note "Severe duty."
+  LOADED  11-9966: S-610DE -> 11-9966 - break from note: built before 2021-06-01; note "Severe duty."
+  LOADED  11-9966: S-610M -> 11-9966 - break from note: built before 2021-06-01; note "Severe duty."
+  LOADED  11-9966: S-700 -> 11-9966 - break from note: built before 2021-06-01; note "Severe duty."
+  LOADED  11-9966: S-750i -> 11-9966 - break from note: built before 2021-06-01; note "Severe duty."
+  LOADED  11-9970: S-600 -> 11-9970 - break from note: built from 2021-06-01; note "Severe duty."
+  LOADED  11-9970: S-610DE -> 11-9970 - break from note: built from 2021-06-01; note "Severe duty."
+  LOADED  11-9970: S-610M -> 11-9970 - break from note: built from 2021-06-01; note "Severe duty."
+  LOADED  11-9970: S-700 -> 11-9970 - break from note: built from 2021-06-01; note "Severe duty."
+  LOADED  11-9970: S-750i -> 11-9970 - break from note: built from 2021-06-01; note "Severe duty."
+  LOADED  11-9968: S-600 -> 11-9968 - break from note: built from 2021-06-01; note "Severe duty."
+  LOADED  11-9968: S-610DE -> 11-9968 - break from note: built from 2021-06-01; note "Severe duty."
+  LOADED  11-9968: S-610M -> 11-9968 - break from note: built from 2021-06-01; note "Severe duty."
+  LOADED  11-9968: S-700 -> 11-9968 - break from note: built from 2021-06-01; note "Severe duty."
+  LOADED  11-9968: S-750i -> 11-9968 - break from note: built from 2021-06-01; note "Severe duty."
+  LOADED  11-9959: S-600 -> 11-9959 - as given; note "Standard duty."
+  LOADED  11-9959: S-610DE -> 11-9959 - as given; note "Standard duty."
+  LOADED  11-9959: S-610M -> 11-9959 - as given; note "Standard duty."
+  LOADED  11-9959: S-700 -> 11-9959 - as given; note "Standard duty."
+  LOADED  11-9959: S-750i -> 11-9959 - as given; note "Standard duty."
+  LOADED  11-9961: S-600 -> 11-9961 - as given; note "Severe duty. Up to 4,000 hr."
+  LOADED  11-9961: S-610DE -> 11-9961 - as given; note "Severe duty. Up to 4,000 hr."
+  LOADED  11-9961: S-610M -> 11-9961 - as given; note "Severe duty. Up to 4,000 hr."
+  LOADED  11-9961: S-700 -> 11-9961 - as given; note "Severe duty. Up to 4,000 hr."
+  LOADED  11-9961: S-750i -> 11-9961 - as given; note "Severe duty. Up to 4,000 hr."
+  LOADED  11-9956: S-600 -> 11-9956 - as given; note "Severe duty."
+  LOADED  11-9956: S-610DE -> 11-9956 - as given; note "Severe duty."
+  LOADED  11-9956: S-610M -> 11-9956 - as given; note "Severe duty."
+  LOADED  11-9956: S-700 -> 11-9956 - as given; note "Severe duty."
+  LOADED  11-9956: S-750i -> 11-9956 - as given; note "Severe duty."
+  LOADED  11-9966: C-600 -> 11-9966 - break from note: built before 2023-07-01
+  LOADED  11-9966: C-600M -> 11-9966 - break from note: built before 2023-07-01
+  LOADED  11-9966: C-700 -> 11-9966 - break from note: built before 2023-07-01
+  LOADED  11-9970: C-600 -> 11-9970 - break from note: built from 2023-07-01
+  LOADED  11-9970: C-600M -> 11-9970 - break from note: built from 2023-07-01
+  LOADED  11-9970: C-700 -> 11-9970 - break from note: built from 2023-07-01
+  LOADED  11-9961: C-600 -> 11-9961 - as given; note "Severe duty."
+  LOADED  11-9961: C-600M -> 11-9961 - as given; note "Severe duty."
+  LOADED  11-9961: C-700 -> 11-9961 - as given; note "Severe duty."
+  LOADED  11-9956: C-600 -> 11-9956 - as given; note "Severe duty."
+  LOADED  11-9956: C-600M -> 11-9956 - as given; note "Severe duty."
+  LOADED  11-9956: C-700 -> 11-9956 - as given; note "Severe duty."
+  LOADED  11-9098: MD-II -> 11-9098 - break from note: built before 2001-01-01
+  LOADED  11-9098: KD-II -> 11-9098 - break from note: built before 2001-01-01
+  LOADED  11-9098: RD-II -> 11-9098 - break from note: built before 2001-01-01
+  LOADED  11-9098: TD-II -> 11-9098 - break from note: built before 2001-01-01
+  LOADED  11-9098: Super TD-II -> 11-9098 - break from note: built before 2001-01-01
+  LOADED  11-9098: RDB-II -> 11-9098 - break from note: built before 2001-01-01
+  LOADED  11-9098: RD-MT -> 11-9098 - break from note: built before 2001-01-01
+  LOADED  11-9098: MD-MT -> 11-9098 - break from note: built before 2001-01-01
+  LOADED  11-9341: MD-II -> 11-9341 - break from note: built from 2001-01-01; note "Also SR units."
+  LOADED  11-9341: KD-II -> 11-9341 - break from note: built from 2001-01-01; note "Also SR units."
+  LOADED  11-9341: RD-II -> 11-9341 - break from note: built from 2001-01-01; note "Also SR units."
+  LOADED  11-9341: TD-II -> 11-9341 - break from note: built from 2001-01-01; note "Also SR units."
+  LOADED  11-9341: Super TD-II -> 11-9341 - break from note: built from 2001-01-01; note "Also SR units."
+  LOADED  11-9341: RDB-II -> 11-9341 - break from note: built from 2001-01-01; note "Also SR units."
+  LOADED  11-9341: RD-MT -> 11-9341 - break from note: built from 2001-01-01; note "Also SR units."
+  LOADED  11-9341: MD-MT -> 11-9341 - break from note: built from 2001-01-01; note "Also SR units."
+  LOADED  11-7444: MD-II -> 11-7444 - as given; note "In the optional DAVCO fuel heater/filter."
+  LOADED  11-7444: KD-II -> 11-7444 - as given; note "In the optional DAVCO fuel heater/filter."
+  LOADED  11-7444: RD-II -> 11-7444 - as given; note "In the optional DAVCO fuel heater/filter."
+  LOADED  11-7444: TD-II -> 11-7444 - as given; note "In the optional DAVCO fuel heater/filter."
+  LOADED  11-7444: Super TD-II -> 11-7444 - as given; note "In the optional DAVCO fuel heater/filter."
+  LOADED  11-7444: RDB-II -> 11-7444 - as given; note "In the optional DAVCO fuel heater/filter."
+  LOADED  11-7444: RD-MT -> 11-7444 - as given; note "In the optional DAVCO fuel heater/filter."
+  LOADED  11-7444: MD-MT -> 11-7444 - as given; note "In the optional DAVCO fuel heater/filter."
+  LOADED  11-6228: MD-II -> 11-6228 - break from note: built before 2001-01-01
+  LOADED  11-6228: KD-II -> 11-6228 - break from note: built before 2001-01-01
+  LOADED  11-6228: RD-II -> 11-6228 - break from note: built before 2001-01-01
+  LOADED  11-6228: TD-II -> 11-6228 - break from note: built before 2001-01-01
+  LOADED  11-6228: Super TD-II -> 11-6228 - break from note: built before 2001-01-01
+  LOADED  11-6228: RDB-II -> 11-6228 - break from note: built before 2001-01-01
+  LOADED  11-6228: RD-MT -> 11-6228 - break from note: built before 2001-01-01
+  LOADED  11-6228: MD-MT -> 11-6228 - break from note: built before 2001-01-01
+  LOADED  11-9321: MD-II -> 11-9321 - break from note: built from 2001-01-01; note "Also SR units."
+  LOADED  11-9321: KD-II -> 11-9321 - break from note: built from 2001-01-01; note "Also SR units."
+  LOADED  11-9321: RD-II -> 11-9321 - break from note: built from 2001-01-01; note "Also SR units."
+  LOADED  11-9321: TD-II -> 11-9321 - break from note: built from 2001-01-01; note "Also SR units."
+  LOADED  11-9321: Super TD-II -> 11-9321 - break from note: built from 2001-01-01; note "Also SR units."
+  LOADED  11-9321: RDB-II -> 11-9321 - break from note: built from 2001-01-01; note "Also SR units."
+  LOADED  11-9321: RD-MT -> 11-9321 - break from note: built from 2001-01-01; note "Also SR units."
+  LOADED  11-9321: MD-MT -> 11-9321 - break from note: built from 2001-01-01; note "Also SR units."
+  HELD  11-9098: MD-100 - note: "Fuel filter (standard) - early TK3.74 / TK3.95 versions; superseded by"; the part is retired and that supersession is your decision
+  HELD  11-9098: MD-200 - note: "Fuel filter (standard) - early TK3.74 / TK3.95 versions; superseded by"; the part is retired and that supersession is your decision
+  HELD  11-9098: MD-300 - note: "Fuel filter (standard) - early TK3.74 / TK3.95 versions; superseded by"; the part is retired and that supersession is your decision
+  HELD  11-9098: TS-200 - note: "Fuel filter (standard) - early TK3.74 / TK3.95 versions; superseded by"; the part is retired and that supersession is your decision
+  HELD  11-9098: TS-300 - note: "Fuel filter (standard) - early TK3.74 / TK3.95 versions; superseded by"; the part is retired and that supersession is your decision
+  HELD  11-9098: TS-500 - note: "Fuel filter (standard) - early TK3.74 / TK3.95 versions; superseded by"; the part is retired and that supersession is your decision
+  HELD  11-9098: TS-600 - note: "Fuel filter (standard) - early TK3.74 / TK3.95 versions; superseded by"; the part is retired and that supersession is your decision
+  HELD  11-9098: Spectrum TS - note: "Fuel filter (standard) - early TK3.74 / TK3.95 versions; superseded by"; the part is retired and that supersession is your decision
+  HELD  11-9098: XDS - note: "Fuel filter (standard) - early TK3.74 / TK3.95 versions; superseded by"; the part is retired and that supersession is your decision
+  LOADED  11-6228: MD-100 -> 11-6228 - break from note: built before 2001-01-01
+  LOADED  11-6228: MD-200 -> 11-6228 - break from note: built before 2001-01-01
+  LOADED  11-6228: MD-300 -> 11-6228 - break from note: built before 2001-01-01
+  LOADED  11-6228: TS-200 -> 11-6228 - break from note: built before 2001-01-01
+  LOADED  11-6228: TS-300 -> 11-6228 - break from note: built before 2001-01-01
+  LOADED  11-6228: TS-500 -> 11-6228 - break from note: built before 2001-01-01
+  LOADED  11-6228: TS-600 -> 11-6228 - break from note: built before 2001-01-01
+  LOADED  11-6228: Spectrum TS -> 11-6228 - break from note: built before 2001-01-01
+  LOADED  11-6228: XDS -> 11-6228 - break from note: built before 2001-01-01
+  LOADED  11-9321: T-500R -> 11-9321 - break from note: built before 2020-10-01
+  LOADED  11-9321: T-560R -> 11-9321 - break from note: built before 2020-10-01
+  LOADED  11-9321: T-570R -> 11-9321 - break from note: built before 2020-10-01
+  LOADED  11-9321: T-600R -> 11-9321 - break from note: built before 2020-10-01
+  LOADED  11-9321: T-800R -> 11-9321 - break from note: built before 2020-10-01
+  LOADED  11-9321: T-1000R -> 11-9321 - break from note: built before 2020-10-01
+  LOADED  11-9321: T-1200R -> 11-9321 - break from note: built before 2020-10-01
+  LOADED  11-9321: T-600 -> 11-9321 - break from note: built before 2020-10-01
+  LOADED  11-9321: T-800 -> 11-9321 - break from note: built before 2020-10-01
+  LOADED  11-9321: T-1000 TSA -> 11-9321 - break from note: built before 2020-10-01
+  LOADED  11-9321: T-580R -> 11-9321 - break from note: built before 2020-10-01; note "Optional."
+  LOADED  11-9321: T-680R -> 11-9321 - break from note: built before 2020-10-01; note "Optional."
+  LOADED  11-9321: T-680S -> 11-9321 - break from note: built before 2020-10-01; note "Optional."
+  LOADED  11-9321: T-880R -> 11-9321 - break from note: built before 2020-10-01; note "Optional."
+  LOADED  11-9321: T-880S -> 11-9321 - break from note: built before 2020-10-01; note "Optional."
+  LOADED  11-9321: T-1080R -> 11-9321 - break from note: built before 2020-10-01; note "Optional."
+  LOADED  11-9321: T-1080S -> 11-9321 - break from note: built before 2020-10-01; note "Optional."
+  HELD  11-9098: UMD - note: "Fuel filter (UMD, URD, LND) - superseded by 11-9341"; the part is retired and that supersession is your decision
+  HELD  11-9098: UMD-II - note: "Fuel filter (UMD, URD, LND) - superseded by 11-9341"; the part is retired and that supersession is your decision
+  HELD  11-9098: SUMD-II - note: "Fuel filter (UMD, URD, LND) - superseded by 11-9341"; the part is retired and that supersession is your decision
+  HELD  11-9098: URD - note: "Fuel filter (UMD, URD, LND) - superseded by 11-9341"; the part is retired and that supersession is your decision
+  HELD  11-9098: URD-III - note: "Fuel filter (UMD, URD, LND) - superseded by 11-9341"; the part is retired and that supersession is your decision
+  HELD  11-9098: LND - note: "Fuel filter (UMD, URD, LND) - superseded by 11-9341"; the part is retired and that supersession is your decision
+  HELD  11-9098: LND-II - note: "Fuel filter (UMD, URD, LND) - superseded by 11-9341"; the part is retired and that supersession is your decision
+  LOADED  11-6180: UMD -> 11-6180 - break from note: built before 1992-01-01
+  LOADED  11-6180: UMD-II -> 11-6180 - break from note: built before 1992-01-01
+  LOADED  11-6180: SUMD-II -> 11-6180 - break from note: built before 1992-01-01
+  LOADED  11-6180: URD -> 11-6180 - break from note: built before 1992-01-01
+  LOADED  11-6180: URD-III -> 11-6180 - break from note: built before 1992-01-01
+  LOADED  11-6180: LND -> 11-6180 - break from note: built before 1992-01-01
+  LOADED  11-6180: LND-II -> 11-6180 - break from note: built before 1992-01-01
+  LOADED  11-9954: UT-800 -> 11-9954 - as given; note "Only with the fuel pre-filter."
+  LOADED  11-9954: UT-1200 -> 11-9954 - as given; note "Only with the fuel pre-filter."
+  LOADED  11-9954: UT-1200X -> 11-9954 - as given; note "Only with the fuel pre-filter."
+  LOADED  11-9954: UT Spectrum -> 11-9954 - as given; note "Only with the fuel pre-filter."
+  LOADED  11-9954: UT Xtreme -> 11-9954 - as given; note "Only with the fuel pre-filter."
+  LOADED  11-9954: UTS -> 11-9954 - as given; note "Only with the fuel pre-filter."
+  HELD  13-0649: TriPac - note gives a break with no serial or date: "In-line fuel filter - early Tier II with rubber fuel lines (kit 10-393)"
+  LOADED  13-0658: TriPac -> 13-0658 - break from note: built before 2008-01-01
+  HELD  11-9098: SGCM - note: "Secondary fuel filter - superseded by 11-9341"; the part is retired and that supersession is your decision
+  HELD  11-9098: SGSM - note: "Secondary fuel filter - superseded by 11-9341"; the part is retired and that supersession is your decision
+  HELD  11-9098: SGCO - note: "Secondary fuel filter - superseded by 11-9341"; the part is retired and that supersession is your decision
+  LOADED  11-9957: SG-4000 -> 11-9965 - carried from superseded 11-9957; note "Carried from superseded 11-9957."
+  LOADED  11-9957: SGCM -> 11-9965 - carried from superseded 11-9957; note "Carried from superseded 11-9957."
+  LOADED  11-9957: SGCO 4000 -> 11-9965 - carried from superseded 11-9957; note "Carried from superseded 11-9957."
+  HELD  45-2323: TK486 - the file lists it both with and without a break (carried from superseded 45-1688)
+  HELD  45-2323: TK486 - the file lists it both with and without a break (as given)
+  HELD  45-2324: TK486V - the file lists it both with and without a break (as given)
+  HELD  45-2324: TK486V - the file lists it both with and without a break (as given)
+  HELD  11-8903: LND-II (fuel-pre) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-8903: LND (fuel-pre) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-8903: URD-III (fuel-pre) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-8903: URD (fuel-pre) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-8903: SUMD-II (fuel-pre) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-8903: UMD-II (fuel-pre) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-8903: UMD (fuel-pre) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-6180: LND-II (fuel-pre, break from note: built before 1992-01-01) -a split row beside an unconditional row for the same model and type on another part (2); loading it would straddle the split
+  HELD  11-6180: LND (fuel-pre, break from note: built before 1992-01-01) -a split row beside an unconditional row for the same model and type on another part (2); loading it would straddle the split
+  HELD  11-6180: URD-III (fuel-pre, break from note: built before 1992-01-01) -a split row beside an unconditional row for the same model and type on another part (2); loading it would straddle the split
+  HELD  11-6180: URD (fuel-pre, break from note: built before 1992-01-01) -a split row beside an unconditional row for the same model and type on another part (2); loading it would straddle the split
+  HELD  11-6180: SUMD-II (fuel-pre, break from note: built before 1992-01-01) -a split row beside an unconditional row for the same model and type on another part (2); loading it would straddle the split
+  HELD  11-6180: UMD-II (fuel-pre, break from note: built before 1992-01-01) -a split row beside an unconditional row for the same model and type on another part (2); loading it would straddle the split
+  HELD  11-6180: UMD (fuel-pre, break from note: built before 1992-01-01) -a split row beside an unconditional row for the same model and type on another part (2); loading it would straddle the split
+  HELD  11-4880: LND-II (fuel-pre) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-4880: LND (fuel-pre) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-4880: URD-III (fuel-pre) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-4880: URD (fuel-pre) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-4880: SUMD-II (fuel-pre) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-4880: UMD-II (fuel-pre) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-4880: UMD (fuel-pre) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9321: T-1080S (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9321: T-1080R (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9321: T-880S (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9321: T-880R (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9321: T-680S (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9321: T-680R (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9321: T-580R (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9341: T-1080S (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9341: T-1080R (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9341: T-880S (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9341: T-880R (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9341: T-680S (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9341: T-680R (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9341: T-580R (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9321: T-1000 TSA (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9321: T-800 (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9321: T-600 (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9321: T-1200R (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9321: T-1000R (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9321: T-800R (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9321: T-600R (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9341: T-1000 TSA (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9341: T-800 (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9341: T-600 (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9341: T-1200R (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9341: T-1000R (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9341: T-800R (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9341: T-600R (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9321: T-570R (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9321: T-560R (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9321: T-500R (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9341: T-570R (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9341: T-560R (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9341: T-500R (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9321: MD-MT (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9321: RD-MT (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9321: RDB-II (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9321: Super TD-II (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9321: TD-II (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9321: RD-II (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9321: KD-II (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9321: MD-II (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-8003: MD-MT (fuel) -an unconditional row beside a split for the same model and type on another part (3); loading it would straddle the split
+  HELD  11-8003: RD-MT (fuel) -an unconditional row beside a split for the same model and type on another part (3); loading it would straddle the split
+  HELD  11-8003: RDB-II (fuel) -an unconditional row beside a split for the same model and type on another part (3); loading it would straddle the split
+  HELD  11-8003: Super TD-II (fuel) -an unconditional row beside a split for the same model and type on another part (3); loading it would straddle the split
+  HELD  11-8003: TD-II (fuel) -an unconditional row beside a split for the same model and type on another part (3); loading it would straddle the split
+  HELD  11-8003: RD-II (fuel) -an unconditional row beside a split for the same model and type on another part (3); loading it would straddle the split
+  HELD  11-8003: KD-II (fuel) -an unconditional row beside a split for the same model and type on another part (3); loading it would straddle the split
+  HELD  11-8003: MD-II (fuel) -an unconditional row beside a split for the same model and type on another part (3); loading it would straddle the split
+  HELD  11-9341: MD-MT (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9341: RD-MT (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9341: RDB-II (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9341: Super TD-II (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9341: TD-II (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9341: RD-II (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9341: KD-II (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9341: MD-II (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9098: MD-MT (fuel, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9098: RD-MT (fuel, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9098: RDB-II (fuel, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9098: Super TD-II (fuel, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9098: TD-II (fuel, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9098: RD-II (fuel, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9098: KD-II (fuel, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9098: MD-II (fuel, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9300: Spectrum SL (air) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9300: SL-400e (air) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9300: SL-200e (air) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9300: SL-100e (air) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9300: SL TCI (air) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9300: SL-400 (air) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9300: SL-300 (air) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9300: SL-200 (air) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9300: SL-100 (air) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7400: Spectrum SL (air, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7400: SL-400e (air, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7400: SL-200e (air, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7400: SL-100e (air, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7400: SL TCI (air, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7400: SL-400 (air, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7400: SL-300 (air, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7400: SL-200 (air, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7400: SL-100 (air, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7400: Spectrum DE (air, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7400: Spectrum SB (air, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7400: SB Classic (air, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7400: SB-400 (air, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7400: SB-310 (air, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7400: SB-300 (air, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7400: SB-210 (air, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7400: SB-200 (air, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7400: SB-190 (air, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7400: SB-110 (air, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7400: SB-100 (air, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9300: Spectrum DE (air) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9300: SB Classic (air) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7382: Spectrum DE (oil, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7382: Spectrum SB (oil, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7382: SB Classic (oil, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7382: SB-400 (oil, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7382: SB-310 (oil, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7382: SB-300 (oil, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7382: SB-210 (oil, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7382: SB-200 (oil, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7382: SB-190 (oil, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7382: SB-110 (oil, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-7382: SB-100 (oil, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9182: Spectrum DE (oil) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  11-9182: SB Classic (oil) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  45-2323: SL-e (Starter) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
+  HELD  45-2324: SL-e (Starter, break from note: built from 2006-08-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
+
+== A crosses (75)
+  REPAIRED  45-2326 Denso 128000-0710 [no tier] - qualified row
+  REPAIRED  45-2326 Hitachi S114-450 [unconfirmed] - qualified row
+  REPAIRED  45-1718 Denso 128000-0710 [no tier] - qualified row
+  REPAIRED  45-1718 Hitachi S114-450 [no tier] - qualified row
+  REPAIRED  45-2176 Denso 228000-3732 [unconfirmed] - qualified row
+  HELD  45-1285 Delco Remy "93593 (obsolete)" - the cross number is OBSOLETE and part_cross_reference has no column for that; it needs a status column (a migration adding part_cross_reference.status TEXT CHECK (status IN ('current','obsolete')))
+  HELD  45-1251 Delco Remy "93547 (obsolete)" - the cross number is OBSOLETE and part_cross_reference has no column for that; it needs a status column (a migration adding part_cross_reference.status TEXT CHECK (status IN ('current','obsolete')))
+  REPAIRED  45-2918 Delco Remy DRS3246 [unconfirmed] - qualified row
+  REPAIRED  45-2918 Hitachi S12-59 [unconfirmed] - qualified row
+  REPAIRED  25-15371-00 Delco Remy 93595 [confirmed] - qualified row
+  REPAIRED  25-15520-00 Delco Remy 99746 [confirmed] - qualified row
+  REPAIRED  25-35465-00 Delco Remy 93594 [confirmed] - qualified row
+  REPAIRED  25-38750-00 Delco Remy 93549 [confirmed] - qualified row
+  REPAIRED  25-39135-00 Delco Remy 93588 [confirmed] - qualified row
+  REPAIRED  25-39476-00 Delco Remy 93607 [confirmed] - qualified row
+  REPAIRED  25-39587-00 Delco Remy 93590 [confirmed] - qualified row
+  REPAIRED  25-39610-00 Delco Remy 93600 [unconfirmed] - qualified row
+  REPAIRED  25-39700-00 Denso 228000-6950 [confirmed] - qualified row; one cell, several numbers
+  REPAIRED  25-39700-00 Denso 228000-6951 [confirmed] - qualified row; one cell, several numbers
+  REPAIRED  25-39700-00 Denso 228000-6952 [confirmed] - qualified row; one cell, several numbers
+  REPAIRED  25-39700-00 Denso 428000-0930 [dealer] - qualified row; one cell, several numbers
+  REPAIRED  25-39700-00 Denso 428000-0931 [dealer] - qualified row; one cell, several numbers
+  REPAIRED  11-9182 Fleetguard LF9030 [confirmed] - reassembled from 2 split rows
+  REPAIRED  11-9182 Fleetguard LF16164 [unconfirmed] - reassembled from 2 split rows
+  REPAIRED  11-9182 Luber-finer LFP9182 [unconfirmed] - qualified row
+  REPAIRED  11-7382 Carquest 85809 [unconfirmed] - qualified row
+  REPAIRED  11-6182 Fleetguard LF16354 [confirmed] - reassembled from 2 split rows
+  REPAIRED  11-6182 Fleetguard LF716 [unconfirmed] - reassembled from 2 split rows
+  REPAIRED  11-9099 Fleetguard LF694 [unconfirmed] - qualified row
+  REPAIRED  11-9099 Carquest 85807 [unconfirmed] - reassembled from 2 split rows
+  REPAIRED  11-9099 Baldwin BT365 [unconfirmed] - qualified row
+  REPAIRED  11-9099 Luber-finer LFP3712 [unconfirmed] - qualified row
+  REPAIRED  11-9100 Fleetguard LF3455 [conflict] - qualified row; both sides of the conflict
+  REPAIRED  11-9100 Fleetguard LF702 [conflict] - qualified row; both sides of the conflict
+  REPAIRED  11-9100 Carquest 85808 [unconfirmed] - reassembled from 2 split rows
+  REPAIRED  11-9959 Fleetguard LF787 [conflict] - reassembled from 3 split rows; both sides of the conflict
+  REPAIRED  11-9959 Fleetguard FF5053 [conflict] - reassembled from 3 split rows; both sides of the conflict
+  REPAIRED  11-7987 Carquest 85334 [unconfirmed] - reassembled from 2 split rows
+  REPAIRED  11-7987 WIX 51334 [unconfirmed] - reassembled from 3 split rows
+  REPAIRED  11-9321 Carquest 84134 [unconfirmed] - qualified row
+  REPAIRED  11-9321 Baldwin B7221 [unconfirmed] - qualified row
+  REPAIRED  11-9321 Luber-finer LFP9321 [unconfirmed] - qualified row
+  REPAIRED  11-6228 Fleetguard LF3641 [unconfirmed] - qualified row
+  REPAIRED  11-6228 Carquest 84134 [unconfirmed] - qualified row
+  REPAIRED  11-6228 Baldwin B7221 [unconfirmed] - qualified row
+  REPAIRED  11-6228 Luber-finer LFP9321 [unconfirmed] - qualified row
+  REPAIRED  11-9101 Carquest 85802 [unconfirmed] - reassembled from 2 split rows
+  REPAIRED  11-9341 Carquest 86368 [unconfirmed] - qualified row
+  REPAIRED  11-9341 Baldwin BF992 [unconfirmed] - qualified row
+  REPAIRED  11-9341 Luber-finer LFP3693F [unconfirmed] - qualified row
+  REPAIRED  11-9098 Fleetguard FF204 [unconfirmed] - qualified row
+  REPAIRED  11-9098 Carquest 86368 [unconfirmed] - qualified row
+  REPAIRED  11-9098 Baldwin BF992 [unconfirmed] - qualified row
+  REPAIRED  11-9342 Fleetguard FS19580 [confirmed] - qualified row; one cell, several numbers
+  REPAIRED  11-9342 Fleetguard FS19580A [confirmed] - qualified row; one cell, several numbers
+  REPAIRED  11-9342 Carquest 86962 [unconfirmed] - qualified row
+  REPAIRED  11-9342 Luber-finer LFF9342 [unconfirmed] - qualified row
+  REPAIRED  11-9954 Luber-finer LFF9954 [unconfirmed] - qualified row
+  REPAIRED  11-9097 Carquest 86367 [unconfirmed] - reassembled from 2 split rows
+  REPAIRED  11-9097 WIX 33367 [unconfirmed] - reassembled from 3 split rows
+  REPAIRED  11-6285 Fleetguard FF5276 [unconfirmed] - qualified row
+  REPAIRED  11-6285 Carquest 86544 [unconfirmed] - reassembled from 2 split rows
+  REPAIRED  11-6285 Baldwin BF7579 [unconfirmed] - qualified row
+  REPAIRED  11-7264 Fleetguard FF5275 [unconfirmed] - qualified row
+  REPAIRED  11-7264 Carquest 86543 [unconfirmed] - reassembled from 2 split rows
+  REPAIRED  11-6286 WIX 33545 [unconfirmed] - reassembled from 3 split rows
+  REPAIRED  11-9965 Baldwin PF46284 [conflict] - qualified row; the note says use PF46284 over BF46114
+  REPAIRED  11-9965 WIX WF10416 [unconfirmed] - reassembled from 3 split rows
+  REPAIRED  11-9957 Baldwin PF46284 [confirmed] - reassembled from 3 split rows
+  REPAIRED  11-9300 Baldwin RS5387 KIT [confirmed] - qualified row
+  REPAIRED  11-9059 Luber-finer LAF8388 [unconfirmed] - qualified row
+  REPAIRED  11-7400 Carquest 88405 [unconfirmed] - reassembled from 2 split rows
+  REPAIRED  11-7234 Fleetguard AF25307 [unconfirmed] - qualified row
+  REPAIRED  11-5692 WIX 46270 [unconfirmed] - reassembled from 2 split rows
+  NO CROSS  11-9955 Baldwin "CONFLICT: none per Baldwin Form 677 ('---') vs RS5387 per Allsize - treat as none" - the source says there is none; nothing to load
+
+== B numbers (113)
+  2530053 / 25-30053 (Heavy-Duty Full-Flow Spin-On Engine Oil Lube (Standard))
+      2530053: tried parsed "2530053" as other; failed - fits no rule
+      25-30053 is the same number as 2530053
+  30-00402-01-U (Pipe, flex exhaust, lower)
+      30-00402-01-U -> 30-00402-01, condition used (U): matched to the store
+  10-00433-50-U (Power bridge, connection kit, reversal)
+      10-00433-50-U -> 10-00433-50, condition used (U): matched to the store
+  13-0393 / 130393 (Engine Thermostat 160F (Legacy))
+      13-0393 -> 13-0393: NEW part
+      130393 is the same number as 13-0393
+  13864 (In-Line Fuel Filter (TriPac APU))
+      13864: tried parsed "13864" as other; failed - fits no rule
+  05G-41CFM-KIT2 (Compressor rebuild kit, full)
+      05G-41CFM-KIT2: tried parsed "05G-41CFM-KIT2" as other; failed - fits no rule
+  08-00225-02-U (Evaporator coil)
+      08-00225-02-U -> 08-00225-02, condition used (U): matched to the store
+  203-0799-2 (EGR gasket kit)
+      203-0799-2: tried parsed "203-0799-2" as other; failed - fits no rule
+  X430LS-FULL-KIT (Compressor rebuild kit, full)
+      X430LS-FULL-KIT: tried parsed "X430LS-FULL-KIT" as other; failed - fits no rule
+  25-39352-00-U (Injection pump)
+      25-39352-00-U -> 25-39352-00, condition used (U): NEW part
+  91-00312-02-U (Display, keypad assembly)
+      91-00312-02-U -> 91-00312-02, condition used (U): matched to the store
+  CA63AA051 (Plug, pipe thread, high pressure, compressor head)
+      CA63AA051: tried parsed "CA63AA051" as other; failed - fits no rule
+  204-1927 (CAN diagnostic bus cable kit)
+      204-1927: tried parsed "204-1927" as other; failed - fits no rule
+  119300 / 129300 (Primary Air Filter)
+      119300 -> 11-9300: matched to the store
+      129300: 12-9300 is in no source; it reads as 11-9300 with 12 for 11 (11-9300 IS in the store). HELD - a corrupted number is not loaded
+  18-00091-106RM (Compressor, 37CFM twin port)
+      18-00091-106RM: tried parsed "18-00091-106RM" as other; failed - suffix RM is not a rule-7 marker
+  12-00382-16-U (Summit microprocessor, 32 config)
+      12-00382-16-U -> 12-00382-16, condition used (U): matched to the store
+  12-55438-22-U (Advance micro)
+      12-55438-22-U -> 12-55438-22, condition used (U): matched to the store
+  96-101-24K (Fuel filter, APU)
+      96-101-24K: tried stripped marker K, parsed "96-101-24" as other (short: Carrier middle segment has 3 digits, not 5 - not padded); failed - fits no rule
+  204-1999 (Tool, oil drain to quick connect)
+      204-1999: tried parsed "204-1999" as other; failed - fits no rule
+  840-1927 (HMI)
+      840-1927: reman of 40-1927 (rule 5); base is NOT in the store. HELD - reman and OEM-new are related, never merged, and there is no table to link two parts (it needs one: part_relation (part_id, related_part_id, relation 'reman_of' / 'aftermarket_for'))
+  20-12-9101 (Engine Oil Spin-on)
+      20-12-9101: Carrier aftermarket for TK 12-9101 (rule 4); 12-9101 is NOT in the store (11-9101 is - see the 11/12 note). HELD - linking needs the part_relation table
+  25-33012-00-U (Injection pump assembly)
+      25-33012-00-U -> 25-33012-00, condition used (U): matched to the store
+  810-1428 (Engine, TK486V Tier 2)
+      810-1428: reman of 10-1428 (rule 5); base is NOT in the store. HELD - reman and OEM-new are related, never merged, and there is no table to link two parts (it needs one: part_relation (part_id, related_part_id, relation 'reman_of' / 'aftermarket_for'))
+  18-60000-05-R (Compressor, rebuilt)
+      18-60000-05-R -> 18-60000-05, condition rebuilt (R): matched to the store
+  54-00691-20-U (Evaporator fan motor, 460V AC)
+      54-00691-20-U -> 54-00691-20, condition used (U): matched to the store
+  50-01172-00SV (Fanshaft with defrost damper motor)
+      50-01172-00SV -> 50-01172-00, condition service (SV): NEW part
+  18-00063-05-R (Compressor, rebuilt)
+      18-00063-05-R -> 18-00063-05, condition rebuilt (R): matched to the store
+  18-00059-72-RB (Tri port compressor rebuild)
+      18-00059-72-RB -> 18-00059-72, condition rebuilt (RB): matched to the store
+  26-60000-16SRV (Engine, Kubota)
+      26-60000-16SRV: tried parsed "26-60000-16SRV" as carrier; failed - suffix SRV is not a rule-7 marker
+  11-5522 (Engine Oil Lube)
+      11-5522: 11-5522 fits the rule, but the seed records it as an OLD number ("11-6182: Replaces 11-5712 / 11-5522 / 11-4928 / 11-5115") with no supersession row. HELD - loading it would show an old number as current
+  25-34730-00-U (Injection pump assembly)
+      25-34730-00-U -> 25-34730-00, condition used (U): NEW part
+  65-00182-03-U (Receiver tank)
+      65-00182-03-U -> 65-00182-03, condition used (U): matched to the store
+  54-00629-PLUG (Connector, 6-pin plug, CDM1, CDM2)
+      54-00629-PLUG: tried parsed "54-00629-PLUG" as other; failed - suffix PLUG is not a rule-7 marker
+  12-00648-16-U (Single temp controller)
+      12-00648-16-U -> 12-00648-16, condition used (U): matched to the store
+  05G-37CFM-KIT1 (Compressor rebuild kit, basic)
+      05G-37CFM-KIT1: tried parsed "05G-37CFM-KIT1" as other; failed - fits no rule
+  54-00136-05-R (Generator, 5KW, multitemp)
+      54-00136-05-R -> 54-00136-05, condition rebuilt (R): matched to the store
+  204-0952 (Tool, rear engine seal installer)
+      204-0952: tried parsed "204-0952" as other; failed - fits no rule
+  810-1389 (Engine assembly, 3TNV76)
+      810-1389: reman of 10-1389 (rule 5); base is NOT in the store. HELD - reman and OEM-new are related, never merged, and there is no table to link two parts (it needs one: part_relation (part_id, related_part_id, relation 'reman_of' / 'aftermarket_for'))
+  54-60017-02-U (Motor, AC, 240V 4.4Kw 60Hz, standby)
+      54-60017-02-U -> 54-60017-02, condition used (U): NEW part
+  25-33006-00-U (Exhaust manifold)
+      25-33006-00-U -> 25-33006-00, condition used (U): matched to the store
+  18-00091-105-RB (Twin port compressor, rebuild)
+      18-00091-105-RB: tried stripped marker RB, parsed "18-00091-105" as other; failed - fits no rule
+  3355-BUMPER (Protective bumper)
+      3355-BUMPER: tried parsed "3355-BUMPER" as other; failed - suffix BUMPER is not a rule-7 marker
+  APX-KEYPAD (Keypad assembly)
+      APX-KEYPAD: tried parsed "APX-KEYPAD" as other; failed - fits no rule
+  845-2570 (SR2 PC board controller)
+      845-2570: reman of 45-2570 (rule 5); base is NOT in the store. HELD - reman and OEM-new are related, never merged, and there is no table to link two parts (it needs one: part_relation (part_id, related_part_id, relation 'reman_of' / 'aftermarket_for'))
+  104-0828 (Generator)
+      104-0828: tried parsed "104-0828" as other; failed - fits no rule
+  11-3726 / 129341 (Secondary Fuel Filter)
+      11-3726: 11-3726 fits the rule, but the seed records it as an OLD number ("11-9098: replaced 11-3726 / 11-3693") with no supersession row. HELD - loading it would show an old number as current
+      129341: 12-9341 is in no source; it reads as 11-9341 with 12 for 11 (11-9341 IS in the store). HELD - a corrupted number is not loaded
+  101-0423 (Engine assembly, 3TNV80)
+      101-0423: tried parsed "101-0423" as other; failed - fits no rule
+  845-2571 (SR2 PC relay board)
+      845-2571: reman of 45-2571 (rule 5); base is NOT in the store. HELD - reman and OEM-new are related, never merged, and there is no table to link two parts (it needs one: part_relation (part_id, related_part_id, relation 'reman_of' / 'aftermarket_for'))
+  25-34367-00-U (Injection pump assembly)
+      25-34367-00-U -> 25-34367-00, condition used (U): matched to the store
+  81-04232-00sv (Heat exchanger)
+      81-04232-00sv -> 81-04232-00, condition service (SV): matched to the store
+  TM16 (Compressor, direct mount 8PK 12v)
+      TM16: tried parsed "TM16" as other; failed - fits no rule
+  30-424-05K (Air Filter (Round))
+      30-424-05K: tried stripped marker K, parsed "30-424-05" as other (short: Carrier middle segment has 3 digits, not 5 - not padded); failed - fits no rule
+  08-00330-00SV (Coil, condenser)
+      08-00330-00SV -> 08-00330-00, condition service (SV): NEW part
+  12-00716-105 (Logic board)
+      12-00716-105: tried parsed "12-00716-105" as other; failed - fits no rule
+  17-44015-00PB (Main front bearing, pre-bored, set of 2)
+      17-44015-00PB: tried parsed "17-44015-00PB" as carrier; failed - suffix PB is not a rule-7 marker
+  25-15568-00SV (Water pump)
+      25-15568-00SV -> 25-15568-00, condition service (SV): matched to the store
+  12-00663-64-U (Display module)
+      12-00663-64-U -> 12-00663-64, condition used (U): NEW part
+  251830010100 (Glow plug)
+      251830010100: tried parsed "251830010100" as other; failed - fits no rule
+  91-01146-87-U (Logic board, microprocessor)
+      91-01146-87-U -> 91-01146-87, condition used (U): matched to the store
+  104-0868 (Condenser fan motor)
+      104-0868: tried parsed "104-0868" as other; failed - fits no rule
+  25-37385-TL (Installation tool, crankshaft rear sleeve)
+      25-37385-TL: tried parsed "25-37385-TL" as other; failed - suffix TL is not a rule-7 marker
+  12-00307-00-R (Keypad/display)
+      12-00307-00-R -> 12-00307-00, condition rebuilt (R): matched to the store
+  101-0447 (Engine, TK486V25L1)
+      101-0447: tried parsed "101-0447" as other; failed - fits no rule
+  86-60180-00-U (Support compressor assembly bracket)
+      86-60180-00-U -> 86-60180-00, condition used (U): matched to the store
+  TM16-8PK (Compressor, 12v 123mm ear mount)
+      TM16-8PK: tried parsed "TM16-8PK" as other; failed - fits no rule
+  20-113693 (Secondary Fuel Filter)
+      20-113693: Carrier aftermarket for TK 11-3693 (rule 4); 11-3693 is NOT in the store. HELD - linking needs the part_relation table
+  25-39335-00-K (Exhaust manifold kit)
+      25-39335-00-K -> 25-39335-00, condition kit (K): matched to the store
+  102-0951 (Compressor, scroll)
+      102-0951: tried parsed "102-0951" as other; failed - fits no rule
+  12-00673-52-U (SMV module)
+      12-00673-52-U -> 12-00673-52, condition used (U): matched to the store
+  48-00327-01-U (Sheave assembly)
+      48-00327-01-U -> 48-00327-01, condition used (U): matched to the store
+  203-0799 (EGR cleaning kit)
+      203-0799: tried parsed "203-0799" as other; failed - fits no rule
+  81-02736-00SV (Heat exchanger economizer assembly)
+      81-02736-00SV -> 81-02736-00, condition service (SV): matched to the store
+  10-01176-00-U (Relay, 30A, FLR, 1EMR, 2EMR)
+      10-01176-00-U -> 10-01176-00, condition used (U): matched to the store
+  12-00307-LCD (LCD)
+      12-00307-LCD: tried parsed "12-00307-LCD" as other; failed - suffix LCD is not a rule-7 marker
+  ADV-999-25 (Adapter, Advance micro to serial port)
+      ADV-999-25: tried parsed "ADV-999-25" as other; failed - fits no rule
+  30-123-01K (Water pump, large impeller, APU)
+      30-123-01K: tried stripped marker K, parsed "30-123-01" as other (short: Carrier middle segment has 3 digits, not 5 - not padded); failed - fits no rule
+  26-60001-01-U (Engine, Kubota, tri-vortex)
+      26-60001-01-U -> 26-60001-01, condition used (U): matched to the store
+  11-9182 / 129182 (Engine Oil Spin-on)
+      11-9182 -> 11-9182: matched to the store
+      129182: 12-9182 is in no source; it reads as 11-9182 with 12 for 11 (11-9182 IS in the store). HELD - a corrupted number is not loaded
+  11-9683 / 119683 (Engine Thermostat 160F)
+      11-9683 -> 11-9683: NEW part
+      119683 is the same number as 11-9683
+  101-0421 (Engine assembly, 3TNV74)
+      101-0421: tried parsed "101-0421" as other; failed - fits no rule
+  50-00229-00SV (Fanshaft)
+      50-00229-00SV -> 50-00229-00, condition service (SV): NEW part
+  54-00639-114 (Evaporator fan motor, 12V)
+      54-00639-114: tried parsed "54-00639-114" as other; failed - fits no rule
+  25-15003-00 / 29-70181-00 (Engine Thermostat 180F)
+      25-15003-00 -> 25-15003-00: NEW part
+      29-70181-00: 29-70181-00 fits the rule but how it relates to 25-15003-00 (alias or old number) is not in the source. HELD
+  96-101-33K (Oil filter, APU)
+      96-101-33K: tried stripped marker K, parsed "96-101-33" as other (short: Carrier middle segment has 3 digits, not 5 - not padded); failed - fits no rule
+  22-50099-01A (Pin terminal, snap in)
+      22-50099-01A: tried parsed "22-50099-01A" as carrier; failed - suffix A is not a rule-7 marker
+  845-2372 (HMI controller / LCD screen)
+      845-2372: reman of 45-2372 (rule 5); base is NOT in the store. HELD - reman and OEM-new are related, never merged, and there is no table to link two parts (it needs one: part_relation (part_id, related_part_id, relation 'reman_of' / 'aftermarket_for'))
+  845-2648 (Control board)
+      845-2648: reman of 45-2648 (rule 5); base is NOT in the store. HELD - reman and OEM-new are related, never merged, and there is no table to link two parts (it needs one: part_relation (part_id, related_part_id, relation 'reman_of' / 'aftermarket_for'))
+  12-00584-02-U (ECM electronic control module)
+      12-00584-02-U -> 12-00584-02, condition used (U): matched to the store
+  18-00091-13-U (Compressor, 37CFM twin port)
+      18-00091-13-U -> 18-00091-13, condition used (U): matched to the store
+  07-00375-00SV (Drive/tester SMV EVXV ETV)
+      07-00375-00SV -> 07-00375-00, condition service (SV): NEW part
+  845-2721 (SR3 PC board microprocessor)
+      845-2721: reman of 45-2721 (rule 5); base is NOT in the store. HELD - reman and OEM-new are related, never merged, and there is no table to link two parts (it needs one: part_relation (part_id, related_part_id, relation 'reman_of' / 'aftermarket_for'))
+  50-01150-01SV (Fanshaft)
+      50-01150-01SV -> 50-01150-01, condition service (SV): NEW part
+  25-39236-00 / -01 (Engine Thermostat 180F (X2/X4))
+      25-39236-00 -> 25-39236-00: NEW part
+      25-39236-01 -> 25-39236-01: matched to the store
+  802-1147 (Compressor)
+      802-1147: reman of 02-1147 (rule 5); base is NOT in the store. HELD - reman and OEM-new are related, never merged, and there is no table to link two parts (it needs one: part_relation (part_id, related_part_id, relation 'reman_of' / 'aftermarket_for'))
+  96-969-03K (APU Alternator Belt)
+      96-969-03K: tried stripped marker K, parsed "96-969-03" as other (short: Carrier middle segment has 3 digits, not 5 - not padded); failed - fits no rule
+  14-00232-25SV (TXV expansion valve)
+      14-00232-25SV -> 14-00232-25, condition service (SV): NEW part
+  22-60365-01SV (Alternator harness diode block)
+      22-60365-01SV -> 22-60365-01, condition service (SV): NEW part
+  24-02024-00-U (Heating element, 3450W 580V)
+      24-02024-00-U -> 24-02024-00, condition used (U): NEW part
+  78-0603 / 78-603 (Fan Drive Belt)
+      78-0603 -> 78-0603: matched to the store
+      78-603 is the same number as 78-0603
+  22-04254-00-U (Transformer)
+      22-04254-00-U -> 22-04254-00, condition used (U): matched to the store
+  25-39667-00SV (Thermostat, 71C)
+      25-39667-00SV -> 25-39667-00, condition service (SV): NEW part
+  11-8047 / 12-9342 (Fuel Water Separator)
+      11-8047 -> 11-8047: matched to a Source A part
+      12-9342: 12-9342 is in no source; it reads as 11-9342 with 12 for 11 (11-9342 IS in the store). HELD - a corrupted number is not loaded
+  05G-41CFM-KIT1 (Compressor rebuild kit, basic)
+      05G-41CFM-KIT1: tried parsed "05G-41CFM-KIT1" as other; failed - fits no rule
+  107-0396 (Clutch assembly)
+      107-0396: tried parsed "107-0396" as other; failed - fits no rule
+  48-00306-00-U (Adapter, blower wheel)
+      48-00306-00-U -> 48-00306-00, condition used (U): matched to the store
+  26-60002-05-U (Engine)
+      26-60002-05-U -> 26-60002-05, condition used (U): matched to the store
+  107-0349 (Clutch)
+      107-0349: tried parsed "107-0349" as other; failed - fits no rule
+  11-7382 / 127382 (Dual-Flow Lube)
+      11-7382 -> 11-7382: matched to the store
+      127382: 12-7382 is in no source; it reads as 11-7382 with 12 for 11 (11-7382 IS in the store). HELD - a corrupted number is not loaded
+  55-851-01K (Switch, binary)
+      55-851-01K: tried stripped marker K, parsed "55-851-01" as other (short: Carrier middle segment has 3 digits, not 5 - not padded); failed - fits no rule
+  91-00342-02-U (Control box assembly)
+      91-00342-02-U -> 91-00342-02, condition used (U): matched to the store
+  ADV6690 (LCD)
+      ADV6690: tried parsed "ADV6690" as other; failed - fits no rule
+  17-44145-PLATE (Seal front plate, tri-port)
+      17-44145-PLATE: tried parsed "17-44145-PLATE" as other; failed - suffix PLATE is not a rule-7 marker
+  2299-BUMPER (Protective bumper)
+      2299-BUMPER: tried parsed "2299-BUMPER" as other; failed - suffix BUMPER is not a rule-7 marker
+
+== B crosses (11)
+  HELD  2530053 / 25-30053: Baldwin B163, Donaldson P550939, Luber-finer LFP163, NAPA Gold 1163 - the OEM number does not load (see B numbers)
+  HELD  13864: Baldwin BF46229, Donaldson P550865, Luber-finer LFF46229, NAPA Gold 33007 - the OEM number does not load (see B numbers)
+  HELD  20-12-9101: Baldwin B128, Donaldson P553746, Luber-finer LFP128, NAPA Gold 1128 - the OEM number does not load (see B numbers)
+  HELD  11-5522: Baldwin B247, Donaldson P552849, Luber-finer LFP247, NAPA Gold 1348 - the OEM number does not load (see B numbers)
+  HELD  11-3726 / 129341: Baldwin BF992, Donaldson P553693, Luber-finer LFF992, NAPA Gold 3368 - the OEM number does not load (see B numbers)
+  HELD  30-424-05K: Baldwin RS3715, Donaldson P822686, Luber-finer LAF3715, NAPA Gold 6715 - the OEM number does not load (see B numbers)
+  HELD  20-113693: Baldwin BF992, Donaldson P553693, Luber-finer LFF992, NAPA Gold 3368 - the OEM number does not load (see B numbers)
+  CARRIED  11-8047 / 12-9342 Baldwin BF9894 -> 11-9342 (11-8047 is superseded by 11-9342)
+  CARRIED  11-8047 / 12-9342 Donaldson P559125 -> 11-9342 (11-8047 is superseded by 11-9342)
+  CARRIED  11-8047 / 12-9342 Luber-finer LFF9342SC -> 11-9342 (11-8047 is superseded by 11-9342)
+  CARRIED  11-8047 / 12-9342 NAPA Gold 3962 -> 11-9342 (11-8047 is superseded by 11-9342)

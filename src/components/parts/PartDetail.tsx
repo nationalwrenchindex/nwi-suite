@@ -177,6 +177,7 @@ export default function PartDetail({ partId }: { partId: string }) {
                 )}
                 {f.serial_from   && <span className="text-orange text-xs">from serial {f.serial_from}</span>}
                 {f.serial_before && <span className="text-orange text-xs">before serial {f.serial_before}</span>}
+                {f.build_date_from && <span className="text-orange text-xs">built from {f.build_date_from}</span>}
                 {f.build_date_before && <span className="text-orange text-xs">built before {f.build_date_before}</span>}
                 {f.qty_per_unit && <span className="text-white/45 text-xs">qty {f.qty_per_unit}</span>}
                 {f.note && <span className="text-white/45 text-xs">{f.note}</span>}
