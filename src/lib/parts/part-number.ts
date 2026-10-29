@@ -11,10 +11,13 @@
 //      of the number. Strip it.                         37-11-9959 IS 11-9959
 //   4. A leading "20-" on a TK number is Carrier selling an aftermarket
 //      part for a TK application.              20-11-9959 relates to 11-9959
-//   5. An "8" on the front of the first segment means reman.
-//                                         845-1234 is the reman of 45-1234
+//   5. An "8" on the front of the first segment means reman - ONLY for alternators and
+//      starters (Oct 29). 845-1234 is the reman of 45-1234; 802-1147 (a compressor) and
+//      810-1428 (an engine) are ordinary TK numbers. Reported as remanOf, never decided here.
 //   6. A LOST LEADING ZERO IS DAMAGED DATA, NOT A DIFFERENT PART (Oct 28).
 //      The canonical form keeps the zero.          78-603 IS 78-0603
+//      Thermo King also has a NNN-NNNN form (Oct 29): 101-0447, 107-0349, 802-1147.
+//      Its second segment is padded the same way.  107-349 IS 107-0349
 //
 // Only rule 3 changes what a number IS. Rules 4 and 5 are RECOGNIZED and reported
 // (form + relatesTo) but the canonical number is left alone: whether a 20- part or a
@@ -27,14 +30,14 @@
 //
 // Rule 6, exactly as far as it goes and no further. A dashed number is padded only
 // where ONE leading zero restores the shape:
-//   TK       NN-NNN -> NN-0NNN      N-NNNN -> 0N-NNNN
+//   TK       NN-NNN -> NN-0NNN      N-NNNN -> 0N-NNNN      NNN-NNN -> NNN-0NNN
 //   Carrier  NN-NNNNN-N -> NN-NNNNN-0N      N-NNNNN-NN -> 0N-NNNNN-NN
 // Never padded, only reported in shortSegment: a Carrier MIDDLE segment that is short
 // (30-6143-01 could be 30-06143-01 or a different part with a digit missing anywhere),
 // and any number short in two places at once (8-603). A bare run of digits is never
 // padded - with no dashes there is no telling which segment lost the zero.
 //
-// Real numbers that fit no shape (306-221, 204-2436, 18-00091-105, 96-153-01K) keep
+// Real numbers that fit no shape (18-00091-105, 96-153-01K, 203-0799-2) keep
 // their own dash positions and are matched as written.
 
 export type PartNumberForm =
@@ -44,8 +47,8 @@ export type PartNumberForm =
   | 'carrier_37'               // rule 3, what was left is a Carrier number
   | 'other_37'                 // rule 3, what was left fits neither shape (stripped anyway)
   | 'carrier_for_thermo_king'  // rule 4
-  | 'thermo_king_reman'        // rule 5 on a TK number
-  | 'carrier_reman'            // rule 5 on a Carrier number
+  | 'carrier_reman'            // rule 5 on a Carrier number (an 8NN-NNNN TK number is form
+                               // thermo_king with remanOf set - see rule 5 below)
   | 'other'                    // none of the rules; matched exactly as typed
   | 'empty'
 
@@ -69,6 +72,13 @@ export interface ParsedPartNumber {
   padded: boolean
   /** Set when the number looks like a TK/Carrier number short a digit that rule 6 will NOT guess at. */
   shortSegment: string | null
+  /**
+   * Rule 5, TK: an 8NN-NNNN number is the reman of NN-NNNN ONLY when the part is an
+   * alternator or a starter (845-1234 is the reman of 45-1234). The number alone cannot
+   * say which, so this is the candidate and the caller decides from the part type. Any
+   * other part with this shape is an ordinary TK number (802-1147, 810-1428).
+   */
+  remanOf: string | null
 }
 
 /** Uppercase alphanumerics. Identical to public.normalize_part_number in SQL. */
@@ -82,6 +92,7 @@ const zero = (g: string) => `0${g}`
 function paddedShape(groups: string[]): Shape | null {
   const lens = groups.map(g => g.length).join(',')
   if (lens === '2,3') return { canonical: `${groups[0]}-${zero(groups[1])}`, maker: 'thermo_king', padded: true }
+  if (lens === '3,3') return { canonical: `${groups[0]}-${zero(groups[1])}`, maker: 'thermo_king', padded: true }   // 107-349 -> 107-0349
   if (lens === '1,4') return { canonical: `${zero(groups[0])}-${groups[1]}`, maker: 'thermo_king', padded: true }
   if (lens === '2,5,1') return { canonical: `${groups[0]}-${groups[1]}-${zero(groups[2])}`, maker: 'carrier', padded: true }
   if (lens === '1,5,2') return { canonical: `${zero(groups[0])}-${groups[1]}-${groups[2]}`, maker: 'carrier', padded: true }
@@ -107,6 +118,7 @@ function oemShape(groups: string[]): Shape | null {
   }
   const lens = groups.map(g => g.length).join(',')
   if (lens === '2,4') return { canonical: groups.join('-'), maker: 'thermo_king', padded: false }
+  if (lens === '3,4') return { canonical: groups.join('-'), maker: 'thermo_king', padded: false }   // 101-0447, 802-1147
   if (lens === '2,5,2') return { canonical: groups.join('-'), maker: 'carrier', padded: false }
   return paddedShape(groups)
 }
@@ -121,7 +133,7 @@ function oemShape(groups: string[]): Shape | null {
 export function parsePartNumber(input: string): ParsedPartNumber {
   const raw = String(input ?? '')
   const cleaned = raw.toUpperCase().trim().replace(/[\s._/\\-]+/g, '-').replace(/^-+|-+$/g, '')
-  const base = { input: raw, stripped37: false, relatesTo: null, suffix: null, maker: null, padded: false, shortSegment: null }
+  const base = { input: raw, stripped37: false, relatesTo: null, suffix: null, maker: null, padded: false, shortSegment: null, remanOf: null }
   if (!cleaned) return { ...base, canonical: '', key: '', form: 'empty' }
 
   // Digits in dash-separated groups, then optional trailing letters (with or without
@@ -146,7 +158,11 @@ export function parsePartNumber(input: string): ParsedPartNumber {
   // Rules 1 and 2 on the whole number come first. A number that already IS a TK or a
   // Carrier number is never stripped or reinterpreted - 37-1234 is TK 37-1234.
   const whole = oemShape(groups)
-  if (whole) return done(withSuffix(whole.canonical), whole.maker, { maker: whole.maker, padded: whole.padded })
+  if (whole) {
+    const [first, second] = whole.canonical.split('-')
+    const remanOf = whole.maker === 'thermo_king' && first.length === 3 && first.startsWith('8') ? `${first.slice(1)}-${second}` : null
+    return done(withSuffix(whole.canonical), whole.maker, { maker: whole.maker, padded: whole.padded, remanOf })
+  }
 
   const digits = groups.join('')
 
@@ -172,15 +188,17 @@ export function parsePartNumber(input: string): ParsedPartNumber {
     }
   }
 
-  // Rule 5: an 8 on the front of the first segment. 845-1234 / 8451234 for TK,
-  // 830-60143-01 / 8306014301 for Carrier.
+  // Rule 5: an 8 on the front of the first segment. Dashed TK (845-1234) is handled above
+  // as an ordinary NNN-NNNN number with remanOf set. Here: bare 8451234, and Carrier
+  // 830-60143-01 / 8306014301.
   const reman = groups.length > 1 && groups[0].length === 3 && groups[0].startsWith('8') ? [groups[0].slice(1), ...groups.slice(1)]
     : groups.length === 1 && digits.startsWith('8') && [7, 10].includes(digits.length) ? [digits.slice(1)]
     : null
   if (reman) {
     const oem = oemShape(reman)
     if (oem) {
-      return done(withSuffix(`8${oem.canonical}`), oem.maker === 'thermo_king' ? 'thermo_king_reman' : 'carrier_reman', { maker: oem.maker, relatesTo: oem.canonical, padded: oem.padded })
+      if (oem.maker === 'thermo_king') return done(withSuffix(`8${oem.canonical}`), 'thermo_king', { maker: 'thermo_king', remanOf: oem.canonical, padded: oem.padded })
+      return done(withSuffix(`8${oem.canonical}`), 'carrier_reman', { maker: oem.maker, relatesTo: oem.canonical, padded: oem.padded })
     }
   }
 

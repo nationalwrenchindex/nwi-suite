@@ -1,14 +1,15 @@
 Seed + reference load - every item that does not load as-is. Generated 2026-10-29.
 Store before: 985 parts, 2586 fitment, 7 supersessions, 18 crosses, 0 engines.
-Adds: 258 parts, 743 fitment, 28 supersessions, 227 crosses, 32 engines.
+Adds: 277 parts, 787 fitment, 28 supersessions, 227 crosses, 32 engines.
 Crosses by brand: Fleetguard 26, Baldwin 23, WIX 22, Hitachi 20, Dayco 20, NAPA 18, Delco Remy 17, Carquest 17, Luber-finer 15, NAPA Gold 15, Continental 13, Denso 12, Donaldson 9
-Seed fitment tallies: A fitment: group / prose model 53; A fitment: already in the store 162; A fitment: carried to the replacement 45; A fitment: repeated in the file 43; A fitment: break recovered into columns 154; A fitment: break with no serial or date 10; A fitment: note says superseded 19; A fitment: listed with and without a break 4; A fitment: would straddle a split 133
+Seed fitment tallies: A fitment: group / prose model 53; A fitment: already in the store 162; A fitment: carried to the replacement 45; A fitment: repeated in the file 43; A fitment: break recovered into columns 154; A fitment: break with no serial or date 10; A fitment: note says superseded 19; A fitment: listed with and without a break 4; A fitment: not a clean changeover 89
 Rule-7 markers stripped in Source B: {"U":29,"K":7,"R":4,"SV":11,"RB":2}
-Source B unit_family not loaded as fitment (family name or list - cannot answer a model search): 236
+Source B unit_family not loaded as fitment (family name or list - cannot answer a model search): 255
     25  family or not a known model: 05G
     14  family or not a known model: ESSN
     13  family or not a known model: APX
     9  family or not a known model: Supra
+    7  family or not a known model: Precedent
     5  family or not a known model: Vector
     5  family or not a known model: 05K
     5  list or group: Supra, D722
@@ -25,13 +26,16 @@ Source B unit_family not loaded as fitment (family name or list - cannot answer 
     3  family or not a known model: TM-16
     2  family or not a known model: V2203-DI-E2B
     2  list or group: 05G, 06D
+    2  family or not a known model: IntelligAIRE III
     2  list or group: D722, CT3-44
+    2  family or not a known model: SB
     2  list or group: D722, CT3-44-TV
     2  list or group: TM1000, XT
-    2  family or not a known model: Precedent
+    2  family or not a known model: SR2
     2  list or group: Solara, Ultra
     2  list or group: Vector 8500, Vector 8600
     2  family or not a known model: EVXV
+    2  list or group: T-series
     1  list or group: SB-III,Super II legacy
     1  list or group: X426, X430
     1  list or group: Supra S, Supra S10
@@ -47,6 +51,7 @@ Source B unit_family not loaded as fitment (family name or list - cannot answer 
     1  family or not a known model: tier 1
     1  list or group: 05G, 05K, 06D
     1  list or group: SB, Yanmar TK 4.82, 4.86
+    1  family or not a known model: SR4
     1  list or group: CT3-69-TV, D1105
     1  family or not a known model: 05K2
     1  family or not a known model: X2
@@ -60,12 +65,13 @@ Source B unit_family not loaded as fitment (family name or list - cannot answer 
     1  list or group: Supra 944, Supra 950, Supra 960, Supra 950MT
     1  list or group: Precedent S-series
     1  list or group: V-SERIES
+    1  family or not a known model: Yanmar
+    1  list or group: T-series, TK-376
     1  family or not a known model: TriPac
     1  list or group: X4, APX
     1  list or group: Supra 844,Supra 850
     1  list or group: MD-100,MD-200,MD-300,TS-200,TS-300,T-570R,T-600,T-600M,T-600R,T-680S,T-800,T-800M,T-800R,T-580R,T-680R,T-880R,T-880S
     1  list or group: 05K4, 05K2, 05G
-    1  family or not a known model: IntelligAIRE III
     1  family or not a known model: tier-2 Engine
     1  list or group: EVXV, ECXV
     1  list or group: Supra, D1105, CT3-69-TV
@@ -75,6 +81,7 @@ Source B unit_family not loaded as fitment (family name or list - cannot answer 
     1  list or group: 40X, 50X
     1  list or group: Supra S-9, Supra S-10
     1  list or group: V2203-DI, V2203-TV
+    1  list or group: T-series, TK-380
     1  list or group: 7300, 7500
     1  list or group: Supra 860, Supra 960
     1  list or group: SR2, SR3
@@ -83,13 +90,13 @@ Source B unit_family not loaded as fitment (family name or list - cannot answer 
     1  family or not a known model: ATC
     1  list or group: Supra, D722, CT3-44-TV
     1  list or group: X426LS, X430LS
-    1  family or not a known model: SB
     1  family or not a known model: SV4
     1  family or not a known model: X430
     1  list or group: D722, Z482
     1  list or group: Supra 950, Supra 960
     1  list or group: V-200, 300, 500, 220, 320, 520
     1  family or not a known model: 2.2-DI
+    1  family or not a known model: truck units
     1  list or group: 2100A, 2500
     1  list or group: Supra 644, Supra 650, Supra 722, Supra 744, Supra 750, Supra 760
     1  list or group: 2100, 7300
@@ -108,16 +115,20 @@ Source B unit_family not loaded as fitment (family name or list - cannot answer 
     1  family or not a known model: Ultima
     1  list or group: Supra,Maxima
     1  list or group: all units
+    1  list or group: SR2, SR3, SR4 HMIs
+    1  family or not a known model: Tripac
     1  list or group: TS-200,TS-300,TS-500
     1  family or not a known model: Three-Way Valve
     1  list or group: Yanmar 388, 395
     1  list or group: XTC, 2100A, 2500A
     1  list or group: 05G, Supra
     1  list or group: SMV, EVXV, ETV
+    1  family or not a known model: SR3
     1  list or group: Phoenix, Advantage
     1  list or group: T-1000,T-1000R,T-1000R Spectrum,T-1080R,T-1080S,T-1090 Spectrum
     1  list or group: RD-II,RD-II MAX,RD-II SR
     1  list or group: YANMAR 482, 486
+    1  family or not a known model: X430P
     1  list or group: 2100A, XTC
     1  list or group: SB-III,SB-200
     1  family or not a known model: GEN X 600X
@@ -131,7 +142,6 @@ Source B unit_family not loaded as fitment (family name or list - cannot answer 
     1  list or group: D1105, CT3-69-TV
     1  list or group: 05K, 05G, 06D
     1  list or group: Vector 1800,Vector 6500,Vector 6600
-    1  list or group: T-series
     1  family or not a known model: mP IV
     1  list or group: Supra, CT3-44TV, D722
     1  family or not a known model: NDX
@@ -145,6 +155,11 @@ Part type disagreements (store type kept, not changed): 7
     11-7264      store "Filter - fuel/water separator"  seed "Filter - water separator"
     11-9970      store "Fuel filter (primary)"  seed "Filter - fuel"
 
+== Store repairs (3)
+  203-799 -> 203-0799 (Thermo King) - rule 6 on the TK NNN-NNNN form
+  306-221 -> 306-0221 (Thermo King) - rule 6 on the TK NNN-NNNN form
+  107-349 -> 107-0349 (Thermo King) - rule 6 on the TK NNN-NNNN form
+
 == A supersessions (8)
   HELD  45-2323 -> 45-2324 [unconfirmed] - your decision (held Oct 28)
   RESOLVED  25-39476-00SV -> 25-39476-00 [unconfirmed] - SV is the service marker on 25-39476-00 itself; one part, nothing to link
@@ -155,7 +170,7 @@ Part type disagreements (store type kept, not changed): 7
   DUPLICATE  30-01121-00 -> 30-60143-01 [confirmed] - already in the store
   HELD  11-9098 -> 11-9341 [confirmed] - your decision (held Oct 28)
 
-== A fitment (446)
+== A fitment (313)
   HELD  45-2326: standard TriPac auxiliary power units - group or prose model string - your decision
   LOADED  45-1718: TK270 -> 45-2326 - carried from superseded 45-1718; note "Carried from superseded 45-1718."
   HELD  45-1718: T-500R to T-1200R - group or prose model string - your decision
@@ -469,139 +484,6 @@ Part type disagreements (store type kept, not changed): 7
   HELD  45-2323: TK486 - the file lists it both with and without a break (as given)
   HELD  45-2324: TK486V - the file lists it both with and without a break (as given)
   HELD  45-2324: TK486V - the file lists it both with and without a break (as given)
-  HELD  11-8903: LND-II (fuel-pre) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-8903: LND (fuel-pre) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-8903: URD-III (fuel-pre) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-8903: URD (fuel-pre) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-8903: SUMD-II (fuel-pre) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-8903: UMD-II (fuel-pre) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-8903: UMD (fuel-pre) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-6180: LND-II (fuel-pre, break from note: built before 1992-01-01) -a split row beside an unconditional row for the same model and type on another part (2); loading it would straddle the split
-  HELD  11-6180: LND (fuel-pre, break from note: built before 1992-01-01) -a split row beside an unconditional row for the same model and type on another part (2); loading it would straddle the split
-  HELD  11-6180: URD-III (fuel-pre, break from note: built before 1992-01-01) -a split row beside an unconditional row for the same model and type on another part (2); loading it would straddle the split
-  HELD  11-6180: URD (fuel-pre, break from note: built before 1992-01-01) -a split row beside an unconditional row for the same model and type on another part (2); loading it would straddle the split
-  HELD  11-6180: SUMD-II (fuel-pre, break from note: built before 1992-01-01) -a split row beside an unconditional row for the same model and type on another part (2); loading it would straddle the split
-  HELD  11-6180: UMD-II (fuel-pre, break from note: built before 1992-01-01) -a split row beside an unconditional row for the same model and type on another part (2); loading it would straddle the split
-  HELD  11-6180: UMD (fuel-pre, break from note: built before 1992-01-01) -a split row beside an unconditional row for the same model and type on another part (2); loading it would straddle the split
-  HELD  11-4880: LND-II (fuel-pre) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-4880: LND (fuel-pre) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-4880: URD-III (fuel-pre) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-4880: URD (fuel-pre) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-4880: SUMD-II (fuel-pre) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-4880: UMD-II (fuel-pre) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-4880: UMD (fuel-pre) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9321: T-1080S (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9321: T-1080R (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9321: T-880S (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9321: T-880R (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9321: T-680S (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9321: T-680R (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9321: T-580R (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9341: T-1080S (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9341: T-1080R (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9341: T-880S (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9341: T-880R (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9341: T-680S (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9341: T-680R (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9341: T-580R (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9321: T-1000 TSA (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9321: T-800 (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9321: T-600 (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9321: T-1200R (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9321: T-1000R (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9321: T-800R (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9321: T-600R (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9341: T-1000 TSA (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9341: T-800 (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9341: T-600 (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9341: T-1200R (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9341: T-1000R (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9341: T-800R (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9341: T-600R (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9321: T-570R (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9321: T-560R (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9321: T-500R (fuel, break from note: built before 2020-10-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9341: T-570R (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9341: T-560R (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9341: T-500R (fuel) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9321: MD-MT (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9321: RD-MT (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9321: RDB-II (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9321: Super TD-II (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9321: TD-II (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9321: RD-II (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9321: KD-II (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9321: MD-II (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-8003: MD-MT (fuel) -an unconditional row beside a split for the same model and type on another part (3); loading it would straddle the split
-  HELD  11-8003: RD-MT (fuel) -an unconditional row beside a split for the same model and type on another part (3); loading it would straddle the split
-  HELD  11-8003: RDB-II (fuel) -an unconditional row beside a split for the same model and type on another part (3); loading it would straddle the split
-  HELD  11-8003: Super TD-II (fuel) -an unconditional row beside a split for the same model and type on another part (3); loading it would straddle the split
-  HELD  11-8003: TD-II (fuel) -an unconditional row beside a split for the same model and type on another part (3); loading it would straddle the split
-  HELD  11-8003: RD-II (fuel) -an unconditional row beside a split for the same model and type on another part (3); loading it would straddle the split
-  HELD  11-8003: KD-II (fuel) -an unconditional row beside a split for the same model and type on another part (3); loading it would straddle the split
-  HELD  11-8003: MD-II (fuel) -an unconditional row beside a split for the same model and type on another part (3); loading it would straddle the split
-  HELD  11-9341: MD-MT (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9341: RD-MT (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9341: RDB-II (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9341: Super TD-II (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9341: TD-II (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9341: RD-II (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9341: KD-II (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9341: MD-II (fuel, break from note: built from 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9098: MD-MT (fuel, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9098: RD-MT (fuel, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9098: RDB-II (fuel, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9098: Super TD-II (fuel, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9098: TD-II (fuel, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9098: RD-II (fuel, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9098: KD-II (fuel, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9098: MD-II (fuel, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9300: Spectrum SL (air) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9300: SL-400e (air) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9300: SL-200e (air) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9300: SL-100e (air) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9300: SL TCI (air) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9300: SL-400 (air) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9300: SL-300 (air) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9300: SL-200 (air) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9300: SL-100 (air) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7400: Spectrum SL (air, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7400: SL-400e (air, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7400: SL-200e (air, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7400: SL-100e (air, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7400: SL TCI (air, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7400: SL-400 (air, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7400: SL-300 (air, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7400: SL-200 (air, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7400: SL-100 (air, break from note: built before 2001-01-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7400: Spectrum DE (air, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7400: Spectrum SB (air, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7400: SB Classic (air, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7400: SB-400 (air, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7400: SB-310 (air, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7400: SB-300 (air, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7400: SB-210 (air, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7400: SB-200 (air, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7400: SB-190 (air, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7400: SB-110 (air, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7400: SB-100 (air, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9300: Spectrum DE (air) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9300: SB Classic (air) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7382: Spectrum DE (oil, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7382: Spectrum SB (oil, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7382: SB Classic (oil, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7382: SB-400 (oil, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7382: SB-310 (oil, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7382: SB-300 (oil, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7382: SB-210 (oil, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7382: SB-200 (oil, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7382: SB-190 (oil, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7382: SB-110 (oil, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-7382: SB-100 (oil, break from note: serial before L32014) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9182: Spectrum DE (oil) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  11-9182: SB Classic (oil) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  45-2323: SL-e (Starter) -an unconditional row beside a split for the same model and type on another part (1); loading it would straddle the split
-  HELD  45-2324: SL-e (Starter, break from note: built from 2006-08-01) -a split row beside an unconditional row for the same model and type on another part (1); loading it would straddle the split
 
 == A crosses (75)
   REPAIRED  45-2326 Denso 128000-0710 [no tier] - qualified row
@@ -680,7 +562,7 @@ Part type disagreements (store type kept, not changed): 7
   REPAIRED  11-5692 WIX 46270 [unconfirmed] - reassembled from 2 split rows
   NO CROSS  11-9955 Baldwin "CONFLICT: none per Baldwin Form 677 ('---') vs RS5387 per Allsize - treat as none" - the source says there is none; nothing to load
 
-== B numbers (113)
+== B numbers (92)
   2530053 / 25-30053 (Heavy-Duty Full-Flow Spin-On Engine Oil Lube (Standard))
       2530053: tried parsed "2530053" as other; failed - fits no rule
       25-30053 is the same number as 2530053
@@ -707,8 +589,6 @@ Part type disagreements (store type kept, not changed): 7
       91-00312-02-U -> 91-00312-02, condition used (U): matched to the store
   CA63AA051 (Plug, pipe thread, high pressure, compressor head)
       CA63AA051: tried parsed "CA63AA051" as other; failed - fits no rule
-  204-1927 (CAN diagnostic bus cable kit)
-      204-1927: tried parsed "204-1927" as other; failed - fits no rule
   119300 / 129300 (Primary Air Filter)
       119300 -> 11-9300: matched to the store
       129300: 12-9300 is in no source; it reads as 11-9300 with 12 for 11 (11-9300 IS in the store). HELD - a corrupted number is not loaded
@@ -720,16 +600,10 @@ Part type disagreements (store type kept, not changed): 7
       12-55438-22-U -> 12-55438-22, condition used (U): matched to the store
   96-101-24K (Fuel filter, APU)
       96-101-24K: tried stripped marker K, parsed "96-101-24" as other (short: Carrier middle segment has 3 digits, not 5 - not padded); failed - fits no rule
-  204-1999 (Tool, oil drain to quick connect)
-      204-1999: tried parsed "204-1999" as other; failed - fits no rule
-  840-1927 (HMI)
-      840-1927: reman of 40-1927 (rule 5); base is NOT in the store. HELD - reman and OEM-new are related, never merged, and there is no table to link two parts (it needs one: part_relation (part_id, related_part_id, relation 'reman_of' / 'aftermarket_for'))
   20-12-9101 (Engine Oil Spin-on)
       20-12-9101: Carrier aftermarket for TK 12-9101 (rule 4); 12-9101 is NOT in the store (11-9101 is - see the 11/12 note). HELD - linking needs the part_relation table
   25-33012-00-U (Injection pump assembly)
       25-33012-00-U -> 25-33012-00, condition used (U): matched to the store
-  810-1428 (Engine, TK486V Tier 2)
-      810-1428: reman of 10-1428 (rule 5); base is NOT in the store. HELD - reman and OEM-new are related, never merged, and there is no table to link two parts (it needs one: part_relation (part_id, related_part_id, relation 'reman_of' / 'aftermarket_for'))
   18-60000-05-R (Compressor, rebuilt)
       18-60000-05-R -> 18-60000-05, condition rebuilt (R): matched to the store
   54-00691-20-U (Evaporator fan motor, 460V AC)
@@ -756,10 +630,6 @@ Part type disagreements (store type kept, not changed): 7
       05G-37CFM-KIT1: tried parsed "05G-37CFM-KIT1" as other; failed - fits no rule
   54-00136-05-R (Generator, 5KW, multitemp)
       54-00136-05-R -> 54-00136-05, condition rebuilt (R): matched to the store
-  204-0952 (Tool, rear engine seal installer)
-      204-0952: tried parsed "204-0952" as other; failed - fits no rule
-  810-1389 (Engine assembly, 3TNV76)
-      810-1389: reman of 10-1389 (rule 5); base is NOT in the store. HELD - reman and OEM-new are related, never merged, and there is no table to link two parts (it needs one: part_relation (part_id, related_part_id, relation 'reman_of' / 'aftermarket_for'))
   54-60017-02-U (Motor, AC, 240V 4.4Kw 60Hz, standby)
       54-60017-02-U -> 54-60017-02, condition used (U): NEW part
   25-33006-00-U (Exhaust manifold)
@@ -770,17 +640,9 @@ Part type disagreements (store type kept, not changed): 7
       3355-BUMPER: tried parsed "3355-BUMPER" as other; failed - suffix BUMPER is not a rule-7 marker
   APX-KEYPAD (Keypad assembly)
       APX-KEYPAD: tried parsed "APX-KEYPAD" as other; failed - fits no rule
-  845-2570 (SR2 PC board controller)
-      845-2570: reman of 45-2570 (rule 5); base is NOT in the store. HELD - reman and OEM-new are related, never merged, and there is no table to link two parts (it needs one: part_relation (part_id, related_part_id, relation 'reman_of' / 'aftermarket_for'))
-  104-0828 (Generator)
-      104-0828: tried parsed "104-0828" as other; failed - fits no rule
   11-3726 / 129341 (Secondary Fuel Filter)
       11-3726: 11-3726 fits the rule, but the seed records it as an OLD number ("11-9098: replaced 11-3726 / 11-3693") with no supersession row. HELD - loading it would show an old number as current
       129341: 12-9341 is in no source; it reads as 11-9341 with 12 for 11 (11-9341 IS in the store). HELD - a corrupted number is not loaded
-  101-0423 (Engine assembly, 3TNV80)
-      101-0423: tried parsed "101-0423" as other; failed - fits no rule
-  845-2571 (SR2 PC relay board)
-      845-2571: reman of 45-2571 (rule 5); base is NOT in the store. HELD - reman and OEM-new are related, never merged, and there is no table to link two parts (it needs one: part_relation (part_id, related_part_id, relation 'reman_of' / 'aftermarket_for'))
   25-34367-00-U (Injection pump assembly)
       25-34367-00-U -> 25-34367-00, condition used (U): matched to the store
   81-04232-00sv (Heat exchanger)
@@ -803,14 +665,10 @@ Part type disagreements (store type kept, not changed): 7
       251830010100: tried parsed "251830010100" as other; failed - fits no rule
   91-01146-87-U (Logic board, microprocessor)
       91-01146-87-U -> 91-01146-87, condition used (U): matched to the store
-  104-0868 (Condenser fan motor)
-      104-0868: tried parsed "104-0868" as other; failed - fits no rule
   25-37385-TL (Installation tool, crankshaft rear sleeve)
       25-37385-TL: tried parsed "25-37385-TL" as other; failed - suffix TL is not a rule-7 marker
   12-00307-00-R (Keypad/display)
       12-00307-00-R -> 12-00307-00, condition rebuilt (R): matched to the store
-  101-0447 (Engine, TK486V25L1)
-      101-0447: tried parsed "101-0447" as other; failed - fits no rule
   86-60180-00-U (Support compressor assembly bracket)
       86-60180-00-U -> 86-60180-00, condition used (U): matched to the store
   TM16-8PK (Compressor, 12v 123mm ear mount)
@@ -819,14 +677,10 @@ Part type disagreements (store type kept, not changed): 7
       20-113693: Carrier aftermarket for TK 11-3693 (rule 4); 11-3693 is NOT in the store. HELD - linking needs the part_relation table
   25-39335-00-K (Exhaust manifold kit)
       25-39335-00-K -> 25-39335-00, condition kit (K): matched to the store
-  102-0951 (Compressor, scroll)
-      102-0951: tried parsed "102-0951" as other; failed - fits no rule
   12-00673-52-U (SMV module)
       12-00673-52-U -> 12-00673-52, condition used (U): matched to the store
   48-00327-01-U (Sheave assembly)
       48-00327-01-U -> 48-00327-01, condition used (U): matched to the store
-  203-0799 (EGR cleaning kit)
-      203-0799: tried parsed "203-0799" as other; failed - fits no rule
   81-02736-00SV (Heat exchanger economizer assembly)
       81-02736-00SV -> 81-02736-00, condition service (SV): matched to the store
   10-01176-00-U (Relay, 30A, FLR, 1EMR, 2EMR)
@@ -845,8 +699,6 @@ Part type disagreements (store type kept, not changed): 7
   11-9683 / 119683 (Engine Thermostat 160F)
       11-9683 -> 11-9683: NEW part
       119683 is the same number as 11-9683
-  101-0421 (Engine assembly, 3TNV74)
-      101-0421: tried parsed "101-0421" as other; failed - fits no rule
   50-00229-00SV (Fanshaft)
       50-00229-00SV -> 50-00229-00, condition service (SV): NEW part
   54-00639-114 (Evaporator fan motor, 12V)
@@ -858,25 +710,17 @@ Part type disagreements (store type kept, not changed): 7
       96-101-33K: tried stripped marker K, parsed "96-101-33" as other (short: Carrier middle segment has 3 digits, not 5 - not padded); failed - fits no rule
   22-50099-01A (Pin terminal, snap in)
       22-50099-01A: tried parsed "22-50099-01A" as carrier; failed - suffix A is not a rule-7 marker
-  845-2372 (HMI controller / LCD screen)
-      845-2372: reman of 45-2372 (rule 5); base is NOT in the store. HELD - reman and OEM-new are related, never merged, and there is no table to link two parts (it needs one: part_relation (part_id, related_part_id, relation 'reman_of' / 'aftermarket_for'))
-  845-2648 (Control board)
-      845-2648: reman of 45-2648 (rule 5); base is NOT in the store. HELD - reman and OEM-new are related, never merged, and there is no table to link two parts (it needs one: part_relation (part_id, related_part_id, relation 'reman_of' / 'aftermarket_for'))
   12-00584-02-U (ECM electronic control module)
       12-00584-02-U -> 12-00584-02, condition used (U): matched to the store
   18-00091-13-U (Compressor, 37CFM twin port)
       18-00091-13-U -> 18-00091-13, condition used (U): matched to the store
   07-00375-00SV (Drive/tester SMV EVXV ETV)
       07-00375-00SV -> 07-00375-00, condition service (SV): NEW part
-  845-2721 (SR3 PC board microprocessor)
-      845-2721: reman of 45-2721 (rule 5); base is NOT in the store. HELD - reman and OEM-new are related, never merged, and there is no table to link two parts (it needs one: part_relation (part_id, related_part_id, relation 'reman_of' / 'aftermarket_for'))
   50-01150-01SV (Fanshaft)
       50-01150-01SV -> 50-01150-01, condition service (SV): NEW part
   25-39236-00 / -01 (Engine Thermostat 180F (X2/X4))
       25-39236-00 -> 25-39236-00: NEW part
       25-39236-01 -> 25-39236-01: matched to the store
-  802-1147 (Compressor)
-      802-1147: reman of 02-1147 (rule 5); base is NOT in the store. HELD - reman and OEM-new are related, never merged, and there is no table to link two parts (it needs one: part_relation (part_id, related_part_id, relation 'reman_of' / 'aftermarket_for'))
   96-969-03K (APU Alternator Belt)
       96-969-03K: tried stripped marker K, parsed "96-969-03" as other (short: Carrier middle segment has 3 digits, not 5 - not padded); failed - fits no rule
   14-00232-25SV (TXV expansion valve)
@@ -897,14 +741,10 @@ Part type disagreements (store type kept, not changed): 7
       12-9342: 12-9342 is in no source; it reads as 11-9342 with 12 for 11 (11-9342 IS in the store). HELD - a corrupted number is not loaded
   05G-41CFM-KIT1 (Compressor rebuild kit, basic)
       05G-41CFM-KIT1: tried parsed "05G-41CFM-KIT1" as other; failed - fits no rule
-  107-0396 (Clutch assembly)
-      107-0396: tried parsed "107-0396" as other; failed - fits no rule
   48-00306-00-U (Adapter, blower wheel)
       48-00306-00-U -> 48-00306-00, condition used (U): matched to the store
   26-60002-05-U (Engine)
       26-60002-05-U -> 26-60002-05, condition used (U): matched to the store
-  107-0349 (Clutch)
-      107-0349: tried parsed "107-0349" as other; failed - fits no rule
   11-7382 / 127382 (Dual-Flow Lube)
       11-7382 -> 11-7382: matched to the store
       127382: 12-7382 is in no source; it reads as 11-7382 with 12 for 11 (11-7382 IS in the store). HELD - a corrupted number is not loaded
@@ -931,3 +771,43 @@ Part type disagreements (store type kept, not changed): 7
   CARRIED  11-8047 / 12-9342 Donaldson P559125 -> 11-9342 (11-8047 is superseded by 11-9342)
   CARRIED  11-8047 / 12-9342 Luber-finer LFF9342SC -> 11-9342 (11-8047 is superseded by 11-9342)
   CARRIED  11-8047 / 12-9342 NAPA Gold 3962 -> 11-9342 (11-8047 is superseded by 11-9342)
+
+== Changeovers held (33)
+  Thermo King SL-e (Starter): 45-2324 build_date_from=2006-08-01; 45-2323 no break - not a clean changeover (2 parts; 45-2324 is in a supersession you are holding; 45-2323 is in a supersession you are holding)
+  Thermo King MD-II (fuel): 11-9098 build_date_before=2001-01-01; 11-9341 build_date_from=2001-01-01; 11-8003 no break; 11-9321 build_date_from=2001-01-01 - not a clean changeover (4 parts, 3 dated; 11-9098 is in a supersession you are holding; 11-9341 has a part-type disagreement (store "Filter - fuel/water separator" seed "Filter - fuel"); 11-9321 has a part-type disagreement (store "Filter - fuel" seed "Filter - oil (engine)"))
+  Thermo King KD-II (fuel): 11-9098 build_date_before=2001-01-01; 11-9341 build_date_from=2001-01-01; 11-8003 no break; 11-9321 build_date_from=2001-01-01 - not a clean changeover (4 parts, 3 dated; 11-9098 is in a supersession you are holding; 11-9341 has a part-type disagreement (store "Filter - fuel/water separator" seed "Filter - fuel"); 11-9321 has a part-type disagreement (store "Filter - fuel" seed "Filter - oil (engine)"))
+  Thermo King RD-II (fuel): 11-9098 build_date_before=2001-01-01; 11-9341 build_date_from=2001-01-01; 11-8003 no break; 11-9321 build_date_from=2001-01-01 - not a clean changeover (4 parts, 3 dated; 11-9098 is in a supersession you are holding; 11-9341 has a part-type disagreement (store "Filter - fuel/water separator" seed "Filter - fuel"); 11-9321 has a part-type disagreement (store "Filter - fuel" seed "Filter - oil (engine)"))
+  Thermo King TD-II (fuel): 11-9098 build_date_before=2001-01-01; 11-9341 build_date_from=2001-01-01; 11-8003 no break; 11-9321 build_date_from=2001-01-01 - not a clean changeover (4 parts, 3 dated; 11-9098 is in a supersession you are holding; 11-9341 has a part-type disagreement (store "Filter - fuel/water separator" seed "Filter - fuel"); 11-9321 has a part-type disagreement (store "Filter - fuel" seed "Filter - oil (engine)"))
+  Thermo King Super TD-II (fuel): 11-9098 build_date_before=2001-01-01; 11-9341 build_date_from=2001-01-01; 11-8003 no break; 11-9321 build_date_from=2001-01-01 - not a clean changeover (4 parts, 3 dated; 11-9098 is in a supersession you are holding; 11-9341 has a part-type disagreement (store "Filter - fuel/water separator" seed "Filter - fuel"); 11-9321 has a part-type disagreement (store "Filter - fuel" seed "Filter - oil (engine)"))
+  Thermo King RDB-II (fuel): 11-9098 build_date_before=2001-01-01; 11-9341 build_date_from=2001-01-01; 11-8003 no break; 11-9321 build_date_from=2001-01-01 - not a clean changeover (4 parts, 3 dated; 11-9098 is in a supersession you are holding; 11-9341 has a part-type disagreement (store "Filter - fuel/water separator" seed "Filter - fuel"); 11-9321 has a part-type disagreement (store "Filter - fuel" seed "Filter - oil (engine)"))
+  Thermo King RD-MT (fuel): 11-9098 build_date_before=2001-01-01; 11-9341 build_date_from=2001-01-01; 11-8003 no break; 11-9321 build_date_from=2001-01-01 - not a clean changeover (4 parts, 3 dated; 11-9098 is in a supersession you are holding; 11-9341 has a part-type disagreement (store "Filter - fuel/water separator" seed "Filter - fuel"); 11-9321 has a part-type disagreement (store "Filter - fuel" seed "Filter - oil (engine)"))
+  Thermo King MD-MT (fuel): 11-9098 build_date_before=2001-01-01; 11-9341 build_date_from=2001-01-01; 11-8003 no break; 11-9321 build_date_from=2001-01-01 - not a clean changeover (4 parts, 3 dated; 11-9098 is in a supersession you are holding; 11-9341 has a part-type disagreement (store "Filter - fuel/water separator" seed "Filter - fuel"); 11-9321 has a part-type disagreement (store "Filter - fuel" seed "Filter - oil (engine)"))
+  Thermo King T-500R (fuel): 11-9341 no break; 11-9321 build_date_before=2020-10-01 - not a clean changeover (2 parts; 11-9341 has a part-type disagreement (store "Filter - fuel/water separator" seed "Filter - fuel"); 11-9321 has a part-type disagreement (store "Filter - fuel" seed "Filter - oil (engine)"))
+  Thermo King T-560R (fuel): 11-9341 no break; 11-9321 build_date_before=2020-10-01 - not a clean changeover (2 parts; 11-9341 has a part-type disagreement (store "Filter - fuel/water separator" seed "Filter - fuel"); 11-9321 has a part-type disagreement (store "Filter - fuel" seed "Filter - oil (engine)"))
+  Thermo King T-570R (fuel): 11-9341 no break; 11-9321 build_date_before=2020-10-01 - not a clean changeover (2 parts; 11-9341 has a part-type disagreement (store "Filter - fuel/water separator" seed "Filter - fuel"); 11-9321 has a part-type disagreement (store "Filter - fuel" seed "Filter - oil (engine)"))
+  Thermo King T-600R (fuel): 11-9341 no break; 11-9321 build_date_before=2020-10-01 - not a clean changeover (2 parts; 11-9341 has a part-type disagreement (store "Filter - fuel/water separator" seed "Filter - fuel"); 11-9321 has a part-type disagreement (store "Filter - fuel" seed "Filter - oil (engine)"))
+  Thermo King T-800R (fuel): 11-9341 no break; 11-9321 build_date_before=2020-10-01 - not a clean changeover (2 parts; 11-9341 has a part-type disagreement (store "Filter - fuel/water separator" seed "Filter - fuel"); 11-9321 has a part-type disagreement (store "Filter - fuel" seed "Filter - oil (engine)"))
+  Thermo King T-1000R (fuel): 11-9341 no break; 11-9321 build_date_before=2020-10-01 - not a clean changeover (2 parts; 11-9341 has a part-type disagreement (store "Filter - fuel/water separator" seed "Filter - fuel"); 11-9321 has a part-type disagreement (store "Filter - fuel" seed "Filter - oil (engine)"))
+  Thermo King T-1200R (fuel): 11-9341 no break; 11-9321 build_date_before=2020-10-01 - not a clean changeover (2 parts; 11-9341 has a part-type disagreement (store "Filter - fuel/water separator" seed "Filter - fuel"); 11-9321 has a part-type disagreement (store "Filter - fuel" seed "Filter - oil (engine)"))
+  Thermo King T-600 (fuel): 11-9341 no break; 11-9321 build_date_before=2020-10-01 - not a clean changeover (2 parts; 11-9341 has a part-type disagreement (store "Filter - fuel/water separator" seed "Filter - fuel"); 11-9321 has a part-type disagreement (store "Filter - fuel" seed "Filter - oil (engine)"))
+  Thermo King T-800 (fuel): 11-9341 no break; 11-9321 build_date_before=2020-10-01 - not a clean changeover (2 parts; 11-9341 has a part-type disagreement (store "Filter - fuel/water separator" seed "Filter - fuel"); 11-9321 has a part-type disagreement (store "Filter - fuel" seed "Filter - oil (engine)"))
+  Thermo King T-1000 TSA (fuel): 11-9341 no break; 11-9321 build_date_before=2020-10-01 - not a clean changeover (2 parts; 11-9341 has a part-type disagreement (store "Filter - fuel/water separator" seed "Filter - fuel"); 11-9321 has a part-type disagreement (store "Filter - fuel" seed "Filter - oil (engine)"))
+  Thermo King T-580R (fuel): 11-9341 no break; 11-9321 build_date_before=2020-10-01 - not a clean changeover (2 parts; 11-9341 has a part-type disagreement (store "Filter - fuel/water separator" seed "Filter - fuel"); 11-9321 has a part-type disagreement (store "Filter - fuel" seed "Filter - oil (engine)"))
+  Thermo King T-680R (fuel): 11-9341 no break; 11-9321 build_date_before=2020-10-01 - not a clean changeover (2 parts; 11-9341 has a part-type disagreement (store "Filter - fuel/water separator" seed "Filter - fuel"); 11-9321 has a part-type disagreement (store "Filter - fuel" seed "Filter - oil (engine)"))
+  Thermo King T-680S (fuel): 11-9341 no break; 11-9321 build_date_before=2020-10-01 - not a clean changeover (2 parts; 11-9341 has a part-type disagreement (store "Filter - fuel/water separator" seed "Filter - fuel"); 11-9321 has a part-type disagreement (store "Filter - fuel" seed "Filter - oil (engine)"))
+  Thermo King T-880R (fuel): 11-9341 no break; 11-9321 build_date_before=2020-10-01 - not a clean changeover (2 parts; 11-9341 has a part-type disagreement (store "Filter - fuel/water separator" seed "Filter - fuel"); 11-9321 has a part-type disagreement (store "Filter - fuel" seed "Filter - oil (engine)"))
+  Thermo King T-880S (fuel): 11-9341 no break; 11-9321 build_date_before=2020-10-01 - not a clean changeover (2 parts; 11-9341 has a part-type disagreement (store "Filter - fuel/water separator" seed "Filter - fuel"); 11-9321 has a part-type disagreement (store "Filter - fuel" seed "Filter - oil (engine)"))
+  Thermo King T-1080R (fuel): 11-9341 no break; 11-9321 build_date_before=2020-10-01 - not a clean changeover (2 parts; 11-9341 has a part-type disagreement (store "Filter - fuel/water separator" seed "Filter - fuel"); 11-9321 has a part-type disagreement (store "Filter - fuel" seed "Filter - oil (engine)"))
+  Thermo King T-1080S (fuel): 11-9341 no break; 11-9321 build_date_before=2020-10-01 - not a clean changeover (2 parts; 11-9341 has a part-type disagreement (store "Filter - fuel/water separator" seed "Filter - fuel"); 11-9321 has a part-type disagreement (store "Filter - fuel" seed "Filter - oil (engine)"))
+  Thermo King UMD (fuel-pre): 11-4880 no break; 11-6180 build_date_before=1992-01-01; 11-8903 no break - not a clean changeover (3 parts)
+  Thermo King UMD-II (fuel-pre): 11-4880 no break; 11-6180 build_date_before=1992-01-01; 11-8903 no break - not a clean changeover (3 parts)
+  Thermo King SUMD-II (fuel-pre): 11-4880 no break; 11-6180 build_date_before=1992-01-01; 11-8903 no break - not a clean changeover (3 parts)
+  Thermo King URD (fuel-pre): 11-4880 no break; 11-6180 build_date_before=1992-01-01; 11-8903 no break - not a clean changeover (3 parts)
+  Thermo King URD-III (fuel-pre): 11-4880 no break; 11-6180 build_date_before=1992-01-01; 11-8903 no break - not a clean changeover (3 parts)
+  Thermo King LND (fuel-pre): 11-4880 no break; 11-6180 build_date_before=1992-01-01; 11-8903 no break - not a clean changeover (3 parts)
+  Thermo King LND-II (fuel-pre): 11-4880 no break; 11-6180 build_date_before=1992-01-01; 11-8903 no break - not a clean changeover (3 parts)
+
+== Changeovers dated (3)
+  11-7400 serial before L32014  ->  11-9300 serial from L32014   on 11 model(s): SB-110, SB-100, SB-300, SB-200, SB-190, Spectrum SB, SB-210, SB-310, SB-400, SB Classic, Spectrum DE   [9 existing store row(s) get the break]
+  11-7382 serial before L32014  ->  11-9182 serial from L32014   on 11 model(s): SB-310, SB-100, SB-200, SB-300, Spectrum SB, SB-110, SB-400, SB-190, SB-210, SB Classic, Spectrum DE   [9 existing store row(s) get the break]
+  11-7400 build date before 2001-01-01  ->  11-9300 build date from 2001-01-01   on 9 model(s): SL-100, SL-200, SL-300, SL-400, SL TCI, SL-100e, SL-200e, SL-400e, Spectrum SL

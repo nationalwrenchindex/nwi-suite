@@ -7,13 +7,18 @@
 -- COMMIT to keep it. Any check that fails raises an error and nothing is applied.
 --
 -- store before: 985 parts, 2586 fitment, 7 supersessions, 18 crosses, 0 engines
--- adds: 258 parts (A 28, B 230), 743 fitment (A 715, B 28), 28 supersessions, 227 crosses (A 154, B 73), 32 engines
+-- adds: 277 parts (A 28, B 249), 787 fitment (A 759, B 28), 28 supersessions, 227 crosses (A 154, B 73), 32 engines
 -- crosses by brand: Fleetguard 26, Baldwin 23, WIX 22, Hitachi 20, Dayco 20, NAPA 18, Delco Remy 17, Carquest 17, Luber-finer 15, NAPA Gold 15, Continental 13, Denso 12, Donaldson 9
 --
 -- Trust: verified = false on every row. Source A carries its own confidence; fitment
 -- carried from a superseded number is 'derived'; Source B carries none.
 -- Not carried: source notes, source_url, unit_series / unit_group / engine_family.
--- Store parts are never edited (part types included).
+-- Store rows touched, and only these: 3 part numbers given their zero back (step 0a) and
+-- 18 fitment rows given the other side of a changeover break (step 0b). No part type changes.
+-- Changeovers dated:
+--   11-7400 serial before L32014  ->  11-9300 serial from L32014  (11 models)
+--   11-7382 serial before L32014  ->  11-9182 serial from L32014  (11 models)
+--   11-7400 build date before 2001-01-01  ->  11-9300 build date from 2001-01-01  (9 models)
 
 BEGIN;
 
@@ -21,6 +26,46 @@ CREATE TEMP TABLE _ld_before ON COMMIT DROP AS
 SELECT (SELECT count(*) FROM public.parts) AS parts, (SELECT count(*) FROM public.part_fitment) AS part_fitment,
        (SELECT count(*) FROM public.part_supersession) AS part_supersession, (SELECT count(*) FROM public.part_cross_reference) AS part_cross_reference,
        (SELECT count(*) FROM public.engines) AS engines;
+
+-- 0a. Repair 3 store number(s) rule 6 now writes with their zero (TK NNN-NNN -> NNN-0NNN).
+-- 0b. Give 18 existing store fitment row(s) the other side of a changeover break.
+--     Each row is named by id and must still have no break, or nothing is applied.
+DO $$
+DECLARE n INTEGER;
+BEGIN
+  IF (SELECT count(*) FROM public.parts WHERE (id, part_number) IN (('227096aa-a1d4-4490-8cdf-01628c08777c'::uuid, '203-799'), ('a1ca46e7-35d6-4d13-8e58-be5477595998'::uuid, '306-221'), ('a2973953-d85f-4139-ab85-a4b0f75315ea'::uuid, '107-349'))) <> 3 THEN
+    RAISE EXCEPTION 'repair: a store number is not what this file was built against'; END IF;
+  UPDATE public.parts SET part_number = '203-0799', updated_at = now() WHERE id = '227096aa-a1d4-4490-8cdf-01628c08777c' AND part_number = '203-799';
+  UPDATE public.parts SET part_number = '306-0221', updated_at = now() WHERE id = 'a1ca46e7-35d6-4d13-8e58-be5477595998' AND part_number = '306-221';
+  UPDATE public.parts SET part_number = '107-0349', updated_at = now() WHERE id = 'a2973953-d85f-4139-ab85-a4b0f75315ea' AND part_number = '107-349';
+  IF (SELECT count(*) FROM public.parts WHERE (id, part_number) IN (('227096aa-a1d4-4490-8cdf-01628c08777c'::uuid, '203-0799'), ('a1ca46e7-35d6-4d13-8e58-be5477595998'::uuid, '306-0221'), ('a2973953-d85f-4139-ab85-a4b0f75315ea'::uuid, '107-0349'))) <> 3 THEN
+    RAISE EXCEPTION 'repair: not every number was restored'; END IF;
+  IF (SELECT count(*) FROM public.part_fitment WHERE id IN ('10906421-4bdf-42d1-a94f-c1c141949a64', '11e10837-4d15-4722-b166-cfe51e87570d', '2d1d917d-9def-41b6-8fc2-0d464a5f9e09', '320d776d-6132-4000-8a8f-1c136f9829d7', '460587fd-c9f5-45da-8a48-a9274ed32cee', '4bd8a44b-181a-467b-9f72-26d119ead6cd', '4d287d84-1f8a-4e83-bc15-cef1c34a8728', '86a79206-8116-4333-9c0c-09fa2bf165df', '974aa58c-018e-4c23-8a60-64cc10103b53', 'a5aa81c3-5a57-46dc-933e-019049c4130c', 'b1322633-1590-48e4-8b17-885851d10a19', 'b5fa957c-93cf-4319-9efe-533ef034c9b4', 'cefd0505-dde5-4cc6-b194-b9f8fb6567bb', 'd1dc759f-0eaf-4aef-afb7-a5b3dccd66cc', 'dbb6d492-2a04-4f4f-9abb-2293a14c1b7c', 'dcd2091e-50cf-450a-a404-578b4e192626', 'f025a23d-9ec4-4f7c-a7ba-a7ecb1744dc8', 'f9a07b22-af39-49b7-90dc-158276ff69ec')
+        AND serial_from IS NULL AND serial_before IS NULL AND build_date_from IS NULL AND build_date_before IS NULL) <> 18 THEN
+    RAISE EXCEPTION 'changeover: a store fitment row is missing or already has a break'; END IF;
+  UPDATE public.part_fitment SET serial_from = 'L32014' WHERE id = '10906421-4bdf-42d1-a94f-c1c141949a64';   -- 11-9300 SB-110
+  UPDATE public.part_fitment SET serial_from = 'L32014' WHERE id = '11e10837-4d15-4722-b166-cfe51e87570d';   -- 11-9182 SB-310
+  UPDATE public.part_fitment SET serial_from = 'L32014' WHERE id = '2d1d917d-9def-41b6-8fc2-0d464a5f9e09';   -- 11-9300 SB-100
+  UPDATE public.part_fitment SET serial_from = 'L32014' WHERE id = '320d776d-6132-4000-8a8f-1c136f9829d7';   -- 11-9300 SB-300
+  UPDATE public.part_fitment SET serial_from = 'L32014' WHERE id = '460587fd-c9f5-45da-8a48-a9274ed32cee';   -- 11-9182 SB-100
+  UPDATE public.part_fitment SET serial_from = 'L32014' WHERE id = '4bd8a44b-181a-467b-9f72-26d119ead6cd';   -- 11-9300 SB-200
+  UPDATE public.part_fitment SET serial_from = 'L32014' WHERE id = '4d287d84-1f8a-4e83-bc15-cef1c34a8728';   -- 11-9182 SB-200
+  UPDATE public.part_fitment SET serial_from = 'L32014' WHERE id = '86a79206-8116-4333-9c0c-09fa2bf165df';   -- 11-9182 SB-300
+  UPDATE public.part_fitment SET serial_from = 'L32014' WHERE id = '974aa58c-018e-4c23-8a60-64cc10103b53';   -- 11-9182 Spectrum SB
+  UPDATE public.part_fitment SET serial_from = 'L32014' WHERE id = 'a5aa81c3-5a57-46dc-933e-019049c4130c';   -- 11-9300 SB-190
+  UPDATE public.part_fitment SET serial_from = 'L32014' WHERE id = 'b1322633-1590-48e4-8b17-885851d10a19';   -- 11-9300 Spectrum SB
+  UPDATE public.part_fitment SET serial_from = 'L32014' WHERE id = 'b5fa957c-93cf-4319-9efe-533ef034c9b4';   -- 11-9300 SB-210
+  UPDATE public.part_fitment SET serial_from = 'L32014' WHERE id = 'cefd0505-dde5-4cc6-b194-b9f8fb6567bb';   -- 11-9300 SB-310
+  UPDATE public.part_fitment SET serial_from = 'L32014' WHERE id = 'd1dc759f-0eaf-4aef-afb7-a5b3dccd66cc';   -- 11-9182 SB-110
+  UPDATE public.part_fitment SET serial_from = 'L32014' WHERE id = 'dbb6d492-2a04-4f4f-9abb-2293a14c1b7c';   -- 11-9182 SB-400
+  UPDATE public.part_fitment SET serial_from = 'L32014' WHERE id = 'dcd2091e-50cf-450a-a404-578b4e192626';   -- 11-9182 SB-190
+  UPDATE public.part_fitment SET serial_from = 'L32014' WHERE id = 'f025a23d-9ec4-4f7c-a7ba-a7ecb1744dc8';   -- 11-9182 SB-210
+  UPDATE public.part_fitment SET serial_from = 'L32014' WHERE id = 'f9a07b22-af39-49b7-90dc-158276ff69ec';   -- 11-9300 SB-400
+  SELECT count(*) INTO n FROM public.part_fitment WHERE id IN ('10906421-4bdf-42d1-a94f-c1c141949a64', '11e10837-4d15-4722-b166-cfe51e87570d', '2d1d917d-9def-41b6-8fc2-0d464a5f9e09', '320d776d-6132-4000-8a8f-1c136f9829d7', '460587fd-c9f5-45da-8a48-a9274ed32cee', '4bd8a44b-181a-467b-9f72-26d119ead6cd', '4d287d84-1f8a-4e83-bc15-cef1c34a8728', '86a79206-8116-4333-9c0c-09fa2bf165df', '974aa58c-018e-4c23-8a60-64cc10103b53', 'a5aa81c3-5a57-46dc-933e-019049c4130c', 'b1322633-1590-48e4-8b17-885851d10a19', 'b5fa957c-93cf-4319-9efe-533ef034c9b4', 'cefd0505-dde5-4cc6-b194-b9f8fb6567bb', 'd1dc759f-0eaf-4aef-afb7-a5b3dccd66cc', 'dbb6d492-2a04-4f4f-9abb-2293a14c1b7c', 'dcd2091e-50cf-450a-a404-578b4e192626', 'f025a23d-9ec4-4f7c-a7ba-a7ecb1744dc8', 'f9a07b22-af39-49b7-90dc-158276ff69ec')
+    AND (serial_from IS NOT NULL OR serial_before IS NOT NULL OR build_date_from IS NOT NULL OR build_date_before IS NOT NULL);
+  IF n <> 18 THEN RAISE EXCEPTION 'changeover: % of 18 store rows got their break', n; END IF;
+  NULL;
+END $$;
 
 CREATE TEMP TABLE _ld_engines (engine_code TEXT, engine_maker TEXT, base_engine TEXT, tier TEXT, confidence TEXT) ON COMMIT DROP;
 INSERT INTO _ld_engines VALUES
@@ -111,6 +156,7 @@ INSERT INTO _ld_parts VALUES
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '14-00150-51', 'Valve', 'Solenoid valve repair kit', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '10-00281-00', 'Relay AC/DC', 'Relay AC/DC', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '17-44724-00', 'Hardware', 'Crankshaft, 2 cylinder', NULL),
+  ('nwi-hd-parts-reference-112', 'Thermo King', '204-1927', 'Hardware', 'CAN diagnostic bus cable kit', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '25-36739-00', 'Gasket', 'Gasket, copper, drain plug', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '25-39496-00', 'Piston rings, STD', 'Piston rings, STD', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '25-39508-00', 'Gasket', 'Gasket, timing case cover', NULL),
@@ -118,10 +164,13 @@ INSERT INTO _ld_parts VALUES
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '22-02911-01', 'Harness, starter', 'Harness, starter', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '25-39440-00', 'Piston, STD', 'Piston, STD', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '17-55012-00', 'Valve', 'Check valve unloader kit, side plate', NULL),
+  ('nwi-hd-parts-reference-112', 'Thermo King', '204-1999', 'Hardware', 'Tool, oil drain to quick connect', NULL),
   ('nwi-hd-parts-reference-112', 'Thermo King', '11-9624', 'Thermostat', 'Thermostat, 82 deg C', NULL),
+  ('nwi-hd-parts-reference-112', 'Thermo King', '840-1927', 'HMI', 'HMI', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '25-34401-00', 'Gasket', 'Cylinder head gasket, graphite', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '25-37389-00', 'Gasket', 'O-ring, front seal', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '25-34950-00', 'Valve', 'Seal, valve stem', NULL),
+  ('nwi-hd-parts-reference-112', 'Thermo King', '810-1428', 'Engine, TK486V Tier 2', 'Engine, TK486V Tier 2', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '50-01172-00', 'Hardware', 'Fanshaft with defrost damper motor', NULL),
   ('nwi-hd-parts-reference-112', 'Thermo King', '33-2881', 'Gasket', 'Oil seal, front', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '25-34173-00', 'Gasket', 'Sleeve collar, crankshaft front seal', NULL),
@@ -146,6 +195,8 @@ INSERT INTO _ld_parts VALUES
   ('nwi-hd-parts-reference-112', 'Thermo King', '55-0381', 'Hardware', 'Copper Crush Washers - Fuel Inlet Screen', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '14-01114-51', 'SV1 repair kit', 'SV1 repair kit', NULL),
   ('nwi-hd-parts-reference-112', 'Thermo King', '45-2193', 'PC board', 'PC board', NULL),
+  ('nwi-hd-parts-reference-112', 'Thermo King', '204-0952', 'Hardware', 'Tool, rear engine seal installer', NULL),
+  ('nwi-hd-parts-reference-112', 'Thermo King', '810-1389', 'Engine assembly, 3TNV76', 'Engine assembly, 3TNV76', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '54-60017-02', 'Motor, AC, 240V 4.4Kw 60Hz, standby', 'Motor, AC, 240V 4.4Kw 60Hz, standby', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '17-44074-00', 'Hardware', 'Crankshaft, 37CFM twin port', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '73-00326-00', 'Vibrasorber, discharge', 'Vibrasorber, discharge', NULL),
@@ -167,6 +218,7 @@ INSERT INTO _ld_parts VALUES
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '17-44011-00', 'Valve', 'Valve, oil pressure relief, tri-port', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '25-35488-00', 'Stud M8, exhaust manifold to muffler', 'Stud M8, exhaust manifold to muffler', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '79-60428-02', 'Cab command', 'Cab command', NULL),
+  ('nwi-hd-parts-reference-112', 'Thermo King', '845-2570', 'SR2 PC board controller', 'SR2 PC board controller', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '25-38121-00', 'Hardware', 'Bushing, piston pin', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '54-00687-00', 'Condenser fan motor', 'Condenser fan motor', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '22-50180-00', 'Jumper J1, configuration', 'Jumper J1, configuration', NULL),
@@ -175,6 +227,9 @@ INSERT INTO _ld_parts VALUES
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '12-00663-52', 'USB dust cap', 'USB dust cap', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '25-37558-00', 'Thermostat', 'Thermostat gasket, metal', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '22-04253-01', 'Hardware', 'USB download cable', NULL),
+  ('nwi-hd-parts-reference-112', 'Thermo King', '104-0828', 'Generator', 'Generator', NULL),
+  ('nwi-hd-parts-reference-112', 'Thermo King', '101-0423', 'Engine assembly, 3TNV80', 'Engine assembly, 3TNV80', NULL),
+  ('nwi-hd-parts-reference-112', 'Thermo King', '845-2571', 'SR2 PC relay board', 'SR2 PC relay board', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '50-60197-06', 'Belt', 'Water Pump Belt', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '54-00673-00', 'Evaporator fan motor', 'Evaporator fan motor', NULL),
   ('nwi-hd-parts-reference-112', 'Thermo King', '41-5484', 'Hardware', 'Cable, controller download', NULL),
@@ -196,9 +251,11 @@ INSERT INTO _ld_parts VALUES
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '12-00663-64', 'Display module', 'Display module', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '12-00773-00', 'Cab command controller display', 'Cab command controller display', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '17-44748-00', 'Valve', 'Suction valve reed, twin port', NULL),
+  ('nwi-hd-parts-reference-112', 'Thermo King', '104-0868', 'Condenser fan motor', 'Condenser fan motor', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '52-69002-00', 'Compressor', 'Compressor, 12v 8PK, direct mount', NULL),
   ('nwi-hd-parts-reference-112', 'Thermo King', '90-0433', 'Hardware', 'Cap, top, std white', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '14-00348-04', 'Valve', 'SV4 valve assembly', NULL),
+  ('nwi-hd-parts-reference-112', 'Thermo King', '101-0447', 'Engine, TK486V25L1', 'Engine, TK486V25L1', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '17-40083-00', 'Valve', 'Spring, suction valve, tri-port', NULL),
   ('nwi-hd-parts-reference-112', 'Thermo King', '22-1027', 'Hardware', 'Crankshaft, large shaft', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '25-34052-00', 'Gasket', 'Timing cover gasket, metal', NULL),
@@ -210,6 +267,7 @@ INSERT INTO _ld_parts VALUES
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '17-44129-00', 'Gasket', 'Gasket, bottom plate metal', NULL),
   ('nwi-hd-parts-reference-112', 'Thermo King', '33-2880', 'Gasket', 'Oil seal, crankshaft rear', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '25-15049-00', 'Gasket', 'O-ring, injection pump', NULL),
+  ('nwi-hd-parts-reference-112', 'Thermo King', '102-0951', 'Compressor', 'Compressor, scroll', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '48-60451-00', 'Hardware', 'Alternator Belt Adjuster', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '50-01179-00', 'Clutch', 'Clutch', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '54-00686-00', 'Condenser fan motor', 'Condenser fan motor', NULL),
@@ -245,6 +303,7 @@ INSERT INTO _ld_parts VALUES
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '58-00743-00', 'Hardware', 'Cap, coolant overflow recovery bottle', NULL),
   ('nwi-hd-parts-reference-112', 'Thermo King', '92-6220', 'Keypad, cab controller', 'Keypad, cab controller', NULL),
   ('nwi-hd-parts-reference-112', 'Thermo King', '78-2000', 'Belt', 'Engine to Motor/Jackshaft Belt (old)', NULL),
+  ('nwi-hd-parts-reference-112', 'Thermo King', '101-0421', 'Engine assembly, 3TNV74', 'Engine assembly, 3TNV74', NULL),
   ('nwi-hd-parts-reference-112', 'Thermo King', '77-2372', 'Belt', 'Water Pump Belt (old)', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '50-00229-00', 'Hardware', 'Fanshaft', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '17-44119-00', 'Gasket', 'Gasket, end plate', NULL),
@@ -252,7 +311,9 @@ INSERT INTO _ld_parts VALUES
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '25-15003-00', 'Thermostat', 'Engine Thermostat 180F', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '12-00772-00', 'Cab command controller display', 'Cab command controller display', NULL),
   ('nwi-hd-parts-reference-112', 'Thermo King', '66-7392', 'Valve', 'Valve, pressure relief', NULL),
+  ('nwi-hd-parts-reference-112', 'Thermo King', '845-2372', 'HMI controller / LCD screen', 'HMI controller / LCD screen', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '22-04205-00', 'Hardware', 'Connector, 14 pin male plug', NULL),
+  ('nwi-hd-parts-reference-112', 'Thermo King', '845-2648', 'Control board', 'Control board', NULL),
   ('nwi-hd-parts-reference-112', 'Thermo King', '78-1062', 'Belt', 'Engine Belt (old)', NULL),
   ('nwi-hd-parts-reference-112', 'Thermo King', '41-1525', 'Valve', 'Coil, pilot solenoid, 12V', NULL),
   ('nwi-hd-parts-reference-112', 'Thermo King', '13-2263', 'Water pump', 'Water pump', NULL),
@@ -261,6 +322,7 @@ INSERT INTO _ld_parts VALUES
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '17-55009-01', 'Hardware', 'Washer, thrust pump end', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '25-39434-00', 'Gasket', 'Cylinder head gasket, metal', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '07-00375-00', 'Drive/tester SMV EVXV ETV', 'Drive/tester SMV EVXV ETV', NULL),
+  ('nwi-hd-parts-reference-112', 'Thermo King', '845-2721', 'SR3 PC board microprocessor', 'SR3 PC board microprocessor', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '25-15118-00', 'Gasket', 'O-ring, front oil engine seal', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '12-00649-53', 'Microprocessor controller', 'Microprocessor controller', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '50-01150-01', 'Hardware', 'Fanshaft', NULL),
@@ -273,6 +335,7 @@ INSERT INTO _ld_parts VALUES
   ('nwi-hd-parts-reference-112', 'Thermo King', '78-1995', 'Belt', 'Motor/Jackshaft to Compressor Belt (old)', NULL),
   ('nwi-hd-parts-reference-112', 'Thermo King', '78-0803', 'Belt', 'Motor Jackshaft to Compressor Belt (old)', NULL),
   ('nwi-hd-parts-reference-112', 'Thermo King', '33-2759', 'Gasket', 'Engine rear seal', NULL),
+  ('nwi-hd-parts-reference-112', 'Thermo King', '802-1147', 'Compressor', 'Compressor', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '14-00232-25', 'Valve', 'TXV expansion valve', NULL),
   ('nwi-hd-parts-reference-112', 'Thermo King', '70-0212', 'Hardware', 'Pulley and seal kit, crankshaft', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '22-60365-01', 'Alternator harness diode block', 'Alternator harness diode block', NULL),
@@ -299,6 +362,7 @@ INSERT INTO _ld_parts VALUES
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '12-00307-50', 'Keypad', 'Keypad', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '17-44722-00', 'Gasket', 'Bearing, main seal end', NULL),
   ('nwi-hd-parts-reference-112', 'Thermo King', '11-9124', 'Hardware', 'Adjuster, speed control', NULL),
+  ('nwi-hd-parts-reference-112', 'Thermo King', '107-0396', 'Clutch assembly', 'Clutch assembly', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '17-44742-00', 'Valve', 'Center valve plate assembly, twin port', NULL),
   ('nwi-hd-parts-reference-112', 'Thermo King', '33-4295', 'Valve', 'O-ring, fuel solenoid', NULL),
   ('nwi-hd-parts-reference-112', 'Carrier Transicold', '25-39495-00', 'Piston, STD', 'Piston, STD', NULL),
@@ -560,6 +624,32 @@ INSERT INTO _ld_fitment VALUES
   ('nwi-seed-2026-10-23', 'Thermo King', '11-9954', 'SB-400', NULL, NULL, 'unit_model', NULL, NULL, NULL, NULL, NULL, 'confirmed', 'Only with the fuel pre-filter.'),
   ('nwi-seed-2026-10-23', 'Thermo King', '11-9954', 'SB Classic', NULL, NULL, 'unit_model', NULL, NULL, NULL, NULL, NULL, 'confirmed', 'Only with the fuel pre-filter.'),
   ('nwi-seed-2026-10-23', 'Thermo King', '11-9954', 'Spectrum DE', NULL, NULL, 'unit_model', NULL, NULL, NULL, NULL, NULL, 'confirmed', 'Only with the fuel pre-filter.'),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-9182', 'SB Classic', NULL, NULL, 'unit_model', 'L32014', NULL, NULL, NULL, NULL, 'confirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-9182', 'Spectrum DE', NULL, NULL, 'unit_model', 'L32014', NULL, NULL, NULL, NULL, 'confirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7382', 'SB-100', NULL, NULL, 'unit_model', NULL, 'L32014', NULL, NULL, NULL, 'unconfirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7382', 'SB-110', NULL, NULL, 'unit_model', NULL, 'L32014', NULL, NULL, NULL, 'unconfirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7382', 'SB-190', NULL, NULL, 'unit_model', NULL, 'L32014', NULL, NULL, NULL, 'unconfirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7382', 'SB-200', NULL, NULL, 'unit_model', NULL, 'L32014', NULL, NULL, NULL, 'unconfirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7382', 'SB-210', NULL, NULL, 'unit_model', NULL, 'L32014', NULL, NULL, NULL, 'unconfirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7382', 'SB-300', NULL, NULL, 'unit_model', NULL, 'L32014', NULL, NULL, NULL, 'unconfirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7382', 'SB-310', NULL, NULL, 'unit_model', NULL, 'L32014', NULL, NULL, NULL, 'unconfirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7382', 'SB-400', NULL, NULL, 'unit_model', NULL, 'L32014', NULL, NULL, NULL, 'unconfirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7382', 'SB Classic', NULL, NULL, 'unit_model', NULL, 'L32014', NULL, NULL, NULL, 'unconfirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7382', 'Spectrum SB', NULL, NULL, 'unit_model', NULL, 'L32014', NULL, NULL, NULL, 'unconfirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7382', 'Spectrum DE', NULL, NULL, 'unit_model', NULL, 'L32014', NULL, NULL, NULL, 'unconfirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-9300', 'SB Classic', NULL, NULL, 'unit_model', 'L32014', NULL, NULL, NULL, NULL, 'confirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-9300', 'Spectrum DE', NULL, NULL, 'unit_model', 'L32014', NULL, NULL, NULL, NULL, 'confirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7400', 'SB-100', NULL, NULL, 'unit_model', NULL, 'L32014', NULL, NULL, NULL, 'unconfirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7400', 'SB-110', NULL, NULL, 'unit_model', NULL, 'L32014', NULL, NULL, NULL, 'unconfirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7400', 'SB-190', NULL, NULL, 'unit_model', NULL, 'L32014', NULL, NULL, NULL, 'unconfirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7400', 'SB-200', NULL, NULL, 'unit_model', NULL, 'L32014', NULL, NULL, NULL, 'unconfirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7400', 'SB-210', NULL, NULL, 'unit_model', NULL, 'L32014', NULL, NULL, NULL, 'unconfirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7400', 'SB-300', NULL, NULL, 'unit_model', NULL, 'L32014', NULL, NULL, NULL, 'unconfirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7400', 'SB-310', NULL, NULL, 'unit_model', NULL, 'L32014', NULL, NULL, NULL, 'unconfirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7400', 'SB-400', NULL, NULL, 'unit_model', NULL, 'L32014', NULL, NULL, NULL, 'unconfirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7400', 'SB Classic', NULL, NULL, 'unit_model', NULL, 'L32014', NULL, NULL, NULL, 'unconfirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7400', 'Spectrum SB', NULL, NULL, 'unit_model', NULL, 'L32014', NULL, NULL, NULL, 'unconfirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7400', 'Spectrum DE', NULL, NULL, 'unit_model', NULL, 'L32014', NULL, NULL, NULL, 'unconfirmed', NULL),
   ('nwi-seed-2026-10-23', 'Thermo King', '11-9182', 'SB-130', NULL, NULL, 'unit_model', NULL, NULL, NULL, NULL, NULL, 'confirmed', NULL),
   ('nwi-seed-2026-10-23', 'Thermo King', '11-9342', 'SL-100', NULL, NULL, 'unit_model', NULL, NULL, NULL, NULL, NULL, 'confirmed', NULL),
   ('nwi-seed-2026-10-23', 'Thermo King', '11-9342', 'SL-200', NULL, NULL, 'unit_model', NULL, NULL, NULL, NULL, NULL, 'confirmed', NULL),
@@ -588,6 +678,24 @@ INSERT INTO _ld_fitment VALUES
   ('nwi-seed-2026-10-23', 'Thermo King', '11-9182', 'SL-200e', NULL, NULL, 'unit_model', NULL, NULL, '2001-01-01', NULL, NULL, 'confirmed', NULL),
   ('nwi-seed-2026-10-23', 'Thermo King', '11-9182', 'SL-400e', NULL, NULL, 'unit_model', NULL, NULL, '2001-01-01', NULL, NULL, 'confirmed', NULL),
   ('nwi-seed-2026-10-23', 'Thermo King', '11-9182', 'Spectrum SL', NULL, NULL, 'unit_model', NULL, NULL, '2001-01-01', NULL, NULL, 'confirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7400', 'SL-100', NULL, NULL, 'unit_model', NULL, NULL, NULL, '2001-01-01', NULL, 'confirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7400', 'SL-200', NULL, NULL, 'unit_model', NULL, NULL, NULL, '2001-01-01', NULL, 'confirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7400', 'SL-300', NULL, NULL, 'unit_model', NULL, NULL, NULL, '2001-01-01', NULL, 'confirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7400', 'SL-400', NULL, NULL, 'unit_model', NULL, NULL, NULL, '2001-01-01', NULL, 'confirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7400', 'SL TCI', NULL, NULL, 'unit_model', NULL, NULL, NULL, '2001-01-01', NULL, 'confirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7400', 'SL-100e', NULL, NULL, 'unit_model', NULL, NULL, NULL, '2001-01-01', NULL, 'confirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7400', 'SL-200e', NULL, NULL, 'unit_model', NULL, NULL, NULL, '2001-01-01', NULL, 'confirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7400', 'SL-400e', NULL, NULL, 'unit_model', NULL, NULL, NULL, '2001-01-01', NULL, 'confirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-7400', 'Spectrum SL', NULL, NULL, 'unit_model', NULL, NULL, NULL, '2001-01-01', NULL, 'confirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-9300', 'SL-100', NULL, NULL, 'unit_model', NULL, NULL, '2001-01-01', NULL, NULL, 'confirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-9300', 'SL-200', NULL, NULL, 'unit_model', NULL, NULL, '2001-01-01', NULL, NULL, 'confirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-9300', 'SL-300', NULL, NULL, 'unit_model', NULL, NULL, '2001-01-01', NULL, NULL, 'confirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-9300', 'SL-400', NULL, NULL, 'unit_model', NULL, NULL, '2001-01-01', NULL, NULL, 'confirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-9300', 'SL TCI', NULL, NULL, 'unit_model', NULL, NULL, '2001-01-01', NULL, NULL, 'confirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-9300', 'SL-100e', NULL, NULL, 'unit_model', NULL, NULL, '2001-01-01', NULL, NULL, 'confirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-9300', 'SL-200e', NULL, NULL, 'unit_model', NULL, NULL, '2001-01-01', NULL, NULL, 'confirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-9300', 'SL-400e', NULL, NULL, 'unit_model', NULL, NULL, '2001-01-01', NULL, NULL, 'confirmed', NULL),
+  ('nwi-seed-2026-10-23', 'Thermo King', '11-9300', 'Spectrum SL', NULL, NULL, 'unit_model', NULL, NULL, '2001-01-01', NULL, NULL, 'confirmed', NULL),
   ('nwi-seed-2026-10-23', 'Thermo King', '11-9342', 'SLX-100', NULL, NULL, 'unit_model', NULL, NULL, NULL, NULL, NULL, 'unconfirmed', NULL),
   ('nwi-seed-2026-10-23', 'Thermo King', '11-9342', 'SLX-200', NULL, NULL, 'unit_model', NULL, NULL, NULL, NULL, NULL, 'unconfirmed', NULL),
   ('nwi-seed-2026-10-23', 'Thermo King', '11-9342', 'SLX-300', NULL, NULL, 'unit_model', NULL, NULL, NULL, NULL, NULL, 'unconfirmed', NULL),
@@ -1329,7 +1437,7 @@ INSERT INTO _ld_cross VALUES
 -- Checks BEFORE writing. Any failure stops everything.
 DO $$
 BEGIN
-  IF (SELECT count(*) FROM _ld_engines) <> 32 OR (SELECT count(*) FROM _ld_parts) <> 258 OR (SELECT count(*) FROM _ld_fitment) <> 743
+  IF (SELECT count(*) FROM _ld_engines) <> 32 OR (SELECT count(*) FROM _ld_parts) <> 277 OR (SELECT count(*) FROM _ld_fitment) <> 787
      OR (SELECT count(*) FROM _ld_sup) <> 28 OR (SELECT count(*) FROM _ld_cross) <> 227 THEN
     RAISE EXCEPTION 'load: staged row counts are not what the plan says'; END IF;
   IF (SELECT count(*) FROM public.parts) <> 985 OR (SELECT count(*) FROM public.part_fitment) <> 2586
@@ -1344,7 +1452,7 @@ BEGIN
   IF EXISTS (SELECT 1 FROM _ld_parts GROUP BY manufacturer, public.normalize_part_number(part_number) HAVING count(*) > 1) THEN
     RAISE EXCEPTION 'load: a new part is staged twice'; END IF;
   IF EXISTS (SELECT 1 FROM _ld_parts WHERE part_number LIKE '37-%') THEN RAISE EXCEPTION 'load: a 37- number'; END IF;
-  IF EXISTS (SELECT 1 FROM _ld_parts WHERE (manufacturer = 'Thermo King' AND part_number !~ '^[0-9]{2}-[0-9]{4}$')
+  IF EXISTS (SELECT 1 FROM _ld_parts WHERE (manufacturer = 'Thermo King' AND part_number !~ '^[0-9]{2,3}-[0-9]{4}$')
              OR (manufacturer = 'Carrier Transicold' AND part_number !~ '^[0-9]{2}-[0-9]{5}-[0-9]{2}$')
              OR manufacturer NOT IN ('Thermo King', 'Carrier Transicold')) THEN
     RAISE EXCEPTION 'load: a number is missing a zero, carries a marker, or does not fit the maker shape'; END IF;
@@ -1441,11 +1549,11 @@ DECLARE b RECORD;
 BEGIN
   SELECT * INTO b FROM _ld_before;
   IF (SELECT count(*) FROM public.engines) - b.engines <> 32 THEN RAISE EXCEPTION 'load: engines did not grow by 32'; END IF;
-  IF (SELECT count(*) FROM public.parts) - b.parts <> 258 THEN RAISE EXCEPTION 'load: parts did not grow by 258'; END IF;
-  IF (SELECT count(*) FROM public.part_fitment) - b.part_fitment <> 743 THEN RAISE EXCEPTION 'load: part_fitment did not grow by 743'; END IF;
+  IF (SELECT count(*) FROM public.parts) - b.parts <> 277 THEN RAISE EXCEPTION 'load: parts did not grow by 277'; END IF;
+  IF (SELECT count(*) FROM public.part_fitment) - b.part_fitment <> 787 THEN RAISE EXCEPTION 'load: part_fitment did not grow by 787'; END IF;
   IF (SELECT count(*) FROM public.part_supersession) - b.part_supersession <> 28 THEN RAISE EXCEPTION 'load: part_supersession did not grow by 28'; END IF;
   IF (SELECT count(*) FROM public.part_cross_reference) - b.part_cross_reference <> 227 THEN RAISE EXCEPTION 'load: part_cross_reference did not grow by 227'; END IF;
-  IF (SELECT count(*) FROM public.parts WHERE source = 'nwi-seed-2026-10-23') <> 28 OR (SELECT count(*) FROM public.parts WHERE source = 'nwi-hd-parts-reference-112') <> 230 THEN
+  IF (SELECT count(*) FROM public.parts WHERE source = 'nwi-seed-2026-10-23') <> 28 OR (SELECT count(*) FROM public.parts WHERE source = 'nwi-hd-parts-reference-112') <> 249 THEN
     RAISE EXCEPTION 'load: parts per source are not what the plan says'; END IF;
   IF EXISTS (SELECT 1 FROM public.parts WHERE source IN ('nwi-seed-2026-10-23', 'nwi-hd-parts-reference-112') AND (verified OR confidence IS NOT NULL OR notes IS NOT NULL)) THEN
     RAISE EXCEPTION 'load: a new part is not verified=false / confidence NULL / notes NULL'; END IF;
@@ -1458,10 +1566,12 @@ BEGIN
 END $$;
 
 -- What it did (this is the table the SQL editor shows).
-SELECT 'parts' AS table_name, b.parts AS before, (SELECT count(*) FROM public.parts) AS after, 258 AS planned FROM _ld_before b
-UNION ALL SELECT 'part_fitment', b.part_fitment, (SELECT count(*) FROM public.part_fitment), 743 FROM _ld_before b
+SELECT 'parts' AS table_name, b.parts AS before, (SELECT count(*) FROM public.parts) AS after, 277 AS planned FROM _ld_before b
+UNION ALL SELECT 'part_fitment', b.part_fitment, (SELECT count(*) FROM public.part_fitment), 787 FROM _ld_before b
 UNION ALL SELECT 'part_supersession', b.part_supersession, (SELECT count(*) FROM public.part_supersession), 28 FROM _ld_before b
 UNION ALL SELECT 'part_cross_reference', b.part_cross_reference, (SELECT count(*) FROM public.part_cross_reference), 227 FROM _ld_before b
-UNION ALL SELECT 'engines', b.engines, (SELECT count(*) FROM public.engines), 32 FROM _ld_before b;
+UNION ALL SELECT 'engines', b.engines, (SELECT count(*) FROM public.engines), 32 FROM _ld_before b
+UNION ALL SELECT 'store numbers given their zero back', 0, (SELECT count(*) FROM public.parts WHERE (id, part_number) IN (('227096aa-a1d4-4490-8cdf-01628c08777c'::uuid, '203-0799'), ('a1ca46e7-35d6-4d13-8e58-be5477595998'::uuid, '306-0221'), ('a2973953-d85f-4139-ab85-a4b0f75315ea'::uuid, '107-0349'))), 3 FROM _ld_before b
+UNION ALL SELECT 'store fitment rows given a changeover break', 0, (SELECT count(*) FROM public.part_fitment WHERE id IN ('10906421-4bdf-42d1-a94f-c1c141949a64', '11e10837-4d15-4722-b166-cfe51e87570d', '2d1d917d-9def-41b6-8fc2-0d464a5f9e09', '320d776d-6132-4000-8a8f-1c136f9829d7', '460587fd-c9f5-45da-8a48-a9274ed32cee', '4bd8a44b-181a-467b-9f72-26d119ead6cd', '4d287d84-1f8a-4e83-bc15-cef1c34a8728', '86a79206-8116-4333-9c0c-09fa2bf165df', '974aa58c-018e-4c23-8a60-64cc10103b53', 'a5aa81c3-5a57-46dc-933e-019049c4130c', 'b1322633-1590-48e4-8b17-885851d10a19', 'b5fa957c-93cf-4319-9efe-533ef034c9b4', 'cefd0505-dde5-4cc6-b194-b9f8fb6567bb', 'd1dc759f-0eaf-4aef-afb7-a5b3dccd66cc', 'dbb6d492-2a04-4f4f-9abb-2293a14c1b7c', 'dcd2091e-50cf-450a-a404-578b4e192626', 'f025a23d-9ec4-4f7c-a7ba-a7ecb1744dc8', 'f9a07b22-af39-49b7-90dc-158276ff69ec') AND (serial_from IS NOT NULL OR serial_before IS NOT NULL OR build_date_from IS NOT NULL OR build_date_before IS NOT NULL)), 18 FROM _ld_before b;
 
 ROLLBACK;

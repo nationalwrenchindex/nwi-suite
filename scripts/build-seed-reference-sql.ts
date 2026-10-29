@@ -184,7 +184,19 @@ async function main() {
   const tick = (k: string) => { tally[k] = (tally[k] ?? 0) + 1 }
 
   // ── the store ─────────────────────────────────────────────────────────────
+  // Store numbers the normalizer now writes differently (rule 6 on TK NNN-NNN, Oct 29) are
+  // REPAIRED first in the SQL, so every comparison here uses the canonical key.
+  const repairs: Array<{ id: string; maker: string; from: string; to: string }> = []
+  for (const p of parts) {
+    const c = parsePartNumber(p.part_number)
+    if (c.padded && c.canonical !== p.part_number && shapeMaker(c) === p.manufacturer) {
+      repairs.push({ id: p.id, maker: p.manufacturer, from: p.part_number, to: c.canonical })
+      p.part_number = c.canonical; p.part_number_normalized = c.key
+    }
+  }
+  for (const r of repairs) rep('Store repairs', `${r.from} -> ${r.to} (${r.maker}) - rule 6 on the TK NNN-NNNN form`)
   const store = new Map(parts.map(p => [`${p.manufacturer}|${p.part_number_normalized}`, p]))
+  if (store.size !== parts.length) throw new Error('a repair collides with another store part')
   const storeFit = new Map<string, Array<{ u: string; e: string; c: string }>>()
   for (const f of fit) storeFit.set(f.part_id, [...(storeFit.get(f.part_id) ?? []),
     { u: normalizeModel(f.unit_model ?? ''), e: normalizeModel(f.engine_model ?? ''), c: normalizeModel(f.engine_code ?? '') }])
@@ -453,11 +465,15 @@ async function main() {
       seenKeys.add(p.key)
       const cond = L.condition ? `, condition ${L.condition} (${L.marker})` : ''
       if (L.condition) conditionTally[L.marker!] = (conditionTally[L.marker!] ?? 0) + 1
-      if (p.form === 'thermo_king_reman' || p.form === 'carrier_reman') {
-        const base = known(p.maker === 'carrier' ? 'Carrier Transicold' : 'Thermo King', parsePartNumber(p.relatesTo!).key)
-        lines.push(`${ps[i]}: reman of ${p.relatesTo} (rule 5)${cond}; base ${base ? `IS in the store as ${base.part_number ?? base.number}` : 'is NOT in the store'}. HELD - reman and OEM-new are related, never merged, and there is no table to link two parts (it needs one: part_relation (part_id, related_part_id, relation 'reman_of' / 'aftermarket_for'))`)
+      // Rule 5 (corrected Oct 29): reman ONLY when the part is an alternator or a starter.
+      const remanOf = p.remanOf ?? (p.form === 'carrier_reman' ? p.relatesTo : null)
+      if (remanOf && /alternator|starter/i.test(`${r.part_category} ${fn}`)) {
+        const base = known(p.maker === 'carrier' ? 'Carrier Transicold' : 'Thermo King', parsePartNumber(remanOf).key)
+        lines.push(`${ps[i]}: a ${/starter/i.test(fn) ? 'starter' : 'alternator'}, so the reman of ${remanOf} (rule 5)${cond}; base ${base ? `IS in the store as ${base.part_number ?? base.number}` : 'is NOT in the store'}. HELD - reman and OEM-new are related, never merged, and there is no table to link two parts (it needs one: part_relation (part_id, related_part_id, relation 'reman_of' / 'aftermarket_for'))`)
         continue
       }
+      if (p.form === 'carrier_reman') { lines.push(`${ps[i]}: an 8 on a Carrier number, and not an alternator or starter - fits no rule. HELD`); continue }
+      const notReman = remanOf ? ` (not an alternator or starter, so NOT the reman of ${remanOf} - an ordinary TK number)` : ''
       if (p.form === 'carrier_for_thermo_king') {
         const base = known('Thermo King', parsePartNumber(p.relatesTo!).key)
         lines.push(`${ps[i]}: Carrier aftermarket for TK ${p.relatesTo} (rule 4); ${p.relatesTo} ${base ? 'IS in the store' : 'is NOT in the store'}${p.relatesTo!.startsWith('12-') ? ` (11-${p.relatesTo!.slice(3)} ${known('Thermo King', parsePartNumber('11-' + p.relatesTo!.slice(3)).key) ? 'is' : 'is not'} - see the 11/12 note)` : ''}. HELD - linking needs the part_relation table`)
@@ -485,7 +501,7 @@ async function main() {
         continue
       }
       if (!chosen) chosen = { maker, number: kept ? (kept.part_number ?? kept.number) : p.canonical, key: p.key }
-      if (kept) { lines.push(`${ps[i]} -> ${kept.part_number ?? kept.number}${cond}: matched to ${store.has(`${maker}|${p.key}`) ? 'the store' : 'a Source A part'}`); continue }
+      if (kept) { lines.push(`${ps[i]} -> ${kept.part_number ?? kept.number}${cond}${notReman}: matched to ${store.has(`${maker}|${p.key}`) ? `the store${repairs.some(x => x.to === (kept.part_number ?? kept.number)) ? ' (after its zero is restored)' : ''}` : 'a Source A part'}`); continue }
       if (!isNew) { lines.push(`${ps[i]} -> ${p.canonical}${cond}`); continue }
       // a new part (rule 7: the base, never the condition)
       const desc = L.condition ? fn.replace(/,?\s*\b(rebuilt|rebuild|used)\b/gi, '').replace(/\s{2,}/g, ' ').replace(/^,\s*|,\s*$/g, '').trim() : fn
@@ -493,7 +509,7 @@ async function main() {
       if (VENDOR.test(desc)) throw new Error(`vendor name in hd_parts_reference description ${label}`)
       const np: NewPart = { src: SRC_B, maker, number: p.canonical, type, description: desc || null, equipment: null }
       newParts.push(np); added.set(`${maker}|${p.key}`, np); bParts++
-      lines.push(`${ps[i]} -> ${p.canonical}${cond}: NEW part`)
+      lines.push(`${ps[i]} -> ${p.canonical}${cond}${notReman}: NEW part`)
     }
     // The part a row's crosses and fitment belong to. A retired number hands them on.
     if (chosen) {
@@ -546,23 +562,75 @@ async function main() {
   const typeOfFit = (f: Fit) => added.get(`${f.maker}|${parsePartNumber(f.number).key}`)?.type ?? store.get(`${f.maker}|${parsePartNumber(f.number).key}`)?.part_type
   const descOfFit = (f: Fit) => added.get(`${f.maker}|${parsePartNumber(f.number).key}`)?.description ?? store.get(`${f.maker}|${parsePartNumber(f.number).key}`)?.description ?? null
   const funcOfFit = (f: Fit) => funcKey(typeOfFit(f) ?? '', descOfFit(f))
-  const splitBy = new Map<string, Set<string>>(), plainBy = new Map<string, Set<string>>()
-  const note2 = (m: Map<string, Set<string>>, k: string, part: string) => m.set(k, (m.get(k) ?? new Set()).add(part))
+  // A CHANGEOVER (Brock, Oct 29): "each successor runs FROM the same break its predecessor
+  // runs BEFORE - no gap and no overlap." A model + job split between exactly TWO parts, one
+  // with a single break and one with none, is read that way: the undated part gets the other
+  // side of the same break. Anything else - three parts, two different breaks, a part both
+  // dated and undated on one model - is not a clean changeover and is held, parts named.
+  const NO_CHANGEOVER = new Map<string, string>()
+  for (const t of typeConflicts) { const n = t.split(/\s+/)[0]; NO_CHANGEOVER.set(n, `has a part-type disagreement (${t.replace(/\s+/g, ' ').slice(n.length).trim()})`) }
+  for (const k of BROCK_HELD) for (const key of k.split('|').slice(1)) {
+    const n = [...store.values()].find(p => p.part_number_normalized === key)?.part_number ?? added.get(`Thermo King|${key}`)?.number
+    if (n && !NO_CHANGEOVER.has(n)) NO_CHANGEOVER.set(n, 'is in a supersession you are holding')
+  }
+  type BreakField ='serial_from' | 'serial_before' | 'build_date_from' | 'build_date_before'
+  const OPPOSITE: Record<BreakField, BreakField> = { serial_from: 'serial_before', serial_before: 'serial_from', build_date_from: 'build_date_before', build_date_before: 'build_date_from' }
+  const loadBreak = (f: Fit): Array<[BreakField, string]> => ([['serial_from', f.serialFrom], ['serial_before', f.serialBefore], ['build_date_from', f.dateFrom], ['build_date_before', f.dateBefore]] as Array<[BreakField, string | null]>).filter((x): x is [BreakField, string] => !!x[1])
+  const storeBreak = (f: Record<string, any>): Array<[BreakField, string]> => (['serial_from', 'serial_before', 'build_date_from', 'build_date_before'] as BreakField[]).filter(k => f[k]).map(k => [k, String(f[k])])
+  type Side = { number: string; load: Fit[]; storeRows: Record<string, any>[] }
+  const groupsBy = new Map<string, Map<string, Side>>()
+  const sideOf = (k: string, pk: string, number: string) => {
+    const g = groupsBy.get(k) ?? new Map<string, Side>(); groupsBy.set(k, g)
+    const s = g.get(pk) ?? { number, load: [], storeRows: [] }; g.set(pk, s); return s
+  }
   for (const f of fit) {
     const p = partById.get(f.part_id); if (!p || !f.unit_model) continue
-    const k = `${p.manufacturer}|${normalizeModel(f.unit_model)}|${funcKey(p.part_type, p.description)}`
-    note2(f.serial_from || f.serial_before || f.build_date_from || f.build_date_before ? splitBy : plainBy, k, p.part_number_normalized)
+    sideOf(`${p.manufacturer}|${normalizeModel(f.unit_model)}|${funcKey(p.part_type, p.description)}`, p.part_number_normalized, p.part_number).storeRows.push(f)
   }
-  for (const f of fits) if (f.unit) note2(splitOf(f) ? splitBy : plainBy, `${f.maker}|${normalizeModel(f.unit)}|${funcOfFit(f)}`, parsePartNumber(f.number).key)
-  for (let i = fits.length - 1; i >= 0; i--) {
-    const f = fits[i]; if (!f.unit) continue
-    const k = `${f.maker}|${normalizeModel(f.unit)}|${funcOfFit(f)}`; const own = parsePartNumber(f.number).key
-    const others = [...((splitOf(f) ? plainBy : splitBy).get(k) ?? [])].filter(x => x !== own)
-    if (others.length) {
-      rep(f.src === SRC_A ? 'A fitment' : 'B fitment', `HELD  ${f.number}: ${f.unit} (${funcOfFit(f)}${splitOf(f) ? `, ${f.how}` : ''}) -${splitOf(f) ? 'a split row beside an unconditional row' : 'an unconditional row beside a split'} for the same model and type on another part (${others.length}); loading it would straddle the split`)
-      tick(`${f.src === SRC_A ? 'A' : 'B'} fitment: would straddle a split`); fits.splice(i, 1)
+  for (const f of fits) if (f.unit) sideOf(`${f.maker}|${normalizeModel(f.unit)}|${funcOfFit(f)}`, parsePartNumber(f.number).key, f.number).load.push(f)
+  const storeUpdates: Array<{ id: string; number: string; model: string; field: BreakField; value: string }> = []
+  const changeovers = new Map<string, { pred: string; succ: string; brk: string; models: string[]; storeRows: number }>()
+  const heldRows = new Set<Fit>()
+  for (const [k, g] of groupsBy) {
+    const sides = [...g.values()].map(s => {
+      const brks = [...s.load.map(loadBreak), ...s.storeRows.map(storeBreak)]
+      return { s, dated: brks.filter(b => b.length).length, plain: brks.filter(b => !b.length).length,
+        distinct: [...new Set(brks.filter(b => b.length).map(b => b.map(([f, v]) => `${f}=${v}`).join('&')))] }
+    })
+    const anyDated = sides.some(x => x.dated), anyPlain = sides.some(x => x.plain)
+    if (!anyDated || !anyPlain) continue                                   // no split here, or already split on every part
+    if (sides.length < 2) continue                                         // one part, dated and undated: the with/without check's
+    const model = (sides[0].s.load[0]?.unit ?? sides[0].s.storeRows[0]?.unit_model) as string
+    const dated = sides.filter(x => x.dated && !x.plain), plain = sides.filter(x => x.plain && !x.dated)
+    // A part whose type the store and the seed disagree on, or one of a pair Brock is holding,
+    // cannot anchor a changeover: the pairing itself may be the mistake.
+    const blocked = sides.map(x => x.s.number).filter(n => NO_CHANGEOVER.has(n))
+    const clean = !blocked.length && sides.length === 2 && dated.length === 1 && plain.length === 1 && dated[0].distinct.length === 1 && !dated[0].distinct[0].includes('&')
+    if (clean) {
+      const [field, value] = dated[0].distinct[0].split('=') as [BreakField, string]
+      const give = OPPOSITE[field]
+      const succ = plain[0].s
+      for (const f of succ.load) {
+        if (give === 'serial_from') f.serialFrom = value; else if (give === 'serial_before') f.serialBefore = value
+        else if (give === 'build_date_from') f.dateFrom = value; else f.dateBefore = value
+        f.how = `${f.how}; changeover: ${give.replace(/_/g, ' ')} ${value} (the other side of ${dated[0].s.number})`
+      }
+      for (const r of succ.storeRows) storeUpdates.push({ id: r.id, number: succ.number, model: r.unit_model, field: give, value })
+      const ck = `${dated[0].s.number}|${succ.number}|${field}=${value}`
+      const c = changeovers.get(ck) ?? { pred: dated[0].s.number, succ: succ.number, brk: `${dated[0].s.number} ${field.replace(/_/g, ' ')} ${value}  ->  ${succ.number} ${give.replace(/_/g, ' ')} ${value}`, models: [], storeRows: 0 }
+      c.models.push(model); c.storeRows += succ.storeRows.length; changeovers.set(ck, c)
+      continue
     }
+    // Not a clean changeover: hold every load row on this model + job that the split would straddle.
+    const why = sides.map(x => `${x.s.number} ${x.dated ? (x.distinct.join(' / ') || 'dated') : ''}${x.dated && x.plain ? ' + ' : ''}${x.plain ? 'no break' : ''}`).join('; ')
+    for (const x of sides) for (const f of x.s.load) {
+      const others = sides.filter(o => o !== x)
+      if ((splitOf(f) && others.some(o => o.plain)) || (!splitOf(f) && others.some(o => o.dated))) heldRows.add(f)
+    }
+    rep('Changeovers held', `${k.split('|')[0]} ${model} (${k.split('|')[2]}): ${why} - not a clean changeover (${sides.length} parts${dated.length !== 1 ? `, ${dated.length} dated` : ''}${dated[0] && dated[0].distinct.length > 1 ? ', more than one break' : ''}${blocked.length ? `; ${blocked.map(n => `${n} ${NO_CHANGEOVER.get(n)}`).join('; ')}` : ''})`)
   }
+  for (let i = fits.length - 1; i >= 0; i--) if (heldRows.has(fits[i])) { tick(`${fits[i].src === SRC_A ? 'A' : 'B'} fitment: not a clean changeover`); fits.splice(i, 1) }
+  for (const c of changeovers.values()) rep('Changeovers dated', `${c.brk}   on ${c.models.length} model(s): ${c.models.join(', ')}${c.storeRows ? `   [${c.storeRows} existing store row(s) get the break]` : ''}`)
 
   // ── counts ────────────────────────────────────────────────────────────────
   const aFitRows = fits.filter(f => f.src === SRC_A), bFitRows = fits.filter(f => f.src === SRC_B)
@@ -596,7 +664,10 @@ async function main() {
     '-- Trust: verified = false on every row. Source A carries its own confidence; fitment',
     "-- carried from a superseded number is 'derived'; Source B carries none.",
     '-- Not carried: source notes, source_url, unit_series / unit_group / engine_family.',
-    '-- Store parts are never edited (part types included).',
+    `-- Store rows touched, and only these: ${repairs.length} part numbers given their zero back (step 0a) and`,
+    `-- ${storeUpdates.length} fitment rows given the other side of a changeover break (step 0b). No part type changes.`,
+    '-- Changeovers dated:',
+    ...[...changeovers.values()].map(c => `--   ${c.brk}  (${c.models.length} models)`),
     '',
     'BEGIN;',
     '',
@@ -604,6 +675,29 @@ async function main() {
     'SELECT (SELECT count(*) FROM public.parts) AS parts, (SELECT count(*) FROM public.part_fitment) AS part_fitment,',
     '       (SELECT count(*) FROM public.part_supersession) AS part_supersession, (SELECT count(*) FROM public.part_cross_reference) AS part_cross_reference,',
     '       (SELECT count(*) FROM public.engines) AS engines;',
+    '',
+    `-- 0a. Repair ${repairs.length} store number(s) rule 6 now writes with their zero (TK NNN-NNN -> NNN-0NNN).`,
+    `-- 0b. Give ${storeUpdates.length} existing store fitment row(s) the other side of a changeover break.`,
+    '--     Each row is named by id and must still have no break, or nothing is applied.',
+    'DO $$',
+    'DECLARE n INTEGER;',
+    'BEGIN',
+    ...(repairs.length ? [
+      `  IF (SELECT count(*) FROM public.parts WHERE (id, part_number) IN (${repairs.map(r => `('${r.id}'::uuid, ${lit(r.from)})`).join(', ')})) <> ${repairs.length} THEN`,
+      "    RAISE EXCEPTION 'repair: a store number is not what this file was built against'; END IF;",
+      ...repairs.map(r => `  UPDATE public.parts SET part_number = ${lit(r.to)}, updated_at = now() WHERE id = '${r.id}' AND part_number = ${lit(r.from)};`),
+      `  IF (SELECT count(*) FROM public.parts WHERE (id, part_number) IN (${repairs.map(r => `('${r.id}'::uuid, ${lit(r.to)})`).join(', ')})) <> ${repairs.length} THEN`,
+      "    RAISE EXCEPTION 'repair: not every number was restored'; END IF;"] : []),
+    ...(storeUpdates.length ? [
+      `  IF (SELECT count(*) FROM public.part_fitment WHERE id IN (${storeUpdates.map(u => `'${u.id}'`).join(', ')})`,
+      '        AND serial_from IS NULL AND serial_before IS NULL AND build_date_from IS NULL AND build_date_before IS NULL) <> ' + storeUpdates.length + ' THEN',
+      "    RAISE EXCEPTION 'changeover: a store fitment row is missing or already has a break'; END IF;",
+      ...storeUpdates.map(u => `  UPDATE public.part_fitment SET ${u.field} = ${lit(u.value)}${u.field.startsWith('build') ? '::date' : ''} WHERE id = '${u.id}';   -- ${u.number} ${u.model}`.replace(/[^\x20-\x7e]/g, '?')),
+      `  SELECT count(*) INTO n FROM public.part_fitment WHERE id IN (${storeUpdates.map(u => `'${u.id}'`).join(', ')})`,
+      '    AND (serial_from IS NOT NULL OR serial_before IS NOT NULL OR build_date_from IS NOT NULL OR build_date_before IS NOT NULL);',
+      `  IF n <> ${storeUpdates.length} THEN RAISE EXCEPTION 'changeover: % of ${storeUpdates.length} store rows got their break', n; END IF;`] : []),
+    '  NULL;',
+    'END $$;',
     '',
     'CREATE TEMP TABLE _ld_engines (engine_code TEXT, engine_maker TEXT, base_engine TEXT, tier TEXT, confidence TEXT) ON COMMIT DROP;',
     ...(nEng ? ['INSERT INTO _ld_engines VALUES',
@@ -644,7 +738,7 @@ async function main() {
     '  IF EXISTS (SELECT 1 FROM _ld_parts GROUP BY manufacturer, public.normalize_part_number(part_number) HAVING count(*) > 1) THEN',
     "    RAISE EXCEPTION 'load: a new part is staged twice'; END IF;",
     "  IF EXISTS (SELECT 1 FROM _ld_parts WHERE part_number LIKE '37-%') THEN RAISE EXCEPTION 'load: a 37- number'; END IF;",
-    "  IF EXISTS (SELECT 1 FROM _ld_parts WHERE (manufacturer = 'Thermo King' AND part_number !~ '^[0-9]{2}-[0-9]{4}$')",
+    "  IF EXISTS (SELECT 1 FROM _ld_parts WHERE (manufacturer = 'Thermo King' AND part_number !~ '^[0-9]{2,3}-[0-9]{4}$')",
     "             OR (manufacturer = 'Carrier Transicold' AND part_number !~ '^[0-9]{2}-[0-9]{5}-[0-9]{2}$')",
     "             OR manufacturer NOT IN ('Thermo King', 'Carrier Transicold')) THEN",
     "    RAISE EXCEPTION 'load: a number is missing a zero, carries a marker, or does not fit the maker shape'; END IF;",
@@ -762,7 +856,9 @@ async function main() {
     `UNION ALL SELECT 'part_fitment', b.part_fitment, (SELECT count(*) FROM public.part_fitment), ${nFit} FROM _ld_before b`,
     `UNION ALL SELECT 'part_supersession', b.part_supersession, (SELECT count(*) FROM public.part_supersession), ${nSup} FROM _ld_before b`,
     `UNION ALL SELECT 'part_cross_reference', b.part_cross_reference, (SELECT count(*) FROM public.part_cross_reference), ${nCross} FROM _ld_before b`,
-    `UNION ALL SELECT 'engines', b.engines, (SELECT count(*) FROM public.engines), ${nEng} FROM _ld_before b;`,
+    `UNION ALL SELECT 'engines', b.engines, (SELECT count(*) FROM public.engines), ${nEng} FROM _ld_before b`,
+    `UNION ALL SELECT 'store numbers given their zero back', 0, ${repairs.length ? `(SELECT count(*) FROM public.parts WHERE (id, part_number) IN (${repairs.map(r => `('${r.id}'::uuid, ${lit(r.to)})`).join(', ')}))` : '0'}, ${repairs.length} FROM _ld_before b`,
+    `UNION ALL SELECT 'store fitment rows given a changeover break', 0, ${storeUpdates.length ? `(SELECT count(*) FROM public.part_fitment WHERE id IN (${storeUpdates.map(u => `'${u.id}'`).join(', ')}) AND (serial_from IS NOT NULL OR serial_before IS NOT NULL OR build_date_from IS NOT NULL OR build_date_before IS NOT NULL))` : '0'}, ${storeUpdates.length} FROM _ld_before b;`,
     '',
     'ROLLBACK;',
     '',

@@ -88,20 +88,28 @@ PAGECHECK_BASE=https://nwi-suite-git-branch.vercel.app npm run smoke
 
 From 17 years in the trade (Oct 28, 2026):
 
-- **Thermo King OEM:** 6 digits, dash after the first two. `11-9959`
+- **Thermo King OEM:** 6 digits, dash after the first two. `11-9959`. TK ALSO has a
+  NNN-NNNN form (Oct 29): `101-0447` (replacement engine), `107-0349` (clutch),
+  `203-0799` (EGR cleaner kit), `802-1147`, `810-1389`, `810-1428`. TK's own store
+  prints them without the dash (`8021147`).
 - **Carrier Transicold:** 9 digits, dashes after the first two and before the last two.
   `30-60143-01`
 - **A leading `37-` is a vendor's catalog addition, NOT part of the number. Strip it.**
   `37-11-9959` IS `11-9959`, the same part.
 - **A leading `20-` on a TK number** is Carrier selling an aftermarket part for a TK
   application. `20-11-9959` relates to TK `11-9959`.
-- **An `8` added to the front of the first segment means reman.** `845-1234` is the reman
-  of OEM-new `45-1234`.
+- **An `8` added to the front of the first segment means reman - ONLY for alternators
+  and starters.** `845-1234` (a starter) is the reman of OEM-new `45-1234`. It does NOT
+  apply to a 3-digit first segment generally: `802-1147` is an X430P compressor and
+  `810-1389` / `810-1428` are TK exchange engines - ordinary OEM numbers, linked to
+  nothing. `parsePartNumber` reports `remanOf` as a candidate; the caller decides from
+  the part type.
 - **A lost leading zero is damaged data, not a different part.** `78-603` and `78-0603`
   are the SAME part; the canonical form keeps the zero. A TK number is six digits - two,
   a dash, four. `78-603` lost its zero in an import.
-  - Pad back exactly ONE zero: TK `78-603` -> `78-0603`, `8-1234` -> `08-1234`; Carrier
-    `30-60143-1` -> `30-60143-01`.
+  - Pad back exactly ONE zero: TK `78-603` -> `78-0603`, `8-1234` -> `08-1234`; TK
+    NNN-NNNN `107-349` -> `107-0349` (an aftermarket listing prints "replaces OEM 107-349
+    107-0349" - one part); Carrier `30-60143-1` -> `30-60143-01`.
   - Never pad a Carrier MIDDLE segment (`30-6143-01` could be a different part with a
     digit lost anywhere), a number short in two places (`8-603`), or bare digits
     (`78603` - no telling which segment lost it). Report those; do not guess.
@@ -120,7 +128,7 @@ merge, cross-reference or stay separate is Brock's decision, not code's.
 - **Reman and OEM-new are RELATED, never the same part** - link them, never merge them.
 
 Not covered by the rules, so never guessed at: other suffixes (`SL`, `RM`, `PB`, `SRV`,
-`KIT`, `SS`, `FA`, `E`), and shapes that fit no rule (`306-221`, `204-2436`, `18-00091-105`, `96-153-01K`) -
+`KIT`, `SS`, `FA`, `E`), and shapes that fit no rule (`18-00091-105`, `96-153-01K`, `203-0799-2`) -
 those stay exactly as written and are matched as written.
 
 ## Money rules that are settled, do not re-litigate
