@@ -1,8 +1,8 @@
-Seed + reference load - every item that does not load as-is. Generated 2026-10-29.
+Seed + reference load - every item that does not load as-is. Generated 2026-10-30.
 Store before: 985 parts, 2586 fitment, 7 supersessions, 18 crosses, 0 engines.
-Adds: 277 parts, 787 fitment, 28 supersessions, 227 crosses, 32 engines.
+Adds: 277 parts, 728 fitment, 28 supersessions, 227 crosses, 32 engines.
 Crosses by brand: Fleetguard 26, Baldwin 23, WIX 22, Hitachi 20, Dayco 20, NAPA 18, Delco Remy 17, Carquest 17, Luber-finer 15, NAPA Gold 15, Continental 13, Denso 12, Donaldson 9
-Seed fitment tallies: A fitment: group / prose model 53; A fitment: already in the store 162; A fitment: carried to the replacement 45; A fitment: repeated in the file 43; A fitment: break recovered into columns 154; A fitment: break with no serial or date 10; A fitment: note says superseded 19; A fitment: listed with and without a break 4; A fitment: not a clean changeover 89
+Seed fitment tallies: A fitment: group / prose model 53; A fitment: already in the store 162; A fitment: carried to the replacement 45; A fitment: repeated in the file 42; A fitment: break recovered into columns 105; A fitment: own note names another part 2; A fitment: break with no serial or date 10; A fitment: older filter on a newer SB (Brock, Oct 30) 22; A fitment: SL question held (Brock, Oct 30) 36; A fitment: note says superseded 19; A fitment: listed with and without a break 4; A fitment: not a clean changeover 89
 Rule-7 markers stripped in Source B: {"U":29,"K":7,"R":4,"SV":11,"RB":2}
 Source B unit_family not loaded as fitment (family name or list - cannot answer a model search): 255
     25  family or not a known model: 05G
@@ -170,7 +170,7 @@ Part type disagreements (store type kept, not changed): 7
   DUPLICATE  30-01121-00 -> 30-60143-01 [confirmed] - already in the store
   HELD  11-9098 -> 11-9341 [confirmed] - your decision (held Oct 28)
 
-== A fitment (313)
+== A fitment (266)
   HELD  45-2326: standard TriPac auxiliary power units - group or prose model string - your decision
   LOADED  45-1718: TK270 -> 45-2326 - carried from superseded 45-1718; note "Carried from superseded 45-1718."
   HELD  45-1718: T-500R to T-1200R - group or prose model string - your decision
@@ -243,6 +243,8 @@ Part type disagreements (store type kept, not changed): 7
   HELD  30-01090-05: TM1000 (2nd Gen) - group or prose model string - your decision
   HELD  30-00463-00: TM1000 (2nd Gen) - group or prose model string - your decision
   HELD  30-00430-23: TM1000 (2nd Gen) - group or prose model string - your decision
+  HELD  11-7400: SB-I - the row's own note says SB-I uses 12-404: "Air cleaner (dry) - SB-II; SB-I/Sentry use 12-404 air cleaner per tk78"
+  HELD  11-7400: Sentry - the row's own note says Sentry uses 12-404: "Air cleaner (dry) - SB-II; SB-I/Sentry use 12-404 air cleaner per tk78"
   HELD  11-6285: SB-II - note gives a break with no serial or date: "Fuel filter element - later DI 2.2 units (SB-III 50 TC2, SR MP IV, Super-II SR /"
   HELD  11-6285: SB-III - note gives a break with no serial or date: "Fuel filter element - later DI 2.2 units (SB-III 50 TC2, SR MP IV, Super-II SR /"
   HELD  11-6285: Sentry - note gives a break with no serial or date: "Fuel filter element - later DI 2.2 units (SB-III 50 TC2, SR MP IV, Super-II SR /"
@@ -259,55 +261,6 @@ Part type disagreements (store type kept, not changed): 7
   LOADED  11-9954: SB-400 -> 11-9954 - as given; note "Only with the fuel pre-filter."
   LOADED  11-9954: SB Classic -> 11-9954 - as given; note "Only with the fuel pre-filter."
   LOADED  11-9954: Spectrum DE -> 11-9954 - as given; note "Only with the fuel pre-filter."
-  LOADED  11-7382: SB-100 -> 11-7382 - break from note: serial before L32014
-  LOADED  11-7382: SB-110 -> 11-7382 - break from note: serial before L32014
-  LOADED  11-7382: SB-190 -> 11-7382 - break from note: serial before L32014
-  LOADED  11-7382: SB-200 -> 11-7382 - break from note: serial before L32014
-  LOADED  11-7382: SB-210 -> 11-7382 - break from note: serial before L32014
-  LOADED  11-7382: SB-300 -> 11-7382 - break from note: serial before L32014
-  LOADED  11-7382: SB-310 -> 11-7382 - break from note: serial before L32014
-  LOADED  11-7382: SB-400 -> 11-7382 - break from note: serial before L32014
-  LOADED  11-7382: SB Classic -> 11-7382 - break from note: serial before L32014
-  LOADED  11-7382: Spectrum SB -> 11-7382 - break from note: serial before L32014
-  LOADED  11-7382: Spectrum DE -> 11-7382 - break from note: serial before L32014
-  LOADED  11-7400: SB-100 -> 11-7400 - break from note: serial before L32014
-  LOADED  11-7400: SB-110 -> 11-7400 - break from note: serial before L32014
-  LOADED  11-7400: SB-190 -> 11-7400 - break from note: serial before L32014
-  LOADED  11-7400: SB-200 -> 11-7400 - break from note: serial before L32014
-  LOADED  11-7400: SB-210 -> 11-7400 - break from note: serial before L32014
-  LOADED  11-7400: SB-300 -> 11-7400 - break from note: serial before L32014
-  LOADED  11-7400: SB-310 -> 11-7400 - break from note: serial before L32014
-  LOADED  11-7400: SB-400 -> 11-7400 - break from note: serial before L32014
-  LOADED  11-7400: SB Classic -> 11-7400 - break from note: serial before L32014
-  LOADED  11-7400: Spectrum SB -> 11-7400 - break from note: serial before L32014
-  LOADED  11-7400: Spectrum DE -> 11-7400 - break from note: serial before L32014
-  LOADED  11-7382: SL-100 -> 11-7382 - break from note: built before 2001-01-01
-  LOADED  11-7382: SL-200 -> 11-7382 - break from note: built before 2001-01-01
-  LOADED  11-7382: SL-300 -> 11-7382 - break from note: built before 2001-01-01
-  LOADED  11-7382: SL-400 -> 11-7382 - break from note: built before 2001-01-01
-  LOADED  11-7382: SL TCI -> 11-7382 - break from note: built before 2001-01-01
-  LOADED  11-7382: SL-100e -> 11-7382 - break from note: built before 2001-01-01
-  LOADED  11-7382: SL-200e -> 11-7382 - break from note: built before 2001-01-01
-  LOADED  11-7382: SL-400e -> 11-7382 - break from note: built before 2001-01-01
-  LOADED  11-7382: Spectrum SL -> 11-7382 - break from note: built before 2001-01-01
-  LOADED  11-9182: SL-100 -> 11-9182 - break from note: built from 2001-01-01
-  LOADED  11-9182: SL-200 -> 11-9182 - break from note: built from 2001-01-01
-  LOADED  11-9182: SL-300 -> 11-9182 - break from note: built from 2001-01-01
-  LOADED  11-9182: SL-400 -> 11-9182 - break from note: built from 2001-01-01
-  LOADED  11-9182: SL TCI -> 11-9182 - break from note: built from 2001-01-01
-  LOADED  11-9182: SL-100e -> 11-9182 - break from note: built from 2001-01-01
-  LOADED  11-9182: SL-200e -> 11-9182 - break from note: built from 2001-01-01
-  LOADED  11-9182: SL-400e -> 11-9182 - break from note: built from 2001-01-01
-  LOADED  11-9182: Spectrum SL -> 11-9182 - break from note: built from 2001-01-01
-  LOADED  11-7400: SL-100 -> 11-7400 - break from note: built before 2001-01-01
-  LOADED  11-7400: SL-200 -> 11-7400 - break from note: built before 2001-01-01
-  LOADED  11-7400: SL-300 -> 11-7400 - break from note: built before 2001-01-01
-  LOADED  11-7400: SL-400 -> 11-7400 - break from note: built before 2001-01-01
-  LOADED  11-7400: SL TCI -> 11-7400 - break from note: built before 2001-01-01
-  LOADED  11-7400: SL-100e -> 11-7400 - break from note: built before 2001-01-01
-  LOADED  11-7400: SL-200e -> 11-7400 - break from note: built before 2001-01-01
-  LOADED  11-7400: SL-400e -> 11-7400 - break from note: built before 2001-01-01
-  LOADED  11-7400: Spectrum SL -> 11-7400 - break from note: built before 2001-01-01
   LOADED  11-9954: SLXi-100 -> 11-9954 - conflict recorded; note "Listed in TK SLXi kit 100574; conflicts with 11-9342."
   LOADED  11-9954: SLXi-200 -> 11-9954 - conflict recorded; note "Listed in TK SLXi kit 100574; conflicts with 11-9342."
   LOADED  11-9954: SLXi-300 -> 11-9954 - conflict recorded; note "Listed in TK SLXi kit 100574; conflicts with 11-9342."
@@ -484,6 +437,66 @@ Part type disagreements (store type kept, not changed): 7
   HELD  45-2323: TK486 - the file lists it both with and without a break (as given)
   HELD  45-2324: TK486V - the file lists it both with and without a break (as given)
   HELD  45-2324: TK486V - the file lists it both with and without a break (as given)
+
+== Model family (Brock, Oct 30) (58)
+  HELD  11-7382: SB-100 - your call: SB-100 to SB-400 take 11-9300 / 11-9182. Source: "Full-flow oil filter (standard) - early SB units; aftermarket kit lists it before SN L3201" [unconfirmed]
+  HELD  11-7382: SB-110 - your call: SB-100 to SB-400 take 11-9300 / 11-9182. Source: "Full-flow oil filter (standard) - early SB units; aftermarket kit lists it before SN L3201" [unconfirmed]
+  HELD  11-7382: SB-190 - your call: SB-100 to SB-400 take 11-9300 / 11-9182. Source: "Full-flow oil filter (standard) - early SB units; aftermarket kit lists it before SN L3201" [unconfirmed]
+  HELD  11-7382: SB-200 - your call: SB-100 to SB-400 take 11-9300 / 11-9182. Source: "Full-flow oil filter (standard) - early SB units; aftermarket kit lists it before SN L3201" [unconfirmed]
+  HELD  11-7382: SB-210 - your call: SB-100 to SB-400 take 11-9300 / 11-9182. Source: "Full-flow oil filter (standard) - early SB units; aftermarket kit lists it before SN L3201" [unconfirmed]
+  HELD  11-7382: SB-300 - your call: SB-100 to SB-400 take 11-9300 / 11-9182. Source: "Full-flow oil filter (standard) - early SB units; aftermarket kit lists it before SN L3201" [unconfirmed]
+  HELD  11-7382: SB-310 - your call: SB-100 to SB-400 take 11-9300 / 11-9182. Source: "Full-flow oil filter (standard) - early SB units; aftermarket kit lists it before SN L3201" [unconfirmed]
+  HELD  11-7382: SB-400 - your call: SB-100 to SB-400 take 11-9300 / 11-9182. Source: "Full-flow oil filter (standard) - early SB units; aftermarket kit lists it before SN L3201" [unconfirmed]
+  HELD  11-7382: SB Classic - your call: SB-100 to SB-400 take 11-9300 / 11-9182. Source: "Full-flow oil filter (standard) - early SB units; aftermarket kit lists it before SN L3201" [unconfirmed]
+  HELD  11-7382: Spectrum SB - your call: SB-100 to SB-400 take 11-9300 / 11-9182. Source: "Full-flow oil filter (standard) - early SB units; aftermarket kit lists it before SN L3201" [unconfirmed]
+  HELD  11-7382: Spectrum DE - your call: SB-100 to SB-400 take 11-9300 / 11-9182. Source: "Full-flow oil filter (standard) - early SB units; aftermarket kit lists it before SN L3201" [unconfirmed]
+  HELD  11-7400: SB-100 - your call: SB-100 to SB-400 take 11-9300 / 11-9182. Source: "Air cleaner (standard) - early SB units, before SN L32014 per aftermarket kit (unconfirmed" [unconfirmed]
+  HELD  11-7400: SB-110 - your call: SB-100 to SB-400 take 11-9300 / 11-9182. Source: "Air cleaner (standard) - early SB units, before SN L32014 per aftermarket kit (unconfirmed" [unconfirmed]
+  HELD  11-7400: SB-190 - your call: SB-100 to SB-400 take 11-9300 / 11-9182. Source: "Air cleaner (standard) - early SB units, before SN L32014 per aftermarket kit (unconfirmed" [unconfirmed]
+  HELD  11-7400: SB-200 - your call: SB-100 to SB-400 take 11-9300 / 11-9182. Source: "Air cleaner (standard) - early SB units, before SN L32014 per aftermarket kit (unconfirmed" [unconfirmed]
+  HELD  11-7400: SB-210 - your call: SB-100 to SB-400 take 11-9300 / 11-9182. Source: "Air cleaner (standard) - early SB units, before SN L32014 per aftermarket kit (unconfirmed" [unconfirmed]
+  HELD  11-7400: SB-300 - your call: SB-100 to SB-400 take 11-9300 / 11-9182. Source: "Air cleaner (standard) - early SB units, before SN L32014 per aftermarket kit (unconfirmed" [unconfirmed]
+  HELD  11-7400: SB-310 - your call: SB-100 to SB-400 take 11-9300 / 11-9182. Source: "Air cleaner (standard) - early SB units, before SN L32014 per aftermarket kit (unconfirmed" [unconfirmed]
+  HELD  11-7400: SB-400 - your call: SB-100 to SB-400 take 11-9300 / 11-9182. Source: "Air cleaner (standard) - early SB units, before SN L32014 per aftermarket kit (unconfirmed" [unconfirmed]
+  HELD  11-7400: SB Classic - your call: SB-100 to SB-400 take 11-9300 / 11-9182. Source: "Air cleaner (standard) - early SB units, before SN L32014 per aftermarket kit (unconfirmed" [unconfirmed]
+  HELD  11-7400: Spectrum SB - your call: SB-100 to SB-400 take 11-9300 / 11-9182. Source: "Air cleaner (standard) - early SB units, before SN L32014 per aftermarket kit (unconfirmed" [unconfirmed]
+  HELD  11-7400: Spectrum DE - your call: SB-100 to SB-400 take 11-9300 / 11-9182. Source: "Air cleaner (standard) - early SB units, before SN L32014 per aftermarket kit (unconfirmed" [unconfirmed]
+  HELD  11-7382: SL-100 - the SL question is held; nothing gets a 2001 date. Source: "Full-flow oil filter (standard) - up to Q4 2000 (Swisclima)" [confirmed]
+  HELD  11-7382: SL-200 - the SL question is held; nothing gets a 2001 date. Source: "Full-flow oil filter (standard) - up to Q4 2000 (Swisclima)" [confirmed]
+  HELD  11-7382: SL-300 - the SL question is held; nothing gets a 2001 date. Source: "Full-flow oil filter (standard) - up to Q4 2000 (Swisclima)" [confirmed]
+  HELD  11-7382: SL-400 - the SL question is held; nothing gets a 2001 date. Source: "Full-flow oil filter (standard) - up to Q4 2000 (Swisclima)" [confirmed]
+  HELD  11-7382: SL TCI - the SL question is held; nothing gets a 2001 date. Source: "Full-flow oil filter (standard) - up to Q4 2000 (Swisclima)" [confirmed]
+  HELD  11-7382: SL-100e - the SL question is held; nothing gets a 2001 date. Source: "Full-flow oil filter (standard) - up to Q4 2000 (Swisclima)" [confirmed]
+  HELD  11-7382: SL-200e - the SL question is held; nothing gets a 2001 date. Source: "Full-flow oil filter (standard) - up to Q4 2000 (Swisclima)" [confirmed]
+  HELD  11-7382: SL-400e - the SL question is held; nothing gets a 2001 date. Source: "Full-flow oil filter (standard) - up to Q4 2000 (Swisclima)" [confirmed]
+  HELD  11-7382: Spectrum SL - the SL question is held; nothing gets a 2001 date. Source: "Full-flow oil filter (standard) - up to Q4 2000 (Swisclima)" [confirmed]
+  HELD  11-9182: SL-100 - the SL question is held; nothing gets a 2001 date. Source: "Full-flow oil filter, EMI 3000 - from Q1 2001 (Swisclima)" [confirmed]
+  HELD  11-9182: SL-200 - the SL question is held; nothing gets a 2001 date. Source: "Full-flow oil filter, EMI 3000 - from Q1 2001 (Swisclima)" [confirmed]
+  HELD  11-9182: SL-300 - the SL question is held; nothing gets a 2001 date. Source: "Full-flow oil filter, EMI 3000 - from Q1 2001 (Swisclima)" [confirmed]
+  HELD  11-9182: SL-400 - the SL question is held; nothing gets a 2001 date. Source: "Full-flow oil filter, EMI 3000 - from Q1 2001 (Swisclima)" [confirmed]
+  HELD  11-9182: SL TCI - the SL question is held; nothing gets a 2001 date. Source: "Full-flow oil filter, EMI 3000 - from Q1 2001 (Swisclima)" [confirmed]
+  HELD  11-9182: SL-100e - the SL question is held; nothing gets a 2001 date. Source: "Full-flow oil filter, EMI 3000 - from Q1 2001 (Swisclima)" [confirmed]
+  HELD  11-9182: SL-200e - the SL question is held; nothing gets a 2001 date. Source: "Full-flow oil filter, EMI 3000 - from Q1 2001 (Swisclima)" [confirmed]
+  HELD  11-9182: SL-400e - the SL question is held; nothing gets a 2001 date. Source: "Full-flow oil filter, EMI 3000 - from Q1 2001 (Swisclima)" [confirmed]
+  HELD  11-9182: Spectrum SL - the SL question is held; nothing gets a 2001 date. Source: "Full-flow oil filter, EMI 3000 - from Q1 2001 (Swisclima)" [confirmed]
+  HELD  11-7400: SL-100 - the SL question is held; nothing gets a 2001 date. Source: "Air cleaner - up to Q4 2000 (Swisclima)" [confirmed]
+  HELD  11-7400: SL-200 - the SL question is held; nothing gets a 2001 date. Source: "Air cleaner - up to Q4 2000 (Swisclima)" [confirmed]
+  HELD  11-7400: SL-300 - the SL question is held; nothing gets a 2001 date. Source: "Air cleaner - up to Q4 2000 (Swisclima)" [confirmed]
+  HELD  11-7400: SL-400 - the SL question is held; nothing gets a 2001 date. Source: "Air cleaner - up to Q4 2000 (Swisclima)" [confirmed]
+  HELD  11-7400: SL TCI - the SL question is held; nothing gets a 2001 date. Source: "Air cleaner - up to Q4 2000 (Swisclima)" [confirmed]
+  HELD  11-7400: SL-100e - the SL question is held; nothing gets a 2001 date. Source: "Air cleaner - up to Q4 2000 (Swisclima)" [confirmed]
+  HELD  11-7400: SL-200e - the SL question is held; nothing gets a 2001 date. Source: "Air cleaner - up to Q4 2000 (Swisclima)" [confirmed]
+  HELD  11-7400: SL-400e - the SL question is held; nothing gets a 2001 date. Source: "Air cleaner - up to Q4 2000 (Swisclima)" [confirmed]
+  HELD  11-7400: Spectrum SL - the SL question is held; nothing gets a 2001 date. Source: "Air cleaner - up to Q4 2000 (Swisclima)" [confirmed]
+  HELD  11-9300: SL-100 - the SL question is held; nothing gets a 2001 date. Source: "Air cleaner element, EMI 3000" [confirmed]
+  HELD  11-9300: SL-200 - the SL question is held; nothing gets a 2001 date. Source: "Air cleaner element, EMI 3000" [confirmed]
+  HELD  11-9300: SL-300 - the SL question is held; nothing gets a 2001 date. Source: "Air cleaner element, EMI 3000" [confirmed]
+  HELD  11-9300: SL-400 - the SL question is held; nothing gets a 2001 date. Source: "Air cleaner element, EMI 3000" [confirmed]
+  HELD  11-9300: SL TCI - the SL question is held; nothing gets a 2001 date. Source: "Air cleaner element, EMI 3000" [confirmed]
+  HELD  11-9300: SL-100e - the SL question is held; nothing gets a 2001 date. Source: "Air cleaner element, EMI 3000" [confirmed]
+  HELD  11-9300: SL-200e - the SL question is held; nothing gets a 2001 date. Source: "Air cleaner element, EMI 3000" [confirmed]
+  HELD  11-9300: SL-400e - the SL question is held; nothing gets a 2001 date. Source: "Air cleaner element, EMI 3000" [confirmed]
+  HELD  11-9300: Spectrum SL - the SL question is held; nothing gets a 2001 date. Source: "Air cleaner element, EMI 3000" [confirmed]
 
 == A crosses (75)
   REPAIRED  45-2326 Denso 128000-0710 [no tier] - qualified row
@@ -806,8 +819,3 @@ Part type disagreements (store type kept, not changed): 7
   Thermo King URD-III (fuel-pre): 11-4880 no break; 11-6180 build_date_before=1992-01-01; 11-8903 no break - not a clean changeover (3 parts)
   Thermo King LND (fuel-pre): 11-4880 no break; 11-6180 build_date_before=1992-01-01; 11-8903 no break - not a clean changeover (3 parts)
   Thermo King LND-II (fuel-pre): 11-4880 no break; 11-6180 build_date_before=1992-01-01; 11-8903 no break - not a clean changeover (3 parts)
-
-== Changeovers dated (3)
-  11-7400 serial before L32014  ->  11-9300 serial from L32014   on 11 model(s): SB-110, SB-100, SB-300, SB-200, SB-190, Spectrum SB, SB-210, SB-310, SB-400, SB Classic, Spectrum DE   [9 existing store row(s) get the break]
-  11-7382 serial before L32014  ->  11-9182 serial from L32014   on 11 model(s): SB-310, SB-100, SB-200, SB-300, Spectrum SB, SB-110, SB-400, SB-190, SB-210, SB Classic, Spectrum DE   [9 existing store row(s) get the break]
-  11-7400 build date before 2001-01-01  ->  11-9300 build date from 2001-01-01   on 9 model(s): SL-100, SL-200, SL-300, SL-400, SL TCI, SL-100e, SL-200e, SL-400e, Spectrum SL

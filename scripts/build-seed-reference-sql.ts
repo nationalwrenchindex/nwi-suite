@@ -25,6 +25,9 @@
 //     the source, with no vendor or retailer name.
 //   * STILL HELD for Brock: group / prose model strings, 45-2323 -> 45-2324,
 //     11-9098 -> 11-9341, the type disagreements (store types are never changed here)
+//   * 11-7382 / 11-7400 vs 11-9182 / 11-9300 split by MODEL FAMILY, never by serial or date
+//     (Brock, Oct 30): none of the four is dated; the older pair on SB-100..SB-400 and all
+//     four on the SL models are held for him
 //
 // TRUST: Source A carries its own confidence (175's vocabulary); verified = false.
 //   Source B: verified = false, confidence NULL - hd_parts_reference.verified is a column
@@ -213,6 +216,11 @@ async function main() {
   const newSups: Sup[] = []
   const seedStatus = new Map(sp.map(r => [`${mk(r.maker)}|${parsePartNumber(r.part_number).key}`, r.status]))
   const BROCK_HELD = new Set(['Thermo King|452323|452324', 'Thermo King|119098|119341'])
+  // Brock, Oct 30: these four split by model family and are never dated (see A fitment).
+  const OLDER_FILTER = new Set(['11-7382', '11-7400'])
+  const FAMILY_SPLIT = new Set([...OLDER_FILTER, '11-9182', '11-9300'])
+  const NEWER_SB = new Set(['SB-100', 'SB-110', 'SB-190', 'SB-200', 'SB-210', 'SB-300', 'SB-310', 'SB-400', 'SB Classic', 'Spectrum SB', 'Spectrum DE'].map(normalizeModel))
+  const SL_MODELS = new Set(['SL-100', 'SL-200', 'SL-300', 'SL-400', 'SL TCI', 'SL-100e', 'SL-200e', 'SL-400e', 'Spectrum SL'].map(normalizeModel))
   for (const r of ss) {
     const maker = mk(r.maker)
     const lo = parseListingNumber(r.old_part), ln = parseListingNumber(r.new_part)
@@ -299,6 +307,24 @@ async function main() {
     } else if (r.match_type === 'engine') {
       if (!allEngines.has(r.engine_code)) { rep('A fitment', `HELD  ${label} - engine code not in engines`); continue }
     } else { rep('A fitment', `HELD  ${label} - match_type ${r.match_type}`); continue }
+    // Brock, Oct 30, from the field: 11-7382 / 11-7400 and 11-9182 / 11-9300 split by MODEL
+    // FAMILY, not by serial, and none of the four is ever dated. SB-100 to SB-400 take
+    // 11-9182 / 11-9300; the older-filter rows on them came from an unconfirmed aftermarket
+    // kit note, so they are held for him to see. The SL question is held entirely.
+    if (FAMILY_SPLIT.has(p.canonical) && r.unit_model) {
+      const m = normalizeModel(r.unit_model)
+      if (OLDER_FILTER.has(p.canonical) && NEWER_SB.has(m)) {
+        rep('Model family (Brock, Oct 30)', `HELD  ${label} - your call: SB-100 to SB-400 take 11-9300 / 11-9182. Source: "${note.slice(0, 90)}" [${r.confidence}]`); tick('A fitment: older filter on a newer SB (Brock, Oct 30)'); continue
+      }
+      if (SL_MODELS.has(m)) {
+        rep('Model family (Brock, Oct 30)', `HELD  ${label} - the SL question is held; nothing gets a 2001 date. Source: "${note.slice(0, 90)}" [${r.confidence}]`); tick('A fitment: SL question held (Brock, Oct 30)'); continue
+      }
+    }
+    // The row's own source note names a different part for this model.
+    const own = note.match(/;\s*([A-Za-z0-9 /-]+?) use ([0-9]{2}-[0-9]{3,4}) /)
+    if (own && r.unit_model && own[1].split('/').map(s => normalizeModel(s)).includes(normalizeModel(r.unit_model))) {
+      rep('A fitment', `HELD  ${label} - the row's own note says ${r.unit_model} uses ${own[2]}: "${note.slice(0, 90)}"`); tick('A fitment: own note names another part'); continue
+    }
     // what the note says
     let conf = r.confidence, how = 'as given'
     const brk = readBreak(note)
@@ -573,6 +599,7 @@ async function main() {
     const n = [...store.values()].find(p => p.part_number_normalized === key)?.part_number ?? added.get(`Thermo King|${key}`)?.number
     if (n && !NO_CHANGEOVER.has(n)) NO_CHANGEOVER.set(n, 'is in a supersession you are holding')
   }
+  for (const n of FAMILY_SPLIT) if (!NO_CHANGEOVER.has(n)) NO_CHANGEOVER.set(n, 'splits by model family, never by a date (Brock, Oct 30)')
   type BreakField ='serial_from' | 'serial_before' | 'build_date_from' | 'build_date_before'
   const OPPOSITE: Record<BreakField, BreakField> = { serial_from: 'serial_before', serial_before: 'serial_from', build_date_from: 'build_date_before', build_date_before: 'build_date_from' }
   const loadBreak = (f: Fit): Array<[BreakField, string]> => ([['serial_from', f.serialFrom], ['serial_before', f.serialBefore], ['build_date_from', f.dateFrom], ['build_date_before', f.dateBefore]] as Array<[BreakField, string | null]>).filter((x): x is [BreakField, string] => !!x[1])
