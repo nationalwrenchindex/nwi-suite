@@ -12,6 +12,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { hasWorkOrders } from '@/lib/work-orders'
+import { insertWithWorkOrderNumber } from '@/lib/work-order-number'
 import { WORK_ORDER_SELECT } from '@/app/api/work-orders/list'
 import { parseDiscount } from '@/lib/document-discount'
 
@@ -68,19 +69,12 @@ export async function POST(
     )
   }
 
-  const { count } = await supabase
-    .from('work_orders')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', user.id)
-
-  const year = new Date().getFullYear()
-  const seq  = String((count ?? 0) + 1).padStart(4, '0')
-
-  const { data: wo, error: insertErr } = await supabase
+  // The highest existing number plus one, retried on a collision (lib/work-order-number).
+  const { data: wo, error: insertErr } = await insertWithWorkOrderNumber(supabase, 'work_orders', user.id, work_order_number => supabase
     .from('work_orders')
     .insert({
       user_id:              user.id,
-      work_order_number:    `WO-${year}-${seq}`,
+      work_order_number,
       status:               'open',
       customer_id:          quote.customer_id ?? null,
       vehicle_id:           quote.vehicle_id  ?? null,
@@ -117,7 +111,7 @@ export async function POST(
       source_quote_id:      quote.id,
     })
     .select(WORK_ORDER_SELECT)
-    .single()
+    .single())
 
   if (insertErr || !wo) {
     console.error('[POST /api/quotes/[id]/to-work-order]', insertErr)

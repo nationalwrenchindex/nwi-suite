@@ -9,6 +9,7 @@ import { createClient } from '@/lib/supabase/server'
 import { writeToleratingMigration142 } from '@/lib/migration-142'
 import { syncParentExtrasQuietly } from '@/lib/segments/parent-extras'
 import { hasWorkOrders } from '@/lib/work-orders'
+import { insertWithWorkOrderNumber } from '@/lib/work-order-number'
 import { WORK_ORDER_STATUSES, type WorkOrderStatus } from '@/types/work-orders'
 import { WORK_ORDER_SELECT, WORK_ORDER_PAGE_SIZE } from './list'
 import { discountForWrite, isMissing165Column, MIGRATION_165_MESSAGE } from '@/lib/document-discount'
@@ -71,17 +72,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Invalid body' }, { status: 400 })
   }
 
-  // WO-YYYY-NNNN, same shape as the HD invoice numbering. Derived from a count, so
-  // it can collide if two tabs submit in the same instant; the UNIQUE constraint on
-  // (user_id, work_order_number) is what actually guarantees uniqueness, and a
-  // collision surfaces as a save error rather than two work orders sharing a number.
-  const { count } = await supabase
-    .from('work_orders')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', user.id)
-
-  const year = new Date().getFullYear()
-  const seq  = String((count ?? 0) + 1).padStart(4, '0')
+  // WO-YYYY-NNNN: the highest existing number plus one, allocated at insert time
+  // below (lib/work-order-number - a count collided once the account had a gap).
 
   const str = (v: unknown): string | null =>
     typeof v === 'string' && v.trim() ? v.trim() : null
@@ -90,7 +82,6 @@ export async function POST(request: NextRequest) {
 
   const insert = {
     user_id:              user.id,
-    work_order_number:    `WO-${year}-${seq}`,
     status:               'open' as const,
     // The tech's explicit choice, not an inference. 'segments' sends no money keys
     // at all, so every money column below resolves to NULL — not zero, which would
@@ -137,10 +128,11 @@ export async function POST(request: NextRequest) {
   if ('error' in discount) return NextResponse.json({ error: discount.error }, { status: 422 })
   if (!discount.skip && discount.value) (insert as Record<string, unknown>).discount = discount.value
 
-  const { data, error } = await writeToleratingMigration142<Record<string, unknown>, Record<string, unknown>>(
-    insert as unknown as Record<string, unknown>,
-    row => supabase.from('work_orders').insert(row).select(WORK_ORDER_SELECT).single(),
-  )
+  const { data, error } = await insertWithWorkOrderNumber(supabase, 'work_orders', user.id, work_order_number =>
+    writeToleratingMigration142<Record<string, unknown>, Record<string, unknown>>(
+      { ...(insert as unknown as Record<string, unknown>), work_order_number },
+      row => supabase.from('work_orders').insert(row).select(WORK_ORDER_SELECT).single(),
+    ))
 
   if (error && isMissing165Column(error)) {
     return NextResponse.json({ error: MIGRATION_165_MESSAGE }, { status: 409 })

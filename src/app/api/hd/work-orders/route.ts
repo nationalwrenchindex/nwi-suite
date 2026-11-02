@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDStarterAccess, reeferStandaloneCan } from '@/lib/hd-access'
+import { insertWithWorkOrderNumber } from '@/lib/work-order-number'
 import { WORK_ORDER_LIST_SELECT, WORK_ORDER_PAGE_SIZE } from './list'
 
 export const dynamic = 'force-dynamic'
@@ -87,22 +88,14 @@ export async function POST(req: NextRequest) {
     if (!acct) return NextResponse.json({ error: 'That fleet account was not found in your accounts.' }, { status: 400 })
   }
 
-  // Sequential work-order number, mirroring the invoices/quotes pattern.
-  const { count } = await supabase
-    .from('hd_work_orders')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', user.id)
-  const year = new Date().getFullYear()
-  const seq  = String((count ?? 0) + 1).padStart(4, '0')
-  const work_order_number = `WO-${year}-${seq}`
-
   const durationRaw = body.estimated_duration_hours
   const estimated_duration_hours =
     typeof durationRaw === 'number' ? durationRaw
     : (typeof durationRaw === 'string' && durationRaw.trim() && !Number.isNaN(Number(durationRaw))) ? Number(durationRaw)
     : null
 
-  const { data, error } = await supabase
+  // The highest existing number plus one, retried on a collision (lib/work-order-number).
+  const { data, error } = await insertWithWorkOrderNumber(supabase, 'hd_work_orders', user.id, work_order_number => supabase
     .from('hd_work_orders')
     .insert({
       user_id:                  user.id,
@@ -133,7 +126,7 @@ export async function POST(req: NextRequest) {
       estimated_duration_hours,
     })
     .select('id, work_order_number, scheduled_at')
-    .single()
+    .single())
 
   if (error) {
     console.error('[hd/work-orders POST]', error)

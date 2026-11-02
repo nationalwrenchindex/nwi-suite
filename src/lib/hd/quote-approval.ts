@@ -32,6 +32,7 @@
 import { createServiceClient } from '@/lib/supabase/service'
 import { isMissingPaymentTermsColumn } from '@/lib/hd/payment-terms'
 import { isMissingMigration159Column, withoutMigration159Columns } from '@/lib/hd/migration-159'
+import { insertWithWorkOrderNumber } from '@/lib/work-order-number'
 
 /** 32 hex characters, the same shape LD's quote token uses. */
 export function generateQuoteToken(): string {
@@ -388,16 +389,10 @@ export async function createWorkOrderFromQuote(
     }
   }
 
-  const year = new Date().getFullYear()
-  const { count } = await supabase
-    .from('hd_work_orders')
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', userId)
-  const seq = String((count ?? 0) + 1).padStart(4, '0')
-
+  // work_order_number is allocated at insert time below: the highest existing number
+  // plus one, retried on a collision (lib/work-order-number).
   const insertRow: Record<string, unknown> = {
     user_id:           userId,
-    work_order_number: `WO-${year}-${seq}`,
     status:            'open',
     quote_id:          quoteId,
 
@@ -554,30 +549,34 @@ export async function createWorkOrderFromQuote(
   // saving at all; the invoice converter reads them from the quote in that window.
   // A loop, because both can be pending at once and each retry strips only its own.
   let row: Record<string, unknown> = insertRow
-  let { data: wo, error } = await supabase
-    .from('hd_work_orders')
-    .insert(row)
-    .select('id, work_order_number')
-    .single()
-
-  for (let attempt = 0; error && attempt < 2; attempt++) {
-    if (isMissingPaymentTermsColumn(error) && 'payment_terms' in row) {
-      console.error('[hd quote->wo] payment_terms missing - run migration 158', error.message)
-      const { payment_terms: _drop, ...withoutTerms } = row
-      void _drop
-      row = withoutTerms
-    } else if (isMissingMigration159Column(error) && 'road_call_fee' in row) {
-      console.error('[hd quote->wo] fee/unit columns missing - run migration 159', error.message)
-      row = withoutMigration159Columns(row)
-    } else {
-      break
-    }
-    ;({ data: wo, error } = await supabase
+  const { data: wo, error } = await insertWithWorkOrderNumber(supabase, 'hd_work_orders', userId, async work_order_number => {
+    row = { ...row, work_order_number }
+    let res = await supabase
       .from('hd_work_orders')
       .insert(row)
       .select('id, work_order_number')
-      .single())
-  }
+      .single()
+
+    for (let attempt = 0; res.error && attempt < 2; attempt++) {
+      if (isMissingPaymentTermsColumn(res.error) && 'payment_terms' in row) {
+        console.error('[hd quote->wo] payment_terms missing - run migration 158', res.error.message)
+        const { payment_terms: _drop, ...withoutTerms } = row
+        void _drop
+        row = withoutTerms
+      } else if (isMissingMigration159Column(res.error) && 'road_call_fee' in row) {
+        console.error('[hd quote->wo] fee/unit columns missing - run migration 159', res.error.message)
+        row = withoutMigration159Columns(row)
+      } else {
+        break
+      }
+      res = await supabase
+        .from('hd_work_orders')
+        .insert(row)
+        .select('id, work_order_number')
+        .single()
+    }
+    return res
+  })
 
   if (error || !wo) {
     if (!error) return { ok: false, error: 'work order insert returned no row' }
