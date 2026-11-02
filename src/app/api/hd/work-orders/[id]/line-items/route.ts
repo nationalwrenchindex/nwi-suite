@@ -8,10 +8,12 @@ import {
 } from '@/lib/hd/work-order-lines'
 
 import { allocateForWorkOrder, partLinesFromRows } from '@/lib/inventory/ledger'
+import { isJobStatus, isMissingJobsSchema, type WorkOrderJob } from '@/lib/hd/work-order-jobs'
+import { LINE_SELECT, loadLinesAndJobs } from '@/lib/hd/work-order-jobs-load'
 
 export const dynamic = 'force-dynamic'
 
-// Line items on an HD work order (migration 120).
+// Line items on an HD work order (migration 120), grouped into jobs (migration 177).
 //
 // RLS already scopes these rows to the owner of the parent work order, but every
 // handler re-checks ownership explicitly so a missing row and someone else's row
@@ -25,6 +27,8 @@ type Gate =
   // gate has already fetched the user. Re-reading it would be a second round trip to
   // learn something this function just proved.
   | { error?: undefined; supabase: Awaited<ReturnType<typeof createClient>>; userId: string }
+
+type Supabase = Awaited<ReturnType<typeof createClient>>
 
 // Shared ownership gate. Returns an authed client scoped to the caller, or a
 // response to hand straight back.
@@ -44,7 +48,8 @@ async function requireOwnedWorkOrder(workOrderId: string): Promise<Gate> {
   return { supabase, userId: user.id }
 }
 
-const SELECT = 'id, work_order_id, type, description, part_number, quantity, unit_cost, unit_price, markup_percent, total, sort_order'
+const totalsOf = (lines: Array<Record<string, unknown>>) =>
+  sumLines(lines as unknown as Parameters<typeof sumLines>[0])
 
 export async function GET(
   _req: NextRequest,
@@ -54,19 +59,16 @@ export async function GET(
   const gate = await requireOwnedWorkOrder(workOrderId)
   if (gate.error) return gate.error
 
-  const { data, error } = await gate.supabase
-    .from('hd_work_order_line_items')
-    .select(SELECT)
-    .eq('work_order_id', workOrderId)
-    .order('sort_order', { ascending: true })
+  // The jobs come with the lines. Before migration 177, jobs is [] and has_jobs false,
+  // and the card shows one job holding every line, as the work order always was.
+  const { lines, jobs, hasJobs, error } = await loadLinesAndJobs(gate.supabase, workOrderId)
 
   if (error) {
     console.error('[hd/work-orders/line-items GET]', error)
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  const lines = data ?? []
-  return NextResponse.json({ line_items: lines, totals: sumLines(lines) })
+  return NextResponse.json({ line_items: lines, jobs, has_jobs: hasJobs, totals: totalsOf(lines) })
 }
 
 // PUT replaces the whole set rather than patching rows.
@@ -84,7 +86,7 @@ export async function PUT(
   if (gate.error) return gate.error
   const supabase = gate.supabase
 
-  let body: { line_items?: unknown }
+  let body: { line_items?: unknown; jobs?: unknown }
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid body' }, { status: 400 }) }
 
   const raw = body.line_items
@@ -93,16 +95,38 @@ export async function PUT(
     return NextResponse.json({ error: `Too many line items (max ${MAX_WORK_ORDER_LINES})` }, { status: 400 })
   }
 
+  // JOBS. The card sends its jobs beside the lines, and each line names its job by
+  // number. A job is a grouping only: normalizeLine prices every line exactly as it
+  // always has, and nothing here touches an amount.
+  //
+  // A client that sends no jobs (a page loaded before this change) gets every line on
+  // the work order's first job, which is what the work order was before jobs existed.
+  const sentJobs = parseJobs(body.jobs)
+  if (sentJobs && 'error' in sentJobs) return NextResponse.json({ error: sentJobs.error }, { status: 400 })
+  const jobNumbers = new Set((sentJobs ?? []).map(j => j.job_number))
+
   // Position in the sent array IS the sort order, so the tech's arrangement survives
   // the round trip without the client inventing index numbers.
-  const rows = []
+  const rows: Array<Record<string, unknown>> = []
+  const lineJob: number[] = []
   for (let i = 0; i < raw.length; i++) {
     const line = normalizeLine(raw[i] as WorkOrderLineInput, i)
     // A row with no usable type is a client bug, not something to silently drop —
     // dropping it would lose a billable line without telling anyone.
     if (!line) return NextResponse.json({ error: `Line ${i + 1}: type must be "labor" or "part"` }, { status: 400 })
+    const n = Number((raw[i] as { job_number?: unknown }).job_number ?? 1)
+    if (sentJobs && !jobNumbers.has(n)) {
+      return NextResponse.json({ error: `Line ${i + 1} names job ${n}, which is not on this work order.` }, { status: 400 })
+    }
     rows.push({ ...line, work_order_id: workOrderId })
+    lineJob.push(sentJobs ? n : 1)
   }
+
+  // The jobs, written before the lines so each line can point at its job's id.
+  const jobIds = await writeJobs(supabase, workOrderId, gate.userId, sentJobs)
+  if ('error' in jobIds) return NextResponse.json({ error: jobIds.error }, { status: jobIds.status })
+  const ids = jobIds.ids
+  if (ids) rows.forEach((r, i) => { r.job_id = ids.get(lineJob[i]) ?? null })
 
   // Delete-then-insert. Supabase's REST client has no multi-statement transaction, so
   // the window between the two is real: a failed insert leaves the set empty. The
@@ -118,20 +142,26 @@ export async function PUT(
     return NextResponse.json({ error: delError.message }, { status: 500 })
   }
 
-  if (rows.length === 0) return NextResponse.json({ line_items: [], totals: sumLines([]) })
+  let lines: Array<Record<string, unknown>> = []
+  if (rows.length > 0) {
+    const { data, error } = await supabase
+      .from('hd_work_order_line_items')
+      .insert(rows)
+      .select(ids ? `${LINE_SELECT}, job_id` : LINE_SELECT)
+      .order('sort_order', { ascending: true })
 
-  const { data, error } = await supabase
-    .from('hd_work_order_line_items')
-    .insert(rows)
-    .select(SELECT)
-    .order('sort_order', { ascending: true })
-
-  if (error) {
-    console.error('[hd/work-orders/line-items PUT insert]', error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) {
+      console.error('[hd/work-orders/line-items PUT insert]', error)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    lines = (data ?? []) as unknown as Array<Record<string, unknown>>
   }
 
-  const lines = data ?? []
+  // Jobs the card no longer has, now that no line points at them.
+  if (ids && sentJobs) await dropUnsentJobs(supabase, workOrderId, sentJobs)
+  const jobs = ids ? (await loadLinesAndJobs(supabase, workOrderId)).jobs : []
+
+  if (lines.length === 0) return NextResponse.json({ line_items: [], jobs, has_jobs: !!ids, totals: totalsOf([]) })
 
   // ------------------------------------------------------------ ALLOCATE
   //
@@ -147,12 +177,73 @@ export async function PUT(
       userId:      gate.userId,
       kind:        'hd',
       workOrderId: workOrderId,
-      lines:       partLinesFromRows(lines as unknown as Array<Record<string, unknown>>),
+      lines:       partLinesFromRows(lines),
     })
   } catch (err: unknown) {
     console.error('[hd/work-orders/line-items PUT] allocation failed, lines still saved:',
       err instanceof Error ? err.message : String(err))
   }
 
-  return NextResponse.json({ line_items: lines, totals: sumLines(lines) })
+  return NextResponse.json({ line_items: lines, jobs, has_jobs: !!ids, totals: totalsOf(lines) })
+}
+
+/** The jobs the card sent, checked. null when it sent none (an older page). */
+function parseJobs(v: unknown): WorkOrderJob[] | { error: string } | null {
+  if (v === undefined || v === null) return null
+  if (!Array.isArray(v) || v.length === 0) return { error: 'jobs must be a non-empty array' }
+  const out: WorkOrderJob[] = []
+  for (const j of v as Array<Record<string, unknown>>) {
+    const n = Number(j.job_number)
+    if (!Number.isInteger(n) || n < 1) return { error: 'Every job needs a whole job number of 1 or more.' }
+    if (out.some(o => o.job_number === n)) return { error: `Job ${n} is listed twice.` }
+    const description = typeof j.description === 'string' && j.description.trim() ? j.description.trim() : null
+    out.push({ job_number: n, description, status: isJobStatus(j.status) ? j.status : 'open' })
+  }
+  return out
+}
+
+/**
+ * Upsert the sent jobs (or, when none were sent, make sure a first job exists) and
+ * return job_number -> id. `ids` is null when migration 177 is not applied: the lines
+ * then save exactly as before, and more than one job - or a job description - is
+ * refused rather than silently flattened into one.
+ */
+async function writeJobs(
+  supabase: Supabase, workOrderId: string, userId: string, sent: WorkOrderJob[] | null,
+): Promise<{ ids: Map<number, string> | null } | { error: string; status: number }> {
+  const existing = await supabase
+    .from('hd_work_order_jobs')
+    .select('id, job_number')
+    .eq('work_order_id', workOrderId)
+  if (existing.error) {
+    if (!isMissingJobsSchema(existing.error)) return { error: existing.error.message, status: 500 }
+    if (sent && (sent.length > 1 || sent[0].description)) {
+      return { error: 'Separate jobs need migration 177, which is not applied yet. Apply it, then save again. Nothing was saved.', status: 409 }
+    }
+    return { ids: null }
+  }
+  // No jobs sent: keep whatever jobs exist and put the lines on the first one.
+  const have = [...(existing.data ?? [])].sort((a, b) => Number(a.job_number) - Number(b.job_number))
+  if (!sent && have.length > 0) return { ids: new Map([[1, String(have[0].id)]]) }
+
+  const want = sent ?? [{ job_number: 1, description: null, status: 'open' as const }]
+  const { data, error } = await supabase
+    .from('hd_work_order_jobs')
+    .upsert(want.map(j => ({
+      work_order_id: workOrderId, user_id: userId, job_number: j.job_number,
+      description: j.description, status: j.status, updated_at: new Date().toISOString(),
+    })), { onConflict: 'work_order_id,job_number' })
+    .select('id, job_number')
+  if (error) return { error: error.message, status: 500 }
+  return { ids: new Map((data ?? []).map(r => [Number(r.job_number), String(r.id)])) }
+}
+
+/** Delete the jobs the card did not send. Runs after the lines, so none points at them. */
+async function dropUnsentJobs(supabase: Supabase, workOrderId: string, sent: WorkOrderJob[]): Promise<void> {
+  const { error } = await supabase
+    .from('hd_work_order_jobs')
+    .delete()
+    .eq('work_order_id', workOrderId)
+    .not('job_number', 'in', `(${sent.map(j => j.job_number).join(',')})`)
+  if (error) console.error('[hd/work-orders/line-items PUT] could not drop removed jobs:', error.message)
 }

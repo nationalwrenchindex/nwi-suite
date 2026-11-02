@@ -56,6 +56,7 @@
 import { computeTax, effectiveRatePercent, parseBreakdown, type TaxSettings } from '@/lib/tax'
 import { parseDiscount, type DiscountInput, type DocumentDiscount } from '@/lib/document-discount'
 import { hdApplyDiscount, recordedRate } from '@/lib/hd/hd-discount'
+import { jobLabel, type WorkOrderJob } from '@/lib/hd/work-order-jobs'
 
 /** A row out of hd_work_order_line_items. */
 export interface WorkOrderLineRow {
@@ -69,6 +70,8 @@ export interface WorkOrderLineRow {
   markup_percent?: number | string | null
   total?: number | string | null
   sort_order?: number | null
+  /** Migration 177. Absent before it, and on a line read without it. */
+  job_id?: string | null
 }
 
 /** A line as hd_invoices.line_items stores it. */
@@ -83,6 +86,13 @@ export interface InvoiceLine {
   markup_percent?: number | null
   mobile_hours: number
   amount: number
+  /**
+   * The job this line belongs to (migration 177) and that job's heading, so every HD
+   * invoice view can group under it. Present ONLY when the work order has two or more
+   * jobs: a single-job invoice carries exactly the keys it always did.
+   */
+  job?: number
+  job_label?: string
 }
 
 const num = (v: unknown): number | null => {
@@ -106,11 +116,23 @@ const r2 = (n: number): number => Math.round(n * 100) / 100
 export function invoiceLinesFromWorkOrder(
   rows: WorkOrderLineRow[],
   workOrderLaborRate: number | null,
+  jobs: WorkOrderJob[] = [],
 ): InvoiceLine[] {
-  const sorted = [...rows].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+  // Jobs group the lines and change nothing else: the same rows, the same amounts, in
+  // job order. Only a work order whose lines sit on two or more jobs is grouped - one job
+  // is the work order itself, and its invoice keeps the shape it always had.
+  const jobById = new Map(jobs.filter(j => j.id).map(j => [j.id as string, j]))
+  const jobOf = (r: WorkOrderLineRow) => (r.job_id ? jobById.get(r.job_id) : undefined)
+  const grouped = new Set(rows.map(r => jobOf(r)?.job_number).filter(n => n != null)).size >= 2
+  const jobRank = (r: WorkOrderLineRow) => jobOf(r)?.job_number ?? Number.MAX_SAFE_INTEGER
+
+  const sorted = [...rows].sort((a, b) =>
+    (grouped ? jobRank(a) - jobRank(b) : 0) || (a.sort_order ?? 0) - (b.sort_order ?? 0))
   const out: InvoiceLine[] = []
 
   for (const r of sorted) {
+    const job = grouped ? jobOf(r) : undefined
+    const jobKeys = job ? { job: job.job_number, job_label: jobLabel(job) } : {}
     const kind = String(r.type ?? '').toLowerCase()
     const isLabor = kind === 'labor' || kind === 'labour'
     const description = (r.description ?? '').toString().trim()
@@ -138,6 +160,7 @@ export function invoiceLinesFromWorkOrder(
         unit_cost: 0,
         mobile_hours: hoursValue,
         amount: total ?? r2(hoursValue * rate),
+        ...jobKeys,
       })
       continue
     }
@@ -164,6 +187,7 @@ export function invoiceLinesFromWorkOrder(
       markup_percent: markup,
       mobile_hours: 0,
       amount: total ?? r2(quantity * unitForCustomer),
+      ...jobKeys,
     })
   }
 
@@ -415,12 +439,14 @@ export function buildInvoicePayload(
   wo: Record<string, unknown>,
   lineRows: WorkOrderLineRow[],
   fallback: ShopFallback,
+  /** The work order's jobs (migration 177). Empty before it: no grouping. */
+  jobs: WorkOrderJob[] = [],
 ): { payload: Record<string, unknown>; source: TermsSource; discountError: string | null } {
   // The work order's own rate if it has one, the shop's current setting if not. Passed
   // into the line builder so a labor line with no unit_price of its own prices at a
   // real rate instead of at 0.
   const laborRate = num(wo.labor_rate) ?? fallback.laborRate
-  const lines = invoiceLinesFromWorkOrder(lineRows, laborRate)
+  const lines = invoiceLinesFromWorkOrder(lineRows, laborRate, jobs)
   const totals = sumInvoiceLines(lines)
 
   const baseTerms = invoiceTermsFromWorkOrder(wo)

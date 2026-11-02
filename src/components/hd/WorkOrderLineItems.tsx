@@ -13,6 +13,7 @@ import AddPartToWorkOrder from '@/components/parts/AddPartToWorkOrder'
 import type { PickedPart } from '@/components/parts/PartsFinder'
 import { money } from '@/lib/format'
 import { tint } from '@/lib/hd/text-tone'
+import { JOB_STATUSES, type JobStatus, type WorkOrderJob } from '@/lib/hd/work-order-jobs'
 
 // Parts and labor priced on the job itself, instead of first appearing at the
 // invoice form. Self-contained: it fetches and saves its own rows, so the work order
@@ -33,6 +34,8 @@ const BLUE      = '#3B82F6'
 // back to 0 under the tech's cursor; they are parsed at save.
 interface DraftLine {
   key: string
+  /** The job this line is on (migration 177). Job 1 when the work order has no jobs. */
+  job_number: number
   type: WorkOrderLineType
   description: string
   part_number: string
@@ -45,9 +48,32 @@ interface DraftLine {
 function fmt(n: number) { return `${money(n)}` }
 function num(v: string) { const n = parseFloat(v); return Number.isFinite(n) ? n : 0 }
 
-function toDraft(l: WorkOrderLine): DraftLine {
+// A job on the card. Description and status only - a job carries no money.
+interface DraftJob {
+  job_number: number
+  description: string
+  status: JobStatus
+}
+
+const FIRST_JOB: DraftJob = { job_number: 1, description: '', status: 'open' }
+
+function toDraftJobs(jobs: WorkOrderJob[] | undefined): DraftJob[] {
+  const out = (jobs ?? []).map(j => ({ job_number: j.job_number, description: j.description ?? '', status: j.status }))
+  return out.length ? out.sort((a, b) => a.job_number - b.job_number) : [FIRST_JOB]
+}
+
+// Lines with their job number, from the server's job ids. A line with no job (a work
+// order from before migration 177) sits on the first job.
+function toDrafts(lines: Array<WorkOrderLine & { job_id?: string | null }>, jobs: WorkOrderJob[] | undefined): DraftLine[] {
+  const byId = new Map((jobs ?? []).filter(j => j.id).map(j => [j.id as string, j.job_number]))
+  const first = toDraftJobs(jobs)[0].job_number
+  return lines.map(l => toDraft(l, (l.job_id && byId.get(l.job_id)) || first))
+}
+
+function toDraft(l: WorkOrderLine, jobNumber: number): DraftLine {
   return {
     key:            l.id,
+    job_number:     jobNumber,
     type:           l.type,
     description:    l.description ?? '',
     part_number:    l.part_number ?? '',
@@ -92,6 +118,11 @@ export default function WorkOrderLineItems({
   unit?: { manufacturer: string | null; model: string | null; serial: string | null }
 }) {
   const [lines, setLines]     = useState<DraftLine[]>([])
+  const [jobs, setJobs]       = useState<DraftJob[]>([FIRST_JOB])
+  // false until migration 177 is applied: the card then works as one job, as before.
+  const [hasJobs, setHasJobs] = useState(false)
+  // Where a part picked from the catalog lands.
+  const [catalogJob, setCatalogJob] = useState(1)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving]   = useState(false)
   const [dirty, setDirty]     = useState(false)
@@ -107,9 +138,13 @@ export default function WorkOrderLineItems({
       try {
         const res = await fetch(`/api/hd/work-orders/${workOrderId}/line-items`)
         if (!res.ok) throw new Error('Could not load line items')
-        const json = await res.json() as { line_items: WorkOrderLine[] }
+        const json = await res.json() as { line_items: WorkOrderLine[]; jobs?: WorkOrderJob[]; has_jobs?: boolean }
         if (cancelled) return
-        setLines((json.line_items ?? []).map(toDraft))
+        const loadedJobs = toDraftJobs(json.jobs)
+        setJobs(loadedJobs)
+        setHasJobs(!!json.has_jobs)
+        setCatalogJob(loadedJobs[loadedJobs.length - 1].job_number)
+        setLines(toDrafts(json.line_items ?? [], json.jobs))
       } catch {
         if (!cancelled) setError('Could not load line items.')
       } finally {
@@ -148,9 +183,10 @@ export default function WorkOrderLineItems({
     setNote(null)
   }, [])
 
-  function addLine(type: WorkOrderLineType) {
+  function addLine(type: WorkOrderLineType, jobNumber: number) {
     setLines(ls => [...ls, {
       key: crypto.randomUUID(),
+      job_number: jobNumber,
       type,
       description: '',
       part_number: '',
@@ -170,6 +206,7 @@ export default function WorkOrderLineItems({
   function addPartFromCatalog(part: PickedPart) {
     setLines(ls => [...ls, {
       key: crypto.randomUUID(),
+      job_number: jobs.some(j => j.job_number === catalogJob) ? catalogJob : jobs[jobs.length - 1].job_number,
       type: 'part' as WorkOrderLineType,
       description: part.description,
       part_number: part.part_number,
@@ -189,15 +226,43 @@ export default function WorkOrderLineItems({
   }
 
   // Position in the array is the sort order the server stores, so moving a row is
-  // just a swap — no index bookkeeping on either side.
-  function move(index: number, delta: number) {
+  // just a swap — no index bookkeeping on either side. A row moves within its own job:
+  // it swaps with the nearest row of the same job above or below it.
+  function move(key: string, delta: number) {
     setLines(ls => {
+      const from = ls.findIndex(l => l.key === key)
+      if (from < 0) return ls
+      let to = from + delta
+      while (to >= 0 && to < ls.length && ls[to].job_number !== ls[from].job_number) to += delta
+      if (to < 0 || to >= ls.length) return ls
       const next = [...ls]
-      const to = index + delta
-      if (to < 0 || to >= next.length) return ls
-      ;[next[index], next[to]] = [next[to], next[index]]
+      ;[next[from], next[to]] = [next[to], next[from]]
       return next
     })
+    setDirty(true)
+  }
+
+  // ── Jobs. A job groups lines and carries no money; see lib/hd/work-order-jobs. ──
+  function addJob() {
+    const n = Math.max(0, ...jobs.map(j => j.job_number)) + 1
+    setJobs(js => [...js, { job_number: n, description: '', status: 'open' }])
+    setCatalogJob(n)
+    setDirty(true)
+    setNote(null)
+  }
+
+  function updateJob(n: number, patch: Partial<DraftJob>) {
+    setJobs(js => js.map(j => (j.job_number === n ? { ...j, ...patch } : j)))
+    setDirty(true)
+    setNote(null)
+  }
+
+  // Only an EMPTY job can be removed. A job's lines are billable work; removing the job
+  // must never take them with it, so the tech removes or moves the lines first.
+  function removeJob(n: number) {
+    if (jobs.length < 2 || lines.some(l => l.job_number === n)) return
+    setJobs(js => js.filter(j => j.job_number !== n))
+    if (catalogJob === n) setCatalogJob(jobs.find(j => j.job_number !== n)!.job_number)
     setDirty(true)
   }
 
@@ -229,10 +294,16 @@ export default function WorkOrderLineItems({
       // Dropped here rather than refusing the save: the tech asked to save the work he
       // did, and an empty row is not work. Refusing would make him hunt for a row that
       // shows nothing wrong.
+      // In job order, so the stored sort_order reads job by job.
+      const jobRank = new Map(jobs.map((j, i) => [j.job_number, i]))
       const keep = lines.filter(d => !isBlank(d))
+        .map((d, i) => ({ d, i }))
+        .sort((a, b) => (jobRank.get(a.d.job_number) ?? 0) - (jobRank.get(b.d.job_number) ?? 0) || a.i - b.i)
+        .map(x => x.d)
       const dropped = lines.length - keep.length
 
       const payload = keep.map(d => ({
+        job_number:     d.job_number,
         type:           d.type,
         description:    d.description,
         part_number:    d.part_number,
@@ -246,13 +317,17 @@ export default function WorkOrderLineItems({
       const res = await fetch(`/api/hd/work-orders/${workOrderId}/line-items`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ line_items: payload }),
+        body: JSON.stringify({
+          line_items: payload,
+          jobs: jobs.map(j => ({ job_number: j.job_number, description: j.description, status: j.status })),
+        }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error ?? 'Save failed')
       // Re-seed from the server's answer so the ids, and any number it rounded
       // differently, are what the card is now showing.
-      setLines((json.line_items ?? []).map(toDraft))
+      if (json.has_jobs) setJobs(toDraftJobs(json.jobs))
+      setLines(toDrafts(json.line_items ?? [], json.has_jobs ? json.jobs : undefined))
       setDirty(false)
       // Said out loud. A row vanishing on save with no explanation is its own small
       // mystery, and the tech should know it was the empty one and not his part line.
@@ -266,12 +341,16 @@ export default function WorkOrderLineItems({
     }
   }
 
-  const totals = sumLines(lines.map(d => ({
+  // One summing rule for the card and for each job, so the job subtotals add up to the
+  // card's LINE TOTAL by construction.
+  const draftTotals = (ds: DraftLine[]) => sumLines(ds.map(d => ({
     type:      d.type,
     quantity:  num(d.quantity),
     unit_cost: d.unit_cost.trim() === '' ? null : num(d.unit_cost),
     total:     draftTotal(d),
   })))
+  const totals = draftTotals(lines)
+  const cols = canEdit ? 9 : 8
 
   return (
     <div className="rounded-xl overflow-hidden mb-6" style={{ border: `1px solid ${BORDER}` }}>
@@ -284,20 +363,34 @@ export default function WorkOrderLineItems({
 
       {canEdit && (
         <div className="px-5 py-3 flex flex-wrap items-center gap-2" style={{ background: 'var(--hd-sunken)', borderBottom: `1px solid ${BORDER}` }}>
-          <button
-            type="button" onClick={() => addLine('labor')}
-            className="px-4 py-2 rounded-lg text-xs font-condensed font-bold tracking-wide"
-            style={{ background: `${tint(HD_ORANGE, 9)}`, color: 'var(--hd-text)', border: `1px solid ${tint(HD_ORANGE, 33)}` }}
-          >
-            + Add Labor
-          </button>
-          <button
-            type="button" onClick={() => addLine('part')}
-            className="px-4 py-2 rounded-lg text-xs font-condensed font-bold tracking-wide"
-            style={{ background: `${tint(BLUE, 9)}`, color: 'var(--hd-info)', border: `1px solid ${tint(BLUE, 33)}` }}
-          >
-            + Add Part
-          </button>
+          {/* With jobs, lines are added inside each job (its header row below), and this
+              bar adds jobs. Before migration 177 the card is one job, as it always was. */}
+          {hasJobs ? (
+            <button
+              type="button" onClick={addJob}
+              className="px-4 py-2 rounded-lg text-xs font-condensed font-bold tracking-wide"
+              style={{ background: 'transparent', color: 'var(--hd-text)', border: `1px solid ${BORDER}` }}
+            >
+              + Add Job
+            </button>
+          ) : (
+            <>
+              <button
+                type="button" onClick={() => addLine('labor', jobs[0].job_number)}
+                className="px-4 py-2 rounded-lg text-xs font-condensed font-bold tracking-wide"
+                style={{ background: `${tint(HD_ORANGE, 9)}`, color: 'var(--hd-text)', border: `1px solid ${tint(HD_ORANGE, 33)}` }}
+              >
+                + Add Labor
+              </button>
+              <button
+                type="button" onClick={() => addLine('part', jobs[0].job_number)}
+                className="px-4 py-2 rounded-lg text-xs font-condensed font-bold tracking-wide"
+                style={{ background: `${tint(BLUE, 9)}`, color: 'var(--hd-info)', border: `1px solid ${tint(BLUE, 33)}` }}
+              >
+                + Add Part
+              </button>
+            </>
+          )}
           <div className="flex-1" />
           {/* A warning, so it reads like one: the amber token (AA in both themes). */}
           {dirty && (
@@ -318,6 +411,17 @@ export default function WorkOrderLineItems({
           memory - which is where a wrong part number comes from. */}
       {canEdit && unit && (
         <div className="px-5 py-3" style={{ borderBottom: `1px solid ${BORDER}` }}>
+          {jobs.length > 1 && (
+            <label className="flex items-center gap-2 mb-2 text-xs" style={{ color: 'var(--hd-text-muted)' }}>
+              Catalog parts go on
+              <select
+                value={catalogJob} onChange={e => setCatalogJob(Number(e.target.value))}
+                className="px-2 py-1 rounded text-xs text-white" style={inputStyle}
+              >
+                {jobs.map(j => <option key={j.job_number} value={j.job_number}>Job {j.job_number}{j.description ? ` - ${j.description}` : ''}</option>)}
+              </select>
+            </label>
+          )}
           <AddPartToWorkOrder
             unit={unit}
             markupPercent={markupDefault}
@@ -351,7 +455,7 @@ export default function WorkOrderLineItems({
 
         {loading ? (
           <p className="p-5 text-xs" style={{ color: 'var(--hd-text-faint)' }}>Loading line items…</p>
-        ) : lines.length === 0 ? (
+        ) : lines.length === 0 && !hasJobs ? (
           <div className="p-5">
             <p className="text-xs py-4 text-center" style={{ color: 'var(--hd-text-faint)', border: `1px dashed ${BORDER}`, borderRadius: 8 }}>
               {canEdit ? 'No parts or labor on this job yet — add a line above' : 'No parts or labor on this job'}
@@ -374,7 +478,63 @@ export default function WorkOrderLineItems({
                 </tr>
               </thead>
               <tbody>
-                {lines.map((d, i) => {
+                {jobs.flatMap(job => {
+                  const jobLines = lines.filter(l => l.job_number === job.job_number)
+                  const jt = draftTotals(jobLines)
+                  // The job's header: what the repair is, where it stands, its own add
+                  // buttons, and its subtotal. Shown once migration 177 is in.
+                  const header = hasJobs ? [(
+                    <tr key={`job-${job.job_number}`} style={{ borderTop: `2px solid ${BORDER}`, background: 'var(--hd-sunken)' }}>
+                      <td colSpan={cols} className="px-3 py-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-condensed font-bold text-sm tracking-widest text-white">JOB {job.job_number}</span>
+                          <input
+                            className="flex-1 min-w-[180px] px-2 py-1.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20"
+                            style={inputStyle} disabled={!canEdit}
+                            value={job.description} onChange={e => updateJob(job.job_number, { description: e.target.value })}
+                            placeholder="What this repair is, e.g. Replace compressor"
+                          />
+                          <select
+                            value={job.status} disabled={!canEdit}
+                            onChange={e => updateJob(job.job_number, { status: e.target.value as JobStatus })}
+                            className="px-2 py-1.5 rounded-lg text-xs text-white" style={inputStyle}
+                          >
+                            {JOB_STATUSES.map(s => <option key={s} value={s}>{s === 'open' ? 'Open' : 'Complete'}</option>)}
+                          </select>
+                          {canEdit && (
+                            <>
+                              <button type="button" onClick={() => addLine('labor', job.job_number)}
+                                className="px-3 py-1.5 rounded-lg text-xs font-condensed font-bold tracking-wide"
+                                style={{ background: `${tint(HD_ORANGE, 9)}`, color: 'var(--hd-text)', border: `1px solid ${tint(HD_ORANGE, 33)}` }}>
+                                + Labor
+                              </button>
+                              <button type="button" onClick={() => addLine('part', job.job_number)}
+                                className="px-3 py-1.5 rounded-lg text-xs font-condensed font-bold tracking-wide"
+                                style={{ background: `${tint(BLUE, 9)}`, color: 'var(--hd-info)', border: `1px solid ${tint(BLUE, 33)}` }}>
+                                + Part
+                              </button>
+                              {jobs.length > 1 && jobLines.length === 0 && (
+                                <button type="button" onClick={() => removeJob(job.job_number)}
+                                  className="px-2 py-1.5 rounded-lg text-xs" style={{ color: 'var(--hd-negative)', border: '1px solid rgba(239,68,68,0.3)' }}
+                                  title="Remove this empty job">Remove job</button>
+                              )}
+                            </>
+                          )}
+                          <span className="ml-auto text-xs" style={{ color: 'var(--hd-text-muted)' }}>
+                            Labor {fmt(jt.labor)} · Parts {fmt(jt.parts)} · <span className="font-semibold text-white">Job subtotal {fmt(jt.total)}</span>
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  )] : []
+                  const empty = hasJobs && jobLines.length === 0 ? [(
+                    <tr key={`job-${job.job_number}-empty`}>
+                      <td colSpan={cols} className="px-3 py-3 text-xs" style={{ color: 'var(--hd-text-faint)' }}>
+                        No lines on this job yet.
+                      </td>
+                    </tr>
+                  )] : []
+                  return [...header, ...empty, ...jobLines.map((d, i) => {
                   const isPart = d.type === 'part'
                   return (
                     <tr key={d.key} style={{ borderTop: `1px solid ${BORDER}` }}>
@@ -467,9 +627,9 @@ export default function WorkOrderLineItems({
                       {canEdit && (
                         <td className="px-3 py-2">
                           <div className="flex items-center gap-1">
-                            <button type="button" onClick={() => move(i, -1)} disabled={i === 0}
+                            <button type="button" onClick={() => move(d.key, -1)} disabled={i === 0}
                               className="px-1.5 py-0.5 rounded text-xs disabled:opacity-25" style={{ color: 'var(--hd-text-muted)', border: `1px solid ${BORDER}` }} title="Move up">↑</button>
-                            <button type="button" onClick={() => move(i, 1)} disabled={i === lines.length - 1}
+                            <button type="button" onClick={() => move(d.key, 1)} disabled={i === jobLines.length - 1}
                               className="px-1.5 py-0.5 rounded text-xs disabled:opacity-25" style={{ color: 'var(--hd-text-muted)', border: `1px solid ${BORDER}` }} title="Move down">↓</button>
                             <button type="button" onClick={() => removeLine(d.key)}
                               className="px-1.5 py-0.5 rounded text-xs" style={{ color: 'var(--hd-negative)', border: '1px solid rgba(239,68,68,0.3)' }} title="Remove line">×</button>
@@ -478,6 +638,7 @@ export default function WorkOrderLineItems({
                       )}
                     </tr>
                   )
+                  })]
                 })}
               </tbody>
             </table>
@@ -487,6 +648,13 @@ export default function WorkOrderLineItems({
         {lines.length > 0 && (
           <div className="px-5 py-4 flex justify-end" style={{ borderTop: `1px solid ${BORDER}` }}>
             <div style={{ width: 260 }}>
+              {/* Each job's subtotal, so the tech can see they add up to the line total. */}
+              {hasJobs && jobs.length > 1 && jobs.map(j => (
+                <div key={`sub-${j.job_number}`} className="flex justify-between py-1 text-xs" style={{ color: 'var(--hd-text-muted)' }}>
+                  <span>Job {j.job_number}{j.description ? ` - ${j.description}` : ''}</span>
+                  <span>{fmt(draftTotals(lines.filter(l => l.job_number === j.job_number)).total)}</span>
+                </div>
+              ))}
               <div className="flex justify-between py-1 text-sm" style={{ color: 'var(--hd-text-muted)' }}>
                 <span>Labor</span><span>{fmt(totals.labor)}</span>
               </div>

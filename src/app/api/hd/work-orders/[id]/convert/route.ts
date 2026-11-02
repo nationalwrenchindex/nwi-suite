@@ -17,6 +17,7 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { buildInvoicePayload, type WorkOrderLineRow } from '@/lib/hd/wo-to-invoice'
+import { loadLinesAndJobs } from '@/lib/hd/work-order-jobs-load'
 import { TAX_SETTINGS_SELECT, taxSettingsFrom } from '@/lib/tax'
 
 export const dynamic = 'force-dynamic'
@@ -98,11 +99,9 @@ export async function GET(
     }
   }
 
-  const { data: lineRows, error: lineErr } = await supabase
-    .from('hd_work_order_line_items')
-    .select('id, type, description, part_number, quantity, unit_cost, unit_price, markup_percent, total, sort_order')
-    .eq('work_order_id', id)
-    .order('sort_order', { ascending: true })
+  // The lines with their jobs (migration 177), so a multi-job work order bills grouped
+  // by job. Read as before when 177 is not applied yet.
+  const { lines: lineRows, jobs, error: lineErr } = await loadLinesAndJobs(supabase, id)
 
   if (lineErr) {
     console.error('[hd convert] could not read line items:', lineErr)
@@ -159,7 +158,7 @@ export async function GET(
   const { payload, source: termsSource, discountError } = buildInvoicePayload(row, rows, {
     laborRate: fallbackRate,
     taxSettings: taxSettingsFrom(prof),
-  })
+  }, jobs)
 
   // A discount that no longer fits the lines (a flat amount bigger than what is left)
   // is refused with the reason, never dropped: an invoice without it would bill more

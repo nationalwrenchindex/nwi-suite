@@ -14,6 +14,8 @@ import { shopTimeZone, fmtShopDate } from '@/lib/shop-time'
 import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
 import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
 import { discountPrintLabel, parseDiscount } from '@/lib/document-discount'
+import { invoiceJobGroups } from '@/lib/hd/work-order-jobs'
+import { Fragment } from 'react'
 
 const ORANGE = '#FF6600'
 const BLUE   = '#2969B0'
@@ -37,6 +39,9 @@ interface LineItem {
   quantity?: number
   unit_cost?: number
   amount: number
+  /** The work order job this line came from (migration 177), on multi-job invoices. */
+  job?: number
+  job_label?: string
 }
 
 /** "Subtotal" then the discount and its reason - nothing at all when there is none. */
@@ -81,7 +86,10 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   )
 
   const items: LineItem[] = Array.isArray(inv.line_items) ? inv.line_items : []
-  const st = STATUS_STYLE[inv.status] ?? STATUS_STYLE.unpaid
+  // Grouped by work order job when there are two or more; otherwise one plain group,
+  // so a single-job invoice renders exactly as before.
+  const lineGroups = invoiceJobGroups(items) ?? [{ job: null, label: null, lines: items, subtotal: 0 }]
+  const st =STATUS_STYLE[inv.status] ?? STATUS_STYLE.unpaid
 
   // Each tax bucket as the document recorded it: its own rate, its own amount, and
   // whether that category was taxed at all. Empty for an invoice written before
@@ -294,7 +302,12 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                     <div className="grid text-xs font-semibold uppercase tracking-wide px-4 py-2.5" style={{ gridTemplateColumns: '70px 1fr 100px 100px 100px', background: '#1A1A1A', color: '#FFFFFF', gap: 8 }}>
                       <span>Type</span><span>Description</span><span className="text-right">Hrs/Qty</span><span className="text-right">Rate</span><span className="text-right">Amount</span>
                     </div>
-                    {items.map(item => (
+                    {lineGroups.map(g => (
+                      <Fragment key={g.job ?? 'other'}>
+                      {g.label && (
+                        <div className="px-4 py-2 text-sm font-semibold" style={{ background: '#F4F5F7', color: '#1A1A1A', borderBottom: '1px solid #E5E7EB' }}>{g.label}</div>
+                      )}
+                    {g.lines.map(item => (
                       <div key={item.id} className="grid px-4 py-3 items-center" style={{ gridTemplateColumns: '70px 1fr 100px 100px 100px', gap: 8, borderBottom: '1px solid #F9FAFB' }}>
                         <span className="text-xs px-2 py-0.5 rounded-full font-semibold w-fit" style={item.type === 'labor' ? { background: '#FFF7ED', color: 'var(--paper-text)' } : { background: '#EBF5FF', color: BLUE }}>
                           {item.type}
@@ -312,11 +325,24 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                         <span className="text-sm font-semibold text-right" style={{ color: '#1A1A1A' }}>{fmt(item.amount)}</span>
                       </div>
                     ))}
+                      {g.label && (
+                        <div className="flex justify-end gap-6 px-4 py-2 text-sm" style={{ borderBottom: '1px solid #E5E7EB' }}>
+                          <span style={{ color: 'var(--paper-muted)' }}>{g.label} subtotal</span>
+                          <span className="font-semibold" style={{ color: '#1A1A1A', minWidth: 100, textAlign: 'right' }}>{fmt(g.subtotal)}</span>
+                        </div>
+                      )}
+                      </Fragment>
+                    ))}
                   </div>
 
                   {/* Mobile cards (below md) */}
                   <div className="block md:hidden">
-                    {items.map(item => (
+                    {lineGroups.map(g => (
+                      <Fragment key={g.job ?? 'other'}>
+                      {g.label && (
+                        <div className="px-4 py-2 text-sm font-semibold" style={{ background: '#F4F5F7', color: '#1A1A1A', borderBottom: '1px solid #E5E7EB' }}>{g.label}</div>
+                      )}
+                    {g.lines.map(item => (
                       <div key={item.id} className="px-4 py-3" style={{ borderBottom: '1px solid #F3F4F6' }}>
                         <div className="flex items-start gap-2">
                           <span className="text-xs px-2 py-0.5 rounded-full font-semibold flex-shrink-0" style={item.type === 'labor' ? { background: '#FFF7ED', color: 'var(--paper-text)' } : { background: '#EBF5FF', color: BLUE }}>
@@ -336,6 +362,14 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                           <span className="text-sm font-semibold" style={{ color: '#1A1A1A' }}>{fmt(item.amount)}</span>
                         </div>
                       </div>
+                    ))}
+                      {g.label && (
+                        <div className="flex justify-between px-4 py-2 text-sm" style={{ borderBottom: '1px solid #E5E7EB' }}>
+                          <span style={{ color: 'var(--paper-muted)' }}>{g.label} subtotal</span>
+                          <span className="font-semibold" style={{ color: '#1A1A1A' }}>{fmt(g.subtotal)}</span>
+                        </div>
+                      )}
+                      </Fragment>
                     ))}
                   </div>
                 </div>

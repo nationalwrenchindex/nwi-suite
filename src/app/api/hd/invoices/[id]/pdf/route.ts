@@ -27,6 +27,7 @@ import {
   feeRows,
 } from '@/lib/invoice-document'
 import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
+import { invoiceJobGroups } from '@/lib/hd/work-order-jobs'
 
 /** Everything interpolated into the HTML below goes through this first. */
 function esc(v: unknown): string {
@@ -51,6 +52,9 @@ interface LineItem {
   quantity?: number
   unit_cost?: number
   amount: number
+  /** The work order job this line came from (migration 177), on multi-job invoices. */
+  job?: number
+  job_label?: string
 }
 
 function fmt(n: number | null | undefined) {
@@ -177,7 +181,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
   const items: LineItem[] = Array.isArray(inv.line_items) ? inv.line_items : []
 
-  const lineRows = items.map(item => {
+  const lineRow = (item: LineItem) => {
     if (item.type === 'labor') {
       return `<tr>
         <td>${esc(item.description)}</td>
@@ -194,7 +198,17 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       <td>${fmt(item.unit_cost)}</td>
       <td>${fmt(item.amount)}</td>
     </tr>`
-  }).join('')
+  }
+  // Grouped by work order job when there are two or more (migration 177): a heading
+  // row, the job's lines, and its subtotal. One job prints exactly as before.
+  const groups = invoiceJobGroups(items)
+  const lineRows = groups
+    ? groups.map(g => [
+        g.label ? `<tr><td colspan="5" style="font-weight:700;background:#F4F5F7">${esc(g.label)}</td></tr>` : '',
+        ...g.lines.map(lineRow),
+        g.label ? `<tr><td colspan="4" style="text-align:right;color:#555">${esc(g.label)} subtotal</td><td style="font-weight:700">${fmt(g.subtotal)}</td></tr>` : '',
+      ].join('')).join('')
+    : items.map(lineRow).join('')
 
   // ── The shop block, the unit block, and what may legally be claimed ─────────
   const shop = shopBlockFrom(profile)

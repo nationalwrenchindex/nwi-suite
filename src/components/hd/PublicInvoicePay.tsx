@@ -26,6 +26,8 @@ import { discountPrintLabel, parseDiscount } from '@/lib/document-discount'
 import { hdTermsBlockRows, parseTermsSnapshot } from '@/lib/document-terms'
 import DocumentTermsBlock from '@/components/hd/DocumentTermsBlock'
 import { shopTimeZone, fmtShopDate } from '@/lib/shop-time'
+import { invoiceJobGroups } from '@/lib/hd/work-order-jobs'
+import { Fragment } from 'react'
 
 // The light "document" palette HD invoices use, not the dark HD suite chrome.
 const BG     = '#F4F5F7'
@@ -57,6 +59,9 @@ interface LineItem {
   quantity?:      number
   unit_cost?:     number
   amount:         number
+  /** The work order job this line came from (migration 177), on multi-job invoices. */
+  job?:           number
+  job_label?:     string
 }
 
 interface Props {
@@ -87,8 +92,9 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
   const fmtDate = (s: string | null | undefined) => fmtShopDate(s, shopTz)
 
   const items: LineItem[] = Array.isArray(inv.line_items) ? inv.line_items : []
-  const labor = items.filter(i => i.type === 'labor')
-  const parts = items.filter(i => i.type === 'parts')
+  // Grouped by work order job when there are two or more, each with its own Labor and
+  // Parts and a subtotal; otherwise one plain group, exactly as before.
+  const lineGroups = invoiceJobGroups(items) ?? [{ job: null, label: null, lines: items, subtotal: 0 }]
 
   const isPaid = inv.status === 'paid'
   const isVoid = inv.status === 'void'
@@ -262,6 +268,14 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
               )}
             </div>
 
+            {lineGroups.map(g => {
+              const labor = g.lines.filter(i => i.type === 'labor')
+              const parts = g.lines.filter(i => i.type === 'parts')
+              return (
+            <Fragment key={g.job ?? 'other'}>
+            {g.label && (
+              <h3 className="text-sm font-semibold mb-2 mt-1" style={{ color: TEXT }}>{g.label}</h3>
+            )}
             {/* Labor */}
             {labor.length > 0 && (
               <div className="mb-5">
@@ -312,6 +326,15 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
                 </div>
               </div>
             )}
+            {g.label && (
+              <div className="flex justify-between text-sm mb-6 px-1" style={{ color: TEXT }}>
+                <span style={{ color: FAINT }}>{g.label} subtotal</span>
+                <span className="font-semibold">{fmt(g.subtotal)}</span>
+              </div>
+            )}
+            </Fragment>
+              )
+            })}
 
             {items.length === 0 && (
               <p className="text-sm mb-5" style={{ color: FAINT }}>No line items on this invoice.</p>
