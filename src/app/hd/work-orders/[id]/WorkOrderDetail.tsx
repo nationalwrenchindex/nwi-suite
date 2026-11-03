@@ -14,6 +14,7 @@ import { inspectionDateLabel, type InspectionSummary } from '@/lib/hd/inspection
 import { BrandHeader } from '@/components/BrandHeader'
 import WorkOrderLineItems from '@/components/hd/WorkOrderLineItems'
 import WorkOrderDiscount from '@/components/hd/WorkOrderDiscount'
+import WorkOrderExtras from '@/components/hd/WorkOrderExtras'
 import type { Branding } from '@/lib/branding'
 import { money } from '@/lib/format'
 import { textTone, tint } from '@/lib/hd/text-tone'
@@ -580,6 +581,8 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
           serial:       unitView.serial,
         }}
       />
+
+      <WorkOrderExtras workOrderId={workOrderId} locked={status === 'invoiced'} />
 
       <WorkOrderDiscount workOrderId={workOrderId} discount={wo.discount ?? null} locked={status === 'invoiced'} />
 

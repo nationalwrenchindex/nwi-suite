@@ -2,6 +2,7 @@ import { redirect, notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import EditInvoiceForm from '../EditInvoiceForm'
+import { loadHdShopExtras } from '@/lib/hd/hd-extras-load'
 
 export const metadata = { title: 'Edit Invoice — NWI HD Suite' }
 
@@ -37,5 +38,15 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
     : p.default_labor_rate != null ? Number(p.default_labor_rate)
     : null
 
-  return <EditInvoiceForm invoice={inv as Record<string, unknown>} shopLaborRate={shopLaborRate} />
+  // HD's drive time / mileage now and the service call setting (migration 178), for
+  // hours or a fee the tech adds to this invoice. Its recorded rates still win.
+  const { shop, available } = await loadHdShopExtras(supabase, user.id)
+
+  return (
+    <EditInvoiceForm
+      invoice={inv as Record<string, unknown>}
+      shopLaborRate={shopLaborRate}
+      shop={{ extras: shop.extras, serviceCallTax: shop.serviceCall.tax, serviceCallAvailable: available && 'service_call_fee' in (inv as Record<string, unknown>) }}
+    />
+  )
 }

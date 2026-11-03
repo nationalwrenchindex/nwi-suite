@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from 'next/server'
+import { isMissingServiceCallColumn } from '@/lib/hd/hd-extras'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { logHDCustomer } from '@/lib/hd/customer-logging'
@@ -154,6 +155,10 @@ export async function POST(req: NextRequest) {
     subtotal_parts: body.subtotal_parts as number | string | null | undefined,
   })
 
+  // Migration 178's two columns, on a database without them: a document with no
+  // service call fee drops the empty keys and saves; one WITH a fee is refused below
+  // rather than billed without a charge its total includes.
+  const serviceCallFeeSent = Number((invoiceBody as Record<string, unknown>).service_call_fee ?? 0) > 0
   const baseRow   = { ...invoiceBody, user_id: user.id, invoice_number, ...fleetLinks }
   const insertRow = { ...baseRow, parts_cost: costing.parts_cost, parts_sell: costing.parts_sell }
 
@@ -162,6 +167,20 @@ export async function POST(req: NextRequest) {
     .insert(insertRow)
     .select()
     .single()
+
+  if (error && isMissingServiceCallColumn(error)) {
+    if (serviceCallFeeSent) {
+      return NextResponse.json({ error: 'A service call fee needs migration 178. Nothing was saved.' }, { status: 409 })
+    }
+    for (const row of [baseRow, insertRow] as Array<Record<string, unknown>>) {
+      delete row.service_call_fee; delete row.service_call_tax
+    }
+    ;({ data, error } = await supabase
+      .from('hd_invoices')
+      .insert(insertRow)
+      .select()
+      .single())
+  }
 
   // Migrations here are applied by hand, so the deploy can land before 119 does.
   // In that window the costing columns do not exist and the insert fails — which

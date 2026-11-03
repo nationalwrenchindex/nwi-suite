@@ -13,6 +13,9 @@
 import { loadEnv, openSession } from './lib/smoke-session'
 import { invoiceJobGroups } from '../src/lib/hd/work-order-jobs'
 
+// Part lines carry NO part number on purpose: a numbered part that is in stock is
+// reserved by the line save (stock_allocation), and deleting the test work order does
+// not release it. On Nov 3 the extras walk left 2 of 11-9098 reserved that way.
 loadEnv()
 const BASE = process.env.PAGECHECK_BASE ?? 'http://localhost:3000'
 const S = process.env.NEXT_PUBLIC_SUPABASE_URL!, K = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -47,12 +50,12 @@ async function main() {
       { job_number: 3, description: 'PM filters', status: 'complete' },
     ]
     const line_items = [
-      { job_number: 1, type: 'part', description: 'Compressor X430P', part_number: '102-1100', quantity: 1, unit_cost: 812.40, markup_percent: 30 },
-      { job_number: 1, type: 'part', description: 'Receiver drier', part_number: '66-8712', quantity: 1, unit_cost: 46.15, markup_percent: 30 },
+      { job_number: 1, type: 'part', description: 'Compressor X430P', quantity: 1, unit_cost: 812.40, markup_percent: 30 },
+      { job_number: 1, type: 'part', description: 'Receiver drier', quantity: 1, unit_cost: 46.15, markup_percent: 30 },
       { job_number: 1, type: 'labor', description: 'R&R compressor, evacuate and charge', quantity: 4.5, unit_price: 145 },
       { job_number: 2, type: 'labor', description: 'Diagnose high head pressure', quantity: 1.25, unit_price: 145 },
-      { job_number: 3, type: 'part', description: 'Fuel filter', part_number: '11-9098', quantity: 2, unit_cost: 18.37, markup_percent: 30 },
-      { job_number: 3, type: 'part', description: 'Air filter', part_number: '11-9300', quantity: 1, unit_cost: 41.09, markup_percent: 30 },
+      { job_number: 3, type: 'part', description: 'Fuel filter', quantity: 2, unit_cost: 18.37, markup_percent: 30 },
+      { job_number: 3, type: 'part', description: 'Air filter', quantity: 1, unit_cost: 41.09, markup_percent: 30 },
     ]
     const saved = await api(`/api/hd/work-orders/${woId}/line-items`, { method: 'PUT', body: JSON.stringify({ jobs, line_items }) })
     const sj = await saved.json()

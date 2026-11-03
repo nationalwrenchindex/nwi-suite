@@ -425,6 +425,9 @@ export function feeRows(inv: Record<string, unknown>): MoneyRow[] {
   const road = Number(inv.road_call_fee ?? 0)
   if (Number.isFinite(diag) && diag > 0) rows.push({ label: 'Diagnostic Fee', amount: diag })
   if (Number.isFinite(road) && road > 0) rows.push({ label: 'Road Call Fee',  amount: road })
+  // Migration 178. NULL on every document before it, so nothing earlier prints a row.
+  const call = Number(inv.service_call_fee ?? 0)
+  if (Number.isFinite(call) && call > 0) rows.push({ label: 'Service Call Fee', amount: call })
   return rows
 }
 

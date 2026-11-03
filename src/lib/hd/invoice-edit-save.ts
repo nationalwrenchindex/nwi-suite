@@ -35,7 +35,8 @@
 // explicit correction (correctionFor) that recalculates on purpose and says so in
 // internal_notes. Nothing here guesses which number was meant.
 
-import { computeExtras, extrasColumns, extrasFromDocument, round2, type ExtrasResult } from '@/lib/billable-extras'
+import { computeExtras, extrasColumns, extrasFromDocument, round2, type ExtrasResult, type ExtrasSettings } from '@/lib/billable-extras'
+import { isServiceCallTax, serviceCallColumns, type ServiceCallTax } from '@/lib/hd/hd-extras'
 import { documentExtras } from '@/lib/document-money'
 import { computeTax, parseBreakdown, type TaxBreakdown, type TaxBucket, type TaxSettings } from '@/lib/tax'
 import { editableLines, type EditLine } from '@/lib/hd/invoice-edit-lines'
@@ -57,6 +58,17 @@ export interface InvoiceEditState {
   labor_rate: number | null
   diagnostic_fee: number
   road_call_fee: number
+  /** Migration 178. 0 = none. */
+  service_call_fee: number
+  /** How the service call fee is taxed: the invoice's own record, else the shop's setting. */
+  service_call_tax: ServiceCallTax
+  /**
+   * The shop's HD drive time and mileage settings NOW, for an invoice that recorded no
+   * rate for one: the tech may add hours or miles to it, priced at today's rate, which
+   * is then recorded. Never shop supplies - a percentage the invoice did not record is
+   * never added to it. NULL = only what the invoice recorded.
+   */
+  shop_extras: ExtrasSettings | null
   /** The hd_invoices.tax_rate column. Written back only when the tech changes it. */
   tax_rate: number
   /** The rates this invoice taxed each bucket at, off its own stored split. */
@@ -89,7 +101,11 @@ function discountInputOf(invoice: Record<string, unknown>): DiscountInput | null
  * flagged as assumed so the screen says so and the save notes it. Never 125, never any
  * number the shop did not set.
  */
-export function openInvoiceEdit(invoice: Record<string, unknown>, shopLaborRate: number | null): OpenedInvoice {
+export function openInvoiceEdit(
+  invoice: Record<string, unknown>,
+  shopLaborRate: number | null,
+  shop: { extras?: ExtrasSettings | null; serviceCallTax?: ServiceCallTax } = {},
+): OpenedInvoice {
   const storedTax = parseBreakdown(invoice.tax_breakdown)
   const recordedRate = invoice.labor_rate == null || invoice.labor_rate === '' ? null : num(invoice.labor_rate, NaN)
   const hasRecorded = recordedRate != null && Number.isFinite(recordedRate)
@@ -108,6 +124,9 @@ export function openInvoiceEdit(invoice: Record<string, unknown>, shopLaborRate:
       labor_rate:        hasRecorded ? recordedRate : shopLaborRate,
       diagnostic_fee:    num(invoice.diagnostic_fee),
       road_call_fee:     num(invoice.road_call_fee),
+      service_call_fee:  num(invoice.service_call_fee),
+      service_call_tax:  isServiceCallTax(invoice.service_call_tax) ? invoice.service_call_tax : (shop.serviceCallTax ?? 'labor'),
+      shop_extras:       shop.extras ?? null,
       tax_rate:          num(invoice.tax_rate),
       // The converter stores a BLENDED effective rate in tax_rate, so the bucket's own
       // recorded rate wins over the column.
@@ -137,19 +156,44 @@ function taxSettingsFor(invoice: Record<string, unknown>, s: InvoiceEditState): 
 function subtotals(s: InvoiceEditState) {
   const labor = round2(s.lines.filter(i => i.type === 'labor').reduce((t, i) => t + num(i.amount), 0))
   const parts = round2(s.lines.filter(i => i.type === 'parts').reduce((t, i) => t + num(i.amount), 0))
-  return { labor, parts, fees: round2(s.diagnostic_fee + s.road_call_fee) }
+  const call = num(s.service_call_fee)
+  return {
+    labor, parts,
+    fees: round2(s.diagnostic_fee + s.road_call_fee + call),
+    // The fees in the labor bucket: the service call fee unless it is recorded untaxed.
+    taxedFees: round2(s.diagnostic_fee + s.road_call_fee + (s.service_call_tax === 'none' ? 0 : call)),
+  }
 }
 
 /**
- * The taxable buckets. Diagnostic and road call fees are labor; travel is labor;
- * shop supplies is parts; mileage is taxed nowhere (it is still in the subtotal).
+ * The taxable buckets. Diagnostic and road call fees are labor, and the service call
+ * fee unless untaxed; travel is labor; shop supplies is parts; mileage is taxed nowhere
+ * (it is still in the subtotal).
  */
 function taxFor(s: InvoiceEditState, extras: ExtrasResult, settings: TaxSettings) {
   const t = subtotals(s)
   return computeTax(
-    { parts: round2(t.parts + extras.shopSupplies.amount), labor: round2(t.labor + t.fees + extras.travel.amount) },
+    { parts: round2(t.parts + extras.shopSupplies.amount), labor: round2(t.labor + t.taxedFees + extras.travel.amount) },
     settings,
   )
+}
+
+/**
+ * What the extras price under: exactly what the invoice recorded, plus - for drive time
+ * or mileage it never recorded - the shop's rate now, but only once the tech has typed
+ * hours or miles for it. Shop supplies only ever as recorded.
+ */
+function editSettings(invoice: Record<string, unknown>, s: InvoiceEditState): ExtrasSettings {
+  const rec = documentExtras(invoice).settings
+  const shop = s.shop_extras
+  if (!shop) return rec
+  const travel = !rec.billTravel && shop.billTravel && s.travelHours > 0
+  const mileage = !rec.billMileage && shop.billMileage && s.mileageMiles > 0
+  return {
+    ...rec,
+    ...(travel ? { billTravel: true, travelRatePerHour: shop.travelRatePerHour } : {}),
+    ...(mileage ? { billMileage: true, mileageRatePerMile: shop.mileageRatePerMile } : {}),
+  }
 }
 
 /**
@@ -165,14 +209,23 @@ export function editedExtras(invoice: Record<string, unknown>, opened: InvoiceEd
   return computeExtras(
     subtotals(s).parts,
     { ...doc.input, travelHours: s.travelHours, mileageMiles: s.mileageMiles },
-    doc.settings,
+    editSettings(invoice, s),
     num(s.labor_rate),
   )
 }
 
-/** The settings the extras inputs show under: exactly what the invoice bills. */
-export function invoiceExtrasSettings(invoice: Record<string, unknown>) {
-  return documentExtras(invoice).settings
+/**
+ * The settings the extras inputs show under: what the invoice bills, and the drive time
+ * and mileage the shop bills now (an input with hours typed is then priced at it).
+ */
+export function invoiceExtrasSettings(invoice: Record<string, unknown>, shop: ExtrasSettings | null = null): ExtrasSettings {
+  const rec = documentExtras(invoice).settings
+  if (!shop) return rec
+  return {
+    ...rec,
+    ...(!rec.billTravel && shop.billTravel ? { billTravel: true, travelRatePerHour: shop.travelRatePerHour } : {}),
+    ...(!rec.billMileage && shop.billMileage ? { billMileage: true, mileageRatePerMile: shop.mileageRatePerMile } : {}),
+  }
 }
 
 export interface InvoicePrice {
@@ -381,6 +434,8 @@ export function invoiceSaveBody(
     subtotal_parts: price.subtotalParts,
     diagnostic_fee: round2(s.diagnostic_fee),
     road_call_fee:  round2(s.road_call_fee),
+    // Migration 178. NULL for none, so an invoice without one writes nothing new.
+    ...serviceCallColumns(s.service_call_fee, s.service_call_tax),
     tax_rate:       s.tax_rate,
     tax_amount:     price.taxAmount,
     total:          price.total,

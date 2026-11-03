@@ -329,6 +329,8 @@ export default function WorkOrderLineItems({
       if (json.has_jobs) setJobs(toDraftJobs(json.jobs))
       setLines(toDrafts(json.line_items ?? [], json.has_jobs ? json.jobs : undefined))
       setDirty(false)
+      // Shop supplies is a percentage of these parts: tell the extras panel to re-price.
+      window.dispatchEvent(new CustomEvent('hd-wo-lines-saved', { detail: { workOrderId } }))
       // Said out loud. A row vanishing on save with no explanation is its own small
       // mystery, and the tech should know it was the empty one and not his part line.
       setNote(dropped > 0

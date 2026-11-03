@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from 'react'
 import { ExtrasInputs } from '@/components/shared/ExtrasFields'
-import { extrasDisplayRows, extrasAgree } from '@/lib/billable-extras'
+import { extrasDisplayRows, extrasAgree, type ExtrasSettings } from '@/lib/billable-extras'
+import type { ServiceCallTax } from '@/lib/hd/hd-extras'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { money } from '@/lib/format'
@@ -53,24 +54,29 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
  * written. `shopLaborRate` is the shop's HD rate, used only when the invoice recorded
  * none - and then shown as assumed and noted on save.
  */
-export default function EditInvoiceForm({ invoice, shopLaborRate }: {
+export default function EditInvoiceForm({ invoice, shopLaborRate, shop = null }: {
   invoice: Record<string, unknown>
   shopLaborRate: number | null
+  /** The shop's HD drive time / mileage now, and the service call setting (migration 178). */
+  shop?: { extras: ExtrasSettings; serviceCallTax: ServiceCallTax; serviceCallAvailable: boolean } | null
 }) {
   const router = useRouter()
   const id = String(invoice.id)
 
   // The invoice as opened. Every price is carried from this, so it never changes.
-  const [opened] = useState(() => openInvoiceEdit(invoice, shopLaborRate))
+  const [opened] = useState(() => openInvoiceEdit(invoice, shopLaborRate, { extras: shop?.extras ?? null, serviceCallTax: shop?.serviceCallTax }))
   // An invoice whose stored total is not its own lines + fees + extras + tax is never
   // saved silently. The tech is offered one deliberate correction instead.
   const notAddingUp = useMemo(() => invoiceDoesNotAddUp(invoice), [invoice])
 
   const [saving, setSaving] = useState(false)
   const [correcting, setCorrecting] = useState(false)
-  // The extras this invoice BILLS: exactly the rates it recorded. A travel, mileage or
-  // supplies rate it never recorded is off, whatever Settings say today.
-  const extrasSettings = useMemo(() => invoiceExtrasSettings(invoice), [invoice])
+  // The extras this invoice BILLS: the rates it recorded. Drive time or mileage it never
+  // recorded can be added at the shop's rate now; a supplies percentage it never
+  // recorded is never added.
+  const extrasSettings = useMemo(() => invoiceExtrasSettings(invoice, shop?.extras ?? null), [invoice, shop])
+  // The service call fee (migration 178): offered when the invoice has one, or the database can store one.
+  const showServiceCall = opened.state.service_call_fee > 0 || shop?.serviceCallAvailable === true
   const [travelHours,  setTravelHours]  = useState(opened.state.travelHours)
   const [mileageMiles, setMileageMiles] = useState(opened.state.mileageMiles)
   const [toast, setToast]   = useState('')
@@ -149,7 +155,7 @@ export default function EditInvoiceForm({ invoice, shopLaborRate }: {
   const extrasResult  = price.extras
   const taxWithExtras   = price.taxAmount
   const totalWithExtras = price.total
-  const taxBase = subtotalLabor + subtotalParts + form.diagnostic_fee + form.road_call_fee
+  const taxBase = subtotalLabor + subtotalParts + form.diagnostic_fee + form.road_call_fee + form.service_call_fee
   // An HD invoice must not display a charge outside its total either.
   const extrasMismatch = extrasAgree(extrasResult, price.subtotal, taxBase)
 
@@ -306,11 +312,24 @@ export default function EditInvoiceForm({ invoice, shopLaborRate }: {
                 onMileageMiles={setMileageMiles}
                 laborRate={rate}
               />
+              {showServiceCall && (
+                <label className="block mt-3">
+                  <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: MUTED }}>Service call fee ($)</span>
+                  <input type="number" min={0} step={0.01} inputMode="decimal" data-testid="edit-service-call-fee"
+                    value={form.service_call_fee || ''}
+                    onChange={e => setField('service_call_fee', Math.max(0, parseFloat(e.target.value) || 0))}
+                    style={{ ...inp, marginTop: 4 }} />
+                  <span className="block text-[11px] mt-1" style={{ color: MUTED }}>
+                    {form.service_call_tax === 'none' ? 'Not taxed' : 'Taxed as labor'}. Blank for none.
+                  </span>
+                </label>
+              )}
             </div>
             <div style={{ width: 280 }}>
               {[
                 { label: 'Labor Subtotal', val: subtotalLabor },
                 { label: 'Parts Subtotal', val: subtotalParts },
+                ...(form.service_call_fee > 0 ? [{ label: 'Service Call Fee', val: form.service_call_fee }] : []),
                 // Travel, mileage and shop supplies. A zero extra prints no row.
                 ...extrasDisplayRows(extrasResult).map(r => ({
                   label: r.detail ? `${r.label} (${r.detail})` : r.label,

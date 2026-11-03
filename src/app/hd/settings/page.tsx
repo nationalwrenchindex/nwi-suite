@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { resolveBranding } from '@/lib/branding'
 import HDSettingsForm from '@/components/hd/HDSettingsForm'
+import HDExtrasSettingsForm from '@/components/hd/HDExtrasSettingsForm'
 import LateFeeSettingsForm from '@/components/hd/LateFeeSettingsForm'
 import ExportData from '@/components/hd/ExportData'
 import ThemeToggle from '@/components/layout/ThemeToggle'
@@ -140,6 +141,15 @@ export default async function HDSettingsPage() {
             initialRoadCallFee={feeString(p?.hd_road_call_fee)}
             feesAvailable={feesAvailable}
           />
+        </div>
+
+        {/* Migration 178. HD's own defaults, edited here rather than on LD's screen. */}
+        <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
+          <p className="font-condensed font-bold text-white text-lg tracking-wide mb-1">DRIVE TIME, MILEAGE, SUPPLIES &amp; SERVICE CALL</p>
+          <p className="text-sm mb-4" style={{ color: 'var(--hd-text-muted)' }}>
+            What new work orders, quotes and invoices bill for the trip and for shop supplies. Each prints as its own line.
+          </p>
+          <HDExtrasSettingsForm laborRate={p?.hd_labor_rate?.toString() ?? null} />
         </div>
 
         {/* Sales tax. The SAME component LD settings mounts, not a copy -- both write

@@ -57,6 +57,9 @@ import { computeTax, effectiveRatePercent, parseBreakdown, type TaxSettings } fr
 import { parseDiscount, type DiscountInput, type DocumentDiscount } from '@/lib/document-discount'
 import { hdApplyDiscount, recordedRate } from '@/lib/hd/hd-discount'
 import { jobLabel, type WorkOrderJob } from '@/lib/hd/work-order-jobs'
+import { computeExtras, EXTRAS_OFF } from '@/lib/billable-extras'
+import { hdFeesTotal, hdTaxableFees } from '@/lib/hd/hd-extras'
+import { recordedTaxSettings, shiftCarriedTax } from '@/lib/hd/carried-tax'
 
 /** A row out of hd_work_order_line_items. */
 export interface WorkOrderLineRow {
@@ -307,12 +310,21 @@ export function invoiceTermsFromWorkOrder(wo: Record<string, unknown>): Record<s
     // route fills these from the quote when the work order predates migration 159.
     diagnostic_fee:                wo.diagnostic_fee ?? null,
     road_call_fee:                 wo.road_call_fee ?? null,
+
+    // Migration 178: the service call fee and the tax treatment the work order recorded
+    // for it. Absent on a work order before 178 - and then absent here too, so the
+    // invoice payload of every earlier work order is unchanged key for key.
+    ...('service_call_fee' in wo ? { service_call_fee: wo.service_call_fee ?? null } : {}),
+    ...('service_call_tax' in wo ? { service_call_tax: wo.service_call_tax ?? null } : {}),
   }
 }
 
-/** The two flat fees on a document, summed. Both are taxed as labor. */
+/**
+ * Every flat fee on a document, summed: diagnostic, road call and service call. All in
+ * the subtotal; the tax bucket each lands in is hdTaxableFees (src/lib/hd/hd-extras.ts).
+ */
 export function feesTotal(doc: Record<string, unknown>): number {
-  return (num(doc.diagnostic_fee) ?? 0) + (num(doc.road_call_fee) ?? 0)
+  return hdFeesTotal(doc)
 }
 
 /** Identity and the authorization record, carried so nothing is retyped. */
@@ -449,19 +461,48 @@ export function buildInvoicePayload(
   const lines = invoiceLinesFromWorkOrder(lineRows, laborRate, jobs)
   const totals = sumInvoiceLines(lines)
 
-  const baseTerms = invoiceTermsFromWorkOrder(wo)
+  // SHOP SUPPLIES, ON THE PARTS ACTUALLY BILLED. A work order that recorded a supplies
+  // percentage is billed that percentage (and cap) of the parts on this invoice - lines
+  // change after the percentage is recorded, and a fee figured on parts that are no
+  // longer there is a wrong number. Parts only: labor, travel, mileage and the fees
+  // never feed it, and a labor-only job is charged nothing. A work order that recorded
+  // no percentage is billed none, whatever Settings say today.
+  const recordedPct = num(wo.shop_supplies_percent_applied)
+  const storedSupplies = num(wo.shop_supplies_fee) ?? 0
+  const supplies = recordedPct == null ? storedSupplies : computeExtras(
+    totals.subtotal_parts,
+    { travelHours: 0, mileageMiles: 0, shopSuppliesPercentOverride: recordedPct, shopSuppliesCapOverride: num(wo.shop_supplies_cap_applied) },
+    EXTRAS_OFF, 0,
+  ).shopSupplies.amount
+  const billed = supplies === storedSupplies ? wo : { ...wo, shop_supplies_fee: supplies }
+
+  const baseTerms = invoiceTermsFromWorkOrder(billed)
 
   // MILEAGE IS EXCLUDED from the taxable extras. It is reimbursement of a cost, not a
   // sale - the settled rule. Travel is taxed as labor, shop supplies as parts.
   //
   // The diagnostic and road call fees are taxed as labor too (src/lib/tax.ts), which is
-  // how the quote computed the tax this normally copies.
+  // how the quote computed the tax this normally copies. The service call fee is taxed
+  // as labor unless the work order recorded it as untaxed (migration 178).
   const taxableExtras = {
-    labor: (num(baseTerms.travel_amount) ?? 0) + feesTotal(baseTerms),
+    labor: (num(baseTerms.travel_amount) ?? 0) + hdTaxableFees(baseTerms),
     parts: num(baseTerms.shop_supplies_fee) ?? 0,
   }
 
-  const { terms, source } = termsWithFallback(wo, totals, taxableExtras, fallback)
+  const { terms, source } = termsWithFallback(billed, totals, taxableExtras, fallback)
+
+  // A CARRIED tax figure (the quote's, by way of the work order) taxed the supplies fee
+  // the work order stored. When the parts billed refigure it, the carried tax moves by
+  // exactly the tax on the difference, in the parts bucket, at the rate the document
+  // recorded - and so does the pre-discount record, which the discount starts from.
+  let suppliesShift: ((c: { taxAmount: number; breakdown: ReturnType<typeof parseBreakdown> }) => { taxAmount: number; breakdown: ReturnType<typeof parseBreakdown> }) | null = null
+  if (source.taxFromDocument && supplies !== storedSupplies) {
+    const settings = recordedTaxSettings(wo.tax_breakdown, fallback.taxSettings)
+    suppliesShift = c => shiftCarriedTax(c, { parts: storedSupplies }, { parts: supplies }, settings)
+    const shifted = suppliesShift({ taxAmount: num(terms.tax_amount) ?? 0, breakdown: parseBreakdown(terms.tax_breakdown) })
+    terms.tax_amount = shifted.taxAmount
+    terms.tax_breakdown = shifted.breakdown
+  }
 
   // Every extra, including the untaxed mileage, counts toward the total.
   const allExtras =
@@ -487,8 +528,9 @@ export function buildInvoicePayload(
   let discountError: string | null = null
   const recorded = parseDiscount(wo.discount)
   if (recorded) {
+    const recordedBefore = { taxAmount: recorded.tax_before, breakdown: recorded.pre_tax_breakdown }
     const before = source.taxFromDocument
-      ? { taxAmount: recorded.tax_before, breakdown: recorded.pre_tax_breakdown }
+      ? (suppliesShift ? suppliesShift(recordedBefore) : recordedBefore)
       : { taxAmount, breakdown: parseBreakdown(terms.tax_breakdown) }
     const applied = hdApplyDiscount({
       discount:   { type: recorded.type, value: recorded.value, scope: recorded.scope, reason: recorded.reason },

@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useExtrasSettingsState } from '@/lib/use-extras-settings'
+import { useHdExtrasSettingsState } from '@/lib/hd/use-hd-extras-settings'
+import { serviceCallColumns } from '@/lib/hd/hd-extras'
 import { ExtrasInputs } from '@/components/shared/ExtrasFields'
 import {
   computeExtras, extrasColumns, extrasDisplayRows, extrasDelta, extrasAgree,
@@ -86,7 +87,10 @@ export default function NewInvoicePage() {
   const [saving, setSaving]       = useState(false)
   // HD gets the same three extras as LD, same tax treatment, same cap. Hours and
   // miles are the only inputs; the percentage is never a question.
-  const { settings: extrasSettings, loaded: extrasLoaded } = useExtrasSettingsState()
+  // HD's own defaults (migration 178), or LD's before it - what this form always read.
+  const hdExtras = useHdExtrasSettingsState()
+  const { settings: extrasSettings, loaded: extrasLoaded } = hdExtras
+  const serviceCallTax = hdExtras.serviceCall.tax
   const [travelHours,  setTravelHours]  = useState(0)
   const [mileageMiles, setMileageMiles] = useState(0)
   const [toast, setToast]         = useState('')
@@ -117,6 +121,8 @@ export default function NewInvoicePage() {
     complaint: '', diagnosis: '',
     labor_rate: 125, diagnostic_fee: 125, include_diagnostic: false,
     road_call_fee: 0, include_road_call: false,
+    // Migration 178. Ticked at the shop's figure when HD Settings bills one (below).
+    service_call_fee: 0, include_service_call: false,
     tax_rate: 0, tax_rate_labor: 0, notes: '',
   })
 
@@ -142,6 +148,13 @@ export default function NewInvoicePage() {
       return next
     })
   }, [feeSettings])
+
+  useEffect(() => {
+    if (!hdExtras.loaded || !hdExtras.serviceCallAvailable) return
+    const sc = hdExtras.serviceCall
+    if (!sc.bill || sc.fee == null || sc.fee <= 0) return
+    setForm(f => (f.service_call_fee === 0 ? { ...f, service_call_fee: sc.fee ?? 0, include_service_call: true } : f))
+  }, [hdExtras.loaded, hdExtras.serviceCallAvailable, hdExtras.serviceCall])
 
   // Seed the tax rate from the tech's saved default. Only fills while the field is
   // still untouched at 0, so a rate typed while the fetch was in flight survives.
@@ -378,11 +391,14 @@ export default function NewInvoicePage() {
   const subtotalParts = lineItems.filter(i => i.type === 'parts').reduce((s, i) => s + i.amount, 0)
   const diagFee = form.include_diagnostic ? form.diagnostic_fee : 0
   const roadFee = form.include_road_call  ? form.road_call_fee  : 0
-  const taxBase = subtotalLabor + subtotalParts + diagFee + roadFee
+  const callFee = hdExtras.serviceCallAvailable && form.include_service_call ? form.service_call_fee : 0
+  // In the labor bucket unless the shop's setting says the service call is not taxed.
+  const callFeeTaxed = serviceCallTax === 'none' ? 0 : callFee
+  const taxBase = subtotalLabor + subtotalParts + diagFee + roadFee + callFee
 
   // Diagnostic and road call fees follow LABOR, not parts. See lib/tax.ts.
   const tax = computeTax(
-    { parts: subtotalParts, labor: subtotalLabor + diagFee + roadFee },
+    { parts: subtotalParts, labor: subtotalLabor + diagFee + roadFee + callFeeTaxed },
     {
       tax_parts:      taxSettings?.tax_parts ?? true,
       tax_labor:      taxSettings?.tax_labor ?? true,
@@ -471,6 +487,8 @@ export default function NewInvoicePage() {
         subtotal_parts:    parseFloat(subtotalParts.toFixed(2)),
         diagnostic_fee:    parseFloat(diagFee.toFixed(2)),
         road_call_fee:     parseFloat(roadFee.toFixed(2)),
+        // Migration 178: the fee and the tax treatment it was priced with.
+        ...(hdExtras.serviceCallAvailable ? serviceCallColumns(callFee, serviceCallTax) : {}),
         tax_rate:          form.tax_rate,
         // MERGED, so the stored breakdown sums to the stored tax_amount.
         //
@@ -677,6 +695,19 @@ export default function NewInvoicePage() {
                 <FeeInput style={{ ...inp, paddingLeft: 24, opacity: form.include_road_call ? 1 : 0.4 }} value={form.road_call_fee} disabled={!form.include_road_call} onChange={n => setField('road_call_fee', n)} />
               </div>
             </div>
+            {hdExtras.serviceCallAvailable && (
+              <div>
+                <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                  <input type="checkbox" checked={form.include_service_call} onChange={e => setField('include_service_call', e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ORANGE }} data-testid="invoice-include-service-call" />
+                  <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: MUTED }}>Service Call Fee</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: MUTED }}>$</span>
+                  <FeeInput style={{ ...inp, paddingLeft: 24, opacity: form.include_service_call ? 1 : 0.4 }} value={form.service_call_fee} disabled={!form.include_service_call} onChange={n => setField('service_call_fee', n)} />
+                </div>
+                <p className="text-xs mt-1" style={{ color: MUTED }}>{serviceCallTax === 'none' ? 'Not taxed.' : 'Taxed as labor.'}</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -739,6 +770,7 @@ export default function NewInvoicePage() {
                 { label: 'Parts Subtotal', val: subtotalParts },
                 ...(form.include_diagnostic ? [{ label: 'Diagnostic Fee', val: diagFee }] : []),
                 ...(form.include_road_call ? [{ label: 'Road Call Fee', val: roadFee }] : []),
+                ...(callFee > 0 ? [{ label: 'Service Call Fee', val: callFee }] : []),
                 // Travel, mileage and shop supplies. extrasDisplayRows returns no row
                 // for a zero amount, so nothing prints for an extra that is not charged.
                 ...extrasDisplayRows(extrasResult).map(r => ({

@@ -11,7 +11,7 @@
 
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
-import { HD_QUOTE_PUBLIC_SELECT } from '@/lib/hd/quote-approval'
+import { HD_QUOTE_PUBLIC_SELECT, HD_QUOTE_PUBLIC_SELECT_178_COLUMNS } from '@/lib/hd/quote-approval'
 
 export const dynamic = 'force-dynamic'
 
@@ -25,11 +25,10 @@ export async function GET(
   }
 
   const supabase = createServiceClient()
-  const { data, error } = await supabase
-    .from('hd_quotes')
-    .select(HD_QUOTE_PUBLIC_SELECT)
-    .eq('public_token', token)
-    .maybeSingle()
+  // With migration 178's service call fee when the database has it, without it before.
+  const read = (cols: string) => supabase.from('hd_quotes').select(cols).eq('public_token', token).maybeSingle()
+  let { data, error } = await read(`${HD_QUOTE_PUBLIC_SELECT}, ${HD_QUOTE_PUBLIC_SELECT_178_COLUMNS}`)
+  if (error && /service_call/.test(error.message)) ({ data, error } = await read(HD_QUOTE_PUBLIC_SELECT))
 
   // Migration 153 applied by hand, code deployed separately: in that window
   // public_token does not exist and this would 500. A 404 is the honest answer to

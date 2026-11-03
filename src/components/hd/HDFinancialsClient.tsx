@@ -83,6 +83,8 @@ interface CostSummary {
   tax_collected:           number
   parts_revenue:           number
   labor_revenue:           number
+  /** Absent from a server older than this field. */
+  shop_supplies_revenue?:  number
   cogs_total:              number | null
   cogs_known:              number
   cogs_unknown:            number
@@ -254,7 +256,8 @@ function CostMarginBlock({ periodParam, periodLabel }: { periodParam: string; pe
             : `${s.invoice_count} invoice${s.invoice_count !== 1 ? 's' : ''} · ${periodLabel}`}
         />
         <StatCard label="Parts Revenue" value={fmt(s.parts_revenue)} color="orange" sub="Billed to customers" />
-        <StatCard label="Labor Revenue" value={fmt(s.labor_revenue)} color="blue"   sub="Incl. diagnostic + road call" />
+        <StatCard label="Labor Revenue" value={fmt(s.labor_revenue)} color="blue"   sub="Incl. diagnostic, road call + service call" />
+        <StatCard label="Shop Supplies" value={fmt(s.shop_supplies_revenue ?? 0)} color="white" sub="Billed as its own line, not in parts" />
         <StatCard
           label="Cost of Goods Sold"
           value={s.cogs_total == null ? '—' : fmt(s.cogs_total)}

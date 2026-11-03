@@ -2,6 +2,9 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDStarterAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { insertWithWorkOrderNumber } from '@/lib/work-order-number'
+import { loadHdShopExtras } from '@/lib/hd/hd-extras-load'
+import { workOrderDefaultColumns } from '@/lib/hd/work-order-extras'
+import { isMissingServiceCallColumn, withoutServiceCall } from '@/lib/hd/hd-extras'
 import { WORK_ORDER_LIST_SELECT, WORK_ORDER_PAGE_SIZE } from './list'
 
 export const dynamic = 'force-dynamic'
@@ -94,10 +97,14 @@ export async function POST(req: NextRequest) {
     : (typeof durationRaw === 'string' && durationRaw.trim() && !Number.isNaN(Number(durationRaw))) ? Number(durationRaw)
     : null
 
+  // Drive time, mileage, shop supplies and the service call fee the shop bills, recorded
+  // on the work order now so a later change to Settings never re-prices it.
+  const { shop, available } = await loadHdShopExtras(supabase, user.id)
+  const defaults = workOrderDefaultColumns(shop, available)
+
   // The highest existing number plus one, retried on a collision (lib/work-order-number).
-  const { data, error } = await insertWithWorkOrderNumber(supabase, 'hd_work_orders', user.id, work_order_number => supabase
-    .from('hd_work_orders')
-    .insert({
+  const { data, error } = await insertWithWorkOrderNumber(supabase, 'hd_work_orders', user.id, async work_order_number => {
+    const row: Record<string, unknown> = {
       user_id:                  user.id,
       work_order_number,
       status:                   'open',
@@ -124,9 +131,13 @@ export async function POST(req: NextRequest) {
       state:                    str(body.state),
       zip:                      str(body.zip),
       estimated_duration_hours,
-    })
-    .select('id, work_order_number, scheduled_at')
-    .single())
+      ...defaults,
+    }
+    const insert = (r: Record<string, unknown>) => supabase.from('hd_work_orders').insert(r).select('id, work_order_number, scheduled_at').single()
+    const res = await insert(row)
+    // Before migration 178 the work order has no service call columns.
+    return res.error && isMissingServiceCallColumn(res.error) ? insert(withoutServiceCall(row)) : res
+  })
 
   if (error) {
     console.error('[hd/work-orders POST]', error)

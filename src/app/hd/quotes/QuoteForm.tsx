@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useExtrasSettingsState } from '@/lib/use-extras-settings'
+import { useHdExtrasSettingsState } from '@/lib/hd/use-hd-extras-settings'
+import { isServiceCallTax, serviceCallColumns } from '@/lib/hd/hd-extras'
 import { ExtrasInputs } from '@/components/shared/ExtrasFields'
 import {
   computeExtras, extrasColumns, extrasDisplayRows, extrasDelta, extrasAgree,
@@ -266,6 +267,7 @@ function withQuote<T extends Record<string, unknown>>(q: Record<string, unknown>
   // A stored fee is an included fee; a zero one was not charged.
   out.include_diagnostic = Number(q.diagnostic_fee ?? 0) > 0
   out.include_road_call  = Number(q.road_call_fee ?? 0) > 0
+  out.include_service_call = Number(q.service_call_fee ?? 0) > 0
   // hd_quotes.tax_rate is the PARTS rate (it is form.tax_rate on save); the labor rate
   // lives only in the stored breakdown. A legacy quote has none - one rate for both.
   const tb = parseBreakdown(q.tax_breakdown)
@@ -287,7 +289,9 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
   const [saving, setSaving]               = useState(false)
   // HD gets the same three extras as LD, same tax treatment, same cap. Hours and
   // miles are the only inputs; the percentage is never a question.
-  const { settings: currentExtras, loaded: currentExtrasLoaded } = useExtrasSettingsState()
+  // HD's own defaults (migration 178), or LD's before it - what this form always read.
+  const hdExtras = useHdExtrasSettingsState()
+  const { settings: currentExtras, loaded: currentExtrasLoaded } = hdExtras
   // A SAVED quote bills exactly the extras it recorded, at the rates it recorded - the
   // same reader LD's editors use. A supplies percentage (or a travel or mileage rate)
   // it never recorded stays off on edit; it does not pick up today's setting. A new
@@ -385,6 +389,8 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
     // HD Settings, at that value: see the seeding effect below.
     labor_rate: 125, diagnostic_fee: 0, include_diagnostic: false,
     road_call_fee: 0, include_road_call: false,
+    // Migration 178. Its own on/off in Settings; seeded below when the shop bills one.
+    service_call_fee: 0, include_service_call: false,
     tax_rate: 0, tax_rate_labor: 0, notes: '', valid_until: '',
     // The customer's own PO, when they give one. Travels to the work order and the
     // invoice; see the field in Notes & Validity.
@@ -428,6 +434,18 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
       return next
     })
   }, [feeSettings])
+
+  // The service call fee (migration 178): ticked at the shop's figure when HD Settings
+  // bills one. Never over a saved quote - its fee is what it recorded, including none.
+  useEffect(() => {
+    if (editing || !hdExtras.loaded || !hdExtras.serviceCallAvailable) return
+    const sc = hdExtras.serviceCall
+    if (!sc.bill || sc.fee == null || sc.fee <= 0) return
+    setForm(f => (f.service_call_fee === 0 ? { ...f, service_call_fee: sc.fee ?? 0, include_service_call: true } : f))
+  }, [hdExtras.loaded, hdExtras.serviceCallAvailable, hdExtras.serviceCall, editing])
+  // Its tax treatment: the saved quote's record, the shop's setting for a new one.
+  const serviceCallTax = editing && isServiceCallTax(initial?.service_call_tax) ? initial.service_call_tax : hdExtras.serviceCall.tax
+  const serviceCallAvailable = editing ? ('service_call_fee' in (initial ?? {})) : hdExtras.serviceCallAvailable
 
   // Seed the tax rate from the tech's saved default. A converted quote carries its
   // tax_rate onto the invoice, so this is what keeps quote-sourced invoices taxed.
@@ -869,7 +887,10 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
   const subtotalParts = lineItems.filter(i => i.type === 'parts').reduce((s, i) => s + i.amount, 0)
   const diagFee       = form.include_diagnostic ? form.diagnostic_fee : 0
   const roadFee       = form.include_road_call  ? form.road_call_fee  : 0
-  const taxBase       = subtotalLabor + subtotalParts + diagFee + roadFee
+  const callFee       = serviceCallAvailable && form.include_service_call ? form.service_call_fee : 0
+  // In the labor bucket unless the shop (or this quote) says it is not taxed.
+  const callFeeTaxed  = serviceCallTax === 'none' ? 0 : callFee
+  const taxBase       = subtotalLabor + subtotalParts + diagFee + roadFee + callFee
 
   // Whether parts and labor are taxed: the saved quote's own record when editing, the
   // shop's settings for a new one.
@@ -880,7 +901,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
   // side would have moved the bug instead of fixing it: a shop in a state that
   // exempts labor would still have been taxing its own call-out.
   const tax = computeTax(
-    { parts: subtotalParts, labor: subtotalLabor + diagFee + roadFee },
+    { parts: subtotalParts, labor: subtotalLabor + diagFee + roadFee + callFeeTaxed },
     {
       tax_parts:      taxedPartsFlag,
       tax_labor:      taxedLaborFlag,
@@ -1350,6 +1371,9 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
         subtotal_parts:    parseFloat(subtotalParts.toFixed(2)),
         diagnostic_fee:    parseFloat(diagFee.toFixed(2)),
         road_call_fee:     parseFloat(roadFee.toFixed(2)),
+        // Migration 178: the fee and the tax treatment it was priced with. Omitted on a
+        // database without 178, where the form offers no fee.
+        ...(serviceCallAvailable ? serviceCallColumns(callFee, serviceCallTax) : {}),
         tax_rate:          form.tax_rate,
         // What was actually taxed, so the customer copy can say so and no later
         // reader has to guess the split back out of a blended subtotal.
@@ -1812,6 +1836,31 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                 />
               </div>
             </div>
+            {serviceCallAvailable && (
+              <div>
+                <label className="flex items-center gap-2 mb-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.include_service_call}
+                    onChange={e => setField('include_service_call', e.target.checked)}
+                    className="w-4 h-4 rounded"
+                    style={{ accentColor: ORANGE }}
+                    data-testid="quote-include-service-call"
+                  />
+                  <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: MUTED }}>Include Service Call Fee</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: MUTED }}>$</span>
+                  <FeeInput
+                    style={{ ...inp, paddingLeft: 24, opacity: form.include_service_call ? 1 : 0.4 }}
+                    value={form.service_call_fee}
+                    disabled={!form.include_service_call}
+                    onChange={n => setField('service_call_fee', n)}
+                  />
+                </div>
+                <p className="text-xs mt-1" style={{ color: MUTED }}>{serviceCallTax === 'none' ? 'Not taxed.' : 'Taxed as labor.'}</p>
+              </div>
+            )}
           </div>
         </div>
 
@@ -1958,6 +2007,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                 { label: 'Parts Subtotal', val: subtotalParts },
                 ...(form.include_diagnostic ? [{ label: 'Diagnostic Fee', val: diagFee }] : []),
                 ...(form.include_road_call ? [{ label: 'Road Call Fee', val: roadFee }] : []),
+                ...(callFee > 0 ? [{ label: 'Service Call Fee', val: callFee }] : []),
                 // Travel, mileage and shop supplies. extrasDisplayRows returns no row
                 // for a zero amount, so nothing prints for an extra that is not charged.
                 ...extrasDisplayRows(extrasResult).map(r => ({

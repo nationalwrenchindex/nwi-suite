@@ -42,6 +42,8 @@ export const QUOTE_EDIT_FIELDS = [
   'complaint', 'diagnosis',
   'line_items', 'labor_rate', 'subtotal_labor', 'subtotal_parts',
   'diagnostic_fee', 'road_call_fee',
+  // Migration 178. The form sends them only when the database has them.
+  'service_call_fee', 'service_call_tax',
   'tax_rate', 'tax_breakdown', 'tax_amount', 'total',
   'travel_hours', 'travel_rate', 'travel_amount',
   'mileage_miles', 'mileage_rate', 'mileage_amount',

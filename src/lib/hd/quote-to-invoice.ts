@@ -51,6 +51,8 @@ export function invoiceBodyFromQuote(q: Record<string, unknown>): Record<string,
     subtotal_parts:     q.subtotal_parts,
     diagnostic_fee:     q.diagnostic_fee,
     road_call_fee:      q.road_call_fee,
+    // Migration 178, inside q.total like the others. Only when the quote has the column.
+    ...('service_call_fee' in q ? { service_call_fee: q.service_call_fee ?? null, service_call_tax: q.service_call_tax ?? null } : {}),
 
     // The billable extras, as the quote recorded them. These are inside q.total, so
     // leaving them off is an invoice whose lines do not add up to its own total.

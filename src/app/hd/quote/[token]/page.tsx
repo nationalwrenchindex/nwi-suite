@@ -12,7 +12,7 @@
 import { notFound } from 'next/navigation'
 import type { Metadata } from 'next'
 import { createServiceClient } from '@/lib/supabase/service'
-import { HD_QUOTE_PUBLIC_SELECT } from '@/lib/hd/quote-approval'
+import { HD_QUOTE_PUBLIC_SELECT, HD_QUOTE_PUBLIC_SELECT_178_COLUMNS } from '@/lib/hd/quote-approval'
 import HDQuoteApprovalClient, { type PublicHDQuote } from './HDQuoteApprovalClient'
 
 export const dynamic = 'force-dynamic'
@@ -54,11 +54,10 @@ export default async function HDPublicQuotePage(
   if (!token || token.length < 16) notFound()
 
   const sc = createServiceClient()
-  const { data, error } = await sc
-    .from('hd_quotes')
-    .select(`${HD_QUOTE_PUBLIC_SELECT}, user_id`)
-    .eq('public_token', token)
-    .maybeSingle()
+  // With migration 178's service call fee when the database has it, without it before.
+  const read = (cols: string) => sc.from('hd_quotes').select(cols).eq('public_token', token).maybeSingle()
+  let { data, error } = await read(`${HD_QUOTE_PUBLIC_SELECT}, ${HD_QUOTE_PUBLIC_SELECT_178_COLUMNS}, user_id`)
+  if (error && /service_call/.test(error.message)) ({ data, error } = await read(`${HD_QUOTE_PUBLIC_SELECT}, user_id`))
 
   // Migration 153 is applied by hand and the code deploys separately. In that window
   // public_token does not exist; 404 is the honest answer rather than a 500.

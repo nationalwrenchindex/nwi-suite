@@ -55,6 +55,8 @@ export interface PublicHDQuote {
   subtotal_parts: number | null
   diagnostic_fee: number | null
   road_call_fee: number | null
+  /** Migration 178. Absent before it. */
+  service_call_fee?: number | null
   travel_hours: number | null
   travel_rate: number | null
   travel_amount: number | null
@@ -271,6 +273,7 @@ export default function HDQuoteApprovalClient({
           ['Parts', quote.subtotal_parts],
           ['Diagnostic', quote.diagnostic_fee],
           ['Road call', quote.road_call_fee],
+          ['Service call', quote.service_call_fee ?? null],
           [quote.travel_hours ? `Travel (${hours(quote.travel_hours)})` : 'Travel', quote.travel_amount],
           [quote.mileage_miles ? `Mileage (${quote.mileage_miles} mi)` : 'Mileage', quote.mileage_amount],
           [quote.shop_supplies_percent_applied != null

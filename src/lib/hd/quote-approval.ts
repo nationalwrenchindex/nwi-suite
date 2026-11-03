@@ -33,6 +33,7 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { isMissingPaymentTermsColumn } from '@/lib/hd/payment-terms'
 import { isMissingMigration159Column, withoutMigration159Columns } from '@/lib/hd/migration-159'
 import { insertWithWorkOrderNumber } from '@/lib/work-order-number'
+import { isMissingServiceCallColumn, withoutServiceCall } from '@/lib/hd/hd-extras'
 
 /** 32 hex characters, the same shape LD's quote token uses. */
 export function generateQuoteToken(): string {
@@ -114,6 +115,9 @@ export async function mintQuoteToken(quoteId: string, userId: string): Promise<s
  * to the customer's browser, and a `*` select would ship whatever the next migration
  * adds without anyone deciding to.
  */
+/** The public select plus migration 178's columns. Readers retry with HD_QUOTE_PUBLIC_SELECT before 178. */
+export const HD_QUOTE_PUBLIC_SELECT_178_COLUMNS = 'service_call_fee, service_call_tax'
+
 export const HD_QUOTE_PUBLIC_SELECT = [
   'id', 'quote_number', 'status', 'public_token',
   'customer_name', 'customer_phone', 'customer_email',
@@ -175,6 +179,10 @@ export function termsFromQuote(q: Record<string, unknown>): Record<string, unkno
     // invoice converter reads the fees off the quote instead.
     diagnostic_fee:                q.diagnostic_fee ?? null,
     road_call_fee:                 q.road_call_fee ?? null,
+
+    // Migration 178: the service call fee and its recorded tax treatment. Only when the
+    // quote row has them, so a quote read before 178 inserts exactly as it did.
+    ...('service_call_fee' in q ? { service_call_fee: q.service_call_fee ?? null, service_call_tax: q.service_call_tax ?? null } : {}),
 
     // MIGRATION 168. The discount the customer approved, with the tax as it stood
     // before it - the converter re-applies it to the invoice from those figures, so
@@ -557,12 +565,17 @@ export async function createWorkOrderFromQuote(
       .select('id, work_order_number')
       .single()
 
-    for (let attempt = 0; res.error && attempt < 2; attempt++) {
+    for (let attempt = 0; res.error && attempt < 3; attempt++) {
       if (isMissingPaymentTermsColumn(res.error) && 'payment_terms' in row) {
         console.error('[hd quote->wo] payment_terms missing - run migration 158', res.error.message)
         const { payment_terms: _drop, ...withoutTerms } = row
         void _drop
         row = withoutTerms
+      } else if (isMissingServiceCallColumn(res.error) && 'service_call_fee' in row) {
+        // Migration 178 not applied on the work order side: the quote's fee is refused
+        // rather than dropped, since its tax is already inside the carried figure.
+        if (Number(row.service_call_fee ?? 0) > 0) break
+        row = withoutServiceCall(row)
       } else if (isMissingMigration159Column(res.error) && 'road_call_fee' in row) {
         console.error('[hd quote->wo] fee/unit columns missing - run migration 159', res.error.message)
         row = withoutMigration159Columns(row)

@@ -38,6 +38,8 @@ interface Bucket {
   revenue:       number
   parts_revenue: number
   labor_revenue: number
+  /** Shop supplies billed. Its own figure - not parts, not labor. */
+  shop_supplies_revenue: number
   tax_collected: number
   cogs_total:    number
   // Revenue from the invoices whose cost we actually know. Gross profit is computed
@@ -54,7 +56,7 @@ interface Bucket {
 
 function emptyBucket(): Bucket {
   return {
-    revenue: 0, parts_revenue: 0, labor_revenue: 0, tax_collected: 0,
+    revenue: 0, parts_revenue: 0, labor_revenue: 0, shop_supplies_revenue: 0, tax_collected: 0,
     cogs_total: 0, known_revenue: 0, known_tax: 0, cogs_known: 0, cogs_unknown: 0, invoice_count: 0,
   }
 }
@@ -102,21 +104,36 @@ export async function GET(request: NextRequest) {
   // to exhaustion: PostgREST caps a response at 1,000 rows and returns a 200, so a
   // single unpaged read would quietly report a fraction of the year's money as the
   // whole of it. Pages are ordered by `id` so the range windows walk a stable sequence.
-  const fetchInvoices = () => fetchAllRows((from, to) =>
+  //
+  // service_call_fee is migration 178's; a database without it reads the rest.
+  const INVOICE_COLS = 'id, status, total, tax_amount, subtotal_parts, subtotal_labor, diagnostic_fee, road_call_fee, shop_supplies_fee, parts_cost, parts_sell, created_at'
+  type Num = number | string | null
+  type InvoiceRow = {
+    id: string; status: string | null; total: Num; tax_amount: Num; subtotal_parts: Num; subtotal_labor: Num
+    diagnostic_fee: Num; road_call_fee: Num; shop_supplies_fee: Num; service_call_fee?: Num
+    parts_cost: Num; parts_sell: Num; created_at: string
+  }
+  const fetchInvoices = (cols = `${INVOICE_COLS}, service_call_fee`) => fetchAllRows<InvoiceRow>((from, to) =>
     supabase
       .from('hd_invoices')
-      .select('id, status, total, tax_amount, subtotal_parts, subtotal_labor, diagnostic_fee, road_call_fee, parts_cost, parts_sell, created_at')
+      .select(cols)
       .eq('user_id', user.id)
       .gte('created_at', `${fromDate}T00:00:00.000Z`)
       .lt('created_at',  `${nextDayUTC(toDate)}T00:00:00.000Z`)
       .order('id', { ascending: true })
       .range(from, to)
+      .returns<InvoiceRow[]>()
   )
 
   let data: Awaited<ReturnType<typeof fetchInvoices>>
 
   try {
-    data = await fetchInvoices()
+    try {
+      data = await fetchInvoices()
+    } catch (err) {
+      if (!/service_call_fee/.test(err instanceof Error ? err.message : String(err))) throw err
+      data = await fetchInvoices(INVOICE_COLS)
+    }
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Failed to load HD financials' },
@@ -156,6 +173,9 @@ export async function GET(request: NextRequest) {
     const laborRevenue = Number(inv.subtotal_labor ?? 0)
                        + Number(inv.diagnostic_fee ?? 0)
                        + Number(inv.road_call_fee  ?? 0)
+                       + Number((inv as { service_call_fee?: unknown }).service_call_fee ?? 0)
+    // Shop supplies: its own figure. A percentage of parts, but not parts revenue.
+    const suppliesRevenue = Number(inv.shop_supplies_fee ?? 0)
 
     // NULL parts_cost means "we do not know what these parts cost", NOT zero. It is
     // counted as unknown rather than folded in as free parts.
@@ -168,6 +188,7 @@ export async function GET(request: NextRequest) {
       b.revenue       += revenue
       b.parts_revenue += partsRevenue
       b.labor_revenue += laborRevenue
+      b.shop_supplies_revenue += suppliesRevenue
       b.tax_collected += tax
       if (cost === null) {
         b.cogs_unknown++
@@ -208,6 +229,7 @@ export async function GET(request: NextRequest) {
       net_revenue:              round2(b.revenue - b.tax_collected),
       parts_revenue:            round2(b.parts_revenue),
       labor_revenue:            round2(b.labor_revenue),
+      shop_supplies_revenue:    round2(b.shop_supplies_revenue),
       tax_collected:            round2(b.tax_collected),
       cogs_total:               b.cogs_known > 0 ? round2(b.cogs_total) : null,
       cogs_known:               b.cogs_known,
