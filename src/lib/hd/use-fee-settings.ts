@@ -85,3 +85,20 @@ export function useHdFeeSettings(): HdFeeSettingsState {
 
   return state
 }
+
+/**
+ * The shop's HD labor rate from Settings, read once, for a form pricing a hand-off
+ * (a QuickWrench or guided-diagnostic prefill) that arrived without one. NULL when
+ * the shop has set none or the read fails - the caller decides its fallback; this
+ * never invents a rate.
+ */
+export async function shopHdLaborRate(): Promise<number | null> {
+  try {
+    const res = await fetch('/api/hd/settings')
+    if (!res.ok) return null
+    const j = await res.json() as { settings?: Record<string, unknown> | null }
+    return num(j.settings?.hd_labor_rate) ?? null
+  } catch {
+    return null
+  }
+}

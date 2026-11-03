@@ -16,7 +16,7 @@ import {
 import { hoursText, sameOperationName } from '@/lib/hd/labor-cards'
 import FeeInput from '@/components/hd/FeeInput'
 import { useTaxSettings } from '@/lib/use-tax-settings'
-import { useHdFeeSettings } from '@/lib/hd/use-fee-settings'
+import { useHdFeeSettings, shopHdLaborRate } from '@/lib/hd/use-fee-settings'
 import { computeTax, taxDisplayRows, mergeBreakdowns, parseBreakdown } from '@/lib/tax'
 import { parseAddress } from '@/lib/hd/address-parse'
 import { DEFAULT_HD_PARTS_MARKUP, sellPrice, lineAmount } from '@/lib/hd/parts-pricing'
@@ -518,7 +518,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
   useEffect(() => {
     // A QuickWrench handoff is for a NEW quote; it must not land on a saved one.
     if (editing) return
-    try {
+    void (async () => { try {
       const raw = localStorage.getItem('hd_guided_diagnostic_prefill')
       if (!raw) return
       localStorage.removeItem('hd_guided_diagnostic_prefill')
@@ -535,10 +535,13 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
           mobile_hours: number; mobile_hours_max: number
         }>
       }
-      // QuickWrench sends the tech's configured rate; fall back to the form default.
-      const rate = Number.isFinite(prefill.labor_rate) && (prefill.labor_rate as number) > 0
-        ? prefill.labor_rate as number
-        : 125
+      // QuickWrench sends the tech's configured rate. A hand-off without one (the
+      // guided diagnostic, or a rate Settings had not answered yet) is priced at the
+      // shop's HD rate from Settings, read here - this was a flat 125, which priced
+      // every pushed labor line at someone else's rate. 125 only when the shop has
+      // set no HD rate at all, the form's own default.
+      const sent = Number.isFinite(prefill.labor_rate) && (prefill.labor_rate as number) > 0 ? prefill.labor_rate as number : null
+      const rate = sent ?? await shopHdLaborRate() ?? 125
       setForm(f => ({
         ...f,
         ...(prefill.complaint ? { complaint:  prefill.complaint  } : {}),
@@ -570,7 +573,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
           amount_max: parseFloat((li.mobile_hours_max * rate).toFixed(2)),
         })))
       }
-    } catch {}
+    } catch {} })()
   }, [])
 
 

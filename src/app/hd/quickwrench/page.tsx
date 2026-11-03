@@ -647,8 +647,11 @@ function SafetyAlert({ content, color, label }: { content: string; color: string
 // X hours" / "Mobile Field Time: Y hours"), which — having no section header —
 // otherwise bleed into the last parsed section (often SAFETY WARNINGS). We
 // extract them for a dedicated block and strip the lines from the sections.
-
-const HD_LABOR_RATE = 125
+//
+// PRICED AT THE SHOP'S OWN HD LABOR RATE (Settings), passed in. This block printed
+// "At $125/hr" from a constant here, whatever the shop charges - a $145 shop's techs
+// read a quote $20/hr light. With no rate set (or not loaded yet) it prints hours
+// only and says where to set one; it never guesses a number.
 
 // Lines that belong to the labor guide, not to a diagnostic section.
 const LABOR_LINE_RE = /^\s*(book time|mobile\s*(?:field\s*)?time|at\s*\$|diagnostic fee|refrigeration recovery(?:\s*(?:and|&)\s*recharge)?|after hours)/i
@@ -674,9 +677,9 @@ function extractLaborTimes(text: string): { book: number; mobile: number } | nul
   return { book: b, mobile: m }
 }
 
-function LaborEstimate({ book, mobile }: { book: number; mobile: number }) {
+function LaborEstimate({ book, mobile, rate }: { book: number; mobile: number; rate: number | null }) {
   const same = Math.abs(book - mobile) < 0.01
-  const fee  = (h: number) => `$${Math.round(h * HD_LABOR_RATE)}`
+  const fee  = (h: number) => `$${Math.round(h * (rate ?? 0))}`
   return (
     <div className="rounded-lg px-4 py-3" style={{ background: 'color-mix(in srgb, var(--hd-info) 14%, var(--hd-card))', borderLeft: '3px solid #2969B0' }}>
       <p className="text-xs uppercase tracking-widest mb-1.5" style={{ color: '#2969B0' }}>
@@ -688,7 +691,9 @@ function LaborEstimate({ book, mobile }: { book: number; mobile: number }) {
           : `Book Time: ${book.toFixed(1)} hours  |  Mobile Field Time: ${mobile.toFixed(1)} hours`}
       </p>
       <p className="text-sm mt-0.5" style={{ color: 'var(--hd-text-muted)' }}>
-        At ${HD_LABOR_RATE}/hr: {same ? fee(mobile) : `${fee(book)} to ${fee(mobile)}`}
+        {rate != null
+          ? <>At ${rate}/hr: {same ? fee(mobile) : `${fee(book)} to ${fee(mobile)}`}</>
+          : 'Set your HD labor rate in Settings to price this.'}
       </p>
     </div>
   )
@@ -976,6 +981,7 @@ function AnalysisCard({
   tkSources,
   codeStatus = 'ai',
   partVendor = 'auto',
+  laborRate = null,
 }: {
   parsedSections: Array<{ key: SectionKey; content: string }>
   analysis: string
@@ -985,6 +991,8 @@ function AnalysisCard({
   tkSources: TKSource[]
   codeStatus?: 'verified' | 'ai' | 'unverified'
   partVendor?: PartVendor
+  /** The shop's HD labor rate from Settings. NULL until loaded, or when none is set. */
+  laborRate?: number | null
 }) {
   // SAFETY-FIRST: pull any SAFETY WARNINGS section out of the normal flow and
   // render it at the very top; detect hazard categories from the full text to
@@ -1023,7 +1031,7 @@ function AnalysisCard({
 
       {/* Labor Estimate — its own block, between the safety warning and the
           alarm meaning. Never inside the safety block. */}
-      {laborTimes && <LaborEstimate book={laborTimes.book} mobile={laborTimes.mobile} />}
+      {laborTimes && <LaborEstimate book={laborTimes.book} mobile={laborTimes.mobile} rate={laborRate} />}
 
       {alarmPattern && (
         <div
@@ -1331,9 +1339,10 @@ export default function HDQuickWrenchPage() {
   const [profileNotes,         setProfileNotes]         = useState('')
   const [includeDiagFee,       setIncludeDiagFee]       = useState(true)
 
-  // The tech's configured labor rate, so a pushed quote/work order/invoice carries
-  // their real rate. Falls back to the same 125 default the destination forms use.
-  const [laborRate,            setLaborRate]            = useState(125)
+  // The tech's configured HD labor rate, so every price on this screen and every
+  // pushed quote/work order/invoice carries their real rate. NULL until Settings
+  // answers, or when no rate is set - never a made-up 125.
+  const [laborRate,            setLaborRate]            = useState<number | null>(null)
   // The shop's diagnostic fee (migration 156), when it has set one. null means it has
   // not, and the fee stays priced at one hour of labor - which is what this screen did
   // before the setting existed. NOT collapsed to 0: a shop that charges nothing to
@@ -1877,8 +1886,10 @@ export default function HDQuickWrenchPage() {
     return dest === 'invoice'
       // The shop's own fee when it has set one; an hour of labor otherwise, which is
       // what this screen priced it at before there was anywhere to say otherwise.
-      ? { labor_rate: laborRate, include_diagnostic: includeDiagFee, diagnostic_fee: diagnosticFee ?? laborRate }
-      : { labor_rate: laborRate }
+      ? { ...(laborRate != null ? { labor_rate: laborRate } : {}), include_diagnostic: includeDiagFee,
+          ...((diagnosticFee ?? laborRate) != null ? { diagnostic_fee: diagnosticFee ?? laborRate } : {}) }
+      // No rate known: the destination form prices at the shop's rate from Settings.
+      : (laborRate != null ? { labor_rate: laborRate } : {})
   }
 
   const DIAG_FEE_LINE = () => ({
@@ -3127,6 +3138,7 @@ export default function HDQuickWrenchPage() {
                 tkSources={tkSources}
                 codeStatus={codeStatus}
                 partVendor={manufacturer === 'Thermo King' ? 'tk' : 'carrier'}
+                laborRate={laborRate}
               />
             )}
 
@@ -3435,6 +3447,7 @@ export default function HDQuickWrenchPage() {
                 primaryTkSource={null}
                 alarmPattern={null}
                 tkSources={[]}
+                laborRate={laborRate}
               />
             )}
 
@@ -3642,6 +3655,7 @@ export default function HDQuickWrenchPage() {
                 primaryTkSource={null}
                 alarmPattern={null}
                 tkSources={[]}
+                laborRate={laborRate}
               />
             )}
           </>
@@ -5197,7 +5211,8 @@ function absAgo(ts: number): string {
 }
 
 interface TrailerABSPanelProps {
-  laborRate:              number
+  /** NULL until Settings answers, or when no HD labor rate is set. */
+  laborRate:              number | null
   history:                ABSHistoryEntry[]
   onHistory:              (next: ABSHistoryEntry[]) => void
   onPush:                 (payload: ABSPrefill, dest: WorkflowDest) => void
@@ -5346,8 +5361,9 @@ function TrailerABSPanel({
         requires_refrigeration: false,
         recharge_added:         false,
         part_number: '', quantity: 1, unit_cost: 0,
-        amount:     parseFloat((low  * laborRate).toFixed(2)),
-        amount_max: parseFloat((high * laborRate).toFixed(2)),
+        // The destination form re-prices these from the hours at its own rate.
+        amount:     parseFloat((low  * (laborRate ?? 0)).toFixed(2)),
+        amount_max: parseFloat((high * (laborRate ?? 0)).toFixed(2)),
       }],
     }
   }
@@ -5879,11 +5895,13 @@ function TrailerABSPanel({
                       : `${absHours((result.labor.low ?? result.labor.high) as number)} hrs`}
                   </p>
                   <p className="text-sm mt-1" style={{ color: 'var(--hd-text-muted)' }}>
+                    {laborRate == null ? 'Set your HD labor rate in Settings to price this.' : <>
                     {absMoney((result.labor.low ?? result.labor.high ?? 0) * laborRate)}
                     {result.labor.high !== null && result.labor.low !== null && result.labor.high !== result.labor.low
                       ? ` – ${absMoney(result.labor.high * laborRate)}`
                       : ''}
                     {' '}at your {absMoney(laborRate)}/hr HD rate
+                    </>}
                   </p>
                   {result.labor.description && (
                     <p className="text-sm mt-2 leading-relaxed" style={{ color: 'var(--hd-text-muted)' }}>
@@ -5907,7 +5925,7 @@ function TrailerABSPanel({
               }}
             />
             <p className="text-xs text-center leading-relaxed" style={{ color: 'var(--hd-text-faint)' }}>
-              Pre-filled with the fault, the estimated hours at your {absMoney(laborRate)}/hr HD rate,
+              Pre-filled with the fault, the estimated hours at your {laborRate != null ? `${absMoney(laborRate)}/hr` : 'Settings'} HD rate,
               and any matched parts.
             </p>
           </div>

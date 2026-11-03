@@ -7,6 +7,7 @@ import { generateDiagnostic, generateText, isGeminiConfigured } from '@/lib/gemi
 import { formatDiagnostic } from '@/lib/gemini/formatter'
 import { detectsHazard } from '@/lib/gemini/hazard'
 import { sendNewCacheAlert } from '@/lib/email-alerts'
+import { filterCrossReferences } from '@/lib/parts/cross-reference-filter'
 import { type TKSeverity, type TKAlarmEntry, TK_ALARM_CODES, TK_DSR_ALARM_CODES, TK_DISCLAIMER, CARRIER_ALARM_CODES, CARRIER_PRETRIP_CODES } from '@/lib/hd/alarm-codes'
 
 // ─── Alarm → Parts Category Mapping ──────────────────────────────────────────
@@ -349,8 +350,8 @@ T-Series Thermo King truck units (T-580R T-600R T-680R T-800R T-880R T-1000 T-10
 - Clutch drum glazing causes slipping — dress or replace drum
 - Clutch springs can weaken causing late or soft engagement
 - Code 48 on T-Series is almost always belt failure or worn clutch shoes — diagnose in that order
-- Correct TK T-Series centrifugal clutch assembly part number: 37-107-349
-- The aftermarket number 107-0349 appearing on eBay is incorrectly described as an electric clutch — do not reference it — the correct OEM part is 37-107-349 centrifugal assembly only
+- Correct TK T-Series centrifugal clutch assembly part number: 107-0349
+- 107-0349 is the centrifugal clutch assembly only - it is not an electric clutch
 
 DIELECTRIC GREASE — FIELD TIP (mention when relevant to electrical work):
 Apply dielectric grease to ALL electrical connectors during reassembly — sensor connectors, solenoid harnesses, battery terminals, starter terminals. A single tube of dielectric grease prevents more nuisance alarms and callbacks than most parts replacements. Never reassemble an electrical connection without it in a transport refrigeration environment. This includes every connector you touch during diagnosis, not just the failed component.
@@ -378,7 +379,7 @@ When a TK unit cranks, fires briefly, then immediately dies this is almost alway
 The fuel solenoid has two coils: a pull-in coil (high current) that pulls the plunger open and a hold-in coil (low current) that keeps it open once running.
 When the hold-in coil fails the solenoid opens on crank but snaps shut the moment the starter releases — killing the engine immediately after start.
 DIAGNOSIS: With engine off and key on measure solenoid voltage. Should show battery voltage. Start unit — if voltage drops to zero immediately after crank releases the hold-in coil has failed.
-REPAIR: Replace fuel shut-off solenoid. Part varies by engine. Always install solenoid diode 37-44-2756 on replacement — protects controller from voltage spike.
+REPAIR: Replace fuel shut-off solenoid. Part varies by engine. Always install solenoid diode 44-2756 on replacement — protects controller from voltage spike.
 
 3-WIRE SOLENOID BENCH TEST — CRITICAL WARNING:
 TK fuel solenoids have 3 wires: pull-in, hold-in, and ground.
@@ -388,7 +389,7 @@ Correct bench test procedure: Apply power briefly to verify plunger movement. Re
 
 T-SERIES CENTRIFUGAL CLUTCH — CRITICAL CORRECTION:
 Thermo King T-Series truck units (T-600, T-680, T-800, T-880, T-1000, T-1080, T-1200, T-1280) use a CENTRIFUGAL clutch — NOT a magnetic/electric clutch.
-Part number: 37-107-349
+Part number: 107-0349
 This clutch engages automatically based on engine RPM — no electrical connection, no coil, no air gap, no shim adjustment.
 At idle RPM the clutch shoes retract and the compressor does not turn.
 As engine speed increases the centrifugal force throws the shoes outward against the drum — engaging the compressor drive.
@@ -517,21 +518,21 @@ CARRIER X2 SPECIFIC ALARM CODES (APX CONTROLLER): P148 — Discharge Pressure Tr
 
 TK EGR SYSTEM — PRECEDENT S-600, S-610, S-700 WITH TK488 ENGINE:
 ALARM CODE 570 — EGR Cleaning Required: Early warning. Unit remains OK to run. 3000 engine hour cleaning interval reached. Schedule EGR cleaning — do not ignore. Running past this point causes Code 618.
-ALARM CODE 618 — EGR System Fault (P148A): Heavy soot buildup. ECU limits engine torque to 75% and caps RPM. Unit will run but performance will be degraded. Requires EGR cleaning procedure using kit 37-203-799. Do not attempt to clear Code 618 without performing the actual cleaning — it will return immediately.
+ALARM CODE 618 — EGR System Fault (P148A): Heavy soot buildup. ECU limits engine torque to 75% and caps RPM. Unit will run but performance will be degraded. Requires EGR cleaning procedure using kit 203-0799. Do not attempt to clear Code 618 without performing the actual cleaning — it will return immediately.
 ALARM CODE 624 — EGR Gas Temperature Sensor: Sensor part number 420536. Check connector for corrosion before replacing sensor.
 EGR CLEANING PROCEDURE SUMMARY: 1. Seal coolant ports on EGR cooler before cleaning. 2. Soak EGR cooler in heated cleaning solution at 120°F — use TK tool 2042379. 3. Clean EGR valve body with carbon spray — do NOT submerge the electronic actuator. 4. Replace all gaskets with new — never reuse EGR gaskets. 5. Clear codes via SR-4 guarded access menu. 6. Run pre-trip to verify pass.
 EGR VALVE HARNESS PIN TEST: Pin 1: 12.5 to 14.2V — battery voltage. Pin 2: Ground — less than 0.2 ohms to chassis. Pin 3: 4.9 to 5.1V — clean reference signal. Pin 4: 0.5 to 4.5V varying — valve position feedback. Coil resistance on valve body: 9.5 to 10.5 ohms. Zero ohms = dead short = replace.
 EGR TORQUE SPECS: Valve mounting bolts: 18-22 ft-lbs. Cooler block fasteners: 20-24 ft-lbs. Pipe flange nuts: 15-18 ft-lbs. Tighten in alternating star sequence.
-EGR PARTS — PRE vs POST JUNE 2021: Units built BEFORE June 2021: Use cooler kit 37-13-1258. Units built AFTER June 2021: Use cooler kit 37-13-2850. Never mix these — different bolt patterns and internal routing.
+EGR PARTS — PRE vs POST JUNE 2021: Units built BEFORE June 2021: Use cooler kit 13-1258. Units built AFTER June 2021: Use cooler kit 13-2850. Never mix these — different bolt patterns and internal routing.
 SR-4 CODE CLEAR — GUARDED ACCESS: Press MENU. Then press and hold EXIT + leftmost blank soft key simultaneously for 3 seconds. This unlocks Maintenance/Guarded Access Menu. Select Clear All ECU Faults to clear latched emissions codes including Code 618.
 
 TK 486V HEAD GASKET — HIGH FAILURE RATE FIELD KNOWLEDGE:
-Part: 37-33-6021 — Head Gasket Kit for Yanmar 486V and 488 engine.
+Part: 33-6021 — Head Gasket Kit for Yanmar 486V and 488 engine.
 Fits: Precedent C-600, S-600, S-610, S-700, S-710, S-750i, SB-110, SB-210, SB-230, SB-330, SLX
 Supersedes: 33-4122, 33-4515, 33-4517, 33-5056
 KNOWN HIGH FAILURE RATE: This gasket is commonly needed at 3000 hours and above on the 486V engine. An experienced tech should stock this gasket or have it readily available.
 FIELD DIAGNOSTIC SIGNS BEFORE PULLING HEAD: White or gray smoke from exhaust — coolant burning in combustion chamber. Coolant loss with no external leak visible anywhere. Overheating with no other apparent cause (thermostat and water pump confirmed good). Milky or creamy oil on dipstick — coolant contaminating oil — SERIOUS — do not run unit. Coolant bubbling or pressurizing in reservoir while running — combustion gases entering cooling system. Rapid coolant loss on units with no history of external leaks.
-PARTS ALWAYS REPLACED AT SAME TIME: Head gasket 37-33-6021. Thermostat 37-13-385 (for 486V Tier 2). Thermostat gaskets 37-33-2767 (upper) and 37-33-2768 (lower). All head bolts — TK recommends new head bolts with every gasket replacement on 486V. Water pump 37-13-2572 if any sign of weep hole seeping — labor is already there.
+PARTS ALWAYS REPLACED AT SAME TIME: Head gasket 33-6021. Thermostat 13-0385 (for 486V Tier 2). Thermostat gaskets 33-2767 (upper) and 33-2768 (lower). All head bolts — TK recommends new head bolts with every gasket replacement on 486V. Water pump 13-2572 if any sign of weep hole seeping — labor is already there.
 COMEBACK PREVENTION: 1. Failing to check head flatness causes immediate repeat failure. 2. Using any sealant on the gasket causes coolant leaks and voids the repair. 3. Not replacing head bolts — stretched bolts do not hold proper clamp load. 4. Rushing the cooling system bleed after reassembly causes air pocket overheating. 5. Not verifying thermostat opens at correct temp — overheating causes repeat failure quickly. 6. Skipping the coolant flush — old coolant with combustion contamination corrodes the new gasket. Install new head gasket DRY — no sealant of any kind on the 486V head gasket.
 
 VIBRASORBER FAILURE PATTERN:
@@ -572,10 +573,14 @@ Every time a tech asks about a repair or receives a diagnostic result always inc
 
 Book Time: [time] hours
 Mobile Field Time: [book time + 0.5 to 0.75 hours] hours
-At $[rate]/hr: $[calculated range using mobile field time]
 Diagnostic fee: 1.0 hour
 Refrigeration recovery and recharge: [include when system must be opened — 1.5 to 2.5 hours]
 Road call fee: 0.5 to 1.0 hour
+
+NEVER STATE A LABOR RATE OR A DOLLAR AMOUNT FOR LABOR, DIAGNOSTIC OR ROAD CALL TIME. Give hours only. You do not know this shop's rate; the app prices the hours at the shop's own labor rate from its settings.
+
+CROSS-REFERENCES - THE RULE:
+A cross-reference is a part number issued by the company that MANUFACTURES the part - for example WIX, Fleetguard, Donaldson, Baldwin, Woodward, Facet, Carrier, Delco. A reseller's SKU is NOT a cross-reference: "FridayParts 42-0100" is the OEM number with a seller's name on it, and "TES 10-42-100" is a shelf number. Never name a reseller, retailer or marketplace (FridayParts, TES, Diselmart, eBay, NAPA, Carquest, AutoZone, O'Reilly, RockAuto or any other) and never print their numbers. If you cannot tell whether a name is a manufacturer or a seller, leave it out.
 
 NOTE TO DISPLAY ON EVERY QUOTE:
 "Mobile field time reflects real world conditions — working without a lift, in weather, without dealer tooling. Book time is dealer flat rate for a controlled shop environment."
@@ -1290,7 +1295,8 @@ export async function POST(req: NextRequest) {
         ? 'unverified'
         : alarmSources.length > 0 ? 'verified' : 'ai'
       return NextResponse.json({
-        analysis:      cached.result_html,
+        // The cross-reference rule, on a cached answer that may predate it.
+        analysis:      filterCrossReferences(cached.result_html).text,
         tk_sources:    responseSources,
         alarm_pattern: alarmPattern,
         disclaimer,
@@ -1503,7 +1509,8 @@ If the code is confirmed correct and you cannot find information — contact you
   }
 
   return NextResponse.json({
-    analysis,
+    // Manufacturer cross-references only - no reseller names or SKUs.
+    analysis:      filterCrossReferences(analysis).text,
     tk_sources:    responseSources,
     alarm_pattern: alarmPattern,
     disclaimer,

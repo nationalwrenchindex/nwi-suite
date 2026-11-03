@@ -127,6 +127,17 @@ merge, cross-reference or stay separate is Brock's decision, not code's.
   reported beside the base part, never loaded as a distinct part, and search is unchanged.
 - **Reman and OEM-new are RELATED, never the same part** - link them, never merge them.
 
+- **A cross-reference is a part number issued by the company that MANUFACTURES the part**
+  (Nov 3) - WIX, Fleetguard, Donaldson, Baldwin, Woodward, Facet, Carrier, Delco. **A
+  reseller SKU is not a cross-reference**: "FridayParts 42-0100" is the OEM number with a
+  seller's name on it; "TES 10-42-100" is a shelf number. Reseller, retailer and
+  marketplace names (FridayParts, TES, Diselmart, eBay, NAPA, Carquest, AutoZone,
+  O'Reilly, RockAuto) and their SKUs are never printed. A name that cannot be told apart
+  is left out and listed for Brock, never guessed. Enforced on AI parts output by
+  `filterCrossReferences` in `src/lib/parts/cross-reference-filter.ts` (tests: `npx tsx
+  scripts/verify-cross-reference-filter.ts`), and stated in the QuickWrench and Parts
+  Manager prompts.
+
 Not covered by the rules, so never guessed at: other suffixes (`SL`, `RM`, `PB`, `SRV`,
 `KIT`, `SS`, `FA`, `E`), and shapes that fit no rule (`18-00091-105`, `96-153-01K`, `203-0799-2`) -
 those stay exactly as written and are matched as written.

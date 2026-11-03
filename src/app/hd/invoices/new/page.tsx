@@ -11,7 +11,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { computeDueDate, termsDisplay } from '@/lib/hd/payment-terms'
 import { useTaxSettings } from '@/lib/use-tax-settings'
-import { useHdFeeSettings } from '@/lib/hd/use-fee-settings'
+import { useHdFeeSettings, shopHdLaborRate } from '@/lib/hd/use-fee-settings'
 import { computeTax, taxDisplayRows, mergeBreakdowns } from '@/lib/tax'
 import { DEFAULT_HD_PARTS_MARKUP, sellPrice, lineAmount } from '@/lib/hd/parts-pricing'
 import AddressAutofill from '@/components/hd/AddressAutofill'
@@ -264,7 +264,7 @@ export default function NewInvoicePage() {
   // The diagnostic fee arrives as a dedicated field here rather than a labor line,
   // which is what the invoice form actually bills it with.
   useEffect(() => {
-    try {
+    void (async () => { try {
       const raw = localStorage.getItem('hd_guided_diagnostic_prefill')
       if (!raw) return
       localStorage.removeItem('hd_guided_diagnostic_prefill')
@@ -276,7 +276,10 @@ export default function NewInvoicePage() {
         labor_rate?: number; include_diagnostic?: boolean; diagnostic_fee?: number
         lineItems?: Array<{ description: string; mobile_hours: number }>
       }
-      const rate = Number.isFinite(p.labor_rate) && (p.labor_rate as number) > 0 ? p.labor_rate as number : 125
+      // A hand-off without a rate is priced at the shop's HD rate from Settings, read
+      // here - not a flat 125. 125 only when no HD rate is set, the form's own default.
+      const sent = Number.isFinite(p.labor_rate) && (p.labor_rate as number) > 0 ? p.labor_rate as number : null
+      const rate = sent ?? await shopHdLaborRate() ?? 125
 
       setForm(f => ({
         ...f,
@@ -306,7 +309,7 @@ export default function NewInvoicePage() {
           amount: parseFloat((li.mobile_hours * rate).toFixed(2)),
         })))
       }
-    } catch { /* ignore */ }
+    } catch { /* ignore */ } })()
   }, [])
 
   // ── Customer picker ──

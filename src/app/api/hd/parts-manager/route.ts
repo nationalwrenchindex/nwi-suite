@@ -5,6 +5,17 @@ import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { generateDiagnostic } from '@/lib/gemini/client'
 import { formatParts } from '@/lib/gemini/formatter'
 import { sendNewCacheAlert } from '@/lib/email-alerts'
+import { filterCrossReferences } from '@/lib/parts/cross-reference-filter'
+
+// THE CROSS-REFERENCE RULE, applied to every answer this route returns - fresh or
+// cached, since a cached answer can predate the rule: manufacturer numbers only, no
+// reseller / retailer / marketplace names or SKUs (src/lib/parts/cross-reference-filter).
+// What is stored stays as the AI wrote it, so a later change to the rule re-applies.
+function served(text: string, cacheKey: string): string {
+  const f = filterCrossReferences(text)
+  if (f.unknown.length) console.log(`[hd/parts-manager] ${cacheKey}: left out unclassified names: ${f.unknown.join(', ')}`)
+  return f.text
+}
 
 export const maxDuration = 60
 export const dynamic = 'force-dynamic'
@@ -14,7 +25,7 @@ const PARTS_SYSTEM_PROMPT = `You are a transport refrigeration parts specialist 
 When given a unit model and fault code, provide a complete parts list for that repair. Always include:
 1. Primary OEM part number (current, not superseded)
 2. Supersession chain if the part has been updated (old to new)
-3. Aftermarket cross-reference numbers if available
+3. Manufacturer cross-reference numbers if available - see CROSS-REFERENCES below
 4. Thread size, pressure rating, or electrical specs where relevant
 5. Quantity typically needed for the repair
 6. Approximate cost range if known
@@ -24,7 +35,7 @@ PARTS FOR [MANUFACTURER] [MODEL] — [CODE/FAULT]:
 
 [Part Name]
 OEM Part Number: XXXXX (supersedes XXXXX)
-Aftermarket: [brand] XXXXX
+Cross-reference: [manufacturer] XXXXX
 Spec: [thread/pressure/voltage spec]
 Qty: [number]
 Est. Cost: $XX to $XX
@@ -38,7 +49,10 @@ CRITICAL RULES:
 
 3. Focus on the most likely failed components for this specific fault code. For an electric motor fault, return motor assembly, contactor, and overload relay — not sensors or controllers.
 
-4. A parts list with 2 accurate parts is better than a parts list with 8 parts where 6 are wrong or unrelated.`
+4. A parts list with 2 accurate parts is better than a parts list with 8 parts where 6 are wrong or unrelated.
+
+CROSS-REFERENCES - THE RULE:
+A cross-reference is a part number issued by the company that MANUFACTURES the part - for example WIX, Fleetguard, Donaldson, Baldwin, Woodward, Facet, Carrier, Delco. A reseller's SKU is NOT a cross-reference: "FridayParts 42-0100" is the OEM number with a seller's name on it, and "TES 10-42-100" is a shelf number. Never name a reseller, retailer or marketplace (FridayParts, TES, Diselmart, eBay, NAPA, Carquest, AutoZone, O'Reilly, RockAuto or any other) and never print their numbers. If you cannot tell whether a name is a manufacturer or a seller, leave it out.`
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()
@@ -94,7 +108,7 @@ export async function POST(req: NextRequest) {
       } catch (e) {
         console.error('[hd/parts-manager] cache hit increment failed', e)
       }
-      return NextResponse.json({ parts: cached.result_html, cached: true })
+      return NextResponse.json({ parts: served(cached.result_html, cacheKey), cached: true })
     }
   }
 
@@ -103,7 +117,7 @@ export async function POST(req: NextRequest) {
   }
 
   // 2. Gemini parts query (grounded).
-  const userPrompt = `Provide the complete parts list for repairing a ${manufacturer} ${model}${unitType ? ' ' + unitType : ''} with alarm ${alarmCode || 'the reported fault'}${displayMessage ? ` (${displayMessage})` : ''}. Include all OEM part numbers, supersession chains, aftermarket cross-references, and specifications.`
+  const userPrompt = `Provide the complete parts list for repairing a ${manufacturer} ${model}${unitType ? ' ' + unitType : ''} with alarm ${alarmCode || 'the reported fault'}${displayMessage ? ` (${displayMessage})` : ''}. Include all OEM part numbers, supersession chains, manufacturer cross-references, and specifications.`
 
   let raw = ''
   try {
@@ -150,5 +164,5 @@ export async function POST(req: NextRequest) {
     console.error('[hd/parts-manager] cache write failed', e)
   }
 
-  return NextResponse.json({ parts: formatted })
+  return NextResponse.json({ parts: served(formatted, cacheKey) })
 }

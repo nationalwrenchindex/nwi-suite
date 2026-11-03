@@ -56,7 +56,7 @@ Preserve ALL voltage specifications exactly as provided — do not simplify, rou
 
 // Parts Manager uses its own Gemini formatting pass — a parts list, not the
 // 8-section diagnostic structure.
-const PARTS_FORMAT_INSTRUCTION = `Format this parts list cleanly. Each part in its own section. OEM part number on its own line labeled OEM. Supersession chain clearly labeled. Aftermarket options clearly labeled. Specs on their own line. Do not add information not in the source.`
+const PARTS_FORMAT_INSTRUCTION = `Format this parts list cleanly. Each part in its own section. OEM part number on its own line labeled OEM. Supersession chain clearly labeled. Cross-references (the manufacturer's own numbers) clearly labeled; never add or keep a reseller, retailer or marketplace name or SKU. Specs on their own line. Do not add information not in the source.`
 
 export async function formatParts(rawGeminiText: string): Promise<string> {
   if (!isGeminiConfigured() || !rawGeminiText.trim()) return rawGeminiText
