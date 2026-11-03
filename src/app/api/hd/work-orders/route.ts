@@ -4,6 +4,7 @@ import { checkHDStarterAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { insertWithWorkOrderNumber } from '@/lib/work-order-number'
 import { loadHdShopExtras } from '@/lib/hd/hd-extras-load'
 import { workOrderDefaultColumns } from '@/lib/hd/work-order-extras'
+import { unitIdentityFill } from '@/lib/hd/unit-hours'
 import { isMissingServiceCallColumn, withoutServiceCall } from '@/lib/hd/hd-extras'
 import { WORK_ORDER_LIST_SELECT, WORK_ORDER_PAGE_SIZE } from './list'
 
@@ -79,11 +80,13 @@ export async function POST(req: NextRequest) {
   // PATCH checks unit_id. NewWorkOrderForm and the calendar only ever offer the shop's
   // own units and accounts, so a legitimate request always passes.
   const unitId  = str(body.unit_id)
+  let linkedUnit: Record<string, unknown> | null = null
   const fleetId = str(body.fleet_account_id)
   if (unitId) {
     const { data: unit } = await supabase
-      .from('hd_units').select('id').eq('id', unitId).eq('user_id', user.id).maybeSingle()
+      .from('hd_units').select('id, unit_number, manufacturer, model, serial_number').eq('id', unitId).eq('user_id', user.id).maybeSingle()
     if (!unit) return NextResponse.json({ error: 'That unit was not found in your units.' }, { status: 400 })
+    linkedUnit = unit as Record<string, unknown>
   }
   if (fleetId) {
     const { data: acct } = await supabase
@@ -133,6 +136,9 @@ export async function POST(req: NextRequest) {
       estimated_duration_hours,
       ...defaults,
     }
+    // The linked unit's number, make, model and serial, recorded on the work order
+    // where the form sent none - frozen there, never read live off the unit later.
+    Object.assign(row, unitIdentityFill(row, linkedUnit))
     const insert = (r: Record<string, unknown>) => supabase.from('hd_work_orders').insert(r).select('id, work_order_number, scheduled_at').single()
     const res = await insert(row)
     // Before migration 178 the work order has no service call columns.

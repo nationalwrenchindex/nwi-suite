@@ -10,6 +10,7 @@ import { resolveLateFeeSettings, assessLateFee, lateFeeBlockMessage } from '@/li
 import type { AerialInspectionType } from '@/types/aerial'
 import { money } from '@/lib/format'
 import { feeRows } from '@/lib/invoice-document'
+import { formatUnitHours } from '@/lib/hd/unit-hours'
 import { shopTimeZone, fmtShopDate } from '@/lib/shop-time'
 import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
 import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
@@ -254,12 +255,19 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
               </div>
               <div>
                 <h3 className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: 'var(--paper-muted)' }}>Service Unit</h3>
+                {/* The unit number the fleet files this invoice under, as recorded on it. */}
+                {inv.unit_number && <p className="font-semibold text-base" style={{ color: '#1A1A1A' }}>Unit {inv.unit_number}</p>}
                 {(inv.unit_manufacturer || inv.unit_model) && (
                   <p className="font-semibold text-base" style={{ color: '#1A1A1A' }}>
                     {[inv.unit_manufacturer, inv.unit_model].filter(Boolean).join(' ')}
                   </p>
                 )}
                 {inv.unit_serial && <p className="text-sm mt-1" style={{ color: 'var(--paper-muted)' }}>Serial: {inv.unit_serial}</p>}
+                {/* Migration 179: the hour reading recorded on THIS invoice - frozen, never the
+                    unit's hours today. An invoice with none prints no line. */}
+                {formatUnitHours((inv as Record<string, unknown>).unit_hours) && (
+                  <p className="text-sm" style={{ color: 'var(--paper-muted)' }}>Hours: {formatUnitHours((inv as Record<string, unknown>).unit_hours)}</p>
+                )}
                 {inv.unit_year   && <p className="text-sm" style={{ color: 'var(--paper-muted)' }}>Year: {inv.unit_year}</p>}
                 {/* Who did the work, carried from the quote by way of the work order. */}
                 {inv.tech_name && <p className="text-sm mt-1" style={{ color: 'var(--paper-muted)' }}>Tech: {inv.tech_name}</p>}

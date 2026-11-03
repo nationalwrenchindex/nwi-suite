@@ -15,6 +15,8 @@ import { BrandHeader } from '@/components/BrandHeader'
 import WorkOrderLineItems from '@/components/hd/WorkOrderLineItems'
 import WorkOrderDiscount from '@/components/hd/WorkOrderDiscount'
 import WorkOrderExtras from '@/components/hd/WorkOrderExtras'
+import WorkOrderUnitHours from '@/components/hd/WorkOrderUnitHours'
+import { lastKnownHours } from '@/lib/hd/unit-hours'
 import type { Branding } from '@/lib/branding'
 import { money } from '@/lib/format'
 import { textTone, tint } from '@/lib/hd/text-tone'
@@ -57,7 +59,7 @@ type WO = {
   // defensively. The converter writes { unit_not_identified: true } into it when an
   // approved quote carried no serial and no VIN.
   flagged_items: unknown
-  unit: { id: string; unit_number: string; manufacturer: string; model: string; year: number | null; serial_number: string | null } | null
+  unit: { id: string; unit_number: string; manufacturer: string; model: string; year: number | null; serial_number: string | null; total_hours?: number | null } | null
   // hd_work_orders has no customer_email column, so the billing email can only come
   // from the linked fleet account. Same for the address — hd_fleet_accounts stores it
   // as one free-text line, not the line1/city/state/zip the invoice form uses.
@@ -480,6 +482,19 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
               <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.85)' }}>{value}</span>
             </div>
           ))}
+
+          {/* Migration 179: the hour reading at the time of service, recorded on this work
+              order and carried to the invoice. Pre-filled from the unit's last reading. */}
+          <div>
+            <span className="text-xs uppercase tracking-wider block mb-0.5" style={{ color: 'var(--hd-text-faint)', fontSize: 10 }}>Unit Hours</span>
+            <WorkOrderUnitHours
+              workOrderId={workOrderId}
+              recorded={(wo as { unit_hours?: number | string | null }).unit_hours != null ? Number((wo as { unit_hours?: number | string | null }).unit_hours) : null}
+              lastKnown={lastKnownHours(wo.unit as Record<string, unknown> | null)}
+              available={'unit_hours' in (wo as object)}
+              locked={status === 'invoiced'}
+            />
+          </div>
 
           {/* ===================================================================
               LOCATION, EDITABLE.

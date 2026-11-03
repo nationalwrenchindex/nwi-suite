@@ -28,7 +28,7 @@ export default async function WorkOrderDetailPage({
       // applied - naming them would fail the whole read until then.
       .select(`
         *,
-        unit:hd_units(id, unit_number, manufacturer, model, year, serial_number),
+        unit:hd_units(id, unit_number, manufacturer, model, year, serial_number, total_hours),
         fleet:hd_fleet_accounts(id, fleet_name, contact_email, contact_phone, address)
       `)
       .eq('id', id)

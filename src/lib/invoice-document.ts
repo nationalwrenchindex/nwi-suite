@@ -362,6 +362,9 @@ export function serviceUnitLines(inv: Record<string, unknown>): LabelledLine[] {
   }
 
   if (s(inv.unit_serial)) out.push({ label: 'Serial',  value: s(inv.unit_serial) })
+  // Migration 179: the reading recorded on THIS document. None recorded, no line.
+  const hours = inv.unit_hours == null || inv.unit_hours === '' ? null : Number(inv.unit_hours)
+  if (hours != null && Number.isFinite(hours)) out.push({ label: 'Hours', value: hours.toLocaleString('en-US', { maximumFractionDigits: 1 }) })
   if (s(inv.unit_year))   out.push({ label: 'Year',    value: s(inv.unit_year) })
 
   const truck = [s(inv.truck_year), s(inv.truck_make), s(inv.truck_model)].filter(Boolean).join(' ')

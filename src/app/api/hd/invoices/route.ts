@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { isMissingServiceCallColumn } from '@/lib/hd/hd-extras'
+import { isMissingUnitHoursColumn } from '@/lib/hd/unit-hours'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { logHDCustomer } from '@/lib/hd/customer-logging'
@@ -167,6 +168,16 @@ export async function POST(req: NextRequest) {
     .insert(insertRow)
     .select()
     .single()
+
+  // Migration 179 not applied: the reading cannot be stored. Refused when there is one
+  // rather than dropped; an absent reading just drops the empty key.
+  if (error && isMissingUnitHoursColumn(error)) {
+    if ((invoiceBody as Record<string, unknown>).unit_hours != null) {
+      return NextResponse.json({ error: 'Unit hours need migration 179. Nothing was saved.' }, { status: 409 })
+    }
+    for (const row of [baseRow, insertRow] as Array<Record<string, unknown>>) delete row.unit_hours
+    ;({ data, error } = await supabase.from('hd_invoices').insert(insertRow).select().single())
+  }
 
   if (error && isMissingServiceCallColumn(error)) {
     if (serviceCallFeeSent) {

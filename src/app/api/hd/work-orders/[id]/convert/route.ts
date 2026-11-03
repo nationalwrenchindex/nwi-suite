@@ -19,6 +19,7 @@ import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { buildInvoicePayload, type WorkOrderLineRow } from '@/lib/hd/wo-to-invoice'
 import { loadLinesAndJobs } from '@/lib/hd/work-order-jobs-load'
 import { TAX_SETTINGS_SELECT, taxSettingsFrom } from '@/lib/tax'
+import { unitIdentityFill } from '@/lib/hd/unit-hours'
 
 export const dynamic = 'force-dynamic'
 
@@ -78,6 +79,15 @@ export async function GET(
     if (row.diagnostic_fee == null && quote.diagnostic_fee != null) row.diagnostic_fee = quote.diagnostic_fee
     if (row.road_call_fee == null && quote.road_call_fee != null)   row.road_call_fee  = quote.road_call_fee
     for (const k of UNIT_FROM_QUOTE) if (!row[k] && quote[k]) row[k] = quote[k]
+  }
+
+  // THE LINKED UNIT FILLS WHAT THE WORK ORDER LEFT EMPTY - its number, make, model and
+  // serial - so the invoice records the unit the screen showed. Read once, here, and
+  // frozen on the invoice from then on; a recorded value always wins.
+  if (row.unit_id) {
+    const { data: unit } = await supabase.from('hd_units')
+      .select('unit_number, manufacturer, model, serial_number').eq('id', String(row.unit_id)).eq('user_id', user.id).maybeSingle()
+    Object.assign(row, unitIdentityFill(row, unit as Record<string, unknown> | null))
   }
 
   // Already billed. Hand back the invoice that exists rather than letting the caller
