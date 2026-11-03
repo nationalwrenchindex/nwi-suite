@@ -222,7 +222,7 @@ function ReceivePanel({ scope, locations, onDone, onCancel }: {
         <label className="block">
           <Label>Part number</Label>
           <input value={number} onChange={e => setNumber(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void lookup() }}
-            placeholder="30-60143-01" className={inputCls} style={field} />
+            placeholder="11-9959 or 30-60143-01" className={inputCls} style={field} />
         </label>
         <button type="button" onClick={() => void lookup()} disabled={!number.trim()} className={secondaryCls} style={{ ...secondaryStyle, minHeight: 44 }}>Look up</button>
       </div>

@@ -236,7 +236,7 @@ export default function PartsCounter({ scope }: { scope: CounterScope }) {
           <label className="block">
             <Label>Part number, cross number or part name</Label>
             <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && canRun) void run() }}
-              placeholder="11-9182, 119182, or: lube filter" className={inputCls} style={field} />
+              placeholder="11-9959 or 30-60143-01" className={inputCls} style={field} />
           </label>
           <button type="button" onClick={() => void run()} disabled={loading || !canRun}
             className="px-6 rounded-lg text-sm font-semibold text-on-accent disabled:opacity-50"

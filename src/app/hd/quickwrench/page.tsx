@@ -4259,7 +4259,7 @@ function PartsReferencePanel({ onOpenTrailer }: { onOpenTrailer: (query: string)
             type="text"
             value={partText}
             onChange={e => setPartText(e.target.value)}
-            placeholder="belt, water pump, alternator, 781968…"
+            placeholder="11-9959 or 30-60143-01"
             autoComplete="off"
             className="w-full px-4 py-3 rounded-xl text-sm text-white placeholder-white/20"
             style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}

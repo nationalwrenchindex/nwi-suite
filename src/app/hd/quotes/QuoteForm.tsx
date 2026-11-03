@@ -2514,7 +2514,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
               <div className="flex gap-2">
                 <div className="flex-1">
                   <Field label="Part Number">
-                    <input style={inp} value={parts.part_number} onChange={e => setParts(d => ({ ...d, part_number: e.target.value }))} placeholder="e.g. 37-33-6021" autoFocus />
+                    <input style={inp} value={parts.part_number} onChange={e => setParts(d => ({ ...d, part_number: e.target.value }))} placeholder="11-9959 or 30-60143-01" autoFocus />
                   </Field>
                 </div>
                 <div className="flex flex-col justify-end">

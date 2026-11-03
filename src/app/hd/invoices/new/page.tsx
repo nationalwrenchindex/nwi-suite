@@ -872,7 +872,7 @@ export default function NewInvoicePage() {
           <div style={{ background: CARD, borderRadius: 12, padding: 24, width: '100%', maxWidth: 520 }}>
             <h3 className="font-condensed font-bold text-xl mb-4" style={{ color: TEXT }}>ADD PARTS LINE</h3>
             <div className="flex flex-col gap-4">
-              <Field label="Part Number"><input style={inp} value={parts.part_number} onChange={e => setParts(d => ({ ...d, part_number: e.target.value }))} placeholder="e.g. 37-33-6021" autoFocus /></Field>
+              <Field label="Part Number"><input style={inp} value={parts.part_number} onChange={e => setParts(d => ({ ...d, part_number: e.target.value }))} placeholder="11-9959 or 30-60143-01" autoFocus /></Field>
               <Field label="Description"><input style={inp} value={parts.description} onChange={e => setParts(d => ({ ...d, description: e.target.value }))} placeholder="Part description" /></Field>
               {/* Cost is what the tech paid; sell is what the customer is billed. The
                   sell column is read-only so the two can never be typed out of step. */}

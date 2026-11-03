@@ -314,7 +314,7 @@ export default function PartsLookup({ canSeed = false }: { canSeed?: boolean }) 
       <div className="mb-4 flex flex-col sm:flex-row sm:flex-wrap gap-3">
         <input
           type="text"
-          placeholder="Search part #, description, or cross-ref number…"
+          placeholder="11-9959 or 30-60143-01"
           value={search}
           onChange={e => applyFilters(e.target.value, manufacturer, category)}
           className="w-full sm:flex-1 sm:min-w-[220px] px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder:text-white/30 outline-none"

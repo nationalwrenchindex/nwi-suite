@@ -263,7 +263,7 @@ export default function PartsFinder({ mode, lockedUnit, onPick, markupPercent }:
               value={text}
               onChange={e => setText(e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter') void run() }}
-              placeholder="781341, or: water pump belt"
+              placeholder="11-9959 or 30-60143-01"
               className="w-full mt-1 bg-dark border border-dark-border rounded-lg px-3 py-2 text-white text-sm"
             />
           </label>

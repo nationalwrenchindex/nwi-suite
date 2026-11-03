@@ -554,7 +554,7 @@ export default function WorkOrderLineItems({
                           <input
                             className={inputCls} style={inputStyle} disabled={!canEdit}
                             value={d.part_number} onChange={e => update(d.key, { part_number: e.target.value })}
-                            placeholder="37-33-6021"
+                            placeholder="11-9959 or 30-60143-01"
                           />
                         ) : (
                           <span style={{ color: 'var(--hd-text-faint)' }}>—</span>
