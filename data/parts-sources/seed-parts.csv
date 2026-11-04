@@ -1,0 +1,93 @@
+maker,part_number,part_number_normalized,part_type,part_category,description,equipment_type,status,superseded_by,engines,notes
+Thermo King,45-2326,452326,Starter,Engine,,reefer,current,,TK370; TK376,
+Thermo King,45-1718,451718,Starter,Engine,,reefer,superseded,45-2326,TK3.66; TK3.74; TK3.88; TK3.95; TK270; TK370; TK376,
+Thermo King,45-2325,452325,Starter,Engine,,reefer,current,,DI2.2; SE2.2,
+Thermo King,45-1993,451993,Starter,Engine,,reefer,superseded,45-2325,DI2.2; SE2.2,
+Thermo King,45-2324,452324,Starter,Engine,,reefer,current,,TK486V,
+Thermo King,45-2323,452323,Starter,Engine,,reefer,current,,TK482; TK486; TK482E; TK486E,
+Thermo King,45-1688,451688,Starter,Engine,,reefer,superseded,45-2323,TK482; TK486; TK482E; TK486E,
+Thermo King,45-2176,452176,Starter,Engine,,reefer,current,,TK270,
+Thermo King,45-1285,451285,Starter,Engine,,reefer,current,,C201,
+Thermo King,45-1251,451251,Starter,Engine,,reefer,current,,TK235; TK353,
+Thermo King,45-2918,452918,Starter,Engine,,reefer,current,,Isuzu,
+Carrier Transicold,25-15198-00,251519800,Starter,Engine,,reefer,current,,CT3-69; CT4-91; CT2-29; CT3-44 (D722),
+Carrier Transicold,25-15371-00,251537100,Starter,Engine,,reefer,current,,,
+Carrier Transicold,25-15520-00,251552000,Starter,Engine,,reefer,current,,CT4-91-TV,
+Carrier Transicold,25-34525-00,253452500,Starter,Engine,,reefer,current,,CT2-29; CT2-29-TV,
+Carrier Transicold,25-35465-00,253546500,Starter,Engine,,reefer,current,,,
+Carrier Transicold,25-38750-00,253875000,Starter,Engine,,reefer,current,,CT 4.114 - Kubota D1861),
+Carrier Transicold,25-39135-00,253913500,Starter,Engine,,reefer,current,,CT4-114; CT4-134; CT4-134-TV (Total Parts); CT4-134TV; DI,
+Carrier Transicold,25-39476-00,253947600,Starter,Engine,,reefer,current,,CT4-134DI Tier 4,
+Carrier Transicold,25-39587-00,253958700,Starter,Engine,,reefer,current,,"CT4-134TV; DI (Myriad, unconfirmed); Carrier matrix lists Tier 4i and Tier 4",
+Carrier Transicold,25-39610-00,253961000,Starter,Engine,,reefer,current,,Kubota Z482,
+Carrier Transicold,25-39700-00,253970000,Starter,Engine,,reefer,current,,CT4-134DI Tier 2; Tier 3,
+Carrier Transicold,25-39316-01,253931601,Starter,Engine,,reefer,superseded,25-39700-00,,"Carrier matrix: Tier 2 or earlier on Genesis, Extra XT, Ultra XL, Ultra XT/XTC, Ultima XTC, X2 1800/2100/2100 A/R/2500 A/R. Reman 25-39316-00RM."
+Carrier Transicold,30-01090-05,300109005,Filter - fuel,Fuel,,reefer,current,,,
+Carrier Transicold,30-00323-00,300032300,Filter - oil (engine),Maintenance & Wear,,reefer,current,,,
+Carrier Transicold,30-00450-00,300045000,Filter - oil (engine),Maintenance & Wear,,reefer,current,,,bypass built in
+Carrier Transicold,30-01077-01,300107701,Filter - air,Maintenance & Wear,,reefer,current,,,
+Carrier Transicold,30-00430-00,300043000,Filter - air,Maintenance & Wear,,reefer,current,,,
+Carrier Transicold,30-00463-00,300046300,Filter - oil (engine),Maintenance & Wear,,reefer,current,,,
+Carrier Transicold,30-00430-23,300043023,Filter - air,Maintenance & Wear,,reefer,current,,,
+Carrier Transicold,30-00426-22,300042622,Filter - air,Maintenance & Wear,,reefer,current,,,
+Carrier Transicold,30-00426-20,300042620,Filter - air,Maintenance & Wear,,reefer,current,,,
+Carrier Transicold,30-00471-20,300047120,Filter - air,Maintenance & Wear,,reefer,current,,,
+Carrier Transicold,30-00426-27,300042627,Filter - air,Maintenance & Wear,,reefer,current,,,
+Carrier Transicold,30-60118-00,306011800,Filter - oil (engine),Maintenance & Wear,,reefer,current,,,
+Carrier Transicold,30-60049-20,306004920,Filter - air,Maintenance & Wear,,reefer,current,,,
+Carrier Transicold,30-60143-01,306014301,Filter - oil (engine),Maintenance & Wear,,reefer,current,,,"new number, supersedes 30-01121-00"
+Carrier Transicold,30-00302-00,300030200,Filter - fuel,Fuel,,reefer,current,,,
+Carrier Transicold,30-60143-00,306014300,Filter - oil (engine),Maintenance & Wear,,reefer,current,,,
+Carrier Transicold,30-01121-00,300112100,Filter - oil (engine),Maintenance & Wear,,reefer,superseded,30-60143-01,,old number for Supra 560/660/760/860/960 oil filter
+Thermo King,11-9182,119182,Filter - oil (engine),Maintenance & Wear,"Oil filter, full-flow spin-on, EMI 3000",reefer,current,,"Isuzu SE 2.2; Yanmar TK486, TK486E, TK486V, TK482E, TK486VH (Tier 4), TK482, TK486VMGS5, TK486VEGS5 (Stage V), TK486VG2; engine for some listed models: none found",
+Thermo King,11-7382,117382,Filter - oil (engine),Maintenance & Wear,"Oil filter, full-flow spin-on (standard, pre-EMI 3000)",reefer,current,,"Isuzu SE 2.2; Yanmar TK486, TK486E, TK486V, TK482E, TK482; engine for some listed models: none found","SL applications move to 11-9182 from Q1 2001 (Swisclima dates); no formal TK supersession found. Replaces 11-7399 (Swisclima, unconfirmed)."
+Thermo King,11-6182,116182,Filter - oil (engine),Maintenance & Wear,"Oil filter, full-flow spin-on (truck / undermount / TriPac; EMI 2000 range)",reefer,current,,"Yanmar TK235, TK3.74, TK353, TK3.88, TK3.95, TK3.76, TK370, TK376, TK270, 3TNV74, TK374F (Tier 4), TK380F (Tier 4), TK376U, TK270M, TK270F (Tier 4); engine for some listed models: none found","CONFLICT: an aggregator (oilfilter-crossreference) lists WIX 51318/51568, NAPA 1318/1568, Baldwin B168/B247, Fleetguard LF3536/LF3361 and Luber-finer PH2808 for 11-6182. Baldwin's own Form 677 (B161-S), NAPA's own lookup (1344) and WIX's own application list (51344 lists TK truck units) agree with each other, so those are used. | 2026: reported replaced by 13-3678 (Swisclima only, unconfirmed). Replaces 11-5712 / 11-5522 / 11-4928 / 11-5115 (Swisclima)."
+Thermo King,11-9099,119099,Filter - oil (engine),Maintenance & Wear,"Oil filter, full-flow spin-on (standard, older SB/Sentry)",reefer,current,,"Isuzu C201, 4JC1, DI 2.2; Mercedes OM636",Listed together with 11-3712 (unconfirmed).
+Thermo King,11-9100,119100,Filter - oil (engine),Maintenance & Wear,"Oil filter, full-flow spin-on (EMI, older SB/Sentry/Super II)",reefer,current,,"Isuzu C201, DI 2.2; Mercedes OM636",
+Thermo King,11-9959,119959,Filter - oil (engine),Maintenance & Wear,"Oil filter, spin-on, EMI 3000 standard duty (Precedent; SLXi-DRC)",reefer,current,,"Yanmar TK486V, TK486V25X, TK486V25X1 (Tier 4), TK488CR, TK488CR1, TK486V25L1 (Tier 4); Peugeot (PSA) TKDV6",SLXi (non-DRC) listing comes only from TK kit 100574; the SLXi operator manual and Baldwin give 11-9182 for SLXi-100...400. CONFLICT - check by serial.
+Thermo King,11-9960,119960,Filter - oil (engine),Maintenance & Wear,"Oil filter, spin-on, EMI 3000 dual element (S-600M / S-600DE, SG-4000)",reefer,current,,"Peugeot (PSA) TKDV6, DV6NR (Tier 4 / unconfirmed)",
+Thermo King,11-9961,119961,Filter - oil (engine),Maintenance & Wear,"Oil filter, spin-on, Severe Duty (Precedent)",reefer,current,,"Yanmar TK488CR, TK488CR1, TK486V25L1 (Tier 4)",
+Thermo King,11-7987,117987,Filter - oil (engine),Maintenance & Wear,"Oil filter, full-flow spin-on (URD-III, LND-II); replaces 11-6088",reefer,current,,Yanmar TK3.95; engine for some listed models: none found,
+Thermo King,11-9321,119321,Filter - oil (engine),Maintenance & Wear,"Oil filter, BYPASS spin-on, EMI 2000",reefer,current,,"Yanmar TK3.74, TK3.88, TK3.95, TK3.76, TK370, TK376, TK270, 3TNV74, TK374F (Tier 4), TK380F (Tier 4), TK376U; engine for some listed models: none found","Earlier conflict NAPA 7134 vs 1347 resolved: NAPA's own lookup gives 7134 for both 11-9321 and 11-6228, and WIX 57134 lists both TK numbers as direct OE. 1347 (kingreat) is not used. | Since 12/2021 (TK bulletin GLW1329907) the bypass filter is no longer installed on new truck units; CI-4 oil instead of CG-4 (Swisclima). 2026: reported replaced by 13-3679 (Swisclima only, unconfirmed)."
+Thermo King,11-6228,116228,Filter - oil (engine),Maintenance & Wear,"Oil filter, BYPASS spin-on (pre-Q1 2001 truck, LND-II)",reefer,current,,"Yanmar TK235, TK3.74, TK353, TK3.88, TK3.95; engine for some listed models: none found",Same filter as 11-9321 per WIX 57134 and NAPA 7134; Swisclima dates show 11-9321 used from Q1 2001.
+Thermo King,11-9101,119101,Filter - oil (engine),Maintenance & Wear,"Oil filter, BYPASS / secondary-flow spin-on (older SB/Sentry/TD-I/LND)",reefer,current,,"Isuzu C201, 4JC1, DI 2.2; Mercedes OM636; Yanmar TK353",
+Thermo King,11-9962,119962,Filter - oil (engine),Maintenance & Wear,"Oil filter, BYPASS, EMI 1000 hour (T-Series)",reefer,current,,"Yanmar TK270, TK370, TK376, 3TNV74, TK374F (Tier 4), TK380F (Tier 4)","Swisclima lists T-500R/T-560R; TK catalog (tk78) also lists it on T-570R, T-580R...T-1080S and T-600/800/1000 TSA/M."
+Thermo King,11-9341,119341,Filter - fuel,Fuel,"Fuel filter, spin-on, EMI 2000 (truck)",reefer,current,,"Yanmar TK3.74, TK3.88, TK3.95, TK3.76, TK370, TK376, TK270, 3TNV74, TK374F (Tier 4), TK380F (Tier 4)","2026: reported replaced by 13-3675 (Swisclima only, unconfirmed)."
+Thermo King,11-9098,119098,Filter - fuel,Fuel,"Fuel filter, spin-on (pre-Q1 2001)",reefer,superseded,11-9341,"Isuzu C201, DI 2.2; Mercedes OM636; Yanmar TK235, TK353, TK3.74, TK3.88, TK3.95; engine for some listed models: none found",TK dealer: 'Use 11-9341 in place of 11-9098'; NAPA and WIX cross both to the same filter. Itself replaced 11-3726 / 11-3693 (Swisclima).
+Thermo King,11-9342,119342,Filter - water separator,Fuel,"Fuel filter / water separator, spin-on, EMI 3000",reefer,current,,"Isuzu SE 2.2; Yanmar TK486, TK486E, TK486V, TK482E, TK486VH, TK482, TK486VMGS5, TK486VEGS5 (Stage V), TK376, TK376U, TK235, TK270M, TK270F (Tier 4), TK486VG2; engine for some listed models: none found",Earlier conflict resolved: Inline's WIX 33245 shows no applications in WIX's own lookup; WIX 33962 lists the TK SB/Super II/TriPac units and NAPA's lookup gives 3962.
+Thermo King,11-8047,118047,Filter - fuel,Fuel,"Fuel filter, spin-on (earlier version)",reefer,superseded,11-9342,same engines as 11-9342 (unconfirmed),Swisclima: 11-9342 replaces 11-8047; Inline and fuerdun list 11-8047 as the same filter.
+Thermo King,11-9954,119954,Filter - fuel,Fuel,"Fuel filter, spin-on, 5 micron, EMI 3000 (use ONLY with a fuel pre-filter)",reefer,current,,"Yanmar TK486V, TK486VH (Tier 4), TK486V25X, TK486V25X1 (Tier 4), TK376, TK376U",SLXi (non-DRC) listing comes only from TK kit 100574; the SLXi operator manual and Baldwin give 11-9342 for SLXi-100...400. CONFLICT - check by serial.
+Thermo King,11-9097,119097,Filter - fuel,Fuel,"Fuel filter, spin-on, primary (older)",reefer,current,,Isuzu C201; Mercedes OM636; Yanmar TK235; engine for some listed models: none found,
+Thermo King,11-9102,119102,Filter - fuel,Fuel,"Fuel filter, primary (EMI, older C201 units)",reefer,current,,Isuzu C201; Mercedes OM636,
+Thermo King,11-9103,119103,Filter - fuel,Fuel,"Fuel filter, secondary (EMI, older C201 / DI 2.2 units)",reefer,current,,"Isuzu C201, DI 2.2; Mercedes OM636",
+Thermo King,11-5948,115948,Filter - fuel,Fuel,"Fuel filter, primary (DI 2.2 units)",reefer,current,,Isuzu DI 2.2,
+Thermo King,11-6285,116285,Filter - fuel,Fuel,Fuel filter element (SB-III / SMX / Super II / early SG),reefer,current,,"Isuzu DI 2.2, SE 2.2; engine for some listed models: none found",
+Thermo King,11-7264,117264,Filter - water separator,Fuel,Fuel / water separator element (paired with 11-6285),reefer,current,,"Isuzu DI 2.2, SE 2.2; engine for some listed models: none found",
+Thermo King,11-6286,116286,Filter - water separator,Fuel,Water separator element (Super-II MAX DI 2.2),reefer,current,,Isuzu DI 2.2,
+Thermo King,11-7444,117444,Filter - fuel,Fuel,"Fuel filter (optional DAVCO fuel heater/filter, KD/MD/RD/TD-II)",reefer,current,,"Yanmar TK3.74, TK3.95",
+Thermo King,11-8003,118003,Filter - fuel,Fuel,"Fuel filter (plastic fuel filter assembly, KD/RD/TD-II)",reefer,current,,"Yanmar TK235, TK3.88",
+Thermo King,11-4880,114880,Filter - fuel,Fuel,"Fuel pre-filter element (bowl type, older truck/undermount)",reefer,current,,"Yanmar TK235, TK3.74, TK353, TK3.88, TK3.95",
+Thermo King,11-6180,116180,Filter - fuel,Fuel,Fuel pre-filter (older truck/undermount),reefer,current,,"Yanmar TK235, TK3.74, TK353, TK3.88, TK3.95",
+Thermo King,11-8903,118903,Filter - fuel,Fuel,"Fuel pre-filter (URD-III, UTS)",reefer,current,,Yanmar TK3.95; engine for some listed models: none found,
+Thermo King,11-4930,114930,Filter - fuel,Fuel,Fuel sedimenter filter (early SG gensets),reefer,current,,none found,
+Thermo King,13-1086,131086,Filter - fuel,Fuel,"Fuel pre-filter element, 30 micron (for pre-filter 10-0431; SLX/SLXe)",reefer,current,,Yanmar TK486V; engine for some listed models: none found,
+Thermo King,13-649,13649,Filter - fuel,Fuel,"In-line fuel filter, TriPac (early, rubber lines)",reefer,current,,Yanmar TK270M,
+Thermo King,13-864,13864,Filter - fuel,Fuel,"In-line fuel filter, TriPac (nylon lines, after 12/06)",reefer,current,,Yanmar TK270M,
+Thermo King,100491,100491,Filter - fuel strainer,Fuel,"Fuel strainer, TriPac Evolution",reefer,current,,Yanmar TK270F (Tier 4),
+Thermo King,11-9965,119965,Filter - fuel,Fuel,"Fuel filter element, Precedent S-Series & genset (EMI 3000)",reefer,current,,"Yanmar TK488CR, TK488CR1; Peugeot (PSA) TKDV6",S-Series kits after 6/2021 use 11-9969 primary + 11-9967 secondary instead (kit 100612).
+Thermo King,11-9957,119957,Filter - fuel,Fuel,"Fuel filter element, EMI 3000 (older Precedent kits 10-457/10-471; SG-4000 manual)",reefer,superseded,11-9965,Peugeot (PSA) DV6NR (Tier 4 / unconfirmed),Supersession inferred from kit changes and Baldwin listing both together (not a published TK supersession; unconfirmed).
+Thermo King,11-9966,119966,Filter - fuel,Fuel,"Fuel filter, Severe Duty (S-Series before 6/2021) / C-Series before 7/2023",reefer,current,,"Yanmar TK488CR, TK488CR1, TK486V25L1 (Tier 4)",
+Thermo King,11-9958,119958,Filter - fuel,Fuel,"Fuel filter, severe duty (older kit 10-469)",reefer,superseded,11-9966,Precedent engines (Yanmar TK488CR family; Peugeot TKDV6) (unconfirmed),Supersession inferred from kit change 10-469 -> 100580 (unconfirmed).
+Thermo King,11-9969,119969,Filter - fuel,Fuel,"Fuel filter, PRIMARY, standard duty, EMI 3000 (S-Series after 6/2021)",reefer,current,,"Yanmar TK488CR, TK488CR1, TK488CRH",
+Thermo King,11-9967,119967,Filter - fuel,Fuel,"Fuel filter, SECONDARY, standard duty (S-Series after 6/2021)",reefer,current,,"Yanmar TK488CR, TK488CR1, TK488CRH",
+Thermo King,11-9970,119970,Filter - fuel,Fuel,Fuel filter (severe duty S-Series after 6/2021; C-Series after 7/2023),reefer,current,,"Yanmar TK488CR, TK488CR1, TK488CRH, TK486V25L1 (Tier 4)",
+Thermo King,11-9968,119968,Filter - fuel,Fuel,"Fuel filter, SECONDARY, severe duty (S-Series after 6/2021)",reefer,current,,"Yanmar TK488CR, TK488CR1, TK488CRH",
+Thermo King,11-9300,119300,Filter - air,Maintenance & Wear,"Air cleaner element, EMI 3000 (cyclonic EMI 3000 air cleaner)",reefer,current,,"Isuzu SE 2.2; Yanmar TK486, TK486E, TK486V, TK486VH (Tier 4), TK482, TK486VMGS5, TK486V25X, TK486V25X1 (Tier 4), TK486VG2; engine for some listed models: none found",Complete EMI 3000 air cleaner assembly = 11-9299 (Swisclima).
+Thermo King,11-9059,119059,Filter - air,Maintenance & Wear,"Air cleaner element, radial seal (truck / UT / TriPac; EMI 2000)",reefer,current,,"Yanmar TK3.76, TK3.95, TK3.74, TK370, TK376, TK270, 3TNV74, TK374F (Tier 4), TK380F (Tier 4), TK376U, TK235, TK270M, TK270F (Tier 4)","Complete dry air cleaner = 11-9068 (TK catalog). 2026: reported replaced by 13-3682 (case of 12) / 13-3853 (single) (Swisclima only, unconfirmed)."
+Thermo King,11-7400,117400,Filter - air,Maintenance & Wear,Air cleaner (older SB / SMX / SL / Sentry / Super II),reefer,current,,"Isuzu C201, DI 2.2, SE 2.2; Mercedes OM636; Yanmar TK486, TK486E, TK486V, TK482","Replaces 11-5978 (Swisclima, unconfirmed). SB units: 11-7400 before SN L32014, 11-9300 after (aftermarket kit, unconfirmed)."
+Thermo King,11-7234,117234,Filter - air,Maintenance & Wear,"Air filter element (older truck, TK3.95 versions)",reefer,current,,Yanmar TK3.95,Replaces 11-7496 (Swisclima).
+Thermo King,11-5692,115692,Filter - air,Maintenance & Wear,Air cleaner element (LND),reefer,current,,Yanmar TK353,
+Thermo King,11-9955,119955,Filter - air,Maintenance & Wear,"Air cleaner element, EMI 3000 (Precedent; Advancer)",reefer,current,,"Yanmar TK486VMGS5, TK486VEGS5 (Stage V), TK488CR, TK488CR1, TK486V25L1 (Tier 4); Peugeot (PSA) TKDV6",
+Thermo King,11-9956,119956,Filter - air,Maintenance & Wear,"Air cleaner element, Severe Duty (Precedent)",reefer,current,,"Yanmar TK488CR, TK488CR1, TK486V25L1 (Tier 4)",
+Thermo King,13-658,13658,Filter - cab air,Air Flow & Structure,"Evaporator (cab) air filter, TriPac legacy",reefer,current,,"n/a (cab air filter, not engine)",
+Thermo King,92-5701,925701,Filter - cab air,Air Flow & Structure,"Evaporator (cab) air filter, TriPac Evolution",reefer,current,,"n/a (cab air filter, not engine)",

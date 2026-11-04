@@ -1,0 +1,39 @@
+site,robots_terms_finding,used,why
+can.ca (seed CSV),Existing dataset reused from /workspace/canparts; not re-scraped,yes,OEM numbers and unit fitments; counted as one source group; retailer name kept out of notes
+tk78.ru,robots.txt has no rule blocking catalog pages; no terms of use found prohibiting automated collection; crawled at >=5 s/request; no blocks or errors seen,yes,"Main TK fitment source (TK catalog groups by model). Only part number, short name and model collected"
+swisclima.ch / swissclima.ch,robots.txt allows /en/thermokingparts; no terms forbidding automated access found; >=5 s/request,yes,TK part applications (models and engines); counted as one source group
+"thermoking.com (incl. TK PDFs hosted by dealers e.g. thermokingmichigan.com, endeavorsuite TK manuals)",robots allows /content/dam documents,yes,"TK filter brochure 54766, PM filter kit flyer 56942 and operator manuals (seed PDFs reused, not re-downloaded); counted as one TK-document group"
+parts.thermoking.com,Store front; store/checkout area,no,Not used: store pages; seed snippet from it excluded
+shareddocs.com (Carrier Transicold documents),robots allows /hvac/docs; Carrier's own public PDFs,yes,"Carrier engine parts lists 62-03459, 62-10295, 62-10863, 62-11335; unit fitment taken from each list's model chart; counted as one Carrier-document group with carrier.com"
+carrier.com,robots allows public documents,yes (seed only),Seed Carrier filter fitments citing carrier.com documents
+wixfilters.com (en-nz / en-mea catalog) and www2.wixfilters.com (seed lookup pages),robots allows product pages; MANN+HUMMEL legal page reserves copyright on texts/photos/graphics; only bare part-number facts taken,yes,"WIX cross numbers and WIX-listed TK/Carrier applications; all WIX pages = one source group. en-us catalog 404; 33340, 33404, 33962, 42888, 49168, 51318, 51807, 51808 404 on en-nz/en-mea"
+baldwinfilters.com (Form 677 PDF),"PDF now returns 403 to curl and fetch -> treated as blocked, stopped",seed only,Baldwin crosses taken only from the seed's earlier read of Form 677; could not be re-checked this run
+myriadparts.com,Public PDF belt quick lists; terms are sales T&Cs with no clause found forbidding automated collection; 2 PDFs fetched,yes,OEM belt number by model and belt function (TK and Carrier EU models); no Myriad numbers or text copied
+thermobyproducts.com (ASE Supply / Thermo By Products),Terms (/terms.php) limit use to personal non-commercial use; robots Content-Signal ai-input not granted,no,Skipped per instruction; nothing pulled directly; seed citations to it excluded from verification
+inlinefilters.co.uk,robots Disallow: / (and ai-train=no),no,Disallowed; seed citations excluded
+finditparts.com,"robots Disallow: / for crawlers; terms: personal non-commercial use only, no harvesting",no,Skipped; seed citations excluded
+filterverified.com,Terms restrict reuse,no,Skipped; seed citations excluded
+napaindustrialfilters.com / napaonline.com,Terms forbid automated collection / data reuse,no,Skipped; no NAPA Gold crosses could be confirmed from an allowed source
+dayco.com / daycoaftermarket.com,Terms forbid automated collection / reuse of catalog data,no,Skipped; no Dayco crosses
+fleetguard.com / cumminsfiltration.com,Cross-reference is a search/interactive tool (query URLs/internal API),no,Not used; no Fleetguard crosses confirmed from an allowed source
+donaldson.com / shop.donaldson.com,Shop/search endpoints,no,Not needed
+"multistarcold.com, simplyfilter.com, excofilter.com, fliphtml5.com, oilfilter-crossreference.com, fuerdun, kingreat, fridayparts, aftermark.net, fleetpro-parts, sf-filter, czescidocarriera.pl, tk.istore.pl, greatmanfilter, htac-bus",Retailers/aggregators cited in the seed; terms not cleared or retailer pages,no,Excluded from verification counts
+almarka.ru (Carrier PDF mirror),Returned HTTP 500,no,Not retried
+scribd / slideshare / easymanua.ls / amazon,Login/paywall/terms,no,Excluded
+kubotaengine.com / yanmar.com,robots checked,no,No part-level data needed
+continental-industry.com,robots Disallow: /,no,Skipped
+gates.com,"robots: Crawl-delay 10, Visit-time 04:00-08:45 UTC, /*? and /catalog/ disallowed. Terms of use (fetched once at 00:00 EDT, inside the window) allow personal, noncommercial use only and bar copying/reproducing content",no,Skipped because of the terms. Earlier this run the homepage was also fetched once outside the visit-time window (disclosed). No Gates crosses
+delcoremy.com,robots checked; seed used its public cross-reference pages,seed only,Delco Remy starter crosses taken from the seed (other_crosses column); not re-fetched this run
+"transarctic.com (Carrier dealer hosting Carrier 05G compressor parts lists 62-10299, 62-11053)",No robots.txt (404); public PDF links; no terms found that forbid it; 2 PDFs fetched 5 s apart,yes,"Carrier's own documents, counted in the Carrier-document group (not a separate source)"
+fridiel.com (hosts Carrier Supra 950 parts list 62-61114),"robots.txt empty; public PDF; document carries a Carrier 'may not be reproduced' notice, so only part numbers/fitment facts were taken",yes,"Carrier document, counted in the Carrier-document group"
+ctrserv.com:8443 (hosts Carrier unit parts lists),TLS connection failed from this network,no,Could not be reached; not retried around the failure
+"tk78.ru (Carrier section, 27 category listings)",robots.txt allows category pages; crawl at 6 s; no terms clause against automated collection found,yes,Independent aftermarket reseller; OEM numbers + unit models from listing titles (only titles naming specific models used); Russian names translated in our own words
+multistarcold.com (63 Carrier part pages),robots.txt allows; no terms-of-use page found; crawl at 6 s,yes,"Independent aftermarket supplier (not a Carrier dealer); OEM number, compatible unit lists, brand crosses; marketing text ignored (contains copy errors)"
+kingclima.net (Carrier product pages),robots.txt Allow /; no terms-of-use page found; crawl at 6 s,yes,"Independent aftermarket supplier (not a Carrier dealer); OEM number, 'to suit' unit lists, alternate Carrier numbers; may share catalog origin with other aftermarket sites"
+delcoremy.com (product-xref pages for Carrier numbers),robots.txt Disallow empty (all allowed); PHINIA terms have no anti-scraping clause; 6 s delay,yes,"Component manufacturer's own cross-reference; Delco Remy numbers for Carrier starters/alternators; cross source only, not counted for fitment"
+fridayparts.com,Terms of use forbid scraping/automated collection,no,Skipped per terms
+totalparts.com.au,Terms limit site use to personal/non-commercial,no,Skipped per terms
+hattink-thermoparts.com,Product data loads via JavaScript/internal API,no,Skipped; no undocumented APIs
+aftermark.net,Returns captcha page,no,Skipped; no captcha bypass
+"Carrier/TK dealer sites and dealer-hosted documents (swissclima, thermokingmichigan, transarctic, fridiel, endeavorsuite)",Excluded by owner rule (no dealerships),no,Source URLs stripped; rows left with no other source dropped
+"Carrier/TK parts manuals, parts lists (62-xxxxx), service manuals, tech letters (shareddocs.com, carrier.com docs)",Excluded by owner rule (proprietary/licensed documents),no,Source URLs stripped; 41 baseline Carrier rows whose notes cite a 62-xxxxx parts list as the fitment basis removed from clean2

@@ -1,0 +1,33 @@
+engine_code,engine_maker,base_engine,tier,confidence,source_note
+TK370,Thermo King,Yanmar,,confirmed,starter and filter documents
+TK376,Thermo King,Yanmar,Tier 2 and Tier 4,confirmed,starter and filter documents
+TK366,Thermo King,Yanmar,,confirmed,starter and filter documents
+TK374,Thermo King,Yanmar,,confirmed,starter and filter documents
+TK388,Thermo King,Yanmar,,confirmed,starter and filter documents
+TK395,Thermo King,Yanmar,,confirmed,starter and filter documents
+TK3.66,Thermo King,Yanmar,,confirmed,starter and filter documents
+TK3.74,Thermo King,Yanmar,,confirmed,starter and filter documents
+TK3.88,Thermo King,Yanmar,,confirmed,starter and filter documents
+TK3.95,Thermo King,Yanmar,,confirmed,starter and filter documents
+TK270,Thermo King,Yanmar,,confirmed,starter and filter documents
+DI2.2,Thermo King,Isuzu,,confirmed,starter and filter documents
+SE2.2,Thermo King,Isuzu,,confirmed,starter and filter documents
+TK486V,Thermo King,Yanmar,Tier 2 and Tier 4i,confirmed,starter and filter documents
+TK482,Thermo King,Yanmar,,confirmed,starter and filter documents
+TK486,Thermo King,Yanmar,Tier 1,confirmed,starter and filter documents
+TK482E,Thermo King,Yanmar,,confirmed,starter and filter documents
+TK486E,Thermo King,Yanmar,,confirmed,starter and filter documents
+C201,Thermo King,Isuzu (2.0L),,confirmed,starter and filter documents
+TK235,Thermo King,Yanmar,,confirmed,starter and filter documents
+TK353,Thermo King,Yanmar (2T72HL),,confirmed,starter and filter documents
+CT3-69,Carrier Transicold,Kubota D1105,,confirmed,starter and filter documents
+CT4-91,Carrier Transicold,Kubota D1505,,confirmed,starter and filter documents
+CT2-29,Carrier Transicold,Kubota D479/Z482,,confirmed,starter and filter documents
+CT3-44,Carrier Transicold,Kubota D722,,confirmed,starter and filter documents
+CT4-91-TV,Carrier Transicold,Kubota D1505,,confirmed,starter and filter documents
+CT2-29-TV,Carrier Transicold,Kubota D479/Z482,,confirmed,starter and filter documents
+CT4-114,Carrier Transicold,Kubota D1861,,confirmed,starter and filter documents
+CT4-134,Carrier Transicold,Kubota V2203,Tier 2 or earlier,confirmed,starter and filter documents
+CT4-134TV,Carrier Transicold,Kubota V2203,,confirmed,starter and filter documents
+CT4-134DI,Carrier Transicold,Kubota V2203 (T4i) / V1903 (T4),Kubota V2203 Tier 4i / V1903 Tier 4 per Carrier matrix,confirmed,starter and filter documents
+Kubota Z482,Carrier Transicold,Kubota Z482,,confirmed,starter and filter documents

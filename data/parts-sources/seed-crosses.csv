@@ -1,0 +1,173 @@
+maker,part_number,cross_mfr,cross_part,confidence,source_note
+Thermo King,45-2326,Delco Remy,93553,confirmed,93553
+Thermo King,45-2326,Denso,028000-5730,confirmed,028000-5730
+Thermo King,45-2326,Denso,128000-0710,aftermarket,128000-0710 (aftermarket only)
+Thermo King,45-2326,Hitachi,S114-116,confirmed,S114-116
+Thermo King,45-2326,Hitachi,S114-450,unconfirmed,S114-450 (unconfirmed)
+Thermo King,45-1718,Delco Remy,93550,confirmed,93550
+Thermo King,45-1718,Denso,028000-5730,confirmed,028000-5730
+Thermo King,45-1718,Denso,128000-0710,aftermarket,128000-0710 (aftermarket only)
+Thermo King,45-1718,Hitachi,S114-116,confirmed,S114-116
+Thermo King,45-1718,Hitachi,S114-450,aftermarket,S114-450 (aftermarket only)
+Thermo King,45-2325,Delco Remy,93584,confirmed,93584
+Thermo King,45-2325,Hitachi,S13-211,confirmed,S13-211
+Thermo King,45-2325,Hitachi,S13-289,confirmed,S13-289
+Thermo King,45-1993,Delco Remy,93584,confirmed,93584
+Thermo King,45-1993,Hitachi,S13-211,confirmed,S13-211
+Thermo King,45-1993,Hitachi,S13-289,confirmed,S13-289
+Thermo King,45-2324,Delco Remy,93592,confirmed,93592
+Thermo King,45-2324,Hitachi,S13-407,confirmed,S13-407
+Thermo King,45-2324,Hitachi,S13-407A,confirmed,S13-407A
+Thermo King,45-2323,Delco Remy,93591,confirmed,93591
+Thermo King,45-2323,Hitachi,S13-207,confirmed,S13-207
+Thermo King,45-2323,Hitachi,S13-207C,confirmed,S13-207C
+Thermo King,45-1688,Delco Remy,93591,confirmed,93591
+Thermo King,45-1688,Hitachi,S13-207,confirmed,S13-207
+Thermo King,45-1688,Hitachi,S13-207C,confirmed,S13-207C
+Thermo King,45-2176,Delco Remy,93597,confirmed,93597
+Thermo King,45-2176,Denso,228000-3732,unconfirmed,228000-3732 (unconfirmed)
+Thermo King,45-1285,Delco Remy,93593,obsolete,93593 (obsolete)
+Thermo King,45-1285,Hitachi,S13-84,confirmed,S13-84
+Thermo King,45-1285,Hitachi,S13-84A,confirmed,S13-84A
+Thermo King,45-1285,Hitachi,S13-84B,confirmed,S13-84B
+Thermo King,45-1251,Delco Remy,93547,obsolete,93547 (obsolete)
+Thermo King,45-1251,Denso,128000-0720,confirmed,128000-0720
+Thermo King,45-1251,Denso,028000-5800,confirmed,028000-5800
+Thermo King,45-2918,Delco Remy,DRS3246,unconfirmed,DRS3246 (unconfirmed)
+Thermo King,45-2918,Hitachi,S12-41,confirmed,S12-41
+Thermo King,45-2918,Hitachi,S12-41A,confirmed,S12-41A
+Thermo King,45-2918,Hitachi,S12-59,unconfirmed,S12-59 (unconfirmed)
+Carrier Transicold,25-15371-00,Delco Remy,93595,confirmed,93595 (Delco Remy cross-reference)
+Carrier Transicold,25-15520-00,Delco Remy,99746,confirmed,99746 (Delco Remy cross-reference)
+Carrier Transicold,25-35465-00,Delco Remy,93594,confirmed,93594 (Delco Remy cross-reference)
+Carrier Transicold,25-38750-00,Delco Remy,93549,confirmed,93549 (Delco Remy cross-reference)
+Carrier Transicold,25-39135-00,Delco Remy,93588,confirmed,93588 (Delco Remy cross-reference)
+Carrier Transicold,25-39476-00,Delco Remy,93607,confirmed,93607 (Delco Remy cross-reference)
+Carrier Transicold,25-39587-00,Delco Remy,93590,confirmed,93590 (Delco Remy cross-reference)
+Carrier Transicold,25-39610-00,Delco Remy,93600,unconfirmed,"93600 (Remy, per Motor City Reman & Amazon listing only; unconfirmed)"
+Carrier Transicold,25-39700-00,Denso,228000-6950 / -6951 / -6952,confirmed,228000-6950 / -6951 / -6952
+Carrier Transicold,25-39700-00,Denso,428000-0930 / -0931,dealer,428000-0930 / -0931 (aftermarket dealers Smithco/Mengyang list these under the 25-39316 family)
+Thermo King,11-9182,Fleetguard,LF9030,confirmed,LF9030 (Inline also lists LF16164)
+Thermo King,11-9182,Fleetguard,LF16164,unconfirmed,LF9030 (Inline also lists LF16164)
+Thermo King,11-9182,Carquest,84382,confirmed,84382
+Thermo King,11-9182,NAPA,7382,confirmed,7382
+Thermo King,11-9182,Baldwin,B7375,confirmed,B7375
+Thermo King,11-9182,Luber-finer,LFP9182,unconfirmed,LFP9182 (unconfirmed)
+Thermo King,11-9182,WIX,57382,confirmed,57382
+Thermo King,11-7382,Fleetguard,LF3746,confirmed,LF3746
+Thermo King,11-7382,Carquest,85809,unconfirmed,85809 (unconfirmed)
+Thermo King,11-7382,NAPA,1809,confirmed,1809
+Thermo King,11-7382,Baldwin,BD7095,confirmed,BD7095
+Thermo King,11-7382,WIX,51809,confirmed,51809
+Thermo King,11-6182,Fleetguard,LF16354,confirmed,LF16354 (Inline also lists LF716)
+Thermo King,11-6182,Fleetguard,LF716,unconfirmed,LF16354 (Inline also lists LF716)
+Thermo King,11-6182,Carquest,85344,confirmed,85344
+Thermo King,11-6182,NAPA,1344,confirmed,1344
+Thermo King,11-6182,Baldwin,B161-S,confirmed,B161-S
+Thermo King,11-6182,WIX,51344,confirmed,51344
+Thermo King,11-9099,Fleetguard,LF694,unconfirmed,LF694 (unconfirmed)
+Thermo King,11-9099,Carquest,85807 (derived from WIX 51807,derived,"85807 (derived from WIX 51807, unconfirmed)"
+Thermo King,11-9099,Carquest,unconfirmed),unconfirmed,"85807 (derived from WIX 51807, unconfirmed)"
+Thermo King,11-9099,NAPA,1807,confirmed,1807
+Thermo King,11-9099,Baldwin,BT365,unconfirmed,BT365 (unconfirmed)
+Thermo King,11-9099,Luber-finer,LFP3712,unconfirmed,LFP3712 (unconfirmed)
+Thermo King,11-9099,WIX,51807,confirmed,51807
+Thermo King,11-9100,Fleetguard,CONFLICT: LF3455 vs LF702,conflict,CONFLICT: LF3455 (Inline snippet) vs LF702 (fuerdun) (unconfirmed)
+Thermo King,11-9100,Carquest,85808 (derived from WIX 51808,derived,"85808 (derived from WIX 51808, unconfirmed)"
+Thermo King,11-9100,Carquest,unconfirmed),unconfirmed,"85808 (derived from WIX 51808, unconfirmed)"
+Thermo King,11-9100,NAPA,1808,confirmed,1808
+Thermo King,11-9100,WIX,51808,confirmed,51808
+Thermo King,11-9959,Fleetguard,CONFLICT: LF787 vs FF5053 (fuerdun,conflict,"CONFLICT: LF787 (TK parts page snippet) vs FF5053 (fuerdun; FF prefix is a Fleetguard fuel-filter series, doubtful) (unconfirmed)"
+Thermo King,11-9959,Fleetguard,FF prefix is a Fleetguard fuel-filter series,confirmed,"CONFLICT: LF787 (TK parts page snippet) vs FF5053 (fuerdun; FF prefix is a Fleetguard fuel-filter series, doubtful) (unconfirmed)"
+Thermo King,11-9959,Fleetguard,doubtful),unconfirmed,"CONFLICT: LF787 (TK parts page snippet) vs FF5053 (fuerdun; FF prefix is a Fleetguard fuel-filter series, doubtful) (unconfirmed)"
+Thermo King,11-7987,Carquest,85334 (derived from WIX 51334,derived,"85334 (derived from WIX 51334, unconfirmed)"
+Thermo King,11-7987,Carquest,unconfirmed),unconfirmed,"85334 (derived from WIX 51334, unconfirmed)"
+Thermo King,11-7987,NAPA,1334,confirmed,1334
+Thermo King,11-7987,WIX,51334 (derived from NAPA 1334,confirmed,"51334 (derived from NAPA 1334, unconfirmed; WIX application list shows no TK rows)"
+Thermo King,11-7987,WIX,unconfirmed,unconfirmed,"51334 (derived from NAPA 1334, unconfirmed; WIX application list shows no TK rows)"
+Thermo King,11-7987,WIX,WIX application list shows no TK rows),confirmed,"51334 (derived from NAPA 1334, unconfirmed; WIX application list shows no TK rows)"
+Thermo King,11-9321,Fleetguard,LF3641,confirmed,LF3641
+Thermo King,11-9321,Carquest,84134,unconfirmed,84134 (unconfirmed)
+Thermo King,11-9321,NAPA,7134,confirmed,7134
+Thermo King,11-9321,Baldwin,B7221,unconfirmed,B7221 (unconfirmed)
+Thermo King,11-9321,Luber-finer,LFP9321,unconfirmed,LFP9321 (unconfirmed)
+Thermo King,11-9321,WIX,57134,confirmed,57134
+Thermo King,11-6228,Fleetguard,LF3641,unconfirmed,LF3641 (unconfirmed)
+Thermo King,11-6228,Carquest,84134,unconfirmed,84134 (unconfirmed)
+Thermo King,11-6228,NAPA,7134,confirmed,7134
+Thermo King,11-6228,Baldwin,B7221,unconfirmed,B7221 (unconfirmed)
+Thermo King,11-6228,Luber-finer,LFP9321,unconfirmed,LFP9321 (unconfirmed)
+Thermo King,11-6228,WIX,57134,confirmed,57134
+Thermo King,11-9101,Carquest,85802 (derived from WIX 51802,derived,"85802 (derived from WIX 51802, unconfirmed)"
+Thermo King,11-9101,Carquest,unconfirmed),unconfirmed,"85802 (derived from WIX 51802, unconfirmed)"
+Thermo King,11-9101,NAPA,1802,confirmed,1802
+Thermo King,11-9101,WIX,51802,confirmed,51802
+Thermo King,11-9341,Fleetguard,FF204,confirmed,FF204
+Thermo King,11-9341,Carquest,86368,unconfirmed,86368 (unconfirmed)
+Thermo King,11-9341,NAPA,3368,confirmed,3368
+Thermo King,11-9341,Baldwin,BF992,unconfirmed,BF992 (unconfirmed)
+Thermo King,11-9341,Luber-finer,LFP3693F,unconfirmed,LFP3693F (unconfirmed)
+Thermo King,11-9341,WIX,33368,confirmed,33368
+Thermo King,11-9098,Fleetguard,FF204,unconfirmed,FF204 (unconfirmed)
+Thermo King,11-9098,Carquest,86368,unconfirmed,86368 (unconfirmed)
+Thermo King,11-9098,NAPA,3368,confirmed,3368
+Thermo King,11-9098,Baldwin,BF992,unconfirmed,BF992 (unconfirmed)
+Thermo King,11-9098,WIX,33368,confirmed,33368
+Thermo King,11-9342,Fleetguard,FS19580 / FS19580A,confirmed,FS19580 / FS19580A
+Thermo King,11-9342,Carquest,86962,unconfirmed,86962 (unconfirmed)
+Thermo King,11-9342,NAPA,3962,confirmed,3962
+Thermo King,11-9342,Baldwin,BF9894,confirmed,BF9894
+Thermo King,11-9342,Luber-finer,LFF9342,unconfirmed,LFF9342 (unconfirmed)
+Thermo King,11-9342,WIX,33962,confirmed,33962
+Thermo King,11-9954,Fleetguard,FS20091,confirmed,FS20091
+Thermo King,11-9954,Baldwin,BF9893,confirmed,BF9893
+Thermo King,11-9954,Luber-finer,LFF9954,unconfirmed,LFF9954 (unconfirmed)
+Thermo King,11-9097,Fleetguard,FF5017,confirmed,FF5017
+Thermo King,11-9097,Carquest,86367 (derived from WIX 33367,derived,"86367 (derived from WIX 33367, unconfirmed)"
+Thermo King,11-9097,Carquest,unconfirmed),unconfirmed,"86367 (derived from WIX 33367, unconfirmed)"
+Thermo King,11-9097,Baldwin,BF991,confirmed,BF991
+Thermo King,11-9097,WIX,33367 (WIX application list shows the same TK units,confirmed,"33367 (WIX application list shows the same TK units; OE link to 11-9097 not shown, unconfirmed)"
+Thermo King,11-9097,WIX,OE link to 11-9097 not shown,confirmed,"33367 (WIX application list shows the same TK units; OE link to 11-9097 not shown, unconfirmed)"
+Thermo King,11-9097,WIX,unconfirmed),unconfirmed,"33367 (WIX application list shows the same TK units; OE link to 11-9097 not shown, unconfirmed)"
+Thermo King,11-6285,Fleetguard,FF5276,unconfirmed,FF5276 (unconfirmed)
+Thermo King,11-6285,Carquest,86544 (derived from WIX 33544,derived,"86544 (derived from WIX 33544, unconfirmed)"
+Thermo King,11-6285,Carquest,unconfirmed),unconfirmed,"86544 (derived from WIX 33544, unconfirmed)"
+Thermo King,11-6285,NAPA,3544,confirmed,3544
+Thermo King,11-6285,Baldwin,BF7579,unconfirmed,BF7579 (unconfirmed)
+Thermo King,11-6285,WIX,33544,confirmed,33544
+Thermo King,11-7264,Fleetguard,FF5275,unconfirmed,FF5275 (unconfirmed)
+Thermo King,11-7264,Carquest,86543 (derived from WIX 33543,derived,"86543 (derived from WIX 33543, unconfirmed)"
+Thermo King,11-7264,Carquest,unconfirmed),unconfirmed,"86543 (derived from WIX 33543, unconfirmed)"
+Thermo King,11-7264,NAPA,3543,confirmed,3543
+Thermo King,11-7264,WIX,33543,confirmed,33543
+Thermo King,11-6286,NAPA,3545,confirmed,3545
+Thermo King,11-6286,WIX,33545 (derived from NAPA 3545,confirmed,"33545 (derived from NAPA 3545, unconfirmed; WIX application list shows no TK rows)"
+Thermo King,11-6286,WIX,unconfirmed,unconfirmed,"33545 (derived from NAPA 3545, unconfirmed; WIX application list shows no TK rows)"
+Thermo King,11-6286,WIX,WIX application list shows no TK rows),confirmed,"33545 (derived from NAPA 3545, unconfirmed; WIX application list shows no TK rows)"
+Thermo King,11-9965,Baldwin,CONFLICT: PF46284 vs BF46114 - use PF46284,conflict,CONFLICT: PF46284 (Baldwin Form 677) vs BF46114 (kingreat) - use PF46284
+Thermo King,11-9965,WIX,WF10416 (kingreat only,confirmed,"WF10416 (kingreat only; WIX application list shows no rows, unconfirmed)"
+Thermo King,11-9965,WIX,WIX application list shows no rows,confirmed,"WF10416 (kingreat only; WIX application list shows no rows, unconfirmed)"
+Thermo King,11-9965,WIX,unconfirmed),unconfirmed,"WF10416 (kingreat only; WIX application list shows no rows, unconfirmed)"
+Thermo King,11-9957,Baldwin,PF46284 (Baldwin lists '119957,confirmed,"PF46284 (Baldwin lists '119957, 119965' together; Amazon listing says compatible with 119957/119965)"
+Thermo King,11-9957,Baldwin,119965' together,confirmed,"PF46284 (Baldwin lists '119957, 119965' together; Amazon listing says compatible with 119957/119965)"
+Thermo King,11-9957,Baldwin,Amazon listing says compatible with 119957/119965),confirmed,"PF46284 (Baldwin lists '119957, 119965' together; Amazon listing says compatible with 119957/119965)"
+Thermo King,11-9966,Baldwin,PF46285,confirmed,PF46285
+Thermo King,11-9300,Fleetguard,AF25119,confirmed,AF25119
+Thermo King,11-9300,Baldwin,RS5387 KIT,confirmed,RS5387 KIT
+Thermo King,11-9300,Luber-finer,LAF9300,confirmed,LAF9300
+Thermo King,11-9300,WIX,WA10060,confirmed,WA10060
+Thermo King,11-9059,Fleetguard,AF25550,confirmed,AF25550
+Thermo King,11-9059,Carquest,88449,confirmed,88449
+Thermo King,11-9059,NAPA,6449,confirmed,6449
+Thermo King,11-9059,Baldwin,RS3715,confirmed,RS3715
+Thermo King,11-9059,Luber-finer,LAF8388,unconfirmed,LAF8388 (unconfirmed)
+Thermo King,11-9059,WIX,46449,confirmed,46449
+Thermo King,11-7400,Carquest,88405 (derived from WIX 46405,derived,"88405 (derived from WIX 46405, unconfirmed)"
+Thermo King,11-7400,Carquest,unconfirmed),unconfirmed,"88405 (derived from WIX 46405, unconfirmed)"
+Thermo King,11-7400,NAPA,6405,confirmed,6405
+Thermo King,11-7400,WIX,46405,confirmed,46405
+Thermo King,11-7234,Fleetguard,AF25307,unconfirmed,AF25307 (unconfirmed)
+Thermo King,11-5692,NAPA,6270,confirmed,6270
+Thermo King,11-5692,WIX,46270 (derived from NAPA 6270,confirmed,"46270 (derived from NAPA 6270, unconfirmed)"
+Thermo King,11-5692,WIX,unconfirmed),unconfirmed,"46270 (derived from NAPA 6270, unconfirmed)"
+Thermo King,11-9955,Baldwin,CONFLICT: none per Baldwin Form 677 vs RS5387 per Allsize - treat as none,conflict,CONFLICT: none per Baldwin Form 677 ('---') vs RS5387 per Allsize - treat as none

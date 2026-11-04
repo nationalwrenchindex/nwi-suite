@@ -1,0 +1,34 @@
+maker,old_part,new_part,confidence,source_note
+Thermo King,45-1718,45-2326,confirmed,45-1718
+Thermo King,45-1993,45-2325,confirmed,"45-1993, 45-1671"
+Thermo King,45-1671,45-2325,confirmed,"45-1993, 45-1671"
+Thermo King,45-1688,45-2323,confirmed,45-1688
+Thermo King,45-2323,45-2324,unconfirmed,45-2324 (unconfirmed - aftermarket only; TK brochure still lists 45-2323 as current)
+Carrier Transicold,29-70158-00,25-15198-00,unconfirmed,29-70158-00 (unconfirmed; Total Parts only)
+Carrier Transicold,25-39316-00,25-15520-00,unconfirmed,Superseded by 25-39316-00 (2.2 kW) per Total Parts only (unconfirmed)
+Carrier Transicold,29-70050-00,25-34525-00,unconfirmed,"Cross-listed with 29-70050-00 / 29-70050-01 (Total Parts URL, Myriad). FridayParts also lists 25-34885-00, 35-34885-00, 25-15371-00 as interchangeable (unconfirmed)"
+Carrier Transicold,29-70050-01,25-34525-00,unconfirmed,"Cross-listed with 29-70050-00 / 29-70050-01 (Total Parts URL, Myriad). FridayParts also lists 25-34885-00, 35-34885-00, 25-15371-00 as interchangeable (unconfirmed)"
+Carrier Transicold,25-34885-00,25-34525-00,unconfirmed,"Cross-listed with 29-70050-00 / 29-70050-01 (Total Parts URL, Myriad). FridayParts also lists 25-34885-00, 35-34885-00, 25-15371-00 as interchangeable (unconfirmed)"
+Carrier Transicold,35-34885-00,25-34525-00,unconfirmed,"Cross-listed with 29-70050-00 / 29-70050-01 (Total Parts URL, Myriad). FridayParts also lists 25-34885-00, 35-34885-00, 25-15371-00 as interchangeable (unconfirmed)"
+Carrier Transicold,25-15371-00,25-34525-00,unconfirmed,"Cross-listed with 29-70050-00 / 29-70050-01 (Total Parts URL, Myriad). FridayParts also lists 25-34885-00, 35-34885-00, 25-15371-00 as interchangeable (unconfirmed)"
+Carrier Transicold,25-39476-00SV,25-39476-00,unconfirmed,"Carrier service number is 25-39476-00SV (Select Line 25-39476-00SL). Dealers also list 25-38781-00(SV) and 25-39420-00SV as same part (aftermark.net, ATS); OE Mitsubishi M8T71871 / Kubota 1G484-63012 (ATS only, unconfirmed)"
+Carrier Transicold,25-39476-00SL,25-39476-00,unconfirmed,"Carrier service number is 25-39476-00SV (Select Line 25-39476-00SL). Dealers also list 25-38781-00(SV) and 25-39420-00SV as same part (aftermark.net, ATS); OE Mitsubishi M8T71871 / Kubota 1G484-63012 (ATS only, unconfirmed)"
+Carrier Transicold,25-38781-00,25-39476-00,unconfirmed,"Carrier service number is 25-39476-00SV (Select Line 25-39476-00SL). Dealers also list 25-38781-00(SV) and 25-39420-00SV as same part (aftermark.net, ATS); OE Mitsubishi M8T71871 / Kubota 1G484-63012 (ATS only, unconfirmed)"
+Carrier Transicold,25-39420-00SV,25-39476-00,unconfirmed,"Carrier service number is 25-39476-00SV (Select Line 25-39476-00SL). Dealers also list 25-38781-00(SV) and 25-39420-00SV as same part (aftermark.net, ATS); OE Mitsubishi M8T71871 / Kubota 1G484-63012 (ATS only, unconfirmed)"
+Carrier Transicold,25-39316-00,25-39587-00,conflict,CONFLICT: aftermark.net and Smithco list 25-39587-00 as interchangeable with the 2.2 kW Denso-style 25-39316-00/-01 and 25-39700-00SV; Myriad lists it as 2.0 kW
+Carrier Transicold,25-39700-00SV,25-39587-00,conflict,CONFLICT: aftermark.net and Smithco list 25-39587-00 as interchangeable with the 2.2 kW Denso-style 25-39316-00/-01 and 25-39700-00SV; Myriad lists it as 2.0 kW
+Carrier Transicold,25-39880-00SV,25-39610-00,confirmed,"Mitsubishi M003T70681 / M3T70681, Kubota 1E152-63011 (aftermarket). CT West sells a 2.5 kW APU starter 25-39880-00SV; no supersession link found"
+Carrier Transicold,25-39316-01,25-39700-00,dealer,"25-39316-01 (replaced by 25-39700-00 per Thermo-By-Products); dealers also list 25-39316-00, 25-39291-00, 25-39396-00, 25-39192-00 in the same family"
+Carrier Transicold,25-39316-00,25-39700-00,dealer,"25-39316-01 (replaced by 25-39700-00 per Thermo-By-Products); dealers also list 25-39316-00, 25-39291-00, 25-39396-00, 25-39192-00 in the same family"
+Carrier Transicold,25-39291-00,25-39700-00,dealer,"25-39316-01 (replaced by 25-39700-00 per Thermo-By-Products); dealers also list 25-39316-00, 25-39291-00, 25-39396-00, 25-39192-00 in the same family"
+Carrier Transicold,25-39396-00,25-39700-00,dealer,"25-39316-01 (replaced by 25-39700-00 per Thermo-By-Products); dealers also list 25-39316-00, 25-39291-00, 25-39396-00, 25-39192-00 in the same family"
+Carrier Transicold,25-39192-00,25-39700-00,dealer,"25-39316-01 (replaced by 25-39700-00 per Thermo-By-Products); dealers also list 25-39316-00, 25-39291-00, 25-39396-00, 25-39192-00 in the same family"
+Carrier Transicold,30-01121-00,30-60143-01,confirmed,brock-carrier-filter-chart
+Thermo King,11-6182,13-3678,unconfirmed,"2026: reported replaced by 13-3678 (Swisclima only, unconfirmed). Replaces 11-5712 / 11-5522 / 11-4928 / 11-5115 (Swisclima)."
+Thermo King,11-9321,13-3679,unconfirmed,"Since 12/2021 (TK bulletin GLW1329907) the bypass filter is no longer installed on new truck units; CI-4 oil instead of CG-4 (Swisclima). 2026: reported replaced by 13-3679 (Swisclima only, unconfirmed)."
+Thermo King,11-9098,11-9341,confirmed,Supersedes: 11-9098
+Thermo King,11-9341,13-3675,unconfirmed,"2026: reported replaced by 13-3675 (Swisclima only, unconfirmed)."
+Thermo King,11-8047,11-9342,confirmed,Supersedes: 11-8047
+Thermo King,11-9957,11-9965,confirmed,Supersedes: 11-9957
+Thermo King,11-9958,11-9966,confirmed,Supersedes: 11-9958
+Thermo King,11-9059,13-3682,unconfirmed,"Complete dry air cleaner = 11-9068 (TK catalog). 2026: reported replaced by 13-3682 (case of 12) / 13-3853 (single) (Swisclima only, unconfirmed)."
