@@ -87,4 +87,4 @@ SELECT 'fitment', p.part_number, f.unit_model, f.engine_model, f.verified, f.con
   FROM _fc_rows r JOIN public.part_fitment f ON f.id = r.id JOIN public.parts p ON p.id = f.part_id
 ORDER BY 1 DESC, 2, 3;
 
-ROLLBACK;
+COMMIT;
