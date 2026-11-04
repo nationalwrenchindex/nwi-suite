@@ -1,0 +1,1267 @@
+REEFER PARTS LOAD - report. Generated 2026-11-04 by scripts/build-reefer-sources-sql.ts.
+
+STORE BEFORE: 985 parts, 2586 fitment, 7 supersessions, 18 crosses, 0 engines
+STORE AFTER (projected): 2700 parts, 20636 fitment, 39 supersessions, 168 crosses, 52 engines
+
+SOURCES (key, rows read, distinct numbers, numbers not in the store, new parts this load takes from it first, rows with no description)
+ reefer-parts-master 22551 rows 2507 numbers 1962 not in the store 1679 loaded from here first 0 rows with no description
+ reefer-parts-simple 22005 rows 2386 numbers 1893 not in the store 0 loaded from here first 0 rows with no description
+ oem-listing-2026-10-28 2692 rows 829 numbers 29 not in the store 1 loaded from here first 0 rows with no description
+ oem-listing-left-out 54 rows 18 numbers 17 not in the store 11 loaded from here first 0 rows with no description
+ tk-filters-crossref 226 rows 52 numbers 26 not in the store 0 loaded from here first 0 rows with no description
+ tk-filters-by-model 917 rows 50 numbers 24 not in the store 0 loaded from here first 0 rows with no description
+ seed-parts-2026-10-23 92 rows 92 numbers 28 not in the store 24 loaded from here first 40 rows with no description
+ seed-fitment-2026-10-23 1135 rows 0 numbers 0 not in the store 0 loaded from here first 0 rows with no description
+ seed-crosses-2026-10-23 172 rows 0 numbers 0 not in the store 0 loaded from here first 0 rows with no description
+ seed-supersessions-2026-10-23 33 rows 0 numbers 0 not in the store 0 loaded from here first 0 rows with no description
+ seed-engines-2026-10-23 32 rows 0 numbers 0 not in the store 0 loaded from here first 0 rows with no description
+
+QUALITY of the 1715 new parts: description 1715, category 1529 (not "Other"), fitment 1644 (1645 once the + model file runs after 182), cross-reference 11
+ category spread: Belts & Drives 433, Refrigeration 338, Maintenance & Wear 248, Other 186, Engine 136, Electrical & Controls 136, Air Flow & Structure 105, Fuel 71, Electric Standby 62
+ also added to EXISTING store parts: 3996 fitment rows, 135 crosses
+
+TALLIES
+ 135 fitment held: SL question (Brock, Oct 30)
+ 81 fitment held: break with no serial or date
+ 2 fitment held: engine text is not an engine designation [leftOut]
+ 440 fitment held: engine text is not an engine designation [master]
+ 45 fitment held: engine text is not an engine designation [oem]
+ 15 fitment held: group or prose model [master]
+ 162 fitment held: group or prose model [oem]
+ 53 fitment held: group or prose model [seed]
+ 168 fitment held: listed with and without a break
+ 19 fitment held: note says superseded [seed]
+ 2 fitment held: older filter by a Yanmar engine the newer SB also uses (Brock, Oct 30)
+ 87 fitment held: older filter on a newer SB (Brock, Oct 30)
+ 79 fitment held: onto a superseded number [master]
+ 33 fitment held: onto a superseded number [oem]
+ 2 fitment held: own note names another part [seed]
+ 3 fitment held: part not loaded [byModel]
+ 13 fitment held: part not loaded [leftOut]
+ 2018 fitment held: part not loaded [master]
+ 25 fitment held: part not loaded [oem]
+ 73 fitment loaded [oem-listing-2026-10-28]
+ 30 fitment loaded [oem-listing-left-out]
+ 16376 fitment loaded [reefer-parts-master]
+ 732 fitment loaded [seed-fitment-2026-10-23]
+ 90 fitment loaded [tk-filters-crossref]
+ 749 fitment loaded by file 12, after 182 (+ models) [reefer-parts-master]
+ 1262 fitment: already in the store [master]
+ 587 fitment: already in the store [oem]
+ 159 fitment: already in the store [seed]
+ 58 fitment: engine text dropped - not an engine designation (unit row kept) [master]
+ 1 fitment: engine text dropped - not an engine designation (unit row kept) [oem]
+ 659 fitment: repeated across sources [byModel]
+ 1 fitment: repeated across sources [leftOut]
+ 1362 fitment: repeated across sources [master]
+ 1427 fitment: repeated across sources [oem]
+ 22 fitment: repeated across sources [seed]
+ 35 listing marker stripped (rule 7) [oem-listing-2026-10-28]: SV
+ 34 listing marker stripped (rule 7) [reefer-parts-master]: SV
+ 1 parts held: collides with a store number
+ 255 parts held: no category
+ 2 parts held: no description
+ 11 parts held: number rules
+
+CROSSES DROPPED
+ 2412 alternate number of the same maker (Carrier alt.) - not a cross, and alternate vs superseded is not stated
+ 90 reseller or retailer brand: Carquest
+ 56 reseller or retailer brand: NAPA Gold
+ 40 brand not known to be a manufacturer: Hastings
+ 36 reseller or retailer brand: NAPA
+ 22 a reman cross - cross rows have no condition column
+ 4 its OEM part does not load
+ 2 seed cross marked obsolete - cross rows have no status column
+
+PART TYPES NO RULE MAPS (parts held; each line: parts held, the source name)
+ 89 Evaporator coil - evaporator fan
+ 51 Accumulator tank
+ 28 3-way valve
+ 26 Sensor/switch
+ 17 Expansion valve power element
+ 8 Sight glass / liquid indicator
+ 6 Oil pump
+ 4 Oil separator
+ 4 Piston ring set
+ 3 Rocker arm
+ 3 Engine overhaul kit
+ 2 Camshaft
+ 1 Compressor sight glass / liquid indicator
+ 1 Compressor piston ring set
+ 1 Exhaust valve
+ 1 3-way valve kit - condenser fan
+ 1 3-way valve - electric motor
+ 1 Oil switch extension
+ 1 Oil switch extension (3.0 in lg)
+ 1 Isolator mat (oil pressure sensor)
+ 1 Sensor kit (universal)
+ 1 Rpm sensor boot
+ 1 Sensor/switch - ambient
+ 1 Precool coil
+ 1 Sensor grade nameplate
+ 1 Sensor pocket
+ 1 Sensor delay pad
+ 1 Valve spring
+
+CONFLICTS (loaded once, NOT settled - yours): 38
+ 11-9960: sources map to "Filter - oil (engine)" / "Filter - element" - loaded as "Filter - oil (engine)" from seed-parts-2026-10-23 row 48; others: reefer-parts-master / All Parts row 9750 "Filter"; reefer-parts-master / All Parts row 9751 "Filter"
+ 11-6286: sources map to "Filter - fuel/water separator" / "Filter - fuel" - loaded as "Filter - fuel/water separator" from seed-parts-2026-10-23 row 66; others: reefer-parts-master / All Parts row 8283 "Fuel filter"
+ 13-0658: sources map to "Filter - air" / "Filter - return air" - loaded as "Filter - air" from reefer-parts-master / All Parts row 9844; others: reefer-parts-master / All Parts row 9845 "Air filter - evaporator fan"
+ 92-5701: sources map to "Filter - air" / "Filter - return air" - loaded as "Filter - air" from reefer-parts-master / All Parts row 10219; others: reefer-parts-master / All Parts row 10221 "Air filter - evaporator fan"
+ 50-01176-00: sources map to "Clutch" / "Solenoid coil" - loaded as "Clutch" from reefer-parts-master / All Parts row 415; others: oem-listing-2026-10-28 row 941 "Solenoid coil"; oem-listing-2026-10-28 row 942 "Solenoid coil"; oem-listing-2026-10-28 row 943 "Solenoid coil"
+ 17-44145-00: sources map to "Compressor shaft seal" / "Seal" - loaded as "Compressor shaft seal" from reefer-parts-master / All Parts row 594; others: reefer-parts-master / All Parts row 597 "Compressor oil seal"; reefer-parts-master / All Parts row 601 "Compressor oil seal"; reefer-parts-master / All Parts row 603 "Compressor oil seal"
+ 78-1995: sources map to "Belt" / "Electric motor (standby)" - loaded as "Belt" from reefer-parts-master / All Parts row 4080; others: reefer-parts-master / All Parts row 12563 "Electric/fan motor - compressor, jackshaft, electric motor"; reefer-parts-master / All Parts row 12564 "Electric/fan motor - compressor, jackshaft, electric motor"; reefer-parts-master / All Parts row 12565 "Electric/fan motor - compressor, jackshaft, electric motor"
+ 102-0922: sources map to "Compressor" / "Unloader valve" - loaded as "Compressor" from reefer-parts-master / All Parts row 5874; others: reefer-parts-master / All Parts row 5880 "Compressor unloader"; reefer-parts-master / All Parts row 5881 "Compressor unloader"; reefer-parts-master / All Parts row 5882 "Compressor unloader"
+ 22-0778: sources map to "Compressor shaft seal" / "Seal" - loaded as "Compressor shaft seal" from reefer-parts-master / All Parts row 5928; others: reefer-parts-master / All Parts row 10826 "Crankshaft oil seal"; reefer-parts-master / All Parts row 10827 "Crankshaft oil seal"; reefer-parts-master / All Parts row 10828 "Crankshaft oil seal"
+ 78-0803: sources map to "Compressor" / "Electric motor (standby)" / "Belt" - loaded as "Compressor" from reefer-parts-master / All Parts row 5944; others: reefer-parts-master / All Parts row 12533 "Electric/fan motor - compressor, jackshaft, electric motor"; reefer-parts-master / All Parts row 12534 "Electric/fan motor - compressor, jackshaft, electric motor"; oem-listing-2026-10-28 row 1395 "Compressor to motor belt"
+ 20-0123: sources map to "Filter - oil (engine)" / "Filter - oil (compressor)" - loaded as "Filter - oil (engine)" from reefer-parts-master / All Parts row 9855; others: reefer-parts-master / All Parts row 9859 "Oil filter - compressor"; reefer-parts-master / All Parts row 9860 "Oil filter - compressor"; reefer-parts-master / All Parts row 9861 "Oil filter - compressor"
+ 33-4256: sources map to "Fuel pump" / "Gasket" - loaded as "Fuel pump" from reefer-parts-master / All Parts row 10674; others: reefer-parts-master / All Parts row 12026 "Bowl to body gasket"; reefer-parts-master / All Parts row 12027 "Bowl to body gasket"; reefer-parts-master / All Parts row 12028 "Bowl to body gasket"
+ 20-3799 (reefer-parts-master / All Parts row 10805, "EGR cleaning kit"): the database reads it as the same number as store 203-799 ("EGR") - NOT loaded; which part the source meant is yours
+ 33-2805: sources map to "Gasket" / "Gasket set" - loaded as "Gasket" from reefer-parts-master / All Parts row 11556; others: reefer-parts-master / All Parts row 11562 "Service valve gasket kit"; reefer-parts-master / All Parts row 11563 "Service valve gasket kit"; reefer-parts-master / All Parts row 11582 "Service valve gasket kit"
+ 33-4458: sources map to "Gasket" / "Filter - fuel" - loaded as "Gasket" from reefer-parts-master / All Parts row 12171; others: reefer-parts-master / All Parts row 12172 "Fuel strainer gasket"; reefer-parts-master / All Parts row 12173 "Fuel strainer gasket"
+ 104-0775: sources map to "Electric motor (standby)" / "Fan motor" - loaded as "Electric motor (standby)" from reefer-parts-master / All Parts row 12440; others: reefer-parts-master / All Parts row 12441 "Electric/fan motor - condenser fan, electric motor"; reefer-parts-master / All Parts row 12443 "Electric/fan motor - condenser fan, electric motor"
+ 104-0776: sources map to "Electric motor (standby)" / "Fan motor" - loaded as "Electric motor (standby)" from reefer-parts-master / All Parts row 12444; others: reefer-parts-master / All Parts row 12445 "Electric/fan motor - condenser fan, electric motor"; reefer-parts-master / All Parts row 12447 "Electric/fan motor - condenser fan, electric motor"
+ 41-0436: sources map to "Electric motor (standby)" / "Fan motor" - loaded as "Electric motor (standby)" from reefer-parts-master / All Parts row 12487; others: reefer-parts-master / All Parts row 12489 "Fan motor 24V"; reefer-parts-master / All Parts row 12498 "Fan motor 24V"
+ 44-8526: sources map to "Electric motor (standby)" / "Fan motor" - loaded as "Electric motor (standby)" from reefer-parts-master / All Parts row 12510; others: reefer-parts-master / All Parts row 12517 "Fan motor 12V"; reefer-parts-master / All Parts row 12519 "Fan motor 12V"; reefer-parts-master / All Parts row 12524 "Fan motor 12V"
+ 78-0903: sources map to "Electric motor (standby)" / "Belt" - loaded as "Electric motor (standby)" from reefer-parts-master / All Parts row 12537; others: oem-listing-2026-10-28 row 2148 "Motor to jackshaft (compressor) belt"; oem-listing-2026-10-28 row 2149 "Motor to jackshaft (compressor) belt"; oem-listing-2026-10-28 row 2150 "Motor to jackshaft (compressor) belt"
+ 78-1134: sources map to "Electric motor (standby)" / "Belt" - loaded as "Electric motor (standby)" from reefer-parts-master / All Parts row 12550; others: oem-listing-2026-10-28 row 2136 "Motor to compressor belt"
+ 99-8228: sources map to "Hardware" / "Pulley" - loaded as "Hardware" from reefer-parts-master / All Parts row 14323; others: reefer-parts-master / All Parts row 14333 "Pulley/idler"
+ 41-7959: sources map to "Throttling valve (ETV/SMV)" / "Sensor - pressure" - loaded as "Throttling valve (ETV/SMV)" from reefer-parts-master / All Parts row 16795; others: reefer-parts-master / All Parts row 21270 "Pressure transducer - discharge"; reefer-parts-master / All Parts row 21271 "Pressure transducer - discharge"; reefer-parts-master / All Parts row 21272 "Pressure transducer - discharge"
+ 41-7960: sources map to "Throttling valve (ETV/SMV)" / "Sensor - pressure" - loaded as "Throttling valve (ETV/SMV)" from reefer-parts-master / All Parts row 16801; others: reefer-parts-master / All Parts row 21285 "Pressure transducer - suction"; reefer-parts-master / All Parts row 21286 "Pressure transducer - suction"; reefer-parts-master / All Parts row 21287 "Pressure transducer - suction"
+ 41-7962: sources map to "Throttling valve (ETV/SMV)" / "Sensor - pressure" - loaded as "Throttling valve (ETV/SMV)" from reefer-parts-master / All Parts row 16804; others: reefer-parts-master / All Parts row 21317 "Pressure transducer - discharge"; reefer-parts-master / All Parts row 21318 "Pressure transducer - discharge"; reefer-parts-master / All Parts row 21319 "Pressure transducer - discharge"
+ 41-7963: sources map to "Throttling valve (ETV/SMV)" / "Sensor - pressure" - loaded as "Throttling valve (ETV/SMV)" from reefer-parts-master / All Parts row 16807; others: reefer-parts-master / All Parts row 21333 "Pressure transducer - suction"; reefer-parts-master / All Parts row 21334 "Pressure transducer - suction"; reefer-parts-master / All Parts row 21335 "Pressure transducer - suction"
+ 44-9181: sources map to "Solenoid valve" / "Solenoid - fuel" / "Solenoid - speed" - loaded as "Solenoid valve" from reefer-parts-master / All Parts row 17053; others: reefer-parts-master / All Parts row 21895 "Fuel solenoid"; reefer-parts-master / All Parts row 21896 "Fuel solenoid"; reefer-parts-master / All Parts row 21897 "Fuel solenoid"
+ 61-0922: sources map to "Expansion valve (TXV)" / "Thermostat" - loaded as "Expansion valve (TXV)" from reefer-parts-master / All Parts row 17304; others: reefer-parts-master / All Parts row 22334 "Thermostat"
+ 61-1300: sources map to "Solenoid valve" / "Service valve" - loaded as "Solenoid valve" from reefer-parts-master / All Parts row 17423; others: reefer-parts-master / All Parts row 17428 "Service valve - suction"; reefer-parts-master / All Parts row 17430 "Service valve - suction"; reefer-parts-master / All Parts row 17432 "Service valve - suction"
+ 61-1525: sources map to "Pressure regulator valve" / "Service valve" - loaded as "Pressure regulator valve" from reefer-parts-master / All Parts row 17473; others: reefer-parts-master / All Parts row 17475 "Service valve - discharge"; reefer-parts-master / All Parts row 17476 "Service valve - discharge"
+ 61-1713: sources map to "Solenoid valve" / "Service valve" - loaded as "Solenoid valve" from reefer-parts-master / All Parts row 17477; others: reefer-parts-master / All Parts row 17478 "Service valve - suction"; reefer-parts-master / All Parts row 17479 "Service valve - suction"
+ 66-5374: sources map to "Solenoid valve" / "Solenoid - pilot" - loaded as "Solenoid valve" from reefer-parts-master / All Parts row 18942; others: reefer-parts-master / All Parts row 18991 "Pilot solenoid valve"; reefer-parts-master / All Parts row 18993 "Pilot solenoid valve"; reefer-parts-master / All Parts row 18995 "Pilot solenoid valve"
+ 66-6127: sources map to "Solenoid valve" / "Service valve" - loaded as "Solenoid valve" from reefer-parts-master / All Parts row 19650; others: reefer-parts-master / All Parts row 19664 "Service valve - suction"; reefer-parts-master / All Parts row 19666 "Service valve - suction"; reefer-parts-master / All Parts row 19670 "Service valve - suction"
+ 66-6851: sources map to "Solenoid valve" / "Service valve" - loaded as "Solenoid valve" from reefer-parts-master / All Parts row 19874; others: reefer-parts-master / All Parts row 19875 "Service valve - suction"; reefer-parts-master / All Parts row 19877 "Service valve - suction"
+ 66-7392: sources map to "Pressure relief valve" / "Check valve" - loaded as "Pressure relief valve" from reefer-parts-master / All Parts row 19942; others: reefer-parts-master / All Parts row 20028 "Refrigeration system check valve"; reefer-parts-master / All Parts row 20029 "Refrigeration system check valve"
+ 41-7064: sources map to "Oil pressure switch" / "Sensor - pressure" - loaded as "Oil pressure switch" from reefer-parts-master / All Parts row 21208; others: reefer-parts-master / All Parts row 21211 "Oil pressure sensor"; reefer-parts-master / All Parts row 21214 "Oil pressure sensor"; reefer-parts-master / All Parts row 21217 "Oil pressure sensor"
+ 41-5459: sources map to "Solenoid - fuel" / "Solenoid - speed" - loaded as "Solenoid - fuel" from reefer-parts-master / All Parts row 21824; others: reefer-parts-master / All Parts row 21830 "Throttle/speed solenoid"; reefer-parts-master / All Parts row 21831 "Throttle/speed solenoid"
+ 44-6215: sources map to "Solenoid - fuel" / "Solenoid - speed" - loaded as "Solenoid - fuel" from reefer-parts-master / All Parts row 21885; others: reefer-parts-master / All Parts row 21887 "Throttle/speed solenoid"
+
+STORE PARTS WHOSE SOURCES MAP TO A DIFFERENT TYPE (store type kept): 22
+ 11-9321 store "Filter - fuel" vs sources "Filter - oil (engine)" (seed-parts-2026-10-23 row 51; tk-filters-crossref / Crossref row 11; reefer-parts-master / All Parts row 9339)
+ 11-9341 store "Filter - fuel/water separator" vs sources "Filter - fuel" (seed-parts-2026-10-23 row 55; tk-filters-crossref / Crossref row 15; reefer-parts-master / All Parts row 9420)
+ 11-9954 store "Filter - fuel/water separator" vs sources "Filter - fuel" (seed-parts-2026-10-23 row 59; tk-filters-crossref / Crossref row 17; reefer-parts-master / All Parts row 9631)
+ 11-6285 store "Filter - fuel/water separator" vs sources "Filter - fuel" (seed-parts-2026-10-23 row 64; tk-filters-crossref / Crossref row 22; reefer-parts-master / All Parts row 8239)
+ 50-01171-00 store "Clutch/coupling" vs sources "Clutch" (reefer-parts-master / All Parts row 369; reefer-parts-master / All Parts row 370; reefer-parts-master / All Parts row 371)
+ 50-01171-01 store "Clutch/coupling" vs sources "Clutch" (reefer-parts-master / All Parts row 377; reefer-parts-master / All Parts row 378; reefer-parts-master / All Parts row 379)
+ 50-01173-00 store "Clutch/coupling" vs sources "Clutch" (reefer-parts-master / All Parts row 403; reefer-parts-master / All Parts row 404; reefer-parts-master / All Parts row 405)
+ 50-01173-03 store "Clutch/coupling" vs sources "Clutch" (reefer-parts-master / All Parts row 409; reefer-parts-master / All Parts row 410; reefer-parts-master / All Parts row 411)
+ 22-02579-00 store "Solenoid - SV valve" vs sources "Solenoid valve" (reefer-parts-master / All Parts row 1727; reefer-parts-master / All Parts row 1728; reefer-parts-master / All Parts row 1729)
+ 22-02804-00 store "Solenoid - unloader" vs sources "Solenoid coil" (reefer-parts-master / All Parts row 1745; reefer-parts-master / All Parts row 1746; reefer-parts-master / All Parts row 1747)
+ 107-349 store "Clutch/coupling" vs sources "Clutch" (reefer-parts-master / All Parts row 4436; reefer-parts-master / All Parts row 4437; reefer-parts-master / All Parts row 4438)
+ 10-0458 store "Hardware" vs sources "Filter - fuel" (reefer-parts-master / All Parts row 7884; reefer-parts-master / All Parts row 7885; reefer-parts-master / All Parts row 7886)
+ 13-1258 store "EGR" vs sources "Gasket" (reefer-parts-master / All Parts row 10793; reefer-parts-master / All Parts row 10794; oem-listing-2026-10-28 row 1552)
+ 13-2850 store "EGR" vs sources "Gasket" (reefer-parts-master / All Parts row 10798; reefer-parts-master / All Parts row 10799; oem-listing-2026-10-28 row 1554)
+ 33-4963 store "EGR" vs sources "Gasket" (reefer-parts-master / All Parts row 12187; reefer-parts-master / All Parts row 12188; reefer-parts-master / All Parts row 12189)
+ 33-6712 store "EGR" vs sources "Gasket" (reefer-parts-master / All Parts row 12201; reefer-parts-master / All Parts row 12202; oem-listing-2026-10-28 row 1561)
+ 41-2842 store "Sensor - level" vs sources "Coolant level sensor/switch" (reefer-parts-master / All Parts row 20789; reefer-parts-master / All Parts row 20790; reefer-parts-master / All Parts row 20791)
+ 48-50005-01 store "Clutch/coupling" vs sources "Gearbox/gear part" (oem-listing-2026-10-28 row 681; oem-listing-2026-10-28 row 682; oem-listing-2026-10-28 row 683)
+ 77-3200 store "Pulley" vs sources "Belt tensioner" (oem-listing-2026-10-28 row 1268)
+ 77-2760 store "Clutch/coupling" vs sources "Bushing" (oem-listing-2026-10-28 row 1332)
+ 67-3218 store "Condenser" vs sources "Condenser/radiator coil" (oem-listing-2026-10-28 row 1428)
+ 67-3219 store "Condenser" vs sources "Condenser/radiator coil" (oem-listing-2026-10-28 row 1429)
+
+REMAN PARTS LOADED AS THEIR OWN PART (rule 5): 12
+ 845-2254 (Alternator) is the reman of 45-2254 - loaded as its own part; the link needs a part_relation table
+ 845-2256 (Alternator) is the reman of 45-2256 - loaded as its own part; the link needs a part_relation table
+ 845-2258 (Alternator) is the reman of 45-2258 - loaded as its own part; the link needs a part_relation table
+ 845-1263 (Starter) is the reman of 45-1263 - loaded as its own part; the link needs a part_relation table
+ 845-1688 (Starter) is the reman of 45-1688 - loaded as its own part; the link needs a part_relation table
+ 845-1718 (Starter) is the reman of 45-1718 - loaded as its own part; the link needs a part_relation table
+ 845-2176 (Starter) is the reman of 45-2176 - loaded as its own part; the link needs a part_relation table
+ 845-2177 (Starter) is the reman of 45-2177 - loaded as its own part; the link needs a part_relation table
+ 845-2323 (Starter) is the reman of 45-2323 - loaded as its own part; the link needs a part_relation table
+ 845-2324 (Starter) is the reman of 45-2324 - loaded as its own part; the link needs a part_relation table
+ 845-2325 (Starter) is the reman of 45-2325 - loaded as its own part; the link needs a part_relation table
+ 845-2326 (Starter) is the reman of 45-2326 - loaded as its own part; the link needs a part_relation table
+
+ROWS WITH NO DESCRIPTION, per source (first 20)
+ reefer-parts-master: 0
+ reefer-parts-simple: 0
+ oem-listing-2026-10-28: 0
+ oem-listing-left-out: 0
+ tk-filters-crossref: 0
+ tk-filters-by-model: 0
+ seed-parts-2026-10-23: 40
+ 45-2326 (type "Starter" only) - seed-parts-2026-10-23 row 2
+ 45-1718 (type "Starter" only) - seed-parts-2026-10-23 row 3
+ 45-2325 (type "Starter" only) - seed-parts-2026-10-23 row 4
+ 45-1993 (type "Starter" only) - seed-parts-2026-10-23 row 5
+ 45-2324 (type "Starter" only) - seed-parts-2026-10-23 row 6
+ 45-2323 (type "Starter" only) - seed-parts-2026-10-23 row 7
+ 45-1688 (type "Starter" only) - seed-parts-2026-10-23 row 8
+ 45-2176 (type "Starter" only) - seed-parts-2026-10-23 row 9
+ 45-1285 (type "Starter" only) - seed-parts-2026-10-23 row 10
+ 45-1251 (type "Starter" only) - seed-parts-2026-10-23 row 11
+ 45-2918 (type "Starter" only) - seed-parts-2026-10-23 row 12
+ 25-15198-00 (type "Starter" only) - seed-parts-2026-10-23 row 13
+ 25-15371-00 (type "Starter" only) - seed-parts-2026-10-23 row 14
+ 25-15520-00 (type "Starter" only) - seed-parts-2026-10-23 row 15
+ 25-34525-00 (type "Starter" only) - seed-parts-2026-10-23 row 16
+ 25-35465-00 (type "Starter" only) - seed-parts-2026-10-23 row 17
+ 25-38750-00 (type "Starter" only) - seed-parts-2026-10-23 row 18
+ 25-39135-00 (type "Starter" only) - seed-parts-2026-10-23 row 19
+ 25-39476-00 (type "Starter" only) - seed-parts-2026-10-23 row 20
+ 25-39587-00 (type "Starter" only) - seed-parts-2026-10-23 row 21
+ seed-fitment-2026-10-23: 0
+ seed-crosses-2026-10-23: 0
+ seed-supersessions-2026-10-23: 0
+ seed-engines-2026-10-23: 0
+
+THE OCT 30 SEED + REFERENCE FILE (scripts/load-seed-and-reference.sql, not run)
+ Source A (the five seed CSVs): 28 new parts there; this load adds 26 of them (not: 452918, 253931601 - see the held sections). Its 728 fitment rows and 227 crosses are re-derived here from the same CSVs under today's rules.
+ Source B (hd_parts_reference, not a source in this job): 249 parts, 49 of them in this load.
+ It also carries 50 NAPA / NAPA Gold / Carquest cross rows and the seeds' own "confirmed" tiers - both against today's rules.
+
+STORE NUMBERS THE RULES NOW WRITE DIFFERENTLY (NOT CHANGED BY THIS LOAD): 3
+ 203-799 (Thermo King) reads as 203-0799 - matched under that number; its stored spelling is left alone
+ 306-221 (Thermo King) reads as 306-0221 - matched under that number; its stored spelling is left alone
+ 107-349 (Thermo King) reads as 107-0349 - matched under that number; its stored spelling is left alone
+
+PARTS HELD (NUMBER RULES): 11
+ fits no numbering rule (other): 50-60288-103 (reefer-parts-master / All Parts row 199)
+ fits no numbering rule (other): 50-60288-115 (reefer-parts-master / All Parts row 202)
+ fits no numbering rule (other): 18-00091-105 (reefer-parts-master / All Parts row 718)
+ fits no numbering rule (other): 54-00639-114 (reefer-parts-master / All Parts row 1467)
+ fits no numbering rule (other): 54-00639-116 (reefer-parts-master / All Parts row 1482)
+ fits no numbering rule (other): 18-00091-106 (oem-listing-2026-10-28 row 287)
+ suffix TKA is not one of the rules: 900433TKA (oem-listing-left-out row 9)
+ fits no numbering rule (other): 1010421 (oem-listing-left-out row 38)
+ fits no numbering rule (other): 1010447 (oem-listing-left-out row 39)
+ suffix TKA is not one of the rules: 611900TKA (oem-listing-left-out row 42)
+ suffix TKA is not one of the rules: 70-0199TKA (oem-listing-left-out row 46)
+
+PARTS NOT LOADED: NO DESCRIPTION IN ANY SOURCE: 2
+ 45-2918 (Thermo King) - seed-parts-2026-10-23 row 12
+ 25-39316-01 (Carrier Transicold) - seed-parts-2026-10-23 row 24
+
+PARTS HELD: NO EXISTING PART_TYPE FITS: 255
+ 14-01092-06 "Compressor sight glass / liquid indicator" - reefer-parts-master / All Parts row 462
+ 17-40055-00 "Compressor piston ring set" - reefer-parts-master / All Parts row 527
+ 25-39086-00 "Exhaust valve" - reefer-parts-master / All Parts row 879
+ 25-15404-00 "Oil pump" - reefer-parts-master / All Parts row 1543
+ 65-60057-00 "Oil separator" - reefer-parts-master / All Parts row 1594
+ 65-60059-01 "Oil separator" - reefer-parts-master / All Parts row 1596
+ 65-60059-02 "Oil separator" - reefer-parts-master / All Parts row 1598
+ 65-66808-00 "Oil separator" - reefer-parts-master / All Parts row 1606
+ 12-01072-11 "Sensor/switch" - reefer-parts-master / All Parts row 1932
+ 22-02973-05 "Sensor/switch" - reefer-parts-master / All Parts row 1968
+ 67-0592 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 4775
+ 67-0603 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 4779
+ 67-0609 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 4782
+ 67-0646 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 4784
+ 67-0683 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 4803
+ 67-0791 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 4821
+ 67-0796 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 4822
+ 67-0797 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 4823
+ 67-0831 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 4831
+ 67-0841 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 4840
+ 67-0902 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 4847
+ 67-0916 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 4859
+ 67-0917 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 4889
+ 67-0936 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 4899
+ 67-0985 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 4919
+ 67-1033 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 4924
+ 67-1035 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 4925
+ 67-1069 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 4926
+ 67-1079 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 4946
+ 67-1091 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 4947
+ 67-1113 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 4949
+ 67-1114 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 4957
+ 67-1132 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 4965
+ 67-1133 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 4967
+ 67-1136 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 4976
+ 67-1175 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 4987
+ 67-1183 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 4991
+ 67-1184 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 4992
+ 67-1344 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5019
+ 67-1369 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5022
+ 67-1401 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5032
+ 67-1458 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5065
+ 67-1459 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5077
+ 67-1461 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5091
+ 67-1463 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5103
+ 67-1464 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5116
+ 67-1465 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5118
+ 67-1466 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5130
+ 67-1521 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5140
+ 67-1528 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5141
+ 67-1547 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5147
+ 67-1552 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5153
+ 67-1557 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5156
+ 67-1616 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5161
+ 67-1630 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5175
+ 67-1679 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5182
+ 67-1688 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5200
+ 67-1762 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5233
+ 67-1775 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5234
+ 67-1776 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5246
+ 67-1785 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5258
+ 67-1801 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5259
+ 67-1818 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5260
+ 67-1819 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5261
+ 67-1853 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5263
+ 67-1910 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5282
+ 67-1921 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5296
+ 67-1922 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5298
+ 67-1923 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5299
+ 67-1975 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5308
+ 67-1985 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5323
+ 67-1997 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5326
+ 67-2092 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5345
+ 67-2137 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5350
+ 67-2138 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5352
+ 67-2175 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5357
+ 67-2178 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5359
+ 67-2247 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5431
+ 67-2309 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5432
+ 67-2327 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5435
+ 67-2333 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5443
+ 67-2348 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5444
+ 67-2354 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5445
+ 67-2413 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5451
+ 67-2422 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5453
+ 67-2480 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5486
+ 67-2537 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5499
+ 67-2650 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5503
+ 67-2651 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5504
+ 67-2727 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5516
+ 67-2783 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5538
+ 67-2786 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5541
+ 67-2835 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5547
+ 91-1564 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5569
+ 91-4455 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5571
+ 92-1330 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5578
+ 99-7998 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5579
+ 99-8089 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5628
+ 99-8649 "Evaporator coil - evaporator fan" - reefer-parts-master / All Parts row 5681
+ 11-7607 "Camshaft" - reefer-parts-master / All Parts row 6984
+ 11-7616 "Camshaft" - reefer-parts-master / All Parts row 6985
+ 41-3246 "Rocker arm" - reefer-parts-master / All Parts row 6987
+ 41-4644 "Rocker arm" - reefer-parts-master / All Parts row 6990
+ 41-8737 "Rocker arm" - reefer-parts-master / All Parts row 6993
+ 11-6133 "Oil pump" - reefer-parts-master / All Parts row 12575
+ 11-9249 "Oil pump" - reefer-parts-master / All Parts row 12586
+ 11-9250 "Oil pump" - reefer-parts-master / All Parts row 12622
+ 13-0525 "Oil pump" - reefer-parts-master / All Parts row 12658
+ 33-1740 "Oil pump" - reefer-parts-master / All Parts row 12659
+ 33-2524 "Piston ring set" - reefer-parts-master / All Parts row 12808
+ 61-3015 "Piston ring set" - reefer-parts-master / All Parts row 12827
+ 66-0176 "Piston ring set" - reefer-parts-master / All Parts row 12940
+ 66-3984 "Piston ring set" - reefer-parts-master / All Parts row 13058
+ 30-0175 "Engine overhaul kit" - reefer-parts-master / All Parts row 14373
+ 30-0251 "Engine overhaul kit" - reefer-parts-master / All Parts row 14383
+ 30-0276 "Engine overhaul kit" - reefer-parts-master / All Parts row 14394
+ 55-3286 "Accumulator tank" - reefer-parts-master / All Parts row 14400
+ 66-3023 "Sight glass / liquid indicator" - reefer-parts-master / All Parts row 14687
+ 66-6827 "Sight glass / liquid indicator" - reefer-parts-master / All Parts row 14975
+ 66-6870 "Sight glass / liquid indicator" - reefer-parts-master / All Parts row 15066
+ 66-6976 "Sight glass / liquid indicator" - reefer-parts-master / All Parts row 15091
+ 66-7607 "Accumulator tank" - reefer-parts-master / All Parts row 15094
+ 66-7608 "Accumulator tank" - reefer-parts-master / All Parts row 15096
+ 66-8339 "Sight glass / liquid indicator" - reefer-parts-master / All Parts row 15118
+ 66-8390 "Accumulator tank" - reefer-parts-master / All Parts row 15126
+ 66-8811 "Sight glass / liquid indicator" - reefer-parts-master / All Parts row 15137
+ 66-9918 "Sight glass / liquid indicator" - reefer-parts-master / All Parts row 15144
+ 67-0583 "Accumulator tank" - reefer-parts-master / All Parts row 15272
+ 67-0593 "Accumulator tank" - reefer-parts-master / All Parts row 15274
+ 67-0617 "Accumulator tank" - reefer-parts-master / All Parts row 15282
+ 67-0652 "Accumulator tank" - reefer-parts-master / All Parts row 15288
+ 67-0679 "Accumulator tank" - reefer-parts-master / All Parts row 15296
+ 67-0682 "Accumulator tank" - reefer-parts-master / All Parts row 15298
+ 67-0691 "Accumulator tank" - reefer-parts-master / All Parts row 15304
+ 67-0694 "Accumulator tank" - reefer-parts-master / All Parts row 15305
+ 67-0750 "Accumulator tank" - reefer-parts-master / All Parts row 15309
+ 67-0769 "Accumulator tank" - reefer-parts-master / All Parts row 15321
+ 67-0876 "Accumulator tank" - reefer-parts-master / All Parts row 15340
+ 67-0887 "Accumulator tank" - reefer-parts-master / All Parts row 15342
+ 67-0977 "Accumulator tank" - reefer-parts-master / All Parts row 15367
+ 67-0978 "Accumulator tank" - reefer-parts-master / All Parts row 15369
+ 67-1093 "Accumulator tank" - reefer-parts-master / All Parts row 15405
+ 67-1137 "Accumulator tank" - reefer-parts-master / All Parts row 15420
+ 67-1157 "Accumulator tank" - reefer-parts-master / All Parts row 15422
+ 67-1161 "Accumulator tank" - reefer-parts-master / All Parts row 15428
+ 67-1162 "Accumulator tank" - reefer-parts-master / All Parts row 15430
+ 67-1163 "Accumulator tank" - reefer-parts-master / All Parts row 15431
+ 67-1174 "Accumulator tank" - reefer-parts-master / All Parts row 15434
+ 67-1178 "Accumulator tank" - reefer-parts-master / All Parts row 15436
+ 67-1195 "Accumulator tank" - reefer-parts-master / All Parts row 15537
+ 67-1196 "Accumulator tank" - reefer-parts-master / All Parts row 15580
+ 67-1226 "Accumulator tank" - reefer-parts-master / All Parts row 15581
+ 67-1227 "Accumulator tank" - reefer-parts-master / All Parts row 15583
+ 67-1274 "Accumulator tank" - reefer-parts-master / All Parts row 15587
+ 67-1328 "Accumulator tank" - reefer-parts-master / All Parts row 15601
+ 67-1371 "Accumulator tank" - reefer-parts-master / All Parts row 15607
+ 67-1398 "Accumulator tank" - reefer-parts-master / All Parts row 15618
+ 67-1403 "Accumulator tank" - reefer-parts-master / All Parts row 15630
+ 67-1427 "Accumulator tank" - reefer-parts-master / All Parts row 15649
+ 67-1429 "Accumulator tank" - reefer-parts-master / All Parts row 15650
+ 67-1435 "Accumulator tank" - reefer-parts-master / All Parts row 15653
+ 67-1436 "Accumulator tank" - reefer-parts-master / All Parts row 15655
+ 67-1572 "Accumulator tank" - reefer-parts-master / All Parts row 15688
+ 67-1742 "Accumulator tank" - reefer-parts-master / All Parts row 15718
+ 67-1947 "Accumulator tank" - reefer-parts-master / All Parts row 15745
+ 67-2214 "Accumulator tank" - reefer-parts-master / All Parts row 15769
+ 67-2335 "Accumulator tank" - reefer-parts-master / All Parts row 15781
+ 67-2424 "Accumulator tank" - reefer-parts-master / All Parts row 15825
+ 67-2668 "Sight glass / liquid indicator" - reefer-parts-master / All Parts row 15901
+ 67-2689 "Accumulator tank" - reefer-parts-master / All Parts row 15923
+ 67-2714 "Accumulator tank" - reefer-parts-master / All Parts row 15995
+ 67-2747 "Accumulator tank" - reefer-parts-master / All Parts row 15999
+ 67-2790 "Accumulator tank" - reefer-parts-master / All Parts row 16033
+ 67-2808 "Accumulator tank" - reefer-parts-master / All Parts row 16045
+ 67-2813 "Accumulator tank" - reefer-parts-master / All Parts row 16047
+ 60-0493 "3-way valve kit - condenser fan" - reefer-parts-master / All Parts row 17227
+ 61-0816 "Expansion valve power element" - reefer-parts-master / All Parts row 17291
+ 61-0819 "Expansion valve power element" - reefer-parts-master / All Parts row 17295
+ 61-0822 "Expansion valve power element" - reefer-parts-master / All Parts row 17299
+ 61-0826 "Expansion valve power element" - reefer-parts-master / All Parts row 17301
+ 61-0939 "3-way valve" - reefer-parts-master / All Parts row 17306
+ 61-1236 "3-way valve" - reefer-parts-master / All Parts row 17394
+ 61-1237 "3-way valve" - reefer-parts-master / All Parts row 17414
+ 61-5210 "3-way valve" - reefer-parts-master / All Parts row 17961
+ 61-5771 "3-way valve" - reefer-parts-master / All Parts row 18021
+ 61-5837 "3-way valve" - reefer-parts-master / All Parts row 18030
+ 61-5978 "3-way valve" - reefer-parts-master / All Parts row 18035
+ 66-0633 "Expansion valve power element" - reefer-parts-master / All Parts row 18154
+ 66-2719 "Expansion valve power element" - reefer-parts-master / All Parts row 18281
+ 66-3560 "Expansion valve power element" - reefer-parts-master / All Parts row 18339
+ 66-3633 "3-way valve" - reefer-parts-master / All Parts row 18353
+ 66-3634 "3-way valve" - reefer-parts-master / All Parts row 18357
+ 66-3635 "3-way valve" - reefer-parts-master / All Parts row 18363
+ 66-3643 "3-way valve" - reefer-parts-master / All Parts row 18365
+ 66-3650 "Expansion valve power element" - reefer-parts-master / All Parts row 18368
+ 66-3911 "3-way valve" - reefer-parts-master / All Parts row 18593
+ 66-3983 "3-way valve" - reefer-parts-master / All Parts row 18610
+ 66-4099 "Expansion valve power element" - reefer-parts-master / All Parts row 18619
+ 66-4167 "Expansion valve power element" - reefer-parts-master / All Parts row 18622
+ 66-4203 "3-way valve" - reefer-parts-master / All Parts row 18624
+ 66-4212 "Expansion valve power element" - reefer-parts-master / All Parts row 18625
+ 66-4293 "3-way valve" - reefer-parts-master / All Parts row 18627
+ 66-4365 "3-way valve" - reefer-parts-master / All Parts row 18636
+ 66-4407 "3-way valve" - reefer-parts-master / All Parts row 18643
+ 66-4750 "3-way valve" - reefer-parts-master / All Parts row 18710
+ 66-4967 "3-way valve" - reefer-parts-master / All Parts row 18717
+ 66-4974 "3-way valve" - reefer-parts-master / All Parts row 18718
+ 66-4975 "3-way valve" - reefer-parts-master / All Parts row 18726
+ 66-5335 "Expansion valve power element" - reefer-parts-master / All Parts row 18890
+ 66-5336 "Expansion valve power element" - reefer-parts-master / All Parts row 18907
+ 66-5359 "Expansion valve power element" - reefer-parts-master / All Parts row 18927
+ 66-5764 "3-way valve" - reefer-parts-master / All Parts row 19304
+ 66-6067 "3-way valve" - reefer-parts-master / All Parts row 19591
+ 66-6393 "3-way valve" - reefer-parts-master / All Parts row 19778
+ 66-6567 "Expansion valve power element" - reefer-parts-master / All Parts row 19837
+ 66-7169 "Expansion valve power element" - reefer-parts-master / All Parts row 19891
+ 66-7979 "Expansion valve power element" - reefer-parts-master / All Parts row 20256
+ 66-8728 "3-way valve - electric motor" - reefer-parts-master / All Parts row 20375
+ 66-8730 "3-way valve" - reefer-parts-master / All Parts row 20376
+ 66-8804 "3-way valve" - reefer-parts-master / All Parts row 20377
+ 66-9631 "3-way valve" - reefer-parts-master / All Parts row 20471
+ 66-9896 "3-way valve" - reefer-parts-master / All Parts row 20493
+ 11-7473 "Sensor/switch" - reefer-parts-master / All Parts row 20513
+ 33-2458 "Isolator mat (oil pressure sensor)" - reefer-parts-master / All Parts row 20565
+ 40-0791 "Sensor kit (universal)" - reefer-parts-master / All Parts row 20592
+ 41-4202 "Sensor/switch" - reefer-parts-master / All Parts row 20930
+ 41-4445 "Sensor/switch" - reefer-parts-master / All Parts row 20934
+ 41-9220 "Sensor/switch" - reefer-parts-master / All Parts row 21339
+ 42-0396 "Sensor/switch" - reefer-parts-master / All Parts row 21346
+ 42-1107 "Sensor/switch" - reefer-parts-master / All Parts row 21375
+ 44-3474 "Sensor/switch" - reefer-parts-master / All Parts row 21437
+ 44-3555 "Sensor/switch" - reefer-parts-master / All Parts row 21442
+ 44-3627 "Sensor/switch" - reefer-parts-master / All Parts row 21444
+ 44-3881 "Sensor/switch" - reefer-parts-master / All Parts row 21453
+ 44-6242 "Sensor/switch" - reefer-parts-master / All Parts row 21543
+ 44-6545 "Sensor/switch" - reefer-parts-master / All Parts row 21618
+ 44-6688 "Sensor/switch" - reefer-parts-master / All Parts row 21622
+ 44-6691 "Sensor/switch" - reefer-parts-master / All Parts row 21623
+ 44-7157 "Sensor/switch" - reefer-parts-master / All Parts row 21627
+ 44-7620 "Rpm sensor boot" - reefer-parts-master / All Parts row 21628
+ 44-7674 "Sensor/switch" - reefer-parts-master / All Parts row 21647
+ 44-7754 "Sensor/switch" - reefer-parts-master / All Parts row 21653
+ 44-8729 "Sensor/switch - ambient" - reefer-parts-master / All Parts row 21700
+ 44-9826 "Sensor/switch" - reefer-parts-master / All Parts row 21791
+ 66-4487 "Sensor/switch" - reefer-parts-master / All Parts row 21796
+ 66-6243 "Sensor/switch" - reefer-parts-master / All Parts row 21797
+ 66-6244 "Sensor/switch" - reefer-parts-master / All Parts row 21804
+ 66-6245 "Sensor/switch" - reefer-parts-master / All Parts row 21809
+ 66-8989 "Sensor/switch" - reefer-parts-master / All Parts row 21812
+ 67-2841 "Precool coil" - reefer-parts-master / All Parts row 21814
+ 91-6032 "Sensor grade nameplate" - reefer-parts-master / All Parts row 21815
+ 91-9362 "Sensor/switch" - reefer-parts-master / All Parts row 21816
+ 91-9754 "Sensor pocket" - reefer-parts-master / All Parts row 21817
+ 92-2943 "Sensor delay pad" - reefer-parts-master / All Parts row 21819
+ 61-1059 "Valve spring" - reefer-parts-master / All Parts row 22369
+
+SUPERSESSIONS HELD: 5
+ 45-2323 -> 45-2324 (seed-supersessions-2026-10-23 row 6) - held for you since Oct 28
+ 25-39476-00SL -> 25-39476-00 (seed-supersessions-2026-10-23 row 15) - a number fits no rule
+ 11-9098 -> 11-9341 (seed-supersessions-2026-10-23 row 29) - held for you since Oct 28
+ 11-9098 -> 11-9341 (tk-filters-crossref / Crossref row 15) - held for you since Oct 28
+ 11-9098 -> 11-9341 (tk-filters-crossref / Crossref row 50) - held for you since Oct 28
+
+FITMENT HELD: GROUP OR PROSE MODEL: 53
+ 45-2326: standard TriPac auxiliary power units (seed-fitment-2026-10-23 row 10)
+ 45-1718: T-500R to T-1200R (seed-fitment-2026-10-23 row 53)
+ 45-1718: MD-100 to MD-300 (seed-fitment-2026-10-23 row 59)
+ 45-1718: TS-200 to TS-600 (seed-fitment-2026-10-23 row 61)
+ 45-2325: SB-III with DI/SE 2.2 (seed-fitment-2026-10-23 row 74)
+ 45-2325: SMX-II with DI/SE 2.2 (seed-fitment-2026-10-23 row 76)
+ 45-1993: SB-III with DI/SE 2.2 (seed-fitment-2026-10-23 row 81)
+ 45-1993: SMX-II with DI/SE 2.2 (seed-fitment-2026-10-23 row 83)
+ 45-2324: SLXi 100-400 (seed-fitment-2026-10-23 row 90)
+ 45-2324: SB-100 to SB-400 (seed-fitment-2026-10-23 row 92)
+ 45-2324: Precedent C & S series (seed-fitment-2026-10-23 row 95)
+ 45-2323: Spectrum SL up to 08.06 (seed-fitment-2026-10-23 row 106)
+ 45-1688: Spectrum SL up to 08.06 (seed-fitment-2026-10-23 row 119)
+ 45-1285: SB-II with C201 (seed-fitment-2026-10-23 row 125)
+ 25-15198-00: 922/944 (seed-fitment-2026-10-23 row 141)
+ 25-15198-00: 950 (seed-fitment-2026-10-23 row 142)
+ 25-15198-00: R90 (Carrier matrix 62-10443); 960 (seed-fitment-2026-10-23 row 143)
+ 25-15371-00: 422 (seed-fitment-2026-10-23 row 144)
+ 25-15371-00: 550 (Carrier matrix); 560 (seed-fitment-2026-10-23 row 145)
+ 25-15520-00: 1000/1200/1300 (seed-fitment-2026-10-23 row 148)
+ 25-34525-00: 322 (seed-fitment-2026-10-23 row 152)
+ 25-34525-00: 422 (seed-fitment-2026-10-23 row 153)
+ 25-34525-00: 444 (seed-fitment-2026-10-23 row 154)
+ 25-34525-00: 522 (seed-fitment-2026-10-23 row 155)
+ 25-34525-00: 544 (seed-fitment-2026-10-23 row 156)
+ 25-34525-00: 550 (seed-fitment-2026-10-23 row 157)
+ 25-35465-00: 6XX (seed-fitment-2026-10-23 row 159)
+ 25-35465-00: 7XX (seed-fitment-2026-10-23 row 160)
+ 25-35465-00: 8XX (seed-fitment-2026-10-23 row 161)
+ 25-35465-00: R70 (Carrier matrix); 650/660/750/760/850/860 (seed-fitment-2026-10-23 row 162)
+ 25-38750-00: Phoenix (Carrier matrix); Phoenix Advantage (seed-fitment-2026-10-23 row 171)
+ 25-38750-00: GU genset (Kubota engine) (seed-fitment-2026-10-23 row 173)
+ 25-39135-00: Tier 2 or earlier (Carrier matrix); 18XX/19XX (seed-fitment-2026-10-23 row 178)
+ 25-39135-00: UG / RG genset (seed-fitment-2026-10-23 row 179)
+ 25-39135-00: Tier 2 or earlier (seed-fitment-2026-10-23 row 180)
+ 25-39476-00: Ultra XT/XTC (seed-fitment-2026-10-23 row 185)
+ 25-39476-00: X2 1800/2100/2100 A/R/2500 A/R (seed-fitment-2026-10-23 row 187)
+ 25-39476-00: X4 7300/7500 (Tier 4) (seed-fitment-2026-10-23 row 188)
+ 25-39476-00: UG / RG genset Tier 4i (seed-fitment-2026-10-23 row 189)
+ 25-39476-00: Genesis TM900/1000 (seed-fitment-2026-10-23 row 190)
+ 25-39587-00: 6500/6600 (seed-fitment-2026-10-23 row 195)
+ 25-39587-00: 8500/8600 (Tier 4) (seed-fitment-2026-10-23 row 196)
+ 25-39610-00: ComfortPro 6000 series (Thermo-By-Products); ComfortPro PC5008/5009/5011 (seed-fitment-2026-10-23 row 198)
+ 25-39610-00: PC6000/6002/6003/6011-6015/6018/6019/6021-6024/6028/6111/6112 (seed-fitment-2026-10-23 row 199)
+ 25-39700-00: X2 1800/2100/2100 A/R/2500 A/R (seed-fitment-2026-10-23 row 204)
+ 25-39700-00: Genesis TM900/TM1000/TR100 (seed-fitment-2026-10-23 row 205)
+ 25-39700-00: 6500/6600 series (seed-fitment-2026-10-23 row 206)
+ 30-01090-05: TM1000 (1st Gen) (seed-fitment-2026-10-23 row 217)
+ 30-00323-00: TM1000 (1st Gen) (seed-fitment-2026-10-23 row 218)
+ 30-01077-01: TM1000 (1st Gen) (seed-fitment-2026-10-23 row 219)
+ 30-01090-05: TM1000 (2nd Gen) (seed-fitment-2026-10-23 row 220)
+ 30-00463-00: TM1000 (2nd Gen) (seed-fitment-2026-10-23 row 221)
+ 30-00430-23: TM1000 (2nd Gen) (seed-fitment-2026-10-23 row 222)
+
+FITMENT HELD: THE ROW NAMES ANOTHER PART: 2
+ 11-7400: SB-I (seed-fitment-2026-10-23 row 336) - "Air cleaner (dry) - SB-II; SB-I/Sentry use 12-404 air cleaner per tk78"
+ 11-7400: Sentry (seed-fitment-2026-10-23 row 338) - "Air cleaner (dry) - SB-II; SB-I/Sentry use 12-404 air cleaner per tk78"
+
+FITMENT HELD: A BREAK WITH NO SERIAL OR DATE: 81
+ 11-6285: SB-II (seed-fitment-2026-10-23 row 351) - "Fuel filter element - later DI 2.2 units (SB-III 50 TC2, SR MP IV, Super-II SR /"
+ 11-6285: SB-III (seed-fitment-2026-10-23 row 352) - "Fuel filter element - later DI 2.2 units (SB-III 50 TC2, SR MP IV, Super-II SR /"
+ 11-6285: Sentry (seed-fitment-2026-10-23 row 353) - "Fuel filter element - later DI 2.2 units (SB-III 50 TC2, SR MP IV, Super-II SR /"
+ 11-6285: Super II (seed-fitment-2026-10-23 row 354) - "Fuel filter element - later DI 2.2 units (SB-III 50 TC2, SR MP IV, Super-II SR /"
+ 11-7382: SB-III Whisper (seed-fitment-2026-10-23 row 419) - "Full-flow oil filter (standard, early units)"
+ 11-7382: Magnum Whisper (seed-fitment-2026-10-23 row 420) - "Full-flow oil filter (standard, early units)"
+ 11-7382: SB-III Tier 2 (seed-fitment-2026-10-23 row 421) - "Full-flow oil filter (standard, early units)"
+ 11-7382: Super-II Whisper (seed-fitment-2026-10-23 row 422) - "Full-flow oil filter (standard, early units)"
+ 11-7382: 190Y (seed-fitment-2026-10-23 row 423) - "Full-flow oil filter (standard, early units)"
+ 13-649: TriPac (seed-fitment-2026-10-23 row 1077) - "In-line fuel filter - early Tier II with rubber fuel lines (kit 10-393)"
+ 50-00162-25: Supra 650 (reefer-parts-master / All Parts row 72) - "serial/date break: Prior to MFH91128016"
+ 50-00162-25: Supra 750 (reefer-parts-master / All Parts row 73) - "serial/date break: Prior to MFH91128016"
+ 50-00162-53: Supra 650 (reefer-parts-master / All Parts row 78) - "serial/date break: Prior to KFW90913748"
+ 50-00162-53: Supra 750 (reefer-parts-master / All Parts row 79) - "serial/date break: Prior to KFW90913748"
+ 50-00179-20: Supra 950 (reefer-parts-master / All Parts row 106) - "serial/date break: prior to LFX91068470"
+ 50-00179-20: Supra 950MT (reefer-parts-master / All Parts row 107) - "serial/date break: prior to LFX91068470"
+ 50-00179-59: Supra 844 (reefer-parts-master / All Parts row 111) - "serial/date break: prior to MFN91151579"
+ 50-00179-59: Supra 850 (reefer-parts-master / All Parts row 112) - "serial/date break: prior to MFN91151579"
+ 50-60191-02: Supra 850U (reefer-parts-master / All Parts row 161) - "per source: Starting with S/N: TB223037 to TB602999; per source: Starting with S/N: TB4181"
+ 50-60191-06: Supra 850U (reefer-parts-master / All Parts row 162) - "per source: Starting with S/N: TB6030000 to TCXXXXXX"
+ 50-60198-49: Supra 650 (reefer-parts-master / All Parts row 182) - "serial/date break: Prior to MFH91126707 & after"
+ 50-60198-49: Supra 750 (reefer-parts-master / All Parts row 183) - "serial/date break: Prior to MFH91126707 & after"
+ 50-60288-03: Supra 850U (reefer-parts-master / All Parts row 192) - "per source: Starting with S/N: TB223037 to TB418106"
+ 50-60288-10: MT (reefer-parts-master / All Parts row 196) - "per source: Starting with S/N: GC21103"
+ 50-60288-10: Supra 750 (reefer-parts-master / All Parts row 197) - "per source: Starting with S/N: GC21103"
+ 50-60288-103: Supra 850U (reefer-parts-master / All Parts row 199) - "per source: Starting with S/N: TB223037 to TB418106"
+ 50-60288-115: Supra 850U (reefer-parts-master / All Parts row 202) - "per source: Starting with S/N: TB223037 to TB418106"
+ 50-60288-15: Supra 850U (reefer-parts-master / All Parts row 205) - "per source: Starting with S/N: TB223037 to TB418106"
+ 50-60288-16: Supra 850U (reefer-parts-master / All Parts row 208) - "per source: Starting with S/N: TB223037 to TB418106"
+ 50-60288-21: Supra 550 (reefer-parts-master / All Parts row 209) - "serial/date break: Prior to MFH91129306"
+ 50-60329-01: Maxima 1000 (reefer-parts-master / All Parts row 256) - "per source: Starting S/N: MB403109"
+ 50-60329-01: Maxima 1200 (reefer-parts-master / All Parts row 257) - "per source: Starting S/N: MB403109"
+ 50-60329-01: Maxima 1200MT (reefer-parts-master / All Parts row 258) - "per source: Starting S/N: MB403109"
+ 50-60329-01: Maxima 1300 (reefer-parts-master / All Parts row 259) - "per source: Starting S/N: MB403109"
+ 50-60329-04: Supra 750 (reefer-parts-master / All Parts row 276) - "serial/date break: 2013 and newer; per source: Starting S/N: TB649023"
+ 50-60329-04: Supra 844 (reefer-parts-master / All Parts row 279) - "serial/date break: after 2013"
+ 50-60329-04: Supra 850 (reefer-parts-master / All Parts row 280) - "serial/date break: after 2013"
+ 50-60329-04: Supra 850MT (reefer-parts-master / All Parts row 281) - "per source: Starting with S/N: TC201001 OR GC211045"
+ 50-60329-06: Supra 550 (reefer-parts-master / All Parts row 285) - "serial/date break: After 2013"
+ 50-60329-07: Maxima 1000 (reefer-parts-master / All Parts row 291) - "per source: Starting S/N: MB220046"
+ 50-60329-07: Maxima 1200 (reefer-parts-master / All Parts row 292) - "per source: Starting S/N: MB220046"
+ 50-60329-07: Maxima 1200MT (reefer-parts-master / All Parts row 293) - "per source: Starting S/N: MB220046"
+ 50-60329-07: Maxima 1300 (reefer-parts-master / All Parts row 294) - "per source: Starting S/N: MB220046"
+ 50-60198-48: Supra 550 (reefer-parts-master / All Parts row 784) - "serial/date break: Prior to MFH91129306"
+ 50-60289-00: Supra 550 (reefer-parts-master / All Parts row 785) - "serial/date break: Prior to MFH91129306"
+ 78-1083: MD-II (reefer-parts-master / All Parts row 3551) - "date/serial range per source: 03.97- with idler pulley 77-2407"
+ 11-9321: UT Spectrum (reefer-parts-master / All Parts row 9408) - "date/serial range per source: *** *** NOTE: - Depuis 12.2021"
+ 11-9321: UT-1200 (reefer-parts-master / All Parts row 9409) - "date/serial range per source: *** *** NOTE: - Depuis 12.2021"
+ 11-9321: UT-800 (reefer-parts-master / All Parts row 9413) - "date/serial range per source: *** *** NOTE: - Depuis 12.2021"
+ 11-9321: Xtreme (reefer-parts-master / All Parts row 9419) - "date/serial range per source: *** *** NOTE: - Depuis 12.2021"
+ 61-4253: SLX Spectrum (reefer-parts-master / All Parts row 17816) - "date/serial range per source: 12.04.2012 -"
+ 41-2842: UT-1200 (reefer-parts-master / All Parts row 20818) - "date/serial range per source: - 2014"
+ 41-2842: UT-800 (reefer-parts-master / All Parts row 20819) - "date/serial range per source: - 2014"
+ 45-1688: SL-100e (reefer-parts-master / All Parts row 21972) - "date/serial range per source: - 08.06 for all units with the following Tier 1 engines : TK"
+ 45-1688: SL-200e (reefer-parts-master / All Parts row 21974) - "date/serial range per source: - 08.06 for all units with the following Tier 1 engines : TK"
+ 45-1688: SL-400e (reefer-parts-master / All Parts row 21977) - "date/serial range per source: - 08.06 for all units with the following Tier 1 engines : TK"
+ 45-1688: Spectrum SL (reefer-parts-master / All Parts row 21978) - "date/serial range per source: - 08.06 for all units with the following Tier 1 engines : TK"
+ 50-00162-25: Supra 650 (oem-listing-2026-10-28 row 69) - "date/serial break: Prior to MFH91128016"
+ 50-00162-25: Supra 750 (oem-listing-2026-10-28 row 70) - "date/serial break: Prior to MFH91128016"
+ 50-00179-20: Supra 950 (oem-listing-2026-10-28 row 72) - "date/serial break: prior to LFX91068470"
+ 50-00179-20: Supra 950MT (oem-listing-2026-10-28 row 73) - "date/serial break: prior to LFX91068470"
+ 50-60288-21: Supra 550 (oem-listing-2026-10-28 row 90) - "date/serial break: Prior to MFH91129306"
+ 50-60198-48: Supra 550 (oem-listing-2026-10-28 row 306) - "date/serial break: Prior to MFH91129306"
+ 50-60289-00: Supra 550 (oem-listing-2026-10-28 row 307) - "date/serial break: Prior to MFH91129306"
+ 50-00179-59: Supra 844 (oem-listing-2026-10-28 row 473) - "date/serial break: prior to MFN91151579"
+ 50-00179-59: Supra 850 (oem-listing-2026-10-28 row 474) - "date/serial break: prior to MFN91151579"
+ 50-60198-49: Supra 650 (oem-listing-2026-10-28 row 515) - "date/serial break: Prior to MFH91126707 & after"
+ 50-60198-49: Supra 750 (oem-listing-2026-10-28 row 516) - "date/serial break: Prior to MFH91126707 & after"
+ 50-00162-53: Supra 650 (oem-listing-2026-10-28 row 982) - "date/serial break: Prior to KFW90913748"
+ 50-00162-53: Supra 750 (oem-listing-2026-10-28 row 983) - "date/serial break: Prior to KFW90913748"
+ 50-60329-02: Supra 950 (oem-listing-2026-10-28 row 1122) - "date/serial break: after 2013"
+ 50-60329-02: Supra 950MT (oem-listing-2026-10-28 row 1123) - "date/serial break: after 2013"
+ 50-60329-04: Supra 844 (oem-listing-2026-10-28 row 1132) - "date/serial break: after 2013"
+ 50-60329-04: Supra 850 (oem-listing-2026-10-28 row 1133) - "date/serial break: after 2013"
+ 50-60329-06: Supra 550 (oem-listing-2026-10-28 row 1135) - "date/serial break: After 2013"
+ 78-1997: T-1090 (oem-listing-2026-10-28 row 1648) - "date/serial break stated: Before 6/2/25"
+ 78-2038: T-1090 (oem-listing-2026-10-28 row 1649) - "date/serial break stated: Before 6/2/25"
+ 11-6285: SB-II / SB-III / Sentry / Super II with Isuzu DI 2.2 (tk-filters-crossref / By model row 13) - "Fuel filter element - later DI 2.2 units (SB-III 50 TC2, SR MP IV, Super-II SR /"
+ 11-7382: SB-III Whisper / Magnum Whisper / SB-III Tier 2 / Super-II Whisper & 190Y (Yanmar TK486 / TK482E) (tk-filters-crossref / By model row 28) - "Full-flow oil filter (standard, early units)"
+ 11-9098: MD-100 / MD-200 / MD-300, TS-200 / TS-300 / TS-500 / TS-600, Spectrum TS, XDS (tk-filters-crossref / By model row 96) - "Fuel filter (standard) - early TK3.74 / TK3.95 versions; superseded by 11-9341"
+ 13-649: TriPac (legacy, Tier 1 / Tier 2) (tk-filters-crossref / By model row 136) - "In-line fuel filter - early Tier II with rubber fuel lines (kit 10-393)"
+
+MODEL FAMILY (BROCK, OCT 30): 224
+ 11-7382: SB-100 (seed-fitment-2026-10-23 row 472) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SB-110 (seed-fitment-2026-10-23 row 473) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SB-190 (seed-fitment-2026-10-23 row 474) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SB-200 (seed-fitment-2026-10-23 row 475) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SB-210 (seed-fitment-2026-10-23 row 476) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SB-300 (seed-fitment-2026-10-23 row 477) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SB-310 (seed-fitment-2026-10-23 row 478) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SB-400 (seed-fitment-2026-10-23 row 479) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SB Classic (seed-fitment-2026-10-23 row 480) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: Spectrum SB (seed-fitment-2026-10-23 row 481) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: Spectrum DE (seed-fitment-2026-10-23 row 482) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-100 (seed-fitment-2026-10-23 row 494) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-110 (seed-fitment-2026-10-23 row 495) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-190 (seed-fitment-2026-10-23 row 496) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-200 (seed-fitment-2026-10-23 row 497) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-210 (seed-fitment-2026-10-23 row 498) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-300 (seed-fitment-2026-10-23 row 499) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-310 (seed-fitment-2026-10-23 row 500) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-400 (seed-fitment-2026-10-23 row 501) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB Classic (seed-fitment-2026-10-23 row 502) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: Spectrum SB (seed-fitment-2026-10-23 row 503) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: Spectrum DE (seed-fitment-2026-10-23 row 504) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SL-100 (seed-fitment-2026-10-23 row 523) - the SL question is yours
+ 11-7382: SL-200 (seed-fitment-2026-10-23 row 524) - the SL question is yours
+ 11-7382: SL-300 (seed-fitment-2026-10-23 row 525) - the SL question is yours
+ 11-7382: SL-400 (seed-fitment-2026-10-23 row 526) - the SL question is yours
+ 11-7382: SL TCI (seed-fitment-2026-10-23 row 527) - the SL question is yours
+ 11-7382: SL-100e (seed-fitment-2026-10-23 row 528) - the SL question is yours
+ 11-7382: SL-200e (seed-fitment-2026-10-23 row 529) - the SL question is yours
+ 11-7382: SL-400e (seed-fitment-2026-10-23 row 530) - the SL question is yours
+ 11-7382: Spectrum SL (seed-fitment-2026-10-23 row 531) - the SL question is yours
+ 11-9182: SL-100 (seed-fitment-2026-10-23 row 532) - the SL question is yours
+ 11-9182: SL-200 (seed-fitment-2026-10-23 row 533) - the SL question is yours
+ 11-9182: SL-300 (seed-fitment-2026-10-23 row 534) - the SL question is yours
+ 11-9182: SL-400 (seed-fitment-2026-10-23 row 535) - the SL question is yours
+ 11-9182: SL TCI (seed-fitment-2026-10-23 row 536) - the SL question is yours
+ 11-9182: SL-100e (seed-fitment-2026-10-23 row 537) - the SL question is yours
+ 11-9182: SL-200e (seed-fitment-2026-10-23 row 538) - the SL question is yours
+ 11-9182: SL-400e (seed-fitment-2026-10-23 row 539) - the SL question is yours
+ 11-9182: Spectrum SL (seed-fitment-2026-10-23 row 540) - the SL question is yours
+ 11-7400: SL-100 (seed-fitment-2026-10-23 row 541) - the SL question is yours
+ 11-7400: SL-200 (seed-fitment-2026-10-23 row 542) - the SL question is yours
+ 11-7400: SL-300 (seed-fitment-2026-10-23 row 543) - the SL question is yours
+ 11-7400: SL-400 (seed-fitment-2026-10-23 row 544) - the SL question is yours
+ 11-7400: SL TCI (seed-fitment-2026-10-23 row 545) - the SL question is yours
+ 11-7400: SL-100e (seed-fitment-2026-10-23 row 546) - the SL question is yours
+ 11-7400: SL-200e (seed-fitment-2026-10-23 row 547) - the SL question is yours
+ 11-7400: SL-400e (seed-fitment-2026-10-23 row 548) - the SL question is yours
+ 11-7400: Spectrum SL (seed-fitment-2026-10-23 row 549) - the SL question is yours
+ 11-9300: SL-100 (seed-fitment-2026-10-23 row 550) - the SL question is yours
+ 11-9300: SL-200 (seed-fitment-2026-10-23 row 551) - the SL question is yours
+ 11-9300: SL-300 (seed-fitment-2026-10-23 row 552) - the SL question is yours
+ 11-9300: SL-400 (seed-fitment-2026-10-23 row 553) - the SL question is yours
+ 11-9300: SL TCI (seed-fitment-2026-10-23 row 554) - the SL question is yours
+ 11-9300: SL-100e (seed-fitment-2026-10-23 row 555) - the SL question is yours
+ 11-9300: SL-200e (seed-fitment-2026-10-23 row 556) - the SL question is yours
+ 11-9300: SL-400e (seed-fitment-2026-10-23 row 557) - the SL question is yours
+ 11-9300: Spectrum SL (seed-fitment-2026-10-23 row 558) - the SL question is yours
+ 11-7382: TK486 (reefer-parts-master / All Parts row 8373) - an engine row would put the older filter on every SB-100..400 with that engine
+ 11-7382: TK486E (reefer-parts-master / All Parts row 8374) - an engine row would put the older filter on every SB-100..400 with that engine
+ 11-7382: SB Classic (reefer-parts-master / All Parts row 8375) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SB-100 (reefer-parts-master / All Parts row 8376) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SB-110 (reefer-parts-master / All Parts row 8377) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SB-190 (reefer-parts-master / All Parts row 8378) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SB-200 (reefer-parts-master / All Parts row 8379) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SB-200 (reefer-parts-master / All Parts row 8380) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SB-210 (reefer-parts-master / All Parts row 8381) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SB-230 (reefer-parts-master / All Parts row 8382) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SB-300 (reefer-parts-master / All Parts row 8383) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SB-310 (reefer-parts-master / All Parts row 8384) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SB-310R (reefer-parts-master / All Parts row 8385) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SB-400 (reefer-parts-master / All Parts row 8386) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SL TCI (reefer-parts-master / All Parts row 8425) - the SL question is yours
+ 11-7382: SL TCI (reefer-parts-master / All Parts row 8426) - the SL question is yours
+ 11-7382: SL-100 (reefer-parts-master / All Parts row 8427) - the SL question is yours
+ 11-7382: SL-100 (reefer-parts-master / All Parts row 8428) - the SL question is yours
+ 11-7382: SL-100e (reefer-parts-master / All Parts row 8429) - the SL question is yours
+ 11-7382: SL-100e (reefer-parts-master / All Parts row 8430) - the SL question is yours
+ 11-7382: SL-200 (reefer-parts-master / All Parts row 8431) - the SL question is yours
+ 11-7382: SL-200 (reefer-parts-master / All Parts row 8432) - the SL question is yours
+ 11-7382: SL-200e (reefer-parts-master / All Parts row 8433) - the SL question is yours
+ 11-7382: SL-200e (reefer-parts-master / All Parts row 8434) - the SL question is yours
+ 11-7382: SL-300 (reefer-parts-master / All Parts row 8435) - the SL question is yours
+ 11-7382: SL-300 (reefer-parts-master / All Parts row 8436) - the SL question is yours
+ 11-7382: SL-400 (reefer-parts-master / All Parts row 8437) - the SL question is yours
+ 11-7382: SL-400 (reefer-parts-master / All Parts row 8438) - the SL question is yours
+ 11-7382: SL-400e (reefer-parts-master / All Parts row 8439) - the SL question is yours
+ 11-7382: SL-400e (reefer-parts-master / All Parts row 8440) - the SL question is yours
+ 11-7382: Spectrum DE (reefer-parts-master / All Parts row 8458) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: Spectrum DE 2 (reefer-parts-master / All Parts row 8459) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: Spectrum DE 3 (reefer-parts-master / All Parts row 8460) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: Spectrum SB (reefer-parts-master / All Parts row 8461) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: Spectrum SB TCI (reefer-parts-master / All Parts row 8462) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: Spectrum SL (reefer-parts-master / All Parts row 8463) - the SL question is yours
+ 11-7382: Spectrum SL (reefer-parts-master / All Parts row 8464) - the SL question is yours
+ 11-7382: Spectrum SL Multi-Temp (reefer-parts-master / All Parts row 8465) - the SL question is yours
+ 11-7382: Spectrum SL Multi-Temp (reefer-parts-master / All Parts row 8466) - the SL question is yours
+ 11-7400: SB Classic (reefer-parts-master / All Parts row 8486) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-100 (reefer-parts-master / All Parts row 8487) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-100 (reefer-parts-master / All Parts row 8488) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-110 (reefer-parts-master / All Parts row 8489) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-110+ (reefer-parts-master / All Parts row 8490) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-190 (reefer-parts-master / All Parts row 8491) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-190 (reefer-parts-master / All Parts row 8492) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-200 (reefer-parts-master / All Parts row 8493) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-200 (reefer-parts-master / All Parts row 8494) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-200TG (reefer-parts-master / All Parts row 8495) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-210 (reefer-parts-master / All Parts row 8496) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-210+ (reefer-parts-master / All Parts row 8497) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-300 (reefer-parts-master / All Parts row 8498) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-300 (reefer-parts-master / All Parts row 8499) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-310 (reefer-parts-master / All Parts row 8500) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-310+ (reefer-parts-master / All Parts row 8501) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-310R (reefer-parts-master / All Parts row 8502) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-310R+ (reefer-parts-master / All Parts row 8503) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-400 (reefer-parts-master / All Parts row 8504) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SL TCI (reefer-parts-master / All Parts row 8536) - the SL question is yours
+ 11-7400: SL-100 (reefer-parts-master / All Parts row 8537) - the SL question is yours
+ 11-7400: SL-200 (reefer-parts-master / All Parts row 8538) - the SL question is yours
+ 11-7400: SL-300 (reefer-parts-master / All Parts row 8539) - the SL question is yours
+ 11-7400: SL-400 (reefer-parts-master / All Parts row 8540) - the SL question is yours
+ 11-7400: Spectrum DE (reefer-parts-master / All Parts row 8554) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: Spectrum DE 2 (reefer-parts-master / All Parts row 8555) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: Spectrum DE 3 (reefer-parts-master / All Parts row 8556) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: Spectrum DE 30-2 (reefer-parts-master / All Parts row 8557) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: Spectrum DE 30-3 (reefer-parts-master / All Parts row 8558) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: Spectrum SB (reefer-parts-master / All Parts row 8560) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: Spectrum SB TCI (reefer-parts-master / All Parts row 8561) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-9182: SL TCI (reefer-parts-master / All Parts row 9087) - the SL question is yours
+ 11-9182: SL TCI (reefer-parts-master / All Parts row 9088) - the SL question is yours
+ 11-9182: SL-100 (reefer-parts-master / All Parts row 9089) - the SL question is yours
+ 11-9182: SL-100 (reefer-parts-master / All Parts row 9090) - the SL question is yours
+ 11-9182: SL-100e (reefer-parts-master / All Parts row 9091) - the SL question is yours
+ 11-9182: SL-100e (reefer-parts-master / All Parts row 9092) - the SL question is yours
+ 11-9182: SL-200 (reefer-parts-master / All Parts row 9093) - the SL question is yours
+ 11-9182: SL-200 (reefer-parts-master / All Parts row 9094) - the SL question is yours
+ 11-9182: SL-200e (reefer-parts-master / All Parts row 9095) - the SL question is yours
+ 11-9182: SL-200e (reefer-parts-master / All Parts row 9096) - the SL question is yours
+ 11-9182: SL-300 (reefer-parts-master / All Parts row 9097) - the SL question is yours
+ 11-9182: SL-300 (reefer-parts-master / All Parts row 9098) - the SL question is yours
+ 11-9182: SL-400 (reefer-parts-master / All Parts row 9099) - the SL question is yours
+ 11-9182: SL-400 (reefer-parts-master / All Parts row 9100) - the SL question is yours
+ 11-9182: SL-400e (reefer-parts-master / All Parts row 9101) - the SL question is yours
+ 11-9182: SL-400e (reefer-parts-master / All Parts row 9102) - the SL question is yours
+ 11-9182: Spectrum SL (reefer-parts-master / All Parts row 9147) - the SL question is yours
+ 11-9182: Spectrum SL (reefer-parts-master / All Parts row 9148) - the SL question is yours
+ 11-9182: Spectrum SL Multi-Temp (reefer-parts-master / All Parts row 9149) - the SL question is yours
+ 11-9300: SL TCI (reefer-parts-master / All Parts row 9277) - the SL question is yours
+ 11-9300: SL TCI (reefer-parts-master / All Parts row 9278) - the SL question is yours
+ 11-9300: SL-100 (reefer-parts-master / All Parts row 9279) - the SL question is yours
+ 11-9300: SL-100 (reefer-parts-master / All Parts row 9280) - the SL question is yours
+ 11-9300: SL-100e (reefer-parts-master / All Parts row 9281) - the SL question is yours
+ 11-9300: SL-100e (reefer-parts-master / All Parts row 9282) - the SL question is yours
+ 11-9300: SL-200 (reefer-parts-master / All Parts row 9283) - the SL question is yours
+ 11-9300: SL-200 (reefer-parts-master / All Parts row 9284) - the SL question is yours
+ 11-9300: SL-200e (reefer-parts-master / All Parts row 9285) - the SL question is yours
+ 11-9300: SL-200e (reefer-parts-master / All Parts row 9286) - the SL question is yours
+ 11-9300: SL-300 (reefer-parts-master / All Parts row 9287) - the SL question is yours
+ 11-9300: SL-300 (reefer-parts-master / All Parts row 9288) - the SL question is yours
+ 11-9300: SL-400 (reefer-parts-master / All Parts row 9289) - the SL question is yours
+ 11-9300: SL-400 (reefer-parts-master / All Parts row 9290) - the SL question is yours
+ 11-9300: SL-400e (reefer-parts-master / All Parts row 9291) - the SL question is yours
+ 11-9300: SL-400e (reefer-parts-master / All Parts row 9292) - the SL question is yours
+ 11-9300: Spectrum SL (reefer-parts-master / All Parts row 9330) - the SL question is yours
+ 11-9300: Spectrum SL (reefer-parts-master / All Parts row 9331) - the SL question is yours
+ 11-9300: Spectrum SL Multi-Temp (reefer-parts-master / All Parts row 9332) - the SL question is yours
+ 11-7382: SB-100 (tk-filters-crossref / By model row 35) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SB-110 (tk-filters-crossref / By model row 35) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SB-190 (tk-filters-crossref / By model row 35) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SB-200 (tk-filters-crossref / By model row 35) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SB-210 (tk-filters-crossref / By model row 35) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SB-300 (tk-filters-crossref / By model row 35) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SB-310 (tk-filters-crossref / By model row 35) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SB-400 (tk-filters-crossref / By model row 35) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SB Classic (tk-filters-crossref / By model row 35) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: Spectrum SB (tk-filters-crossref / By model row 35) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: Spectrum DE (tk-filters-crossref / By model row 35) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-100 (tk-filters-crossref / By model row 37) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-110 (tk-filters-crossref / By model row 37) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-190 (tk-filters-crossref / By model row 37) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-200 (tk-filters-crossref / By model row 37) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-210 (tk-filters-crossref / By model row 37) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-300 (tk-filters-crossref / By model row 37) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-310 (tk-filters-crossref / By model row 37) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB-400 (tk-filters-crossref / By model row 37) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: SB Classic (tk-filters-crossref / By model row 37) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: Spectrum SB (tk-filters-crossref / By model row 37) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7400: Spectrum DE (tk-filters-crossref / By model row 37) - SB-100 to SB-400 take 11-9182 / 11-9300
+ 11-7382: SL-100 (tk-filters-crossref / By model row 42) - the SL question is yours
+ 11-7382: SL-200 (tk-filters-crossref / By model row 42) - the SL question is yours
+ 11-7382: SL-300 (tk-filters-crossref / By model row 42) - the SL question is yours
+ 11-7382: SL-400 (tk-filters-crossref / By model row 42) - the SL question is yours
+ 11-7382: SL TCI (tk-filters-crossref / By model row 42) - the SL question is yours
+ 11-7382: SL-100e (tk-filters-crossref / By model row 42) - the SL question is yours
+ 11-7382: SL-200e (tk-filters-crossref / By model row 42) - the SL question is yours
+ 11-7382: SL-400e (tk-filters-crossref / By model row 42) - the SL question is yours
+ 11-7382: Spectrum SL (tk-filters-crossref / By model row 42) - the SL question is yours
+ 11-9182: SL-100 (tk-filters-crossref / By model row 43) - the SL question is yours
+ 11-9182: SL-200 (tk-filters-crossref / By model row 43) - the SL question is yours
+ 11-9182: SL-300 (tk-filters-crossref / By model row 43) - the SL question is yours
+ 11-9182: SL-400 (tk-filters-crossref / By model row 43) - the SL question is yours
+ 11-9182: SL TCI (tk-filters-crossref / By model row 43) - the SL question is yours
+ 11-9182: SL-100e (tk-filters-crossref / By model row 43) - the SL question is yours
+ 11-9182: SL-200e (tk-filters-crossref / By model row 43) - the SL question is yours
+ 11-9182: SL-400e (tk-filters-crossref / By model row 43) - the SL question is yours
+ 11-9182: Spectrum SL (tk-filters-crossref / By model row 43) - the SL question is yours
+ 11-7400: SL-100 (tk-filters-crossref / By model row 44) - the SL question is yours
+ 11-7400: SL-200 (tk-filters-crossref / By model row 44) - the SL question is yours
+ 11-7400: SL-300 (tk-filters-crossref / By model row 44) - the SL question is yours
+ 11-7400: SL-400 (tk-filters-crossref / By model row 44) - the SL question is yours
+ 11-7400: SL TCI (tk-filters-crossref / By model row 44) - the SL question is yours
+ 11-7400: SL-100e (tk-filters-crossref / By model row 44) - the SL question is yours
+ 11-7400: SL-200e (tk-filters-crossref / By model row 44) - the SL question is yours
+ 11-7400: SL-400e (tk-filters-crossref / By model row 44) - the SL question is yours
+ 11-7400: Spectrum SL (tk-filters-crossref / By model row 44) - the SL question is yours
+ 11-9300: SL-100 (tk-filters-crossref / By model row 45) - the SL question is yours
+ 11-9300: SL-200 (tk-filters-crossref / By model row 45) - the SL question is yours
+ 11-9300: SL-300 (tk-filters-crossref / By model row 45) - the SL question is yours
+ 11-9300: SL-400 (tk-filters-crossref / By model row 45) - the SL question is yours
+ 11-9300: SL TCI (tk-filters-crossref / By model row 45) - the SL question is yours
+ 11-9300: SL-100e (tk-filters-crossref / By model row 45) - the SL question is yours
+ 11-9300: SL-200e (tk-filters-crossref / By model row 45) - the SL question is yours
+ 11-9300: SL-400e (tk-filters-crossref / By model row 45) - the SL question is yours
+ 11-9300: Spectrum SL (tk-filters-crossref / By model row 45) - the SL question is yours
+
+FITMENT HELD: NOTE SAYS SUPERSEDED: 19
+ 11-9098: MD-100 (seed-fitment-2026-10-23 row 831) - "Fuel filter (standard) - early TK3.74 / TK3.95 versions; superseded by 11-9341"
+ 11-9098: MD-200 (seed-fitment-2026-10-23 row 832) - "Fuel filter (standard) - early TK3.74 / TK3.95 versions; superseded by 11-9341"
+ 11-9098: MD-300 (seed-fitment-2026-10-23 row 833) - "Fuel filter (standard) - early TK3.74 / TK3.95 versions; superseded by 11-9341"
+ 11-9098: TS-200 (seed-fitment-2026-10-23 row 834) - "Fuel filter (standard) - early TK3.74 / TK3.95 versions; superseded by 11-9341"
+ 11-9098: TS-300 (seed-fitment-2026-10-23 row 835) - "Fuel filter (standard) - early TK3.74 / TK3.95 versions; superseded by 11-9341"
+ 11-9098: TS-500 (seed-fitment-2026-10-23 row 836) - "Fuel filter (standard) - early TK3.74 / TK3.95 versions; superseded by 11-9341"
+ 11-9098: TS-600 (seed-fitment-2026-10-23 row 837) - "Fuel filter (standard) - early TK3.74 / TK3.95 versions; superseded by 11-9341"
+ 11-9098: Spectrum TS (seed-fitment-2026-10-23 row 838) - "Fuel filter (standard) - early TK3.74 / TK3.95 versions; superseded by 11-9341"
+ 11-9098: XDS (seed-fitment-2026-10-23 row 839) - "Fuel filter (standard) - early TK3.74 / TK3.95 versions; superseded by 11-9341"
+ 11-9098: UMD (seed-fitment-2026-10-23 row 961) - "Fuel filter (UMD, URD, LND) - superseded by 11-9341"
+ 11-9098: UMD-II (seed-fitment-2026-10-23 row 962) - "Fuel filter (UMD, URD, LND) - superseded by 11-9341"
+ 11-9098: SUMD-II (seed-fitment-2026-10-23 row 963) - "Fuel filter (UMD, URD, LND) - superseded by 11-9341"
+ 11-9098: URD (seed-fitment-2026-10-23 row 964) - "Fuel filter (UMD, URD, LND) - superseded by 11-9341"
+ 11-9098: URD-III (seed-fitment-2026-10-23 row 965) - "Fuel filter (UMD, URD, LND) - superseded by 11-9341"
+ 11-9098: LND (seed-fitment-2026-10-23 row 966) - "Fuel filter (UMD, URD, LND) - superseded by 11-9341"
+ 11-9098: LND-II (seed-fitment-2026-10-23 row 967) - "Fuel filter (UMD, URD, LND) - superseded by 11-9341"
+ 11-9098: SGCM (seed-fitment-2026-10-23 row 1110) - "Secondary fuel filter - superseded by 11-9341"
+ 11-9098: SGSM (seed-fitment-2026-10-23 row 1111) - "Secondary fuel filter - superseded by 11-9341"
+ 11-9098: SGCO (seed-fitment-2026-10-23 row 1112) - "Secondary fuel filter - superseded by 11-9341"
+
+FITMENT HELD: ONTO A SUPERSEDED NUMBER: 112
+ 50-01173-00: Ultima XTC (reefer-parts-master / All Parts row 403)
+ 50-01173-00: Ultra (reefer-parts-master / All Parts row 404)
+ 50-01173-00: Ultra XT (reefer-parts-master / All Parts row 405)
+ 50-01173-00: X2 2100R (reefer-parts-master / All Parts row 406)
+ 50-01173-00: X2 2500A (reefer-parts-master / All Parts row 407)
+ 50-01173-00: X2 2500R (reefer-parts-master / All Parts row 408)
+ 30-01121-00: Supra 560 (reefer-parts-master / All Parts row 1153)
+ 30-01121-00: Supra 660 (reefer-parts-master / All Parts row 1154)
+ 30-01121-00: Supra 760 (reefer-parts-master / All Parts row 1155)
+ 30-01121-00: Supra 860 (reefer-parts-master / All Parts row 1156)
+ 30-01121-00: Supra 960 (reefer-parts-master / All Parts row 1157)
+ 30-01121-00: Vector 1350 (reefer-parts-master / All Parts row 1158)
+ 78-1340: C-600 (reefer-parts-master / All Parts row 3605)
+ 78-1340: C-600 (reefer-parts-master / All Parts row 3606)
+ 78-1340: C-600M (reefer-parts-master / All Parts row 3607)
+ 78-1340: S-600 (reefer-parts-master / All Parts row 3608)
+ 78-1340: S-600 (reefer-parts-master / All Parts row 3609)
+ 78-1340: S-600DE (reefer-parts-master / All Parts row 3610)
+ 78-1340: S-600M (reefer-parts-master / All Parts row 3611)
+ 78-1340: S-610DE (reefer-parts-master / All Parts row 3612)
+ 78-1340: S-610M (reefer-parts-master / All Parts row 3613)
+ 78-1340: S-700 (reefer-parts-master / All Parts row 3614)
+ 78-1340: S-750i (reefer-parts-master / All Parts row 3615)
+ 78-1340: SB-200 (reefer-parts-master / All Parts row 3616)
+ 78-1340: SB-210 (reefer-parts-master / All Parts row 3617)
+ 78-1340: SB-210+ (reefer-parts-master / All Parts row 3618)
+ 78-1340: SB-230 (reefer-parts-master / All Parts row 3619)
+ 78-1340: SB-230 RR (reefer-parts-master / All Parts row 3620)
+ 78-1340: SB-III Whisper Multi-Temp SR (reefer-parts-master / All Parts row 3621)
+ 78-1340: SGCM 2000 (reefer-parts-master / All Parts row 3622)
+ 78-1340: SGCM 3000 (reefer-parts-master / All Parts row 3623)
+ 78-1340: SGCO 2000 (reefer-parts-master / All Parts row 3624)
+ 78-1340: SGCO 3000 (reefer-parts-master / All Parts row 3625)
+ 78-1340: SGSM 2000 (reefer-parts-master / All Parts row 3626)
+ 78-1340: SGSM 3000 (reefer-parts-master / All Parts row 3627)
+ 78-1340: SL Spectrum MT (reefer-parts-master / All Parts row 3628)
+ 78-1340: SL TCI (reefer-parts-master / All Parts row 3629)
+ 78-1340: SL TCI (reefer-parts-master / All Parts row 3630)
+ 78-1340: SL-100 (reefer-parts-master / All Parts row 3631)
+ 78-1340: SL-100 (reefer-parts-master / All Parts row 3632)
+ 78-1340: SL-100e (reefer-parts-master / All Parts row 3633)
+ 78-1340: SL-100e (reefer-parts-master / All Parts row 3634)
+ 78-1340: SL-200 (reefer-parts-master / All Parts row 3635)
+ 78-1340: SL-200 (reefer-parts-master / All Parts row 3636)
+ 78-1340: SL-200e (reefer-parts-master / All Parts row 3637)
+ 78-1340: SL-200e (reefer-parts-master / All Parts row 3638)
+ 78-1340: SL-300 (reefer-parts-master / All Parts row 3639)
+ 78-1340: SL-300 (reefer-parts-master / All Parts row 3640)
+ 78-1340: SL-400 (reefer-parts-master / All Parts row 3641)
+ 78-1340: SL-400 (reefer-parts-master / All Parts row 3642)
+ 78-1340: SL-400e (reefer-parts-master / All Parts row 3643)
+ 78-1340: SL-400e (reefer-parts-master / All Parts row 3644)
+ 78-1340: SLX Spectrum (reefer-parts-master / All Parts row 3645)
+ 78-1340: SLX Whisper (reefer-parts-master / All Parts row 3646)
+ 78-1340: SLX-100 (reefer-parts-master / All Parts row 3647)
+ 78-1340: SLX-200 (reefer-parts-master / All Parts row 3648)
+ 78-1340: SLX-300 (reefer-parts-master / All Parts row 3649)
+ 78-1340: SLX-400 (reefer-parts-master / All Parts row 3650)
+ 78-1340: SLX-Spectrum (reefer-parts-master / All Parts row 3651)
+ 78-1340: SLXe Spectrum (reefer-parts-master / All Parts row 3652)
+ 78-1340: SLXe-100 (reefer-parts-master / All Parts row 3653)
+ 78-1340: SLXe-200 (reefer-parts-master / All Parts row 3654)
+ 78-1340: SLXe-300 (reefer-parts-master / All Parts row 3655)
+ 78-1340: SLXe-400 (reefer-parts-master / All Parts row 3656)
+ 78-1340: SLXe-Spectrum (reefer-parts-master / All Parts row 3657)
+ 78-1340: SLXi-100 (reefer-parts-master / All Parts row 3658)
+ 78-1340: SLXi-200 (reefer-parts-master / All Parts row 3659)
+ 78-1340: SLXi-300 (reefer-parts-master / All Parts row 3660)
+ 78-1340: SLXi-400 (reefer-parts-master / All Parts row 3661)
+ 78-1340: SLXi-Spectrum (reefer-parts-master / All Parts row 3662)
+ 78-1340: Spectrum SB (reefer-parts-master / All Parts row 3663)
+ 78-1340: Spectrum SB TCI (reefer-parts-master / All Parts row 3664)
+ 78-1340: Spectrum SL (reefer-parts-master / All Parts row 3665)
+ 78-1340: Spectrum SL (reefer-parts-master / All Parts row 3666)
+ 78-1340: Spectrum SL Multi-Temp (reefer-parts-master / All Parts row 3667)
+ 78-1340: Spectrum SL Multi-Temp (reefer-parts-master / All Parts row 3668)
+ 78-1340: Super II 190Y (reefer-parts-master / All Parts row 3669)
+ 78-1340: Super II Whisper (reefer-parts-master / All Parts row 3670)
+ 78-1844: S-600 (reefer-parts-master / All Parts row 3948)
+ 30-01121-00: Supra 560 (oem-listing-2026-10-28 row 815)
+ 30-01121-00: Supra 660 (oem-listing-2026-10-28 row 816)
+ 30-01121-00: Supra 760 (oem-listing-2026-10-28 row 817)
+ 30-01121-00: Supra 860 (oem-listing-2026-10-28 row 818)
+ 30-01121-00: Supra 960 (oem-listing-2026-10-28 row 819)
+ 78-1340: Precedent C-600 (oem-listing-2026-10-28 row 2600)
+ 78-1340: Precedent C-600M (oem-listing-2026-10-28 row 2601)
+ 78-1340: Precedent S-600 (oem-listing-2026-10-28 row 2602)
+ 78-1340: Precedent S-600DE (oem-listing-2026-10-28 row 2603)
+ 78-1340: Precedent S-600M (oem-listing-2026-10-28 row 2604)
+ 78-1340: Precedent S-610DE (oem-listing-2026-10-28 row 2605)
+ 78-1340: Precedent S-610M (oem-listing-2026-10-28 row 2606)
+ 78-1340: Precedent S-700 (oem-listing-2026-10-28 row 2607)
+ 78-1340: Precedent S-750i (oem-listing-2026-10-28 row 2608)
+ 78-1340: SL-100 (oem-listing-2026-10-28 row 2609)
+ 78-1340: SL-200 (oem-listing-2026-10-28 row 2610)
+ 78-1340: SL-300 (oem-listing-2026-10-28 row 2611)
+ 78-1340: SL-400 (oem-listing-2026-10-28 row 2612)
+ 78-1340: SLX-100 (oem-listing-2026-10-28 row 2613)
+ 78-1340: SLX-200 (oem-listing-2026-10-28 row 2614)
+ 78-1340: SLX-300 (oem-listing-2026-10-28 row 2615)
+ 78-1340: SLX-400 (oem-listing-2026-10-28 row 2616)
+ 78-1340: SLX-Spectrum (oem-listing-2026-10-28 row 2617)
+ 78-1340: SLXe-100 (oem-listing-2026-10-28 row 2618)
+ 78-1340: SLXe-200 (oem-listing-2026-10-28 row 2619)
+ 78-1340: SLXe-300 (oem-listing-2026-10-28 row 2620)
+ 78-1340: SLXe-400 (oem-listing-2026-10-28 row 2621)
+ 78-1340: SLXe-Spectrum (oem-listing-2026-10-28 row 2622)
+ 78-1340: SLXi-100 (oem-listing-2026-10-28 row 2623)
+ 78-1340: SLXi-200 (oem-listing-2026-10-28 row 2624)
+ 78-1340: SLXi-300 (oem-listing-2026-10-28 row 2625)
+ 78-1340: SLXi-400 (oem-listing-2026-10-28 row 2626)
+ 78-1340: SLXi-Spectrum (oem-listing-2026-10-28 row 2627)
+
+ENGINE TEXT THAT IS NOT AN ENGINE DESIGNATION IN ENGINES (NOT LOADED AS ENGINE FITMENT): 48
+ 78	"XDS SR w/TK 3.95"
+ 71	"UMD-II MAX, SUMD-II MAX w/TK 3.74"
+ 67	"TriPac Tier 2"
+ 63	"URD-III 25DG w/3.95"
+ 58	"TriPac Tier 1"
+ 22	"V2203"
+ 18	"TKDV6 (Peugeot)"
+ 15	"SGCO 2000 Tier 2"
+ 14	"D722"
+ 13	"D1105"
+ 13	"SGCM 2000 Tier 2"
+ 13	"SGSM 2000 Tier 2"
+ 8	"CT4-114-TV"
+ 8	"DI"
+ 7	"Yanmar 482"
+ 6	"CT3-44-TV"
+ 5	"CT3-44E"
+ 4	"CT4-114E"
+ 4	"CT4-134E"
+ 4	"V2203-TV"
+ 4	"V2203-DI"
+ 4	"di 2.2 / se 2.2"
+ 3	"CT2-29E"
+ 3	"CT4-44E"
+ 3	"FE"
+ 3	"TK380"
+ 2	"CT3-69-TV"
+ 2	"CT3-69E"
+ 2	"R404A"
+ 2	"TK3.74U"
+ 2	"SE"
+ 2	"TK486V25"
+ 2	"D201"
+ 2	"4TNV86"
+ 2	"3TNV88"
+ 2	"Yanmar 486V"
+ 2	"Yanmar 388"
+ 2	"Yanmar 2.70"
+ 2	"Yanmar 4.86V"
+ 1	"SR-2"
+ 1	"TK2.44"
+ 1	"TK2.49"
+ 1	"TK3.66U"
+ 1	"TK3.88U"
+ 1	"TK3.95U"
+ 1	"se 2.2 Engine"
+ 1	"TK353 Engine"
+ 1	"TK3.66 & TK3.74"
+
+FITMENT HELD: MODEL STRING THE 148 CHECK REFUSES (GROUP, RANGE OR +): 19
+ 45	"7300"
+ 33	"7500"
+ 22	"2100"
+ 15	"2500"
+ 9	"1800"
+ 8	"8600"
+ 7	"6500"
+ 7	"6600"
+ 7	"8500"
+ 6	"SB-210-50"
+ 6	"SB-230-50"
+ 3	"7700"
+ 2	"se 2.2 Engine"
+ 2	"di 2.2 Engine"
+ 1	"TK486 Engine"
+ 1	"TK235 Engine"
+ 1	"TK486E Engine"
+ 1	"7100"
+ 1	"8700"
+
+BY MODEL: GROUP PIECES THAT ARE NOT A KNOWN SINGLE MODEL (NOT LOADED): 2
+ 5	"M"
+ 1	"Magnum SL"
+
+FITMENT HELD: LISTED WITH AND WITHOUT A BREAK: 168
+ 11-9965: Precedent S-600M (tk-filters-crossref / By model row 71)
+ 11-9965: Precedent S-600M (oem-listing-2026-10-28 row 1818)
+ 77-2390: Super II (oem-listing-2026-10-28 row 1511)
+ 77-2390: SB-II (oem-listing-2026-10-28 row 1509)
+ 77-2390: SB-190 (oem-listing-2026-10-28 row 1508)
+ 13-0658: TriPac (reefer-parts-master / All Parts row 9845)
+ 11-9970: S-600 (reefer-parts-master / All Parts row 9817)
+ 11-9970: C-600 (reefer-parts-master / All Parts row 9815)
+ 11-9969: S-750i (reefer-parts-master / All Parts row 9813)
+ 11-9969: S-600 (reefer-parts-master / All Parts row 9807)
+ 11-9968: S-600 (reefer-parts-master / All Parts row 9805)
+ 11-9967: S-750i (reefer-parts-master / All Parts row 9804)
+ 11-9967: S-600 (reefer-parts-master / All Parts row 9798)
+ 11-9966: C-700 (reefer-parts-master / All Parts row 9790)
+ 11-9965: S-600M (reefer-parts-master / All Parts row 9783)
+ 11-9965: S-600DE (reefer-parts-master / All Parts row 9782)
+ 11-9342: SL-400 (reefer-parts-master / All Parts row 9555)
+ 11-9342: SL-300 (reefer-parts-master / All Parts row 9553)
+ 11-9342: SL-200 (reefer-parts-master / All Parts row 9549)
+ 11-9342: SL-100 (reefer-parts-master / All Parts row 9545)
+ 11-9342: SL TCI (reefer-parts-master / All Parts row 9543)
+ 11-9341: RDB-II (reefer-parts-master / All Parts row 9442)
+ 11-9341: RD-MT (reefer-parts-master / All Parts row 9441)
+ 11-9341: RD-II (reefer-parts-master / All Parts row 9434)
+ 11-9341: MD-MT (reefer-parts-master / All Parts row 9433)
+ 11-9341: MD-II (reefer-parts-master / All Parts row 9427)
+ 11-9321: XDS (reefer-parts-master / All Parts row 9417)
+ 11-9321: TS-600 (reefer-parts-master / All Parts row 9407)
+ 11-9321: TS-500 (reefer-parts-master / All Parts row 9406)
+ 11-9321: TS-300 (reefer-parts-master / All Parts row 9404)
+ 11-9321: TS-200 (reefer-parts-master / All Parts row 9402)
+ 11-9321: T-880S (reefer-parts-master / All Parts row 9396)
+ 11-9321: T-880R (reefer-parts-master / All Parts row 9395)
+ 11-9321: T-800R (reefer-parts-master / All Parts row 9393)
+ 11-9321: T-800 (reefer-parts-master / All Parts row 9391)
+ 11-9321: T-680S (reefer-parts-master / All Parts row 9390)
+ 11-9321: T-680R (reefer-parts-master / All Parts row 9389)
+ 11-9321: T-600R (reefer-parts-master / All Parts row 9388)
+ 11-9321: T-600 (reefer-parts-master / All Parts row 9386)
+ 11-9321: T-580R (reefer-parts-master / All Parts row 9385)
+ 11-9321: T-570R (reefer-parts-master / All Parts row 9384)
+ 11-9321: T-560R (reefer-parts-master / All Parts row 9383)
+ 11-9321: T-500R (reefer-parts-master / All Parts row 9382)
+ 11-9321: T-1200R (reefer-parts-master / All Parts row 9380)
+ 11-9321: T-1080S (reefer-parts-master / All Parts row 9379)
+ 11-9321: T-1080R (reefer-parts-master / All Parts row 9378)
+ 11-9321: T-1000R (reefer-parts-master / All Parts row 9376)
+ 11-9321: Spectrum TS (reefer-parts-master / All Parts row 9370)
+ 11-9321: RDB-II (reefer-parts-master / All Parts row 9368)
+ 11-9321: RD-MT (reefer-parts-master / All Parts row 9367)
+ 11-9321: RD-II (reefer-parts-master / All Parts row 9359)
+ 11-9321: MD-MT (reefer-parts-master / All Parts row 9358)
+ 11-9321: MD-II (reefer-parts-master / All Parts row 9351)
+ 11-9321: MD-300 (reefer-parts-master / All Parts row 9350)
+ 11-9321: MD-200 (reefer-parts-master / All Parts row 9347)
+ 11-9321: MD-100 (reefer-parts-master / All Parts row 9345)
+ 11-9321: KD-II (reefer-parts-master / All Parts row 9341)
+ 11-9098: TD-II (reefer-parts-master / All Parts row 8830)
+ 11-9098: Super TD-II (reefer-parts-master / All Parts row 8826)
+ 11-9098: RDB-II (reefer-parts-master / All Parts row 8780)
+ 11-9098: RD-MT (reefer-parts-master / All Parts row 8778)
+ 11-9098: RD-II (reefer-parts-master / All Parts row 8765)
+ 11-9098: MD-MT (reefer-parts-master / All Parts row 8758)
+ 11-9098: MD-II (reefer-parts-master / All Parts row 8747)
+ 11-9098: KD-II (reefer-parts-master / All Parts row 8735)
+ 11-9059: XDS (reefer-parts-master / All Parts row 8667)
+ 11-9059: TS-300 (reefer-parts-master / All Parts row 8652)
+ 11-9059: TS-200 (reefer-parts-master / All Parts row 8651)
+ 11-9059: Spectrum TS (reefer-parts-master / All Parts row 8616)
+ 11-6228: RDB-II (reefer-parts-master / All Parts row 8213)
+ 11-6228: RD-MT (reefer-parts-master / All Parts row 8212)
+ 11-6228: MD-MT (reefer-parts-master / All Parts row 8204)
+ 11-6228: MD-300 (reefer-parts-master / All Parts row 8197)
+ 11-6228: MD-200 (reefer-parts-master / All Parts row 8195)
+ 11-6228: MD-100 (reefer-parts-master / All Parts row 8194)
+ 11-6182: XDS (reefer-parts-master / All Parts row 8184)
+ 11-6182: TS-600 (reefer-parts-master / All Parts row 8172)
+ 11-6182: TS-500 (reefer-parts-master / All Parts row 8171)
+ 11-6182: TS-300 (reefer-parts-master / All Parts row 8170)
+ 11-6182: TS-200 (reefer-parts-master / All Parts row 8169)
+ 11-6180: UMD-II (reefer-parts-master / All Parts row 8086)
+ 11-6180: UMD (reefer-parts-master / All Parts row 8084)
+ 11-6180: SUMD-II (reefer-parts-master / All Parts row 8079)
+ 77-2390: Super II (reefer-parts-master / All Parts row 7006)
+ 77-2390: SB-II (reefer-parts-master / All Parts row 7004)
+ 77-2390: SB-190 (reefer-parts-master / All Parts row 7003)
+ 78-1946: T-1000R Spectrum (reefer-parts-master / All Parts row 5970)
+ 78-1946: T-1000R Spectrum (reefer-parts-master / All Parts row 4029)
+ 13-0658: TriPac (seed-fitment-2026-10-23 row 1081)
+ 11-6180: SUMD-II (seed-fitment-2026-10-23 row 984)
+ 11-6180: UMD-II (seed-fitment-2026-10-23 row 983)
+ 11-6180: UMD (seed-fitment-2026-10-23 row 982)
+ 11-9321: T-1080S (seed-fitment-2026-10-23 row 946)
+ 11-9321: T-1080R (seed-fitment-2026-10-23 row 945)
+ 11-9321: T-880S (seed-fitment-2026-10-23 row 944)
+ 11-9321: T-880R (seed-fitment-2026-10-23 row 943)
+ 11-9321: T-680S (seed-fitment-2026-10-23 row 942)
+ 11-9321: T-680R (seed-fitment-2026-10-23 row 941)
+ 11-9321: T-580R (seed-fitment-2026-10-23 row 940)
+ 11-9321: T-800 (seed-fitment-2026-10-23 row 910)
+ 11-9321: T-600 (seed-fitment-2026-10-23 row 909)
+ 11-9321: T-1200R (seed-fitment-2026-10-23 row 908)
+ 11-9321: T-1000R (seed-fitment-2026-10-23 row 907)
+ 11-9321: T-800R (seed-fitment-2026-10-23 row 906)
+ 11-9321: T-600R (seed-fitment-2026-10-23 row 905)
+ 11-9321: T-570R (seed-fitment-2026-10-23 row 884)
+ 11-9321: T-560R (seed-fitment-2026-10-23 row 883)
+ 11-9321: T-500R (seed-fitment-2026-10-23 row 882)
+ 11-9059: XDS (seed-fitment-2026-10-23 row 875)
+ 11-9059: Spectrum TS (seed-fitment-2026-10-23 row 874)
+ 11-9059: TS-300 (seed-fitment-2026-10-23 row 871)
+ 11-9059: TS-200 (seed-fitment-2026-10-23 row 870)
+ 11-6228: MD-300 (seed-fitment-2026-10-23 row 860)
+ 11-6228: MD-200 (seed-fitment-2026-10-23 row 859)
+ 11-6228: MD-100 (seed-fitment-2026-10-23 row 858)
+ 11-9321: XDS (seed-fitment-2026-10-23 row 857)
+ 11-9321: Spectrum TS (seed-fitment-2026-10-23 row 856)
+ 11-9321: TS-600 (seed-fitment-2026-10-23 row 855)
+ 11-9321: TS-500 (seed-fitment-2026-10-23 row 854)
+ 11-9321: TS-300 (seed-fitment-2026-10-23 row 853)
+ 11-9321: TS-200 (seed-fitment-2026-10-23 row 852)
+ 11-9321: MD-300 (seed-fitment-2026-10-23 row 851)
+ 11-9321: MD-200 (seed-fitment-2026-10-23 row 850)
+ 11-9321: MD-100 (seed-fitment-2026-10-23 row 849)
+ 11-6182: XDS (seed-fitment-2026-10-23 row 848)
+ 11-6182: TS-600 (seed-fitment-2026-10-23 row 846)
+ 11-6182: TS-500 (seed-fitment-2026-10-23 row 845)
+ 11-6182: TS-300 (seed-fitment-2026-10-23 row 844)
+ 11-6182: TS-200 (seed-fitment-2026-10-23 row 843)
+ 11-9321: MD-MT (seed-fitment-2026-10-23 row 805)
+ 11-9321: RD-MT (seed-fitment-2026-10-23 row 804)
+ 11-9321: RDB-II (seed-fitment-2026-10-23 row 803)
+ 11-9321: RD-II (seed-fitment-2026-10-23 row 800)
+ 11-9321: KD-II (seed-fitment-2026-10-23 row 799)
+ 11-9321: MD-II (seed-fitment-2026-10-23 row 798)
+ 11-6228: MD-MT (seed-fitment-2026-10-23 row 797)
+ 11-6228: RD-MT (seed-fitment-2026-10-23 row 796)
+ 11-6228: RDB-II (seed-fitment-2026-10-23 row 795)
+ 11-9341: MD-MT (seed-fitment-2026-10-23 row 749)
+ 11-9341: RD-MT (seed-fitment-2026-10-23 row 748)
+ 11-9341: RDB-II (seed-fitment-2026-10-23 row 747)
+ 11-9341: RD-II (seed-fitment-2026-10-23 row 744)
+ 11-9341: MD-II (seed-fitment-2026-10-23 row 742)
+ 11-9098: MD-MT (seed-fitment-2026-10-23 row 741)
+ 11-9098: RD-MT (seed-fitment-2026-10-23 row 740)
+ 11-9098: RDB-II (seed-fitment-2026-10-23 row 739)
+ 11-9098: Super TD-II (seed-fitment-2026-10-23 row 738)
+ 11-9098: TD-II (seed-fitment-2026-10-23 row 737)
+ 11-9098: RD-II (seed-fitment-2026-10-23 row 736)
+ 11-9098: KD-II (seed-fitment-2026-10-23 row 735)
+ 11-9098: MD-II (seed-fitment-2026-10-23 row 734)
+ 11-9970: C-600 (seed-fitment-2026-10-23 row 707)
+ 11-9966: C-700 (seed-fitment-2026-10-23 row 706)
+ 11-9965: S-600DE (seed-fitment-2026-10-23 row 699)
+ 11-9965: S-600M (seed-fitment-2026-10-23 row 698)
+ 11-9968: S-600 (seed-fitment-2026-10-23 row 673)
+ 11-9970: S-600 (seed-fitment-2026-10-23 row 668)
+ 11-9967: S-750i (seed-fitment-2026-10-23 row 662)
+ 11-9967: S-600 (seed-fitment-2026-10-23 row 658)
+ 11-9969: S-750i (seed-fitment-2026-10-23 row 657)
+ 11-9969: S-600 (seed-fitment-2026-10-23 row 653)
+ 11-9342: SL TCI (seed-fitment-2026-10-23 row 518)
+ 11-9342: SL-400 (seed-fitment-2026-10-23 row 517)
+ 11-9342: SL-300 (seed-fitment-2026-10-23 row 516)
+ 11-9342: SL-200 (seed-fitment-2026-10-23 row 515)
+ 11-9342: SL-100 (seed-fitment-2026-10-23 row 514)
+ 45-2324: TK486V (seed-fitment-2026-10-23 row 85)
+ 45-2324: TK486V (seed-fitment-2026-10-23 row 84)
+
+MODEL FAMILY QUESTION (LOADED - THE SOURCES LIST IT; YOUR CALL): 8
+ 11-7382 on SB-III G with TK482E - an older unit, but a Yanmar engine; Oct 30 you described the older pair with Isuzu engines (reefer-parts-master / All Parts row 8388)
+ 11-7382 on Spectrum Super-II TCI with TK486 - an older unit, but a Yanmar engine; Oct 30 you described the older pair with Isuzu engines (reefer-parts-master / All Parts row 8467)
+ 11-7382 on Super II 190Y with TK486 - an older unit, but a Yanmar engine; Oct 30 you described the older pair with Isuzu engines (reefer-parts-master / All Parts row 8470)
+ 11-7382 on Super II Whisper with TK486 - an older unit, but a Yanmar engine; Oct 30 you described the older pair with Isuzu engines (reefer-parts-master / All Parts row 8482)
+ 11-7382 on Super II Whisper Multi-Temp with TK486 - an older unit, but a Yanmar engine; Oct 30 you described the older pair with Isuzu engines (reefer-parts-master / All Parts row 8483)
+ 11-7400 on SB-III G with TK482E - an older unit, but a Yanmar engine; Oct 30 you described the older pair with Isuzu engines (reefer-parts-master / All Parts row 8514)
+ 11-7400 on Super II 190Y with TK486 - an older unit, but a Yanmar engine; Oct 30 you described the older pair with Isuzu engines (reefer-parts-master / All Parts row 8563)
+ 11-7400 on Super II Whisper with TK486 - an older unit, but a Yanmar engine; Oct 30 you described the older pair with Isuzu engines (reefer-parts-master / All Parts row 8572)
+
+THE DOCX AGAINST THE BY MODEL SHEET: 1
+ numbers in the docx: 50; in the sheet: 50; docx only: none; sheet only: none
