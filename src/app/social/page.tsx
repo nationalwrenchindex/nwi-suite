@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import AppNav from '@/components/layout/AppNav'
 import SocialClient from '@/components/social/SocialClient'
+import { isSocialOwner } from '@/lib/social/owner'
 
 export const metadata = { title: 'NWI Social — National Wrench Index Suite™' }
 
@@ -9,6 +10,8 @@ export default async function SocialPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/login')
+  // The founder's own marketing tool. Checked before anything is read.
+  if (!isSocialOwner(user.id)) redirect('/dashboard')
 
   const { data: profile } = await supabase
     .from('profiles')
@@ -17,9 +20,6 @@ export default async function SocialPage() {
     .single()
 
   if (!profile?.business_name) redirect('/onboarding')
-
-  const FOUNDER_ID = '4a8c046f-7db3-42bb-8422-fd47efb7678c'
-  if (user.id !== FOUNDER_ID) redirect('/dashboard')
 
   const today    = new Date()
   const todayStr = today.toISOString().slice(0, 10)

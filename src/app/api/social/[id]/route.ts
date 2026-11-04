@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { denyUnlessSocialOwner } from '@/lib/social/owner'
 
 // PATCH /api/social/[id]
 // Updates status ('posted' | 'skipped') or content for a social post.
@@ -10,6 +11,9 @@ export async function PATCH(
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // The founder's own marketing tool - refused to every other account (lib/social/owner).
+  const notOwner = denyUnlessSocialOwner(user.id)
+  if (notOwner) return notOwner
 
   const { id } = await params
 

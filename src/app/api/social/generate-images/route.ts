@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { denyUnlessSocialOwner } from '@/lib/social/owner'
 import { generatePostImage } from '@/lib/social/generate'
 import type { SocialPlatform } from '@/lib/social/generate'
 
@@ -14,6 +15,9 @@ export async function POST(request: NextRequest) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // The founder's own marketing tool - refused to every other account (lib/social/owner).
+  const notOwner = denyUnlessSocialOwner(user.id)
+  if (notOwner) return notOwner
 
   const openAiKey = process.env.OPENAI_API_KEY
   if (!openAiKey) {

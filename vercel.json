@@ -16,10 +16,6 @@
       "schedule": "0 2 * * *"
     },
     {
-      "path": "/api/cron/social-generate",
-      "schedule": "0 6 * * *"
-    },
-    {
       "path": "/api/cron/foreman-hours",
       "schedule": "*/5 * * * *"
     },

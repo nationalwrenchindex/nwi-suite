@@ -4,12 +4,15 @@ import { generateSocialPosts, generatePostImage } from '@/lib/social/generate'
 import type { SocialPlatform } from '@/lib/social/generate'
 import { isGeminiConfigured } from '@/lib/gemini/client'
 import { authorizeCron } from '@/lib/cron-auth'
+import { SOCIAL_OWNER_ID } from '@/lib/social/owner'
 
 export const dynamic = 'force-dynamic'
 
 // GET /api/cron/social-generate
-// Runs every morning at 6am UTC (see vercel.json).
-// Generates today's social posts for all active subscribers.
+// NO LONGER SCHEDULED: its vercel.json entry was removed on Nov 4, 2026.
+// It generated a batch of NWI's OWN marketing posts for every active or trialing
+// subscriber, which put them into subscriber accounts. Run by hand, it now writes for
+// the founder account only (lib/social/owner) and never for anyone else.
 // Protected by x-cron-secret header.
 export async function GET(request: NextRequest) {
   const denied = authorizeCron(request)
@@ -23,20 +26,8 @@ export async function GET(request: NextRequest) {
 
   const supabase = createServiceClient()
 
-  // Fetch all active subscribers
-  const { data: subs, error: subsErr } = await supabase
-    .from('subscriptions')
-    .select('user_id')
-    .in('status', ['active', 'trialing'])
-
-  if (subsErr) {
-    console.error('[social-cron] DB error:', subsErr.message)
-    return NextResponse.json({ error: subsErr.message }, { status: 500 })
-  }
-
-  if (!subs || subs.length === 0) {
-    return NextResponse.json({ generated: 0, skipped: 0, total: 0 })
-  }
+  // The founder account only - never the subscriber list.
+  const subs = [{ user_id: SOCIAL_OWNER_ID }]
 
   const todayStr = new Date().toISOString().slice(0, 10)
   let generated = 0
