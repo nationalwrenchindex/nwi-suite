@@ -828,4 +828,4 @@ UNION ALL SELECT 'part_supersession', 39, (SELECT count(*) FROM public.part_supe
 UNION ALL SELECT 'part_cross_reference', 168, (SELECT count(*) FROM public.part_cross_reference), 168
 UNION ALL SELECT 'engines', 52, (SELECT count(*) FROM public.engines), 52;
 
-ROLLBACK;
+COMMIT;
