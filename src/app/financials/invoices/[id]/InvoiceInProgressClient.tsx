@@ -622,6 +622,20 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
   const additionalPartsTotal = round2(additionalParts.reduce((s, i) => s + i.total, 0))
   const additionalLaborTotal = round2(additionalLabor.reduce((s, i) => s + i.subtotal, 0))
 
+  // THE ADDITIONS THE INVOICE ALREADY STORED. A save writes subtotal = baseline plus
+  // the additions, so invoice.subtotal holds them from then on; adding the current
+  // additions on top of it counted every one twice on reopen (INV-2026-0001 opened at
+  // 1,997.48 against a stored 998.74, and a second save would have written that).
+  // They come out first and the current ones go back in, as the extras do - nothing
+  // moves when nothing was edited. The converters write all three empty, so an
+  // invoice never saved has nothing to take out.
+  const storedSuppliesItems = round2((Array.isArray(invoice.shop_supplies) ? invoice.shop_supplies : []).reduce((s, i) => s + Number(i.total ?? 0), 0))
+  const storedAddedParts    = round2((Array.isArray(invoice.additional_parts) ? invoice.additional_parts : []).reduce((s, i) => s + Number(i.total ?? 0), 0))
+  const storedAddedLabor    = round2((Array.isArray(invoice.additional_labor) ? invoice.additional_labor : []).reduce((s, i) => s + Number(i.subtotal ?? 0), 0))
+  const storedAdditions     = round2(storedSuppliesItems + storedAddedParts + storedAddedLabor)
+  // The baseline: what the invoice was converted with, without the additions.
+  const baselineSubtotal    = round2(Number(originalSubtotal ?? 0) - storedAdditions)
+
   // Detailer: service lines and adjustments drive the base subtotal (not originalSubtotal)
   // Sum cents first to avoid floating-point accumulation, then divide once
   const serviceLinesTotal = isDetailer ? serviceLines.reduce((s, sl) => s + sl.price_cents, 0) / 100 : 0
@@ -723,11 +737,11 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
     // first so a recompute replaces them rather than stacking on top of them.
     : callDelta !== 0
       ? round2(
-          originalSubtotal + shopSuppliesTotal + additionalPartsTotal + additionalLaborTotal
+          baselineSubtotal + shopSuppliesTotal + additionalPartsTotal + additionalLaborTotal
           - storedExtras.total + extrasResult.total + callDelta,
         )
       : round2(
-          originalSubtotal + shopSuppliesTotal + additionalPartsTotal + additionalLaborTotal
+          baselineSubtotal + shopSuppliesTotal + additionalPartsTotal + additionalLaborTotal
           - storedExtras.total + extrasResult.total,
         )
   // ── Splitting the tax on an in-progress invoice ────────────────────────────
@@ -757,11 +771,17 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
   // subtotal. Leaving the mileage in made every work-order invoice with mileage fail
   // this check and fall to the single-rate path below - which taxed the mileage.
   const untaxedStored = round2(serviceCallBuckets(storedCall).untaxed + storedExtras.mileage.amount)
+  // A STORED breakdown was written by the same save that stored the additions, so its
+  // bases hold them, and it is checked against the stored subtotal as it always was.
+  // The quote's bases never held them: they are checked against the baseline without
+  // the additions. That used to fail on any saved quote invoice with additions, which
+  // sent it to the single-rate path.
+  const subtotalForSplit = storedTax ? Number(originalSubtotal ?? 0) : baselineSubtotal
   const baselineReconciles =
     baseParts != null && baseLabor != null &&
     Math.abs((baseParts + baseLabor) - (untaxedStored > 0
-      ? round2(Number(originalSubtotal ?? 0) - untaxedStored)
-      : Number(originalSubtotal ?? 0))) < 0.02
+      ? round2(subtotalForSplit - untaxedStored)
+      : subtotalForSplit)) < 0.02
 
   // ── THE APPROVED FIGURE IS CARRIED, NOT RE-DERIVED ─────────────────────────
   //
@@ -788,13 +808,16 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
   const storedExtraBuckets = extrasTaxBuckets(storedExtras)
   const extraBuckets       = extrasTaxBuckets(extrasResult)
 
+  // The stored breakdown already taxed the stored additions, so only the change since
+  // is priced here; the quote's bases never held them, so all of them are.
+  const additionsTaxed = storedTax ? { parts: round2(storedSuppliesItems + storedAddedParts), labor: storedAddedLabor } : { parts: 0, labor: 0 }
   const addedParts = round2(
-    shopSuppliesTotal + additionalPartsTotal - storedExtraBuckets.parts + extraBuckets.parts,
+    shopSuppliesTotal + additionalPartsTotal - additionsTaxed.parts - storedExtraBuckets.parts + extraBuckets.parts,
   )
   const addedLabor = callLaborDelta !== 0
-    ? round2(additionalLaborTotal - storedExtraBuckets.labor + extraBuckets.labor + callLaborDelta)
+    ? round2(additionalLaborTotal - additionsTaxed.labor - storedExtraBuckets.labor + extraBuckets.labor + callLaborDelta)
     : round2(
-        additionalLaborTotal - storedExtraBuckets.labor + extraBuckets.labor,
+        additionalLaborTotal - additionsTaxed.labor - storedExtraBuckets.labor + extraBuckets.labor,
       )
 
   // What was agreed. A work-order invoice has it stored; a quote-sourced one is priced
