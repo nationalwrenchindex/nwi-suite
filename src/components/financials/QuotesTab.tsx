@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useExtrasSettingsState } from '@/lib/use-extras-settings'
 import {
-  computeExtras, extrasColumns, extrasDisplayRows, extrasDelta, extrasAgree,
+  computeExtras, extrasColumns, extrasDisplayRows, extrasDelta, extrasAgree, extrasFromDocument,
 } from '@/lib/billable-extras'
 import { ExtrasInputs } from '@/components/shared/ExtrasFields'
 import { useTaxSettings } from '@/lib/use-tax-settings'
@@ -1836,6 +1836,19 @@ function QuoteDetailModal({
                       )}
                     </>
                   )}
+                  {/* Travel, mileage and shop supplies AS STORED - a sent quote prints every
+                      charge in its total, read and never recomputed. This view used to
+                      jump from the labor to the tax, so a quote with drive time showed a
+                      total its rows did not add up to. A zero extra prints no row. */}
+                  {extrasDisplayRows(extrasFromDocument(initialQuote as unknown as Record<string, unknown>)).map(r => (
+                    <div key={r.key} className="flex justify-between text-sm" data-testid={`stored-extra-${r.key}`}>
+                      <span className="text-white/60">
+                        {r.label}
+                        {r.detail && <span className="text-white/30 text-xs ml-1.5">{r.detail}</span>}
+                      </span>
+                      <span className="text-white">{fmt(r.amount)}</span>
+                    </div>
+                  ))}
                   {(() => {
                     const d = storedDiscount(initialQuote as unknown as Record<string, unknown>)
                     return d ? <DiscountRows discount={d} subtotalBefore={d.subtotal_before} /> : null

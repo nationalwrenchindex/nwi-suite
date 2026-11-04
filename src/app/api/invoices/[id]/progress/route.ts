@@ -71,6 +71,24 @@ export async function PATCH(
   if (body.tax_breakdown    !== undefined) updates.tax_breakdown    = body.tax_breakdown ?? null
   // Migration 142. Shop-only; nothing customer-facing reads it.
   if (body.internal_notes   !== undefined) updates.internal_notes   = (body.internal_notes as string | null)?.trim() || null
+  // ── THE EXTRAS (migration 142) ──
+  // THE BUG THIS CLOSES: the editor has always sent drive time, mileage and shop
+  // supplies, and this route kept none of them - so a save stored a subtotal and total
+  // that included the drive time while the invoice recorded no drive time at all, and
+  // reopening it lost the hours. Written only when sent; the editor sends them only
+  // when they changed. Dropped with the rest of 142 by the retry below on a database
+  // without it.
+  for (const k of [
+    'travel_hours', 'travel_rate', 'travel_amount', 'mileage_miles', 'mileage_rate', 'mileage_amount',
+    'shop_supplies_percent_applied', 'shop_supplies_cap_applied', 'shop_supplies_fee',
+  ] as const) {
+    if (body[k] === undefined) continue
+    const v = body[k]
+    if (v !== null && !Number.isFinite(Number(v))) return NextResponse.json({ error: `${k} must be a number` }, { status: 422 })
+    if (v !== null && Number(v) < 0) return NextResponse.json({ error: `${k} cannot be negative` }, { status: 422 })
+    updates[k] = v === null ? null : Number(v)
+  }
+
   // The service call fee (migration 180) and how it is taxed - only when sent.
   const serviceCall = serviceCallFromBody(body)
   if (serviceCall) Object.assign(updates, serviceCall)

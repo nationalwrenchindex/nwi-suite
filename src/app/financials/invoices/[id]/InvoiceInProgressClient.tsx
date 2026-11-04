@@ -649,10 +649,18 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
   // fee is suppressed - the customer has already been charged for supplies once and
   // must not be charged again when somebody reopens the document. This is what makes
   // the retirement safe for invoices that already exist rather than only for new ones.
-  const hasLegacySupplies = legacySupplyItems.length > 0 && shopSuppliesTotal > 0
-  const extrasSettingsInForce = hasLegacySupplies
-    ? { ...extrasSettings, billShopSupplies: false }
-    : extrasSettings
+  // The rule below covers it: no percentage the invoice did not record is ever applied.
+  // SHOP SUPPLIES ON AN INVOICE: ONLY AT THE PERCENTAGE IT RECORDED. An invoice is an
+  // existing document - it came from a quote or a work order, which recorded whether
+  // and at what percentage it bills supplies - so the shop's current percentage never
+  // reaches it. Reading Settings here would put a fee on an invoice that never had
+  // one the moment it is opened (eight live ones on Nov 4, once Settings were read
+  // correctly). A recorded percentage still bills: computeExtras treats it as proof.
+  // Travel and mileage take the shop's current rates only for hours or miles typed
+  // here, and a recorded rate wins.
+  const extrasSettingsInForce = {
+    ...extrasSettings, billShopSupplies: false, shopSuppliesPercent: null, shopSuppliesCap: null,
+  }
 
   const approvedPartsBase = partsBaseFromLines(invoice.line_items)
   const partsOnDocument   = round2(approvedPartsBase + additionalPartsTotal + shopSuppliesTotal)
@@ -700,6 +708,14 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
   // Written when there is one, or to clear one the invoice had.
   const callPayload = callAvailable && (callFee > 0 || storedCall.fee > 0) ? serviceCallColumns(callFee, callTax) : {}
 
+  // The extras columns, written only when something about them changed - hours, miles
+  // or an amount - so saving an invoice nobody touched writes exactly what it had.
+  const extrasChanged =
+    extrasResult.travel.input  !== storedExtras.travel.input  || extrasResult.travel.amount  !== storedExtras.travel.amount ||
+    extrasResult.mileage.input !== storedExtras.mileage.input || extrasResult.mileage.amount !== storedExtras.mileage.amount ||
+    extrasResult.shopSupplies.amount !== storedExtras.shopSupplies.amount
+  const extrasPayload = extrasChanged ? extrasColumns(extrasResult) : {}
+
   // Running total
   const newSubtotal  = isDetailer
     ? round2(serviceLinesTotal + adjLinesTotal + shopSuppliesTotal + additionalPartsTotal + additionalLaborTotal)
@@ -736,12 +752,15 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
   const storedTax  = storedDisc ? storedDisc.pre_tax_breakdown : parseBreakdown(invoice.tax_breakdown)
   const baseParts  = storedTax?.parts?.base ?? (sq ? quotedPartsSubtotal : null)
   const baseLabor  = storedTax?.labor?.base ?? (sq ? quotedLaborSubtotal : null)
-  // A service call fee recorded as untaxed is in the subtotal and in no tax bucket.
-  const untaxedStoredCall = serviceCallBuckets(storedCall).untaxed
+  // MILEAGE IS IN THE SUBTOTAL AND IN NO TAX BUCKET, and so is a service call fee
+  // recorded as untaxed. They come out before the split is checked against the
+  // subtotal. Leaving the mileage in made every work-order invoice with mileage fail
+  // this check and fall to the single-rate path below - which taxed the mileage.
+  const untaxedStored = round2(serviceCallBuckets(storedCall).untaxed + storedExtras.mileage.amount)
   const baselineReconciles =
     baseParts != null && baseLabor != null &&
-    Math.abs((baseParts + baseLabor) - (untaxedStoredCall > 0
-      ? round2(Number(originalSubtotal ?? 0) - untaxedStoredCall)
+    Math.abs((baseParts + baseLabor) - (untaxedStored > 0
+      ? round2(Number(originalSubtotal ?? 0) - untaxedStored)
       : Number(originalSubtotal ?? 0))) < 0.02
 
   // ── THE APPROVED FIGURE IS CARRIED, NOT RE-DERIVED ─────────────────────────
@@ -797,7 +816,12 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
     ? { breakdown: mergeBreakdowns([approvedBreakdown, addedBreakdown]) }
     : null
 
-  const preDiscountTax = tax ? breakdownTaxTotal(tax.breakdown) : round2(newSubtotal * taxRate)
+  // The single-rate path (no split known) taxes the subtotal - never the mileage, and
+  // never a service call fee recorded as untaxed. Mileage is not taxed, in any state.
+  const untaxedNow = isDetailer ? 0 : round2(extrasResult.mileage.amount + serviceCallBuckets(callNow).untaxed)
+  const preDiscountTax = tax ? breakdownTaxTotal(tax.breakdown)
+    : untaxedNow > 0 ? round2(round2(newSubtotal - untaxedNow) * taxRate)
+    : round2(newSubtotal * taxRate)
 
   // ── THE DISCOUNT (lib/document-discount, migration 165) ────────────────────
   // Applied LAST, to the approved lines plus the lines added since: the labour lines
@@ -941,8 +965,9 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
           payment_terms:    paymentTerms || null,
           po_number:        poNumber || null,
           shop_supplies:    shopSupplies,
-          // Computed, stored with the rate in force so a reopen cannot re-price it.
-          ...extrasColumns(extrasResult),
+          // Computed, stored with the rate in force so a reopen cannot re-price it -
+          // only when they changed (extrasPayload).
+          ...extrasPayload,
           additional_parts: additionalParts,
           additional_labor: additionalLabor,
           ...(isDetailer ? { service_lines: serviceLines, adjustments: adjLines } : {}),
@@ -990,8 +1015,9 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
           payment_terms:    paymentTerms || null,
           po_number:        poNumber || null,
           shop_supplies:    shopSupplies,
-          // Computed, stored with the rate in force so a reopen cannot re-price it.
-          ...extrasColumns(extrasResult),
+          // Computed, stored with the rate in force so a reopen cannot re-price it -
+          // only when they changed (extrasPayload).
+          ...extrasPayload,
           additional_parts: additionalParts,
           additional_labor: additionalLabor,
           ...(isDetailer ? { service_lines: serviceLines, adjustments: adjLines } : {}),

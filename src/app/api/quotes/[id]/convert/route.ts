@@ -87,6 +87,14 @@ export async function POST(
   // labor base already holds the fee - and copied with how it was taxed. None on a quote
   // without one, so that quote converts exactly as before.
   const call = serviceCallOf(q)
+  // THE EXTRAS ARE IN THE SUBTOTAL TOO. This subtotal was the lines alone, so a quote
+  // with drive time, mileage or supplies converted into an invoice whose subtotal left
+  // them out while its total held them - and the invoice editor, which carries the
+  // subtotal as its baseline with the extras inside it, then dropped them from the
+  // running total. As the work-order converter has always done: the stored amounts,
+  // copied, never recomputed. A quote without extras converts exactly as before.
+  const quoteExtras = Math.round((Number(quote.travel_amount ?? 0) + Number(quote.mileage_amount ?? 0) + Number(quote.shop_supplies_fee ?? 0)) * 100) / 100
+  const addedToLines = Math.round((call.fee + quoteExtras) * 100) / 100
   const invoiceInsert = {
     user_id:         user.id,
     invoice_number,
@@ -97,8 +105,8 @@ export async function POST(
     job_category:    quote.job_category ?? null,
     job_subtype:     quote.job_subtype  ?? null,
     line_items:      quote.line_items   ?? [],
-    subtotal:        call.fee > 0
-      ? Number(quote.parts_subtotal ?? 0) * (1 + Number(quote.parts_markup_percent ?? 0) / 100) + Number(quote.labor_subtotal ?? 0) + call.fee
+    subtotal:        addedToLines > 0
+      ? Number(quote.parts_subtotal ?? 0) * (1 + Number(quote.parts_markup_percent ?? 0) / 100) + Number(quote.labor_subtotal ?? 0) + addedToLines
       : Number(quote.parts_subtotal ?? 0) * (1 + Number(quote.parts_markup_percent ?? 0) / 100) + Number(quote.labor_subtotal ?? 0),
     tax_rate:        Number(quote.tax_percent ?? 0) / 100,
     tax_amount:      Number(quote.tax_amount   ?? 0),

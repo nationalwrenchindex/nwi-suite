@@ -222,7 +222,9 @@ async function main() {
   ok(src.includes('computeExtras('), 'the editor computes the extras')
   ok(src.includes('partsBaseFromLines('), 'from a clean parts base')
   ok(src.includes('extrasDisplayRows('), 'and renders them as their own rows')
-  ok(src.includes('...extrasColumns(extrasResult)'), 'and stores the computed columns on save')
+  // Nov 4: stored only when they changed, so an untouched save writes what it had.
+  ok(src.includes('extrasChanged ? extrasColumns(extrasResult) : {}') && (src.match(/...extrasPayload,/g) ?? []).length === 2,
+    'and stores the computed columns on save (both saves), whenever they changed')
   ok(/- storedExtras\.total \+ extrasResult\.total/.test(src),
     'the stored extras are removed before the recomputed ones are added, so nothing double-counts')
   ok(/- storedExtraBuckets\.parts \+ extraBuckets\.parts/.test(src),
@@ -254,8 +256,10 @@ async function main() {
   // THE GUARD that makes the retirement safe on documents that already exist.
   ok(/billShopSupplies: false/.test(editor),
     'the percentage fee is SUPPRESSED when an invoice carries itemised supplies')
-  ok(/const hasLegacySupplies = legacySupplyItems.length > 0 && shopSuppliesTotal > 0/.test(editor),
-    'and the condition requires real money, not just an empty item row')
+  // Nov 4: stricter than the itemised-only guard - an invoice never takes the shop's
+  // percentage at all, only one it recorded, so an itemised invoice cannot gain one.
+  ok(/billShopSupplies: false, shopSuppliesPercent: null, shopSuppliesCap: null/.test(editor),
+    'and no invoice takes the shop percentage it never recorded - itemised or not')
 
   // The three existing invoices must still total what was sent.
   ok(editor.includes('shopSuppliesTotal + additionalPartsTotal'),
