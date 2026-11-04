@@ -22,6 +22,9 @@ import { documentTaxSettings } from '@/lib/tax'
 import { money } from '@/lib/format'
 import NewQuoteForm from './NewQuoteForm'
 import { deepLinkTarget, urlWithoutQuote } from '@/lib/quote-deep-link'
+import { useServiceCallSettingsState } from '@/lib/use-service-call-settings'
+import { hasServiceCallColumn, serviceCallOf, serviceCallRow } from '@/lib/service-call'
+import ServiceCallField from '@/components/shared/ServiceCallField'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -599,6 +602,15 @@ function QuoteDetailModal({
   const [initDiscount] = useState<DiscountDraft>(() =>
     draftFrom(storedDiscount(initialQuote as unknown as Record<string, unknown>)))
   const [discountDraft, setDiscountDraft] = useState<DiscountDraft>(initDiscount)
+  // THE SERVICE CALL FEE (migration 180): the amount this quote recorded, editable here.
+  // Its tax treatment is the quote's own record; a fee first added here takes the shop's.
+  // Never on a detailer's quote, and not offered on a database without the column.
+  const storedCall    = serviceCallOf(initialQuote as unknown as Record<string, unknown>)
+  const callAvailable = !isDetailer && hasServiceCallColumn(initialQuote as unknown as Record<string, unknown>)
+  const callState     = useServiceCallSettingsState()
+  const [callFee, setCallFee] = useState(storedCall.fee)
+  const callTax  = storedCall.fee > 0 ? storedCall.tax : callState.settings.tax
+  const showCall = callAvailable && (storedCall.fee > 0 || callFee > 0 || callState.settings.bill)
 
   // ── Detailer edit state ────────────────────────────────────────────────────
   const [serviceLines,   setServiceLines]   = useState<EditServiceLine[]>(initServiceLines)
@@ -681,11 +693,11 @@ function QuoteDetailModal({
   const [savedHash, setSavedHash] = useState(() =>
     isDetailer
       ? makeDetHash(initServiceLines, initAdjustments, initTaxPct, initNotes, initCustName, initCustPhone, initialQuote.vehicle_id)
-      : makeHash(initialItems, initLaborHours, initLaborRate, initMarkup, initTaxPct, initNotes, initCustName, initCustPhone, initialQuote.vehicle_id, discountKey(initDiscount))
+      : makeHash(initialItems, initLaborHours, initLaborRate, initMarkup, initTaxPct, initNotes, initCustName, initCustPhone, initialQuote.vehicle_id, discountKey(initDiscount) + '|sc' + storedCall.fee)
   )
   const currentHash = isDetailer
     ? makeDetHash(serviceLines, adjustments, taxPct, notes, custName, custPhone, vehicleId)
-    : makeHash(items, laborHours, laborRate, markupPct, taxPct, notes, custName, custPhone, vehicleId, discountKey(discountDraft))
+    : makeHash(items, laborHours, laborRate, markupPct, taxPct, notes, custName, custPhone, vehicleId, discountKey(discountDraft) + '|sc' + callFee)
   const isDirty = isDraft && currentHash !== savedHash
 
   // Live status for polling-driven updates
@@ -723,8 +735,10 @@ function QuoteDetailModal({
     extrasSettings: docExtras.settings,
     extras:         { ...docExtras.input, travelHours, mileageMiles },
     discount:       discountFromDraft(discountDraft),
+    serviceCall:    callAvailable ? { fee: callFee, tax: callTax } : null,
     stored:         initialQuote as unknown as Record<string, unknown>,
   })
+  const callRow = docMoney ? serviceCallRow(docMoney.serviceCall) : null
 
   const t                   = computeTotals({ ...lineInputs, items: [], laborHours: 0, laborRate: 0 })
   const partsBase           = docMoney ? docMoney.partsBase     : t.partsBase
@@ -1699,6 +1713,12 @@ function QuoteDetailModal({
                           <span className="text-white">{fmt(laborSubtotal)}</span>
                         </div>
                       )}
+                      {callRow && (
+                        <div className="flex justify-between text-sm" data-testid="service-call-row">
+                          <span className="text-white/60">{callRow.label}</span>
+                          <span className="text-white">{fmt(callRow.amount)}</span>
+                        </div>
+                      )}
                     </>
                   )}
                   {/* Travel, mileage and shop supplies. A zero extra prints no row. */}
@@ -1722,6 +1742,11 @@ function QuoteDetailModal({
                         onMileageMiles={setMileageMiles}
                         laborRate={laborRate}
                       />
+                    </div>
+                  )}
+                  {showCall && (
+                    <div className="pt-2">
+                      <ServiceCallField fee={callFee} tax={callTax} onFee={setCallFee} />
                     </div>
                   )}
                   {!isDetailer && docMoney && (
@@ -1801,6 +1826,12 @@ function QuoteDetailModal({
                               : ''}
                           </span>
                           <span className="text-white">{fmt(initialQuote.labor_subtotal)}</span>
+                        </div>
+                      )}
+                      {storedCall.fee > 0 && (
+                        <div className="flex justify-between text-sm" data-testid="service-call-row">
+                          <span className="text-white/60">Service Call Fee</span>
+                          <span className="text-white">{fmt(storedCall.fee)}</span>
                         </div>
                       )}
                     </>

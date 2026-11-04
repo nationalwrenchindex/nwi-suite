@@ -37,6 +37,7 @@ import { BrandFooter } from '@/components/BrandHeader'
 import { publicDocumentMetadata } from '@/lib/public-metadata'
 import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
 import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
+import { serviceCallOf } from '@/lib/service-call'
 import { parseTermsSnapshot, termsBlockRows } from '@/lib/document-terms'
 import { discountLabel, parseDiscount } from '@/lib/document-discount'
 
@@ -142,6 +143,11 @@ export default async function PublicQuotePage(
   const quoteExtraRows = extrasDisplayRows(
     extrasFromDocument(q as unknown as Record<string, unknown>),
   )
+  // The service call fee (migration 180) as stored, on its own line. Its own read, so a
+  // database without 180 loses the row, never the page.
+  const { data: callRow } = await sc
+    .from('quotes').select('service_call_fee, service_call_tax').eq('id', q.id).maybeSingle()
+  const quoteCallFee = serviceCallOf(callRow as Record<string, unknown> | null).fee
 
   const customerName = q.customer
     ? `${q.customer.first_name ?? ''} ${q.customer.last_name ?? ''}`.trim()
@@ -403,6 +409,12 @@ export default async function PublicQuotePage(
           {/* Travel, mileage and shop supplies, each on its own labelled line. These
               are part of what the customer is being asked to approve, so they belong
               above the tax rather than hidden inside the parts figure. */}
+          {quoteCallFee > 0 && (
+            <div className="flex justify-between text-sm" data-testid="service-call-row">
+              <span className="text-white/50">Service Call Fee</span>
+              <span className="text-white">{fmt(quoteCallFee)}</span>
+            </div>
+          )}
           {quoteExtraRows.map(r => (
             <div key={r.key} className="flex justify-between text-sm">
               <span className="text-white/50">

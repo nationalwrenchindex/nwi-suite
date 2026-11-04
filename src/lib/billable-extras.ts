@@ -45,6 +45,17 @@
 
 import type { TaxBreakdown, TaxSettings } from '@/lib/tax'
 import { computeTax } from '@/lib/tax'
+import { serviceCallBuckets, type ServiceCall } from '@/lib/service-call'
+
+// THE SERVICE CALL FEE (lib/service-call) rides with the extras on LD: the optional
+// `serviceCall` below puts it in the same tax call as the drive time (labor bucket,
+// unless recorded untaxed) and in the same subtotal. Every addition is made only when a
+// fee is present, so a document without one is computed exactly as before. HD's forms
+// carry their fee as a document fee instead and never pass it here.
+function callBuckets(sc: ServiceCall | null | undefined): { labor: number; untaxed: number; total: number } {
+  const b = serviceCallBuckets(sc)
+  return { ...b, total: round2(b.labor + b.untaxed) }
+}
 
 export function round2(n: number): number {
   return Math.round(n * 100) / 100
@@ -312,11 +323,14 @@ export function extrasTaxBuckets(e: ExtrasResult): ExtrasTaxBuckets {
 export function extrasTax(
   e: ExtrasResult,
   settings: TaxSettings | null,
+  serviceCall?: ServiceCall | null,
 ): { breakdown: TaxBreakdown | null; taxAmount: number } {
   if (!settings) return { breakdown: null, taxAmount: 0 }
   const b = extrasTaxBuckets(e)
-  if (b.parts === 0 && b.labor === 0) return { breakdown: null, taxAmount: 0 }
-  const t = computeTax({ parts: b.parts, labor: b.labor }, settings)
+  const call = callBuckets(serviceCall)
+  const labor = call.labor > 0 ? round2(b.labor + call.labor) : b.labor
+  if (b.parts === 0 && labor === 0) return { breakdown: null, taxAmount: 0 }
+  const t = computeTax({ parts: b.parts, labor }, settings)
   return { breakdown: t.breakdown, taxAmount: t.taxAmount }
 }
 
@@ -335,9 +349,12 @@ export interface ExtrasDelta {
   breakdown:     TaxBreakdown | null
 }
 
-export function extrasDelta(e: ExtrasResult, settings: TaxSettings | null): ExtrasDelta {
-  const { breakdown, taxAmount } = extrasTax(e, settings)
-  const subtotalDelta = round2(e.travel.amount + e.mileage.amount + e.shopSupplies.amount)
+export function extrasDelta(e: ExtrasResult, settings: TaxSettings | null, serviceCall?: ServiceCall | null): ExtrasDelta {
+  const { breakdown, taxAmount } = extrasTax(e, settings, serviceCall)
+  const call = callBuckets(serviceCall).total
+  const subtotalDelta = call > 0
+    ? round2(e.travel.amount + e.mileage.amount + e.shopSupplies.amount + call)
+    : round2(e.travel.amount + e.mileage.amount + e.shopSupplies.amount)
   return {
     subtotalDelta,
     taxDelta:   taxAmount,
@@ -357,13 +374,18 @@ export function extrasAgree(
   e: ExtrasResult,
   subtotalIncludingExtras: number,
   subtotalExcludingExtras: number,
+  /** A service call fee the caller put in the same subtotal (LD). */
+  serviceCall?: ServiceCall | null,
 ): string | null {
-  const stated   = round2(e.travel.amount + e.mileage.amount + e.shopSupplies.amount)
+  const call     = callBuckets(serviceCall).total
+  const stated   = call > 0
+    ? round2(e.travel.amount + e.mileage.amount + e.shopSupplies.amount + call)
+    : round2(e.travel.amount + e.mileage.amount + e.shopSupplies.amount)
   const totalled = round2(subtotalIncludingExtras - subtotalExcludingExtras)
   if (stated === totalled) return null
   return `extras stated ${stated.toFixed(2)} but only ${totalled.toFixed(2)} reached the subtotal ` +
     `(travel ${e.travel.amount.toFixed(2)}, mileage ${e.mileage.amount.toFixed(2)}, ` +
-    `supplies ${e.shopSupplies.amount.toFixed(2)})`
+    `supplies ${e.shopSupplies.amount.toFixed(2)}${call > 0 ? `, service call ${call.toFixed(2)}` : ''})`
 }
 
 /**
@@ -377,16 +399,24 @@ export function totalsWithExtras(
   extras: ExtrasResult,
   settings: TaxSettings | null,
   fallbackTaxPercent = 0,
+  /** LD's service call fee, taxed with the drive time (lib/service-call). */
+  serviceCall?: ServiceCall | null,
 ): { subtotal: number; taxAmount: number; grandTotal: number; taxBreakdown: TaxBreakdown | null } {
   const b = extrasTaxBuckets(extras)
+  const call = callBuckets(serviceCall)
   const parts = round2(base.parts + b.parts)
-  const labor = round2(base.labor + b.labor)
+  const labor = call.labor > 0 ? round2(base.labor + b.labor + call.labor) : round2(base.labor + b.labor)
   // b.untaxed is mileage: in the subtotal, never in a taxed bucket. Leaving it out
-  // here would quietly shorten every total by the mileage charge.
-  const subtotal = round2(parts + labor + b.untaxed)
+  // here would quietly shorten every total by the mileage charge. An untaxed service
+  // call fee is the same.
+  const subtotal = call.untaxed > 0 ? round2(parts + labor + b.untaxed + call.untaxed) : round2(parts + labor + b.untaxed)
 
   if (!settings) {
-    const taxAmount = round2(subtotal * (fallbackTaxPercent / 100))
+    // The single-rate fallback taxes the whole subtotal as it always has, less a fee
+    // recorded as never taxed.
+    const taxAmount = call.untaxed > 0
+      ? round2(round2(subtotal - call.untaxed) * (fallbackTaxPercent / 100))
+      : round2(subtotal * (fallbackTaxPercent / 100))
     return { subtotal, taxAmount, grandTotal: round2(subtotal + taxAmount), taxBreakdown: null }
   }
 

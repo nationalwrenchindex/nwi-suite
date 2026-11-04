@@ -22,6 +22,7 @@ import { carriedTerms } from '@/lib/document-terms'
 import {
   extrasFromDocument, extrasDelta, extrasAgree, extrasColumns, partsBaseFromLines,
 } from '@/lib/billable-extras'
+import { serviceCallBuckets, serviceCallColumns, serviceCallOf, writeToleratingServiceCall } from '@/lib/service-call'
 
 export const dynamic = 'force-dynamic'
 
@@ -153,7 +154,11 @@ export async function POST(
   // computeTax, and mergeBreakdowns SUMS already-rounded amounts rather than
   // re-deriving one figure from a combined base.
   const parentExtras = extrasFromDocument(wo as unknown as Record<string, unknown>)
-  const extras       = extrasDelta(parentExtras, taxSettings)
+  // THE SERVICE CALL FEE (migration 180), as the work order recorded it, folded in with
+  // the extras: taxed in the same call as the drive time unless recorded untaxed, and
+  // in the subtotal either way. None on a work order without one, so nothing differs.
+  const parentCall   = serviceCallOf(wo as unknown as Record<string, unknown>)
+  const extras       = extrasDelta(parentExtras, taxSettings, parentCall)
 
   // The parent's own parts and labour, read off its LINE ITEMS, with tax on those alone
   // and the extras deliberately excluded - the fold below adds those for both modes.
@@ -233,13 +238,14 @@ export async function POST(
     parentExtras,
     Number(money.subtotal),
     Number(segmentMoney.subtotal),
+    parentCall,
   )
   if (disagreement) {
     console.error('[convert] REFUSING TO BILL - ' + disagreement)
     return NextResponse.json(
       {
-        error: 'This work order could not be billed: its travel, mileage or shop supplies ' +
-               'do not add up to its total. Nothing has been created. Please report this.',
+        error: 'This work order could not be billed: its travel, mileage, shop supplies or ' +
+               'service call fee do not add up to its total. Nothing has been created. Please report this.',
         detail: disagreement,
       },
       { status: 500 },
@@ -259,8 +265,9 @@ export async function POST(
   const breakdownBases = bd
     ? round2((bd.parts?.base ?? 0) + (bd.labor?.base ?? 0) + (bd.services?.base ?? 0))
     : 0
-  // Mileage is in the subtotal and in no bucket, so it is excluded from the comparison.
-  const taxableSubtotal = round2(Number(money.subtotal) - parentExtras.mileage.amount)
+  // Mileage is in the subtotal and in no bucket, so it is excluded from the comparison;
+  // so is a service call fee recorded as untaxed.
+  const taxableSubtotal = round2(Number(money.subtotal) - parentExtras.mileage.amount - serviceCallBuckets(parentCall).untaxed)
   const breakdownIsComplete = !!bd && Math.abs(breakdownBases - taxableSubtotal) <= 0.02
 
   if (breakdownIsComplete && Math.abs(breakdownTax - Number(money.tax_amount)) > 0.005) {
@@ -394,6 +401,9 @@ export async function POST(
     shop_supplies_percent_applied: wo.shop_supplies_percent_applied ?? null,
     shop_supplies_cap_applied:     wo.shop_supplies_cap_applied     ?? null,
     shop_supplies_fee:             wo.shop_supplies_fee             ?? 0,
+    // The service call fee and how it was taxed, copied. Only when there is one, so an
+    // invoice without one is written exactly as before (and before 180 is applied).
+    ...(parentCall.fee > 0 ? serviceCallColumns(parentCall.fee, parentCall.tax) : {}),
 
     ...carriedTerms(sourceQuote),
   }
@@ -403,7 +413,7 @@ export async function POST(
     Record<string, unknown>
   >(
     invoiceInsert as unknown as Record<string, unknown>,
-    row => supabase.from('invoices').insert(row).select(INVOICE_SELECT).single(),
+    row => writeToleratingServiceCall(row, r => supabase.from('invoices').insert(r).select(INVOICE_SELECT).single()),
   )
 
   if (insertErr && isMissing165Column(insertErr)) {

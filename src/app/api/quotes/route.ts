@@ -5,6 +5,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { isMissingTaxBreakdownColumn, withoutTaxBreakdown } from '@/lib/tax'
 import { discountForWrite, isMissing165Column, MIGRATION_165_MESSAGE } from '@/lib/document-discount'
 import { createClient } from '@/lib/supabase/server'
+import { isMissingServiceCallColumn, serviceCallFee, serviceCallFromBody, MIGRATION_180_MESSAGE } from '@/lib/service-call'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 async function genQuoteNumber(supabase: SupabaseClient, userId: string): Promise<string> {
@@ -122,6 +123,8 @@ export async function POST(req: NextRequest) {
     const n = num(body[key])
     if (n !== null) money[key] = n
   }
+  // The service call fee (migration 180) and how it is taxed - only when sent.
+  const serviceCall = serviceCallFromBody(body as Record<string, unknown>)
   if (typeof money.grand_total === 'number' && money.grand_total < 0) {
     return NextResponse.json({ error: 'Grand total cannot be negative.' }, { status: 422 })
   }
@@ -206,6 +209,7 @@ export async function POST(req: NextRequest) {
     notes:        notes       ? String(notes)        : null,
     line_items:   lineItems ?? [],
     ...money,
+    ...(serviceCall ?? {}),
   }
   if (taxBreakdown) insertData.tax_breakdown = taxBreakdown
   if (!discount.skip && discount.value) insertData.discount = discount.value
@@ -224,6 +228,18 @@ export async function POST(req: NextRequest) {
     .insert(insertData)
     .select('*')
     .single()
+
+  // Before 180: a quote WITH a service call fee is refused rather than saved with a
+  // total that holds a fee it does not record; one without is retried without the columns.
+  if (error && isMissingServiceCallColumn(error)) {
+    if (serviceCallFee(insertData) > 0) return NextResponse.json({ error: MIGRATION_180_MESSAGE }, { status: 409 })
+    delete insertData.service_call_fee; delete insertData.service_call_tax
+    ;({ data: quote, error } = await supabase
+      .from('quotes')
+      .insert(insertData)
+      .select('*')
+      .single())
+  }
 
   // tax_breakdown is a display column; the quote is complete without it. Retry rather
   // than lose a quote a tech just typed if 140 has not reached this database.

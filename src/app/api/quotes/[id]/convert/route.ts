@@ -4,6 +4,7 @@ import { parseDiscount } from '@/lib/document-discount'
 import { createClient } from '@/lib/supabase/server'
 import { writeToleratingMigration142 } from '@/lib/migration-142'
 import { carriedTerms } from '@/lib/document-terms'
+import { serviceCallColumns, serviceCallOf, writeToleratingServiceCall } from '@/lib/service-call'
 
 const INVOICE_SELECT = `
   *,
@@ -81,6 +82,11 @@ export async function POST(
   // Build invoice row from quote data
   const q = quote as Record<string, unknown>
   const quoteDiscount = parseDiscount(q.discount)
+  // The service call fee the customer agreed to (migration 180). It is IN the subtotal
+  // below - the invoice editor carries the subtotal as its baseline and its tax split's
+  // labor base already holds the fee - and copied with how it was taxed. None on a quote
+  // without one, so that quote converts exactly as before.
+  const call = serviceCallOf(q)
   const invoiceInsert = {
     user_id:         user.id,
     invoice_number,
@@ -91,7 +97,9 @@ export async function POST(
     job_category:    quote.job_category ?? null,
     job_subtype:     quote.job_subtype  ?? null,
     line_items:      quote.line_items   ?? [],
-    subtotal:        Number(quote.parts_subtotal ?? 0) * (1 + Number(quote.parts_markup_percent ?? 0) / 100) + Number(quote.labor_subtotal ?? 0),
+    subtotal:        call.fee > 0
+      ? Number(quote.parts_subtotal ?? 0) * (1 + Number(quote.parts_markup_percent ?? 0) / 100) + Number(quote.labor_subtotal ?? 0) + call.fee
+      : Number(quote.parts_subtotal ?? 0) * (1 + Number(quote.parts_markup_percent ?? 0) / 100) + Number(quote.labor_subtotal ?? 0),
     tax_rate:        Number(quote.tax_percent ?? 0) / 100,
     tax_amount:      Number(quote.tax_amount   ?? 0),
 
@@ -131,6 +139,7 @@ export async function POST(
     shop_supplies_percent_applied: quote.shop_supplies_percent_applied ?? null,
     shop_supplies_cap_applied:     quote.shop_supplies_cap_applied     ?? null,
     shop_supplies_fee:             quote.shop_supplies_fee             ?? 0,
+    ...(call.fee > 0 ? serviceCallColumns(call.fee, call.tax) : {}),
     // The customer approved this split on the quote; the invoice bills the same one.
     tax_breakdown:   parseBreakdown((quote as { tax_breakdown?: unknown }).tax_breakdown),
     // The discount the customer agreed to, carried as recorded (migration 165).
@@ -172,7 +181,7 @@ export async function POST(
     { id: string }
   >(
     invoiceInsert as unknown as Record<string, unknown>,
-    row => supabase.from('invoices').insert(row).select(INVOICE_SELECT).single(),
+    row => writeToleratingServiceCall(row, r => supabase.from('invoices').insert(r).select(INVOICE_SELECT).single()),
   )
 
   if (insertErr || !newInvoice) {

@@ -7,6 +7,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { writeToleratingMigration142 } from '@/lib/migration-142'
+import { serviceCallFromBody, writeToleratingServiceCall } from '@/lib/service-call'
 import { syncParentExtrasQuietly } from '@/lib/segments/parent-extras'
 import { hasWorkOrders } from '@/lib/work-orders'
 import { insertWithWorkOrderNumber } from '@/lib/work-order-number'
@@ -127,11 +128,15 @@ export async function POST(request: NextRequest) {
   const discount = discountForWrite(body.discount)
   if ('error' in discount) return NextResponse.json({ error: discount.error }, { status: 422 })
   if (!discount.skip && discount.value) (insert as Record<string, unknown>).discount = discount.value
+  // The service call fee (migration 180), only when sent. Before 180 a fee is refused
+  // by writeToleratingServiceCall below; none is written without the columns.
+  const serviceCall = serviceCallFromBody(body as Record<string, unknown>)
+  if (serviceCall) Object.assign(insert as Record<string, unknown>, serviceCall)
 
   const { data, error } = await insertWithWorkOrderNumber(supabase, 'work_orders', user.id, work_order_number =>
     writeToleratingMigration142<Record<string, unknown>, Record<string, unknown>>(
       { ...(insert as unknown as Record<string, unknown>), work_order_number },
-      row => supabase.from('work_orders').insert(row).select(WORK_ORDER_SELECT).single(),
+      row => writeToleratingServiceCall(row, r => supabase.from('work_orders').insert(r).select(WORK_ORDER_SELECT).single()),
     ))
 
   if (error && isMissing165Column(error)) {

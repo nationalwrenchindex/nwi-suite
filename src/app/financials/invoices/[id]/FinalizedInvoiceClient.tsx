@@ -7,6 +7,7 @@ import { money } from '@/lib/format'
 import { LineDetail } from '@/components/shared/LineItemEditor'
 import { segmentedLine, segmentHeading } from '@/lib/invoice-document'
 import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
+import { serviceCallOf } from '@/lib/service-call'
 import { discountLabel, parseDiscount } from '@/lib/document-discount'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://tools.nationalwrenchindex.com'
@@ -114,6 +115,8 @@ function calcJobPnL(invoice: import('@/types/financials').Invoice) {
 
   const shopSupplies      = Array.isArray(invoice.shop_supplies) ? invoice.shop_supplies : []
   const shopSuppliesTotal = round2(shopSupplies.reduce((s, ss) => s + ss.total, 0))
+  // The service call fee (migration 180): revenue on its own line, never labor income.
+  const serviceCallRevenue = serviceCallOf(invoice as unknown as Record<string, unknown>).fee
 
   const cogsTotal  = round2(totalPartsCost + shopSuppliesTotal)
   const taxAmount  = Number(invoice.tax_amount ?? 0)
@@ -126,6 +129,7 @@ function calcJobPnL(invoice: import('@/types/financials').Invoice) {
     grandTotal,
     partsRevenue,
     laborIncome,
+    serviceCallRevenue,
     shopSuppliesTotal,
     taxAmount,
     fuelCost,
@@ -852,6 +856,8 @@ export default function FinalizedInvoiceClient({
   // invoice is finalized, and re-deriving a fee on a document already sent is the
   // class of bug the markup work was about. A zero extra returns no row.
   const finalExtraRows = extrasDisplayRows(extrasFromDocument(invoice as unknown as Record<string, unknown>))
+  // The service call fee as stored, on its own line. Read, never recomputed.
+  const finalCallFee = serviceCallOf(invoice as unknown as Record<string, unknown>).fee
 
   const displaySubtotal = detailerSubtotal ?? invoice.subtotal
   const displayTaxAmt   = detailerTax      ?? invoice.tax_amount
@@ -1530,6 +1536,12 @@ export default function FinalizedInvoiceClient({
             </>
           )}
           {/* Each on its own labelled line, never folded into parts. */}
+          {finalCallFee > 0 && (
+            <div className="flex justify-between text-sm" data-testid="service-call-row">
+              <span className="text-white/50">Service Call Fee</span>
+              <span className="text-white">{fmt(finalCallFee)}</span>
+            </div>
+          )}
           {finalExtraRows.map(r => (
             <div key={r.key} className="flex justify-between text-sm">
               <span className="text-white/50">
@@ -1621,6 +1633,12 @@ export default function FinalizedInvoiceClient({
                   <div className="flex justify-between text-xs pl-4">
                     <span className="text-white/40">{isDetailer ? 'Service Income' : 'Labor Income'}</span>
                     <span className="text-white/60">{fmt(pnl.laborIncome)}</span>
+                  </div>
+                )}
+                {pnl.serviceCallRevenue > 0 && (
+                  <div className="flex justify-between text-xs pl-4">
+                    <span className="text-white/40">Service Call Fees</span>
+                    <span className="text-white/60">{fmt(pnl.serviceCallRevenue)}</span>
                   </div>
                 )}
                 {pnl.shopSuppliesTotal > 0 && (

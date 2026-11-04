@@ -8,6 +8,7 @@ import { taxSettingsFrom } from '@/lib/tax'
 import { extrasSettingsFrom } from '@/lib/billable-extras'
 import { normalisePaymentTerms, PAYMENT_TERMS } from '@/lib/hd/payment-terms'
 import { safePayLink, isMissing164Column } from '@/lib/document-terms'
+import { LD_SERVICE_CALL_SELECT, isMissingServiceCallColumn } from '@/lib/service-call'
 
 // Columns that exist on every deployment.
 const BASE_COLUMNS = 'average_mpg, fuel_type, offer_mpi_on_booking, default_labor_rate, default_parts_markup_percent, default_tax_percent'
@@ -83,7 +84,17 @@ export async function GET() {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
+  // LD's service call fee (migration 180), read on its own so a database without it
+  // takes nothing else down. Returned under the column names, which is what
+  // ldServiceCallFrom reads, with whether the columns exist at all.
+  const call = await supabase.from('profiles').select(LD_SERVICE_CALL_SELECT).eq('id', user.id).maybeSingle()
+  const callRow = (call.error ? null : call.data) as Record<string, unknown> | null
+
   return NextResponse.json({
+    bill_service_call:      callRow?.bill_service_call === true,
+    service_call_fee:       callRow?.service_call_fee ?? null,
+    service_call_tax:       callRow?.service_call_tax === 'none' ? 'none' : 'labor',
+    service_call_available: !call.error,
     average_mpg:                   data?.average_mpg                   ?? null,
     fuel_type:                     data?.fuel_type                     ?? 'gasoline',
     offer_mpi_on_booking:          data?.offer_mpi_on_booking          ?? false,
@@ -222,6 +233,32 @@ export async function PUT(request: NextRequest) {
       : Math.round(n * 1000) / 1000
   }
 
+  // ── LD's service call fee (migration 180) ──
+  if ('bill_service_call' in body) {
+    if (typeof body.bill_service_call !== 'boolean') {
+      return NextResponse.json({ error: 'bill_service_call must be true or false' }, { status: 400 })
+    }
+    update.bill_service_call = body.bill_service_call
+  }
+  if ('service_call_fee' in body) {
+    const raw = body.service_call_fee
+    if (raw === null || raw === undefined || raw === '') {
+      update.service_call_fee = null
+    } else {
+      const n = Number(raw)
+      if (!Number.isFinite(n) || n < 0 || n > 99999) {
+        return NextResponse.json({ error: 'service_call_fee must be 0–99999, or null' }, { status: 400 })
+      }
+      update.service_call_fee = Math.round(n * 100) / 100
+    }
+  }
+  if ('service_call_tax' in body) {
+    if (body.service_call_tax !== 'labor' && body.service_call_tax !== 'none') {
+      return NextResponse.json({ error: "service_call_tax must be 'labor' or 'none'" }, { status: 400 })
+    }
+    update.service_call_tax = body.service_call_tax
+  }
+
   // ── Payment terms and the shop's own address (migration 143) ──
   if ('default_payment_terms' in body) {
     const t = normalisePaymentTerms(body.default_payment_terms as string | null)
@@ -347,6 +384,11 @@ export async function PUT(request: NextRequest) {
     // note above: a save that returns ok while discarding the number the shop just
     // typed is how a shop ends up billing a rate it believes it changed. But the
     // message has to say what to do, not just "column does not exist".
+    if (isMissingServiceCallColumn(error)) {
+      return NextResponse.json({
+        error: 'The service call fee needs migration 180 applied first. Your other pricing defaults were not saved either - nothing was changed.',
+      }, { status: 409 })
+    }
     if (isMissing164Column(error)) {
       return NextResponse.json({
         error: 'Warranty, customer-supplied parts and the pay link need migration 164 applied first. Nothing was saved.',

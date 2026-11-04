@@ -3,6 +3,7 @@ import { isMissingTaxBreakdownColumn } from '@/lib/tax'
 import { missingMigration142Column, withoutMigration142Columns } from '@/lib/migration-142'
 import { createClient } from '@/lib/supabase/server'
 import { discountForWrite, isMissing165Column, MIGRATION_165_MESSAGE } from '@/lib/document-discount'
+import { isMissingServiceCallColumn, serviceCallFee, serviceCallFromBody, withoutServiceCall, MIGRATION_180_MESSAGE } from '@/lib/service-call'
 
 const INVOICE_SELECT = `
   *,
@@ -70,6 +71,9 @@ export async function PATCH(
   if (body.tax_breakdown    !== undefined) updates.tax_breakdown    = body.tax_breakdown ?? null
   // Migration 142. Shop-only; nothing customer-facing reads it.
   if (body.internal_notes   !== undefined) updates.internal_notes   = (body.internal_notes as string | null)?.trim() || null
+  // The service call fee (migration 180) and how it is taxed - only when sent.
+  const serviceCall = serviceCallFromBody(body)
+  if (serviceCall) Object.assign(updates, serviceCall)
 
   // ── THE DISCOUNT (migration 165) ──
   // An in-progress invoice takes a discount without being recreated: it is its own
@@ -93,6 +97,22 @@ export async function PATCH(
     .eq('user_id', user.id)
     .select(INVOICE_SELECT)
     .single()
+
+  // Before 180: setting a service call fee is refused, never stored as a total with no
+  // record of the fee; clearing one that cannot exist is dropped and the save retried.
+  if (error && isMissingServiceCallColumn(error)) {
+    if (serviceCallFee(updates) > 0) return NextResponse.json({ error: MIGRATION_180_MESSAGE }, { status: 409 })
+    const stripped = withoutServiceCall(updates)
+    for (const k of Object.keys(updates)) delete updates[k]
+    Object.assign(updates, stripped)
+    ;({ data, error } = await supabase
+      .from('invoices')
+      .update(updates)
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select(INVOICE_SELECT)
+      .single())
+  }
 
   // Migration 140 is applied by hand. A tech saving progress on an invoice must not
   // lose the save because a display column is not there yet.

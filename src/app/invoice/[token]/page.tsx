@@ -35,6 +35,7 @@ import {
   docLineMeta,
 } from '@/lib/invoice-document'
 import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
+import { serviceCallOf } from '@/lib/service-call'
 import { missingMigration142Column } from '@/lib/migration-142'
 import { termsWithDueDate } from '@/lib/hd/payment-terms'
 import { parseTermsSnapshot, termsBlockRows } from '@/lib/document-terms'
@@ -414,6 +415,11 @@ export default async function PublicInvoicePage(
   // reads, it does not recompute — an invoice already sent must keep the figures the
   // customer was given, whatever Settings says today.
   const extraRows = extrasDisplayRows(extrasFromDocument(inv))
+  // The service call fee (migration 180) as stored, on its own line. Its own read, so a
+  // database without 180 loses the row, never the page.
+  const { data: callRow } = await sc
+    .from('invoices').select('service_call_fee, service_call_tax').eq('id', inv.id).maybeSingle()
+  const callFee = isDetailer ? 0 : serviceCallOf(callRow as Record<string, unknown> | null).fee
 
   // Use computed values for display (fall back to stored values for non-detailer)
   const displaySubtotal = detailerSubtotal ?? inv.subtotal
@@ -727,6 +733,12 @@ export default async function PublicInvoicePage(
                     never folded into labor or parts. A zero prints nothing at all:
                     extrasDisplayRows returns no row for it. Read from the stored
                     columns, never recomputed, so a sent invoice cannot change. */}
+                {callFee > 0 && (
+                  <div className="flex justify-between py-2 text-sm" style={{ color: MUTED, borderBottom: `1px solid ${RULE}` }} data-testid="service-call-row">
+                    <span>Service Call Fee</span>
+                    <span style={{ color: TEXT }}>{fmt(callFee)}</span>
+                  </div>
+                )}
                 {extraRows.map(r => (
                   <div
                     key={r.key}

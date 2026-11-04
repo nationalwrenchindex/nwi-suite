@@ -24,8 +24,14 @@
 // as labor (src/lib/tax.ts). That is unchanged here.
 
 import { extrasSettingsFrom, EXTRAS_SETTINGS_SELECT, round2, type ExtrasSettings } from '@/lib/billable-extras'
+import { isServiceCallTax, serviceCallFee, serviceCallTaxed, type ServiceCallTax } from '@/lib/service-call'
 
-export type ServiceCallTax = 'labor' | 'none'
+// The document helpers are shared with LD (lib/service-call): the two document columns
+// have the same names in both products. Re-exported so HD's callers are unchanged.
+export {
+  isServiceCallTax, serviceCallFee, serviceCallTaxed, serviceCallColumns, withoutServiceCall,
+  type ServiceCallTax,
+} from '@/lib/service-call'
 
 export interface HdServiceCallSettings {
   bill: boolean
@@ -71,10 +77,6 @@ export function hdExtrasSettingsFrom(profile: Record<string, unknown> | null | u
   }
 }
 
-export function isServiceCallTax(v: unknown): v is ServiceCallTax {
-  return v === 'labor' || v === 'none'
-}
-
 /** The service call default. Off before migration 178. */
 export function hdServiceCallFrom(profile: Record<string, unknown> | null | undefined): HdServiceCallSettings {
   const p = profile ?? {}
@@ -88,16 +90,6 @@ export function hdServiceCallFrom(profile: Record<string, unknown> | null | unde
 
 // ─── On a document ────────────────────────────────────────────────────────────
 
-/** The service call fee a document charges. NULL and absent are none. */
-export function serviceCallFee(doc: Record<string, unknown>): number {
-  return num(doc.service_call_fee) ?? 0
-}
-
-/** Whether a document's service call fee is taxed - by its own record, never a setting. */
-export function serviceCallTaxed(doc: Record<string, unknown>): boolean {
-  return doc.service_call_tax !== 'none'
-}
-
 /** Every flat fee on a document: diagnostic + road call + service call. In the subtotal. */
 export function hdFeesTotal(doc: Record<string, unknown>): number {
   return round2((num(doc.diagnostic_fee) ?? 0) + (num(doc.road_call_fee) ?? 0) + serviceCallFee(doc))
@@ -108,25 +100,9 @@ export function hdTaxableFees(doc: Record<string, unknown>): number {
   return round2((num(doc.diagnostic_fee) ?? 0) + (num(doc.road_call_fee) ?? 0) + (serviceCallTaxed(doc) ? serviceCallFee(doc) : 0))
 }
 
-/**
- * The two columns a document stores for its service call fee. NULL fee when there is
- * none, so a document without one reads exactly as before 178.
- */
-export function serviceCallColumns(fee: number | null | undefined, tax: ServiceCallTax): { service_call_fee: number | null; service_call_tax: ServiceCallTax | null } {
-  const f = num(fee)
-  return f != null && f > 0 ? { service_call_fee: round2(f), service_call_tax: tax } : { service_call_fee: null, service_call_tax: null }
-}
-
 /** True for a write refused because migration 178's document columns are missing. */
 export function isMissingServiceCallColumn(error: unknown): boolean {
   const e = (error ?? {}) as { code?: string; message?: string }
   const missing = e.code === '42703' || e.code === 'PGRST204'
   return missing && /service_call_(fee|tax)/.test(String(e.message ?? ''))
-}
-
-/** Drop the two 178 document columns from a row, for a database without them. */
-export function withoutServiceCall<T extends Record<string, unknown>>(row: T): T {
-  const { service_call_fee: _f, service_call_tax: _t, ...rest } = row
-  void _f; void _t
-  return rest as T
 }

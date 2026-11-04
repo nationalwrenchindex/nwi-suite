@@ -9,6 +9,7 @@
 // priced with, so changing a figure here never re-prices one already saved.
 
 import { useEffect, useState } from 'react'
+import { BILLING_METHODS, billingMethodFrom, methodShows, togglesFor, type BillingMethod } from '@/lib/service-call'
 
 const inputCls = 'w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20'
 const field = { background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }
@@ -50,6 +51,18 @@ export default function HDExtrasSettingsForm({ laborRate }: { laborRate: string 
   const [billCall, setBillCall] = useState(false)
   const [callFee, setCallFee] = useState('')
   const [callTax, setCallTax] = useState<'labor' | 'none'>('labor')
+  // HOW THE SHOP BILLS FOR GETTING TO THE JOB. The picker SETS the toggles - it does not
+  // replace them - and opens on whatever the shop has on today, so nothing it bills
+  // changes until it picks something else. Shop supplies is not part of it.
+  const [method, setMethod] = useState<BillingMethod>('drive_time')
+  function pickMethod(m: BillingMethod) {
+    const t = togglesFor(m)
+    setMethod(m)
+    setBillTravel(t.billTravel)
+    setBillMileage(t.billMileage)
+    setBillCall(t.billServiceCall)
+  }
+  const shows = methodShows(method)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -68,6 +81,11 @@ export default function HDExtrasSettingsForm({ laborRate }: { laborRate: string 
         setBillSupplies(e.hd_bill_shop_supplies === true); setSuppliesPct(str(e.hd_shop_supplies_percent)); setSuppliesCap(str(e.hd_shop_supplies_cap))
         setBillCall(e.hd_bill_service_call === true); setCallFee(str(e.hd_service_call_fee))
         setCallTax(e.hd_service_call_tax === 'none' ? 'none' : 'labor')
+        setMethod(billingMethodFrom({
+          billServiceCall: e.hd_bill_service_call === true,
+          billTravel:      e.hd_bill_travel === true,
+          billMileage:     e.hd_bill_mileage === true,
+        }))
       } catch {
         if (!cancelled) setError('Could not load these settings.')
       } finally {
@@ -79,8 +97,9 @@ export default function HDExtrasSettingsForm({ laborRate }: { laborRate: string 
 
   async function save(e: React.FormEvent) {
     e.preventDefault()
-    setSaving(true); setError(null); setSaved(false)
     const n = (s: string) => (s.trim() === '' ? null : Number(s))
+    if (billCall && n(callFee) == null) { setError('Enter a service call fee, or pick drive time and mileage.'); return }
+    setSaving(true); setError(null); setSaved(false)
     try {
       const res = await fetch('/api/hd/settings', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -114,6 +133,39 @@ export default function HDExtrasSettingsForm({ laborRate }: { laborRate: string 
 
   return (
     <form onSubmit={save} className="space-y-4" data-testid="hd-extras-settings">
+      <fieldset className="space-y-2" data-testid="billing-method">
+        <legend className="text-sm text-white mb-1">How do you bill for getting to the job?</legend>
+        {BILLING_METHODS.map(m => (
+          <label key={m.value} className="flex items-start gap-2.5 cursor-pointer">
+            <input type="radio" name="hd-billing-method" className="mt-1" value={m.value}
+              checked={method === m.value} onChange={() => pickMethod(m.value)} data-testid={`billing-method-${m.value}`} />
+            <span className="text-sm text-white">
+              {m.label}
+              <span className="block text-xs mt-0.5" style={{ color: 'var(--hd-text-faint)' }}>{m.hint}</span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+
+      {shows.serviceCall && (
+        <div className="grid grid-cols-2 gap-3" data-testid="hd-service-call-settings">
+          <Num label="Service Call Fee ($)" value={callFee} onChange={setCallFee} step="0.01" testid="hd-service-call-fee" placeholder="0.00"
+            hint="A flat fee on each new work order, separate from the road call fee. The tech can change or clear it on the job." />
+          <div>
+            <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>Tax</label>
+            <select value={callTax} onChange={e => setCallTax(e.target.value === 'none' ? 'none' : 'labor')}
+              className={inputCls} style={field} data-testid="hd-service-call-tax">
+              <option value="labor">Taxed as labor</option>
+              <option value="none">Not taxed</option>
+            </select>
+          </div>
+          <p className="col-span-2 text-xs" style={{ color: 'var(--hd-text-faint)' }}>
+            &quot;Taxed as labor&quot; follows your labor tax setting below. Check your state&apos;s rule; every shop differs.
+          </p>
+        </div>
+      )}
+
+      {shows.driveTime && (<>
       <Check checked={billTravel} onChange={setBillTravel} testid="hd-bill-travel" label="Bill drive time"
         hint="Hours x rate, its own line on the document. Taxed at your labor tax rate." />
       {billTravel && (
@@ -126,6 +178,7 @@ export default function HDExtrasSettingsForm({ laborRate }: { laborRate: string 
       {billMileage && (
         <Num label="Mileage Rate ($/mile)" value={mileageRate} onChange={setMileageRate} step="0.0001" testid="hd-mileage-rate" placeholder="2.00" />
       )}
+      </>)}
 
       <Check checked={billSupplies} onChange={setBillSupplies} testid="hd-bill-supplies" label="Bill shop supplies"
         hint="A percentage of parts sales only - never labor, drive time, mileage or a fee. A labor-only job is charged nothing. Taxed as parts." />
@@ -133,25 +186,6 @@ export default function HDExtrasSettingsForm({ laborRate }: { laborRate: string 
         <div className="grid grid-cols-2 gap-3">
           <Num label="Shop Supplies (%)" value={suppliesPct} onChange={setSuppliesPct} step="0.1" testid="hd-supplies-pct" placeholder="5" />
           <Num label="Cap ($, optional)" value={suppliesCap} onChange={setSuppliesCap} step="0.01" testid="hd-supplies-cap" placeholder="No cap" />
-        </div>
-      )}
-
-      <Check checked={billCall} onChange={setBillCall} testid="hd-bill-service-call" label="Bill a service call fee"
-        hint="A flat fee on each new work order, separate from the road call fee. The tech can change or clear it on the job." />
-      {billCall && (
-        <div className="grid grid-cols-2 gap-3">
-          <Num label="Service Call Fee ($)" value={callFee} onChange={setCallFee} step="0.01" testid="hd-service-call-fee" placeholder="0.00" />
-          <div>
-            <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>Tax</label>
-            <select value={callTax} onChange={e => setCallTax(e.target.value === 'none' ? 'none' : 'labor')}
-              className={inputCls} style={field} data-testid="hd-service-call-tax">
-              <option value="labor">Taxed as labor</option>
-              <option value="none">Not taxed</option>
-            </select>
-          </div>
-          <p className="col-span-2 text-xs" style={{ color: 'var(--hd-text-faint)' }}>
-            &quot;Taxed as labor&quot; follows your labor tax setting below. Check your state&apos;s rule; every shop differs.
-          </p>
         </div>
       )}
 

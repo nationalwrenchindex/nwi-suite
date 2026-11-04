@@ -105,6 +105,8 @@ interface InvoiceForBreakdown {
   travel_amount?:     number | null
   mileage_amount?:    number | null
   shop_supplies_fee?: number | null
+  /** Migration 180: a flat service call fee. Its own revenue, never labor income. */
+  service_call_fee?:  number | null
   /** Migration 165. Absent before it, null when there is none. */
   discount?:          unknown
 }
@@ -169,6 +171,9 @@ function calcBreakdown(inv: InvoiceForBreakdown) {
     travel_revenue:      travelRevenue,
     mileage_revenue:     Number(inv.mileage_amount ?? 0),
     shop_supplies_fee:   Number(inv.shop_supplies_fee ?? 0),
+    // Reported on its own and kept out of labor_income above: the fee is a flat charge
+    // for coming out, not time billed at a rate.
+    service_call_revenue: Number(inv.service_call_fee ?? 0),
   }
 }
 

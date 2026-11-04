@@ -15,6 +15,7 @@ import { hasWorkOrders } from '@/lib/work-orders'
 import { insertWithWorkOrderNumber } from '@/lib/work-order-number'
 import { WORK_ORDER_SELECT } from '@/app/api/work-orders/list'
 import { parseDiscount } from '@/lib/document-discount'
+import { serviceCallColumns, serviceCallOf, writeToleratingServiceCall } from '@/lib/service-call'
 
 export const dynamic = 'force-dynamic'
 
@@ -70,9 +71,11 @@ export async function POST(
   }
 
   // The highest existing number plus one, retried on a collision (lib/work-order-number).
-  const { data: wo, error: insertErr } = await insertWithWorkOrderNumber(supabase, 'work_orders', user.id, work_order_number => supabase
-    .from('work_orders')
-    .insert({
+  // The service call fee the customer agreed to (migration 180), copied with how it was
+  // taxed. Only when there is one; a quote without one converts exactly as before.
+  const call = serviceCallOf(quote as Record<string, unknown>)
+  const { data: wo, error: insertErr } = await insertWithWorkOrderNumber(supabase, 'work_orders', user.id, work_order_number =>
+    writeToleratingServiceCall<Record<string, unknown>, Record<string, unknown>>({
       user_id:              user.id,
       work_order_number,
       status:               'open',
@@ -107,15 +110,14 @@ export async function POST(
       shop_supplies_fee:             quote.shop_supplies_fee             ?? 0,
       // The discount the customer agreed to (migration 165), only when there is one.
       ...(parseDiscount(quote.discount) ? { discount: parseDiscount(quote.discount) } : {}),
+      ...(call.fee > 0 ? serviceCallColumns(call.fee, call.tax) : {}),
       source:               'quote',
       source_quote_id:      quote.id,
-    })
-    .select(WORK_ORDER_SELECT)
-    .single())
+    }, row => supabase.from('work_orders').insert(row).select(WORK_ORDER_SELECT).single()))
 
   if (insertErr || !wo) {
     console.error('[POST /api/quotes/[id]/to-work-order]', insertErr)
-    return NextResponse.json({ error: insertErr?.message ?? 'Failed to create work order' }, { status: 500 })
+    return NextResponse.json({ error: (insertErr as { message?: string } | null)?.message ?? 'Failed to create work order' }, { status: 500 })
   }
 
   return NextResponse.json({ work_order: wo, work_order_id: wo.id }, { status: 201 })

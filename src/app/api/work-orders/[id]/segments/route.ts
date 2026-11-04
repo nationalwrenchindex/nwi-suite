@@ -11,6 +11,7 @@ import { guardCanAddSegment, parentExists, PARENTS } from '@/lib/segments/parent
 import { SEGMENT_SELECT, shapeSegments } from '@/lib/segments/select'
 import { syncParentExtrasQuietly } from '@/lib/segments/parent-extras'
 import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
+import { serviceCallOf, serviceCallRow } from '@/lib/service-call'
 import { normalizeSegmentLines, priceSegment, rollupSegments } from '@/components/shared/segments'
 import { loadTaxSettings } from '@/lib/tax-settings.server'
 import { isMissingTaxBreakdownColumn, withoutTaxBreakdown } from '@/lib/tax'
@@ -60,9 +61,22 @@ export async function GET(
     .eq('user_id', user.id)
     .maybeSingle()
 
-  const extras = extrasDisplayRows(
-    extrasFromDocument((parentRow ?? null) as Record<string, unknown> | null),
-  )
+  // The service call fee (migration 180) on the parent, first, on its own line. Read on
+  // its own so a database without 180 simply has none.
+  const { data: callRow, error: callErr } = await supabase
+    .from('work_orders')
+    .select('service_call_fee, service_call_tax')
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .maybeSingle()
+  const call = callErr ? null : serviceCallRow(serviceCallOf(callRow as Record<string, unknown> | null))
+
+  const extras = [
+    ...(call ? [{ ...call, detail: null }] : []),
+    ...extrasDisplayRows(
+      extrasFromDocument((parentRow ?? null) as Record<string, unknown> | null),
+    ),
+  ]
 
   return NextResponse.json({ segments, rollup: rollupSegments(segments), extras })
 }

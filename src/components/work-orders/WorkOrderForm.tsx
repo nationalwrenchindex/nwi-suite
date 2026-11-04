@@ -7,7 +7,7 @@
 // Money maths comes from components/shared/line-items, the same module the quote
 // editor uses, so a work order and the quote it came from agree to the cent.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTaxSettings } from '@/lib/use-tax-settings'
 import { useExtrasSettingsState } from '@/lib/use-extras-settings'
 import { extrasDisplayRows } from '@/lib/billable-extras'
@@ -32,6 +32,9 @@ import {
 import CustomerUnitPicker from './CustomerUnitPicker'
 import WorkOrderPhotos, { type PhotoWithUrl } from './WorkOrderPhotos'
 import { money } from '@/lib/format'
+import { useServiceCallSettingsState } from '@/lib/use-service-call-settings'
+import { hasServiceCallColumn, serviceCallColumns, serviceCallOf, serviceCallRow, serviceCallSeed } from '@/lib/service-call'
+import ServiceCallField from '@/components/shared/ServiceCallField'
 
 const fmt = (n: number | null | undefined) =>
   money(n ?? 0)
@@ -117,6 +120,21 @@ export default function WorkOrderForm({
   const [discountDraft, setDiscountDraft] = useState<DiscountDraft>(() =>
     draftFrom(storedDiscount(workOrder as unknown as Record<string, unknown>)))
 
+  // ── The service call fee (migration 180) ──
+  // On the work order itself on either pricing mode, like the drive time: one trip, one
+  // fee. A new work order is seeded from Settings once they arrive; an existing one
+  // keeps the fee and tax treatment it recorded, and the tech can change the amount.
+  const callState     = useServiceCallSettingsState()
+  const storedCall    = serviceCallOf(workOrder as unknown as Record<string, unknown> | undefined)
+  const callAvailable = isNew ? callState.available : hasServiceCallColumn(workOrder as unknown as Record<string, unknown>)
+  const [callFee, setCallFee] = useState<number | null>(isNew ? null : storedCall.fee)
+  useEffect(() => {
+    if (isNew && callState.loaded && callFee === null) setCallFee(serviceCallSeed(callState.settings).fee)
+  }, [isNew, callState.loaded, callState.settings, callFee])
+  const callTax     = !isNew && storedCall.fee > 0 ? storedCall.tax : callState.settings.tax
+  const serviceCall = callAvailable ? { fee: callFee ?? 0, tax: callTax } : null
+  const showCall    = callAvailable && (storedCall.fee > 0 || (callFee ?? 0) > 0 || callState.settings.bill)
+
   /** Seeds the shop's defaults at the moment "Single job" is chosen, and clears them
    *  again if the tech switches to segments before saving. */
   function chooseMode(next: PricingMode) {
@@ -157,8 +175,16 @@ export default function WorkOrderForm({
       : { travelHours, mileageMiles },
     // The discount it recorded or carried from its quote (migration 165).
     discount: owns ? discountFromDraft(discountDraft) : null,
+    serviceCall: owns ? serviceCall : null,
     stored: recordedTerms ? workOrder as unknown as Record<string, unknown> : null,
   })
+  const callRow = serviceCallRow(docMoney.serviceCall)
+  // A segment-priced work order's money lives in its segments, so its fee is sent on
+  // its own and billed by the converter with the drive time. Only when there is one, or
+  // to clear one it had, so a work order without one writes nothing new.
+  const callColumns = serviceCall && (serviceCall.fee > 0 || storedCall.fee > 0)
+    ? serviceCallColumns(serviceCall.fee, serviceCall.tax)
+    : {}
   const totals       = docMoney
   const extrasResult = docMoney.extras
   const withExtras   = docMoney
@@ -185,7 +211,7 @@ export default function WorkOrderForm({
     // pricing_mode is only ever sent on CREATE. Changing it later goes through the
     // dedicated PATCH path, which checks that nothing is priced on either side yet.
     const withMode = isNew && mode ? { ...base, pricing_mode: mode } : base
-    if (!owns) return withMode
+    if (!owns) return { ...withMode, ...callColumns }
     // lineMoneyColumns owns parts/labour; extrasColumns owns the three extras. The
     // tax and grand total are overwritten from withExtras because the extras are
     // inside them — otherwise the stored total would exclude travel the customer
@@ -210,6 +236,7 @@ export default function WorkOrderForm({
     // exactly what it recorded (lib/segments/parent-extras). Saving before the shop's
     // settings arrive would record "no extras" for good, so wait for them.
     if (!extrasLoaded)                  { setErr('Your shop settings are still loading. Try again in a moment.'); return }
+    if (isNew && !callState.loaded)     { setErr('Your shop settings are still loading. Try again in a moment.'); return }
 
     setErr(null); setSaving(true)
     try {
@@ -405,6 +432,15 @@ export default function WorkOrderForm({
       </section>
       )}
 
+      {/* ── Service call fee ── outside the Parts & Labor section for the same reason as
+          travel: a segment-priced job has a trip too. */}
+      {showCall && (
+      <section className="nwi-card space-y-3">
+        <p className="text-white/30 text-xs uppercase tracking-widest">Service Call</p>
+        <ServiceCallField fee={callFee ?? 0} tax={callTax} onFee={setCallFee} disabled={isLocked} />
+      </section>
+      )}
+
       {/* ── Parts and labor ── */}
       {owns && (
       <section className="nwi-card space-y-4">
@@ -456,6 +492,7 @@ export default function WorkOrderForm({
             dim
           />
           {totals.laborSubtotal > 0 && <Row label="Labor" value={fmt(totals.laborSubtotal)} />}
+          {callRow && <Row label={callRow.label} value={fmt(callRow.amount)} />}
           {/* A zero extra prints no row — extrasDisplayRows returns none. */}
           {extrasDisplayRows(extrasResult).map(r => (
             <Row key={r.key} label={r.detail ? `${r.label} (${r.detail})` : r.label} value={fmt(r.amount)} />

@@ -9,6 +9,9 @@ import ShareBookingModal from '@/components/ShareBookingModal'
 import DetailerPricingEditor, { type PricingRow } from '@/components/detailer/DetailerPricingEditor'
 import type { AdjustmentPreset } from '@/types/financials'
 import ExportButton from '@/components/settings/ExportButton'
+import {
+  BILLING_METHODS, billingMethodFrom, methodShows, togglesFor, type BillingMethod, type ServiceCallTax,
+} from '@/lib/service-call'
 
 const BOOKING_BASE = 'https://tools.nationalwrenchindex.com/book'
 
@@ -139,6 +142,13 @@ export const EXTRAS_DEFAULTS: ExtrasDefaults = {
   bill_shop_supplies: false, shop_supplies_percent: null, shop_supplies_cap: null,
 }
 
+/** LD's service call default (migration 180), as it arrives from profiles. */
+export interface ServiceCallDefaults {
+  bill_service_call: boolean
+  service_call_fee:  number | null
+  service_call_tax:  ServiceCallTax
+}
+
 /** null/undefined -> '', so a blank input stays distinguishable from a zero. */
 function numStr(v: number | null | undefined): string {
   return v == null ? '' : String(v)
@@ -163,6 +173,7 @@ export default function SettingsClient({
   initialLaborRate    = 125,
   initialMarkupPct    = 20,
   initialExtras       = EXTRAS_DEFAULTS,
+  initialServiceCall  = null,
   initialAddress      = {},
   initialDefaultTerms = DEFAULT_PAYMENT_TERMS,
   initialDocumentTerms,
@@ -190,6 +201,8 @@ export default function SettingsClient({
   initialLaborRate?:           number
   initialMarkupPct?:           number
   initialExtras?:              ExtrasDefaults
+  /** Migration 180. Null when it is not applied yet. */
+  initialServiceCall?:         ServiceCallDefaults | null
   initialAddress?:             { address_line1?: string | null; address_line2?: string | null; zip?: string | null }
   initialDefaultTerms?:        string
   /** Migration 164. Undefined when it is not applied yet. */
@@ -250,6 +263,29 @@ export default function SettingsClient({
   const [billShopSupplies, setBillShopSupplies] = useState(initialExtras.bill_shop_supplies)
   const [shopSuppliesPct,  setShopSuppliesPct]  = useState(numStr(initialExtras.shop_supplies_percent))
   const [shopSuppliesCap,  setShopSuppliesCap]  = useState(numStr(initialExtras.shop_supplies_cap))
+
+  // The service call fee (migration 180): on/off, amount, and its own tax treatment.
+  const callAvailable = initialServiceCall != null
+  const [billCall, setBillCall] = useState(initialServiceCall?.bill_service_call ?? false)
+  const [callFee,  setCallFee]  = useState(numStr(initialServiceCall?.service_call_fee))
+  const [callTax,  setCallTax]  = useState<ServiceCallTax>(initialServiceCall?.service_call_tax ?? 'labor')
+
+  // HOW THE SHOP BILLS FOR GETTING TO THE JOB. The picker SETS the toggles above - it
+  // does not replace them - and it opens on whatever the shop has on today, so nothing
+  // it bills changes until it picks something else. Shop supplies is not part of it.
+  const [method, setMethod] = useState<BillingMethod>(() => billingMethodFrom({
+    billServiceCall: initialServiceCall?.bill_service_call ?? false,
+    billTravel:      initialExtras.bill_travel,
+    billMileage:     initialExtras.bill_mileage,
+  }))
+  function pickMethod(m: BillingMethod) {
+    const t = togglesFor(m)
+    setMethod(m)
+    setBillTravel(t.billTravel)
+    setBillMileage(t.billMileage)
+    if (callAvailable) setBillCall(t.billServiceCall)
+  }
+  const shows = methodShows(method)
 
   const [savingRates,   setSavingRates]   = useState(false)
 
@@ -523,6 +559,10 @@ export default function SettingsClient({
         setSavedMsg('Enter a shop supplies percentage, or switch it off.')
         setTimeout(() => setSavedMsg(null), 4000); setSavingRates(false); return
       }
+      if (callAvailable && billCall && optNum(callFee) == null) {
+        setSavedMsg('Enter a service call fee, or pick drive time and mileage.')
+        setTimeout(() => setSavedMsg(null), 4000); setSavingRates(false); return
+      }
 
       const res = await fetch('/api/user/profile', {
         method: 'PUT',
@@ -540,6 +580,12 @@ export default function SettingsClient({
           bill_shop_supplies:     billShopSupplies,
           shop_supplies_percent:  optNum(shopSuppliesPct),
           shop_supplies_cap:      optNum(shopSuppliesCap),
+          // Migration 180. Not sent before it is applied, so the rest still saves.
+          ...(callAvailable ? {
+            bill_service_call: billCall,
+            service_call_fee:  optNum(callFee),
+            service_call_tax:  callTax,
+          } : {}),
         }),
       })
       if (res.ok) {
@@ -1104,6 +1150,61 @@ export default function SettingsClient({
           <div className="pt-2 border-t border-white/10 space-y-4">
             <p className="text-white/40 text-xs uppercase tracking-widest">Travel, Mileage &amp; Supplies</p>
 
+            {/* ── How you bill for getting to the job ── */}
+            <fieldset className="space-y-2" data-testid="billing-method">
+              <legend className="text-white/80 text-sm mb-1">How do you bill for getting to the job?</legend>
+              {BILLING_METHODS.map(m => {
+                const needs180 = !callAvailable && m.value !== 'drive_time'
+                return (
+                  <label key={m.value} className={`flex items-start gap-2.5 ${needs180 ? 'opacity-40' : 'cursor-pointer'}`}>
+                    <input type="radio" name="billing-method" className="mt-0.5" value={m.value}
+                      checked={method === m.value} disabled={needs180}
+                      onChange={() => pickMethod(m.value)} data-testid={`billing-method-${m.value}`} />
+                    <span className="text-white/80 text-sm">
+                      {m.label}
+                      <span className="block text-white/35 text-xs mt-0.5">{m.hint}</span>
+                    </span>
+                  </label>
+                )
+              })}
+              {!callAvailable && (
+                <p className="text-white/35 text-xs" data-testid="service-call-unavailable">
+                  The flat service call fee needs migration 180. Until it is applied, drive time and mileage work as before.
+                </p>
+              )}
+            </fieldset>
+
+            {shows.serviceCall && callAvailable && (
+              <div className="grid grid-cols-2 gap-3" data-testid="ld-service-call-settings">
+                <div>
+                  <label className="nwi-label">Service Call Fee ($)</label>
+                  <input
+                    type="number" min="0" max="99999" step="0.01"
+                    className="nwi-input text-sm w-full"
+                    placeholder="0.00"
+                    value={callFee}
+                    onChange={e => setCallFee(e.target.value)}
+                    data-testid="ld-service-call-fee"
+                  />
+                </div>
+                <div>
+                  <label className="nwi-label">Tax</label>
+                  <select className="nwi-input text-sm w-full" value={callTax}
+                    onChange={e => setCallTax(e.target.value === 'none' ? 'none' : 'labor')}
+                    data-testid="ld-service-call-tax">
+                    <option value="labor">Taxed as labor</option>
+                    <option value="none">Not taxed</option>
+                  </select>
+                </div>
+                <p className="col-span-2 text-white/30 text-xs">
+                  A flat fee on each new quote, work order and invoice, on its own line. The tech can
+                  change or clear it on the job. &quot;Taxed as labor&quot; follows your labor tax setting;
+                  check your state&apos;s rule.
+                </p>
+              </div>
+            )}
+
+            {shows.driveTime && (<>
             <label className="flex items-start gap-2.5 cursor-pointer">
               <input type="checkbox" className="mt-0.5" checked={billTravel}
                 onChange={e => setBillTravel(e.target.checked)} />
@@ -1152,6 +1253,7 @@ export default function SettingsClient({
                 />
               </div>
             )}
+            </>)}
 
             <label className="flex items-start gap-2.5 cursor-pointer">
               <input type="checkbox" className="mt-0.5" checked={billShopSupplies}

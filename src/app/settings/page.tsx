@@ -5,6 +5,7 @@ import SettingsClient from '@/components/settings/SettingsClient'
 import ThemeToggle from '@/components/layout/ThemeToggle'
 import { hasQuickWrenchAccess } from '@/lib/subscription'
 import { TERMS_PROFILE_SELECT_164 } from '@/lib/document-terms'
+import { LD_SERVICE_CALL_SELECT } from '@/lib/service-call'
 import type { PricingRow } from '@/components/detailer/DetailerPricingEditor'
 import Link from 'next/link'
 
@@ -81,6 +82,16 @@ export default async function SettingsPage() {
       .eq('status', 'created')
       .maybeSingle(),
   ])
+
+  // The service call fee (migration 180), on its own so a database without it loses
+  // that card's fee options and nothing else. Null tells the card 180 is not applied.
+  const callRes = await supabase.from('profiles').select(LD_SERVICE_CALL_SELECT).eq('id', user.id).maybeSingle()
+  const callRow = callRes.error ? null : (callRes.data as Record<string, unknown> | null)
+  const initialServiceCall = callRow ? {
+    bill_service_call: callRow.bill_service_call === true,
+    service_call_fee:  callRow.service_call_fee == null ? null : Number(callRow.service_call_fee),
+    service_call_tax:  callRow.service_call_tax === 'none' ? 'none' as const : 'labor' as const,
+  } : null
 
   // Redirect to onboarding ONLY when setup is genuinely incomplete.
   // Never redirect on a DB query error (profile === null) — that is a different failure mode.
@@ -208,6 +219,7 @@ export default async function SettingsPage() {
             shop_supplies_percent: p.shop_supplies_percent ?? null,
             shop_supplies_cap:     p.shop_supplies_cap ?? null,
           }}
+          initialServiceCall={initialServiceCall}
           initialAddress={{
             address_line1: p.address_line1 ?? null,
             address_line2: p.address_line2 ?? null,

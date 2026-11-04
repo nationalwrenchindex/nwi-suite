@@ -11,6 +11,9 @@ import { money } from '@/lib/format'
 import { daysPastDue } from '@/lib/hd/payment-terms'
 import CustomerUnitPicker from '@/components/work-orders/CustomerUnitPicker'
 import { applyDiscount, discountLabel } from '@/lib/document-discount'
+import { useServiceCallSettingsState } from '@/lib/use-service-call-settings'
+import { serviceCallBuckets, serviceCallColumns, serviceCallSeed } from '@/lib/service-call'
+import ServiceCallField from '@/components/shared/ServiceCallField'
 import {
   DiscountEditor, EMPTY_DISCOUNT, discountFromDraft, type DiscountDraft,
 } from '@/components/shared/DiscountEditor'
@@ -209,15 +212,31 @@ export default function InvoicesTab() {
   const [invItems, setInvItems] = useState<EditItem[]>([])
   const lineTotals = computeTotals({ items: invItems, markupPct: 0, laborHours: 0, laborRate: 0, taxPct: 0 })
 
+  // ── The service call fee (migration 180) ──
+  // Seeded from Settings once they arrive, then the tech's to change; null until seeded
+  // so a save cannot slip in before it. Taxed in the labor bucket unless the shop records
+  // it as untaxed, never folded into the labor lines, and never discounted.
+  const callState = useServiceCallSettingsState()
+  const [callFee, setCallFee] = useState<number | null>(null)
+  useEffect(() => {
+    if (callState.loaded && callFee === null) setCallFee(serviceCallSeed(callState.settings).fee)
+  }, [callState.loaded, callState.settings, callFee])
+  const call      = callState.available ? { fee: callFee ?? 0, tax: callState.settings.tax } : null
+  const callB     = serviceCallBuckets(call)
+  const callTotal = round2(callB.labor + callB.untaxed)
+  const showCall  = callState.available && (callState.settings.bill || (callFee ?? 0) > 0)
+
   // ── Computed totals ──
-  const subtotal  = round2(lineTotals.subtotal)
+  const subtotal  = callTotal > 0 ? round2(lineTotals.subtotal + callTotal) : round2(lineTotals.subtotal)
   const laborBase = round2(lineTotals.laborSubtotal)
   const partsBase = round2(lineTotals.partsTotal)
 
   const tax    = taxSettings
-    ? computeTax({ parts: partsBase, labor: laborBase }, taxSettings)
+    ? computeTax({ parts: partsBase, labor: callB.labor > 0 ? round2(laborBase + callB.labor) : laborBase }, taxSettings)
     : null
-  const preDiscountTax = tax ? tax.taxAmount : round2(subtotal * (form.tax_rate / 100))
+  const preDiscountTax = tax ? tax.taxAmount
+    : callB.untaxed > 0 ? round2(round2(subtotal - callB.untaxed) * (form.tax_rate / 100))
+    : round2(subtotal * (form.tax_rate / 100))
   // THE DISCOUNT (lib/document-discount, migration 165). This form used to take a
   // dollar figure off AFTER tax, so the customer paid tax on money they were never
   // charged. It now comes off the labour and parts lines, and tax is on what is left.
@@ -270,6 +289,10 @@ export default function InvoicesTab() {
       setFormError(discountError)
       return
     }
+    if (!callState.loaded) {
+      setFormError('Your shop settings are still loading. Try again in a moment.')
+      return
+    }
     setSubmitting(true)
     try {
       const res = await fetch('/api/invoices', {
@@ -298,6 +321,7 @@ export default function InvoicesTab() {
           status:          form.status,
           notes:           form.notes || null,
           terms:           form.terms || null,
+          ...(call && call.fee > 0 ? serviceCallColumns(call.fee, call.tax) : {}),
         }),
       })
       const json = await res.json()
@@ -323,6 +347,7 @@ export default function InvoicesTab() {
       })
       setInvItems([])
       setDiscountDraft(EMPTY_DISCOUNT)
+      setCallFee(null)
     } catch (err) {
       setFormError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
@@ -581,8 +606,21 @@ export default function InvoicesTab() {
               <LineItemEditor items={invItems} onChange={setInvItems} allowLabor priceLabel="Price" />
             </div>
 
+            {/* The service call fee: a flat fee, its own line. */}
+            {showCall && (
+              <div className="max-w-xs">
+                <ServiceCallField fee={callFee ?? 0} tax={callState.settings.tax} onFee={setCallFee} disabled={submitting} />
+              </div>
+            )}
+
             {/* Totals row */}
             <div className="flex flex-col items-end gap-1 border-t border-dark-border pt-4">
+              {callTotal > 0 && (
+                <div className="flex gap-8 text-sm" data-testid="service-call-row">
+                  <span className="text-white/40">Service Call Fee</span>
+                  <span className="text-white w-24 text-right">{fmt(callTotal)}</span>
+                </div>
+              )}
               <div className="flex gap-8 text-sm">
                 <span className="text-white/40">Subtotal</span>
                 <span className="text-white w-24 text-right">{fmt(subtotal)}</span>

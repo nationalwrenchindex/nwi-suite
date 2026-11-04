@@ -32,6 +32,7 @@ import {
 } from '@/lib/tax'
 import { isBillable, type SegmentStatus } from '@/types/segments'
 import { applyDiscount, parseDiscount } from '@/lib/document-discount'
+import { serviceCallBuckets, serviceCallOf } from '@/lib/service-call'
 
 const LD = PARENTS.ld
 
@@ -253,13 +254,28 @@ export async function syncParentExtras(
 
       const laborBase = await lineItemLaborBase(supabase, parentId, userId)
       const buckets   = extrasTaxBuckets(extras)
+      // THE SERVICE CALL FEE (migration 180), as the work order recorded it. Read on its
+      // own so a database without 180 has none and this sync works exactly as before.
+      // It is taxed in the same call as the drive time, unless recorded untaxed.
+      let call = { labor: 0, untaxed: 0 }
+      {
+        const { data: cRow, error: cErr } = await supabase
+          .from(spec.table).select('service_call_fee, service_call_tax').eq('id', parentId).eq('user_id', userId).maybeSingle()
+        if (!cErr) call = serviceCallBuckets(serviceCallOf(cRow as Record<string, unknown> | null))
+      }
       // Travel joins labour, supplies joins parts, mileage is taxed nowhere but still
       // belongs in the subtotal - which is what buckets.untaxed carries.
       const taxable = computeTax(
-        { parts: round2(partsBase + buckets.parts), labor: round2(laborBase + buckets.labor) },
+        {
+          parts: round2(partsBase + buckets.parts),
+          labor: call.labor > 0 ? round2(laborBase + buckets.labor + call.labor) : round2(laborBase + buckets.labor),
+        },
         taxSettings,
       )
-      const subtotal = round2(partsBase + laborBase + extras.travel.amount + extras.mileage.amount + extras.shopSupplies.amount)
+      const fee = round2(call.labor + call.untaxed)
+      const subtotal = fee > 0
+        ? round2(partsBase + laborBase + extras.travel.amount + extras.mileage.amount + extras.shopSupplies.amount + fee)
+        : round2(partsBase + laborBase + extras.travel.amount + extras.mileage.amount + extras.shopSupplies.amount)
 
       // NOTE: work_orders has NO subtotal column - only parts_subtotal, labor_subtotal
       // and grand_total. Writing one would fail this entire UPDATE and the sync would

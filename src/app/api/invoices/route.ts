@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { isMissingTaxBreakdownColumn, withoutTaxBreakdown } from '@/lib/tax'
 import { missingMigration142Column, withoutMigration142Columns } from '@/lib/migration-142'
+import { isMissingServiceCallColumn, serviceCallFee, serviceCallFromBody, MIGRATION_180_MESSAGE } from '@/lib/service-call'
 import { createClient } from '@/lib/supabase/server'
 import { discountForWrite, isMissing165Column, MIGRATION_165_MESSAGE } from '@/lib/document-discount'
 
@@ -119,6 +120,8 @@ export async function POST(request: NextRequest) {
       notes:            body.notes           ?? null,
       terms:            body.terms           ?? null,
       invoice_status:   body.invoice_status  ?? 'in_progress',
+      // The service call fee (migration 180) and how it is taxed - only when sent.
+      ...(serviceCallFromBody(body as Record<string, unknown>) ?? {}),
   }
 
   let { data, error } = await supabase
@@ -126,6 +129,19 @@ export async function POST(request: NextRequest) {
     .insert(invoiceRow)
     .select(INVOICE_SELECT)
     .single()
+
+  // Before 180: an invoice WITH a service call fee is refused rather than saved with a
+  // total that holds a fee it does not record; one without is retried without the columns.
+  if (error && isMissingServiceCallColumn(error)) {
+    if (serviceCallFee(invoiceRow) > 0) return NextResponse.json({ error: MIGRATION_180_MESSAGE }, { status: 409 })
+    delete (invoiceRow as Record<string, unknown>).service_call_fee
+    delete (invoiceRow as Record<string, unknown>).service_call_tax
+    ;({ data, error } = await supabase
+      .from('invoices')
+      .insert(invoiceRow)
+      .select(INVOICE_SELECT)
+      .single())
+  }
 
   // Migration 140 is applied by hand. An invoice a tech just typed must not be lost
   // because a display column is not there yet -- tax_amount and total are complete.

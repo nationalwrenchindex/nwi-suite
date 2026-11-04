@@ -13,6 +13,9 @@ import {
 import { useRouter } from 'next/navigation'
 import type { Invoice, ShopSupplyItem, AdditionalPartItem, AdditionalLaborItem, ServiceLine, Adjustment, AdjustmentPreset } from '@/types/financials'
 import { money } from '@/lib/format'
+import { useServiceCallSettingsState } from '@/lib/use-service-call-settings'
+import { hasServiceCallColumn, serviceCallBuckets, serviceCallColumns, serviceCallOf, serviceCallRow } from '@/lib/service-call'
+import ServiceCallField from '@/components/shared/ServiceCallField'
 import { LineDetail } from '@/components/shared/LineItemEditor'
 import { applyDiscount, discountLabel, laborFromLines, parseDiscount } from '@/lib/document-discount'
 import {
@@ -510,6 +513,16 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
   const { settings: extrasSettings, loaded: extrasLoaded } = useExtrasSettingsState()
   const [travelHours,  setTravelHours]  = useState(Number(invoice.travel_hours  ?? 0))
   const [mileageMiles, setMileageMiles] = useState(Number(invoice.mileage_miles ?? 0))
+  // THE SERVICE CALL FEE (migration 180): the amount this invoice recorded or carried,
+  // editable while it is in progress. Its tax treatment is the invoice's own record; a
+  // fee first added here takes the shop's. Not on a detailer's invoice, and not offered
+  // on a database without the column.
+  const storedCall    = serviceCallOf(invoice as unknown as Record<string, unknown>)
+  const callAvailable = !isDetailer && hasServiceCallColumn(invoice as unknown as Record<string, unknown>)
+  const callState     = useServiceCallSettingsState()
+  const [callFee, setCallFee] = useState(storedCall.fee)
+  const callTax  = storedCall.fee > 0 ? storedCall.tax : callState.settings.tax
+  const showCall = callAvailable && (storedCall.fee > 0 || callFee > 0 || callState.settings.bill)
   const [shopSupplies,    setShopSupplies]    = useState<ShopSupplyItem[]>(
     Array.isArray(invoice.shop_supplies)    ? invoice.shop_supplies    : []
   )
@@ -674,15 +687,33 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
   // computed ones added back, which nets to zero change when nothing moved.
   const storedExtras = extrasFromDocument(invoice as unknown as Record<string, unknown>)
 
+  // The service call fee the same way: the stored fee is inside the approved subtotal
+  // and its labor base already, so only the CHANGE moves the figures - nothing when the
+  // fee is as stored, and nothing at all on an invoice without one.
+  const callNow     = callAvailable ? { fee: callFee, tax: callTax } : storedCall
+  const callChanged = callNow.fee !== storedCall.fee || (callNow.fee > 0 && callNow.tax !== storedCall.tax)
+  const callDelta   = callChanged ? round2(callNow.fee - storedCall.fee) : 0
+  const callLaborDelta = callChanged
+    ? round2(serviceCallBuckets(callNow).labor - serviceCallBuckets(storedCall).labor)
+    : 0
+  const callRowNow  = serviceCallRow(callNow)
+  // Written when there is one, or to clear one the invoice had.
+  const callPayload = callAvailable && (callFee > 0 || storedCall.fee > 0) ? serviceCallColumns(callFee, callTax) : {}
+
   // Running total
   const newSubtotal  = isDetailer
     ? round2(serviceLinesTotal + adjLinesTotal + shopSuppliesTotal + additionalPartsTotal + additionalLaborTotal)
     // The extras are part of the subtotal, and the document's STORED extras come out
     // first so a recompute replaces them rather than stacking on top of them.
-    : round2(
-        originalSubtotal + shopSuppliesTotal + additionalPartsTotal + additionalLaborTotal
-        - storedExtras.total + extrasResult.total,
-      )
+    : callDelta !== 0
+      ? round2(
+          originalSubtotal + shopSuppliesTotal + additionalPartsTotal + additionalLaborTotal
+          - storedExtras.total + extrasResult.total + callDelta,
+        )
+      : round2(
+          originalSubtotal + shopSuppliesTotal + additionalPartsTotal + additionalLaborTotal
+          - storedExtras.total + extrasResult.total,
+        )
   // ── Splitting the tax on an in-progress invoice ────────────────────────────
   // invoice.subtotal is ONE BLENDED NUMBER: parts, markup and labor are already
   // added together and there is no column that says how much of it was which. So the
@@ -705,9 +736,13 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
   const storedTax  = storedDisc ? storedDisc.pre_tax_breakdown : parseBreakdown(invoice.tax_breakdown)
   const baseParts  = storedTax?.parts?.base ?? (sq ? quotedPartsSubtotal : null)
   const baseLabor  = storedTax?.labor?.base ?? (sq ? quotedLaborSubtotal : null)
+  // A service call fee recorded as untaxed is in the subtotal and in no tax bucket.
+  const untaxedStoredCall = serviceCallBuckets(storedCall).untaxed
   const baselineReconciles =
     baseParts != null && baseLabor != null &&
-    Math.abs((baseParts + baseLabor) - Number(originalSubtotal ?? 0)) < 0.02
+    Math.abs((baseParts + baseLabor) - (untaxedStoredCall > 0
+      ? round2(Number(originalSubtotal ?? 0) - untaxedStoredCall)
+      : Number(originalSubtotal ?? 0))) < 0.02
 
   // ── THE APPROVED FIGURE IS CARRIED, NOT RE-DERIVED ─────────────────────────
   //
@@ -737,9 +772,11 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
   const addedParts = round2(
     shopSuppliesTotal + additionalPartsTotal - storedExtraBuckets.parts + extraBuckets.parts,
   )
-  const addedLabor = round2(
-    additionalLaborTotal - storedExtraBuckets.labor + extraBuckets.labor,
-  )
+  const addedLabor = callLaborDelta !== 0
+    ? round2(additionalLaborTotal - storedExtraBuckets.labor + extraBuckets.labor + callLaborDelta)
+    : round2(
+        additionalLaborTotal - storedExtraBuckets.labor + extraBuckets.labor,
+      )
 
   // What was agreed. A work-order invoice has it stored; a quote-sourced one is priced
   // from the quote's own bases, which is what this screen already did.
@@ -917,6 +954,7 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
           tax_breakdown:    tax ? finalBreakdown : null,
           total:            grandTotal,
           ...discountPayload,
+          ...callPayload,
         }),
       })
       const res  = await fetch(`/api/invoices/${invoice.id}/finalize`, { method: 'POST' })
@@ -965,6 +1003,7 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
           tax_breakdown:    tax ? finalBreakdown : null,
           total:            grandTotal,
           ...discountPayload,
+          ...callPayload,
         }),
       })
       const json = await res.json()
@@ -1250,6 +1289,12 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
                   139.63, and the missing 0.77 of shop supplies was nowhere on screen.
                   A charge folded silently into a subtotal is the thing the customer
                   phones about. Read as stored, never recomputed. */}
+              {storedCall.fee > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/50">Service Call Fee</span>
+                  <span className="text-white">{fmt(storedCall.fee)}</span>
+                </div>
+              )}
               {extrasDisplayRows(storedExtras).map(r => (
                 <div key={r.key} className="flex justify-between text-sm">
                   <span className="text-white/50">
@@ -1509,6 +1554,13 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
             Mileage is manual on purpose - deriving it from addresses needs a distance
             API and a monthly bill.
           </p>
+        </Section>
+      )}
+
+      {/* ── SECTION D1c: The service call fee - a flat fee, its own line. ── */}
+      {showCall && (
+        <Section label="Service Call">
+          <ServiceCallField fee={callFee} tax={callTax} onFee={setCallFee} />
         </Section>
       )}
 
@@ -1801,6 +1853,12 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
             job shows no shop supplies line at all and a job with no travel shows no
             travel line. Nobody adds these; they are a percentage and two rates.
           */}
+          {callRowNow && (
+            <div className="flex justify-between text-sm" data-testid="service-call-row">
+              <span className="text-white/50">{callRowNow.label}</span>
+              <span className="text-white">{fmt(callRowNow.amount)}</span>
+            </div>
+          )}
           {extraRows.map(r => (
             <div key={r.key} className="flex justify-between text-sm">
               <span className="text-white/50">

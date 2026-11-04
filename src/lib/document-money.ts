@@ -25,6 +25,7 @@ import { parseBreakdown, type TaxBreakdown, type TaxSettings } from '@/lib/tax'
 import {
   applyDiscount, normalizeDiscount, parseDiscount, type DiscountInput, type DocumentDiscount,
 } from '@/lib/document-discount'
+import { serviceCallColumns, serviceCallOf, type ServiceCall } from '@/lib/service-call'
 
 export interface DocumentMoneyInput {
   items:       EditItem[]
@@ -44,6 +45,12 @@ export interface DocumentMoneyInput {
    * or zero is no discount, and then nothing below differs from before it existed.
    */
   discount?:   DiscountInput | null
+  /**
+   * The flat service call fee (migration 180) and how it is taxed. Taxed in the same
+   * call as the drive time - LD's rounding is unchanged - and never folded into the
+   * labor subtotal. Null or a 0 fee is none, and then nothing below differs.
+   */
+  serviceCall?: ServiceCall | null
   /**
    * The document as stored, when re-totalling an existing one. While nothing about it
    * has changed, its own figures are returned untouched - see `unchanged`.
@@ -68,8 +75,16 @@ const STORED_MONEY_COLUMNS = [
   'labor_subtotal', 'tax_percent', 'tax_amount', 'grand_total', 'tax_breakdown',
   'travel_hours', 'travel_rate', 'travel_amount', 'mileage_miles', 'mileage_rate', 'mileage_amount',
   'shop_supplies_percent_applied', 'shop_supplies_cap_applied', 'shop_supplies_fee',
-  'discount',
+  'discount', 'service_call_fee', 'service_call_tax',
 ] as const
+
+/** The same fee: amount and tax treatment - or both none. */
+function sameServiceCall(a: ServiceCall | null | undefined, stored: Record<string, unknown>): boolean {
+  const s = serviceCallOf(stored)
+  const fee = a && a.fee > 0 ? a.fee : 0
+  if (fee === 0 || s.fee === 0) return fee === s.fee
+  return fee === s.fee && a!.tax === s.tax
+}
 
 /**
  * THE NO-OP RULE. Every line still exactly as loaded, in the same order, and every
@@ -94,7 +109,8 @@ export function unchanged(input: DocumentMoneyInput): boolean {
     sameNum(s.tax_percent, input.taxPct) &&
     sameNum(s.travel_hours, input.extras.travelHours) &&
     sameNum(s.mileage_miles, input.extras.mileageMiles) &&
-    sameDiscount(normalizeDiscount(input.discount ?? null), parseDiscount(s.discount))
+    sameDiscount(normalizeDiscount(input.discount ?? null), parseDiscount(s.discount)) &&
+    sameServiceCall(input.serviceCall, s)
 }
 
 export interface DocumentMoney {
@@ -103,6 +119,8 @@ export interface DocumentMoney {
   partsTotal:    number
   laborSubtotal: number
   extras:        ExtrasResult
+  /** The service call fee on the document: its own line, fee 0 for none. */
+  serviceCall:   ServiceCall
   /** Before the discount - what the customer's copy prints as "Subtotal". */
   subtotal:      number
   /** The discount as applied, or null for none. */
@@ -132,8 +150,11 @@ export function documentMoney(input: DocumentMoneyInput): DocumentMoney {
   // Shop supplies is a percentage of the POST-markup parts total - the figure the
   // customer reads - so a quote and the invoice it becomes agree.
   const extras = computeExtras(t.partsTotal, input.extras, input.extrasSettings, input.laborRate)
+  const serviceCall: ServiceCall = input.serviceCall && input.serviceCall.fee > 0
+    ? { fee: round2(input.serviceCall.fee), tax: input.serviceCall.tax }
+    : { fee: 0, tax: input.serviceCall?.tax ?? 'labor' }
   const w = totalsWithExtras(
-    { parts: t.partsTotal, labor: t.laborSubtotal }, extras, input.taxSettings, input.taxPct,
+    { parts: t.partsTotal, labor: t.laborSubtotal }, extras, input.taxSettings, input.taxPct, serviceCall,
   )
   if (unchanged(input)) {
     const s = input.stored!
@@ -148,6 +169,7 @@ export function documentMoney(input: DocumentMoneyInput): DocumentMoney {
       partsTotal:    t.partsTotal,
       laborSubtotal: n(s.labor_subtotal),
       extras:        storedExtras,
+      serviceCall:   serviceCallOf(s),
       // grand_total - tax_amount is AFTER the discount; the subtotal before it is the
       // one the discount recorded.
       subtotal:      disc ? disc.subtotal_before : round2(n(s.grand_total) - n(s.tax_amount)),
@@ -182,12 +204,18 @@ export function documentMoney(input: DocumentMoneyInput): DocumentMoney {
   // that never had a discount writes nothing new (and saves before 165 is applied).
   if (d?.discount) columns.discount = d.discount
   else if (input.stored && parseDiscount(input.stored.discount)) columns.discount = null
+  // The service call fee, the same way: written when there is one or to clear one the
+  // document had, so a document without one writes nothing new (and saves before 180).
+  if (serviceCall.fee > 0 || (input.stored && serviceCallOf(input.stored).fee > 0)) {
+    Object.assign(columns, serviceCallColumns(serviceCall.fee, serviceCall.tax))
+  }
   return {
     partsBase:     t.partsBase,
     markupAmt:     t.markupAmt,
     partsTotal:    t.partsTotal,
     laborSubtotal: t.laborSubtotal,
     extras,
+    serviceCall,
     subtotal:      w.subtotal,
     discount:      d?.discount ?? null,
     discountError: applied.ok ? null : applied.error,

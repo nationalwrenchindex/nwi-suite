@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server'
 import { isMissingTaxBreakdownColumn } from '@/lib/tax'
 import { discountForWrite, isMissing165Column, MIGRATION_165_MESSAGE } from '@/lib/document-discount'
 import { createClient } from '@/lib/supabase/server'
+import { isMissingServiceCallColumn, serviceCallFee, serviceCallFromBody, MIGRATION_180_MESSAGE } from '@/lib/service-call'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 const QUOTE_SELECT = `
@@ -206,6 +207,9 @@ export async function PUT(
   ]) {
     if (raw[k] !== undefined && !isDetailer) updatePayload[k] = raw[k]
   }
+  // The service call fee (migration 180): only when sent, and not on a detailer's quote.
+  const serviceCall = serviceCallFromBody(raw)
+  if (serviceCall && !isDetailer) Object.assign(updatePayload, serviceCall)
   // Written only when sent, so a caller that does not know about the split cannot
   // wipe a breakdown that is already on the row.
   if (body.tax_breakdown !== undefined) updatePayload.tax_breakdown = body.tax_breakdown ?? null
@@ -226,6 +230,20 @@ export async function PUT(
     .eq('user_id', user.id)
     .select(QUOTE_SELECT)
     .single()
+
+  // Before 180: setting a service call fee is refused, never stored as a total with no
+  // record of the fee; clearing one that cannot exist is dropped and the save retried.
+  if (updateErr && isMissingServiceCallColumn(updateErr)) {
+    if (serviceCallFee(updatePayload) > 0) return NextResponse.json({ error: MIGRATION_180_MESSAGE }, { status: 409 })
+    delete updatePayload.service_call_fee; delete updatePayload.service_call_tax
+    ;({ data: updated, error: updateErr } = await supabase
+      .from('quotes')
+      .update(updatePayload)
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select(QUOTE_SELECT)
+      .single())
+  }
 
   // A display column must not cost a tech their edit if 140 has not run here.
   if (updateErr && isMissingTaxBreakdownColumn(updateErr)) {

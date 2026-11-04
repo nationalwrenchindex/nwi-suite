@@ -15,7 +15,7 @@
 // including the parts/labor tax split, so this form and the quote editor cannot
 // disagree about one job's money.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import CustomerUnitPicker from '@/components/work-orders/CustomerUnitPicker'
 import LineItemEditor from '@/components/shared/LineItemEditor'
 import { totalLaborHours, type EditItem } from '@/components/shared/line-items'
@@ -30,6 +30,9 @@ import { extrasDisplayRows } from '@/lib/billable-extras'
 import { taxDisplayRows } from '@/lib/tax'
 import { money } from '@/lib/format'
 import { BLANK_QUOTE_SEED, seedNotes, type QuoteSeed } from '@/types/quote-seed'
+import { useServiceCallSettingsState } from '@/lib/use-service-call-settings'
+import { serviceCallRow, serviceCallSeed } from '@/lib/service-call'
+import ServiceCallField from '@/components/shared/ServiceCallField'
 
 export default function NewQuoteForm({
   defaults,
@@ -53,6 +56,15 @@ export default function NewQuoteForm({
   // Hours and miles are the only inputs. A percentage is not a question.
   const [travelHours,  setTravelHours]  = useState(0)
   const [mileageMiles, setMileageMiles] = useState(0)
+  // The service call fee (migration 180): seeded from Settings once they arrive, then
+  // the tech's to change. null until seeded, so a save cannot slip in before it.
+  const callState = useServiceCallSettingsState()
+  const [callFee, setCallFee] = useState<number | null>(null)
+  useEffect(() => {
+    if (callState.loaded && callFee === null) setCallFee(serviceCallSeed(callState.settings).fee)
+  }, [callState.loaded, callState.settings, callFee])
+  const serviceCall = callState.available ? { fee: callFee ?? 0, tax: callState.settings.tax } : null
+  const showCall = callState.available && (callState.settings.bill || (callFee ?? 0) > 0)
 
   const [customerId, setCustomerId] = useState<string | null>(seed.customerId ?? null)
   // CustomerUnitPicker hands over the whole customer and every caller was taking the
@@ -97,7 +109,9 @@ export default function NewQuoteForm({
     items, markupPct, laborRate, taxPct, taxSettings,
     extrasSettings, extras: { travelHours, mileageMiles },
     discount: discountFromDraft(discountDraft),
+    serviceCall,
   })
+  const callRow = serviceCallRow(docMoney.serviceCall)
   const totals       = docMoney
   const extrasResult = docMoney.extras
   const withExtras   = docMoney
@@ -115,6 +129,11 @@ export default function NewQuoteForm({
     }
     if (withExtras.grandTotal < 0) {
       setError('Grand total cannot be negative.')
+      return
+    }
+    // The fee is seeded from Settings; saving before they arrive would record none.
+    if (!callState.loaded) {
+      setError('Your shop settings are still loading. Try again in a moment.')
       return
     }
 
@@ -251,10 +270,19 @@ export default function NewQuoteForm({
         </div>
       )}
 
+      {/* ── The service call fee: a flat fee, its own line, shown when the shop bills
+          one or this quote has one. ── */}
+      {showCall && (
+        <div className="pt-3 border-t border-white/8">
+          <ServiceCallField fee={callFee ?? 0} tax={callState.settings.tax} onFee={setCallFee} disabled={saving} />
+        </div>
+      )}
+
       {/* ── Totals, from the shared calculator ── */}
       <div className="space-y-1 pt-3 border-t border-white/8 text-sm">
         <Row label="Parts" value={money(totals.partsTotal)} />
         <Row label={`Labour (${laborHours}h)`} value={money(totals.laborSubtotal)} />
+        {callRow && <Row label={callRow.label} value={money(callRow.amount)} />}
         {/* Travel, mileage and shop supplies - computed, each labelled, never folded
             into parts. A zero extra prints no row, so a labour-only quote shows no
             shop supplies line at all. */}
