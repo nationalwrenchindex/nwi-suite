@@ -206,10 +206,14 @@ async function main() {
     const after = buildInvoicePayload({ ...carried, ...up.update }, cl, fb).payload
     const tRate = parseBreakdown(carried.tax_breakdown)?.labor
     const added = Number(after.travel_amount)
-    const taxAdded = r2((tRate ? (tRate.taxed ? tRate.rate : 0) : (ts.tax_labor ? ts.tax_rate_labor : 0)) / 100 * added)
+    // The labor bucket taxed ONCE on its summed base (stored base + the drive time),
+    // less the tax on the stored base - not the drive time taxed and rounded on its own.
+    const lRate = tRate ? (tRate.taxed ? tRate.rate : 0) : (ts.tax_labor ? ts.tax_rate_labor : 0)
+    const lBase = tRate?.base ?? 0
+    const taxAdded = tRate ? r2(r2(lRate / 100 * r2(lBase + added)) - r2(lRate / 100 * lBase)) : r2(lRate / 100 * added)
     console.log(`\n5. ${carried.work_order_number} CARRIES ITS QUOTE'S TAX (${usd(carried.tax_amount)}). One hour of drive time added (${usd(added)}):`)
     console.log(`   tax ${usd(before.tax_amount)} -> ${usd(after.tax_amount)}; invoice total ${usd(before.total)} -> ${usd(after.total)}; quoted total ${usd(carried.total_amount)} -> ${usd(up.update.total_amount ?? carried.total_amount)}`)
-    check(`the carried tax moves by exactly the tax on the drive time (${usd(taxAdded)}), never re-derived`, r2(Number(after.tax_amount) - Number(before.tax_amount)) === taxAdded)
+    check(`the carried tax moves by exactly the drive time's tax in the labor bucket, rounded once on the summed base (${usd(taxAdded)}), never re-derived`, r2(Number(after.tax_amount) - Number(before.tax_amount)) === taxAdded)
     check('the invoice total moves by exactly drive time + its tax', r2(Number(after.total) - Number(before.total)) === r2(added + taxAdded))
     const back = workOrderExtrasUpdate({ ...carried, ...up.update }, cl, { travelHours: 0, mileageMiles: 0, serviceCallFee: null }, shop, true)
     if ('error' in back) throw new Error(back.error)
@@ -225,12 +229,15 @@ async function main() {
   const p = priceInvoiceEdit(real, opened.state, edited)
   const eTravel = r2(1.5 * (extras.travelRatePerHour ?? laborRate)), eMiles = r2(42 * (extras.mileageRatePerMile ?? 0))
   const rl = parseBreakdown(real.tax_breakdown)?.labor
-  const eTax = r2((rl ? (rl.taxed ? rl.rate : 0) : Number(real.tax_rate)) / 100 * (eTravel + fee))
+  // The labor bucket taxed ONCE on its summed base (stored base + drive time + fee),
+  // less the tax on the stored base. Taxing the $297.50 on its own rounds twice.
+  const eRate = rl ? (rl.taxed ? rl.rate : 0) : Number(real.tax_rate)
+  const eTax = rl ? r2(r2(eRate / 100 * r2(rl.base + eTravel + fee)) - r2(eRate / 100 * rl.base)) : r2(eRate / 100 * (eTravel + fee))
   console.log(`\n6. ${real.invoice_number} (stored total ${usd(real.total)}) - the tech adds 1.5 h drive time, 42 miles and a ${usd(fee)} service call on the invoice:`)
   console.log(`   drive time ${usd(p.extras.travel.amount)}, mileage ${usd(p.extras.mileage.amount)}, shop supplies ${usd(p.extras.shopSupplies.amount)} (not recorded on this invoice, so none), tax ${usd(real.tax_amount)} -> ${usd(p.taxAmount)}, total ${usd(p.total)}`)
   check('drive time and mileage price at your rates now', p.extras.travel.amount === eTravel && p.extras.mileage.amount === eMiles)
   check('a supplies percentage the invoice never recorded is NOT added to it', p.extras.shopSupplies.amount === Number(real.shop_supplies_fee ?? 0))
-  check(`the total = stored + drive time + mileage + fee + only their tax (${usd(eTax)}, mileage untaxed)`, p.total === r2(Number(real.total) + eTravel + eMiles + fee + eTax), `expected ${usd(r2(Number(real.total) + eTravel + eMiles + fee + eTax))}`)
+  check(`the total = stored + drive time + mileage + fee + only their tax, the labor bucket rounded once (${usd(eTax)}, mileage untaxed)`, p.total === r2(Number(real.total) + eTravel + eMiles + fee + eTax), `expected ${usd(r2(Number(real.total) + eTravel + eMiles + fee + eTax))}`)
 
   // ── 7. three existing invoices, before and after ───────────────────────────────
   const [oldPath, newPath] = process.argv.slice(2)

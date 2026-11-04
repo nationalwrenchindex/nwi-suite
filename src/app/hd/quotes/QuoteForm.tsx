@@ -18,7 +18,8 @@ import FeeInput from '@/components/hd/FeeInput'
 import { useTaxSettings } from '@/lib/use-tax-settings'
 import { useHdFeeSettings, shopHdLaborRate } from '@/lib/hd/use-fee-settings'
 import { NO_HD_LABOR_RATE } from '@/lib/hd/labor-rate'
-import { computeTax, taxDisplayRows, mergeBreakdowns, parseBreakdown } from '@/lib/tax'
+import { taxDisplayRows, parseBreakdown } from '@/lib/tax'
+import { hdDocumentTax, hdTaxableBase, savedDocumentTax } from '@/lib/hd/document-tax'
 import { parseAddress } from '@/lib/hd/address-parse'
 import { DEFAULT_HD_PARTS_MARKUP, sellPrice, lineAmount } from '@/lib/hd/parts-pricing'
 import AddressAutofill from '@/components/hd/AddressAutofill'
@@ -295,6 +296,8 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
   // What THIS quote taxed, off its own breakdown. NULL for a new quote or a legacy one,
   // which then follows the shop's settings exactly as before.
   const storedTax = editing ? parseBreakdown(initial.tax_breakdown) : null
+  // The saved quote's own tax, carried rather than re-derived (lib/hd/document-tax).
+  const savedTax = editing ? savedDocumentTax(initial) : null
 
   const [saving, setSaving]               = useState(false)
   // HD gets the same three extras as LD, same tax treatment, same cap. Hours and
@@ -927,26 +930,17 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
   const taxedPartsFlag = storedTax?.parts ? storedTax.parts.taxed : (taxSettings?.tax_parts ?? true)
   const taxedLaborFlag = storedTax?.labor ? storedTax.labor.taxed : (taxSettings?.tax_labor ?? true)
 
-  // THE DIAGNOSTIC FEE AND THE ROAD CALL FEE ARE LABOR. Leaving them on the parts
-  // side would have moved the bug instead of fixing it: a shop in a state that
-  // exempts labor would still have been taxing its own call-out.
-  const tax = computeTax(
-    { parts: subtotalParts, labor: subtotalLabor + diagFee + roadFee + callFeeTaxed },
-    {
-      tax_parts:      taxedPartsFlag,
-      tax_labor:      taxedLaborFlag,
-      tax_rate_parts: form.tax_rate,
-      tax_rate_labor: form.tax_rate_labor,
-    },
-  )
-  const taxAmount     = tax.taxAmount
-  const total         = taxBase + taxAmount
+  const quoteTaxSettings = {
+    tax_parts:      taxedPartsFlag,
+    tax_labor:      taxedLaborFlag,
+    tax_rate_parts: form.tax_rate,
+    tax_rate_labor: form.tax_rate_labor,
+  }
 
   // ── Billable extras ──────────────────────────────────────────────────────
   // Supplies is a percentage of the PARTS subtotal only - never labour, and never
   // the diagnostic or road-call fee, both of which are labour. Travel is taxed as
-  // labour, mileage is not taxed, supplies is taxed as parts. extrasDelta does the
-  // per-bucket rounding; nothing is re-derived from the document total.
+  // labour, mileage is not taxed, supplies is taxed as parts.
   const extrasResult = computeExtras(
     subtotalParts,
     {
@@ -964,15 +958,27 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
     extrasSettings,
     Number(form.labor_rate ?? 0),
   )
-  const extras = extrasDelta(extrasResult, {
-    tax_parts:      taxedPartsFlag,
-    tax_labor:      taxedLaborFlag,
-    tax_rate_parts: form.tax_rate,
-    tax_rate_labor: form.tax_rate_labor,
-  })
+  const extras = extrasDelta(extrasResult, null)
+
+  // THE TAX: each bucket's whole base - lines, fees, drive time and supplies summed -
+  // taxed once and rounded once. THE DIAGNOSTIC FEE AND THE ROAD CALL FEE ARE LABOR;
+  // leaving them on the parts side would have a shop in a state that exempts labor
+  // taxing its own call-out. A saved quote carries its stored tax and moves only by
+  // the tax on what is changed here.
+  const tax = hdDocumentTax(
+    hdTaxableBase({
+      partsLines: subtotalParts,
+      laborLines: subtotalLabor,
+      taxedFees:  diagFee + roadFee + callFeeTaxed,
+      travel:     extrasResult.travel.amount,
+      supplies:   extrasResult.shopSupplies.amount,
+    }),
+    quoteTaxSettings,
+    savedTax,
+  )
   const subtotalWithExtras = parseFloat((taxBase + extras.subtotalDelta).toFixed(2))
-  const taxWithExtras      = parseFloat((taxAmount + extras.taxDelta).toFixed(2))
-  const totalWithExtras    = parseFloat((total + extras.totalDelta).toFixed(2))
+  const taxWithExtras      = tax.taxAmount
+  const totalWithExtras    = parseFloat((subtotalWithExtras + taxWithExtras).toFixed(2))
   // An HD invoice must not display a charge outside its total either.
   const extrasMismatch = extrasAgree(extrasResult, subtotalWithExtras, taxBase)
 
@@ -980,7 +986,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
   // Off the labor and parts LINES only; travel, mileage, supplies and the fees ride in
   // the subtotal and are never discounted. The tax is the merged split above, reduced
   // per bucket on the discounted base - the shared engine, not a copy of it.
-  const preDiscountBreakdown = mergeBreakdowns([tax.breakdown, extras.breakdown])
+  const preDiscountBreakdown = tax.breakdown
   const disc = hdApplyDiscount({
     discount:   discountFromDraft(discountDraft),
     laborLines: parseFloat(subtotalLabor.toFixed(2)),
@@ -1407,17 +1413,8 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
         tax_rate:          form.tax_rate,
         // What was actually taxed, so the customer copy can say so and no later
         // reader has to guess the split back out of a blended subtotal.
-        // MERGED, so the stored breakdown sums to the stored tax_amount.
-        //
-        // This stored tax.breakdown alone, which covers parts and labor and NOT the
-        // tax on travel and shop supplies - while tax_amount below is taxWithExtras
-        // and includes it. Any reader totalling the breakdown therefore came up short
-        // of the figure the customer was charged, and the detail screen now prints
-        // those buckets as the tax lines.
-        //
-        // mergeBreakdowns SUMS already-rounded bucket amounts rather than recomputing
-        // over the merged bases - the two disagree by a cent, and the agreed figure
-        // is the one that wins. See breakdownTaxTotal in lib/tax.ts.
+        // One bucket per category with the drive time and supplies already in its
+        // base, so the stored breakdown sums to the stored tax_amount.
         //
         // AFTER THE DISCOUNT, when there is one: the record below holds the split and
         // the tax as they stood before it.
@@ -2093,8 +2090,8 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                 {([
                   // With a discount, each bucket's tax AFTER it (extras included), so
                   // the rows add up to the Tax line beneath them.
-                  { key: 'parts', label: 'parts', taxed: taxedPartsFlag, rate: form.tax_rate,       field: 'tax_rate',       amount: (discountApplied ? breakdownFinal?.parts?.amount : tax.breakdown.parts?.amount) ?? 0 },
-                  { key: 'labor', label: 'labor', taxed: taxedLaborFlag, rate: form.tax_rate_labor, field: 'tax_rate_labor', amount: (discountApplied ? breakdownFinal?.labor?.amount : tax.breakdown.labor?.amount) ?? 0 },
+                  { key: 'parts', label: 'parts', taxed: taxedPartsFlag, rate: form.tax_rate,       field: 'tax_rate',       amount: (discountApplied ? breakdownFinal?.parts?.amount : tax.breakdown?.parts?.amount) ?? 0 },
+                  { key: 'labor', label: 'labor', taxed: taxedLaborFlag, rate: form.tax_rate_labor, field: 'tax_rate_labor', amount: (discountApplied ? breakdownFinal?.labor?.amount : tax.breakdown?.labor?.amount) ?? 0 },
                 ] as const).map(row => (
                   <div key={row.key} className="flex items-center gap-2 py-2">
                     <span className="text-sm flex-1" style={{ color: MUTED }}>
@@ -2135,8 +2132,8 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                       <span>{r.text}</span><span>{fmt(r.amount)}</span>
                     </div>
                   ))}
-                {/* The total: the two buckets plus the tax on travel and supplies.
-                    Its own line so the figures above it visibly add up to it. */}
+                {/* The total of the buckets above, drive time and supplies inside
+                    them. Its own line so the figures above it visibly add up to it. */}
                 <div className="flex items-center gap-3 py-1.5" style={{ borderTop: `1px solid ${BORDER}` }}>
                   <span className="text-sm flex-1 font-semibold" style={{ color: MUTED }}>Tax</span>
                   <span className="text-sm font-semibold" style={{ color: MUTED }}>{fmt(taxFinal)}</span>

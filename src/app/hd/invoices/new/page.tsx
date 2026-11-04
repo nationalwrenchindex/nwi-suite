@@ -13,7 +13,8 @@ import { computeDueDate, termsDisplay } from '@/lib/hd/payment-terms'
 import { useTaxSettings } from '@/lib/use-tax-settings'
 import { useHdFeeSettings, shopHdLaborRate } from '@/lib/hd/use-fee-settings'
 import { NO_HD_LABOR_RATE } from '@/lib/hd/labor-rate'
-import { computeTax, taxDisplayRows, mergeBreakdowns } from '@/lib/tax'
+import { taxDisplayRows } from '@/lib/tax'
+import { hdDocumentTax, hdTaxableBase } from '@/lib/hd/document-tax'
 import { DEFAULT_HD_PARTS_MARKUP, sellPrice, lineAmount } from '@/lib/hd/parts-pricing'
 import AddressAutofill from '@/components/hd/AddressAutofill'
 import { money } from '@/lib/format'
@@ -421,41 +422,42 @@ export default function NewInvoicePage() {
   const callFeeTaxed = serviceCallTax === 'none' ? 0 : callFee
   const taxBase = subtotalLabor + subtotalParts + diagFee + roadFee + callFee
 
-  // Diagnostic and road call fees follow LABOR, not parts. See lib/tax.ts.
-  const tax = computeTax(
-    { parts: subtotalParts, labor: subtotalLabor + diagFee + roadFee + callFeeTaxed },
-    {
-      tax_parts:      taxSettings?.tax_parts ?? true,
-      tax_labor:      taxSettings?.tax_labor ?? true,
-      tax_rate_parts: form.tax_rate,
-      tax_rate_labor: form.tax_rate_labor,
-    },
-  )
-  const taxAmount = tax.taxAmount
-  const total = taxBase + taxAmount
   const taxedPartsFlag = taxSettings?.tax_parts ?? true
   const taxedLaborFlag = taxSettings?.tax_labor ?? true
 
   // ── Billable extras ──────────────────────────────────────────────────────
   // Supplies is a percentage of the PARTS subtotal only - never labour, and never
   // the diagnostic or road-call fee, both of which are labour. Travel is taxed as
-  // labour, mileage is not taxed, supplies is taxed as parts. extrasDelta does the
-  // per-bucket rounding; nothing is re-derived from the document total.
+  // labour, mileage is not taxed, supplies is taxed as parts.
   const extrasResult = computeExtras(
     subtotalParts,
     { travelHours, mileageMiles },
     extrasSettings,
     Number(form.labor_rate ?? 0),
   )
-  const extras = extrasDelta(extrasResult, {
-    tax_parts:      taxedPartsFlag,
-    tax_labor:      taxedLaborFlag,
-    tax_rate_parts: form.tax_rate,
-    tax_rate_labor: form.tax_rate_labor,
-  })
+  const extras = extrasDelta(extrasResult, null)
+
+  // THE TAX: each bucket's whole base - lines, fees, drive time and supplies summed -
+  // taxed once and rounded once. Diagnostic and road call fees follow LABOR, not
+  // parts. See lib/tax.ts and lib/hd/document-tax.ts.
+  const tax = hdDocumentTax(
+    hdTaxableBase({
+      partsLines: subtotalParts,
+      laborLines: subtotalLabor,
+      taxedFees:  diagFee + roadFee + callFeeTaxed,
+      travel:     extrasResult.travel.amount,
+      supplies:   extrasResult.shopSupplies.amount,
+    }),
+    {
+      tax_parts:      taxedPartsFlag,
+      tax_labor:      taxedLaborFlag,
+      tax_rate_parts: form.tax_rate,
+      tax_rate_labor: form.tax_rate_labor,
+    },
+  )
   const subtotalWithExtras = parseFloat((taxBase + extras.subtotalDelta).toFixed(2))
-  const taxWithExtras      = parseFloat((taxAmount + extras.taxDelta).toFixed(2))
-  const totalWithExtras    = parseFloat((total + extras.totalDelta).toFixed(2))
+  const taxWithExtras      = tax.taxAmount
+  const totalWithExtras    = parseFloat((subtotalWithExtras + taxWithExtras).toFixed(2))
   // An HD invoice must not display a charge outside its total either.
   const extrasMismatch = extrasAgree(extrasResult, subtotalWithExtras, taxBase)
 
@@ -515,18 +517,9 @@ export default function NewInvoicePage() {
         // Migration 178: the fee and the tax treatment it was priced with.
         ...(hdExtras.serviceCallAvailable ? serviceCallColumns(callFee, serviceCallTax) : {}),
         tax_rate:          form.tax_rate,
-        // MERGED, so the stored breakdown sums to the stored tax_amount.
-        //
-        // This stored tax.breakdown alone, which covers parts and labor and NOT the
-        // tax on travel and shop supplies - while tax_amount below is taxWithExtras
-        // and includes it. Any reader totalling the breakdown therefore came up short
-        // of the figure the customer was charged, and the detail screen now prints
-        // those buckets as the tax lines.
-        //
-        // mergeBreakdowns SUMS already-rounded bucket amounts rather than recomputing
-        // over the merged bases - the two disagree by a cent, and the agreed figure
-        // is the one that wins. See breakdownTaxTotal in lib/tax.ts.
-        tax_breakdown:     mergeBreakdowns([tax.breakdown, extras.breakdown]),
+        // One bucket per category with the drive time and supplies already in its
+        // base, so the stored breakdown sums to the stored tax_amount.
+        tax_breakdown:     tax.breakdown,
         // With the extras in. taxWithExtras / totalWithExtras include travel and
         // supplies tax; mileage adds to the subtotal and attracts none.
         tax_amount:        taxWithExtras,
@@ -824,8 +817,8 @@ export default function NewInvoicePage() {
                   it. The percentage now appears once, as the field that sets it. */}
               <div style={{ borderTop: `1px solid ${BORDER}`, marginTop: 4 }}>
                 {([
-                  { key: 'parts', label: 'parts', taxed: taxedPartsFlag, rate: form.tax_rate,       field: 'tax_rate',       amount: tax.breakdown.parts?.amount ?? 0 },
-                  { key: 'labor', label: 'labor', taxed: taxedLaborFlag, rate: form.tax_rate_labor, field: 'tax_rate_labor', amount: tax.breakdown.labor?.amount ?? 0 },
+                  { key: 'parts', label: 'parts', taxed: taxedPartsFlag, rate: form.tax_rate,       field: 'tax_rate',       amount: tax.breakdown?.parts?.amount ?? 0 },
+                  { key: 'labor', label: 'labor', taxed: taxedLaborFlag, rate: form.tax_rate_labor, field: 'tax_rate_labor', amount: tax.breakdown?.labor?.amount ?? 0 },
                 ] as const).map(row => (
                   <div key={row.key} className="flex items-center gap-2 py-2">
                     <span className="text-sm flex-1" style={{ color: MUTED }}>
