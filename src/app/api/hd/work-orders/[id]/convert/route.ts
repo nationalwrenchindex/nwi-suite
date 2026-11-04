@@ -20,6 +20,8 @@ import { buildInvoicePayload, type WorkOrderLineRow } from '@/lib/hd/wo-to-invoi
 import { loadLinesAndJobs } from '@/lib/hd/work-order-jobs-load'
 import { TAX_SETTINGS_SELECT, taxSettingsFrom } from '@/lib/tax'
 import { unitIdentityFill } from '@/lib/hd/unit-hours'
+import { hdLaborRateFrom } from '@/lib/hd/labor-rate'
+import { invoiceCarryFromQuote } from '@/lib/hd/document-carry'
 
 export const dynamic = 'force-dynamic'
 
@@ -63,16 +65,18 @@ export async function GET(
   // And the unit year, truck fields and VIN, which reached the work order only from
   // migration 159 on.
   const UNIT_FROM_QUOTE = ['unit_year', 'truck_make', 'truck_model', 'truck_year', 'vin'] as const
-  const feeMissing  = row.diagnostic_fee == null || row.road_call_fee == null
-  const unitMissing = UNIT_FROM_QUOTE.some(k => !row[k])
-  if (row.quote_id && (!row.payment_terms || !row.unit_number || !row.fleet_account_id || feeMissing || unitMissing)) {
+  // Read whenever the work order came from a quote: besides these fills, the quote's
+  // notes, email and service address reach the invoice below (invoiceCarryFromQuote).
+  let sourceQuote: Record<string, unknown> | null = null
+  if (row.quote_id) {
     const { data: q } = await supabase
       .from('hd_quotes')
       .select('*')
       .eq('id', String(row.quote_id))
       .eq('user_id', user.id)
       .maybeSingle()
-    const quote = (q ?? {}) as Record<string, unknown>
+    sourceQuote = (q ?? null) as Record<string, unknown> | null
+    const quote = sourceQuote ?? {}
     if (!row.payment_terms && quote.payment_terms)       row.payment_terms    = quote.payment_terms
     if (!row.unit_number && quote.unit_number)           row.unit_number      = quote.unit_number
     if (!row.fleet_account_id && quote.fleet_account_id) row.fleet_account_id = quote.fleet_account_id
@@ -152,18 +156,15 @@ export async function GET(
   // that it did - see buildInvoicePayload's internal_notes.
   const { data: profile } = await supabase
     .from('profiles')
-    .select(`hd_labor_rate, default_labor_rate, ${TAX_SETTINGS_SELECT}`)
+    .select(`hd_labor_rate, ${TAX_SETTINGS_SELECT}`)
     .eq('id', user.id)
     .single()
 
   const prof = (profile ?? {}) as Record<string, unknown>
-  // hd_labor_rate FIRST: HD has its own rate setting, and reading LD's
-  // default_labor_rate would quietly bill an HD job at the light-duty rate. They happen
-  // to match at 135 for this shop, which is exactly how that would go unnoticed.
-  const fallbackRate =
-    prof.hd_labor_rate != null ? Number(prof.hd_labor_rate)
-    : prof.default_labor_rate != null ? Number(prof.default_labor_rate)
-    : null
+  // hd_labor_rate ONLY (hdLaborRateFrom). LD's default_labor_rate used to stand in
+  // when it was unset, which bills an HD job at the light-duty rate; with no HD rate
+  // the route now refuses an unpriced labor line below and says to set one.
+  const fallbackRate = hdLaborRateFrom(prof)
 
   const { payload, source: termsSource, discountError } = buildInvoicePayload(row, rows, {
     laborRate: fallbackRate,
@@ -192,6 +193,17 @@ export async function GET(
       }, { status: 422 })
     }
   }
+
+  // The fields with no column on the work order: the quote's notes and service address,
+  // and the email to send to (the fleet account's contact, read now, else the quote's).
+  // Only what the payload leaves empty; nothing here is money.
+  let fleet: { contact_email?: unknown } | null = null
+  if (row.fleet_account_id) {
+    const { data: f } = await supabase.from('hd_fleet_accounts')
+      .select('contact_email').eq('id', String(row.fleet_account_id)).eq('user_id', user.id).maybeSingle()
+    fleet = (f ?? null) as { contact_email?: unknown } | null
+  }
+  Object.assign(payload, invoiceCarryFromQuote(payload, row, sourceQuote, fleet))
 
   const partCount  = rows.filter(r => String(r.type ?? '').toLowerCase() === 'part').length
   const laborCount = rows.filter(r => String(r.type ?? '').toLowerCase().startsWith('lab')).length

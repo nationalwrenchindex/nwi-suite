@@ -8,6 +8,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { TAX_SETTINGS_SELECT, taxSettingsFrom } from '@/lib/tax'
 import { HD_EXTRAS_SELECT, LD_EXTRAS_SELECT, hdExtrasSettingsFrom, hdServiceCallFrom } from '@/lib/hd/hd-extras'
 import type { ShopExtras } from '@/lib/hd/work-order-extras'
+import { hdLaborRateFrom } from '@/lib/hd/labor-rate'
 
 function isMissingColumn(error: unknown): boolean {
   const e = (error ?? {}) as { code?: string }
@@ -26,8 +27,8 @@ export async function loadHdShopExtras(
     res = await supabase.from('profiles').select(base).eq('id', userId).maybeSingle()
   }
   const p = (res.data ?? {}) as Record<string, unknown>
-  const laborRate = p.hd_labor_rate != null ? Number(p.hd_labor_rate)
-    : p.default_labor_rate != null ? Number(p.default_labor_rate) : null
+  // HD's own rate only (hdLaborRateFrom) - LD's default_labor_rate never stands in.
+  const laborRate = hdLaborRateFrom(p)
   return {
     available,
     profile: p,

@@ -14,6 +14,7 @@ import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { normalizeDiscount } from '@/lib/document-discount'
 import { workOrderDiscountUpdate, type WorkOrderLineRow } from '@/lib/hd/wo-to-invoice'
+import { hdLaborRateFrom } from '@/lib/hd/labor-rate'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,12 +55,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     .order('sort_order', { ascending: true })
   if (lineErr) return NextResponse.json({ error: 'Could not read the work order line items.' }, { status: 500 })
 
-  // Only for a labor line with no price of its own - the converter's same fallback.
+  // Only for a labor line with no price of its own - the converter's same fallback,
+  // hd_labor_rate only (hdLaborRateFrom), never LD's rate.
   const { data: profile } = await supabase
-    .from('profiles').select('hd_labor_rate, default_labor_rate').eq('id', user.id).maybeSingle()
-  const p = (profile ?? {}) as Record<string, unknown>
-  const fallbackRate = p.hd_labor_rate != null ? Number(p.hd_labor_rate)
-    : p.default_labor_rate != null ? Number(p.default_labor_rate) : null
+    .from('profiles').select('hd_labor_rate').eq('id', user.id).maybeSingle()
+  const fallbackRate = hdLaborRateFrom(profile as Record<string, unknown> | null)
 
   const result = workOrderDiscountUpdate(
     wo as Record<string, unknown>, (lineRows ?? []) as unknown as WorkOrderLineRow[], input, fallbackRate)

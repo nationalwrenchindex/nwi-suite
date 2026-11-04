@@ -14,6 +14,7 @@ import type { PickedPart } from '@/components/parts/PartsFinder'
 import { money } from '@/lib/format'
 import { tint } from '@/lib/hd/text-tone'
 import { JOB_STATUSES, type JobStatus, type WorkOrderJob } from '@/lib/hd/work-order-jobs'
+import { NO_HD_LABOR_RATE } from '@/lib/hd/labor-rate'
 
 // Parts and labor priced on the job itself, instead of first appearing at the
 // invoice form. Self-contained: it fetches and saves its own rows, so the work order
@@ -43,6 +44,8 @@ interface DraftLine {
   unit_cost: string
   unit_price: string
   markup_percent: string
+  /** The rate a new labor row opened with, so a row left at it is still blank. */
+  seededRate?: string
 }
 
 function fmt(n: number) { return `${money(n)}` }
@@ -111,9 +114,16 @@ export default function WorkOrderLineItems({
   workOrderId,
   canEdit,
   unit,
+  laborRate = null,
 }: {
   workOrderId: string
   canEdit: boolean
+  /**
+   * The rate a NEW labor line pre-fills: the work order's recorded rate, else the shop's
+   * HD rate (newLaborLineRate). NULL when neither exists - the row opens empty and the
+   * card says why. Lines already saved keep their own rate.
+   */
+  laborRate?: number | null
   /** The unit on the job, so the parts picker opens already filtered to it. */
   unit?: { manufacturer: string | null; model: string | null; serial: string | null }
 }) {
@@ -184,6 +194,9 @@ export default function WorkOrderLineItems({
   }, [])
 
   function addLine(type: WorkOrderLineType, jobNumber: number) {
+    // A labor row opens at the rate, editable on the line. It used to open empty, so
+    // every labor line on every work order had its rate typed by hand.
+    const seeded = type === 'labor' && laborRate != null ? String(laborRate) : undefined
     setLines(ls => [...ls, {
       key: crypto.randomUUID(),
       job_number: jobNumber,
@@ -192,8 +205,9 @@ export default function WorkOrderLineItems({
       part_number: '',
       quantity: '1',
       unit_cost: '',
-      unit_price: '',
+      unit_price: seeded ?? '',
       markup_percent: type === 'part' ? String(markupDefault) : '',
+      ...(seeded ? { seededRate: seeded } : {}),
     }])
     setDirty(true)
     setNote(null)
@@ -281,7 +295,10 @@ export default function WorkOrderLineItems({
   // shorthand and is not ours to drop.
   function isBlank(d: DraftLine): boolean {
     const hasText  = d.description.trim() !== '' || d.part_number.trim() !== ''
-    const hasMoney = d.unit_cost.trim() !== '' || d.unit_price.trim() !== '' || draftTotal(d) !== 0
+    // The rate a new labor row opened with is the card's, not the tech's: a row still
+    // at it, at one hour, with nothing typed, is the same blank row it always was.
+    const untouched = d.seededRate != null && d.unit_price === d.seededRate && d.quantity === '1' && d.unit_cost.trim() === ''
+    const hasMoney = !untouched && (d.unit_cost.trim() !== '' || d.unit_price.trim() !== '' || draftTotal(d) !== 0)
     return !hasText && !hasMoney
   }
 
@@ -392,6 +409,10 @@ export default function WorkOrderLineItems({
                 + Add Part
               </button>
             </>
+          )}
+          {/* No rate to pre-fill a labor line with: said plainly, never a made-up number. */}
+          {laborRate == null && (
+            <span className="text-xs" style={{ color: 'var(--hd-warn)' }}>{NO_HD_LABOR_RATE}</span>
           )}
           <div className="flex-1" />
           {/* A warning, so it reads like one: the amber token (AA in both themes). */}
@@ -613,7 +634,7 @@ export default function WorkOrderLineItems({
                             type="number" min="0" step="0.01"
                             className={inputCls} style={inputStyle} disabled={!canEdit}
                             value={d.unit_price} onChange={e => update(d.key, { unit_price: e.target.value })}
-                            placeholder="Rate/hr"
+                            placeholder={laborRate == null ? 'Set rate' : 'Rate/hr'}
                           />
                         )}
                       </td>

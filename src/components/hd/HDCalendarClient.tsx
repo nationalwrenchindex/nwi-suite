@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { matchUnitBySerial } from '@/lib/hd/unit-match'
+import { shopHdLaborRate } from '@/lib/hd/use-fee-settings'
 import { textTone, tint } from '@/lib/hd/text-tone'
 
 const HD_ORANGE = '#E85D24'
@@ -113,6 +114,10 @@ export default function HDCalendarClient() {
   const [bookingDate,   setBookingDate]   = useState('')
   const [bookingSaving, setBookingSaving] = useState(false)
   const [bookingError,  setBookingError]  = useState('')
+  // A QuickWrench "Create Work Order" push carries its labor estimate. Those lines go
+  // onto the work order once it is booked, so they are not retyped on the job.
+  const [handoffLabor, setHandoffLabor] = useState<{ lines: Array<{ description: string; hours: number }>; rate: number | null } | null>(null)
+  const [handoffNote,  setHandoffNote]  = useState('')
 
   // The shop's units, loaded when the booking form opens. Paged, because the list API
   // pages; a shop has tens of units, so this is one or two requests.
@@ -147,10 +152,33 @@ export default function HDCalendarClient() {
 
   function openBooking(date: string) {
     setBookingForm(BLANK_BOOKING)
+    // A new booking starts with no hand-off; the QuickWrench consumer sets it after this.
+    setHandoffLabor(null)
     void loadUnits()
     setBookingDate(date || todayStr())
     setBookingError('')
     setBooking(true)
+  }
+
+  // The hand-off's labor lines, at the rate QuickWrench priced them at, else the shop's
+  // HD rate. No rate anywhere: the lines land unpriced for the tech to rate on the job,
+  // never at a made-up number. A failure is said, never swallowed - the job is booked
+  // either way, and the lines can be added on it.
+  async function addHandoffLabor(workOrderId: string, h: { lines: Array<{ description: string; hours: number }>; rate: number | null }) {
+    const rate = h.rate ?? await shopHdLaborRate()
+    try {
+      const res = await fetch(`/api/hd/work-orders/${workOrderId}/line-items`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ line_items: h.lines.map(l => ({
+          type: 'labor', description: l.description, part_number: '', quantity: l.hours,
+          unit_cost: null, unit_price: rate, markup_percent: null,
+        })) }),
+      })
+      if (!res.ok) throw new Error(((await res.json().catch(() => ({}))) as { error?: string }).error ?? 'save failed')
+      setHandoffNote(`Job booked with ${h.lines.length} labor line${h.lines.length === 1 ? '' : 's'} from QuickWrench${rate == null ? ' - no HD labor rate is set, so rate them on the work order' : ''}.`)
+    } catch (e) {
+      setHandoffNote(`Job booked, but the QuickWrench labor lines could not be added (${(e as Error).message}). Add them on the work order.`)
+    }
   }
 
   async function submitBooking() {
@@ -170,6 +198,9 @@ export default function HDCalendarClient() {
       })
       const data = await res.json()
       if (!res.ok) { setBookingError(data.error ?? 'Could not book the job.'); return }
+      const woId = (data.work_order as { id?: string } | undefined)?.id
+      if (woId && handoffLabor?.lines.length) await addHandoffLabor(woId, handoffLabor)
+      setHandoffLabor(null)
       setBooking(false)
       setSelected(bookingDate)
       // Re-fetch the month the job landed in so it shows immediately.
@@ -230,10 +261,16 @@ export default function HDCalendarClient() {
       const p = JSON.parse(raw) as {
         complaint?: string; notes?: string; service_type?: string
         unit_manufacturer?: string; unit_model?: string; unit_serial?: string
-        lineItems?: Array<{ mobile_hours: number }>
+        lineItems?: Array<{ mobile_hours: number; description?: string }>
+        labor_rate?: number
       }
       // Seed the duration from the diagnostic's own labor estimate.
       const hours = (p.lineItems ?? []).reduce((s, li) => s + (Number(li.mobile_hours) || 0), 0)
+      const lines = (p.lineItems ?? [])
+        .map(li => ({ description: String(li.description ?? '').trim(), hours: Number(li.mobile_hours) || 0 }))
+        .filter(l => l.description)
+      const sentRate = Number(p.labor_rate)
+      setHandoffLabor(lines.length ? { lines, rate: Number.isFinite(sentRate) && sentRate > 0 ? sentRate : null } : null)
       setBookingForm(f => ({
         ...f,
         unit_manufacturer: p.unit_manufacturer ?? f.unit_manufacturer,
@@ -274,6 +311,9 @@ export default function HDCalendarClient() {
 
   return (
     <div>
+      {handoffNote && (
+        <p className="text-xs mb-3" style={{ color: 'var(--hd-text-faint)' }}>{handoffNote}</p>
+      )}
       {/* Legend */}
       <div className="flex items-center justify-end gap-5 mb-5 text-xs flex-wrap">
         {[

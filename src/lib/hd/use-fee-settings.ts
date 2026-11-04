@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { hdLaborRateFrom } from '@/lib/hd/labor-rate'
 
 // The shop's HD labor rate and its two fees, for the forms that start a document.
 //
@@ -21,7 +22,7 @@ import { useEffect, useState } from 'react'
 // must not have $125 put back on its quotes.
 
 export interface HdFeeSettings {
-  /** profiles.hd_labor_rate. null = never set. */
+  /** profiles.hd_labor_rate (hdLaborRateFrom). null = never set, or set to 0. */
   laborRate: number | null
   /** profiles.hd_diagnostic_fee. null = never set, which is NOT the same as 0. */
   diagnosticFee: number | null
@@ -70,7 +71,7 @@ export function useHdFeeSettings(): HdFeeSettingsState {
         if (cancelled) return
         const s = json.settings ?? {}
         setState({
-          laborRate:     num(s.hd_labor_rate),
+          laborRate:     hdLaborRateFrom(s),
           diagnosticFee: num(s.hd_diagnostic_fee),
           roadCallFee:   num(s.hd_road_call_fee),
           feesAvailable: Boolean(json.fees_available),
@@ -97,7 +98,7 @@ export async function shopHdLaborRate(): Promise<number | null> {
     const res = await fetch('/api/hd/settings')
     if (!res.ok) return null
     const j = await res.json() as { settings?: Record<string, unknown> | null }
-    return num(j.settings?.hd_labor_rate) ?? null
+    return hdLaborRateFrom(j.settings)
   } catch {
     return null
   }

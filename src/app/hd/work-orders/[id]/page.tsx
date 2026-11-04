@@ -4,6 +4,7 @@ import { checkHDStarterAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { fetchWorkOrderInspections } from '@/lib/hd/inspections'
 import { BRANDING_SELECT, resolveBranding, type BrandingSource } from '@/lib/branding'
 import WorkOrderDetail from './WorkOrderDetail'
+import { hdLaborRateFrom } from '@/lib/hd/labor-rate'
 
 export const metadata = { title: 'Work Order — NWI HD Suite' }
 
@@ -70,6 +71,10 @@ export default async function WorkOrderDetailPage({
 
   const branding = resolveBranding(brandingRow as BrandingSource | null)
 
+  // The shop's HD labor rate, for the labor lines added on this work order. Its own read
+  // so a branding column that does not exist yet cannot take the rate down with it.
+  const { data: rateRow } = await supabase.from('profiles').select('hd_labor_rate').eq('id', user.id).maybeSingle()
+
   // Generate signed URLs for each photo (1-hour expiry)
   const photosWithUrls = await Promise.all(
     (photos ?? []).map(async (photo) => {
@@ -88,6 +93,7 @@ export default async function WorkOrderDetailPage({
         inspections={inspections}
         workOrderId={id}
         branding={branding}
+        shopLaborRate={hdLaborRateFrom(rateRow as Record<string, unknown> | null)}
       />
     </main>
   )

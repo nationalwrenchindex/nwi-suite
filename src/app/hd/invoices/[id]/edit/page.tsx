@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import EditInvoiceForm from '../EditInvoiceForm'
 import { loadHdShopExtras } from '@/lib/hd/hd-extras-load'
+import { hdLaborRateFrom } from '@/lib/hd/labor-rate'
 
 export const metadata = { title: 'Edit Invoice — NWI HD Suite' }
 
@@ -25,18 +26,14 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
   if (!inv) notFound()
 
   // Used ONLY when the invoice recorded no labor rate, and then shown as assumed.
-  // hd_labor_rate first, as the work order converter reads it: default_labor_rate is
-  // LD's, and would bill an HD job at the light-duty rate.
+  // hd_labor_rate only (hdLaborRateFrom): default_labor_rate is LD's, and would bill an
+  // HD job at the light-duty rate. None set: the form says so and asks for one.
   const { data: profile } = await supabase
     .from('profiles')
-    .select('hd_labor_rate, default_labor_rate')
+    .select('hd_labor_rate')
     .eq('id', user.id)
     .maybeSingle()
-  const p = (profile ?? {}) as Record<string, unknown>
-  const shopLaborRate =
-    p.hd_labor_rate != null ? Number(p.hd_labor_rate)
-    : p.default_labor_rate != null ? Number(p.default_labor_rate)
-    : null
+  const shopLaborRate = hdLaborRateFrom(profile as Record<string, unknown> | null)
 
   // HD's drive time / mileage now and the service call setting (migration 178), for
   // hours or a fee the tech adds to this invoice. Its recorded rates still win.

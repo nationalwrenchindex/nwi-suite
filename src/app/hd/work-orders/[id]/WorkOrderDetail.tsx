@@ -13,6 +13,7 @@ import { inspectionDateLabel, type InspectionSummary } from '@/lib/hd/inspection
 // this client component.
 import { BrandHeader } from '@/components/BrandHeader'
 import WorkOrderLineItems from '@/components/hd/WorkOrderLineItems'
+import { newLaborLineRate } from '@/lib/hd/labor-rate'
 import WorkOrderDiscount from '@/components/hd/WorkOrderDiscount'
 import WorkOrderExtras from '@/components/hd/WorkOrderExtras'
 import WorkOrderUnitHours from '@/components/hd/WorkOrderUnitHours'
@@ -88,6 +89,8 @@ interface Props {
   inspections: InspectionSummary[]
   workOrderId: string
   branding: Branding
+  /** profiles.hd_labor_rate (hdLaborRateFrom). NULL when the shop has set none. */
+  shopLaborRate?: number | null
 }
 
 const CATEGORIES = [
@@ -118,7 +121,7 @@ function statusLabel(s: string) {
 }
 
 
-export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, inspections, workOrderId, branding }: Props) {
+export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, inspections, workOrderId, branding, shopLaborRate = null }: Props) {
   // On /reefer only the Reefer PM inspection is offered - no aerial, DOT or equipment.
   const reeferSurface = isReeferSurfacePath(usePathname())
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos)
@@ -590,6 +593,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
       <WorkOrderLineItems
         workOrderId={workOrderId}
         canEdit={status !== 'invoiced'}
+        laborRate={newLaborLineRate(wo.labor_rate, shopLaborRate)}
         unit={{
           manufacturer: unitView.manufacturer,
           model:        unitView.model,

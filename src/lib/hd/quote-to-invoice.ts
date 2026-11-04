@@ -78,6 +78,9 @@ export function invoiceBodyFromQuote(q: Record<string, unknown>): Record<string,
     // The terms the quote recorded when it was sent. The invoice keeps them.
     terms_snapshot:     q.terms_snapshot ?? null,
     notes:              q.notes,
+    // The quote's own internal notes, which this body dropped. The insert route strips
+    // the column on a database without migration 142.
+    internal_notes:     q.internal_notes ?? null,
     tech_name:          q.tech_name ?? null,
     // The insert route strips this if migration 157 has not been applied.
     customer_po_number: q.customer_po_number ?? null,

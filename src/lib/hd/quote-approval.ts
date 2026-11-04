@@ -34,6 +34,7 @@ import { isMissingPaymentTermsColumn } from '@/lib/hd/payment-terms'
 import { isMissingMigration159Column, withoutMigration159Columns } from '@/lib/hd/migration-159'
 import { insertWithWorkOrderNumber } from '@/lib/work-order-number'
 import { isMissingServiceCallColumn, withoutServiceCall } from '@/lib/hd/hd-extras'
+import { serviceLocationFromQuote, workOrderNotesFromQuote } from '@/lib/hd/document-carry'
 
 /** 32 hex characters, the same shape LD's quote token uses. */
 export function generateQuoteToken(): string {
@@ -442,7 +443,9 @@ export async function createWorkOrderFromQuote(
     // comments, not in what the customer asked for.
     service_requests:  quote.complaint ?? null,
     comments:          quote.diagnosis ?? null,
-    internal_notes:    quote.notes ?? null,
+    // The quote's printed notes as before, then its own internal notes and the
+    // customer's note on approval, which were dropped (lib/hd/document-carry).
+    internal_notes:    workOrderNotesFromQuote(quote),
     service_type:      'Quote Approved',
     total_amount:      quote.total ?? null,
 
@@ -495,20 +498,9 @@ export async function createWorkOrderFromQuote(
   // It is only a DEFAULT. The work order screen can edit it, because the unit is
   // often at neither address on file.
   if (insertRow.location == null) {
-    const useCorp = Boolean(quote.has_corp_address)
-    const line1 = useCorp ? quote.corp_address_line1 : quote.address_line1
-    const line2 = useCorp ? quote.corp_address_line2 : quote.address_line2
-    const city  = useCorp ? quote.corp_city  : quote.city
-    const state = useCorp ? quote.corp_state : quote.state
-    const zip   = useCorp ? quote.corp_zip   : quote.zip
-    const location = [
-      line1, line2,
-      [city, state].filter(v => String(v ?? '').trim() !== '').join(', '),
-      zip,
-    ]
-      .map(v => String(v ?? '').trim())
-      .filter(v => v !== '')
-      .join(', ')
+    // One derivation, shared with the converter, which checks the job was not moved
+    // before it bills the quote's service address.
+    const location = serviceLocationFromQuote(quote)
     if (location) insertRow.location = location
   }
 

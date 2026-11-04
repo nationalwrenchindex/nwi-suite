@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useHdExtrasSettingsState } from '@/lib/hd/use-hd-extras-settings'
 import { serviceCallColumns } from '@/lib/hd/hd-extras'
 import { ExtrasInputs } from '@/components/shared/ExtrasFields'
@@ -12,6 +12,7 @@ import Link from 'next/link'
 import { computeDueDate, termsDisplay } from '@/lib/hd/payment-terms'
 import { useTaxSettings } from '@/lib/use-tax-settings'
 import { useHdFeeSettings, shopHdLaborRate } from '@/lib/hd/use-fee-settings'
+import { NO_HD_LABOR_RATE } from '@/lib/hd/labor-rate'
 import { computeTax, taxDisplayRows, mergeBreakdowns } from '@/lib/tax'
 import { DEFAULT_HD_PARTS_MARKUP, sellPrice, lineAmount } from '@/lib/hd/parts-pricing'
 import AddressAutofill from '@/components/hd/AddressAutofill'
@@ -34,6 +35,11 @@ const MUTED  = 'var(--paper-muted)'
 // any machine (tractor, box truck, aerial lift), so a prefilled value outside this
 // list is surfaced as an extra option rather than silently dropped.
 const REEFER_BRANDS = ['Thermo King', 'Carrier Transicold']
+
+/** A labor line priced at a rate: its hours times the rate. */
+function pricedLabor<T extends { mobile_hours: number; amount: number }>(i: T, rate: number): T {
+  return { ...i, amount: parseFloat((i.mobile_hours * rate).toFixed(2)) }
+}
 
 interface LineItem {
   id: string
@@ -119,7 +125,8 @@ export default function NewInvoicePage() {
     unit_number: '', unit_manufacturer: '', unit_model: '', unit_serial: '', unit_year: '',
     truck_make: '', truck_model: '', truck_year: '', vin: '',
     complaint: '', diagnosis: '',
-    labor_rate: 125, diagnostic_fee: 125, include_diagnostic: false,
+    // 0 until the shop's HD rate arrives (seeded below) - never a borrowed 125.
+    labor_rate: 0, diagnostic_fee: 125, include_diagnostic: false,
     road_call_fee: 0, include_road_call: false,
     // Migration 178. Ticked at the shop's figure when HD Settings bills one (below).
     service_call_fee: 0, include_service_call: false,
@@ -138,11 +145,17 @@ export default function NewInvoicePage() {
   // NULL from settings means the shop never set that fee, and the fallback stays - it
   // is not read as zero.
   const feeSettings = useHdFeeSettings()
+  // True once the tech types a rate. A typed rate is never overwritten by the seed.
+  const rateTyped = useRef(false)
   useEffect(() => {
     if (!feeSettings.loaded) return
+    const seedRate = feeSettings.laborRate != null && !rateTyped.current ? feeSettings.laborRate : null
+    // A labor line that arrived before the rate (a hand-off, a work order link) was
+    // priced at no rate. It takes the rate now; a line with an amount keeps it.
+    if (seedRate != null) setLineItems(l => l.map(i => (i.type === 'labor' && i.amount === 0 ? pricedLabor(i, seedRate) : i)))
     setForm(f => {
       const next = { ...f }
-      if (feeSettings.laborRate     != null && f.labor_rate     === 125) next.labor_rate     = feeSettings.laborRate
+      if (seedRate != null && f.labor_rate === 0) next.labor_rate = seedRate
       if (feeSettings.diagnosticFee != null && f.diagnostic_fee === 125) next.diagnostic_fee = feeSettings.diagnosticFee
       if (feeSettings.roadCallFee   != null && f.road_call_fee  === 0)   next.road_call_fee  = feeSettings.roadCallFee
       return next
@@ -243,7 +256,8 @@ export default function NewInvoicePage() {
     // Work orders have no line items of their own — the billable record is
     // labor_hours × labor_rate, so seed the invoice with that single labor line.
     if (woId && laborHours && laborHours > 0) {
-      const rate = laborRate ?? 125
+      // No rate on the link: unpriced until the shop's rate arrives (the seed above).
+      const rate = laborRate ?? 0
       setLineItems(l => l.length ? l : [{
         id: crypto.randomUUID(), type: 'labor',
         description: serviceType || 'Service labor',
@@ -277,9 +291,9 @@ export default function NewInvoicePage() {
         lineItems?: Array<{ description: string; mobile_hours: number }>
       }
       // A hand-off without a rate is priced at the shop's HD rate from Settings, read
-      // here - not a flat 125. 125 only when no HD rate is set, the form's own default.
+      // here. None set anywhere: the lines arrive unpriced and the rate box says so.
       const sent = Number.isFinite(p.labor_rate) && (p.labor_rate as number) > 0 ? p.labor_rate as number : null
-      const rate = sent ?? await shopHdLaborRate() ?? 125
+      const rate = sent ?? await shopHdLaborRate() ?? 0
 
       setForm(f => ({
         ...f,
@@ -354,6 +368,14 @@ export default function NewInvoicePage() {
 
   // ── Line items ──
   function fmt(n: number) { return `${money(n)}` }
+
+  // The rate box prices the labor: every labor line here is its hours at the one rate,
+  // and a changed rate used to leave the lines already added at the old one.
+  function setLaborRate(rate: number) {
+    rateTyped.current = true
+    setField('labor_rate', rate)
+    setLineItems(l => l.map(i => (i.type === 'labor' ? pricedLabor(i, rate) : i)))
+  }
 
   function addLabor() {
     const description = labor.description.trim()
@@ -675,8 +697,14 @@ export default function NewInvoicePage() {
             <Field label="Labor Rate / Hour">
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: MUTED }}>$</span>
-                <input style={{ ...inp, paddingLeft: 24 }} type="number" min={0} value={form.labor_rate} onChange={e => setField('labor_rate', parseFloat(e.target.value) || 0)} />
+                <input style={{ ...inp, paddingLeft: 24 }} type="number" min={0}
+                  value={form.labor_rate === 0 && !rateTyped.current ? '' : form.labor_rate}
+                  placeholder={feeSettings.loaded && feeSettings.laborRate == null ? 'Set rate' : undefined}
+                  onChange={e => setLaborRate(parseFloat(e.target.value) || 0)} />
               </div>
+              {feeSettings.loaded && feeSettings.laborRate == null && !rateTyped.current && (
+                <p className="text-xs mt-1" style={{ color: '#92400E' }}>{NO_HD_LABOR_RATE}</p>
+              )}
             </Field>
             <div>
               <label className="flex items-center gap-2 mb-2 cursor-pointer">

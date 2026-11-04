@@ -6,7 +6,9 @@
 //   invoices    the stored money columns, every row the invoice page prints (labor,
 //               parts, fees, extras, discount), the stored total, whether the stored
 //               row adds up, and what an UNCHANGED edit-and-save would write
-//   quotes      the stored total and every fee and extras row the quote page prints
+//   quotes      the stored total and every fee and extras row the quote page prints,
+//               the work order its approval would open (terms and lines), and the
+//               invoice "Bill Directly" would write (money keys and lines)
 //   work orders the converter's whole invoice payload (money keys), with the shop
 //               fallback the convert route builds
 //
@@ -20,6 +22,8 @@ import { extrasDisplayRows, extrasFromDocument } from '../src/lib/billable-extra
 import { buildInvoicePayload, type WorkOrderLineRow, type ShopFallback } from '../src/lib/hd/wo-to-invoice'
 import { invoiceDoesNotAddUp, openInvoiceEdit, invoiceSaveBody } from '../src/lib/hd/invoice-edit-save'
 import { taxSettingsFrom, TAX_SETTINGS_SELECT } from '../src/lib/tax'
+import { termsFromQuote, workOrderLinesFromQuote } from '../src/lib/hd/quote-approval'
+import { invoiceBodyFromQuote } from '../src/lib/hd/quote-to-invoice'
 
 loadEnv()
 const S = process.env.NEXT_PUBLIC_SUPABASE_URL!, K = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -73,7 +77,12 @@ async function main() {
     }
   }
   for (const q of quotes) {
-    snap[`quote ${q.quote_number} ${q.id}`] = { stored: pick(q, MONEY), printed: printed(q) }
+    const bill = invoiceBodyFromQuote(q) as Record<string, any>
+    snap[`quote ${q.quote_number} ${q.id}`] = {
+      stored: pick(q, MONEY), printed: printed(q),
+      toWorkOrder: { terms: termsFromQuote(q), lines: workOrderLinesFromQuote(q.line_items, q.labor_rate == null ? null : Number(q.labor_rate)) },
+      billDirectly: { money: pick(bill, MONEY), line_items: bill.line_items, labor_rate: bill.labor_rate ?? null, printed: printed(bill) },
+    }
   }
   for (const wo of wos) {
     const rows = lines.filter(l => l.work_order_id === wo.id) as WorkOrderLineRow[]

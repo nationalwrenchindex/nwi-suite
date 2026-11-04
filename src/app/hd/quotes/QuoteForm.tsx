@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useHdExtrasSettingsState } from '@/lib/hd/use-hd-extras-settings'
 import { isServiceCallTax, serviceCallColumns } from '@/lib/hd/hd-extras'
 import { ExtrasInputs } from '@/components/shared/ExtrasFields'
@@ -17,6 +17,7 @@ import { hoursText, sameOperationName } from '@/lib/hd/labor-cards'
 import FeeInput from '@/components/hd/FeeInput'
 import { useTaxSettings } from '@/lib/use-tax-settings'
 import { useHdFeeSettings, shopHdLaborRate } from '@/lib/hd/use-fee-settings'
+import { NO_HD_LABOR_RATE } from '@/lib/hd/labor-rate'
 import { computeTax, taxDisplayRows, mergeBreakdowns, parseBreakdown } from '@/lib/tax'
 import { parseAddress } from '@/lib/hd/address-parse'
 import { DEFAULT_HD_PARTS_MARKUP, sellPrice, lineAmount } from '@/lib/hd/parts-pricing'
@@ -68,6 +69,15 @@ interface LineItem {
   // billing amount uses mobile_hours (lower); amount_max for display
   amount: number
   amount_max: number
+}
+
+/** A labor line priced at a rate: its hours times the rate, low and high. */
+function pricedLabor<T extends { mobile_hours: number; mobile_hours_max: number; amount: number; amount_max: number }>(i: T, rate: number): T {
+  return {
+    ...i,
+    amount:     parseFloat((i.mobile_hours * rate).toFixed(2)),
+    amount_max: parseFloat((i.mobile_hours_max * rate).toFixed(2)),
+  }
 }
 
 interface PartsDraft {
@@ -387,7 +397,9 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
     // tech touched anything, on every quote. A charge the shop never agreed to should
     // not be the default. It turns on by itself only once hd_diagnostic_fee is set in
     // HD Settings, at that value: see the seeding effect below.
-    labor_rate: 125, diagnostic_fee: 0, include_diagnostic: false,
+    // 0 until the shop's HD rate arrives (the seeding effect below). It opened at 125,
+    // someone else's rate, on every quote of a shop that charges anything else.
+    labor_rate: 0, diagnostic_fee: 0, include_diagnostic: false,
     road_call_fee: 0, include_road_call: false,
     // Migration 178. Its own on/off in Settings; seeded below when the shop bills one.
     service_call_fee: 0, include_service_call: false,
@@ -420,12 +432,18 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
   // nothing gets no charge it never agreed to. The road call fee does NOT auto-tick -
   // whether a job was a road call is a fact about that job, not a standing policy.
   const feeSettings = useHdFeeSettings()
+  // True once the tech types a rate. A typed rate is never overwritten by the seed.
+  const rateTyped = useRef(false)
   useEffect(() => {
     // Never over a saved quote: its fees are what it recorded, including a 0.
     if (editing || !feeSettings.loaded) return
+    const seedRate = feeSettings.laborRate != null && !rateTyped.current ? feeSettings.laborRate : null
+    // A labor line added before the rate arrived was priced at no rate. It takes the
+    // rate now; a line that already has an amount keeps it.
+    if (seedRate != null) setLineItems(l => l.map(i => (i.type === 'labor' && i.amount === 0 ? pricedLabor(i, seedRate) : i)))
     setForm(f => {
       const next = { ...f }
-      if (feeSettings.laborRate != null && f.labor_rate === 125) next.labor_rate = feeSettings.laborRate
+      if (seedRate != null && f.labor_rate === 0) next.labor_rate = seedRate
       if (feeSettings.diagnosticFee != null && f.diagnostic_fee === 0) {
         next.diagnostic_fee = feeSettings.diagnosticFee
         next.include_diagnostic = true
@@ -537,11 +555,10 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
       }
       // QuickWrench sends the tech's configured rate. A hand-off without one (the
       // guided diagnostic, or a rate Settings had not answered yet) is priced at the
-      // shop's HD rate from Settings, read here - this was a flat 125, which priced
-      // every pushed labor line at someone else's rate. 125 only when the shop has
-      // set no HD rate at all, the form's own default.
+      // shop's HD rate from Settings, read here. No rate set anywhere: the lines arrive
+      // unpriced and the rate box says so - never a stand-in 125.
       const sent = Number.isFinite(prefill.labor_rate) && (prefill.labor_rate as number) > 0 ? prefill.labor_rate as number : null
-      const rate = sent ?? await shopHdLaborRate() ?? 125
+      const rate = sent ?? await shopHdLaborRate() ?? 0
       setForm(f => ({
         ...f,
         ...(prefill.complaint ? { complaint:  prefill.complaint  } : {}),
@@ -883,6 +900,16 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
     }])
     // Remove the card once added so the tech sees what's left.
     setSuggestions(prev => prev.filter(x => x !== s))
+  }
+
+  // THE RATE BOX PRICES THE LABOR. Every labor line on this form is its hours at the
+  // quote's one rate, and changing the rate used to leave the lines already added at the
+  // old one - the line read "$145.00/hr" beside an amount figured at 125. Only on the
+  // tech's own edit: opening a saved quote re-prices nothing.
+  function setLaborRate(rate: number) {
+    rateTyped.current = true
+    setField('labor_rate', rate)
+    setLineItems(l => l.map(i => (i.type === 'labor' ? pricedLabor(i, rate) : i)))
   }
 
   // Derived totals
@@ -1776,10 +1803,15 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                   style={{ ...inp, paddingLeft: 24 }}
                   type="number"
                   min={0}
-                  value={form.labor_rate}
-                  onChange={e => setField('labor_rate', parseFloat(e.target.value) || 0)}
+                  value={form.labor_rate === 0 && !rateTyped.current ? '' : form.labor_rate}
+                  placeholder={!editing && feeSettings.loaded && feeSettings.laborRate == null ? 'Set rate' : undefined}
+                  onChange={e => setLaborRate(parseFloat(e.target.value) || 0)}
                 />
               </div>
+              {/* No rate to start from: said plainly, never a made-up number. */}
+              {!editing && feeSettings.loaded && feeSettings.laborRate == null && !rateTyped.current && (
+                <p className="text-xs mt-1" style={{ color: '#92400E' }}>{NO_HD_LABOR_RATE}</p>
+              )}
             </Field>
             <div>
               <label className="flex items-center gap-2 mb-2 cursor-pointer">

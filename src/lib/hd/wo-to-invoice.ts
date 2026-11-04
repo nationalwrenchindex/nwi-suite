@@ -332,6 +332,9 @@ export function invoiceIdentityFromWorkOrder(wo: Record<string, unknown>): Recor
   return {
     work_order_id:     wo.id ?? null,
     work_order_number: wo.work_order_number ?? null,
+    // The quote this job was approved from, so the invoice links back to it. Only when
+    // the work order has one, so a job booked directly converts exactly as before.
+    ...(wo.quote_id ? { quote_id: wo.quote_id } : {}),
     customer_id:       wo.customer_id ?? null,
     customer_name:     wo.customer_name ?? null,
     customer_phone:    wo.customer_phone ?? null,

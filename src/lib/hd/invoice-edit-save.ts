@@ -97,7 +97,7 @@ function discountInputOf(invoice: Record<string, unknown>): DiscountInput | null
  * The editor's starting point, from the stored row alone.
  *
  * labor_rate: the invoice's own. If it recorded none, the shop's current HD rate
- * (hd_labor_rate, then default_labor_rate - the order the work order converter uses),
+ * (hd_labor_rate only, as the work order converter reads it - see lib/hd/labor-rate),
  * flagged as assumed so the screen says so and the save notes it. Never 125, never any
  * number the shop did not set.
  */
