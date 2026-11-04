@@ -1,0 +1,416 @@
+REEFER PARTS LOAD - THE 255 PARTS HELD FOR WANT OF A PART TYPE. Report only; no SQL.
+Written 2026-11-04 from scripts/reefer-load/REPORT.txt (the held list), the source files in
+data/parts-sources/, and a read-only SELECT of the live store (2700 parts, 141 part types).
+
+Every one of the 255 comes from ONE source: reefer-parts-master (Reefer-Parts-Master.xlsx,
+sheet "All Parts"; row numbers below count the header as row 1). No other source file carries
+any of these numbers except parts-needs-review.csv, which holds the same rows. Master gives NO
+description for any of them - only a part_name, which is often its catalog SECTION HEADING
+("Evaporator coil - evaporator fan", "Sensor/switch"), not the part.
+
+HEADINGS. The counter (src/lib/parts/counter.ts, categoryOf) has 8 named headings - Engine,
+Fuel, Maintenance & Wear, Belts & Drives, Refrigeration, Electrical & Controls, Air Flow &
+Structure, Electric Standby - plus Other for anything its rules do not match. For each type
+below, "belongs" is the heading the part belongs under; "counter today" is where categoryOf
+would actually file that name as the code stands. They differ for 8 of the 12 proposed
+types: any name containing "oil" lands in Maintenance & Wear (that rule runs first, and
+"coil" contains "oil"), and tank / sight glass / piston / rocker / camshaft match no rule
+and land in Other. That is a counter change in src/, not a naming choice - not made here.
+
+SUMMARY
+  219 need one of 12 NEW types (section 1)
+    2 are MAPPING BUGS - an existing type covers them (section 2)
+   25 are "Sensor/switch" - no type proposed; each is one of the existing sensor/switch types (section 3)
+    9 are single oddities that need your call (section 4)
+  ---
+  255
+
+NAMING. The store uses two styles side by side (section 5): "Kind - qualifier" for filters,
+sensors, solenoids and switches (Filter - air, Sensor - temperature), and a plain noun phrase
+for everything else (Receiver tank, Fan motor, Compressor oil pump, Expansion valve (TXV)
+retrofit kit). None of the 12 is a filter, sensor, solenoid or switch, so all 12 use the
+plain style, each named after its nearest existing neighbour.
+
+=================================================================================================
+1. NEW TYPES NEEDED
+=================================================================================================
+   proposed name                          parts  belongs                counter today
+   Evaporator coil                           89  Refrigeration          Maintenance & Wear   <- differs
+   Accumulator tank                          51  Refrigeration          Other   <- differs
+   3-way valve                               29  Refrigeration          Refrigeration
+   Expansion valve (TXV) power element       17  Refrigeration          Refrigeration
+   Sight glass                                9  Refrigeration          Other   <- differs
+   Oil separator                              4  Refrigeration          Maintenance & Wear   <- differs
+   Engine oil pump                            6  Engine                 Maintenance & Wear   <- differs
+   Piston ring set                            5  Engine                 Other   <- differs
+   Rocker arm                                 3  Engine                 Other   <- differs
+   Engine overhaul kit                        3  Engine                 Engine
+   Camshaft                                   2  Engine                 Other   <- differs
+   Engine exhaust valve                       1  Engine                 Engine
+
+-- Evaporator coil (89) - belongs: Refrigeration; counter today: Maintenance & Wear
+   Why this name / not an existing type: the store files the condenser side "Condenser coil - condenser fan" under Condenser/radiator coil; the evaporator side has no type.
+   CHECK: 91-1564, 91-4455, 92-1330, 99-7998, 99-8089, 99-8649 are not 67- coil numbers. Master names by
+   section heading, so these six may be other parts from the evaporator section (fan parts, kits).
+   67-0592      Thermo King  "Evaporator coil - evaporator fan"  SB-I 1000, SB-I 1200, SB-I 2000, SB-I HPO  [row 4775]
+   67-0603      Thermo King  "Evaporator coil - evaporator fan"  LND, LND PEG, RD-I  [row 4779]
+   67-0609      Thermo King  "Evaporator coil - evaporator fan"  KD-I, KD-I SSIV  [row 4782]
+   67-0646      Thermo King  "Evaporator coil - evaporator fan"  MD-I, SUMD-II, SUMD-II MAX, UMD (+3 more)  [row 4784]
+   67-0683      Thermo King  "Evaporator coil - evaporator fan"  MD-I SSIV  [row 4803]
+   67-0791      Thermo King  "Evaporator coil - evaporator fan"  RD-I SSIV  [row 4821]
+   67-0796      Thermo King  "Evaporator coil - evaporator fan"  SB-II  [row 4822]
+   67-0797      Thermo King  "Evaporator coil - evaporator fan"  SB-II  [row 4823]
+   67-0831      Thermo King  "Evaporator coil - evaporator fan"  SB Classic, SB-II, SB-II TC  [row 4831]
+   67-0841      Thermo King  "Evaporator coil - evaporator fan"  MD-II, MD-II MAX, SUMD-II, SUMD-II MAX (+3 more)  [row 4840]
+   67-0902      Thermo King  "Evaporator coil - evaporator fan"  Super II MAX  [row 4847]
+   67-0916      Thermo King  "Evaporator coil - evaporator fan"  SB-100, SB-110, SB-110+, SB-190 (+26 more)  [row 4859]
+   67-0917      Thermo King  "Evaporator coil - evaporator fan"  RD-I TC  [row 4889]
+   67-0936      Thermo King  "Evaporator coil - evaporator fan"  Super II MAX, Super II Multi-Temp  [row 4899]
+   67-0985      Thermo King  "Evaporator coil - evaporator fan"  Sentry II MAX, Sentry II MAX TC, Sentry di  [row 4919]
+   67-1033      Thermo King  "Evaporator coil - evaporator fan"  URD 25DG  [row 4924]
+   67-1035      Thermo King  "Evaporator coil - evaporator fan"  RD-II TCI  [row 4925]
+   67-1069      Thermo King  "Evaporator coil - evaporator fan"  SB-110, SB-110+, SB-190, SB-200 (+16 more)  [row 4926]
+   67-1079      Thermo King  "Evaporator coil - evaporator fan"  Super II MAX  [row 4946]
+   67-1091      Thermo King  "Evaporator coil - evaporator fan"  Super II MAX, Super II Multi-Temp  [row 4947]
+   67-1113      Thermo King  "Evaporator coil - evaporator fan"  SB-III MULTI-TEMP, SB-III Multi-Temp SR+, SB-III Whisper MULTI-TEMP SR, Spectrum DE (+4 more)  [row 4949]
+   67-1114      Thermo King  "Evaporator coil - evaporator fan"  SB-III MULTI-TEMP, SB-III Multi-Temp SR+, SB-III Whisper MULTI-TEMP SR, Spectrum DE (+4 more)  [row 4957]
+   67-1132      Thermo King  "Evaporator coil - evaporator fan"  SB-II, SB-III SLE  [row 4965]
+   67-1133      Thermo King  "Evaporator coil - evaporator fan"  KD-II MAX, MD-100, MD-200, MD-300 (+5 more)  [row 4967]
+   67-1136      Thermo King  "Evaporator coil - evaporator fan"  MD-100, MD-200, MD-300, TS-200 (+1 more)  [row 4976]
+   67-1175      Thermo King  "Evaporator coil - evaporator fan"  Sentry II MAX, Sentry II MAX TC, Sentry di  [row 4987]
+   67-1183      Thermo King  "Evaporator coil - evaporator fan"  MD-II TCI  [row 4991]
+   67-1184      Thermo King  "Evaporator coil - evaporator fan"  SL-100, SL-200, SL-300, SMX (+3 more)  [row 4992]
+   67-1344      Thermo King  "Evaporator coil - evaporator fan"  RD-II, RD-II MAX, RD-II SR  [row 5019]
+   67-1369      Thermo King  "Evaporator coil - evaporator fan"  Super TD-II, TD-II, TD-II MAX, TD-II SR (+1 more)  [row 5022]
+   67-1401      Thermo King  "Evaporator coil - evaporator fan"  SUMD-II, SUMD-II MAX, UMD, UMD-II (+1 more)  [row 5032]
+   67-1458      Thermo King  "Evaporator coil - evaporator fan"  Spectrum S-II, Spectrum Super-II TCI, Super II 190 SR+ MP VI, Super II 190Y (+8 more)  [row 5065]
+   67-1459      Thermo King  "Evaporator coil - evaporator fan"  Super II MAX, Super II Multi-Temp  [row 5077]
+   67-1461      Thermo King  "Evaporator coil - evaporator fan"  Spectrum S-II, Spectrum Super-II TCI, Super II 190 SR+ MP VI, Super II 190Y (+8 more)  [row 5091]
+   67-1463      Thermo King  "Evaporator coil - evaporator fan"  Spectrum S-II, Spectrum Super-II TCI, Super II 190 SR+ MP VI, Super II 190Y (+9 more)  [row 5103]
+   67-1464      Thermo King  "Evaporator coil - evaporator fan"  Super II MAX, Super II Multi-Temp  [row 5116]
+   67-1465      Thermo King  "Evaporator coil - evaporator fan"  Spectrum S-II, Spectrum Super-II TCI, Super II 190 SR+ MP VI, Super II 190Y (+8 more)  [row 5118]
+   67-1466      Thermo King  "Evaporator coil - evaporator fan"  MD-II TCI, RD-II TC, RD-II TCI, SB-III (+6 more)  [row 5130]
+   67-1521      Thermo King  "Evaporator coil - evaporator fan"  URD-III MAX TCIA  [row 5140]
+   67-1528      Thermo King  "Evaporator coil - evaporator fan"  MD-II TLE, RD-II TLE, SB-III Whisper MULTI-TEMP SR, SB-III Whisper Multi-Temp SR (+2 more)  [row 5141]
+   67-1547      Thermo King  "Evaporator coil - evaporator fan"  RD-II TLE, SB-III Whisper MULTI-TEMP SR, SB-III Whisper Multi-Temp SR, SL TCI (+1 more)  [row 5147]
+   67-1552      Thermo King  "Evaporator coil - evaporator fan"  SB-III MAGNUM Whisper, SB-III S SR, SB-III S+  [row 5153]
+   67-1557      Thermo King  "Evaporator coil - evaporator fan"  Spectrum SB  [row 5156]
+   67-1616      Thermo King  "Evaporator coil - evaporator fan"  SB-110, SB-110+, SB-130, SB-210 (+10 more)  [row 5161]
+   67-1630      Thermo King  "Evaporator coil - evaporator fan"  SB-III Whisper Multi-Temp SR, Spectrum SB  [row 5175]
+   67-1679      Thermo King  "Evaporator coil - evaporator fan"  Spectrum S-II, Spectrum Super-II TCI, Super II 190 SR+ MP VI, Super II 190Y (+8 more)  [row 5182]
+   67-1688      Thermo King  "Evaporator coil - evaporator fan"  SB-110, SB-110+, SB-130, SB-190 (+15 more)  [row 5200]
+   67-1762      Thermo King  "Evaporator coil - evaporator fan"  SB-III CR  [row 5233]
+   67-1775      Thermo King  "Evaporator coil - evaporator fan"  Spectrum S-II, Spectrum Super-II TCI, Super II 190 SR+ MP VI, Super II 190Y (+8 more)  [row 5234]
+   67-1776      Thermo King  "Evaporator coil - evaporator fan"  Spectrum S-II, Spectrum Super-II TCI, Super II 190 SR+ MP VI, Super II 190Y (+8 more)  [row 5246]
+   67-1785      Thermo King  "Evaporator coil - evaporator fan"  TS-500  [row 5258]
+   67-1801      Thermo King  "Evaporator coil - evaporator fan"  TS-300  [row 5259]
+   67-1818      Thermo King  "Evaporator coil - evaporator fan"  SB-400  [row 5260]
+   67-1819      Thermo King  "Evaporator coil - evaporator fan"  SB-400  [row 5261]
+   67-1853      Thermo King  "Evaporator coil - evaporator fan"  MD-MT, RD-MT, SLX Spectrum, SLXe Spectrum (+15 more)  [row 5263]
+   67-1910      Thermo King  "Evaporator coil - evaporator fan"  SB-110, SB-110+, SB-190, SB-200 (+10 more)  [row 5282]
+   67-1921      Thermo King  "Evaporator coil - evaporator fan"  MAGNUM, MAGNUM SL mP-4000  [row 5296]
+   67-1922      Thermo King  "Evaporator coil - evaporator fan"  MAGNUM  [row 5298]
+   67-1923      Thermo King  "Evaporator coil - evaporator fan"  MAGNUM, MAGNUM PLUS  [row 5299]
+   67-1975      Thermo King  "Evaporator coil - evaporator fan"  SL TCI, SL-100, SL-200, SL-200e (+11 more)  [row 5308]
+   67-1985      Thermo King  "Evaporator coil - evaporator fan"  SL-100, SL-100e, SL-200  [row 5323]
+   67-1997      Thermo King  "Evaporator coil - evaporator fan"  MD-200 MT, MD-MT, RD-MT, SLX Spectrum (+15 more)  [row 5326]
+   67-2092      Thermo King  "Evaporator coil - evaporator fan"  MD-100, MD-200, MD-300, TS-200 (+1 more)  [row 5345]
+   67-2137      Thermo King  "Evaporator coil - evaporator fan"  TDD-M1 Southern Double Deck, TDD-M2 Northern Double Deck  [row 5350]
+   67-2138      Thermo King  "Evaporator coil - evaporator fan"  TDD-M1 Southern Double Deck, TDD-M2 Northern Double Deck  [row 5352]
+   67-2175      Thermo King  "Evaporator coil - evaporator fan"  (no model given)  [row 5357]
+   67-2178      Thermo King  "Evaporator coil - evaporator fan"  (no model given)  [row 5359]
+   67-2247      Thermo King  "Evaporator coil - evaporator fan"  (no model given)  [row 5431]
+   67-2309      Thermo King  "Evaporator coil - evaporator fan"  TriPac, TriPac Evolution  [row 5432]
+   67-2327      Thermo King  "Evaporator coil - evaporator fan"  RD-II TCI-Z, URD-III 25DG  [row 5435]
+   67-2333      Thermo King  "Evaporator coil - evaporator fan"  SLX-200  [row 5443]
+   67-2348      Thermo King  "Evaporator coil - evaporator fan"  SLX-100  [row 5444]
+   67-2354      Thermo King  "Evaporator coil - evaporator fan"  Super II MAX, Super II MAX TG VI, Super II Multi-Temp, Super II SR (+2 more)  [row 5445]
+   67-2413      Thermo King  "Evaporator coil - evaporator fan"  SLX Spectrum, SLXe Spectrum  [row 5451]
+   67-2422      Thermo King  "Evaporator coil - evaporator fan"  T-1000, T-1000 M, T-1080R, T-1080S (+10 more)  [row 5453]
+   67-2480      Thermo King  "Evaporator coil - evaporator fan"  UT-800  [row 5486]
+   67-2537      Thermo King  "Evaporator coil - evaporator fan"  SB-330, SB-330 RR  [row 5499]
+   67-2650      Thermo King  "Evaporator coil - evaporator fan"  SLR75  [row 5503]
+   67-2651      Thermo King  "Evaporator coil - evaporator fan"  SLR75  [row 5504]
+   67-2727      Thermo King  "Evaporator coil - evaporator fan"  C-600, S-600  [row 5516]
+   67-2783      Thermo King  "Evaporator coil - evaporator fan"  SLX-100, SLXe-100, SLXe-200  [row 5538]
+   67-2786      Thermo King  "Evaporator coil - evaporator fan"  SLX-200, SLX-300, SLX-400, SLXe Whisper (+2 more)  [row 5541]
+   67-2835      Thermo King  "Evaporator coil - evaporator fan"  TDD GO TRANSIT  [row 5547]
+   91-1564      Thermo King  "Evaporator coil - evaporator fan"  SB-II, SB-III SLE  [row 5569]
+   91-4455      Thermo King  "Evaporator coil - evaporator fan"  SB-III Multi-Temp SR+, SB-III Whisper MULTI-TEMP SR, Spectrum DE, Spectrum DE 2 (+3 more)  [row 5571]
+   92-1330      Thermo King  "Evaporator coil - evaporator fan"  SB-III CR  [row 5578]
+   99-7998      Thermo King  "Evaporator coil - evaporator fan"  SB Classic, SB-100, SB-110, SB-110+ (+45 more)  [row 5579]
+   99-8089      Thermo King  "Evaporator coil - evaporator fan"  SB Classic, SB-100, SB-110, SB-110+ (+49 more)  [row 5628]
+   99-8649      Thermo King  "Evaporator coil - evaporator fan"  SB-II  [row 5681]
+
+-- Accumulator tank (51) - belongs: Refrigeration; counter today: Other
+   Why this name / not an existing type: NOT Receiver tank (41) - a different vessel on the suction side.
+   CHECK: 55-3286, 66-7607, 66-7608, 66-8390 are not 67- numbers; same caution as above.
+   55-3286      Thermo King  "Accumulator tank"  SB-I 1000, SB-I 1200, SB-I 2000, SB-I HPO  [row 14400]
+   66-7607      Thermo King  "Accumulator tank"  MD-II, MD-II MAX  [row 15094]
+   66-7608      Thermo King  "Accumulator tank"  MD-II, MD-II MAX  [row 15096]
+   66-8390      Thermo King  "Accumulator tank"  Super II Multi-Temp  [row 15126]
+   67-0583      Thermo King  "Accumulator tank"  MD-I  [row 15272]
+   67-0593      Thermo King  "Accumulator tank"  SB-I 1000, SB-I 1200, SB-I 2000, SB-I HPO  [row 15274]
+   67-0617      Thermo King  "Accumulator tank"  KD-I, KD-I SSIV, RD-I, RD-I SSIV (+2 more)  [row 15282]
+   67-0652      Thermo King  "Accumulator tank"  SUMD-II, SUMD-II MAX, UMD, UMD 20DG (+2 more)  [row 15288]
+   67-0679      Thermo King  "Accumulator tank"  Sentry MAX, Sentry di  [row 15296]
+   67-0682      Thermo King  "Accumulator tank"  Sentry 1000, Sentry 1200, Sentry 1500, Sentry 2000 (+2 more)  [row 15298]
+   67-0691      Thermo King  "Accumulator tank"  KD-I SSIV  [row 15304]
+   67-0694      Thermo King  "Accumulator tank"  URD 25DG  [row 15305]
+   67-0750      Thermo King  "Accumulator tank"  TD-I  [row 15309]
+   67-0769      Thermo King  "Accumulator tank"  Sentry 1000, Sentry 1200, Sentry 1500, Sentry 2000 (+3 more)  [row 15321]
+   67-0876      Thermo King  "Accumulator tank"  Super II MAX  [row 15340]
+   67-0887      Thermo King  "Accumulator tank"  MD-II, MD-II MAX  [row 15342]
+   67-0977      Thermo King  "Accumulator tank"  URD-III 25DG  [row 15367]
+   67-0978      Thermo King  "Accumulator tank"  Sentry di  [row 15369]
+   67-1093      Thermo King  "Accumulator tank"  SMX, SMX SR  [row 15405]
+   67-1137      Thermo King  "Accumulator tank"  MD-II, MD-II MAX  [row 15420]
+   67-1157      Thermo King  "Accumulator tank"  SUMD-II, SUMD-II MAX, UMD, UMD-II (+1 more)  [row 15422]
+   67-1161      Thermo King  "Accumulator tank"  LND, LND PEG  [row 15428]
+   67-1162      Thermo King  "Accumulator tank"  SB-II  [row 15430]
+   67-1163      Thermo King  "Accumulator tank"  LND, LND PEG, SB-II  [row 15431]
+   67-1174      Thermo King  "Accumulator tank"  Sentry II MAX, Sentry II MAX TC  [row 15434]
+   67-1178      Thermo King  "Accumulator tank"  MD-II, MD-II MAX, MD-II TCI, MD-II TCI-Z  [row 15436]
+   67-1195      Thermo King  "Accumulator tank"  SB Classic, SB-100, SB-110, SB-110+ (+39 more)  [row 15537]
+   67-1196      Thermo King  "Accumulator tank"  Sentry II MAX  [row 15580]
+   67-1226      Thermo King  "Accumulator tank"  TD-II, TD-II MAX  [row 15581]
+   67-1227      Thermo King  "Accumulator tank"  RD-II, RD-II MAX, TD-II, TD-II MAX  [row 15583]
+   67-1274      Thermo King  "Accumulator tank"  Super II 190 SR+ MP VI, Super II MAX, Super II MAX TG VI, Super II Multi-Temp (+3 more)  [row 15587]
+   67-1328      Thermo King  "Accumulator tank"  Super II MAX, Super II MAX TG VI, Super II Multi-Temp, Super II SR (+2 more)  [row 15601]
+   67-1371      Thermo King  "Accumulator tank"  RD-II, RD-II MAX, RD-II SR, RD-II TCI (+2 more)  [row 15607]
+   67-1398      Thermo King  "Accumulator tank"  RD-II SR, RD-II TCI, RD-II TLE, RD-MT (+3 more)  [row 15618]
+   67-1403      Thermo King  "Accumulator tank"  KD-II MAX, KD-II SR, MD-II, MD-II MAX (+3 more)  [row 15630]
+   67-1427      Thermo King  "Accumulator tank"  TS-500  [row 15649]
+   67-1429      Thermo King  "Accumulator tank"  Super II MAX TG VI, Super II SR, Super II SR+  [row 15650]
+   67-1435      Thermo King  "Accumulator tank"  URD-III 25DG  [row 15653]
+   67-1436      Thermo King  "Accumulator tank"  (no model given)  [row 15655]
+   67-1572      Thermo King  "Accumulator tank"  TS-200, TS-300  [row 15688]
+   67-1742      Thermo King  "Accumulator tank"  Spectrum TS, Spectrum TS-500, TS-200, TS-300 (+1 more)  [row 15718]
+   67-1947      Thermo King  "Accumulator tank"  MD-100, MD-200, MD-200 MT, MD-300  [row 15745]
+   67-2214      Thermo King  "Accumulator tank"  MD-100, MD-200, MD-300  [row 15769]
+   67-2335      Thermo King  "Accumulator tank"  SLX Spectrum, SLX-100, SLX-200, SLX-300 (+6 more)  [row 15781]
+   67-2424      Thermo King  "Accumulator tank"  T-1000, T-1000 M, T-570R, T-580R (+4 more)  [row 15825]
+   67-2689      Thermo King  "Accumulator tank"  Spectrum DE, Spectrum SB  [row 15923]
+   67-2714      Thermo King  "Accumulator tank"  C-600, S-600  [row 15995]
+   67-2747      Thermo King  "Accumulator tank"  SLX Spectrum, SLXe Spectrum  [row 15999]
+   67-2790      Thermo King  "Accumulator tank"  Spectrum S-II, Spectrum Super-II TCI, Super II 190 SR+ MP VI, Super II 190Y (+8 more)  [row 16033]
+   67-2808      Thermo King  "Accumulator tank"  T-680R, T-880R  [row 16045]
+   67-2813      Thermo King  "Accumulator tank"  T-1080R, T-1080S  [row 16047]
+
+-- 3-way valve (29) - belongs: Refrigeration; counter today: Refrigeration
+   Why this name / not an existing type: the store has only 3-way valve part (1). 66-8728 is named "3-way valve - electric motor": the section heading again.
+   61-0939      Thermo King  "3-way valve"  SB-III CR  [row 17306]
+   61-1236      Thermo King  "3-way valve"  KD-II, KD-II MAX, KD-II SR, MD-100 (+16 more)  [row 17394]
+   61-1237      Thermo King  "3-way valve"  KD-II, KD-II MAX, MD-II, MD-II MAX (+5 more)  [row 17414]
+   61-5210      Thermo King  "3-way valve"  SLX-200, SLX-300, SLX-400, SLXe Whisper (+2 more)  [row 17961]
+   61-5771      Thermo King  "3-way valve"  SLX-100, SLX-200, SLXe-100, SLXe-200  [row 18021]
+   61-5837      Thermo King  "3-way valve"  SB-130, SB-230, SB-230 RR, SB-330 (+1 more)  [row 18030]
+   61-5978      Thermo King  "3-way valve"  C-600, S-600  [row 18035]
+   66-3633      Thermo King  "3-way valve"  SB-I 1000, SB-I 1200, SB-I 2000, SB-I HPO  [row 18353]
+   66-3634      Thermo King  "3-way valve"  KD-I, KD-I SSIV, RD-I, RD-I SSIV (+2 more)  [row 18357]
+   66-3635      Thermo King  "3-way valve"  MD-I, MD-I SSIV  [row 18363]
+   66-3643      Thermo King  "3-way valve"  RD-I  [row 18365]
+   66-3911      Thermo King  "3-way valve"  URD 25DG, URD TCIA  [row 18593]
+   66-3983      Thermo King  "3-way valve"  SUMD-II, SUMD-II MAX, UMD, UMD 20DG (+2 more)  [row 18610]
+   66-4203      Thermo King  "3-way valve"  SB-II  [row 18624]
+   66-4293      Thermo King  "3-way valve"  LND, LND PEG  [row 18627]
+   66-4365      Thermo King  "3-way valve"  Sentry 1000, Sentry 1200, Sentry 1500, Sentry 2000 (+3 more)  [row 18636]
+   66-4407      Thermo King  "3-way valve"  Sentry MAX, Sentry di  [row 18643]
+   66-4750      Thermo King  "3-way valve"  Super II MAX  [row 18710]
+   66-4967      Thermo King  "3-way valve"  RD-I TC  [row 18717]
+   66-4974      Thermo King  "3-way valve"  Sentry 1000, Sentry 1200, Sentry 1500, Sentry 2000 (+4 more)  [row 18718]
+   66-4975      Thermo King  "3-way valve"  SL-100, SL-100e, SL-200, SL-200e (+16 more)  [row 18726]
+   66-5764      Thermo King  "3-way valve"  URD-III 25DG  [row 19304]
+   66-6067      Thermo King  "3-way valve"  SB-III SR MP IV  [row 19591]
+   66-6393      Thermo King  "3-way valve"  SB-III MAGNUM Whisper, SB-III S SR, SB-III S+  [row 19778]
+   66-8728      Thermo King  "3-way valve - electric motor"  SB-III CR  [row 20375]
+   66-8730      Thermo King  "3-way valve"  SB-III CR  [row 20376]
+   66-8804      Thermo King  "3-way valve"  SB Classic, SB-100, SB-110, SB-110+ (+37 more)  [row 20377]
+   66-9631      Thermo King  "3-way valve"  TS-200, TS-300  [row 20471]
+   66-9896      Thermo King  "3-way valve"  SLX-100, SLX-200, Spectrum TS-500, TS-500 (+2 more)  [row 20493]
+
+-- Expansion valve (TXV) power element (17) - belongs: Refrigeration; counter today: Refrigeration
+   Why this name / not an existing type: named after the store's Expansion valve (TXV) retrofit kit. NOT Expansion valve (TXV): the power element is the head, sold alone.
+   61-0816      Thermo King  "Expansion valve power element"  Super II MAX, Super II MAX TG VI, Super II SR, Super II SR+  [row 17291]
+   61-0819      Thermo King  "Expansion valve power element"  SB-III, SB-III TC MAX, Sentry II MAX, Super II MAX  [row 17295]
+   61-0822      Thermo King  "Expansion valve power element"  RD-I, RD-I SSIV  [row 17299]
+   61-0826      Thermo King  "Expansion valve power element"  RD-I, URD 25DG  [row 17301]
+   66-0633      Thermo King  "Expansion valve power element"  KD-I, KD-I SSIV, LND, LND PEG (+22 more)  [row 18154]
+   66-2719      Thermo King  "Expansion valve power element"  MD-I  [row 18281]
+   66-3560      Thermo King  "Expansion valve power element"  SMX, SMX SR  [row 18339]
+   66-3650      Thermo King  "Expansion valve power element"  RD-II, RD-II MAX, RD-II SR, RD-II TCI-Z (+73 more)  [row 18368]
+   66-4099      Thermo King  "Expansion valve power element"  LND, RD-I SSIV, TD-I  [row 18619]
+   66-4167      Thermo King  "Expansion valve power element"  RD-I TC, TD-I  [row 18622]
+   66-4212      Thermo King  "Expansion valve power element"  Sentry MAX, Sentry di  [row 18625]
+   66-5335      Thermo King  "Expansion valve power element"  KD-II MAX, LND, MD-II, MD-II MAX (+12 more)  [row 18890]
+   66-5336      Thermo King  "Expansion valve power element"  MD-II TCI, RD-II TC, RD-II TCI, SB-III (+16 more)  [row 18907]
+   66-5359      Thermo King  "Expansion valve power element"  MD-II, MD-II MAX  [row 18927]
+   66-6567      Thermo King  "Expansion valve power element"  Sentry MAX, Sentry di  [row 19837]
+   66-7169      Thermo King  "Expansion valve power element"  KD-I, KD-I SSIV, MD-II TLE, RD-II TLE (+4 more)  [row 19891]
+   66-7979      Thermo King  "Expansion valve power element"  RD-II SR, Sentry II MAX, Super TD-II, TD-II (+2 more)  [row 20256]
+
+-- Sight glass (9) - belongs: Refrigeration; counter today: Other
+   Why this name / not an existing type: 14-01092-06 (Carrier, compressor section) may be the compressor oil-level glass rather than the liquid-line indicator - your call whether it shares this type.
+   14-01092-06  Carrier      "Compressor sight glass / liquid indicator"  Genesis TM800, Genesis TM900, Supra 1050, Supra 1150 (+20 more)  [row 462]
+   66-3023      Thermo King  "Sight glass / liquid indicator"  SB-I 1000, SB-I 1200, SB-I 2000, SB-I HPO (+8 more)  [row 14687]
+   66-6827      Thermo King  "Sight glass / liquid indicator"  KD-I, MD-II TCI, MD-II TLE, MD-MT (+87 more)  [row 14975]
+   66-6870      Thermo King  "Sight glass / liquid indicator"  KD-I, RD-I, Sentry 1000, Sentry 1200 (+15 more)  [row 15066]
+   66-6976      Thermo King  "Sight glass / liquid indicator"  TDD GO TRANSIT, TDD-M1 Southern Double Deck, TDD-M2 Northern Double Deck  [row 15091]
+   66-8339      Thermo King  "Sight glass / liquid indicator"  LND, MD-II, MD-II MAX, URD 25DG (+3 more)  [row 15118]
+   66-8811      Thermo King  "Sight glass / liquid indicator"  MAGNUM PLUS  [row 15137]
+   66-9918      Thermo King  "Sight glass / liquid indicator"  KD-II, KD-II MAX, KD-II SR, MD-100 (+106 more)  [row 15144]
+   67-2668      Thermo King  "Sight glass / liquid indicator"  C-600, S-600, T-1000, T-1000 M (+14 more)  [row 15901]
+
+-- Oil separator (4) - belongs: Refrigeration; counter today: Maintenance & Wear
+   Why this name / not an existing type: NOT Filter - oil separator (2): those two are the filter element inside a separator.
+   65-60057-00  Carrier      "Oil separator"  Xarios 500, Xarios 600  [row 1594]
+   65-60059-01  Carrier      "Oil separator"  Xarios 300, Xarios 350  [row 1596]
+   65-60059-02  Carrier      "Oil separator"  Citimax 280, Citimax 350, Citimax 400  [row 1598]
+   65-66808-00  Carrier      "Oil separator"  Citimax 500, Citimax 700  [row 1606]
+
+-- Engine oil pump (6) - belongs: Engine; counter today: Maintenance & Wear
+   Why this name / not an existing type: named after the store's Compressor oil pump. The source says only "Oil pump"; nothing says compressor, so these are not filed there.
+   25-15404-00  Carrier      "Oil pump"  Vector 1350  [row 1543]
+   11-6133      Thermo King  "Oil pump"  KD-II, KD-II MAX, MD-II, MD-II MAX (+7 more)  [row 12575]
+   11-9249      Thermo King  "Oil pump"  SB-110, SB-200, SB-210, SB-300 (+30 more)  [row 12586]
+   11-9250      Thermo King  "Oil pump"  SB-110, SB-200, SB-210, SB-300 (+30 more)  [row 12622]
+   13-0525      Thermo King  "Oil pump"  (no model given)  [row 12658]
+   33-1740      Thermo King  "Oil pump"  KD-II, KD-II MAX, MD-II, MD-II MAX (+7 more)  [row 12659]
+
+-- Piston ring set (5) - belongs: Engine; counter today: Other
+   Why this name / not an existing type: one type for engine and compressor rings, as the store does with Piston (11, both kinds). 17-40055-00 is the compressor set; the TK 61-/66- numbers may be compressor rings too.
+   17-40055-00  Carrier      "Compressor piston ring set"  Maxima 1000, Maxima 1200, Maxima 1200MT, Maxima 1300 (+15 more)  [row 527]
+   33-2524      Thermo King  "Piston ring set"  RD-I TC, SB-110, SB-110+, SB-130 (+14 more)  [row 12808]
+   61-3015      Thermo King  "Piston ring set"  KD-I, KD-I SSIV, KD-II, KD-II MAX (+107 more)  [row 12827]
+   66-0176      Thermo King  "Piston ring set"  LND, LND PEG, RD-I, RD-I SSIV (+112 more)  [row 12940]
+   66-3984      Thermo King  "Piston ring set"  SUMD-II, SUMD-II MAX, UMD, UMD 20DG (+2 more)  [row 13058]
+
+-- Rocker arm (3) - belongs: Engine; counter today: Other
+   41-3246      Thermo King  "Rocker arm"  RD-II SR, Super TD-II, TD-II SR  [row 6987]
+   41-4644      Thermo King  "Rocker arm"  MD-100, MD-200, MD-300  [row 6990]
+   41-8737      Thermo King  "Rocker arm"  T-1000, T-1080R, T-1080S, T-600 (+5 more)  [row 6993]
+
+-- Engine overhaul kit (3) - belongs: Engine; counter today: Engine
+   Why this name / not an existing type: named after Timing belt kit / Fuel rail kit.
+   30-0175      Thermo King  "Engine overhaul kit"  SB-I 1000, SB-I 1200, SB-I 2000, SB-I HPO (+6 more)  [row 14373]
+   30-0251      Thermo King  "Engine overhaul kit"  KD-II, KD-II MAX, MD-II, MD-II MAX (+7 more)  [row 14383]
+   30-0276      Thermo King  "Engine overhaul kit"  LND, LND PEG  [row 14394]
+
+-- Camshaft (2) - belongs: Engine; counter today: Other
+   Why this name / not an existing type: named after the store's Crankshaft.
+   11-7607      Thermo King  "Camshaft"  (no model given)  [row 6984]
+   11-7616      Thermo King  "Camshaft"  (no model given)  [row 6985]
+
+-- Engine exhaust valve (1) - belongs: Engine; counter today: Engine
+   Why this name / not an existing type: Carrier 25- engine part, Ultra. Store has Valve stem seal but no engine valve.
+   25-39086-00  Carrier      "Exhaust valve"  Ultra  [row 879]
+
+=================================================================================================
+2. MAPPING BUGS - an existing type already covers these; the load failed to match the name
+=================================================================================================
+-- -> existing type "Sensor - temperature" (Electrical & Controls; the counter files it there today)
+   source names it "Sensor/switch - ambient": the ambient air temperature sensor. The store already has Sensor - temperature (31 parts).
+   44-8729      Thermo King  "Sensor/switch - ambient"  SB-III, SB-III TC MAX  [row 21700]
+
+-- -> existing type "3-way valve part" (Refrigeration; the counter files it there today)
+   source names it "3-way valve kit - condenser fan". A 3-way valve kit is parts for the valve; the store files 66-1889 the same way. "condenser fan" is the Master section heading, not the part.
+   60-0493      Thermo King  "3-way valve kit - condenser fan"  SB-100, SB-130, SB-190, SB-200TG (+14 more)  [row 17227]
+
+Considered and NOT called mapping bugs: Accumulator tank vs Receiver tank, Expansion valve power
+element vs Expansion valve (TXV), Oil separator vs Filter - oil separator, Oil pump vs Compressor
+oil pump, Piston ring set vs Piston - each pair is two different parts (reasons in section 1).
+
+=================================================================================================
+3. "SENSOR/SWITCH" (25) - no new type proposed
+=================================================================================================
+"Sensor/switch" is the Master section heading. Each of these is a specific sensor or switch, and
+the store already has the specific types: Sensor - temperature, Sensor - pressure, Sensor - rpm,
+Switch - pressure, Oil pressure switch, Coolant level sensor/switch, Oil level sensor. The
+source does not say which one each number is. A catch-all "Sensor/switch" type would file
+them where no tech looks. Proposal: you sort them into the existing types, or they stay held.
+   12-01072-11  Carrier      "Sensor/switch"  Supra 944  [row 1932]
+   22-02973-05  Carrier      "Sensor/switch"  Supra 1050, Supra 1150, Supra 1150MT, Supra 1250 (+22 more)  [row 1968]
+   41-4202      Thermo King  "Sensor/switch"  SB-III Whisper MULTI-TEMP SR, SB-III Whisper Multi-Temp SR, SL TCI, Super II Whisper Multi-Temp  [row 20930]
+   41-4445      Thermo King  "Sensor/switch"  TS-300, TS-500  [row 20934]
+   41-9220      Thermo King  "Sensor/switch"  MAGNUM  [row 21339]
+   42-0396      Thermo King  "Sensor/switch"  C-600, S-600  [row 21346]
+   42-1107      Thermo King  "Sensor/switch"  TriPac Evolution  [row 21375]
+   44-3474      Thermo King  "Sensor/switch"  MD-200 MT, MD-II TLE, MD-MT, RD-II TLE (+1 more)  [row 21437]
+   44-3555      Thermo King  "Sensor/switch"  KD-I SSIV, RD-I SSIV  [row 21442]
+   44-3627      Thermo King  "Sensor/switch"  KD-II MAX, MD-II, MD-II MAX, RD-I TC (+5 more)  [row 21444]
+   44-3881      Thermo King  "Sensor/switch"  SB-II  [row 21453]
+   44-6242      Thermo King  "Sensor/switch"  Sentry MAX, Sentry di  [row 21543]
+   44-6545      Thermo King  "Sensor/switch"  RD-I TC, SB-II TC, SMX TCI, TD-I  [row 21618]
+   44-6688      Thermo King  "Sensor/switch"  SMX  [row 21622]
+   44-6691      Thermo King  "Sensor/switch"  KD-II MAX, MD-II, MD-II MAX, SMX TCI  [row 21623]
+   44-7157      Thermo King  "Sensor/switch"  SB-III S SR  [row 21627]
+   44-7674      Thermo King  "Sensor/switch"  KD-II MAX, MD-II, MD-II MAX, RD-II SR (+2 more)  [row 21647]
+   44-7754      Thermo King  "Sensor/switch"  SB-III, SB-III TC MAX  [row 21653]
+   44-9826      Thermo King  "Sensor/switch"  SMX TCI, Spectrum SL  [row 21791]
+   66-4487      Thermo King  "Sensor/switch"  SB-II  [row 21796]
+   66-6243      Thermo King  "Sensor/switch"  KD-II MAX, MD-100, MD-200, MD-300 (+3 more)  [row 21797]
+   66-6244      Thermo King  "Sensor/switch"  RD-II SR, Super TD-II, TD-II SR, TS-200 (+1 more)  [row 21804]
+   66-6245      Thermo King  "Sensor/switch"  RD-II SR, Super TD-II, TD-II SR  [row 21809]
+   66-8989      Thermo King  "Sensor/switch"  MD-II TLE, RD-II TLE  [row 21812]
+   91-9362      Thermo King  "Sensor/switch"  SB-III G  [row 21816]
+
+=================================================================================================
+4. SINGLE ODDITIES (9) - your call, no type proposed
+=================================================================================================
+   11-7473      Thermo King  "Sensor/switch" / "Oil switch extension" / "Oil switch extension (3.0 in lg)"  KD-II, KD-II MAX, KD-II SR, MD-II (+26 more)  [row 20513]
+        Oil switch extension (3.0 in lg) - also listed under "Sensor/switch". Candidate: Fitting (2 parts), if it is a threaded extension.
+   33-2458      Thermo King  "Isolator mat (oil pressure sensor)"  KD-II SR, MD-100, MD-200, MD-200 MT (+12 more)  [row 20565]
+        Isolator mat (oil pressure sensor). Candidate: Mount (16 vibration mounts) or Hardware - you know which.
+   40-0791      Thermo King  "Sensor kit (universal)"  MAGNUM  [row 20592]
+        Sensor kit (universal), MAGNUM. The source does not say what sensor.
+   44-7620      Thermo King  "Rpm sensor boot"  SB-110, SB-110+, SB-130, SB-200 (+15 more)  [row 21628]
+        Rpm sensor boot. An accessory of the rpm sensor, not the sensor - Sensor - rpm would be wrong for it as it stands.
+   67-2841      Thermo King  "Precool coil"  TriPac Evolution  [row 21814]
+        Precool coil, TriPac Evolution (an APU, not a reefer). Candidate: the new Evaporator coil type, or Heat exchanger.
+   91-6032      Thermo King  "Sensor grade nameplate"  SB-III S SR  [row 21815]
+        Sensor grade nameplate - a label. Candidate: Body/enclosure part.
+   91-9754      Thermo King  "Sensor pocket"  MAGNUM, MAGNUM PLUS  [row 21817]
+        Sensor pocket, MAGNUM. Candidate: Fitting.
+   92-2943      Thermo King  "Sensor delay pad"  SB-III Whisper MULTI-TEMP SR, SB-III Whisper Multi-Temp SR, SL TCI, Super II Whisper Multi-Temp  [row 21819]
+        Sensor delay pad. The source does not say what it is.
+   61-1059      Thermo King  "Valve spring"  SB-III CR  [row 22369]
+        Valve spring, SB-III CR. The CR is a cryogenic unit (no diesel, no compressor), so neither "engine valve spring" nor the store's Compressor valve spring fits without knowing which valve.
+
+=================================================================================================
+5. DUPLICATE AND OVERLAPPING TYPES ALREADY IN THE STORE (141 types, read Nov 4)
+=================================================================================================
+Same thing, two names (part counts in brackets; what is in the smaller one at the end):
+   Temperature sensor [6]       = Sensor - temperature [31]        all 6 described "Temperature sensor"
+   Compressor oil filter [2]    = Filter - oil (compressor) [6]    14-00289-00, 07-00380-00
+   Fuel filter (primary) [1]    = Filter - fuel [49]               11-9970
+   Tensioner [2]                = Belt tensioner [10]              both described "Belt tensioner" (204-2436, 77-3229)
+   Sensor - level [1]           = Coolant level sensor/switch [8]  41-2842 "Coolant Level Sensor"
+   Solenoid - SV valve [1]      = Solenoid coil [26]               22-02579-00 "Solenoid Valve Coil 12V - SV1 SV2 SV3 SV4"
+   Condenser [2]                = Condenser/radiator coil [83]     67-3218 / 67-3219 "Condenser Roadside / Curbside - Precedent"
+   Fastener [1]                 = Hardware [23]                    17-44017-03 "Fastener"
+
+Overlapping - probably need one rule for which wins, but not plainly the same thing:
+   Clutch [77] / Clutch/coupling [10] / Drive coupling/bushing [2] / Bushing [3]
+        Clutch/coupling holds drive couplings AND clutches (50-01171-xx truck clutches, 107-349 centrifugal clutch pulley).
+   Filter - suction [1] / Suction screen [2]
+        a suction cleanup filter vs suction screens.
+   Oil level sensor [5] / Sensor - level [1]
+        Oil level sensor holds 3 "Oil level switch" + 2 sensors.
+   EGR [12] / EGR valve [2] / Gasket / Hose/tube
+        EGR is a grab-bag: EGR hoses, gaskets, cooler kits and the 203-799 cleaning kit.
+   Compressor temperature sensor [2] / Exhaust temperature sensor [1] / EGR gas temperature sensor [1] vs Sensor - temperature [31]
+        specific temperature sensors written in the other naming style.
+   Seal [7] vs Compressor shaft seal, Front/Rear crankshaft oil seal, Gearbox seal
+        Seal holds "Fanshaft oil seal", "Compressor oil seal", "Crankshaft oil seal".
+   Electrical component [2] / Electrical connector [4]
+        Electrical component is a catch-all.
+
+Not duplicates, checked: Oil pressure switch [12] vs Switch - pressure [43] (the 43 are refrigerant
+HP/LP cutouts); Filter - oil separator vs the proposed Oil separator; Receiver tank vs Accumulator tank.
+
+Existing types the counter files under the wrong heading today (categoryOf, same cause as above):
+   Condenser/radiator coil [83] and Solenoid coil [26] -> Maintenance & Wear ("coil" contains "oil")
+   Oil pressure switch [12], Oil level sensor [5], Compressor oil pump [4] -> Maintenance & Wear
+   EGR valve [2], Valve stem seal [2] -> Refrigeration ("valve")
+   Receiver tank [41], Heat exchanger [65], Piston [11], Crankshaft [14], Connecting rod [7], Glow plug [12],
+   Cylinder sleeve [2], Exhaust manifold [7], Muffler [8], Solenoid - pilot/speed/unloader/electrical -> Other

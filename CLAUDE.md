@@ -138,6 +138,20 @@ merge, cross-reference or stay separate is Brock's decision, not code's.
   scripts/verify-cross-reference-filter.ts`), and stated in the QuickWrench and Parts
   Manager prompts.
 
+Settled field facts (Nov 4, 2026, Brock from the field - a source that disagrees is wrong):
+
+- **`11-7382` is the ENGINE OIL FILTER** (`Filter - oil (engine)`) and **`11-7400` is the AIR
+  FILTER** (`Filter - air`) for the older Thermo King Super II, Super II Whisper, SB-II, SB-III
+  and 190Y units. A catalog that files either one under another type is wrong.
+- **Both fit those older units with a Yanmar engine too**: Super II Whisper and Super II 190Y
+  (TK486) and SB-III G (TK482E). Those fitment rows are field-confirmed (`confidence =
+  'confirmed'`, `verified = true`) - not a model-family conflict, never hold them.
+- **`203-799` is the Thermo King EGR cleaning kit** (canonical `203-0799`, per the TK NNN-NNNN
+  form above). **`20-3799` is NOT a part number**: scraped listings printed `203799` with no
+  dash and the scrape inserted the standard two-digit TK dash, producing `20-3799`. Never load
+  `20-3799` as an EGR kit. In the EGR listings, bare `203799` means `203-799` (`203-0799`); the
+  `-2` listing (`203-0799-2`, sold as an EGR gasket kit) stays exactly as written - see below.
+
 Not covered by the rules, so never guessed at: other suffixes (`SL`, `RM`, `PB`, `SRV`,
 `KIT`, `SS`, `FA`, `E`), and shapes that fit no rule (`18-00091-105`, `96-153-01K`, `203-0799-2`) -
 those stay exactly as written and are matched as written.
