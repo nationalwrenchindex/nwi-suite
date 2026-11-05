@@ -2,6 +2,7 @@ import { redirect, notFound } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import { checkHDStarterAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { textTone, tint } from '@/lib/hd/text-tone'
 
@@ -101,7 +102,9 @@ export default async function FleetAccountDetailPage({
     redirect(`/hd/fleet-accounts/${id}?saved=1`)
   }
 
-  const [{ data: account }, { data: units }, { data: workOrders }] = await Promise.all([
+  // The list shows the newest 50; the KPI tiles read every work order on the account, paged
+  // past PostgREST's 1,000-row cap. They used to be summed from the 50 the list shows.
+  const [{ data: account }, { data: units }, { data: workOrders }, kpiRows] = await Promise.all([
     supabase
       .from('hd_fleet_accounts')
       .select('id, fleet_name, contact_name, contact_phone, contact_email, address, notes, created_at')
@@ -121,6 +124,14 @@ export default async function FleetAccountDetailPage({
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
       .limit(50),
+    fetchAllRows<{ status: string | null; total_amount: number | string | null }>((from, to) =>
+      supabase
+        .from('hd_work_orders')
+        .select('id, status, total_amount')
+        .eq('fleet_account_id', id)
+        .eq('user_id', user.id)
+        .order('id')
+        .range(from, to)),
   ])
 
   if (!account) notFound()
@@ -180,8 +191,8 @@ export default async function FleetAccountDetailPage({
   const unitList = (units ?? []) as Unit[]
   const woList   = (workOrders ?? []) as WorkOrder[]
 
-  const openWoCount = woList.filter(w => w.status === 'open' || w.status === 'in_progress').length
-  const totalBilled = woList.reduce((s, w) => s + Number(w.total_amount ?? 0), 0)
+  const openWoCount = kpiRows.filter(w => w.status === 'open' || w.status === 'in_progress').length
+  const totalBilled = kpiRows.reduce((s, w) => s + Number(w.total_amount ?? 0), 0)
 
   return (
     <main className="flex-1 p-4 sm:p-6">

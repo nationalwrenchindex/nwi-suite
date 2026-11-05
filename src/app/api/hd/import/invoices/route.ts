@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import { isReeferStandaloneUser } from '@/lib/hd-access'
 
 function normalize(name: string) {
@@ -50,15 +51,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No rows to import' }, { status: 400 })
   }
 
-  // Load existing state
-  const [{ data: existingFleets }, { data: existingWOs }] = await Promise.all([
+  // Load existing state. The work order numbers already held are paged past PostgREST's
+  // 1,000-row cap: a plain select stopped at 1,000, so a re-import of a larger shop did not
+  // recognise the rest and inserted them again. If that read fails, nothing is imported.
+  const [{ data: existingFleets }, existingWOs] = await Promise.all([
     supabase.from('hd_fleet_accounts').select('id, fleet_name').eq('user_id', user.id),
-    supabase.from('hd_work_orders').select('work_order_number').eq('user_id', user.id).not('work_order_number', 'is', null),
+    fetchAllRows<{ work_order_number: string }>((from, to) =>
+      supabase.from('hd_work_orders').select('id, work_order_number').eq('user_id', user.id)
+        .not('work_order_number', 'is', null).order('id').range(from, to)).catch(() => null),
   ])
+  if (!existingWOs) return NextResponse.json({ error: 'Could not read existing work orders - nothing imported' }, { status: 500 })
 
   const fleetMap = new Map<string, string>()
   for (const f of existingFleets ?? []) fleetMap.set(normalize(f.fleet_name), f.id)
-  const existingWONums = new Set((existingWOs ?? []).map(w => w.work_order_number))
+  const existingWONums = new Set(existingWOs.map(w => w.work_order_number))
 
   // Collect unique client names and categorize as new vs matched
   const newClientKeys   = new Set<string>()

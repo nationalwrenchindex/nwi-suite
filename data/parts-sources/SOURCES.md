@@ -18,6 +18,8 @@ be found again, checked, or taken back out on its own.
 | `seed-crosses-2026-10-23` | seed-crosses.csv | yes |
 | `seed-supersessions-2026-10-23` | seed-supersessions.csv | yes |
 | `seed-engines-2026-10-23` | seed-engines.csv | yes |
+| `parts-csv-2026-10-08` | ../parts/parts.csv (the Oct 8 load, scripts/load-parts.ts) | yes - re-keyed by scripts/reefer-load/16 |
+| `fitment-csv-2026-10-08` | ../parts/fitment.csv (the Oct 8 load, scripts/load-parts.ts) | yes - re-keyed by scripts/reefer-load/16 |
 
 Not loaded, by instruction: truck_trailer_parts_pilot.xlsx (truck and trailer, on hold), and
 the files in this folder that were never part of the reefer load (truck-trailer-*, service-truck-*,
