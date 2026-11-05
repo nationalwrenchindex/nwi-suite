@@ -156,9 +156,24 @@ export const CATEGORY_ORDER = [
   'Electrical & Controls', 'Air Flow & Structure', 'Electric Standby', 'Other',
 ] as const
 
+// Brock's heading for these exact types (Nov 4, 2026, from the field), checked before the
+// rules - the rules file each of them under the wrong header, or under none.
+const TYPE_HEADINGS: Record<string, typeof CATEGORY_ORDER[number]> = {
+  'egr valve':               'Engine',
+  'piston':                  'Engine',
+  'crankshaft':              'Engine',
+  'glow plug':               'Engine',
+  'valve stem seal':         'Refrigeration',
+  'receiver tank':           'Refrigeration',
+  'heat exchanger':          'Refrigeration',
+  'condenser/radiator coil': 'Refrigeration',
+  'solenoid coil':           'Electrical & Controls',
+}
+
 const CATEGORY_RULES: Array<[RegExp, typeof CATEGORY_ORDER[number]]> = [
   [/fuel|water separator|strainer/i,                   'Fuel'],
-  [/filter|fluid|gasket|pm kit|oil/i,                   'Maintenance & Wear'],
+  // "oil" as a whole word: a bare /oil/ also matched "coil" and filed every coil here.
+  [/filter|fluid|gasket|pm kit|\boil\b/i,               'Maintenance & Wear'],
   [/starter|alternator|engine|head|block|thermostat|water pump/i, 'Engine'],
   [/belt|idler|clutch|coupling|pulley/i,                'Belts & Drives'],
   [/compressor|condenser|evaporator|valve|drier|refriger/i, 'Refrigeration'],
@@ -168,6 +183,8 @@ const CATEGORY_RULES: Array<[RegExp, typeof CATEGORY_ORDER[number]]> = [
 ]
 
 export function categoryOf(partType: string): typeof CATEGORY_ORDER[number] {
+  const fixed = TYPE_HEADINGS[partType.trim().toLowerCase()]
+  if (fixed) return fixed
   if (/cab air/i.test(partType)) return 'Air Flow & Structure'
   for (const [re, cat] of CATEGORY_RULES) if (re.test(partType)) return cat
   return 'Other'

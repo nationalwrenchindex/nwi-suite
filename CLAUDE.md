@@ -151,6 +151,28 @@ Settled field facts (Nov 4, 2026, Brock from the field - a source that disagrees
   dash and the scrape inserted the standard two-digit TK dash, producing `20-3799`. Never load
   `20-3799` as an EGR kit. In the EGR listings, bare `203799` means `203-799` (`203-0799`); the
   `-2` listing (`203-0799-2`, sold as an EGR gasket kit) stays exactly as written - see below.
+- **Thermo King air sensors - graded vs ungraded.** Two current kits supersede everything older
+  (loaded `confirmed`, `verified = true`, by `scripts/reefer-load/15-air-sensor-supersessions.sql`):
+  - **`40-0974` GRADED** - Return Air Sensor (RAS) and Discharge Air Sensor (DAS). Supersedes
+    `40-0871 40-0784 41-0741 41-2649 41-3852 41-4013 41-4022 41-5801 41-7084 41-8547 44-9351`.
+  - **`40-0975` UNGRADED** - evaporator coil sensor and ambient air sensor. Supersedes
+    `40-0872 40-0785 41-0742 41-2858 41-3853 41-4012 41-4021 41-5802 41-7085 41-8548 44-9335`.
+  - Graded sensors are precision thermistors calibrated to temperature brackets; the controller
+    works off the difference between return and discharge air. **On a microprocessor unit such
+    as the SR-3, replacing one requires entering the sensor grade code into the controller** -
+    otherwise the unit runs on bad readings with a new sensor fitted. Ungraded sensors are
+    general-purpose threshold sensors (coil-frozen, ambient) with no grade code. Never offer one
+    for the other.
+  - Catalogs also print them `400974` / `400975`. Canonical is `40-0974` / `40-0975`: all six
+    digits are there, the TK dash goes after the first two (the no-dash form above) - NOT
+    `400-974`, the mistake that produced `20-3799`.
+- **`60-0493`** is a refrigeration valve, NOT a `3-way valve part` (the source printed it
+  `60-493` and named it "3-way valve kit - condenser fan" - a section heading). **`44-8729`**
+  (a mechanical sensor switch) is too old to matter: leave it held, never give it a type.
+- **Counter headings Brock set** (`TYPE_HEADINGS` in `src/lib/parts/counter.ts`): EGR valve,
+  Piston, Crankshaft, Glow plug -> Engine; Valve stem seal, Receiver tank, Heat exchanger,
+  Condenser/radiator coil -> Refrigeration; Solenoid coil -> Electrical & Controls. The oil rule
+  matches "oil" as a whole word only - "coil" is not oil.
 
 Not covered by the rules, so never guessed at: other suffixes (`SL`, `RM`, `PB`, `SRV`,
 `KIT`, `SS`, `FA`, `E`), and shapes that fit no rule (`18-00091-105`, `96-153-01K`, `203-0799-2`) -

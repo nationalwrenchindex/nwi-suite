@@ -77,6 +77,13 @@ check('fuel filter -> Fuel',                  categoryOf('Filter - fuel') === 'F
 check('water separator -> Fuel',              categoryOf('Filter - water separator') === 'Fuel')
 check('starter -> Engine',                    categoryOf('Starter') === 'Engine')
 check('cab air filter -> Air Flow & Structure', categoryOf('Filter - cab air') === 'Air Flow & Structure')
+check('"coil" is not caught by the oil rule',  categoryOf('Evaporator coil') === 'Refrigeration', categoryOf('Evaporator coil'))
+check('a whole-word oil still is',             categoryOf('Oil pickup screen') === 'Maintenance & Wear' && categoryOf('Front crankshaft oil seal') === 'Maintenance & Wear')
+for (const [t, h] of [
+  ['EGR valve', 'Engine'], ['Piston', 'Engine'], ['Crankshaft', 'Engine'], ['Glow plug', 'Engine'],
+  ['Valve stem seal', 'Refrigeration'], ['Receiver tank', 'Refrigeration'], ['Heat exchanger', 'Refrigeration'],
+  ['Condenser/radiator coil', 'Refrigeration'], ['Solenoid coil', 'Electrical & Controls'],
+] as const) check(`Brock Nov 4: ${t} -> ${h}`, categoryOf(t) === h, categoryOf(t))
 const g = groupTypes(['Starter', 'Filter - fuel', 'Filter - oil (engine)', 'Starter'])
 check('groups follow the spec order, no duplicates', g.map(x => x.category).join('|') === 'Engine|Fuel|Maintenance & Wear' && g[0].types.length === 1)
 check('"lube filter" finds the oil filter',    typeSynonymMatches('Filter - oil (engine)', 'lube filter'))
