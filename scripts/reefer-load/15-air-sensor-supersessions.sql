@@ -99,4 +99,4 @@ SELECT a.old_number, s.new_number, CASE WHEN a.graded THEN 'graded' ELSE 'ungrad
                                  AND s.source = 'brock-field-2026-11-04'
  ORDER BY 2, 1;
 
-ROLLBACK;
+COMMIT;

@@ -34,8 +34,12 @@ import {
   serialApplies, serialLabel, serialSide, fitmentRank, textMatches, typeMatches,
 } from '@/lib/parts/search'
 import { partNumberSearchKeys } from '@/lib/parts/part-number'
+import { fetchAllRows } from '@/lib/supabase/fetch-all'
+import type { PostgrestError } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
+
+type PageResult<T> = { data: T[] | null; error: PostgrestError | null }
 
 const PART_COLUMNS =
   'id, part_number, part_number_normalized, manufacturer, part_type, description, ' +
@@ -101,37 +105,43 @@ export async function GET(request: NextRequest) {
   // vendor_price arrives with migration 149 and the code deploys separately, so the
   // select is retried without it rather than failing the search over a column that is
   // on its way.
+  //
+  // Every read pages past PostgREST's 1,000-row cap, the same way the counter's catalog
+  // read does (src/lib/parts/catalog.ts). A plain select stopped at row 1,000 and hid
+  // most of the store once it passed 1,000 parts.
+  const readParts = (cols: string) => fetchAllRows<PartRow>((from, to) =>
+    supabase.from('parts').select(cols).order('part_number').order('id').range(from, to) as unknown as PromiseLike<PageResult<PartRow>>)
   let parts: PartRow[] = []
   let pricesAvailable = true
-  {
-    const first = await supabase.from('parts').select(`${PART_COLUMNS}, vendor_price`).order('part_number')
-    if (first.error) {
-      pricesAvailable = false
-      const retry = await supabase.from('parts').select(PART_COLUMNS).order('part_number')
-      if (retry.error) {
-        console.error('[parts/search] parts select failed:', retry.error)
-        return NextResponse.json({ error: 'Could not read the parts catalog' }, { status: 500 })
-      }
-      parts = (retry.data ?? []) as unknown as PartRow[]
-    } else {
-      parts = (first.data ?? []) as unknown as PartRow[]
+  try {
+    parts = await readParts(`${PART_COLUMNS}, vendor_price`)
+  } catch {
+    pricesAvailable = false
+    try {
+      parts = await readParts(PART_COLUMNS)
+    } catch (e) {
+      console.error('[parts/search] parts select failed:', e)
+      return NextResponse.json({ error: 'Could not read the parts catalog' }, { status: 500 })
     }
   }
 
-  const { data: fitmentData, error: fitErr } = await supabase
-    .from('part_fitment')
-    .select(FITMENT_COLUMNS)
-  if (fitErr) {
-    console.error('[parts/search] fitment select failed:', fitErr)
+  let fitment: FitmentRow[] = []
+  try {
+    fitment = await fetchAllRows<FitmentRow>((from, to) =>
+      supabase.from('part_fitment').select(FITMENT_COLUMNS).order('id').range(from, to) as unknown as PromiseLike<PageResult<FitmentRow>>)
+  } catch (e) {
+    console.error('[parts/search] fitment select failed:', e)
     return NextResponse.json({ error: 'Could not read fitment' }, { status: 500 })
   }
-  const fitment = (fitmentData ?? []) as unknown as FitmentRow[]
 
-  const { data: superData } = await supabase
-    .from('part_supersession')
-    .select('old_number, new_number, old_number_normalized, new_number_normalized, manufacturer, note, verified')
-
-  const supersessions = superData ?? []
+  // A failed supersession read leaves the search working without it, as before.
+  let supersessions: Array<Record<string, unknown>> = []
+  try {
+    supersessions = await fetchAllRows<Record<string, unknown>>((from, to) =>
+      supabase.from('part_supersession')
+        .select('id, old_number, new_number, old_number_normalized, new_number_normalized, manufacturer, note, verified')
+        .order('id').range(from, to) as unknown as PromiseLike<PageResult<Record<string, unknown>>>)
+  } catch { /* searched without supersessions */ }
 
   // ── supersession, before anything is filtered out ────────────────────────
   //
