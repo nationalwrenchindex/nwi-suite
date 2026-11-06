@@ -2,6 +2,21 @@
 // Saves a completed QuickWrench quote.
 // Creates a record in the quotes table (not invoices — that happens at Phase 3 conversion).
 // When send_sms=true, sets status='sent', records sent_at, and fires an SMS.
+//
+// THE MONEY IS PRICED HERE, through lib/quickwrench-money -> lib/document-money, under
+// the shop's settings read server-side (lib/document-defaults): shop supplies, drive time
+// and mileage per the billing method picker, the service call fee taxed per its setting,
+// the tax split into a parts and a labor bucket. The request carries only what the tech
+// typed - rates, hours, miles, prices, the fee. It used to store the client's totals as
+// sent, which never had supplies, travel, mileage or a service call in them, with
+// tax_percent back-derived from the total and parts_subtotal holding the store cost.
+//
+// THE CUSTOMER AND THE VEHICLE ARE REAL RECORDS. The customer is the one QuickWrench
+// already saved to Intel Hub when it sends its id; the vehicle decoded from the VIN is
+// that customer's own vehicle row, found or created, and is attached to the quote - so
+// the work order made from it has its unit and the invoice carries it. This used to
+// reuse ANY vehicle in the shop with that VIN, whoever owned it, leaving the customer
+// with no vehicle at all.
 
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
@@ -9,6 +24,11 @@ import { hasQuickWrenchAccess } from '@/lib/subscription'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { QuoteSaveRequest } from '@/types/quickwrench'
 import { money } from '@/lib/format'
+import type { MultiJobEntry } from '@/types/quickwrench'
+import { splitCustomerName } from '@/lib/customer-name'
+import { loadDocumentDefaults } from '@/lib/document-defaults.server'
+import { newDocumentServiceCall } from '@/lib/document-defaults'
+import { quickwrenchMoney, partsCostTotal, type QwJob } from '@/lib/quickwrench-money'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -35,13 +55,20 @@ async function genQuoteNumber(supabase: SupabaseClient, userId: string): Promise
   return `${prefix}${String(seq).padStart(4, '0')}`
 }
 
-// Looks up a customer by phone, or creates one if not found.
+// The quote's customer: the one QuickWrench already saved (its id, checked to be this
+// shop's), else a match on phone, else a new one - named exactly as typed, never with an
+// invented surname (lib/customer-name).
 async function resolveCustomer(
-  supabase: SupabaseClient,
-  userId:  string,
-  name:    string,
-  phone:   string,
+  supabase:   SupabaseClient,
+  userId:     string,
+  customerId: string | null | undefined,
+  name:       string,
+  phone:      string,
 ): Promise<string | null> {
+  if (customerId) {
+    const { data } = await supabase.from('customers').select('id').eq('id', customerId).eq('user_id', userId).maybeSingle()
+    if (data) return data.id as string
+  }
   if (!name.trim() && !phone.trim()) return null
 
   if (phone.trim()) {
@@ -54,49 +81,41 @@ async function resolveCustomer(
     if (data && data.length > 0) return data[0].id
   }
 
-  const parts     = name.trim().split(/\s+/)
-  const firstName = parts[0] || 'Walk-up'
-  const lastName  = parts.slice(1).join(' ') || 'Customer'
-
+  const split = splitCustomerName(name)
   const { data: created } = await supabase
     .from('customers')
-    .insert({ user_id: userId, first_name: firstName, last_name: lastName, phone: phone.trim() || null })
+    // No name at all: "Walk-up", the label for an unnamed customer - and no surname.
+    .insert({ user_id: userId, first_name: split?.first_name ?? 'Walk-up', last_name: split?.last_name ?? '', phone: phone.trim() || null })
     .select('id')
     .single()
 
   return created?.id ?? null
 }
 
-// Looks up a vehicle by VIN; creates one if not found and we have a customer.
+// THE CUSTOMER'S OWN vehicle for this VIN: found among that customer's vehicles, else
+// created for them from the decode (year, make, model, trim, VIN, engine). Never another
+// customer's row - a VIN on file under someone else is a different customer's record of
+// the truck, and borrowing it left this customer with no vehicle and an empty picker.
 async function resolveVehicle(
   supabase:    SupabaseClient,
-  userId:      string,
   vin:         string | null | undefined,
   vehicleData: { year: string; make: string; model: string; trim?: string; engine?: string },
   customerId:  string | null,
 ): Promise<string | null> {
-  if (!vin) return null
+  if (!customerId || !vehicleData.make || !vehicleData.model) return null
 
-  const { data: customerRows } = await supabase
-    .from('customers')
-    .select('id')
-    .eq('user_id', userId)
-
-  if (customerRows && customerRows.length > 0) {
-    const ids = customerRows.map((r: { id: string }) => r.id)
+  if (vin) {
     const { data: existing } = await supabase
       .from('vehicles')
       .select('id')
+      .eq('customer_id', customerId)
       .eq('vin', vin)
-      .in('customer_id', ids)
       .limit(1)
     if (existing && existing.length > 0) return existing[0].id
   }
 
-  if (!customerId) return null
-
   const yearInt = vehicleData.year ? parseInt(vehicleData.year, 10) : null
-  const { data: created } = await supabase
+  const { data: created, error } = await supabase
     .from('vehicles')
     .insert({
       customer_id: customerId,
@@ -104,11 +123,12 @@ async function resolveVehicle(
       make:        vehicleData.make,
       model:       vehicleData.model,
       trim:        vehicleData.trim   || null,
-      vin,
+      vin:         vin || null,
       engine:      vehicleData.engine || null,
     })
     .select('id')
     .single()
+  if (error) console.error('[quickwrench/quote] vehicle insert failed:', error.message)
 
   return created?.id ?? null
 }
@@ -162,14 +182,53 @@ export async function POST(req: NextRequest) {
   }
 
   const {
-    vehicle, job, jobs, extra_labor,
-    parts, parts_total, parts_cost_total, labor_hours, labor_rate, labor_total,
-    markup_percent, tax_amount, grand_total, tax_breakdown,
-    customer_name, customer_phone,
+    vehicle, job, jobs, extra_labor, parts,
+    customer_id, customer_name, customer_phone,
     send_sms, save_quote,
   } = body
 
   const isMultiJob = Array.isArray(jobs) && jobs.length > 0
+  const n0 = (v: unknown) => { const x = Number(v); return Number.isFinite(x) && x >= 0 ? x : 0 }
+  const laborRate = n0(body.labor_rate)
+  const markupPct = n0(body.markup_percent)
+
+  // The jobs as priced. The single-job legacy request is folded into one job, its
+  // supplier price as the store cost, marked up - exactly as it priced before.
+  const qwJobs: QwJob[] = isMultiJob
+    ? (jobs as MultiJobEntry[]).map(j => ({ subtype: j.subtype, labor_hours: n0(j.labor_hours), parts: j.parts }))
+    : [{
+        subtype: job.name, labor_hours: n0(body.labor_hours),
+        parts: (parts ?? []).filter(p => p.included).map(p => {
+          const supplierPrice =
+            // The client sends custom_price only (selected_supplier 'custom'). The legacy
+            // branches stay so a request carrying them prices exactly as before.
+            (p.selected_supplier === 'autozone' ? p.price_autozone :
+             p.selected_supplier === 'orielly'  ? p.price_orielly  :
+             p.selected_supplier === 'napa'     ? p.price_napa     :
+             p.selected_supplier === 'rockauto' ? p.price_rockauto :
+             undefined) ?? p.custom_price
+          return { name: p.name, qty: p.qty, unit_cost: supplierPrice, unit_price: supplierPrice * (1 + markupPct / 100) }
+        }),
+      }]
+  const extraLabor = (Array.isArray(extra_labor) ? extra_labor : [])
+    .map(el => ({ description: String(el.description ?? ''), hours: n0(el.hours) }))
+
+  // Priced here, under the shop's settings - never the client's totals.
+  const defaults = await loadDocumentDefaults(supabase, user.id)
+  const qm = quickwrenchMoney({
+    jobs: qwJobs, extraLabor, laborRate, markupPct,
+    taxPct:         body.tax_percent != null ? n0(body.tax_percent) : defaults.taxPct,
+    taxSettings:    defaults.taxSettings,
+    defaults,
+    travelHours:    n0(body.travel_hours),
+    mileageMiles:   n0(body.mileage_miles),
+    serviceCallFee: body.service_call_fee != null ? n0(body.service_call_fee) : (newDocumentServiceCall(defaults)?.fee ?? 0),
+  })
+  const m = qm.money
+  const laborHoursTotal = Number(qm.columns.labor_hours ?? 0)
+  const partsTotal  = Math.round(m.partsTotal * 100) / 100
+  const laborTotal  = Math.round(m.laborSubtotal * 100) / 100
+  const costTotal   = partsCostTotal(qwJobs)
 
   // ── Save raw QuickWrench quote log ─────────────────────────────────────────
   const { data: qwQuote, error: qwErr } = await supabase
@@ -184,13 +243,13 @@ export async function POST(req: NextRequest) {
       job_category:   job.category,
       job_name:       job.name,
       parts_list:     parts,
-      parts_total,
-      labor_hours,
-      labor_rate,
-      labor_total,
-      markup_percent,
-      tax_amount,
-      grand_total,
+      parts_total:    partsTotal,
+      labor_hours:    laborHoursTotal,
+      labor_rate:     laborRate,
+      labor_total:    laborTotal,
+      markup_percent: markupPct,
+      tax_amount:     m.taxAmount,
+      grand_total:    m.grandTotal,
       customer_name:  customer_name  || null,
       customer_phone: customer_phone || null,
       status:         'draft',
@@ -209,99 +268,15 @@ export async function POST(req: NextRequest) {
   let publicToken:  string | null = null
 
   if (save_quote || send_sms) {
-    const customerId = await resolveCustomer(supabase, user.id, customer_name ?? '', customer_phone ?? '')
-    const vehicleId  = await resolveVehicle(supabase, user.id, vehicle.vin, vehicle, customerId)
+    const customerId = await resolveCustomer(supabase, user.id, customer_id, customer_name ?? '', customer_phone ?? '')
+    const vehicleId  = await resolveVehicle(supabase, vehicle.vin, vehicle, customerId)
 
     const qtNum = await genQuoteNumber(supabase, user.id)
 
-    // ── Build line items and parts subtotal ──────────────────────────────────
-    let lineItems: Array<{ description: string; quantity: number; unit_price: number; total: number; unit_cost?: number }>
-    let partsSubtotal: number
-    let jobCategoryLabel: string
-    let jobSubtype: string
-
-    if (isMultiJob && jobs) {
-      // Multi-job: build line items grouped by job
-      lineItems = []
-      partsSubtotal = 0
-      for (const j of jobs as import('@/types/quickwrench').MultiJobEntry[]) {
-        for (const p of j.parts) {
-          lineItems.push({
-            description: p.name,
-            quantity:    p.qty,
-            unit_cost:   Math.round(p.unit_cost * 100) / 100,
-            unit_price:  Math.round(p.unit_price * 100) / 100,
-            total:       Math.round(p.unit_price * p.qty * 100) / 100,
-          })
-          partsSubtotal += p.unit_cost * p.qty
-        }
-        lineItems.push({
-          description: `Labor — ${j.subtype}`,
-          quantity:    j.labor_hours,
-          unit_price:  j.labor_rate,
-          total:       Math.round(j.labor_hours * j.labor_rate * 100) / 100,
-        })
-      }
-      partsSubtotal = Math.round(partsSubtotal * 100) / 100
-      jobCategoryLabel = job.categoryLabel
-      jobSubtype = jobs.length > 1 ? `${jobs.length} Services` : (jobs as import('@/types/quickwrench').MultiJobEntry[])[0]?.subtype ?? job.name
-    } else {
-      // Single-job legacy path
-      lineItems = [
-        ...parts
-          .filter((p) => p.included)
-          .map((p) => {
-            const supplierPrice =
-              // The client sends custom_price only (selected_supplier 'custom'). The legacy
-              // branches stay so a request carrying them prices exactly as before.
-              (p.selected_supplier === 'autozone' ? p.price_autozone :
-               p.selected_supplier === 'orielly'  ? p.price_orielly  :
-               p.selected_supplier === 'napa'     ? p.price_napa     :
-               p.selected_supplier === 'rockauto' ? p.price_rockauto :
-               undefined) ?? p.custom_price
-            const unitPrice = supplierPrice * (1 + markup_percent / 100)
-            return {
-              description: p.name,
-              quantity:    p.qty,
-              unit_price:  Math.round(unitPrice * 100) / 100,
-              total:       Math.round(unitPrice * p.qty * 100) / 100,
-            }
-          }),
-        {
-          description: `Labor — ${job.name}`,
-          quantity:    labor_hours,
-          unit_price:  labor_rate,
-          total:       labor_total,
-        },
-      ]
-      partsSubtotal = parts
-        .filter(p => p.included)
-        .reduce((s, p) => {
-          const supplierPrice =
-            // The client sends custom_price only (selected_supplier 'custom'). The legacy
-            // branches stay so a request carrying them prices exactly as before.
-            (p.selected_supplier === 'autozone' ? p.price_autozone :
-             p.selected_supplier === 'orielly'  ? p.price_orielly  :
-             p.selected_supplier === 'napa'     ? p.price_napa     :
-             p.selected_supplier === 'rockauto' ? p.price_rockauto :
-             undefined) ?? p.custom_price
-          return s + supplierPrice * p.qty
-        }, 0)
-      jobCategoryLabel = job.categoryLabel
-      jobSubtype = job.name
-    }
-
-    // Append custom labor lines from the Quote-tab "Add Labor Line" rows.
-    const extraLabor = Array.isArray(extra_labor) ? extra_labor : []
-    for (const el of extraLabor) {
-      const hrs = Number(el.hours) || 0
-      lineItems.push({
-        description: `Labor — ${el.description || 'Additional labor'}`,
-        quantity:    hrs,
-        unit_price:  labor_rate,
-        total:       Math.round(hrs * labor_rate * 100) / 100,
-      })
-    }
+    const jobCategoryLabel = job.categoryLabel
+    const jobSubtype = isMultiJob
+      ? (jobs!.length > 1 ? `${jobs!.length} Services` : (jobs as MultiJobEntry[])[0]?.subtype ?? job.name)
+      : job.name
 
     const vehicleLabel = [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ')
     let notes = `Vehicle: ${vehicleLabel}`
@@ -329,22 +304,11 @@ export async function POST(req: NextRequest) {
         vehicle_engine:       vehicle.engine || null,
         job_category:         jobCategoryLabel,
         job_subtype:          jobSubtype,
-        line_items:           lineItems,
-        labor_hours,
-        labor_rate,
-        parts_subtotal:       Math.round(partsSubtotal * 100) / 100,
-        parts_cost_total:     Math.round((parts_cost_total ?? 0) * 100) / 100,
-        parts_markup_percent: markup_percent,
-        labor_subtotal:       Math.round(labor_total * 100) / 100,
-        tax_percent:          grand_total > 0
-          ? Math.round(((tax_amount / (grand_total - tax_amount)) * 100) * 100) / 100
-          : 0,
-        tax_amount:           Math.round(tax_amount * 100) / 100,
-        grand_total:          Math.round(grand_total * 100) / 100,
-        // Passed through from the client, which is where the split is known. Null
-        // when the settings fetch had not resolved, and a null reads as pre-split
-        // rather than as "nothing was taxed".
-        tax_breakdown:        tax_breakdown ?? null,
+        // Every money column from lib/document-money (lines post-markup with each part's
+        // store cost kept, labour hours, the pre-markup parts base, the shop's tax rate,
+        // the split, the extras and the service call fee inside the tax and the total).
+        ...qm.columns,
+        parts_cost_total:     costTotal,
         notes,
         source:               'quickwrench',
         sent_at:              send_sms ? now : null,
@@ -353,14 +317,16 @@ export async function POST(req: NextRequest) {
         sent_to_phone:        send_sms && customer_phone ? customer_phone.trim() : null,
         quote_expires_at:     expiresAt,
         // Phase 8: multi-job JSONB
-        jobs:                 isMultiJob ? jobs : [],
+        jobs:                 isMultiJob ? (jobs as MultiJobEntry[]).map(j => ({ ...j, labor_rate: laborRate })) : [],
       })
       .select('id')
       .single()
 
     if (qtErr) {
       console.error('[quote] quotes insert failed:', qtErr)
-      // Non-fatal — raw log was already saved
+      // Said, not swallowed: this answered 200 with no quote number, and the tech saw a
+      // save that had not happened.
+      return NextResponse.json({ error: 'The quote could not be saved: ' + qtErr.message }, { status: 500 })
     } else if (qt) {
       quoteId     = qt.id
       quoteNumber = qtNum
@@ -398,10 +364,11 @@ export async function POST(req: NextRequest) {
         `Vehicle: ${vehicleLabel}`,
         `Service: ${serviceLabel}`,
         '',
-        `Parts:  ${fmt(parts_total)}`,
-        `Labor:  ${fmt(labor_total)} (${labor_hours}h @ ${fmt(labor_rate)}/hr)`,
-        `Tax:    ${fmt(tax_amount)}`,
-        `TOTAL:  ${fmt(grand_total)}`,
+        `Parts:  ${fmt(partsTotal)}`,
+        `Labor:  ${fmt(laborTotal)} (${laborHoursTotal}h @ ${fmt(laborRate)}/hr)`,
+        ...(m.subtotal - partsTotal - laborTotal > 0.004 ? [`Fees:   ${fmt(Math.round((m.subtotal - partsTotal - laborTotal) * 100) / 100)}`] : []),
+        `Tax:    ${fmt(m.taxAmount)}`,
+        `TOTAL:  ${fmt(m.grandTotal)}`,
         '',
         `View your quote: ${quoteUrl}`,
         '',

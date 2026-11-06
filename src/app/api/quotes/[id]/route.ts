@@ -8,6 +8,7 @@ import { discountForWrite, isMissing165Column, MIGRATION_165_MESSAGE } from '@/l
 import { createClient } from '@/lib/supabase/server'
 import { isMissingServiceCallColumn, serviceCallFee, serviceCallFromBody, MIGRATION_180_MESSAGE } from '@/lib/service-call'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { splitCustomerName } from '@/lib/customer-name'
 
 const QUOTE_SELECT = `
   *,
@@ -41,9 +42,10 @@ async function resolveCustomer(
     if (hit) return hit.id
   }
 
-  const parts     = name.trim().split(/\s+/)
-  const firstName = parts[0] || 'Walk-up'
-  const lastName  = parts.slice(1).join(' ') || 'Customer'
+  // Never an invented surname (lib/customer-name): "Jesus" is Jesus, not "Jesus Customer".
+  const split     = splitCustomerName(name)
+  const firstName = split?.first_name ?? 'Walk-up'
+  const lastName  = split?.last_name ?? ''
 
   const { data: created } = await supabase
     .from('customers')

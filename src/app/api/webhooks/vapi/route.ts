@@ -18,6 +18,7 @@ import { verifyVapiRequest } from '@/lib/vapi/verify-signature'
 // supplies the vendor-neutral fallback ("Your service provider"). Pure module —
 // no server deps — so importing it here costs nothing.
 import { normalizeBusinessName } from '@/lib/hd/sms-templates'
+import { splitCustomerName } from '@/lib/customer-name'
 
 const SERVER_URL = 'https://tools.nationalwrenchindex.com/api/webhooks/vapi'
 
@@ -737,9 +738,10 @@ async function handleBookAppointment(
   }
 
   // Parse customer name
-  const nameParts = params.customer_name.trim().split(/\s+/)
-  const firstName = nameParts[0] || 'Customer'
-  const lastName  = nameParts.slice(1).join(' ') || 'Unknown'
+  // Never an invented surname (lib/customer-name): a caller who gives one name is stored as it.
+  const split     = splitCustomerName(params.customer_name)
+  const firstName = split?.first_name ?? 'Customer'
+  const lastName  = split?.last_name ?? ''
 
   // Build vehicle + engine text for job notes (no separate vehicle row for inbound calls)
   const vehicleText = params.vehicle_info?.trim() || null

@@ -10,8 +10,7 @@
 import { useEffect, useState } from 'react'
 import { useTaxSettings } from '@/lib/use-tax-settings'
 import { useExtrasSettingsState } from '@/lib/use-extras-settings'
-import { extrasDisplayRows } from '@/lib/billable-extras'
-import { taxDisplayRows, documentTaxSettings } from '@/lib/tax'
+import { documentTaxSettings } from '@/lib/tax'
 import { useRouter } from 'next/navigation'
 import LineItemEditor from '@/components/shared/LineItemEditor'
 import {
@@ -20,7 +19,6 @@ import {
   type EditItem,
 } from '@/components/shared/line-items'
 import { documentMoney, documentExtras, storedDiscount } from '@/lib/document-money'
-import { discountLabel } from '@/lib/document-discount'
 import {
   DiscountEditor, draftFrom, discountFromDraft, type DiscountDraft,
 } from '@/components/shared/DiscountEditor'
@@ -31,13 +29,10 @@ import {
 } from '@/types/work-orders'
 import CustomerUnitPicker from './CustomerUnitPicker'
 import WorkOrderPhotos, { type PhotoWithUrl } from './WorkOrderPhotos'
-import { money } from '@/lib/format'
 import { useServiceCallSettingsState } from '@/lib/use-service-call-settings'
-import { hasServiceCallColumn, serviceCallColumns, serviceCallOf, serviceCallRow, serviceCallSeed } from '@/lib/service-call'
+import { hasServiceCallColumn, serviceCallColumns, serviceCallOf, serviceCallSeed } from '@/lib/service-call'
 import ServiceCallField from '@/components/shared/ServiceCallField'
-
-const fmt = (n: number | null | undefined) =>
-  money(n ?? 0)
+import DocumentTotals from '@/components/shared/DocumentTotals'
 
 export default function WorkOrderForm({
   workOrder,
@@ -178,15 +173,12 @@ export default function WorkOrderForm({
     serviceCall: owns ? serviceCall : null,
     stored: recordedTerms ? workOrder as unknown as Record<string, unknown> : null,
   })
-  const callRow = serviceCallRow(docMoney.serviceCall)
   // A segment-priced work order's money lives in its segments, so its fee is sent on
   // its own and billed by the converter with the drive time. Only when there is one, or
   // to clear one it had, so a work order without one writes nothing new.
   const callColumns = serviceCall && (serviceCall.fee > 0 || storedCall.fee > 0)
     ? serviceCallColumns(serviceCall.fee, serviceCall.tax)
     : {}
-  const totals       = docMoney
-  const extrasResult = docMoney.extras
   const withExtras   = docMoney
   const laborHoursShown = totalLaborHours({ items, laborHours })
   const status = (workOrder?.status ?? 'open') as WorkOrderStatus
@@ -437,7 +429,7 @@ export default function WorkOrderForm({
       {showCall && (
       <section className="nwi-card space-y-3">
         <p className="text-white/30 text-xs uppercase tracking-widest">Service Call</p>
-        <ServiceCallField fee={callFee ?? 0} tax={callTax} onFee={setCallFee} disabled={isLocked} />
+        <ServiceCallField fee={callFee ?? 0} tax={callTax} taxFrom={!isNew && storedCall.fee > 0 ? 'document' : 'settings'} loaded={(!isNew && storedCall.fee > 0) || callState.loaded} onFee={setCallFee} disabled={isLocked} />
       </section>
       )}
 
@@ -484,57 +476,21 @@ export default function WorkOrderForm({
           </div>
         </div>
 
-        <div className="space-y-1.5 pt-2 border-t border-white/10">
-          <Row label="Parts Base"                    value={fmt(totals.partsBase)} />
-          <Row
-            label={`Parts Markup (${!isNew && !storedMarkup.recorded && !markupTouched ? markupLabel(storedMarkup) : `${markupPct}%`})`}
-            value={fmt(totals.markupAmt)}
-            dim
+        <div className="pt-2 border-t border-white/10 space-y-2">
+          <DiscountEditor value={discountDraft} onChange={setDiscountDraft} disabled={isLocked}
+            applied={docMoney.discount} error={docMoney.discountError} />
+          {/* lib/document-money's answer in the shared rows (lib/document-totals): the same
+              rows the quote this came from prints, tax one row per bucket, every extra and
+              the service call inside the subtotal. FROM docMoney, NOT the line totals: the
+              line totals tax the lines alone, so they put 7.75% of 390.00 = 30.23 on screen
+              while the stored breakdown had supplies in the parts bucket at 429.00 = 33.25 -
+              WO-2026-0021 could not be invoiced because of exactly that disagreement. */}
+          <DocumentTotals
+            money={docMoney}
+            markupText={!isNew && !storedMarkup.recorded && !markupTouched ? markupLabel(storedMarkup) : `${markupPct}%`}
+            laborHours={laborHoursShown}
+            taxPct={taxPct}
           />
-          {totals.laborSubtotal > 0 && <Row label="Labor" value={fmt(totals.laborSubtotal)} />}
-          {callRow && <Row label={callRow.label} value={fmt(callRow.amount)} />}
-          {/* A zero extra prints no row — extrasDisplayRows returns none. */}
-          {extrasDisplayRows(extrasResult).map(r => (
-            <Row key={r.key} label={r.detail ? `${r.label} (${r.detail})` : r.label} value={fmt(r.amount)} />
-          ))}
-          {extrasResult.shopSupplies.capped && (
-            <p className="text-[10px] text-white/35">
-              Shop supplies capped at {fmt(extrasResult.shopSupplies.rate ?? 0)}.
-            </p>
-          )}
-          {/* SUBTOTAL, with the extras inside it. Without this the box jumped from the
-              line items straight to tax and a tech had no figure to check the extras
-              against. */}
-          <Row label="Subtotal" value={fmt(withExtras.subtotal)} />
-          {docMoney.discount && (
-            <div className="flex items-center justify-between text-sm" data-testid="discount-row">
-              <span className="text-white/60">
-                {discountLabel(docMoney.discount)}
-                {docMoney.discount.reason && <span className="text-white/40 text-xs ml-1.5">· {docMoney.discount.reason}</span>}
-              </span>
-              <span className="text-emerald-400">{'-' + fmt(docMoney.discount.amount)}</span>
-            </div>
-          )}
-          <div className="py-1">
-            <DiscountEditor value={discountDraft} onChange={setDiscountDraft} disabled={isLocked}
-              applied={docMoney.discount} error={docMoney.discountError} />
-          </div>
-          {/* One row per category when the split is known, including the exempt one,
-              so a tech sees "Labor - not taxable" before a customer does.
-              FROM withExtras, NOT totals: totals taxes the line items alone, so it put
-              7.75% of 390.00 = 30.23 on screen while the stored breakdown had the
-              supplies fee in the parts bucket at 429.00 = 33.25. The work order then
-              disagreed with its own stored row, and the converter's guard refused to
-              bill it - WO-2026-0021 could not be invoiced at all. */}
-          {withExtras.taxBreakdown
-            ? taxDisplayRows(withExtras.taxBreakdown).map(r => (
-                <Row key={r.category} label={r.text} value={r.taxed ? fmt(r.amount) : '—'} dim />
-              ))
-            : <Row label={`Tax (${taxPct}%)`} value={fmt(withExtras.taxAmount)} dim />}
-          <div className="flex items-center justify-between pt-2">
-            <span className="text-white/60 text-sm">Total</span>
-            <span className="font-condensed font-bold text-2xl text-orange">{fmt(withExtras.grandTotal)}</span>
-          </div>
         </div>
       </section>
       )}
@@ -617,11 +573,3 @@ export default function WorkOrderForm({
   )
 }
 
-function Row({ label, value, dim = false }: { label: string; value: string; dim?: boolean }) {
-  return (
-    <div className="flex items-center justify-between text-sm">
-      <span className={dim ? 'text-white/40' : 'text-white/60'}>{label}</span>
-      <span className={dim ? 'text-white/60' : 'text-white'}>{value}</span>
-    </div>
-  )
-}

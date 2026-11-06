@@ -1609,7 +1609,7 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
       {/* ── SECTION D1c: The service call fee - a flat fee, its own line. ── */}
       {showCall && (
         <Section label="Service Call">
-          <ServiceCallField fee={callFee} tax={callTax} onFee={setCallFee} />
+          <ServiceCallField fee={callFee} tax={callTax} taxFrom={storedCall.fee > 0 ? 'document' : 'settings'} loaded={storedCall.fee > 0 || callState.loaded} onFee={setCallFee} />
         </Section>
       )}
 

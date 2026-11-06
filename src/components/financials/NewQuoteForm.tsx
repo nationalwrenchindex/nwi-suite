@@ -20,19 +20,16 @@ import CustomerUnitPicker from '@/components/work-orders/CustomerUnitPicker'
 import LineItemEditor from '@/components/shared/LineItemEditor'
 import { totalLaborHours, type EditItem } from '@/components/shared/line-items'
 import { documentMoney } from '@/lib/document-money'
-import { discountLabel } from '@/lib/document-discount'
 import {
   DiscountEditor, EMPTY_DISCOUNT, discountFromDraft, type DiscountDraft,
 } from '@/components/shared/DiscountEditor'
 import { useTaxSettings } from '@/lib/use-tax-settings'
 import { useExtrasSettingsState } from '@/lib/use-extras-settings'
-import { extrasDisplayRows } from '@/lib/billable-extras'
-import { taxDisplayRows } from '@/lib/tax'
-import { money } from '@/lib/format'
 import { BLANK_QUOTE_SEED, seedNotes, type QuoteSeed } from '@/types/quote-seed'
 import { useServiceCallSettingsState } from '@/lib/use-service-call-settings'
-import { serviceCallRow, serviceCallSeed } from '@/lib/service-call'
+import { serviceCallSeed } from '@/lib/service-call'
 import ServiceCallField from '@/components/shared/ServiceCallField'
+import DocumentTotals from '@/components/shared/DocumentTotals'
 
 export default function NewQuoteForm({
   defaults,
@@ -111,9 +108,6 @@ export default function NewQuoteForm({
     discount: discountFromDraft(discountDraft),
     serviceCall,
   })
-  const callRow = serviceCallRow(docMoney.serviceCall)
-  const totals       = docMoney
-  const extrasResult = docMoney.extras
   const withExtras   = docMoney
   const laborHours   = totalLaborHours({ items, laborHours: 0 })
 
@@ -274,46 +268,19 @@ export default function NewQuoteForm({
           one or this quote has one. ── */}
       {showCall && (
         <div className="pt-3 border-t border-white/8">
-          <ServiceCallField fee={callFee ?? 0} tax={callState.settings.tax} onFee={setCallFee} disabled={saving} />
+          <ServiceCallField fee={callFee ?? 0} tax={callState.settings.tax} taxFrom="settings" loaded={callState.loaded} onFee={setCallFee} disabled={saving} />
         </div>
       )}
 
-      {/* ── Totals, from the shared calculator ── */}
-      <div className="space-y-1 pt-3 border-t border-white/8 text-sm">
-        <Row label="Parts" value={money(totals.partsTotal)} />
-        <Row label={`Labour (${laborHours}h)`} value={money(totals.laborSubtotal)} />
-        {callRow && <Row label={callRow.label} value={money(callRow.amount)} />}
-        {/* Travel, mileage and shop supplies - computed, each labelled, never folded
-            into parts. A zero extra prints no row, so a labour-only quote shows no
-            shop supplies line at all. */}
-        {extrasDisplayRows(extrasResult).map(r => (
-          <Row key={r.key} label={r.detail ? `${r.label} (${r.detail})` : r.label} value={money(r.amount)} />
-        ))}
-        <Row label="Subtotal" value={money(withExtras.subtotal)} />
-        {docMoney.discount && (
-          <div className="flex justify-between" data-testid="discount-row">
-            <span className="text-white/60">
-              {discountLabel(docMoney.discount)}
-              {docMoney.discount.reason && <span className="text-white/40 text-xs ml-1.5">· {docMoney.discount.reason}</span>}
-            </span>
-            <span className="text-emerald-400">{'-' + money(docMoney.discount.amount)}</span>
-          </div>
-        )}
-        <div className="py-1">
-          <DiscountEditor value={discountDraft} onChange={setDiscountDraft}
-            applied={docMoney.discount} error={docMoney.discountError} />
-        </div>
-        {/* One row per category, including the exempt one — same as every other
-            surface since the tax split shipped. */}
-        {withExtras.taxBreakdown
-          ? taxDisplayRows(withExtras.taxBreakdown).map(r => (
-              <Row key={r.category} label={r.text} value={r.taxed ? money(r.amount) : '—'} dim />
-            ))
-          : <Row label={`Tax (${taxPct}%)`} value={money(withExtras.taxAmount)} dim />}
-        <div className="flex justify-between items-baseline pt-2 border-t border-white/8">
-          <span className="text-white font-medium">Total</span>
-          <span className="font-condensed font-bold text-orange text-2xl">{money(withExtras.grandTotal)}</span>
-        </div>
+      <div className="pt-3 border-t border-white/8">
+        <DiscountEditor value={discountDraft} onChange={setDiscountDraft}
+          applied={docMoney.discount} error={docMoney.discountError} />
+      </div>
+
+      {/* ── Totals: the shared calculator's answer in the shared rows - the same rows the
+          quote editor and the work order print (lib/document-totals). ── */}
+      <div className="pt-3 border-t border-white/8">
+        <DocumentTotals money={docMoney} markupText={`${markupPct}%`} laborHours={laborHours} taxPct={taxPct} />
       </div>
 
       {error && <p className="text-danger text-xs">{error}</p>}
@@ -332,15 +299,6 @@ export default function NewQuoteForm({
           Cancel
         </button>
       </div>
-    </div>
-  )
-}
-
-function Row({ label, value, dim }: { label: string; value: string; dim?: boolean }) {
-  return (
-    <div className="flex justify-between">
-      <span className={dim ? 'text-white/40' : 'text-white/60'}>{label}</span>
-      <span className={dim ? 'text-white/60' : 'text-white'}>{value}</span>
     </div>
   )
 }

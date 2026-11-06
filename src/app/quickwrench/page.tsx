@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { loadDocumentDefaults } from '@/lib/document-defaults.server'
 import { hasQuickWrenchAccess } from '@/lib/subscription'
 import AppNav from '@/components/layout/AppNav'
 import QuickWrenchClient from '@/components/quickwrench/QuickWrenchClient'
@@ -19,7 +20,7 @@ export default async function QuickWrenchPage({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('full_name, business_name, default_labor_rate, default_parts_markup_percent, default_tax_percent, business_type, work_orders_enabled')
+    .select('full_name, business_name, business_type, work_orders_enabled')
     .eq('id', user.id)
     .single()
 
@@ -27,9 +28,6 @@ export default async function QuickWrenchPage({
 
   const p = profile as {
     business_name?: string
-    default_labor_rate?: number | null
-    default_parts_markup_percent?: number | null
-    default_tax_percent?: number | null
     business_type?: string
   }
 
@@ -37,6 +35,10 @@ export default async function QuickWrenchPage({
 
   const hasQW = await hasQuickWrenchAccess(user.id)
   if (!hasQW) redirect('/dashboard?upsell=1')
+
+  // The shop's document defaults, the one read every LD surface makes (lib/document-defaults).
+  // An unset rate is 0 - this used to fall back to 125 / 20 / 8.5.
+  const docDefaults = await loadDocumentDefaults(supabase, user.id)
 
   return (
     <div className="min-h-dvh bg-dark flex flex-col">
@@ -60,9 +62,9 @@ export default async function QuickWrenchPage({
         <QuickWrenchClient
           workOrdersEnabled={profile.work_orders_enabled ?? false}
           loadQuoteId={sp.loadQuoteId}
-          defaultLaborRate={p.default_labor_rate ?? 125}
-          defaultMarkupPct={p.default_parts_markup_percent ?? 20}
-          defaultTaxPct={p.default_tax_percent ?? 8.5}
+          defaultLaborRate={docDefaults.laborRate}
+          defaultMarkupPct={docDefaults.markupPct}
+          defaultTaxPct={docDefaults.taxPct}
         />
       </main>
     </div>

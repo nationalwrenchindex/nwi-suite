@@ -111,9 +111,10 @@ export async function POST(req: Request) {
         if (existing) {
           customerId = existing.id
         } else {
+          // Never an invented surname (lib/customer-name): one name is stored as one name.
           const { data, error } = await supabase
             .from('customers')
-            .insert({ user_id: uid, first_name: firstName, last_name: lastName || 'Unknown', phone: phone || null, email: email || null })
+            .insert({ user_id: uid, first_name: firstName, last_name: lastName || '', phone: phone || null, email: email || null })
             .select('id')
             .single()
           if (error) {

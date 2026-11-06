@@ -29,6 +29,9 @@ import { editableLines } from '../src/lib/hd/invoice-edit-lines'
 import { stripLeadingZeros, parseFee } from '../src/components/hd/FeeInput'
 import { fmtShopDate, shopTimeZone } from '../src/lib/shop-time'
 import { fromLineItems, markupOnReopen, type EditItem } from '../src/components/shared/line-items'
+import { documentDefaultsFrom } from '../src/lib/document-defaults'
+import { documentTotalsRows } from '../src/lib/document-totals'
+import { serviceCallOf } from '../src/lib/service-call'
 import { documentMoney, documentExtras } from '../src/lib/document-money'
 import { openInvoiceEdit, invoiceSaveBody, invoiceDoesNotAddUp, correctionBody } from '../src/lib/hd/invoice-edit-save'
 import { documentTaxSettings, parseBreakdown, breakdownTaxTotal } from '../src/lib/tax'
@@ -118,6 +121,8 @@ const created = {
   // customers by marker: logHDCustomer creates one for every HD document, and a
   // blanket delete would reach rows other flows rely on.
   customers: new Set<string>(),
+  // Flow Qw: QuickWrench's raw save log (quickwrench_quotes), one row per save.
+  qwLogs: new Set<string>(),
   // HD labor library entries (hd_repair_items).
   libraryItems: new Set<string>(),
   // Equipment categories this run adds (migration 161). Deleted AFTER the units, which
@@ -157,6 +162,7 @@ async function cleanup(): Promise<void> {
   for (const id of created.invoices)   await del('invoices', id)
   for (const id of created.workOrders) await del('work_orders', id)
   for (const id of created.quotes)     await del('quotes', id)
+  for (const id of created.qwLogs)     await del('quickwrench_quotes', id)
 
   // Flow Tm restores the owner's terms in its own finally. A run killed mid-flow
   // leaves the marker text instead - cleared here, and only fields holding it.
@@ -298,6 +304,141 @@ function expectedSupplies(parts: number): number {
   if (!shop.billsSupplies || shop.suppliesPct == null) return 0
   const raw = r2(parts * (shop.suppliesPct / 100))
   return shop.suppliesCap != null && raw > shop.suppliesCap ? r2(shop.suppliesCap) : raw
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FLOW Qw - the QuickWrench door, end to end, and the quote/work order parity
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Nov 5, 2026: a QuickWrench save stored "Jesus Unknown", attached a vehicle that
+// belonged to another customer (so the work order's unit picker was empty), and priced
+// the quote with no shop supplies, no drive time, no mileage and no service call fee,
+// while the New Quote form priced the same job with all four. And the quote printed one
+// combined tax line where the work order made from it printed two buckets.
+//
+// Driven through the real routes as the shop, against the shop's own settings: a
+// one-word customer saved the way QuickWrench saves to Intel Hub, a QuickWrench save
+// with drive time and miles, the quote -> work order -> invoice chain, and both
+// documents' totals rows compared line for line. Every row it makes is deleted.
+async function flowQw(): Promise<void> {
+  const F = 'Qw quickwrench door'
+  const p = (await rest(`profiles?select=*&id=eq.${OWNER}`))[0] ?? {}
+  const d = documentDefaultsFrom(p as Record<string, unknown>)
+  const stamp = String(Date.now()).slice(-7)
+  const phone = `555${stamp}`
+  const firstName = `${MARK}Jesus${stamp}`
+
+  // 1. The customer, as QuickWrench's "Save to Intel Hub" sends it: one name, no surname.
+  const c = await api('POST', '/api/customers', { first_name: firstName, last_name: '', phone })
+  const custId = (c.json.customer as { id?: string } | undefined)?.id
+  if (!record(F, 'a one-word customer saves', (c.status === 201 || c.status === 200) && !!custId, `-> ${c.status} ${JSON.stringify(c.json).slice(0, 120)}`)) return
+  created.customers.add(custId!)
+  const cust = (await rest(`customers?select=first_name,last_name&id=eq.${custId}`))[0]
+  record(F, 'no surname is invented', !!cust && cust.first_name === firstName && cust.last_name === '',
+    cust ? `stored "${cust.first_name}" / "${cust.last_name}"` : 'not found')
+
+  // 2. The QuickWrench save: a VIN-decoded vehicle, one job, drive time and miles.
+  const vin = `SMK${stamp}0000000`.slice(0, 17)
+  const partPrice = r2(65 * (1 + d.markupPct / 100))
+  const save = await api('POST', '/api/quickwrench/quote', {
+    vehicle: { vin, year: '2015', make: 'GMC', model: 'Yukon XL', engine: '5.3L V8', trim: 'SLT' },
+    job: { category: 'brakes', categoryLabel: 'Brakes', name: 'Front Brake Pad Replacement', hours: 1.2 },
+    jobs: [{ id: 'brakes:front', category: 'brakes', subtype: 'Front Brake Pad Replacement', labor_hours: 1.2,
+      labor_rate: d.laborRate, parts: [{ name: `${MARK} ceramic pad set`, qty: 1, unit_cost: 65, unit_price: partPrice }], notes: '' }],
+    extra_labor: [], parts: [],
+    labor_rate: d.laborRate, markup_percent: d.markupPct, tax_percent: d.taxPct,
+    travel_hours: 1, mileage_miles: 10,
+    customer_id: custId, customer_name: firstName, customer_phone: phone,
+    send_sms: false, save_quote: true,
+  })
+  const qId = save.json.quoteId as string | undefined
+  const logId = (save.json.quote as { id?: string } | undefined)?.id
+  if (logId) created.qwLogs.add(logId)
+  if (!record(F, 'the QuickWrench save creates a quote', save.status === 200 && !!qId, `-> ${save.status} ${JSON.stringify(save.json).slice(0, 160)}`)) return
+  created.quotes.add(qId!)
+  const q = (await rest(`quotes?select=*&id=eq.${qId}`))[0] as Record<string, unknown>
+
+  // The vehicle is a real record, the customer's own, attached to the quote.
+  const veh = q.vehicle_id ? (await rest(`vehicles?select=*&id=eq.${q.vehicle_id}`))[0] : null
+  record(F, 'the quote is attached to the customer', q.customer_id === custId, String(q.customer_id))
+  record(F, 'a real vehicle record from the decoded VIN, the customer\'s own',
+    !!veh && veh.customer_id === custId && veh.vin === vin && veh.year === 2015 && veh.make === 'GMC' && veh.model === 'Yukon XL',
+    veh ? `${veh.year} ${veh.make} ${veh.model} ${veh.vin}, customer ${veh.customer_id === custId ? 'this one' : String(veh.customer_id)}` : 'no vehicle_id on the quote')
+  const picker = await api('GET', `/api/vehicles?customer_id=${custId}&limit=50`)
+  const listed = ((picker.json.vehicles as Array<{ id: string }> | undefined) ?? []).map(v => v.id)
+  record(F, 'the unit picker lists it', picker.status === 200 && listed.includes(String(q.vehicle_id)), `${listed.length} vehicle(s)`)
+
+  // The billing settings the New Quote form reads - every one of them on this quote.
+  const partsTotal = partPrice
+  const travelRate = d.extras.travelRatePerHour ?? d.laborRate
+  const callFee = d.serviceCallAvailable && d.serviceCall.bill ? (d.serviceCall.fee ?? 0) : 0
+  record(F, 'shop supplies per Settings', r2(Number(q.shop_supplies_fee ?? 0)) === expectedSupplies(partsTotal),
+    `${usd(q.shop_supplies_fee)} (expected ${usd(expectedSupplies(partsTotal))})`)
+  record(F, 'drive time per the billing method', r2(Number(q.travel_amount ?? 0)) === (d.extras.billTravel ? r2(travelRate) : 0),
+    `${usd(q.travel_amount)} for 1 hour (bills travel: ${d.extras.billTravel})`)
+  record(F, 'mileage per the billing method', r2(Number(q.mileage_amount ?? 0)) === (d.extras.billMileage ? r2(10 * (d.extras.mileageRatePerMile ?? 0)) : 0),
+    `${usd(q.mileage_amount)} for 10 miles (bills mileage: ${d.extras.billMileage})`)
+  record(F, 'the service call fee and its tax setting', r2(Number(q.service_call_fee ?? 0)) === r2(callFee) &&
+    (callFee === 0 || q.service_call_tax === d.serviceCall.tax),
+    `${usd(q.service_call_fee)} ${q.service_call_tax ?? ''} (Settings: ${callFee ? `${usd(callFee)} ${d.serviceCall.tax}` : 'none'})`)
+  const bd = parseBreakdown(q.tax_breakdown)
+  record(F, 'tax split into a parts and a labor bucket', !!bd?.parts && !!bd?.labor,
+    bd ? `parts ${usd(bd.parts?.amount)} on ${usd(bd.parts?.base)}, labor ${usd(bd.labor?.amount)} on ${usd(bd.labor?.base)}` : 'no breakdown')
+  record(F, 'tax_percent is the shop rate, not back-derived', Number(q.tax_percent) === d.taxPct, `${q.tax_percent} vs ${d.taxPct}`)
+  const sum = r2(partsTotal + r2(1.2 * d.laborRate) + Number(q.shop_supplies_fee ?? 0) + Number(q.travel_amount ?? 0)
+    + Number(q.mileage_amount ?? 0) + Number(q.service_call_fee ?? 0) + Number(q.tax_amount ?? 0))
+  record(F, 'every charge is inside the total', r2(Number(q.grand_total)) === sum, `${usd(q.grand_total)} vs rows ${usd(sum)}`)
+
+  // 3. Quote -> work order: the unit comes with it.
+  const toWo = await api('POST', `/api/quotes/${qId}/to-work-order`)
+  const woId = toWo.json.work_order_id as string | undefined
+  if (!record(F, 'converts to a work order', (toWo.status === 201 || toWo.status === 200) && !!woId, `-> ${toWo.status}`)) return
+  created.workOrders.add(woId!)
+  const wo = (await rest(`work_orders?select=*&id=eq.${woId}`))[0] as Record<string, unknown>
+  record(F, 'the work order has the unit', wo.vehicle_id === q.vehicle_id && wo.customer_id === custId, String(wo.vehicle_id))
+
+  // 4. PARITY. The rows each screen prints, from each stored document, through the one
+  //    calculator and the one row builder - and the work order's as actually rendered.
+  const rowsOf = (doc: Record<string, unknown>) => {
+    const m = markupOnReopen(doc.parts_markup_percent as number | null)
+    const ex = documentExtras(doc)
+    const money = documentMoney({
+      items: fromLineItems(doc.line_items as never, m.percent, undefined, { withLabor: true }),
+      markupPct: m.percent, laborRate: Number(doc.labor_rate ?? 0), taxPct: Number(doc.tax_percent ?? 0),
+      taxSettings: documentTaxSettings(doc.tax_breakdown, null, Number(doc.tax_percent ?? 0)),
+      extrasSettings: ex.settings, extras: ex.input, discount: parseDiscount(doc.discount),
+      serviceCall: serviceCallOf(doc), stored: doc,
+    })
+    return documentTotalsRows(money, { markupText: `${m.percent}%`, laborHours: Number(doc.labor_hours ?? 0), taxPct: Number(doc.tax_percent ?? 0) })
+      .map(r => `${r.label}${r.detail ? ` (${r.detail})` : ''}|${r.amount === null ? '-' : usd(r.amount)}`)
+  }
+  const qRows = rowsOf(q), wRows = rowsOf(wo)
+  const width = Math.max(...qRows.map(r => r.length), 10)
+  console.log(`\n      QUOTE ${String(q.quote_number).padEnd(width - 6)}  |  WORK ORDER ${wo.work_order_number}`)
+  for (let i = 0; i < Math.max(qRows.length, wRows.length); i++) {
+    console.log(`      ${(qRows[i] ?? '').replace('|', '  ').padEnd(width + 2)}  |  ${(wRows[i] ?? '').replace('|', '  ')}`)
+  }
+  console.log('')
+  record(F, 'quote and work order print identical rows, line for line',
+    qRows.length > 0 && JSON.stringify(qRows) === JSON.stringify(wRows), `${qRows.length} rows each`)
+  const woPage = await page(`/work-orders/${woId}`)
+  const at = woPage ? woPage.html.indexOf('data-testid="document-totals"') : -1
+  const block = at >= 0 ? woPage!.html.slice(at, at + 8000) : ''
+  const shown = visibleText(block)
+  const amounts = wRows.map(r => r.split('|')[1]).filter(a => a !== '-')
+  record(F, 'the work order page renders those rows', !!woPage && amounts.every(a => shown.includes(a)) && /Tax on parts|not taxable/.test(shown),
+    woPage ? shown.slice(0, 140) : 'did not load')
+
+  // 5. Work order -> invoice: the unit is still on it.
+  await api('POST', `/api/work-orders/${woId}/status`, { status: 'complete', notify: false })
+  await sleep(1200)
+  const conv = await api('POST', `/api/work-orders/${woId}/convert`)
+  const invId = (conv.json.invoice as { id?: string } | undefined)?.id ?? (conv.json.invoice_id as string | undefined)
+  if (!record(F, 'converts to an invoice', conv.status === 201 && !!invId, `-> ${conv.status} ${JSON.stringify(conv.json).slice(0, 150)}`)) return
+  created.invoices.add(invId!)
+  const inv = (await rest(`invoices?select=vehicle_id,customer_id,total&id=eq.${invId}`))[0]
+  record(F, 'the invoice still has the unit', !!inv && inv.vehicle_id === q.vehicle_id && inv.customer_id === custId, inv ? String(inv.vehicle_id) : 'not found')
+  record(F, 'the invoice totals what was quoted', !!inv && r2(Number(inv.total)) === r2(Number(q.grand_total)), inv ? `${usd(inv.total)} vs ${usd(q.grand_total)}` : '')
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -4241,6 +4382,7 @@ async function main(): Promise<void> {
     await flowW()
     await flowTerms()
     await flowDiscount()
+    await flowQw()
     await flowIe()
     await flowHq()
     await flowPe()

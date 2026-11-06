@@ -5,6 +5,7 @@ import { SEGMENT_SELECT, shapeSegments } from '@/lib/segments/select'
 import SegmentApprovalClient from '@/components/shared/SegmentApprovalClient'
 import { BRANDING_SELECT, resolveBranding, type BrandingSource } from '@/lib/branding'
 import { publicDocumentMetadata } from '@/lib/public-metadata'
+import { customerSegments } from '@/lib/customer-copy'
 
 // Public. No auth, no AppNav — the token is the credential, same arrangement as
 // /quote/[token] and /invoice/[token]. Read with the service client so no anon policy
@@ -103,7 +104,7 @@ export default async function PublicWorkOrderPage({
           const b = resolveBranding(profile as BrandingSource | null)
           return { name: b.name, phone: b.phone, logoUrl: b.logoUrl }
         })()}
-        initialSegments={shapeSegments(segRows)}
+        initialSegments={customerSegments(shapeSegments(segRows))}
       />
     </div>
   )

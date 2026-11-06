@@ -291,10 +291,13 @@ async function main() {
   ok(quote.includes('documentMoney(') && dm.includes('computeExtras('), 'the quote form computes the extras (lib/document-money)')
   ok(dm.includes('totalsWithExtras('), 'and re-taxes through the same helper the work order uses')
   ok(quote.includes('...docMoney.columns') && dm.includes('...extrasColumns(extras)'), 'and stores the computed columns')
-  ok(quote.includes('money(withExtras.grandTotal)'),
+  // Since Nov 5 the totals print through the shared rows (lib/document-totals), fed the
+  // documentMoney result - the figures WITH the extras - and nothing else.
+  const rowsSrc = fs.readFileSync('src/lib/document-totals.ts', 'utf8')
+  ok(/<DocumentTotals money=\{docMoney\}/.test(quote) && /amount: m\.grandTotal/.test(rowsSrc),
     'the quoted TOTAL includes the extras - not a figure that excludes them')
-  ok(quote.includes('money(withExtras.subtotal)'), 'and so does the subtotal')
-  ok(/withExtras.taxBreakdown/.test(quote), 'and the tax split is taken with the extras in their buckets')
+  ok(/amount: m\.subtotal/.test(rowsSrc), 'and so does the subtotal')
+  ok(/taxDisplayRows\(m\.taxBreakdown\)/.test(rowsSrc), 'and the tax split is taken with the extras in their buckets')
   ok(quote.includes('if (withExtras.grandTotal < 0)'),
     'validation checks the total that is actually saved')
   ok(!/setShopSuppliesPercent|value={shopSuppliesPercent}/.test(quote),

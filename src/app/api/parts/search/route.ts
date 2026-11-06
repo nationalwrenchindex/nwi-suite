@@ -21,9 +21,10 @@
 // through PostgREST without a generated column on part_fitment or user text embedded
 // in an `or=` filter string. So the candidate set is narrowed in the query by the
 // things SQL does exactly - manufacturer, part type - and the normalized comparison
-// runs here. part_fitment holds 215 rows today; when that is tens of thousands this
-// needs a generated unit_model_normalized column and a migration, and that is a
-// deliberate trade recorded here rather than a surprise later.
+// runs here. part_fitment held 20,636 rows on Nov 5, 2026, read in 21 pages on every
+// search; a generated unit_model_normalized column and a migration would let the query
+// narrow by model instead, and that is a deliberate trade recorded here rather than a
+// surprise later.
 
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'

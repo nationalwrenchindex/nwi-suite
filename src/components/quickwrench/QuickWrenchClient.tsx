@@ -1,8 +1,12 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useTaxSettings } from '@/lib/use-tax-settings'
-import { computeTax } from '@/lib/tax'
+import { useDocumentDefaults } from '@/lib/use-document-defaults'
+import { newDocumentServiceCall } from '@/lib/document-defaults'
+import { quickwrenchMoney, type QwJob } from '@/lib/quickwrench-money'
+import DocumentTotals from '@/components/shared/DocumentTotals'
+import ServiceCallField from '@/components/shared/ServiceCallField'
+import { ExtrasInputs } from '@/components/shared/ExtrasFields'
 import DiagnosticTools, { type DTCJobPayload } from './DiagnosticTools'
 import type {
   QWVehicle,
@@ -14,6 +18,7 @@ import type {
   MultiJobEntry,
 } from '@/types/quickwrench'
 import { money } from '@/lib/format'
+import { splitCustomerName } from '@/lib/customer-name'
 
 // ─── Job catalog ──────────────────────────────────────────────────────────────
 
@@ -520,10 +525,12 @@ function CustomerEntry({ onCustomerSet }: {
   async function saveCustomer() {
     const n = name.trim()
     if (!n) return
-    const parts = n.split(/\s+/)
+    // Never an invented surname (lib/customer-name): "Jesus" is saved as Jesus. This
+    // stored "Jesus Unknown", and every document he received was addressed to it.
+    const split = splitCustomerName(n)!
     const payload = {
-      first_name:    parts[0],
-      last_name:     parts.slice(1).join(' ') || 'Unknown',
+      first_name:    split.first_name,
+      last_name:     split.last_name,
       phone:         phone.trim()   || null,
       email:         email.trim()   || null,
       address_line1: address.trim() || null,
@@ -1563,11 +1570,12 @@ function QuoteTab({
   onPartCostChange,
   onPartPriceChange,
   onRemoveJob,
-  initialLaborRate   = 125,
-  initialMarkupPct   = 20,
-  initialTaxPct      = 8.5,
+  initialLaborRate,
+  initialMarkupPct,
+  initialTaxPct,
   initialCustomerName  = '',
   initialCustomerPhone = '',
+  customerId           = null,
   workOrdersEnabled    = false,
 }: {
   vehicle:               QWVehicle | null
@@ -1583,11 +1591,14 @@ function QuoteTab({
   onPartCostChange:      (id: string, cost: number) => void
   onPartPriceChange:     (id: string, price: number) => void
   onRemoveJob:           (job: SelectedJob) => void
-  initialLaborRate?:     number
-  initialMarkupPct?:     number
-  initialTaxPct?:        number
+  /** The shop's defaults (lib/document-defaults), or a loaded quote's own rates. */
+  initialLaborRate:      number
+  initialMarkupPct:      number
+  initialTaxPct:         number
   initialCustomerName?:  string
   initialCustomerPhone?: string
+  /** The customer QuickWrench saved to Intel Hub - the quote is attached to them. */
+  customerId?:           string | null
   workOrdersEnabled?:    boolean
 }) {
   const [laborRate,     setLaborRate]     = useState(initialLaborRate)
@@ -1673,27 +1684,41 @@ function QuoteTab({
     return { j, key, desc, laborHrs, jParts, partsRev, laborTotal, subtotal }
   })
 
-  const taxSettings = useTaxSettings()
+  // The shop's settings, the same answer the New Quote form reads (lib/document-defaults).
+  const { defaults: docDefaults, loaded: defaultsLoaded } = useDocumentDefaults()
+  const [travelHours,  setTravelHours]  = useState(0)
+  const [mileageMiles, setMileageMiles] = useState(0)
+  // The service call fee, seeded from Settings once they land, then the tech's to change.
+  const [callFee, setCallFee] = useState<number | null>(null)
+  useEffect(() => {
+    if (defaultsLoaded && callFee === null) setCallFee(newDocumentServiceCall(docDefaults)?.fee ?? 0)
+  }, [defaultsLoaded, docDefaults, callFee])
+  const showCall = docDefaults.serviceCallAvailable && (docDefaults.serviceCall.bill || (callFee ?? 0) > 0)
   const allIncludedParts = selectedJobs.flatMap(j => (partsByJob[jobKey(j)] ?? []).filter(p => p.included))
-  const partsCostTotal   = allIncludedParts.reduce((s, p) => s + partCostOf(p) * p.qty, 0) // COGS
   const hasUnpricedParts = allIncludedParts.some(p => !partCosts[p.id] || partCosts[p.id] <= 0)
 
-  const extraLaborTotal = extraLaborLines.reduce((s, l) => s + l.hours * laborRate, 0)
   const extraLaborHours = extraLaborLines.reduce((s, l) => s + l.hours, 0)
 
-  const totalPartsRev   = jobBreakdowns.reduce((s, b) => s + b.partsRev,   0)
   const totalLaborHours = jobBreakdowns.reduce((s, b) => s + b.laborHrs,   0) + extraLaborHours
-  const totalLaborTotal = jobBreakdowns.reduce((s, b) => s + b.laborTotal, 0) + extraLaborTotal
-  const preTax          = totalPartsRev + totalLaborTotal
 
-  // Parts revenue and labor are already tracked separately here, so the split needs
-  // no guessing. Until taxSettings resolves it is null and computeTax is skipped, so
-  // the figure on screen is never briefly wrong in the exempt direction.
-  const tax             = taxSettings
-    ? computeTax({ parts: totalPartsRev, labor: totalLaborTotal }, taxSettings)
-    : null
-  const taxAmount       = tax ? tax.taxAmount : preTax * (taxPct / 100)
-  const grandTotal      = preTax + taxAmount
+  // THE QUOTE'S MONEY, from the one shared calculator (lib/quickwrench-money ->
+  // lib/document-money): shop supplies on the marked-up parts, drive time and mileage
+  // per the billing method picker, the service call fee taxed per its setting, the tax
+  // split into a parts and a labor bucket. The save route prices the same inputs the
+  // same way under the same settings, so what is stored is what is on screen. This used
+  // to total parts + labor + tax here, with none of the extras, and the route stored it.
+  const qwJobs: QwJob[] = jobBreakdowns.map(b => ({
+    subtype: b.desc, labor_hours: b.laborHrs,
+    parts: b.jParts.map(p => ({ name: p.name, qty: p.qty, unit_cost: partCostOf(p), unit_price: customerUnitPrice(p) })),
+  }))
+  const qwExtraLabor = extraLaborLines
+    .filter(l => l.description.trim() || l.hours > 0)
+    .map(l => ({ description: l.description.trim() || 'Additional labor', hours: l.hours }))
+  const { money: docMoney } = quickwrenchMoney({
+    jobs: qwJobs, extraLabor: qwExtraLabor, laborRate, markupPct, taxPct,
+    taxSettings: defaultsLoaded ? docDefaults.taxSettings : null,
+    defaults: docDefaults, travelHours, mileageMiles, serviceCallFee: callFee ?? 0,
+  })
 
   function addExtraLabor() {
     setExtraLaborLines(prev => [...prev, { id: crypto.randomUUID(), description: '', hours: 1 }])
@@ -1705,7 +1730,7 @@ function QuoteTab({
     setExtraLaborLines(prev => prev.filter(l => l.id !== id))
   }
 
-  const quoteHash = [laborRate, markupPct, taxPct,
+  const quoteHash = [laborRate, markupPct, taxPct, travelHours, mileageMiles, callFee ?? 0,
     JSON.stringify(laborHourOverrides), JSON.stringify(laborDescOverrides),
     JSON.stringify(extraLaborLines), JSON.stringify(partCosts), JSON.stringify(partPriceOverrides),
     ...selectedJobs.map(j => {
@@ -1719,6 +1744,8 @@ function QuoteTab({
   async function save(sendSms: boolean, saveQuote: boolean) {
     if (!vehicle || selectedJobs.length === 0) return
     if (sendSms && !customerPhone) { setError('Enter customer phone to send SMS.'); return }
+    // Priced under the shop's settings; saving before they land would price without them.
+    if (!defaultsLoaded) { setError('Your shop settings are still loading. Try again in a moment.'); return }
     setError(null)
     if (sendSms) { setSendingSms(true) } else { setSaving(true) }
 
@@ -1738,9 +1765,7 @@ function QuoteTab({
         notes: '',
       }))
 
-      const extraLaborPayload = extraLaborLines
-        .filter(l => l.description.trim() || l.hours > 0)
-        .map(l => ({ description: l.description.trim() || 'Additional labor', hours: l.hours }))
+      const extraLaborPayload = qwExtraLabor
 
       const allParts = selectedJobs.flatMap(j => partsByJob[jobKey(j)] ?? [])
 
@@ -1758,17 +1783,16 @@ function QuoteTab({
           jobs:           jobsPayload,
           extra_labor:    extraLaborPayload,
           parts:          allParts,
-          parts_total:    Math.round(totalPartsRev * 100) / 100,
-          parts_cost_total: Math.round(partsCostTotal * 100) / 100,
+          // What the tech typed. The route prices it (lib/quickwrench-money) under the
+          // shop's settings - no total is sent, so none can be stored wrong.
           labor_hours:    totalLaborHours,
           labor_rate:     laborRate,
-          labor_total:    Math.round(totalLaborTotal * 100) / 100,
           markup_percent: markupPct,
-          tax_amount:     Math.round(taxAmount * 100) / 100,
-          // What was taxed. Null until the settings fetch resolves, in which case
-          // the server stores nothing and the quote reads as pre-split.
-          tax_breakdown:  tax ? tax.breakdown : null,
-          grand_total:    Math.round(grandTotal * 100) / 100,
+          tax_percent:    taxPct,
+          travel_hours:   travelHours,
+          mileage_miles:  mileageMiles,
+          service_call_fee: callFee ?? 0,
+          customer_id:    customerId,
           customer_name:  customerName,
           customer_phone: customerPhone,
           send_sms:       sendSms,
@@ -2000,25 +2024,29 @@ function QuoteTab({
             </button>
           </div>
 
-          {/* Totals summary */}
-          <div className="flex items-center justify-between py-1.5 border-b border-dark-border">
-            <span className="text-white/50 text-sm">Labor</span>
-            <span className="text-white text-sm font-medium">{fmt(totalLaborTotal)}</span>
+          {/* Drive time, mileage and the service call fee, per the shop's billing method
+              picker - the inputs the New Quote form shows, read from the same settings. */}
+          <div className="space-y-2 pt-2 border-t border-dark-border">
+            <ExtrasInputs
+              settings={docDefaults.extras}
+              loaded={defaultsLoaded}
+              travelHours={travelHours}
+              mileageMiles={mileageMiles}
+              onTravelHours={setTravelHours}
+              onMileageMiles={setMileageMiles}
+              laborRate={laborRate}
+            />
+            {showCall && (
+              <ServiceCallField fee={callFee ?? 0} tax={docDefaults.serviceCall.tax} taxFrom="settings" loaded={defaultsLoaded} onFee={setCallFee} />
+            )}
           </div>
 
-          <div className="flex items-center justify-between py-1.5 border-b border-dark-border">
-            <span className="text-white/50 text-sm">Parts</span>
-            <span className="text-white text-sm font-medium">{fmt(totalPartsRev)}</span>
-          </div>
-
-          <div className="flex items-center justify-between py-1.5 border-b border-dark-border">
-            <span className="text-white/30 text-sm">Tax ({taxPct}%)</span>
-            <span className="text-white/50 text-sm">{fmt(taxAmount)}</span>
-          </div>
-
-          <div className="flex items-center justify-between pt-3 mt-1">
-            <span className="font-condensed font-bold text-white text-lg tracking-wide">GRAND TOTAL</span>
-            <span className="font-condensed font-bold text-orange text-3xl">{fmt(grandTotal)}</span>
+          {/* The shared rows (lib/document-totals): the same rows this quote prints in the
+              quote editor and on the work order made from it - shop supplies, drive time,
+              mileage and the service call fee inside the subtotal, tax one row per bucket.
+              This printed one combined "Tax (x%)" line and no extras at all. */}
+          <div className="pt-3 mt-2 border-t border-dark-border">
+            <DocumentTotals money={docMoney} markupText={`${markupPct}%`} laborHours={totalLaborHours} taxPct={taxPct} />
           </div>
         </div>
       </div>
@@ -2161,15 +2189,16 @@ interface LoadedQuoteDefaults {
 
 export default function QuickWrenchClient({
   loadQuoteId,
-  defaultLaborRate = 125,
-  defaultMarkupPct = 20,
-  defaultTaxPct    = 8.5,
+  defaultLaborRate,
+  defaultMarkupPct,
+  defaultTaxPct,
   workOrdersEnabled = false,
 }: {
   loadQuoteId?:      string
-  defaultLaborRate?: number
-  defaultMarkupPct?: number
-  defaultTaxPct?:    number
+  /** The shop's defaults, through lib/document-defaults. No literal fallback: an unset rate is 0. */
+  defaultLaborRate: number
+  defaultMarkupPct: number
+  defaultTaxPct:    number
   workOrdersEnabled?: boolean
 }) {
   const [activeTab,     setActiveTab]     = useState(0)
@@ -2257,7 +2286,8 @@ export default function QuickWrenchClient({
           const restoredParts: Record<string, PartWithSuppliers[]> = {}
           const restoredCosts: Record<string, number> = {}
           const restoredPriceOverrides: Record<string, number> = {}
-          const markup = (q.parts_markup_percent ?? 20) / 100
+          // Its own recorded markup, never an invented one (markupOnReopen's rule).
+          const markup = (q.parts_markup_percent ?? 0) / 100
 
           for (const entry of q.jobs as MultiJobEntry[]) {
             const matchedCat = JOB_CATEGORIES.find(c => c.id === entry.category)
@@ -2295,9 +2325,9 @@ export default function QuickWrenchClient({
           setPartCosts(restoredCosts)
           setPartPriceOverrides(restoredPriceOverrides)
           setQuoteDefaults({
-            laborRate:     q.labor_rate          ?? 125,
-            markupPct:     q.parts_markup_percent ?? 20,
-            taxPct:        q.tax_percent          ?? 8.5,
+            laborRate:     q.labor_rate          ?? 0,
+            markupPct:     q.parts_markup_percent ?? 0,
+            taxPct:        q.tax_percent          ?? 0,
             customerName:  q.customer ? `${q.customer.first_name} ${q.customer.last_name}`.trim() : '',
             customerPhone: q.customer?.phone ?? '',
           })
@@ -2375,9 +2405,9 @@ export default function QuickWrenchClient({
         }
 
         setQuoteDefaults({
-          laborRate:     q.labor_rate          ?? 125,
-          markupPct:     q.parts_markup_percent ?? 20,
-          taxPct:        q.tax_percent          ?? 8.5,
+          laborRate:     q.labor_rate          ?? 0,
+          markupPct:     q.parts_markup_percent ?? 0,
+          taxPct:        q.tax_percent          ?? 0,
           customerName:  q.customer ? `${q.customer.first_name} ${q.customer.last_name}`.trim() : '',
           customerPhone: q.customer?.phone ?? '',
         })
@@ -2699,6 +2729,7 @@ export default function QuickWrenchClient({
             initialLaborRate={quoteDefaults?.laborRate ?? defaultLaborRate}
             initialMarkupPct={quoteDefaults?.markupPct ?? defaultMarkupPct}
             initialTaxPct={quoteDefaults?.taxPct ?? defaultTaxPct}
+            customerId={customer?.id ?? null}
             initialCustomerName={customer.name || quoteDefaults?.customerName}
             initialCustomerPhone={customer.phone || quoteDefaults?.customerPhone}
           />

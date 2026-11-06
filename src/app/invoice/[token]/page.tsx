@@ -46,6 +46,7 @@ import type { ReactNode } from 'react'
 import type { Metadata } from 'next'
 import type { MultiJobEntry } from '@/types/financials'
 import { money } from '@/lib/format'
+import { customerUnitPrice } from '@/lib/customer-copy'
 
 // internal_notes is DELIBERATELY ABSENT and must stay absent. It is the shop-only
 // field added by migration 142 precisely so a tech's notes have somewhere to go that
@@ -693,7 +694,9 @@ export default async function PublicInvoicePage(
               rows={additionalParts.map(part => ({
                 key: part.id,
                 description: part.description,
-                meta: [quantityText(Number(part.qty), false), part.unit_cost > 0 ? `${fmt(part.unit_cost)} ea` : null]
+                // unit_cost on an additional part is what the SHOP paid; the customer reads their
+                // own per-unit price, total / qty (lib/customer-copy).
+                meta: [quantityText(Number(part.qty), false), (() => { const each = customerUnitPrice(part.total, Number(part.qty)); return each ? `${fmt(each)} ea` : null })()]
                   .filter(Boolean).join(' × ') || null,
                 amount: part.total,
               }))}

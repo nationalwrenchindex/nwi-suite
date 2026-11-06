@@ -12,6 +12,7 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { HD_QUOTE_PUBLIC_SELECT, HD_QUOTE_PUBLIC_SELECT_178_COLUMNS } from '@/lib/hd/quote-approval'
+import { customerLines } from '@/lib/customer-copy'
 
 export const dynamic = 'force-dynamic'
 
@@ -44,5 +45,7 @@ export async function GET(
   }
   if (!data) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  return NextResponse.json({ quote: data })
+  // hd_quotes lines: unit_cost is the SELL price, unit_cost_base the cost (lib/customer-copy).
+  const q = data as unknown as { line_items?: unknown[] }
+  return NextResponse.json({ quote: { ...q, line_items: customerLines(q.line_items, false) } })
 }

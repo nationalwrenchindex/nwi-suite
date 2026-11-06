@@ -4,12 +4,13 @@
 
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
+import { customerLines } from '@/lib/customer-copy'
 
 const QUOTE_SELECT = `
   id, quote_number, status, public_token,
   job_category, job_subtype, notes,
   line_items, labor_hours, labor_rate,
-  parts_subtotal, parts_markup_percent, labor_subtotal,
+  labor_subtotal,
   tax_percent, tax_amount, grand_total,
   view_count, viewed_at, times_sent,
   sent_at, approved_at, declined_at, quote_expires_at,
@@ -47,8 +48,10 @@ export async function GET(
     .eq('id', quote.user_id)
     .single()
 
+  // QuickWrench quote lines carry unit_cost = what the shop paid (lib/customer-copy).
+  const q = quote as unknown as { line_items?: unknown[] }
   return NextResponse.json({
-    quote,
+    quote: { ...q, line_items: customerLines(q.line_items, true) },
     tech: {
       full_name:     (profile as { full_name?: string } | null)?.full_name     ?? null,
       business_name: (profile as { business_name?: string } | null)?.business_name ?? null,

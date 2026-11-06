@@ -14,6 +14,7 @@ import type { Metadata } from 'next'
 import { createServiceClient } from '@/lib/supabase/service'
 import { HD_QUOTE_PUBLIC_SELECT, HD_QUOTE_PUBLIC_SELECT_178_COLUMNS } from '@/lib/hd/quote-approval'
 import HDQuoteApprovalClient, { type PublicHDQuote } from './HDQuoteApprovalClient'
+import { customerLines } from '@/lib/customer-copy'
 
 export const dynamic = 'force-dynamic'
 
@@ -71,7 +72,9 @@ export default async function HDPublicQuotePage(
   }
   if (!data) notFound()
 
-  const quote = data as unknown as PublicHDQuote & { user_id: string }
+  // hd_quotes lines: unit_cost is the SELL price, unit_cost_base the cost (lib/customer-copy).
+  const raw = data as unknown as PublicHDQuote & { user_id: string }
+  const quote = { ...raw, line_items: customerLines(raw.line_items, false) }
   const business = await businessNameFor(quote.user_id)
 
   return (

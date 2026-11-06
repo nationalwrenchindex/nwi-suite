@@ -125,7 +125,8 @@ export const HD_QUOTE_PUBLIC_SELECT = [
   'unit_manufacturer', 'unit_model', 'unit_serial', 'unit_year', 'unit_number',
   'truck_make', 'truck_model', 'truck_year', 'vin',
   'complaint', 'diagnosis', 'notes',
-  'line_items', 'labor_hours', 'labor_rate', 'parts_markup_percent',
+  // No parts_markup_percent: the customer never receives the shop's markup.
+  'line_items', 'labor_hours', 'labor_rate',
   'subtotal_labor', 'subtotal_parts',
   'diagnostic_fee', 'road_call_fee',
   'travel_hours', 'travel_rate', 'travel_amount',

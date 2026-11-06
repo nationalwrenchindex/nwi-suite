@@ -15,6 +15,7 @@ import { FOLLOWUP_DAYS } from '@/lib/followups'
 import { createServiceClient } from '@/lib/supabase/service'
 import { PARENTS } from '@/lib/segments/parent'
 import { SEGMENT_SELECT, shapeSegments } from '@/lib/segments/select'
+import { customerSegments } from '@/lib/customer-copy'
 import { rollupSegments } from '@/components/shared/segments'
 
 export const dynamic = 'force-dynamic'
@@ -124,5 +125,5 @@ export async function POST(
     .order('sequence', { ascending: true })
 
   const segments = shapeSegments(segRows)
-  return NextResponse.json({ segments, rollup: rollupSegments(segments) })
+  return NextResponse.json({ segments: customerSegments(segments), rollup: rollupSegments(segments) })
 }

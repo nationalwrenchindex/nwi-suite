@@ -23,8 +23,10 @@ import { money } from '@/lib/format'
 import NewQuoteForm from './NewQuoteForm'
 import { deepLinkTarget, urlWithoutQuote } from '@/lib/quote-deep-link'
 import { useServiceCallSettingsState } from '@/lib/use-service-call-settings'
-import { hasServiceCallColumn, serviceCallOf, serviceCallRow } from '@/lib/service-call'
+import { hasServiceCallColumn, serviceCallOf } from '@/lib/service-call'
 import ServiceCallField from '@/components/shared/ServiceCallField'
+import { useDocumentDefaults } from '@/lib/use-document-defaults'
+import DocumentTotals from '@/components/shared/DocumentTotals'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -738,11 +740,8 @@ function QuoteDetailModal({
     serviceCall:    callAvailable ? { fee: callFee, tax: callTax } : null,
     stored:         initialQuote as unknown as Record<string, unknown>,
   })
-  const callRow = docMoney ? serviceCallRow(docMoney.serviceCall) : null
 
   const t                   = computeTotals({ ...lineInputs, items: [], laborHours: 0, laborRate: 0 })
-  const partsBase           = docMoney ? docMoney.partsBase     : t.partsBase
-  const markupAmt           = docMoney ? docMoney.markupAmt     : t.markupAmt
   const laborSubtotal       = docMoney ? docMoney.laborSubtotal : t.laborSubtotal
   const servicesSubtotal    = isDetailer ? serviceLines.reduce((s, sl) => s + sl.price_cents / 100, 0) : 0
   const adjustmentsSubtotal = isDetailer ? adjustments.reduce((s, a) => s + a.price_cents / 100, 0) : 0
@@ -1670,9 +1669,43 @@ function QuoteDetailModal({
             <div className="bg-white/5 rounded-xl p-4 space-y-2.5">
               <p className="text-white/30 text-xs uppercase tracking-widest mb-3">Financial Breakdown</p>
 
-              {isDraft ? (
+              {/* A mechanic's quote, draft or sent: lib/document-money's answer in the shared
+                  rows (lib/document-totals) - the same rows its work order prints, tax one row
+                  per bucket. A sent quote's docMoney is its stored figures (the no-op rule).
+                  This used to print one combined "Tax (x%)" line while the work order made
+                  from the same quote printed the parts and labor buckets. */}
+              {!isDetailer && docMoney ? (
                 <>
-                  {isDetailer ? (
+                  {isDraft && (
+                    <div className="space-y-2 pb-2">
+                      <ExtrasInputs
+                        settings={extrasSettings}
+                        loaded={extrasLoaded}
+                        travelHours={travelHours}
+                        mileageMiles={mileageMiles}
+                        onTravelHours={setTravelHours}
+                        onMileageMiles={setMileageMiles}
+                        laborRate={laborRate}
+                      />
+                      {showCall && <ServiceCallField fee={callFee} tax={callTax} taxFrom={storedCall.fee > 0 ? 'document' : 'settings'} loaded={storedCall.fee > 0 || callState.loaded} onFee={setCallFee} />}
+                      <DiscountEditor
+                        value={discountDraft}
+                        onChange={setDiscountDraft}
+                        applied={docMoney.discount}
+                        error={docMoney.discountError}
+                      />
+                    </div>
+                  )}
+                  <DocumentTotals
+                    money={docMoney}
+                    markupText={!storedMarkup.recorded && !markupTouched ? markupLabel(storedMarkup) : `${markupPct}%`}
+                    laborHours={laborHoursShown}
+                    taxPct={taxPct}
+                  />
+                </>
+              ) : isDraft ? (
+                <>
+                  {/* A detailer's quote, exactly as it always printed. */}
                     <>
                       {servicesSubtotal > 0 && (
                         <div className="flex justify-between text-sm">
@@ -1693,35 +1726,6 @@ function QuoteDetailModal({
                         </div>
                       )}
                     </>
-                  ) : (
-                    <>
-                      {partsBase > 0 && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-white/60">Parts Base</span>
-                          <span className="text-white">{fmt(partsBase)}</span>
-                        </div>
-                      )}
-                      {markupPct > 0 && partsBase > 0 && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-white/40">Parts Markup ({markupPct}%)</span>
-                          <span className="text-white/60">+{fmt(markupAmt)}</span>
-                        </div>
-                      )}
-                      {laborSubtotal > 0 && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-white/60">Labor ({laborHoursShown}h)</span>
-                          <span className="text-white">{fmt(laborSubtotal)}</span>
-                        </div>
-                      )}
-                      {callRow && (
-                        <div className="flex justify-between text-sm" data-testid="service-call-row">
-                          <span className="text-white/60">{callRow.label}</span>
-                          <span className="text-white">{fmt(callRow.amount)}</span>
-                        </div>
-                      )}
-                    </>
-                  )}
-                  {/* Travel, mileage and shop supplies. A zero extra prints no row. */}
                   {extrasDisplayRows(extrasResult).map(r => (
                     <div key={r.key} className="flex justify-between text-sm">
                       <span className="text-white/60">
@@ -1731,37 +1735,6 @@ function QuoteDetailModal({
                       <span className="text-white">{fmt(r.amount)}</span>
                     </div>
                   ))}
-                  {!isDetailer && (
-                    <div className="pt-2">
-                      <ExtrasInputs
-                        settings={extrasSettings}
-                loaded={extrasLoaded}
-                        travelHours={travelHours}
-                        mileageMiles={mileageMiles}
-                        onTravelHours={setTravelHours}
-                        onMileageMiles={setMileageMiles}
-                        laborRate={laborRate}
-                      />
-                    </div>
-                  )}
-                  {showCall && (
-                    <div className="pt-2">
-                      <ServiceCallField fee={callFee} tax={callTax} onFee={setCallFee} />
-                    </div>
-                  )}
-                  {!isDetailer && docMoney && (
-                    <>
-                      <DiscountRows discount={docMoney.discount} subtotalBefore={docMoney.subtotal} />
-                      <div className="pt-1">
-                        <DiscountEditor
-                          value={discountDraft}
-                          onChange={setDiscountDraft}
-                          applied={docMoney.discount}
-                          error={docMoney.discountError}
-                        />
-                      </div>
-                    </>
-                  )}
                   {taxPct > 0 && (
                     <div className="flex justify-between text-sm border-t border-white/10 pt-2.5">
                       <span className="text-white/40">Tax ({taxPct}%)</span>
@@ -1777,7 +1750,6 @@ function QuoteDetailModal({
                 </>
               ) : (
                 <>
-                  {isDetailer ? (
                     <>
                       {dq.service_lines && dq.service_lines.length > 0 && (
                         <div className="flex justify-between text-sm">
@@ -1792,50 +1764,6 @@ function QuoteDetailModal({
                         </div>
                       )}
                     </>
-                  ) : (
-                    <>
-                      {initialQuote.parts_subtotal != null && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-white/60">Parts Subtotal</span>
-                          <span className="text-white">{fmt(initialQuote.parts_subtotal)}</span>
-                        </div>
-                      )}
-                      {initialQuote.parts_markup_percent != null ? (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-white/40">Parts Markup ({initialQuote.parts_markup_percent}%)</span>
-                          <span className="text-white/60">
-                            {initialQuote.parts_subtotal != null
-                              ? fmt(initialQuote.parts_subtotal * (initialQuote.parts_markup_percent / 100))
-                              : '—'}
-                          </span>
-                        </div>
-                      ) : initialQuote.parts_subtotal != null ? (
-                        /* A sent quote with no recorded markup says so rather than
-                           omitting the row, which previously made it look as though
-                           the parts were sold at cost. */
-                        <div className="flex justify-between text-sm">
-                          <span className="text-white/40">Parts Markup</span>
-                          <span className="text-white/40">{markupLabel(storedMarkup)}</span>
-                        </div>
-                      ) : null}
-                      {initialQuote.labor_subtotal != null && (
-                        <div className="flex justify-between text-sm">
-                          <span className="text-white/60">
-                            Labor{initialQuote.labor_hours != null && initialQuote.labor_rate != null
-                              ? ` (${initialQuote.labor_hours}h × ${fmt(initialQuote.labor_rate)}/hr)`
-                              : ''}
-                          </span>
-                          <span className="text-white">{fmt(initialQuote.labor_subtotal)}</span>
-                        </div>
-                      )}
-                      {storedCall.fee > 0 && (
-                        <div className="flex justify-between text-sm" data-testid="service-call-row">
-                          <span className="text-white/60">Service Call Fee</span>
-                          <span className="text-white">{fmt(storedCall.fee)}</span>
-                        </div>
-                      )}
-                    </>
-                  )}
                   {/* Travel, mileage and shop supplies AS STORED - a sent quote prints every
                       charge in its total, read and never recomputed. This view used to
                       jump from the labor to the tax, so a quote with drive time showed a
@@ -2385,34 +2313,13 @@ export default function QuotesTab({ initialQuoteId, isDetailer = false, workOrde
   const [modalKey,     setModalKey]     = useState(0)
   const [showForm,     setShowForm]     = useState(false)
 
-  // The shop's pricing defaults, for a from-scratch quote. Read from the same
-  // endpoint every other form prefills from, so a new quote opens on the same labour
-  // rate, markup and tax the editor would have used. Falls back to the documented
-  // defaults rather than zeros, because a quote priced at 0% markup is silently wrong.
-  const [quoteDefaults, setQuoteDefaults] = useState({
-    labor_rate: 125, markup_percent: 20, tax_percent: 8.5,
-  })
-  useEffect(() => {
-    let cancelled = false
-    ;(async () => {
-      try {
-        const res = await fetch('/api/user/profile')
-        if (!res.ok) return
-        const j = await res.json()
-        if (cancelled) return
-        setQuoteDefaults({
-          labor_rate:     Number(j.default_labor_rate) || 125,
-          markup_percent: Number(j.default_parts_markup_percent) || 20,
-          // tax_rate_parts is the post-140 home for this; default_tax_percent is the
-          // pre-140 fallback the endpoint still returns.
-          tax_percent:    Number(j.tax_rate_parts ?? j.default_tax_percent) || 0,
-        })
-      } catch {
-        // Keep the fallbacks; a failed prefill must not block creating a quote.
-      }
-    })()
-    return () => { cancelled = true }
-  }, [])
+  // The shop's pricing defaults, for a from-scratch quote, through lib/document-defaults -
+  // the one place every LD surface reads them. An unset rate reads 0, never an invented
+  // 125 / 20 / 8.5 (this block used to fall back to those).
+  const { defaults: docDefaults } = useDocumentDefaults()
+  const quoteDefaults = {
+    labor_rate: docDefaults.laborRate, markup_percent: docDefaults.markupPct, tax_percent: docDefaults.taxPct,
+  }
 
   const loadQuotes = useCallback(async () => {
     setLoading(true)

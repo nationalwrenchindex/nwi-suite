@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import AppNav from '@/components/layout/AppNav'
 import WorkOrderForm from '@/components/work-orders/WorkOrderForm'
+import { loadDocumentDefaults } from '@/lib/document-defaults.server'
 
 export const metadata = { title: 'New Work Order — National Wrench Index Suite™' }
 
@@ -17,12 +18,13 @@ export default async function NewWorkOrderPage() {
   // making the tech retype them for every job.
   const { data: profile } = await supabase
     .from('profiles')
-    .select('business_name, business_type, work_orders_enabled, default_labor_rate, default_parts_markup_percent, default_tax_percent')
+    .select('business_name, business_type, work_orders_enabled')
     .eq('id', user.id)
     .single()
 
   if (!profile?.business_name) redirect('/onboarding')
   if (profile.work_orders_enabled !== true) redirect('/dashboard')
+  const docDefaults = await loadDocumentDefaults(supabase, user.id)
 
   return (
     <div className="min-h-dvh bg-dark flex flex-col">
@@ -43,9 +45,11 @@ export default async function NewWorkOrderPage() {
 
         <WorkOrderForm
           defaults={{
-            labor_rate:     Number(profile.default_labor_rate ?? 125),
-            markup_percent: Number(profile.default_parts_markup_percent ?? 20),
-            tax_percent:    Number(profile.default_tax_percent ?? 8.5),
+            // lib/document-defaults: the one read every LD surface makes. An unset
+            // rate is 0, never an invented 125 / 20 / 8.5.
+            labor_rate:     docDefaults.laborRate,
+            markup_percent: docDefaults.markupPct,
+            tax_percent:    docDefaults.taxPct,
           }}
         />
       </main>

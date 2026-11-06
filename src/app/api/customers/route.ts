@@ -79,8 +79,11 @@ export async function POST(request: NextRequest) {
 
   if (!body.first_name || typeof body.first_name !== 'string')
     return NextResponse.json({ error: 'first_name is required' }, { status: 400 })
-  if (!body.last_name || typeof body.last_name !== 'string')
-    return NextResponse.json({ error: 'last_name is required' }, { status: 400 })
+  // A surname may be empty: a customer who gives one name is stored as it, never with
+  // an invented one (lib/customer-name). It must still be text - the column is NOT NULL.
+  if (body.last_name === undefined || body.last_name === null) body.last_name = ''
+  if (typeof body.last_name !== 'string')
+    return NextResponse.json({ error: 'last_name must be text' }, { status: 400 })
 
   // ── Already on file? ──
   // This route inserted unconditionally, so every "+ New customer" minted a row

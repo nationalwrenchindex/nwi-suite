@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import AppNav from '@/components/layout/AppNav'
 import WorkOrderForm from '@/components/work-orders/WorkOrderForm'
+import { loadDocumentDefaults } from '@/lib/document-defaults.server'
 import { WORK_ORDER_SELECT } from '@/app/api/work-orders/list'
 import { STATUS_META, unitLabelFor, type WorkOrder, type WorkOrderPhoto } from '@/types/work-orders'
 import SegmentList from '@/components/shared/SegmentList'
@@ -26,12 +27,13 @@ export default async function WorkOrderDetailPage({
 
   const { data: profile } = await supabase
     .from('profiles')
-    .select('business_name, business_type, work_orders_enabled, default_labor_rate, default_parts_markup_percent, default_tax_percent')
+    .select('business_name, business_type, work_orders_enabled')
     .eq('id', user.id)
     .single()
 
   if (!profile?.business_name) redirect('/onboarding')
   if (profile.work_orders_enabled !== true) redirect('/dashboard')
+  const docDefaults = await loadDocumentDefaults(supabase, user.id)
 
   const [{ data }, { data: photoRows }] = await Promise.all([
     supabase
@@ -112,9 +114,11 @@ export default async function WorkOrderDetailPage({
           photos={photos}
           ownsPricing={parentPriced}
           defaults={{
-            labor_rate:     Number(profile.default_labor_rate ?? 125),
-            markup_percent: Number(profile.default_parts_markup_percent ?? 20),
-            tax_percent:    Number(profile.default_tax_percent ?? 8.5),
+            // lib/document-defaults: the one read every LD surface makes. An unset
+            // rate is 0, never an invented 125 / 20 / 8.5.
+            labor_rate:     docDefaults.laborRate,
+            markup_percent: docDefaults.markupPct,
+            tax_percent:    docDefaults.taxPct,
           }}
         />
 
@@ -132,9 +136,9 @@ export default async function WorkOrderDetailPage({
               apiBase={`/api/work-orders/${wo.id}`}
               variant="ld"
               initialSegments={segments}
-              defaultMarkup={Number(profile.default_parts_markup_percent ?? 20)}
-              laborRate={Number(profile.default_labor_rate ?? 125)}
-              defaultTaxPercent={Number(profile.default_tax_percent ?? 8.5)}
+              defaultMarkup={docDefaults.markupPct}
+              laborRate={docDefaults.laborRate}
+              defaultTaxPercent={docDefaults.taxPct}
               locked={!!wo.converted_invoice_id}
             />
           </div>

@@ -11,6 +11,7 @@ import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { PARENTS } from '@/lib/segments/parent'
 import { SEGMENT_SELECT, shapeSegments } from '@/lib/segments/select'
+import { customerSegments } from '@/lib/customer-copy'
 import { rollupSegments } from '@/components/shared/segments'
 
 export const dynamic = 'force-dynamic'
@@ -75,7 +76,8 @@ export async function GET(
       name:  (profile?.business_name as string | null) ?? null,
       phone: (profile?.phone as string | null) ?? null,
     },
-    segments,
+    // Rolled up from the full rows, then sent without cost or markup (lib/customer-copy).
+    segments: customerSegments(segments),
     rollup: rollupSegments(segments),
   })
 }

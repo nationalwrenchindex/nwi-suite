@@ -247,8 +247,11 @@ async function main() {
   ok(conv.includes('breakdownIsComplete'),
     'and only compares a breakdown that covers the whole taxable subtotal')
   const form = fs.readFileSync('src/components/work-orders/WorkOrderForm.tsx', 'utf8')
-  ok(form.includes('{withExtras.taxBreakdown'), 'the form shows tax WITH the extras in it')
-  ok(form.includes('fmt(withExtras.grandTotal)'), 'and the grand total with them in it')
+  // Since Nov 5 the form prints through the shared rows (lib/document-totals), fed the
+  // documentMoney result - the figures WITH the extras.
+  const rowsSrc = fs.readFileSync('src/lib/document-totals.ts', 'utf8')
+  ok(/money=\{docMoney\}/.test(form) && /taxDisplayRows\(m\.taxBreakdown\)/.test(rowsSrc), 'the form shows tax WITH the extras in it')
+  ok(/money=\{docMoney\}/.test(form) && /amount: m\.grandTotal/.test(rowsSrc), 'and the grand total with them in it')
   ok(!form.includes('subtotal:      withExtras.subtotal'),
     'and does NOT try to store a subtotal column that does not exist')
 

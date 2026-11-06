@@ -98,8 +98,11 @@ export async function GET() {
     average_mpg:                   data?.average_mpg                   ?? null,
     fuel_type:                     data?.fuel_type                     ?? 'gasoline',
     offer_mpi_on_booking:          data?.offer_mpi_on_booking          ?? false,
-    default_labor_rate:            data?.default_labor_rate            ?? 125,
-    default_parts_markup_percent:  data?.default_parts_markup_percent  ?? 20,
+    // As stored: NULL = never set. Read through lib/document-defaults, which reads an
+    // unset rate as 0 and says so. This used to answer 125 / 20 / 8.5 for a shop that
+    // had set nothing, and every LD form quoted at numbers nobody chose.
+    default_labor_rate:            data?.default_labor_rate            ?? null,
+    default_parts_markup_percent:  data?.default_parts_markup_percent  ?? null,
     // Two markups, not one. default_parts_markup_percent is the LD number (LD bills
     // from it and LD Settings writes it); hd_parts_markup_percent is HD's own, added
     // by migration 121. They are returned side by side rather than merged because a
@@ -107,7 +110,7 @@ export async function GET() {
     // about heavy-duty reefer parts. NULL = never set, so fall back to 30 — the HD
     // brief's number and DEFAULT_HD_PARTS_MARKUP in src/lib/hd/parts-pricing.ts.
     hd_parts_markup_percent:       data?.hd_parts_markup_percent       ?? 30,
-    default_tax_percent:           data?.default_tax_percent           ?? 8.5,
+    default_tax_percent:           data?.default_tax_percent           ?? null,
     // Resolved through the shared helper so the pre-140 fallback is defined in ONE
     // place: no tax columns means labor stays taxed at default_tax_percent, which is
     // what the code did before the split existed. Falling back to 'not taxed' would

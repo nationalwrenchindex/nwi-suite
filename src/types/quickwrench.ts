@@ -142,17 +142,19 @@ export interface QuoteSaveRequest {
   jobs?:         MultiJobEntry[]       // all jobs (multi-job JSONB)
   extra_labor?:  Array<{ description: string; hours: number }>  // custom labor lines
   parts:         PartWithSuppliers[]   // all included parts flat (backwards compat)
-  parts_total:   number
-  parts_cost_total?: number            // COGS across all parts
-  labor_hours:   number                // total labor hours across all jobs
+  // What the tech typed. Every total is priced by the route (lib/quickwrench-money),
+  // under the shop's settings - none is taken from the request.
+  labor_hours?:  number                // single-job legacy request only
   labor_rate:    number
-  labor_total:   number
   markup_percent: number
-  tax_amount:    number
-  /** What was taxed, from src/lib/tax. Null when the settings fetch had not
-   *  resolved, in which case the quote stores no split. */
-  tax_breakdown?: unknown
-  grand_total:   number
+  /** The rate the quote records; the tax itself is the shop's split. */
+  tax_percent?:  number
+  travel_hours?:  number
+  mileage_miles?: number
+  /** The fee as on the Quote tab. Absent: the shop's own fee when it bills one. */
+  service_call_fee?: number
+  /** The customer QuickWrench already saved to Intel Hub. */
+  customer_id?:  string | null
   customer_name: string
   customer_phone: string
   send_sms:   boolean

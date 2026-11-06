@@ -609,7 +609,7 @@ export default function InvoicesTab() {
             {/* The service call fee: a flat fee, its own line. */}
             {showCall && (
               <div className="max-w-xs">
-                <ServiceCallField fee={callFee ?? 0} tax={callState.settings.tax} onFee={setCallFee} disabled={submitting} />
+                <ServiceCallField fee={callFee ?? 0} tax={callState.settings.tax} taxFrom="settings" loaded={callState.loaded} onFee={setCallFee} disabled={submitting} />
               </div>
             )}
 

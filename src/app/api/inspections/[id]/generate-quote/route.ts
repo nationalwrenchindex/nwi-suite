@@ -3,8 +3,10 @@
 // Calls the same Gemini tech-guide system as QuickWrench, with parallel execution.
 
 import { NextResponse } from 'next/server'
-import { computeTax, isMissingTaxBreakdownColumn, withoutTaxBreakdown } from '@/lib/tax'
-import { loadTaxSettings } from '@/lib/tax-settings.server'
+import { isMissingTaxBreakdownColumn, withoutTaxBreakdown } from '@/lib/tax'
+import { loadDocumentDefaults } from '@/lib/document-defaults.server'
+import { newDocumentServiceCall } from '@/lib/document-defaults'
+import { quickwrenchMoney, partsCostTotal, type QwJob } from '@/lib/quickwrench-money'
 import { createClient } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { hasQuickWrenchAccess } from '@/lib/subscription'
@@ -85,20 +87,12 @@ export async function POST(_req: Request, { params }: RouteContext) {
     console.warn(`[generate-quote] No vehicle linked to inspection ${id} — AI will use generic context`)
   }
 
-  // Pull mechanic's configured pricing defaults from their profile.
-  const { data: pricingProfile } = await supabase
-    .from('profiles')
-    .select('default_labor_rate, default_parts_markup_percent, default_tax_percent')
-    .eq('id', user.id)
-    .single()
-
-  const laborRate = pricingProfile?.default_labor_rate            != null ? Number(pricingProfile.default_labor_rate)            : 125
-  const markupPct = pricingProfile?.default_parts_markup_percent  != null ? Number(pricingProfile.default_parts_markup_percent)  : 20
-  const taxPct    = pricingProfile?.default_tax_percent           != null ? Number(pricingProfile.default_tax_percent)           : 8.5
-
-  // Read separately rather than widening the select above, so the pre-migration-140
-  // fallback lives in one place (loadTaxSettings) instead of being re-derived here.
-  const taxSettings = await loadTaxSettings(supabase, user.id)
+  // The shop's document defaults - the one read every LD surface makes
+  // (lib/document-defaults). These were read here with their own 125 / 20 / 8.5.
+  const defaults  = await loadDocumentDefaults(supabase, user.id)
+  const laborRate = defaults.laborRate
+  const markupPct = defaults.markupPct
+  const taxPct    = defaults.taxPct
 
   // Identify failed/needs_attention items, deduplicate by mapped service name
   const failedItems = ((inspection.items as RawItem[]) ?? []).filter(
@@ -197,45 +191,23 @@ export async function POST(_req: Request, { params }: RouteContext) {
     }))
   }
 
-  // Build line items (parts only — QuotesTab renders labor separately via labor_hours + labor_rate).
-  // unit_price = AI retail price (already includes supplier margin). Storing the mechanic's
-  // markupPct alongside it matches QuickWrench convention: QuotesTab reverse-engineers
-  // cost = retail / (1 + markup) and re-applies markup on display — final prices are identical.
-  type LineItem = { description: string; quantity: number; unit_price: number; total: number }
-
-  const lineItems: LineItem[] = []
-  let totalHours   = 0
-  let partsRevenue = 0  // retail total (for grand_total)
-  let costBasis    = 0  // mechanic's cost (for parts_subtotal)
-
-  for (const result of results) {
-    totalHours += result.hours
-
-    for (const p of result.parts) {
-      const retail = r2(p.unit_price)
-      lineItems.push({
-        description: p.name,
-        quantity:    p.qty,
-        unit_price:  retail,
-        total:       r2(retail * p.qty),
-      })
-      partsRevenue += retail * p.qty
-      costBasis    += p.unit_cost * p.qty
-    }
-  }
-
-  totalHours   = r2(totalHours)
-  partsRevenue = r2(partsRevenue)
-  costBasis    = r2(costBasis)
-
-  const laborSubtotal = r2(totalHours * laborRate)
-  const preTax        = r2(partsRevenue + laborSubtotal)
-
-  // partsRevenue is already post-markup, so it is the parts base as the customer
-  // sees it. Labor is hours x rate. Both are known exactly here, so no inference.
-  const tax        = computeTax({ parts: partsRevenue, labor: laborSubtotal }, taxSettings)
-  const taxAmount  = tax.taxAmount
-  const grandTotal = r2(preTax + taxAmount)
+  // Priced through the one shared calculator (lib/quickwrench-money -> lib/document-money),
+  // exactly as QuickWrench and the New Quote form price a job: one labour line per service
+  // at the shop's rate, the AI retail price as each part's customer price with its cost
+  // kept on the line, shop supplies, the service call fee per its setting, and the tax in
+  // a parts and a labor bucket. This used to total parts + labour + tax itself with no
+  // extras, and stored labour only as labor_hours - which the quote editor, holding
+  // labour as lines, does not read.
+  const qwJobs: QwJob[] = results.map(r => ({
+    subtype: r.serviceName, labor_hours: r2(r.hours),
+    parts: r.parts.map(p => ({ name: p.name, qty: p.qty, unit_cost: p.unit_cost, unit_price: r2(p.unit_price) })),
+  }))
+  const qm = quickwrenchMoney({
+    jobs: qwJobs, extraLabor: [], laborRate, markupPct, taxPct,
+    taxSettings: defaults.taxSettings, defaults,
+    travelHours: 0, mileageMiles: 0,
+    serviceCallFee: newDocumentServiceCall(defaults)?.fee ?? 0,
+  })
 
   const completedDate = new Date().toLocaleDateString('en-US', {
     month: 'short', day: 'numeric', year: 'numeric',
@@ -256,17 +228,10 @@ export async function POST(_req: Request, { params }: RouteContext) {
       source:               'mpi',
       job_category:         'Multi-Point Inspection',
       job_subtype:          serviceLabel,
-      line_items:           lineItems,
       jobs:                 [],
-      labor_hours:          totalHours,
-      labor_rate:           laborRate,
-      parts_subtotal:       costBasis,
-      parts_markup_percent: markupPct,
-      labor_subtotal:       laborSubtotal,
-      tax_percent:          taxPct,
-      tax_amount:           taxAmount,
-      grand_total:          grandTotal,
-      tax_breakdown:        tax.breakdown,
+      // Every money column from lib/document-money, part costs kept on their lines.
+      ...qm.columns,
+      parts_cost_total:     partsCostTotal(qwJobs),
       notes: `Generated from 25-Point Multi-Point Inspection (${completedDate}).${
         usedFallback
           ? ' AI pricing unavailable — please add parts and pricing manually.'

@@ -1,35 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { EXTRAS_OFF, type ExtrasSettings } from '@/lib/billable-extras'
+import { EXTRAS_OFF, extrasSettingsFromProfileApi, type ExtrasSettings } from '@/lib/billable-extras'
 
-/**
- * The settings as GET /api/user/profile sends them: already an ExtrasSettings object,
- * spread onto the response (billTravel, travelRatePerHour, ...).
- *
- * THE BUG THIS CLOSES (Oct 3 - Nov 4, 2026): the answer was read back through
- * extrasSettingsFrom, which reads the PROFILE ROW's column names (bill_travel, ...).
- * The response has none of them, so every flag read false and every rate null: every
- * LD form believed the shop billed no travel, mileage or shop supplies, whatever
- * Settings said, and no new LD document could bill any of the three.
- */
-export function extrasSettingsFromProfileApi(json: Record<string, unknown> | null | undefined): ExtrasSettings {
-  const j = json ?? {}
-  const num = (v: unknown): number | null => {
-    if (v === null || v === undefined || v === '') return null
-    const n = Number(v)
-    return Number.isFinite(n) ? n : null
-  }
-  return {
-    billTravel:          j.billTravel === true,
-    travelRatePerHour:   num(j.travelRatePerHour),
-    billMileage:         j.billMileage === true,
-    mileageRatePerMile:  num(j.mileageRatePerMile),
-    billShopSupplies:    j.billShopSupplies === true,
-    shopSuppliesPercent: num(j.shopSuppliesPercent),
-    shopSuppliesCap:     num(j.shopSuppliesCap),
-  }
-}
+// extrasSettingsFromProfileApi lives in lib/billable-extras so server code (the shared
+// document defaults) can read the same answer; re-exported for existing importers.
+export { extrasSettingsFromProfileApi } from '@/lib/billable-extras'
 
 /**
  * The shop's travel / mileage / shop-supplies settings, for the quote, work order
