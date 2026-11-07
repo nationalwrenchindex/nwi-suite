@@ -169,6 +169,12 @@ Settled field facts (Nov 4, 2026, Brock from the field - a source that disagrees
 - **`60-0493`** is a refrigeration valve, NOT a `3-way valve part` (the source printed it
   `60-493` and named it "3-way valve kit - condenser fan" - a section heading). **`44-8729`**
   (a mechanical sensor switch) is too old to matter: leave it held, never give it a type.
+- **`78-1968` is the ENGINE CRANK TO WATER PUMP belt on Precedent units** (Nov 6, Brock from
+  the field). Store description `Belt Engine Crank to Water Pump - Precedent`, `verified = true`,
+  `confidence = 'confirmed'`, source `brock-field-correction-2026-11-06`
+  (`scripts/reefer-load/17-field-correction-78-1968.sql`). Whether it supersedes `78-1340` is
+  NOT settled - `78-1340`, `78-1341` and `78-1968` are one digit apart across model generations;
+  link nothing until Brock decides.
 - **Counter headings Brock set** (`TYPE_HEADINGS` in `src/lib/parts/counter.ts`): EGR valve,
   Piston, Crankshaft, Glow plug -> Engine; Valve stem seal, Receiver tank, Heat exchanger,
   Condenser/radiator coil -> Refrigeration; Solenoid coil -> Electrical & Controls. The oil rule

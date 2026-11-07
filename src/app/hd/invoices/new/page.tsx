@@ -20,6 +20,7 @@ import AddressAutofill from '@/components/hd/AddressAutofill'
 import { money } from '@/lib/format'
 import PaymentTermsSelect from '@/components/hd/PaymentTermsSelect'
 import FeeInput from '@/components/hd/FeeInput'
+import { addressLine } from '@/lib/hd/address-print'
 
 // Direct-invoice fast path: skip the quote/approval step and bill a trusted
 // customer directly. Mirrors the quote form but posts straight to /api/hd/invoices.
@@ -553,7 +554,7 @@ export default function NewInvoicePage() {
     }
   }
 
-  const billingAddr = [form.address_line1, form.address_line2, [form.city, form.state].filter(Boolean).join(', '), form.zip].filter(Boolean).join(', ')
+  const billingAddr = addressLine(form.address_line1, form.address_line2, form.city, form.state, form.zip)
 
   return (
     // paper-surface: a white document in BOTH themes, so shared inputs inside it take

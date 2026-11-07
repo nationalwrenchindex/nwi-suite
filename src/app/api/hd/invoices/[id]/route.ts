@@ -7,6 +7,7 @@ import { resolveInvoiceFleetLinks } from '@/lib/fleet-pro/invoice-link'
 import { costingFromLineItems, isMissingCostingColumn } from '@/lib/hd/invoice-costing'
 import { checkDiscountWrite } from '@/lib/hd/hd-discount'
 import { recordTermsSnapshot } from '@/lib/document-terms'
+import { READING_COLUMNS, readingsFromBody, withoutMissingReadings } from '@/lib/hd/unit-hours'
 
 export const dynamic = 'force-dynamic'
 
@@ -52,7 +53,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const discountError = checkDiscountWrite(body)
   if (discountError) return NextResponse.json({ error: discountError }, { status: 400 })
 
-  const update: Record<string, unknown> = { ...body, updated_at: new Date().toISOString() }
+  // The readings (179 hours, 183 odometer) are parsed, never stored raw: "123,000" is
+  // 123000 miles, and an unparseable value is refused rather than stored as blank.
+  const readings = readingsFromBody(body)
+  if ('error' in readings) return NextResponse.json({ error: readings.error }, { status: 400 })
+  for (const k of READING_COLUMNS) delete body[k]
+
+  const update: Record<string, unknown> = { ...body, ...readings.update, updated_at: new Date().toISOString() }
   if (body.status === 'paid' && !body.paid_at) {
     update.paid_at = new Date().toISOString()
   }
@@ -146,6 +153,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     ;({ data, error } = await supabase
       .from('hd_invoices')
       .update(update)
+      .eq('id', id)
+      .eq('user_id', user.id)
+      .select()
+      .single())
+  }
+
+  // A reading column the database lacks: refused when the edit carries a reading for
+  // it (never dropped silently), otherwise retried without it.
+  if (error && READING_COLUMNS.some(k => k in update && String(error?.message ?? '').includes(k))) {
+    const r = withoutMissingReadings(update, error)
+    if ('error' in r) return NextResponse.json({ error: r.error }, { status: 409 })
+    ;({ data, error } = await supabase
+      .from('hd_invoices')
+      .update(r.row)
       .eq('id', id)
       .eq('user_id', user.id)
       .select()

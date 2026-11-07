@@ -29,6 +29,7 @@ import {
 import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
 import { invoiceJobGroups } from '@/lib/hd/work-order-jobs'
 import { sourceQuoteNumber } from '@/lib/hd/invoice-source'
+import { addressLine } from '@/lib/hd/address-print'
 
 /** Everything interpolated into the HTML below goes through this first. */
 function esc(v: unknown): string {
@@ -410,8 +411,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     <div class="info-box">
       <h3>Bill To</h3>
       <p><strong>${esc(inv.customer_name)}</strong></p>
-      ${inv.address_line1 ? `<p>${inv.has_corp_address ? '<span class="label">Billing:</span> ' : ''}${esc([inv.address_line1, inv.address_line2, [inv.city, inv.state].filter(Boolean).join(', '), inv.zip].filter(Boolean).join(', '))}</p>` : ''}
-      ${inv.has_corp_address && inv.corp_address_line1 ? `<p><span class="label">Service:</span> ${esc([inv.corp_address_line1, inv.corp_address_line2, [inv.corp_city, inv.corp_state].filter(Boolean).join(', '), inv.corp_zip].filter(Boolean).join(', '))}</p>` : ''}
+      ${inv.address_line1 ? `<p>${inv.has_corp_address ? '<span class="label">Billing:</span> ' : ''}${esc(addressLine(inv.address_line1, inv.address_line2, inv.city, inv.state, inv.zip))}</p>` : ''}
+      ${inv.has_corp_address && inv.corp_address_line1 ? `<p><span class="label">Service:</span> ${esc(addressLine(inv.corp_address_line1, inv.corp_address_line2, inv.corp_city, inv.corp_state, inv.corp_zip))}</p>` : ''}
       ${inv.customer_phone ? `<p>${esc(inv.customer_phone)}</p>` : ''}
       ${inv.customer_email ? `<p>${esc(inv.customer_email)}</p>` : ''}
     </div>

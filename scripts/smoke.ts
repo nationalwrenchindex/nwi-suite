@@ -44,7 +44,8 @@ import { REEFER_STANDALONE_MODULES } from '../src/lib/reefer-standalone'
 import { loadRollupInput } from '../src/lib/hd/equipment-rollup-load'
 import { jobsFor, rollupByCategory, rollupByUnit } from '../src/lib/hd/equipment-rollup'
 import { loadEnv, openSession, visibleText } from './lib/smoke-session'
-import { extrasTotalsState, feeInputsAfterReload, flushPending, registerPending } from '../src/lib/hd/wo-pending'
+import { extrasTotalsState, feeInputsAfterReload, flushPending, registerPending, type PendingCard } from '../src/lib/hd/wo-pending'
+import { doubleDiagnosticProblem, isDiagnosticChargeLine } from '../src/lib/hd/diagnostic-charge'
 import { hdExtrasSettingsFrom, hdServiceCallFrom, serviceCallColumns } from '../src/lib/hd/hd-extras'
 import { hdLaborRateFrom } from '../src/lib/hd/labor-rate'
 import { sellPrice, lineAmount } from '../src/lib/hd/parts-pricing'
@@ -596,6 +597,18 @@ async function hwDoors(F: string, profile: Record<string, unknown>, surface: '/h
   const woId = String((wc.json.work_order as Record<string, unknown> | undefined)?.id ?? '')
   if (woId) created.hdWorkOrders.add(woId)
   if (!record(F, 'an HD work order is created', wc.status === 201 && !!woId, `-> ${wc.status} ${String(wc.json.error ?? '')}`)) return
+
+  // A5: a QuickWrench "Create Work Order" push books with the readings it took.
+  const qwWo = await api('POST', '/api/hd/work-orders', {
+    scheduled_date: new Date().toISOString().slice(0, 10), customer_name: `${MARK} hw qw push`,
+    unit_manufacturer: 'Thermo King', unit_model: 's-600', unit_hours: '20351', vehicle_odometer: '123,000',
+  })
+  const qwWoId = String((qwWo.json.work_order as Record<string, unknown> | undefined)?.id ?? '')
+  if (qwWoId) created.hdWorkOrders.add(qwWoId)
+  const qwRow = qwWoId ? (await rest<Record<string, unknown>>(`hd_work_orders?id=eq.${qwWoId}&select=unit_hours,vehicle_odometer`))[0] ?? {} : {}
+  record(F, 'a work order booked with readings (the QuickWrench push) records both',
+    qwWo.status === 201 && Number(qwRow.unit_hours) === HW_JOB.hours && Number(qwRow.vehicle_odometer) === HW_JOB.odometer,
+    `-> ${qwWo.status} ${String(qwWo.json.error ?? '')}, stored ${qwRow.unit_hours ?? 'none'} h / ${qwRow.vehicle_odometer ?? 'none'} mi`)
   const markup = Number(profile.hd_parts_markup_percent ?? 30)
   const rate = hdLaborRateFrom(profile) ?? 0
   // No part number: a stocked number would be reserved by the line save (see walk-hd-extras).
@@ -622,6 +635,10 @@ async function hwDoors(F: string, profile: Record<string, unknown>, surface: '/h
   record(F, `the work order screen renders the fees panel, the readings and the parts lookup (${surface})`,
     !!wp && wp.text.includes('DRIVE TIME, MILEAGE & FEES') && wp.text.includes('Unit Hours') && wp.text.includes('Odometer') && wp.html.includes('data-testid="wo-find-part"'),
     wp ? missingControls(wp.text, ['DRIVE TIME, MILEAGE & FEES', 'Unit Hours', 'Odometer']).join(', ') : 'did not load')
+  // A3: a reading on the job and a unit's last known reading must never look alike.
+  record(F, `the readings card says each reading is RECORDED ON THIS JOB (${surface})`,
+    !!wp && wp.text.includes('RECORDED ON THIS JOB: 20,351 h') && wp.text.includes('RECORDED ON THIS JOB: 123,000 mi'),
+    wp ? `hours ${wp.text.includes('RECORDED ON THIS JOB: 20,351 h')}, odometer ${wp.text.includes('RECORDED ON THIS JOB: 123,000 mi')}` : 'did not load')
   // A shop with no logo renders no <img> at all, so its name already prints once; with a
   // logo, the img must carry no alt text (the name printed beside it is the name).
   const hasLogo = !!wp && /<img[^>]*class="h-12/.test(wp.html)
@@ -642,6 +659,19 @@ async function hwDoors(F: string, profile: Record<string, unknown>, surface: '/h
 
   record(F, "the work order's readings reach its invoice", Number(wInv.unit_hours) === HW_JOB.hours && Number(wInv.vehicle_odometer) === HW_JOB.odometer,
     `hours ${wInv.unit_hours ?? 'none'}, odometer ${wInv.vehicle_odometer ?? 'none'}`)
+
+  // A4: the invoice editor carries both readings, and its save parses them.
+  const ie = await page(`${surface}/invoices/${wInvId}/edit`)
+  record(F, `the invoice editor has the hours and odometer fields, filled with the invoice's own (${surface})`,
+    !!ie && /data-testid="inv-edit-unit-hours"/.test(ie.html) && /value="20351"/.test(ie.html) && /data-testid="inv-edit-odometer"/.test(ie.html) && /value="123000"/.test(ie.html),
+    ie ? `hours field ${/inv-edit-unit-hours/.test(ie.html)}, odometer field ${/inv-edit-odometer/.test(ie.html)}` : 'did not load')
+  const ed = await api('PUT', `/api/hd/invoices/${wInvId}`, { vehicle_odometer: '123,456', unit_hours: '20352.5' })
+  const edRow = (await rest<Record<string, unknown>>(`hd_invoices?id=eq.${wInvId}&select=unit_hours,vehicle_odometer`))[0] ?? {}
+  record(F, 'an invoice edit saves typed readings parsed ("123,456" is 123456 miles)',
+    ed.status === 200 && Number(edRow.vehicle_odometer) === 123456 && Number(edRow.unit_hours) === 20352.5,
+    `-> ${ed.status} ${String(ed.json.error ?? '')}, stored ${edRow.unit_hours} h / ${edRow.vehicle_odometer} mi`)
+  const bad = await api('PUT', `/api/hd/invoices/${wInvId}`, { vehicle_odometer: 'about 120k' })
+  record(F, 'and refuses one it cannot read, rather than storing it raw or blank', bad.status === 400, `-> ${bad.status}`)
 
   // ── the four documents ──
   const docs: Array<[string, Record<string, unknown>]> = [['Quote', q], ['Invoice (quote)', qInv], ['Work order', woMoney], ['Invoice (WO)', wInv]]
@@ -665,14 +695,22 @@ async function flowHw(): Promise<void> {
     extrasTotalsState({ linesDirty: false, feesDirty: true, pricedFor: 'old', showing: 'new' }) === 'updating' &&
     extrasTotalsState({ linesDirty: false, feesDirty: true, pricedFor: 'new', showing: 'new' }) === 'priced', '')
   const order: string[] = []
-  const unreg = [
-    registerPending('zz-hw', 'extras', { dirty: () => true, flush: async () => { order.push('extras'); return null } }),
-    registerPending('zz-hw', 'lines', { dirty: () => true, flush: async () => { order.push('lines'); return null } }),
-    registerPending('zz-hw', 'odometer', { dirty: () => false, flush: async () => { order.push('odometer'); return null } }),
-  ]
+  // Registered out of order, one card clean: every dirty card saves, in the order that
+  // cannot lose data, and the clean one is not saved.
+  const pend = (card: PendingCard, dirty: boolean) =>
+    registerPending('zz-hw', card, { dirty: () => dirty, flush: async () => { order.push(card); return null } })
+  const unreg = [pend('odometer', true), pend('discount', true), pend('extras', true), pend('hours', true), pend('lines', true)]
   const flushed = await flushPending('zz-hw')
-  record(F, 'Create Invoice saves every unsaved card first, lines before fees', flushed === null && order.join(',') === 'lines,extras', order.join(','))
+  record(F, 'Create Invoice saves every unsaved card first: lines, fees, discount, hours, odometer',
+    flushed === null && order.join(',') === 'lines,extras,discount,hours,odometer', order.join(','))
   unreg.forEach(u => u())
+  const clean: string[] = []
+  const u1 = [
+    registerPending('zz-hw1', 'hours', { dirty: () => false, flush: async () => { clean.push('hours'); return null } }),
+    registerPending('zz-hw1', 'discount', { dirty: () => true, flush: async () => { clean.push('discount'); return null } }),
+  ]
+  record(F, 'and saves nothing that is already saved', (await flushPending('zz-hw1')) === null && clean.join(',') === 'discount', clean.join(','))
+  u1.forEach(u => u())
   const stop: string[] = []
   const u2 = [
     registerPending('zz-hw2', 'lines', { dirty: () => true, flush: async () => { stop.push('lines'); return 'boom' } }),
@@ -680,6 +718,19 @@ async function flowHw(): Promise<void> {
   ]
   record(F, 'and converts nothing when a save fails', (await flushPending('zz-hw2')) === 'boom' && stop.join(',') === 'lines', stop.join(','))
   u2.forEach(u => u())
+
+  // ── one diagnostic charge per quote (C, Nov 6) ──
+  const qwLine = { type: 'labor', description: 'Diagnostic Fee' }
+  const guidedLine = { type: 'labor', description: 'Diagnostic fee - Code 25 alternator check' }
+  const repair = { type: 'labor', description: 'HD Diagnostic & Repair - Thermo King S-600 Code 25' }
+  record(F, 'a "Diagnostic Fee" labor line is a diagnostic charge; "Diagnostic & Repair" is not',
+    isDiagnosticChargeLine(qwLine) && isDiagnosticChargeLine(guidedLine) && !isDiagnosticChargeLine(repair) && !isDiagnosticChargeLine({ type: 'parts', description: 'Diagnostic fee' }), '')
+  record(F, 'a quote with the $145 fee ticked AND a diagnostic labor line will not save',
+    doubleDiagnosticProblem({ includeFee: true, fee: 145, lines: [repair, qwLine], bothConfirmed: false }) !== null, '')
+  record(F, 'and saves once the tech deliberately ticks "Bill both", or either charge goes',
+    doubleDiagnosticProblem({ includeFee: true, fee: 145, lines: [repair, qwLine], bothConfirmed: true }) === null &&
+    doubleDiagnosticProblem({ includeFee: false, fee: 145, lines: [repair, qwLine], bothConfirmed: false }) === null &&
+    doubleDiagnosticProblem({ includeFee: true, fee: 145, lines: [repair], bothConfirmed: false }) === null, '')
 
   // ── the parts lookup on a document's unit ──
   const belt = await api('GET', '/api/parts/search?manufacturer=Thermo%20King&model=s-600&q=belt')

@@ -1,3 +1,5 @@
+import { sameStreet } from '@/lib/hd/address-print'
+
 // Pure US address parser for the HD single-line address input.
 //
 // No network and no geocoding on purpose. GOOGLE_PLACES_API_KEY exists in this
@@ -239,7 +241,8 @@ export function parseAddress(input: string): ParsedAddress {
     // fragment into line 2, which then prints on the invoice as a second street
     // line reading "NC 27107". Dropped rather than kept: the state and zip are
     // already captured in their own fields, so nothing is lost.
-    const unitParts = street.slice(1).filter(p => !isStateZipOnly(p))
+    // Nor is a repeat of line 1: "123 Main St, 123 Main St, City" is one street.
+    const unitParts = street.slice(1).filter(p => !isStateZipOnly(p) && !sameStreet(street[0], p))
     // The tech already separated the unit with a comma — trust that boundary.
     return {
       address_line1: street[0],

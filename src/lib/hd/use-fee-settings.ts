@@ -103,3 +103,21 @@ export async function shopHdLaborRate(): Promise<number | null> {
     return null
   }
 }
+
+/**
+ * The shop's HD diagnostic fee from Settings (hd_diagnostic_fee), read once, for a form
+ * pricing a hand-off that asked for the fee without a figure. NULL when the shop has set
+ * none or the read fails.
+ */
+export async function shopHdDiagnosticFee(): Promise<number | null> {
+  try {
+    const res = await fetch('/api/hd/settings')
+    if (!res.ok) return null
+    const j = await res.json() as { settings?: Record<string, unknown> | null }
+    const v = j.settings?.hd_diagnostic_fee
+    const n = v == null || v === '' ? NaN : Number(v)
+    return Number.isFinite(n) && n >= 0 ? n : null
+  } catch {
+    return null
+  }
+}

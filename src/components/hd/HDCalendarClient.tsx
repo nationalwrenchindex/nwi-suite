@@ -118,6 +118,9 @@ export default function HDCalendarClient() {
   // onto the work order once it is booked, so they are not retyped on the job.
   const [handoffLabor, setHandoffLabor] = useState<{ lines: Array<{ description: string; hours: number }>; rate: number | null } | null>(null)
   const [handoffNote,  setHandoffNote]  = useState('')
+  // The readings QuickWrench took (hours on a reefer, odometer on a truck), recorded on
+  // the work order when it is booked - the same as the quote push carries them.
+  const [handoffReadings, setHandoffReadings] = useState<{ unit_hours?: string; vehicle_odometer?: string }>({})
 
   // The shop's units, loaded when the booking form opens. Paged, because the list API
   // pages; a shop has tens of units, so this is one or two requests.
@@ -154,6 +157,7 @@ export default function HDCalendarClient() {
     setBookingForm(BLANK_BOOKING)
     // A new booking starts with no hand-off; the QuickWrench consumer sets it after this.
     setHandoffLabor(null)
+    setHandoffReadings({})
     void loadUnits()
     setBookingDate(date || todayStr())
     setBookingError('')
@@ -194,13 +198,14 @@ export default function HDCalendarClient() {
         : bookingForm
       const res = await fetch('/api/hd/work-orders', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...body, scheduled_date: bookingDate }),
+        body: JSON.stringify({ ...body, ...handoffReadings, scheduled_date: bookingDate }),
       })
       const data = await res.json()
       if (!res.ok) { setBookingError(data.error ?? 'Could not book the job.'); return }
       const woId = (data.work_order as { id?: string } | undefined)?.id
       if (woId && handoffLabor?.lines.length) await addHandoffLabor(woId, handoffLabor)
       setHandoffLabor(null)
+      setHandoffReadings({})
       setBooking(false)
       setSelected(bookingDate)
       // Re-fetch the month the job landed in so it shows immediately.
@@ -263,7 +268,11 @@ export default function HDCalendarClient() {
         unit_manufacturer?: string; unit_model?: string; unit_serial?: string
         lineItems?: Array<{ mobile_hours: number; description?: string }>
         labor_rate?: number
+        unit_hours?: number | string | null; vehicle_odometer?: number | string | null
       }
+      const reading = (v: unknown) => (v != null && String(v).trim() !== '' ? String(v).trim() : null)
+      const hoursIn = reading(p.unit_hours), odoIn = reading(p.vehicle_odometer)
+      setHandoffReadings({ ...(hoursIn ? { unit_hours: hoursIn } : {}), ...(odoIn ? { vehicle_odometer: odoIn } : {}) })
       // Seed the duration from the diagnostic's own labor estimate.
       const hours = (p.lineItems ?? []).reduce((s, li) => s + (Number(li.mobile_hours) || 0), 0)
       const lines = (p.lineItems ?? [])
@@ -546,6 +555,12 @@ export default function HDCalendarClient() {
             </div>
 
             <div className="px-5 py-4 flex flex-col gap-3" style={{ overflowY: 'auto' }}>
+              {(handoffReadings.unit_hours || handoffReadings.vehicle_odometer) && (
+                <p className="text-xs" data-testid="booking-handoff-readings" style={{ color: 'var(--hd-text-muted)' }}>
+                  {'From QuickWrench, recorded on this job: '}
+                  {[handoffReadings.unit_hours && `unit hours ${handoffReadings.unit_hours}`, handoffReadings.vehicle_odometer && `odometer ${handoffReadings.vehicle_odometer} mi`].filter(Boolean).join(', ')}
+                </p>
+              )}
               {bookingError && (
                 <p className="text-sm px-3 py-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: 'var(--hd-negative)', border: '1px solid rgba(239,68,68,0.3)' }}>{bookingError}</p>
               )}

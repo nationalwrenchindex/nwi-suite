@@ -415,12 +415,11 @@ export default function GuidedDiagnostic({ alarmCode }: { alarmCode: string }) {
       complaint: conclusion.complaint,
       diagnosis: buildDiagnosisSummary(history, conclusion),
       notes:     buildStepNotes(history, conclusion),
+      // The diagnosis is charged as the quote's diagnostic FEE (the shop's own, else one
+      // hour at its rate), never as a labor line beside it: that line plus the fee the
+      // quote ticks from Settings billed it twice (lib/hd/diagnostic-charge).
+      include_diagnostic: true,
       lineItems: [
-        {
-          description:      'Diagnostic fee — Code 25 alternator check',
-          book_hours:       1.0,                      book_hours_max:   1.0,
-          mobile_hours:     1.0,                      mobile_hours_max: 1.0,
-        },
         ...(conclusion.generateQuote ? [{
           description:      conclusion.laborDescription,
           book_hours:       conclusion.laborBook,     book_hours_max:   conclusion.laborBookMax,

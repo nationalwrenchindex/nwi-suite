@@ -256,6 +256,11 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
   // the existing /api/hd/invoices route performs the insert. That is deliberately the
   // only insert path: it already carries the column-tolerance retries, already deducts
   // stock through the shared ledger, and already flips this work order to 'invoiced'.
+  // A Reefer Standalone subscriber never sees /hd/ in the URL bar: the invoice opens on
+  // the surface the work order was opened on. (The middleware's /hd -> /reefer redirect
+  // is a safety net for a browser holding the surface cookie, not the way there.)
+  const invoicesBase = reeferSurface ? '/reefer/invoices' : '/hd/invoices'
+
   async function createInvoice() {
     setInvoicing(true)
     setInvoiceError(null)
@@ -275,7 +280,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
       // Already billed. Send the tech to the invoice that exists rather than letting
       // them create a second one - WO-2026-1538 was billed twice before this existed.
       if (built.status === 409 && builtJson.invoice?.id) {
-        window.location.href = `/hd/invoices/${builtJson.invoice.id}`
+        window.location.href = `${invoicesBase}/${builtJson.invoice.id}`
         return
       }
       if (!built.ok) throw new Error(builtJson.error ?? 'Could not read this work order.')
@@ -314,13 +319,13 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
 
       // The migration-154 unique index refusing a second invoice.
       if (made.status === 409 && madeJson.invoice?.id) {
-        window.location.href = `/hd/invoices/${madeJson.invoice.id}`
+        window.location.href = `${invoicesBase}/${madeJson.invoice.id}`
         return
       }
       if (!made.ok) throw new Error(madeJson.error ?? 'Could not create the invoice.')
 
       const id = (madeJson.invoice as Record<string, unknown> | undefined)?.id
-      window.location.href = id ? `/hd/invoices/${String(id)}` : '/hd/invoices'
+      window.location.href = id ? `${invoicesBase}/${String(id)}` : invoicesBase
     } catch (err) {
       setInvoiceError(err instanceof Error ? err.message : 'Could not create the invoice.')
     } finally {

@@ -1882,11 +1882,14 @@ export default function HDQuickWrenchPage() {
     router.push(WORKFLOW_DESTS[dest])
   }
 
-  // The quote form bills the diagnostic as a one-hour labor line; the invoice form
-  // has a dedicated diagnostic-fee field instead. Feed whichever the destination
-  // uses — priced the same either way — so the fee never lands twice or not at all.
+  // THE DIAGNOSTIC FEE IS ONE FIELD, NEVER A LINE AND A FIELD (lib/hd/diagnostic-charge).
+  // The quote and the invoice both have a diagnostic-fee field, and the quote form ticks
+  // the shop's fee from Settings by itself - so the 1-hour "Diagnostic Fee" labor line
+  // this used to send the quote landed ON TOP of that fee: $145 + $145. Both now get the
+  // fee decision (the box on this screen) and no line. Only the work order, which has no
+  // diagnostic fee field at booking, still gets the labor line.
   function diagFeeFields(dest: WorkflowDest) {
-    return dest === 'invoice'
+    return dest !== 'work_order'
       // The shop's own fee when it has set one; an hour of labor otherwise, which is
       // what this screen priced it at before there was anywhere to say otherwise.
       ? { ...(laborRate != null ? { labor_rate: laborRate } : {}), include_diagnostic: includeDiagFee,
@@ -1937,6 +1940,9 @@ export default function HDQuickWrenchPage() {
       truck_model:       '',
       truck_year:        '',
       vin:               '',
+      // The hour meter typed above is the reading at this service: carried to whichever
+      // document this becomes, not left only in the notes.
+      unit_hours:        engineHours.trim() || null,
       service_type:      'Reefer Diagnostic',
       ...diagFeeFields(dest),
       lineItems: [
@@ -1954,7 +1960,7 @@ export default function HDQuickWrenchPage() {
           amount: 0, amount_max: 0,
         },
         ...buildRepairLines(),
-        ...(includeDiagFee && dest !== 'invoice' ? [DIAG_FEE_LINE()] : []),
+        ...(includeDiagFee && dest === 'work_order' ? [DIAG_FEE_LINE()] : []),
       ],
     }
     pushPrefill(prefill, dest)
@@ -1998,7 +2004,7 @@ export default function HDQuickWrenchPage() {
           amount: 0, amount_max: 0,
         },
         ...buildRepairLines(),
-        ...(includeDiagFee && dest !== 'invoice' ? [DIAG_FEE_LINE()] : []),
+        ...(includeDiagFee && dest === 'work_order' ? [DIAG_FEE_LINE()] : []),
       ],
     }
     pushPrefill(prefill, dest)
@@ -2016,7 +2022,7 @@ export default function HDQuickWrenchPage() {
       ...diagFeeFields(dest),
       lineItems: [
         ...payload.lineItems,
-        ...(includeDiagFee && dest !== 'invoice' ? [DIAG_FEE_LINE()] : []),
+        ...(includeDiagFee && dest === 'work_order' ? [DIAG_FEE_LINE()] : []),
       ],
     }, dest)
   }

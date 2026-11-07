@@ -1,5 +1,6 @@
 import { createServiceClient } from '@/lib/supabase/service'
 import type { Address } from '@/lib/address'
+import { sameStreet } from '@/lib/hd/address-print'
 
 const ADDRESS_KEYS = ['address_line1', 'address_line2', 'city', 'state', 'zip'] as const
 
@@ -50,6 +51,8 @@ function addressColumns(address: Partial<Address> | null | undefined): Record<st
     const v = address[k]
     if (typeof v === 'string' && v.trim()) out[k] = v.trim()
   }
+  // A line 2 that only repeats line 1 is never written (lib/hd/address-print).
+  if (out.address_line2 && sameStreet(address.address_line1, out.address_line2)) delete out.address_line2
   return out
 }
 

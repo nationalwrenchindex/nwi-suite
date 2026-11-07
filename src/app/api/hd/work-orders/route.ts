@@ -4,7 +4,7 @@ import { checkHDStarterAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { insertWithWorkOrderNumber } from '@/lib/work-order-number'
 import { loadHdShopExtras } from '@/lib/hd/hd-extras-load'
 import { workOrderDefaultColumns } from '@/lib/hd/work-order-extras'
-import { unitIdentityFill } from '@/lib/hd/unit-hours'
+import { isMissingReadingColumn, readingsFromBody, unitIdentityFill, withoutMissingReadings } from '@/lib/hd/unit-hours'
 import { isMissingServiceCallColumn, withoutServiceCall } from '@/lib/hd/hd-extras'
 import { WORK_ORDER_LIST_SELECT, WORK_ORDER_PAGE_SIZE } from './list'
 
@@ -94,6 +94,11 @@ export async function POST(req: NextRequest) {
     if (!acct) return NextResponse.json({ error: 'That fleet account was not found in your accounts.' }, { status: 400 })
   }
 
+  // The readings at the time of service (179 hours, 183 odometer), sent by a
+  // QuickWrench push. Only the keys sent; an unparseable value is refused.
+  const readings = readingsFromBody(body)
+  if ('error' in readings) return NextResponse.json({ error: readings.error }, { status: 400 })
+
   const durationRaw = body.estimated_duration_hours
   const estimated_duration_hours =
     typeof durationRaw === 'number' ? durationRaw
@@ -135,14 +140,24 @@ export async function POST(req: NextRequest) {
       zip:                      str(body.zip),
       estimated_duration_hours,
       ...defaults,
+      ...readings.update,
     }
     // The linked unit's number, make, model and serial, recorded on the work order
     // where the form sent none - frozen there, never read live off the unit later.
     Object.assign(row, unitIdentityFill(row, linkedUnit))
     const insert = (r: Record<string, unknown>) => supabase.from('hd_work_orders').insert(r).select('id, work_order_number, scheduled_at').single()
-    const res = await insert(row)
+    let first = row
+    let res = await insert(first)
+    // A reading column the database lacks: a reading that was sent is refused, never
+    // dropped silently; an unsent one is simply left off.
+    if (res.error && isMissingReadingColumn(res.error)) {
+      const r = withoutMissingReadings(first, res.error)
+      if ('error' in r) return { data: null, error: { message: r.error, code: 'READING_COLUMN' } } as unknown as typeof res
+      first = r.row
+      res = await insert(first)
+    }
     // Before migration 178 the work order has no service call columns.
-    return res.error && isMissingServiceCallColumn(res.error) ? insert(withoutServiceCall(row)) : res
+    return res.error && isMissingServiceCallColumn(res.error) ? insert(withoutServiceCall(first)) : res
   })
 
   if (error) {

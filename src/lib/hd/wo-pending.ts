@@ -1,8 +1,8 @@
 // ─── Unsaved edits on the HD work order screen ────────────────────────────────
 //
 // The work order screen is several cards that each save their own part: the parts and
-// labor lines; drive time / mileage / the service call fee; the unit hours and the
-// odometer. "+ Create Invoice"
+// labor lines; drive time / mileage / the service call fee; the discount; the unit
+// hours and the odometer. "+ Create Invoice"
 // converts what is STORED. So anything typed and not yet saved on any card was left
 // off the bill without a word - WO-2026-1571 typed 1.0 h of drive time and 50 miles,
 // and INV-2026-0027 billed neither. The quote never had this: it is one form and one
@@ -10,11 +10,13 @@
 //
 // Each card registers what it has unsaved and how to save it. Saving the lines saves
 // the typed fees with them, and Create Invoice saves everything pending before it
-// converts - lines first, because shop supplies is a percentage of the saved parts.
+// converts, in ORDER below: lines first, because shop supplies is a percentage of the
+// saved parts and the discount is priced on the saved lines; then the fees; then the
+// discount; then the two readings, which depend on nothing and save last.
 //
 // Browser-only state, keyed by work order id. No React here, so either card can use it.
 
-export type PendingCard = 'lines' | 'extras' | 'hours' | 'odometer'
+export type PendingCard = 'lines' | 'extras' | 'discount' | 'hours' | 'odometer'
 
 interface Entry {
   /** True while the card holds edits the server does not have. */
@@ -42,7 +44,7 @@ export function pendingCards(workOrderId: string): PendingCard[] {
   return cards ? [...cards.entries()].filter(([, e]) => e.dirty()).map(([k]) => k) : []
 }
 
-const ORDER: PendingCard[] = ['lines', 'extras', 'hours', 'odometer']
+export const PENDING_ORDER: PendingCard[] = ['lines', 'extras', 'discount', 'hours', 'odometer']
 
 /**
  * Save every card with unsaved edits, lines first. Stops at the first failure and
@@ -51,7 +53,7 @@ const ORDER: PendingCard[] = ['lines', 'extras', 'hours', 'odometer']
 export async function flushPending(workOrderId: string, only?: PendingCard[]): Promise<string | null> {
   const cards = registry.get(workOrderId)
   if (!cards) return null
-  for (const card of ORDER) {
+  for (const card of PENDING_ORDER) {
     if (only && !only.includes(card)) continue
     const e = cards.get(card)
     if (!e || !e.dirty()) continue

@@ -30,6 +30,12 @@ async function main() {
 
   const cases: Array<{ input: string; want: Partial<ReturnType<typeof parseAddress>>; why: string }> = [
     {
+      // INV-2026-0029 (Nov 6): the printed doubled line, pasted back, must not re-double.
+      input: '123 sesame st., 123 sesame st., Winston salem, NC, 27105',
+      want: { address_line1: '123 sesame st.', address_line2: null, city: 'Winston salem', state: 'NC', zip: '27105' },
+      why: 'a street repeated as line 2 is one street',
+    },
+    {
       input: '2140 Fiddlers Ct, Apt B, Winston-Salem, NC 27107',
       want: { address_line1: '2140 Fiddlers Ct', address_line2: 'Apt B', city: 'Winston-Salem', state: 'NC', zip: '27107' },
       why: 'fully comma separated',

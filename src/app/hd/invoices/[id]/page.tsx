@@ -17,6 +17,7 @@ import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
 import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
 import { discountPrintLabel, parseDiscount } from '@/lib/document-discount'
 import { invoiceJobGroups } from '@/lib/hd/work-order-jobs'
+import { addressLine } from '@/lib/hd/address-print'
 import { Fragment } from 'react'
 
 const ORANGE = '#FF6600'
@@ -247,13 +248,13 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                 {inv.address_line1 && (
                   <p className="text-sm mt-1" style={{ color: 'var(--paper-muted)' }}>
                     {inv.has_corp_address && <span style={{ color: 'var(--paper-muted)' }}>Billing: </span>}
-                    {[inv.address_line1, inv.address_line2, [inv.city, inv.state].filter(Boolean).join(', '), inv.zip].filter(Boolean).join(', ')}
+                    {addressLine(inv.address_line1, inv.address_line2, inv.city, inv.state, inv.zip)}
                   </p>
                 )}
                 {inv.has_corp_address && inv.corp_address_line1 && (
                   <p className="text-sm" style={{ color: 'var(--paper-muted)' }}>
                     <span style={{ color: 'var(--paper-muted)' }}>Service: </span>
-                    {[inv.corp_address_line1, inv.corp_address_line2, [inv.corp_city, inv.corp_state].filter(Boolean).join(', '), inv.corp_zip].filter(Boolean).join(', ')}
+                    {addressLine(inv.corp_address_line1, inv.corp_address_line2, inv.corp_city, inv.corp_state, inv.corp_zip)}
                   </p>
                 )}
                 {inv.customer_phone && <p className="text-sm mt-1" style={{ color: 'var(--paper-muted)' }}>{inv.customer_phone}</p>}

@@ -16,7 +16,8 @@ import {
 import { hoursText, sameOperationName } from '@/lib/hd/labor-cards'
 import FeeInput from '@/components/hd/FeeInput'
 import { useTaxSettings } from '@/lib/use-tax-settings'
-import { useHdFeeSettings, shopHdLaborRate } from '@/lib/hd/use-fee-settings'
+import { useHdFeeSettings, shopHdLaborRate, shopHdDiagnosticFee } from '@/lib/hd/use-fee-settings'
+import { doubleDiagnosticProblem, isDiagnosticChargeLine } from '@/lib/hd/diagnostic-charge'
 import { NO_HD_LABOR_RATE } from '@/lib/hd/labor-rate'
 import { taxDisplayRows, parseBreakdown } from '@/lib/tax'
 import { hdDocumentTax, hdTaxableBase, savedDocumentTax } from '@/lib/hd/document-tax'
@@ -30,6 +31,7 @@ import { termsDisplay } from '@/lib/hd/payment-terms'
 import { documentExtras } from '@/lib/document-money'
 import { discountPrintLabel, parseDiscount } from '@/lib/document-discount'
 import { hdApplyDiscount } from '@/lib/hd/hd-discount'
+import { addressLine } from '@/lib/hd/address-print'
 import {
   DiscountEditor, draftFrom, discountFromDraft, type DiscountDraft,
 } from '@/components/shared/DiscountEditor'
@@ -433,6 +435,11 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
   // nothing gets no charge it never agreed to. The road call fee does NOT auto-tick -
   // whether a job was a road call is a fact about that job, not a standing policy.
   const feeSettings = useHdFeeSettings()
+  // True once a QuickWrench / guided hand-off said whether to charge the diagnostic fee.
+  // Its answer stands: the Settings seed below never re-ticks a fee the hand-off left off.
+  const diagFromHandoff = useRef(false)
+  // The deliberate second tick: a diagnostic labor line AND the fee, on purpose.
+  const [bothDiagConfirmed, setBothDiagConfirmed] = useState(false)
   // True once the tech types a rate. A typed rate is never overwritten by the seed.
   const rateTyped = useRef(false)
   useEffect(() => {
@@ -445,7 +452,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
     setForm(f => {
       const next = { ...f }
       if (seedRate != null && f.labor_rate === 0) next.labor_rate = seedRate
-      if (feeSettings.diagnosticFee != null && f.diagnostic_fee === 0) {
+      if (feeSettings.diagnosticFee != null && f.diagnostic_fee === 0 && !diagFromHandoff.current) {
         next.diagnostic_fee = feeSettings.diagnosticFee
         next.include_diagnostic = true
       }
@@ -551,6 +558,9 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
         /** Taken at the point the VIN was entered in QuickWrench. */
         vehicle_odometer?: number | string | null
         unit_hours?: number | string | null
+        /** The hand-off's diagnostic fee decision (lib/hd/diagnostic-charge). */
+        include_diagnostic?: boolean
+        diagnostic_fee?: number | null
         lineItems?: Array<{
           description: string
           book_hours: number; book_hours_max: number
@@ -562,7 +572,16 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
       // shop's HD rate from Settings, read here. No rate set anywhere: the lines arrive
       // unpriced and the rate box says so - never a stand-in 125.
       const sent = Number.isFinite(prefill.labor_rate) && (prefill.labor_rate as number) > 0 ? prefill.labor_rate as number : null
+      // Said BEFORE the first await, so the Settings seed cannot tick the fee meanwhile.
+      const diagDecided = typeof prefill.include_diagnostic === 'boolean'
+      if (diagDecided) diagFromHandoff.current = true
       const rate = sent ?? await shopHdLaborRate() ?? 0
+      // Asked for with no figure (the guided diagnostic): the shop's own fee, else one
+      // hour at the rate - what this hand-off billed as a labor line before.
+      const sentFee = Number(prefill.diagnostic_fee)
+      const diagFee = prefill.include_diagnostic
+        ? (Number.isFinite(sentFee) && sentFee > 0 ? sentFee : (await shopHdDiagnosticFee()) ?? rate)
+        : 0
       setForm(f => ({
         ...f,
         ...(prefill.complaint ? { complaint:  prefill.complaint  } : {}),
@@ -578,6 +597,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
         ...(prefill.vin         ? { vin:         prefill.vin         } : {}),
         ...(prefill.vehicle_odometer != null && String(prefill.vehicle_odometer).trim() !== '' ? { vehicle_odometer: String(prefill.vehicle_odometer) } : {}),
         ...(prefill.unit_hours != null && String(prefill.unit_hours).trim() !== '' ? { unit_hours: String(prefill.unit_hours) } : {}),
+        ...(diagDecided ? { include_diagnostic: !!prefill.include_diagnostic && diagFee > 0, diagnostic_fee: diagFee } : {}),
         labor_rate: rate,
       }))
       if (prefill.lineItems?.length) {
@@ -859,8 +879,8 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
     }))
   }
 
-  const billingAddr = [form.address_line1, form.address_line2, [form.city, form.state].filter(Boolean).join(', '), form.zip].filter(Boolean).join(', ')
-  const serviceAddr = [form.corp_address_line1, form.corp_address_line2, [form.corp_city, form.corp_state].filter(Boolean).join(', '), form.corp_zip].filter(Boolean).join(', ')
+  const billingAddr = addressLine(form.address_line1, form.address_line2, form.city, form.state, form.zip)
+  const serviceAddr = addressLine(form.corp_address_line1, form.corp_address_line2, form.corp_city, form.corp_state, form.corp_zip)
 
   // ── Gemini labor suggestions ───────────────────────────────────────────────
   const isTruckUnit = !!(form.truck_make.trim() || form.truck_model.trim() || form.truck_year.trim() || (form.vin.trim() && !form.unit_manufacturer.trim()))
@@ -922,6 +942,8 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
   const subtotalLabor = lineItems.filter(i => i.type === 'labor').reduce((s, i) => s + i.amount, 0)
   const subtotalParts = lineItems.filter(i => i.type === 'parts').reduce((s, i) => s + i.amount, 0)
   const diagFee       = form.include_diagnostic ? form.diagnostic_fee : 0
+  const diagLaborLines = lineItems.filter(isDiagnosticChargeLine).length
+  const doubleDiagnostic = doubleDiagnosticProblem({ includeFee: form.include_diagnostic, fee: form.diagnostic_fee, lines: lineItems, bothConfirmed: bothDiagConfirmed })
   const roadFee       = form.include_road_call  ? form.road_call_fee  : 0
   const callFee       = serviceCallAvailable && form.include_service_call ? form.service_call_fee : 0
   // In the labor bucket unless the shop (or this quote) says it is not taxed.
@@ -1370,6 +1392,8 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
     // Refuse rather than bill a figure that does not add up. Loud on purpose.
     if (extrasMismatch) { setToast('Cannot save: ' + extrasMismatch); return }
     if (discountError) { setToast('Cannot save: ' + discountError); return }
+    // One diagnostic charge unless the tech ticked "Bill both" (lib/hd/diagnostic-charge).
+    if (doubleDiagnostic) { setToast('Cannot save: ' + doubleDiagnostic); return }
     setSaving(true)
     try {
       const body = {
@@ -1851,6 +1875,17 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                   onChange={n => setField('diagnostic_fee', n)}
                 />
               </div>
+              {/* The fee AND a diagnostic labor line: never by accident. Saving is off until
+                  one goes, or the tech ticks this box saying both are meant. */}
+              {form.include_diagnostic && form.diagnostic_fee > 0 && diagLaborLines > 0 && (
+                <div role="alert" data-testid="quote-double-diagnostic" className="mt-2 rounded-lg px-3 py-2 text-xs" style={{ background: '#FFFBEB', border: '1px solid #FCD34D', color: '#92400E' }}>
+                  <p className="font-semibold">{`Diagnostic charged twice: this fee and ${diagLaborLines === 1 ? 'a labor line' : `${diagLaborLines} labor lines`} named as a diagnostic charge.`}</p>
+                  <label className="flex items-center gap-2 mt-1 cursor-pointer">
+                    <input type="checkbox" checked={bothDiagConfirmed} onChange={e => setBothDiagConfirmed(e.target.checked)} className="w-4 h-4 rounded" style={{ accentColor: ORANGE }} />
+                    <span>Bill both - I mean to charge the diagnosis twice</span>
+                  </label>
+                </div>
+              )}
               {/* Only while the shop has no configured fee. Once HD Settings holds one
                   the box ticks itself at that value and this note is wrong, so it goes.
                   feesAvailable is false when migration 156 has not been applied, and

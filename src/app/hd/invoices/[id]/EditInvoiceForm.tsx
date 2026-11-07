@@ -14,6 +14,7 @@ import {
   invoiceDoesNotAddUp, doesNotAddUpMessage, correctionBody, type InvoiceEditState,
 } from '@/lib/hd/invoice-edit-save'
 import { discountPrintLabel } from '@/lib/document-discount'
+import { readingEditBody } from '@/lib/hd/unit-hours'
 import {
   DiscountEditor, draftFrom, discountFromDraft, type DiscountDraft,
 } from '@/components/shared/DiscountEditor'
@@ -95,6 +96,15 @@ export default function EditInvoiceForm({ invoice, shopLaborRate, shop = null }:
   ) as FormFields)
   // The discount it recorded (migration 168), as the editor's four answers.
   const [discountDraft, setDiscountDraft] = useState<DiscountDraft>(() => draftFrom(opened.state.discount))
+  // The readings at the time of service (179 hours, 183 odometer), as this invoice
+  // recorded them. Frozen on the invoice: never read from the unit record or the work
+  // order here, only corrected by hand. Sent only when changed.
+  const hasHours = 'unit_hours' in invoice
+  const hasOdometer = 'vehicle_odometer' in invoice
+  const openedHours = invoice.unit_hours == null ? '' : String(Number(invoice.unit_hours))
+  const openedOdometer = invoice.vehicle_odometer == null ? '' : String(Number(invoice.vehicle_odometer))
+  const [unitHours, setUnitHours] = useState(openedHours)
+  const [odometer, setOdometer] = useState(openedOdometer)
   function setField(k: keyof FormFields, v: string | number) { setForm(f => ({ ...f, [k]: v })) }
   function fmt(n: number) { return `${money(n)}` }
   // NULL only when the invoice recorded no rate and the shop has none set either.
@@ -166,7 +176,10 @@ export default function EditInvoiceForm({ invoice, shopLaborRate, shop = null }:
     if (extrasMismatch) { setToast('Cannot save: ' + extrasMismatch); return }
     if (price.discountError) { setToast('Cannot save: ' + price.discountError); return }
     // Only the fields this edit changed. Nothing changed means nothing is written.
-    const body = invoiceSaveBody(invoice, opened, edited)
+    const body = {
+      ...invoiceSaveBody(invoice, opened, edited),
+      ...readingEditBody({ unit_hours: [openedHours, unitHours], vehicle_odometer: [openedOdometer, odometer] }),
+    }
     if (Object.keys(body).length === 0) { router.push(`/hd/invoices/${id}`); return }
     setSaving(true)
     try {
@@ -227,6 +240,19 @@ export default function EditInvoiceForm({ invoice, shopLaborRate, shop = null }:
             <Field label="Manufacturer"><input style={inp} value={form.unit_manufacturer} onChange={e => setField('unit_manufacturer', e.target.value)} /></Field>
             <Field label="Model"><input style={inp} value={form.unit_model} onChange={e => setField('unit_model', e.target.value)} /></Field>
             <Field label="Serial"><input style={inp} value={form.unit_serial} onChange={e => setField('unit_serial', e.target.value)} /></Field>
+          </div>
+          {/* The readings this invoice records. Blank = none, and the invoice prints none. */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-4">
+            <Field label="Unit Hours">
+              {hasHours
+                ? <input style={inp} value={unitHours} onChange={e => setUnitHours(e.target.value)} placeholder="Hour meter (optional)" inputMode="decimal" data-testid="inv-edit-unit-hours" />
+                : <span className="text-sm" style={{ color: MUTED }}>Needs migration 179</span>}
+            </Field>
+            <Field label="Odometer (miles)">
+              {hasOdometer
+                ? <input style={inp} value={odometer} onChange={e => setOdometer(e.target.value)} placeholder="Truck / trailer miles (optional)" inputMode="numeric" data-testid="inv-edit-odometer" />
+                : <span className="text-sm" style={{ color: MUTED }}>Needs migration 183</span>}
+            </Field>
           </div>
         </div>
 

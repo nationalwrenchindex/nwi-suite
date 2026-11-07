@@ -139,3 +139,19 @@ export function withoutMissingReadings(row: Record<string, unknown>, error: unkn
   }
   return { row: out }
 }
+
+/**
+ * The readings an EDIT changed, for a document editor's save body: only a column whose
+ * text differs from what the document opened with, so an untouched reading is never
+ * rewritten. Values go as typed; the route parses them (readingsFromBody).
+ */
+export function readingEditBody(fields: Partial<Record<typeof READING_COLUMNS[number], [opened: string, now: string]>>): Record<string, string | null> {
+  const out: Record<string, string | null> = {}
+  for (const k of READING_COLUMNS) {
+    const f = fields[k]
+    if (!f) continue
+    const was = f[0].trim(), now = f[1].trim()
+    if (was !== now) out[k] = now === '' ? null : now
+  }
+  return out
+}

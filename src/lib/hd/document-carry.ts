@@ -1,3 +1,5 @@
+import { distinctLine2 } from '@/lib/hd/address-print'
+
 // What travels between HD documents that the money converters do not carry.
 //
 // None of this is money. quote-approval.ts and wo-to-invoice.ts carry every price, rate,
@@ -25,7 +27,7 @@ const text = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
 export function serviceLocationFromQuote(quote: Record<string, unknown>): string {
   const useCorp = Boolean(quote.has_corp_address)
   const line1 = useCorp ? quote.corp_address_line1 : quote.address_line1
-  const line2 = useCorp ? quote.corp_address_line2 : quote.address_line2
+  const line2 = distinctLine2(line1, useCorp ? quote.corp_address_line2 : quote.address_line2)
   const city  = useCorp ? quote.corp_city  : quote.city
   const state = useCorp ? quote.corp_state : quote.state
   const zip   = useCorp ? quote.corp_zip   : quote.zip
