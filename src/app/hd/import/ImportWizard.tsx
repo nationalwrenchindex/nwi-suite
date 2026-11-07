@@ -2,7 +2,7 @@
 
 import { useState, useRef } from 'react'
 import Link from 'next/link'
-import { textTone, tint } from '@/lib/hd/text-tone'
+import { textTone, tint, ON_FILL } from '@/lib/hd/text-tone'
 
 const HD_ORANGE = '#E85D24'
 
@@ -168,7 +168,7 @@ function StepIndicator({ step }: { step: Step }) {
                 className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
                 style={{
                   background: done ? '#22C55E' : current ? HD_ORANGE : 'var(--hd-border)',
-                  color: textTone(done || current ? 'white' : 'var(--hd-text-faint)'),
+                  color: done || current ? ON_FILL : textTone('var(--hd-text-faint)'),
                 }}
               >
                 {done ? '✓' : i + 1}

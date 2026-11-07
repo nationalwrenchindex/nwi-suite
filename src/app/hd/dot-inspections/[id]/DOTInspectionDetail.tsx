@@ -48,7 +48,7 @@ interface DOTInspection {
 const RESULT_CFG = {
   pass: { label: 'PASS', color: 'var(--hd-positive)', bg: '#22C55E20', border: '#22C55E50' },
   fail: { label: 'FAIL', color: 'var(--hd-negative)', bg: '#EF444420', border: '#EF444450' },
-  na:   { label: 'N/A',  color: '#6B7280', bg: '#6B728020', border: '#6B728050' },
+  na:   { label: 'N/A',  color: 'var(--hd-text-faint)', bg: '#6B728020', border: '#6B728050' },
 }
 
 function ResultBadge({ result }: { result: string }) {

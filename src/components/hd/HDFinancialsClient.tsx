@@ -143,14 +143,14 @@ const INVOICE_STATUS: Record<HDInvoice['status'], StatusCfg> = {
   sent:    { label: 'Sent',    color: 'var(--hd-info)', bg: '#60A5FA20' },
   paid:    { label: 'Paid',    color: 'var(--hd-positive)', bg: '#22C55E20' },
   partial: { label: 'Partial', color: 'var(--hd-warn)', bg: '#F59E0B20' },
-  void:    { label: 'Void',    color: '#6B7280', bg: '#6B728020' },
+  void:    { label: 'Void',    color: 'var(--hd-text-faint)', bg: '#6B728020' },
   // Deeper red than unpaid (#EF4444) plus a heavier background tint, so overdue
   // reads as an escalation of unpaid rather than a different colour of the same thing.
   overdue: { label: 'Overdue', color: 'var(--hd-negative)', bg: '#DC262640' },
 }
 
 const QUOTE_STATUS: Record<HDQuote['status'], StatusCfg> = {
-  draft:    { label: 'Draft',    color: '#6B7280', bg: '#6B728020' },
+  draft:    { label: 'Draft',    color: 'var(--hd-text-faint)', bg: '#6B728020' },
   sent:     { label: 'Sent',     color: 'var(--hd-info)', bg: '#60A5FA20' },
   approved: { label: 'Approved', color: 'var(--hd-positive)', bg: '#22C55E20' },
   declined: { label: 'Declined', color: 'var(--hd-negative)', bg: '#EF444420' },
@@ -165,7 +165,7 @@ const QUOTE_STATUS: Record<HDQuote['status'], StatusCfg> = {
 // 'toString' returns an inherited member instead of undefined.
 function statusCfg(map: Record<string, StatusCfg>, status: string | null | undefined): StatusCfg {
   if (status && Object.prototype.hasOwnProperty.call(map, status)) return map[status]
-  return { label: status || 'Unknown', color: '#9CA3AF', bg: '#9CA3AF20' }
+  return { label: status || 'Unknown', color: 'var(--hd-text-faint)', bg: '#9CA3AF20' }
 }
 
 function ymd(d: Date) {

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { matchUnitBySerial } from '@/lib/hd/unit-match'
 import { shopHdLaborRate } from '@/lib/hd/use-fee-settings'
-import { textTone, tint } from '@/lib/hd/text-tone'
+import { textTone, tint, ON_FILL } from '@/lib/hd/text-tone'
 
 const HD_ORANGE = '#E85D24'
 const HD_BLUE   = '#1A6BAF'
@@ -329,7 +329,7 @@ export default function HDCalendarClient() {
           { label: 'Scheduled',  color: HD_BLUE   },
           { label: 'In Progress', color: 'var(--hd-accent-text)' },
           { label: 'Completed',  color: 'var(--hd-positive)'  },
-          { label: 'Cancelled',  color: '#6B7280'  },
+          { label: 'Cancelled',  color: 'var(--hd-text-faint)'  },
         ].map(l => (
           <span key={l.label} className="flex items-center gap-1.5" style={{ color: 'var(--hd-text-faint)' }}>
             <span className="w-2 h-2 rounded-full inline-block" style={{ background: l.color }} />
@@ -427,7 +427,7 @@ export default function HDCalendarClient() {
                               className="text-xs font-medium inline-flex items-center justify-center w-6 h-6 rounded-full mb-1"
                               style={{
                                 background: isToday ? HD_ORANGE : 'transparent',
-                                color: textTone(isToday ? '#fff' : isSelected ? HD_ORANGE : 'rgba(var(--hd-ink-rgb), 0.6)'),
+                                color: isToday ? ON_FILL : textTone(isSelected ? HD_ORANGE : 'rgba(var(--hd-ink-rgb), 0.6)'),
                                 fontWeight: isToday || isSelected ? 700 : 400,
                               }}
                             >
@@ -549,7 +549,7 @@ export default function HDCalendarClient() {
           >
             <div className="flex items-center justify-between px-5 pt-5 pb-3 shrink-0" style={{ borderBottom: '1px solid var(--hd-border)' }}>
               <h3 className="font-condensed font-bold text-xl text-white">BOOK A JOB</h3>
-              <button onClick={() => setBooking(false)} style={{ color: '#8a9bad' }}>
+              <button onClick={() => setBooking(false)} style={{ color: 'var(--hd-text-muted)' }}>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
               </button>
             </div>

@@ -176,7 +176,7 @@ export default function WorkOrderExtras({ workOrderId, locked }: { workOrderId: 
     return (
       <div className="rounded-xl p-5 mb-6" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
         <p className="font-condensed font-bold text-white text-sm tracking-widest">DRIVE TIME, MILEAGE &amp; FEES</p>
-        <p className="text-xs mt-2" style={{ color: error ? '#FBBF24' : 'var(--hd-text-muted)' }}>{error ?? 'Loading...'}</p>
+        <p className="text-xs mt-2" style={{ color: error ? 'var(--hd-warn)' : 'var(--hd-text-muted)' }}>{error ?? 'Loading...'}</p>
       </div>
     )
   }
@@ -281,8 +281,8 @@ export default function WorkOrderExtras({ workOrderId, locked }: { workOrderId: 
         )}
       </div>
 
-      {answer.discount_error && <p className="text-xs mt-2" style={{ color: '#FBBF24' }}>{answer.discount_error}</p>}
-      {error && <p className="text-xs mt-2" style={{ color: '#FBBF24' }}>{error}</p>}
+      {answer.discount_error && <p className="text-xs mt-2" style={{ color: 'var(--hd-warn)' }}>{answer.discount_error}</p>}
+      {error && <p className="text-xs mt-2" style={{ color: 'var(--hd-warn)' }}>{error}</p>}
       {note && !dirty && <p className="text-xs mt-2" style={{ color: 'var(--hd-text-muted)' }}>{note}</p>}
       {dirty && !locked && (
         <button type="button" onClick={save} disabled={saving}

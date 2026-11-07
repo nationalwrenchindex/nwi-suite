@@ -251,7 +251,7 @@ export default function ByEquipmentTab() {
                           )}
                         </td>
                         <td className="px-3 py-2.5 whitespace-nowrap text-white">{u.categoryName}</td>
-                        <td className="px-3 py-2.5 whitespace-nowrap" style={u.fleetName ? { color: '#fff' } : muted(0.35)}>{u.fleetName ?? '-'}</td>
+                        <td className="px-3 py-2.5 whitespace-nowrap" style={u.fleetName ? { color: 'var(--hd-text)' } : muted(0.35)}>{u.fleetName ?? '-'}</td>
                         <td className="px-3 py-2.5 text-right whitespace-nowrap" title={sourceNote(u)}>
                           <span className="text-white">{u.jobs}</span>
                           <span className="block text-[10px]" style={muted(0.35)}>{sourceBadge(u)}</span>

@@ -40,11 +40,20 @@ export default function OosPrompt({
 
   const faint = tone === 'hd' ? 'rgba(var(--hd-ink-rgb), 0.5)' : 'rgba(255,255,255,0.45)'
   const text  = tone === 'hd' ? 'rgba(var(--hd-ink-rgb), 0.85)' : '#ffffff'
+  // LIGHT MODE (Nov 6). The panel was a fixed near-black #1a0505 while its text follows
+  // the HD theme ink, so on the light theme it printed #1a1a1a on near-black - the
+  // question nobody could read sat on every failed DOT, aerial and equipment item. On
+  // HD the panel is now a red tint of the card and the reds and ambers are the theme's
+  // AA tokens. The LD tone is exactly as it was.
+  const hd = tone === 'hd'
+  const panelBg = hd ? 'color-mix(in srgb, var(--hd-negative) 10%, var(--hd-card))' : '#1a0505'
+  const red     = hd ? 'var(--hd-negative)' : '#EF4444'
+  const amber   = hd ? 'var(--hd-warn)' : '#F59E0B'
 
   return (
     <div
       className="px-4 py-3 space-y-2"
-      style={{ background: '#1a0505', borderTop: '1px solid #EF444440' }}
+      style={{ background: panelBg, borderTop: '1px solid #EF444440' }}
     >
       <div className="flex items-center gap-3 flex-wrap">
         <span className="text-xs font-semibold" style={{ color: text }}>
@@ -70,12 +79,12 @@ export default function OosPrompt({
           )
         })}
         {auto && !answered && (
-          <span className="text-[10px] font-semibold" style={{ color: '#EF4444' }}>
+          <span className="text-[10px] font-semibold" style={{ color: red }}>
             defaults to Yes on this checkpoint
           </span>
         )}
         {overridden && (
-          <span className="text-[10px] font-semibold" style={{ color: '#F59E0B' }}>
+          <span className="text-[10px] font-semibold" style={{ color: amber }}>
             overridden — this checkpoint normally goes out of service
           </span>
         )}
@@ -96,7 +105,7 @@ export default function OosPrompt({
       />
 
       {answered && !noteGiven && (
-        <p className="text-[11px]" style={{ color: '#EF4444' }}>
+        <p className="text-[11px]" style={{ color: red }}>
           A note is required on this decision.
         </p>
       )}

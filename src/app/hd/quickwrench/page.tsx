@@ -10,7 +10,7 @@ import PartsOnTheWay, { type PartInput } from '@/components/parts-delivery/Parts
 import PartText from '@/components/parts/PartText'
 import type { PartVendor } from '@/lib/parts/parse-part-numbers'
 import { money } from '@/lib/format'
-import { textTone, tint } from '@/lib/hd/text-tone'
+import { textTone, tint, ON_FILL } from '@/lib/hd/text-tone'
 
 // Best-effort parse of the Parts Manager result text into structured parts for
 // delivery. Each meaningful line → { name, oem } with any part-number token pulled out.
@@ -2906,7 +2906,7 @@ export default function HDQuickWrenchPage() {
                         className="flex-1 text-xs font-semibold transition-colors"
                         style={{
                           background: manufacturer === m ? HD_ORANGE : 'var(--hd-inner)',
-                          color:      textTone(manufacturer === m ? '#fff' : 'var(--hd-text-faint)'),
+                          color:      manufacturer === m ? ON_FILL : textTone('var(--hd-text-faint)'),
                           minHeight: 44,
                         }}
                       >
@@ -2928,7 +2928,7 @@ export default function HDQuickWrenchPage() {
                         className="flex-1 text-xs font-semibold transition-colors capitalize"
                         style={{
                           background: unitType === t ? HD_BLUE : 'var(--hd-inner)',
-                          color:      textTone(unitType === t ? '#fff' : 'var(--hd-text-faint)'),
+                          color:      unitType === t ? ON_FILL : textTone('var(--hd-text-faint)'),
                           minHeight: 44,
                         }}
                       >
@@ -3014,7 +3014,7 @@ export default function HDQuickWrenchPage() {
               {identifiedModel && (
                 <div className="rounded-lg px-4 py-3 flex items-center gap-2" style={{ background: 'color-mix(in srgb, var(--hd-positive) 14%, var(--hd-card))', border: '1px solid #1c5c34' }}>
                   <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: '#34D399' }} />
-                  <p className="text-sm font-medium" style={{ color: '#34D399' }}>
+                  <p className="text-sm font-medium" style={{ color: 'var(--hd-positive)' }}>
                     Unit identified — {identifiedModel}{identifiedRefrigerant ? `, ${identifiedRefrigerant}` : ''}
                   </p>
                 </div>
@@ -3361,7 +3361,7 @@ export default function HDQuickWrenchPage() {
                       className="text-xs font-semibold transition-colors px-1 leading-tight"
                       style={{
                         background: truckBrand === b ? HD_ORANGE : 'var(--hd-inner)',
-                        color:      textTone(truckBrand === b ? '#fff' : 'var(--hd-text-faint)'),
+                        color:      truckBrand === b ? ON_FILL : textTone('var(--hd-text-faint)'),
                         minHeight: 44,
                       }}
                     >
@@ -4019,8 +4019,8 @@ const CHIP_CONFIG: Record<string, { label: string; bg: string; color: string }> 
   donaldson:   { label: 'Donaldson',   bg: '#E85D2425', color: '#FB923C' },
   fleetguard:  { label: 'Fleetguard',  bg: '#EF444425', color: 'var(--hd-negative)' },
   wix:         { label: 'WIX',         bg: '#8B5CF625', color: '#A78BFA' },
-  dayco:       { label: 'Dayco',       bg: '#0EA5E925', color: '#38BDF8' },
-  continental: { label: 'Continental', bg: '#6B728025', color: '#9CA3AF' },
+  dayco:       { label: 'Dayco',       bg: '#0EA5E925', color: 'var(--hd-info)' },
+  continental: { label: 'Continental', bg: '#6B728025', color: 'var(--hd-text-faint)' },
   gates:       { label: 'Gates',       bg: '#1D4ED825', color: 'var(--hd-info)' },
 }
 

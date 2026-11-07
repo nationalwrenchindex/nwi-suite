@@ -19,7 +19,7 @@ import {
   collectDeficiencies, emptyData, hasCriticalDeficiency, overallResult, unansweredCount,
 } from '@/types/equipment'
 import SignaturePad from '@/components/hd/SignaturePad'
-import { textTone } from '@/lib/hd/text-tone'
+import { textTone, ON_FILL } from '@/lib/hd/text-tone'
 
 interface UnitOption { id: string; unit_number: string | null; manufacturer: string | null; model: string | null; serial_number?: string | null }
 
@@ -70,7 +70,7 @@ function ItemRow({
                 background: state.result === r
                   ? r === 'pass' ? '#22C55E' : r === 'fail' ? '#EF4444' : '#4B5563'
                   : 'var(--hd-inner)',
-                color: textTone(state.result === r ? '#fff' : 'var(--hd-text-faint)'),
+                color: state.result === r ? ON_FILL : textTone('var(--hd-text-faint)'),
               }}>
               {r === 'na' ? 'N/A' : r.toUpperCase()}
             </button>

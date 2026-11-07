@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { textTone, tint } from '@/lib/hd/text-tone'
+import { textTone, tint, ON_FILL } from '@/lib/hd/text-tone'
 import {
   SAFETY_ITEMS, CHECKLIST_SECTIONS, PM_TYPES,
   type ItemState, type PMTypeValue,
@@ -56,7 +56,7 @@ function StepBadge({ n, active, done }: { n: number; active: boolean; done: bool
       className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
       style={{
         background: done ? '#22C55E' : active ? HD_ORANGE : 'var(--hd-border)',
-        color:      textTone(done || active ? '#fff' : 'var(--hd-text-faint)'),
+        color:      done || active ? ON_FILL : textTone('var(--hd-text-faint)'),
       }}
     >
       {done ? '✓' : n}
@@ -711,7 +711,7 @@ export default function PMChecklistClient({
               className="flex-1 py-2.5 rounded-xl font-semibold text-sm transition-opacity"
               style={{
                 background: safetyComplete ? HD_ORANGE : 'var(--hd-border)',
-                color:      textTone(safetyComplete ? '#fff' : 'var(--hd-text-faint)'),
+                color:      safetyComplete ? ON_FILL : textTone('var(--hd-text-faint)'),
                 cursor:     safetyComplete ? 'pointer' : 'not-allowed',
               }}
             >

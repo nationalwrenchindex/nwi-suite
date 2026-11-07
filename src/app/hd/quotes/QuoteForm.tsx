@@ -2316,7 +2316,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
             {/* Modal header */}
             <div className="flex items-center justify-between px-5 pt-5 pb-3 shrink-0" style={{ borderBottom: `1px solid ${D_BORDER}` }}>
               <h3 className="font-condensed font-bold text-xl" style={{ color: 'var(--hd-text)' }}>ADD LABOR LINE</h3>
-              <button onClick={closeLaborModal} style={{ color: '#8a9bad' }}>
+              <button onClick={closeLaborModal} style={{ color: 'var(--hd-text-muted)' }}>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
                   <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
@@ -2328,7 +2328,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
 
               {/* Free-text description + live library/catalog results */}
               <div className="flex flex-col gap-1">
-                <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#8a9bad' }}>Labor Description</label>
+                <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--hd-text-muted)' }}>Labor Description</label>
                 <input
                   autoFocus
                   style={dInp}
@@ -2354,17 +2354,17 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                           onClick={() => selectLibraryItem(i)}
                           className="w-full text-left px-4 py-2.5 flex items-center gap-3"
                           style={{
-                            background: isSel ? '#1a2733' : 'transparent',
+                            background: isSel ? 'var(--hd-inner)' : 'transparent',
                             borderLeft: isSel ? `3px solid ${ORANGE}` : '3px solid transparent',
                             borderBottom: `1px solid ${D_BORDER}`,
                           }}
                         >
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate" style={{ color: isSel ? 'var(--paper-accent)' : '#FFFFFF' }}>
-                              {i.labor_code && <span className="font-mono text-xs mr-2" style={{ color: '#8a9bad' }}>{i.labor_code}</span>}
+                            <p className="text-sm font-medium truncate" style={{ color: isSel ? 'var(--paper-accent)' : 'var(--hd-text)' }}>
+                              {i.labor_code && <span className="font-mono text-xs mr-2" style={{ color: 'var(--hd-text-muted)' }}>{i.labor_code}</span>}
                               {i.description}
                             </p>
-                            <p className="text-xs mt-0.5" style={{ color: '#8a9bad' }}>
+                            <p className="text-xs mt-0.5" style={{ color: 'var(--hd-text-muted)' }}>
                               {`Field: ${fieldT || '—'}`} &nbsp;&bull;&nbsp; {`Shop: ${shopT || '—'}`}
                             </p>
                           </div>
@@ -2377,7 +2377,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                     })}
 
                     {libTrimmed && (
-                      <p className="px-4 py-2 text-xs" style={{ color: '#92400e', borderBottom: `1px solid ${D_BORDER}` }}>
+                      <p className="px-4 py-2 text-xs" style={{ color: 'var(--hd-warn)', borderBottom: `1px solid ${D_BORDER}` }}>
                         {`Your library: ${libTrimmed}`}
                       </p>
                     )}
@@ -2392,19 +2392,19 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                           onClick={() => selectGuideItem(item)}
                           className="w-full text-left px-4 py-2.5 flex items-center gap-3"
                           style={{
-                            background: isSel ? '#1a2733' : 'transparent',
+                            background: isSel ? 'var(--hd-inner)' : 'transparent',
                             borderLeft: isSel ? `3px solid ${ORANGE}` : '3px solid transparent',
                             borderBottom: `1px solid ${D_BORDER}`,
                           }}
                         >
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium truncate" style={{ color: isSel ? 'var(--paper-accent)' : '#FFFFFF' }}>{item.label}</p>
-                            <p className="text-xs mt-0.5" style={{ color: '#8a9bad' }}>
+                            <p className="text-sm font-medium truncate" style={{ color: isSel ? 'var(--paper-accent)' : 'var(--hd-text)' }}>{item.label}</p>
+                            <p className="text-xs mt-0.5" style={{ color: 'var(--hd-text-muted)' }}>
                               Book: {fmtHrs(item.book_min, item.book_max, item.shop_only)}
                               &nbsp;&bull;&nbsp;
                               Mobile: {fmtHrs(item.mobile_min, item.mobile_max, item.shop_only)}
                               {item.requires_refrigeration && (
-                                <span className="ml-2 font-semibold" style={{ color: '#1d4ed8' }}>❄ Refrig.</span>
+                                <span className="ml-2 font-semibold" style={{ color: 'var(--hd-info)' }}>❄ Refrig.</span>
                               )}
                             </p>
                           </div>
@@ -2412,14 +2412,14 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                       )
                     })}
                     {guideTrimmed && (
-                      <p className="px-4 py-2 text-xs" style={{ color: '#92400e' }}>
+                      <p className="px-4 py-2 text-xs" style={{ color: 'var(--hd-warn)' }}>
                         {`Labor guide: ${guideTrimmed}`}
                       </p>
                     )}
                   </div>
                 )}
                 {sameNameCard && (
-                  <p className="text-xs mt-1" style={{ color: '#92400e' }}>
+                  <p className="text-xs mt-1" style={{ color: 'var(--hd-warn)' }}>
                     {`You already have a card named this (${sameNameCard.labor_code ?? 'no code'}).`}
                   </p>
                 )}
@@ -2434,7 +2434,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                   it. "+ add a range" is for the jobs that genuinely have a spread. */}
               <div className="flex flex-col gap-1">
                 <div className="flex items-end justify-between gap-3">
-                  <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: '#8a9bad' }}>
+                  <label className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--hd-text-muted)' }}>
                     Hours (billed)
                   </label>
                   {/* Hidden while the recharge add-on is on: it forces a range, and
@@ -2454,7 +2454,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                         }
                       }}
                       className="text-xs font-semibold"
-                      style={{ color: '#1d4ed8', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+                      style={{ color: 'var(--hd-info)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
                     >
                       {laborRange ? 'use one number' : '+ add a range'}
                     </button>
@@ -2478,7 +2478,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                   />
                   {laborRange && (
                     <>
-                      <span style={{ color: '#8a9bad', fontSize: 12 }}>to</span>
+                      <span style={{ color: 'var(--hd-text-muted)', fontSize: 12 }}>to</span>
                       <input
                         type="number"
                         min={0}
@@ -2489,12 +2489,12 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                       />
                     </>
                   )}
-                  <span className="text-xs" style={{ color: '#8a9bad' }}>
+                  <span className="text-xs" style={{ color: 'var(--hd-text-muted)' }}>
                     hrs
                     {/* Book time, as reference. Only present when a library or guide
                         job supplied one - a hand-typed job has none, and the old form
                         invented 1.0 for it. */}
-                    {bookRefText && <span className="ml-2" style={{ color: '#6b7a8c' }}>{bookRefText}</span>}
+                    {bookRefText && <span className="ml-2" style={{ color: 'var(--hd-text-faint)' }}>{bookRefText}</span>}
                   </span>
                 </div>
                 {pickedShopOnly && (
@@ -2526,7 +2526,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                     <p className="text-sm font-semibold" style={{ color: 'var(--hd-info)' }}>
                       Separate refrigeration service line will be added
                     </p>
-                    <p className="text-xs mt-0.5" style={{ color: '#8a9bad' }}>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--hd-text-muted)' }}>
                       Refrigeration Service{laborRefrig.service ? ` ${laborRefrig.service}` : ''} — {laborRefrig.hours} hrs, billed as its own line (not added to base hours)
                     </p>
                   </div>
@@ -2548,7 +2548,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                   />
                   <div>
                     <p className="text-sm font-semibold" style={{ color: 'var(--hd-info)' }}>Add refrigeration recovery &amp; recharge</p>
-                    <p className="text-xs mt-0.5" style={{ color: '#8a9bad' }}>Adds 1.5 to 2.5 hrs to mobile field time</p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--hd-text-muted)' }}>Adds 1.5 to 2.5 hrs to mobile field time</p>
                   </div>
                 </label>
               )}
@@ -2567,7 +2567,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
               {/* Save to library - not offered for a card picked from it, unchanged: that
                   line is the card, and saving it again would make a copy. */}
               {pickedUnchanged && laborPicked ? (
-                <p className="text-sm" style={{ color: '#c9d5e0' }}>
+                <p className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.85)' }}>
                   {laborPicked.is_master
                     ? `From the NWI labor catalog, ${laborPicked.labor_code ?? 'no code'}`
                     : `From your library, ${laborPicked.labor_code ?? 'no code'}`}
@@ -2581,7 +2581,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                     className="w-4 h-4 rounded"
                     style={{ accentColor: ORANGE }}
                   />
-                  <span className="text-sm" style={{ color: '#c9d5e0' }}>Save to my labor library as a new card</span>
+                  <span className="text-sm" style={{ color: 'rgba(var(--hd-ink-rgb), 0.85)' }}>Save to my labor library as a new card</span>
                 </label>
               )}
 
@@ -2600,13 +2600,13 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                   {laborMath()}
                 </p>
                 {laborRecharge && (
-                  <p className="text-xs mt-1" style={{ color: '#8a9bad' }}>
+                  <p className="text-xs mt-1" style={{ color: 'var(--hd-text-muted)' }}>
                     includes the refrigeration recovery &amp; recharge add-on
                     ({baseMobileMin} hrs + 1.5 to 2.5)
                   </p>
                 )}
                 {bookRefText && (
-                  <p className="text-xs mt-1" style={{ color: '#6b7a8c' }}>
+                  <p className="text-xs mt-1" style={{ color: 'var(--hd-text-faint)' }}>
                     {bookRefText} — reference only, nothing bills from it
                   </p>
                 )}
@@ -2624,7 +2624,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
               <button
                 onClick={closeLaborModal}
                 className="flex-1 py-2.5 rounded-lg font-semibold text-sm"
-                style={{ background: D_INPUT_BG, color: '#c9d5e0', border: `1px solid ${D_BORDER}` }}
+                style={{ background: D_INPUT_BG, color: 'rgba(var(--hd-ink-rgb), 0.85)', border: `1px solid ${D_BORDER}` }}
               >
                 Cancel
               </button>

@@ -241,11 +241,11 @@ export default function PartsOnTheWay({
           {screen === 'coming_soon' && (
             <div className="text-center py-6 flex flex-col gap-3">
               <div className="text-4xl">🚚</div>
-              <p className="font-condensed font-bold text-xl text-white">Parts on the Way — Coming Soon</p>
+              <p className="font-condensed font-bold text-xl text-on-fill">Parts on the Way — Coming Soon</p>
               <p className="text-sm" style={{ color: '#c9d5e0' }}>
                 We&apos;re finalizing our delivery partner integration. This feature will let you get parts delivered to your job site in under an hour.
               </p>
-              <button onClick={onClose} className="mt-2 mx-auto px-6 py-2.5 rounded-lg font-semibold text-sm text-white" style={{ background: ORANGE }}>Got It</button>
+              <button onClick={onClose} className="mt-2 mx-auto px-6 py-2.5 rounded-lg font-semibold text-sm text-on-fill" style={{ background: ORANGE }}>Got It</button>
             </div>
           )}
 
@@ -282,11 +282,11 @@ export default function PartsOnTheWay({
                   {partRows.map((p, i) => (
                     <div key={i} className="p-2.5 rounded-lg" style={{ background: INPUT, border: `1px solid ${BORDER}` }}>
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-medium text-white">{p.name}</span>
+                        <span className="text-sm font-medium text-on-fill">{p.name}</span>
                         {p.verified ? (
-                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded text-white shrink-0" style={{ background: GREEN }}>Field Verified</span>
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded text-on-fill shrink-0" style={{ background: GREEN }}>Field Verified</span>
                         ) : (
-                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded text-white shrink-0" style={{ background: YELLOW }}>AI suggested — verify with store</span>
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded text-on-fill shrink-0" style={{ background: YELLOW }}>AI suggested — verify with store</span>
                         )}
                       </div>
                       <div className="text-xs mt-0.5" style={{ color: '#8a9bad' }}>
@@ -312,7 +312,7 @@ export default function PartsOnTheWay({
                         <input type="radio" name="store" checked={sel} onChange={() => setSelectedStore(s.placeId)} className="mt-1" style={{ accentColor: ORANGE }} />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between gap-2">
-                            <span className="text-sm font-semibold text-white">{s.name}</span>
+                            <span className="text-sm font-semibold text-on-fill">{s.name}</span>
                             <span className="text-xs shrink-0" style={{ color: ORANGE }}>{s.distanceMiles} mi</span>
                           </div>
                           <div className="text-xs mt-0.5" style={{ color: '#8a9bad' }}>{s.address}</div>
@@ -332,7 +332,7 @@ export default function PartsOnTheWay({
 
               <button
                 onClick={() => { setError(''); if (!selectedStore) { setError('Select a store first.'); return } setScreen('confirm') }}
-                className="w-full py-3 rounded-lg font-semibold text-sm text-white"
+                className="w-full py-3 rounded-lg font-semibold text-sm text-on-fill"
                 style={{ background: ORANGE }}
               >
                 I Called — Store Has My Parts →
@@ -349,7 +349,7 @@ export default function PartsOnTheWay({
                   <div key={i} className="p-3 rounded-lg" style={{ background: INPUT, border: `1px solid ${BORDER}` }}>
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input type="checkbox" checked={p.confirmed} onChange={e => setPartRows(rows => rows.map((r, ri) => ri === i ? { ...r, confirmed: e.target.checked } : r))} className="w-4 h-4" style={{ accentColor: ORANGE }} />
-                      <span className="text-sm font-medium text-white">{p.name}</span>
+                      <span className="text-sm font-medium text-on-fill">{p.name}</span>
                     </label>
                     {p.confirmed && (
                       <div className="mt-2 pl-6">
@@ -366,7 +366,7 @@ export default function PartsOnTheWay({
                   </div>
                 ))}
               </div>
-              <button onClick={submitConfirmAndQuote} disabled={busy} className="w-full py-3 rounded-lg font-semibold text-sm text-white disabled:opacity-50" style={{ background: ORANGE }}>
+              <button onClick={submitConfirmAndQuote} disabled={busy} className="w-full py-3 rounded-lg font-semibold text-sm text-on-fill disabled:opacity-50" style={{ background: ORANGE }}>
                 {busy ? 'Getting quote…' : 'Confirm Parts & Get Delivery Quote →'}
               </button>
               <button onClick={() => setScreen('stores')} className="text-xs mx-auto" style={{ color: '#8a9bad' }}>← Back to stores</button>
@@ -379,20 +379,20 @@ export default function PartsOnTheWay({
               <div className="p-4 rounded-lg" style={{ background: INPUT, border: `1px solid ${BORDER}` }}>
                 {/* The store is not named on the screen that shows the fees and the total: no store
                     name sits beside a price. The tech picked and called it on the previous screen. */}
-                <p className="text-sm font-semibold text-white mb-1">Delivery from the store you called</p>
+                <p className="text-sm font-semibold text-on-fill mb-1">Delivery from the store you called</p>
                 {store && <p className="text-xs" style={{ color: '#c9d5e0' }}>📍 {store.distanceMiles} miles away</p>}
                 <p className="text-xs" style={{ color: '#c9d5e0' }}>⏱ Estimated arrival: {quote.etaMinutes} minutes</p>
                 <div className="my-3" style={{ borderTop: `1px solid ${BORDER}` }} />
                 <div className="flex justify-between text-sm" style={{ color: '#c9d5e0' }}><span>Delivery fee:</span><span>{usd(quote.roadieFeeCents)}</span></div>
                 <div className="flex justify-between text-sm" style={{ color: '#c9d5e0' }}><span>Platform fee:</span><span>{usd(quote.platformFeeCents)}</span></div>
                 <div className="my-2" style={{ borderTop: `1px solid ${BORDER}` }} />
-                <div className="flex justify-between text-base font-bold text-white"><span>Total charged:</span><span style={{ color: ORANGE }}>{usd(quote.totalCents)}</span></div>
+                <div className="flex justify-between text-base font-bold text-on-fill"><span>Total charged:</span><span style={{ color: ORANGE }}>{usd(quote.totalCents)}</span></div>
                 <p className="text-xs mt-2" style={{ color: '#8a9bad' }}>Charged to card on file</p>
               </div>
               <div className="px-3 py-2 rounded-lg text-xs" style={{ background: '#2a2213', border: '1px solid #6b5417', color: '#FCD34D' }}>
                 ⚠ This amount will be charged to your account immediately and added to your customer&apos;s invoice.
               </div>
-              <button onClick={dispatch} disabled={busy} className="w-full py-3 rounded-lg font-semibold text-sm text-white disabled:opacity-50" style={{ background: ORANGE }}>
+              <button onClick={dispatch} disabled={busy} className="w-full py-3 rounded-lg font-semibold text-sm text-on-fill disabled:opacity-50" style={{ background: ORANGE }}>
                 {busy ? 'Dispatching…' : '✓ Confirm & Dispatch Driver'}
               </button>
               <button onClick={onClose} className="text-xs mx-auto" style={{ color: '#8a9bad' }}>✗ Cancel</button>
@@ -403,13 +403,13 @@ export default function PartsOnTheWay({
           {screen === 'tracking' && tracking && (
             <div className="text-center flex flex-col gap-3 py-2">
               <div className="text-3xl">✓</div>
-              <p className="font-condensed font-bold text-xl text-white">Driver Dispatched!</p>
+              <p className="font-condensed font-bold text-xl text-on-fill">Driver Dispatched!</p>
               <p className="text-sm" style={{ color: '#c9d5e0' }}>
                 {tracking.driverName ? <b>{tracking.driverName}</b> : 'A driver'} is on the way
               </p>
               {tracking.etaMinutes != null && <p className="text-sm" style={{ color: '#c9d5e0' }}>Estimated arrival: <b>{tracking.etaMinutes} minutes</b></p>}
               {tracking.trackingUrl && (
-                <a href={tracking.trackingUrl} target="_blank" rel="noopener noreferrer" className="mx-auto px-6 py-2.5 rounded-lg font-semibold text-sm text-white" style={{ background: BLUE }}>Live Tracking →</a>
+                <a href={tracking.trackingUrl} target="_blank" rel="noopener noreferrer" className="mx-auto px-6 py-2.5 rounded-lg font-semibold text-sm text-on-fill" style={{ background: BLUE }}>Live Tracking →</a>
               )}
               <p className="text-xs" style={{ color: '#8a9bad' }}>Parts will be added to your invoice automatically.</p>
               {techPhone && <p className="text-xs" style={{ color: '#8a9bad' }}>Driver will call you on arrival: {techPhone}</p>}

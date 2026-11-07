@@ -377,7 +377,7 @@ export default function CargoWatchPage() {
                 className="inline-flex items-center gap-1.5 text-xs font-bold px-2 py-0.5 rounded-full"
                 style={isGpsFix
                   ? { background: 'color-mix(in srgb, var(--hd-positive) 14%, var(--hd-card))', color: 'var(--hd-positive)', border: '1px solid #1c5c34' }
-                  : { background: 'color-mix(in srgb, var(--hd-warn) 14%, var(--hd-card))', color: '#EAB308', border: '1px solid #5c4a0f' }}
+                  : { background: 'color-mix(in srgb, var(--hd-warn) 14%, var(--hd-card))', color: 'var(--hd-warn)', border: '1px solid #5c4a0f' }}
               >
                 <span
                   className="w-1.5 h-1.5 rounded-full"

@@ -17,7 +17,7 @@ import {
   initialInspectionData,
 } from '@/lib/hd/dot-categories'
 import { money } from '@/lib/format'
-import { textTone, tint } from '@/lib/hd/text-tone'
+import { textTone, tint, ON_FILL } from '@/lib/hd/text-tone'
 
 const HD_ORANGE = '#E85D24'
 const HD_BLUE   = '#1A6BAF'
@@ -109,7 +109,7 @@ function SubItemRow({
                 background: state.result === r
                   ? r === 'pass' ? '#22C55E' : r === 'fail' ? '#EF4444' : '#4B5563'
                   : 'var(--hd-inner)',
-                color: textTone(state.result === r ? '#fff' : 'var(--hd-text-faint)'),
+                color: state.result === r ? ON_FILL : textTone('var(--hd-text-faint)'),
               }}>
               {r === 'na' ? 'N/A' : r.toUpperCase()}
             </button>

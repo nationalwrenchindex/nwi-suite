@@ -366,8 +366,8 @@ export default async function HDDashboardPage({
           {[
             { href: `${base}/quickwrench`,   label: reefer ? 'REEFER DIAGNOSTICS' : 'HD QUICKWRENCH', sub: 'Alarm codes & specs', color: 'var(--hd-accent-text)' },
             { href: `${base}/pm-checklist`,  label: 'PM CHECKLIST',   sub: 'Start a new PM',      color: HD_BLUE   },
-            { href: `${base}/fleet-units`,   label: reefer ? 'REEFER UNITS' : 'FLEET UNITS', sub: reefer ? 'Manage your reefer units' : 'Manage your fleet', color: '#6B7280' },
-            { href: `${base}/epa-log`,       label: 'EPA 608 LOG',    sub: 'Refrigerant tracking', color: '#6B7280' },
+            { href: `${base}/fleet-units`,   label: reefer ? 'REEFER UNITS' : 'FLEET UNITS', sub: reefer ? 'Manage your reefer units' : 'Manage your fleet', color: 'var(--hd-text-faint)' },
+            { href: `${base}/epa-log`,       label: 'EPA 608 LOG',    sub: 'Refrigerant tracking', color: 'var(--hd-text-faint)' },
           ].map(({ href, label, sub, color }) => (
             <Link
               key={href}

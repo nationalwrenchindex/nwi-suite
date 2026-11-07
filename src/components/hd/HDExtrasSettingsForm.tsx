@@ -193,7 +193,7 @@ export default function HDExtrasSettingsForm({ laborRate }: { laborRate: string 
         These seed new quotes, work orders and invoices. Changing them never re-prices a document you already saved.
         The diagnostic and road call fees are always taxed as labor.
       </p>
-      {error && <p className="text-xs" style={{ color: '#FBBF24' }}>{error}</p>}
+      {error && <p className="text-xs" style={{ color: 'var(--hd-warn)' }}>{error}</p>}
       <button type="submit" disabled={saving}
         className="px-4 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50"
         style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)', minHeight: 40 }}>
