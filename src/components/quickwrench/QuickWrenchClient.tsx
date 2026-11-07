@@ -12,13 +12,13 @@ import type {
   QWVehicle,
   SelectedJob,
   TechGuide,
-  TechGuidePart,
   PartWithSuppliers,
   Supplier,
   MultiJobEntry,
 } from '@/types/quickwrench'
 import { money } from '@/lib/format'
 import { splitCustomerName } from '@/lib/customer-name'
+import { enrichParts } from '@/lib/quickwrench-parts'
 
 // ─── Job catalog ──────────────────────────────────────────────────────────────
 
@@ -196,35 +196,6 @@ function shortPartLabel(full: string): string {
   if (oem) base = `${base} — Part# ${oem[1]}`
   if (base.length > 80) base = base.slice(0, 77).trimEnd() + '...'
   return base
-}
-
-// `scope` is the job key. Without it two jobs both produce `part-0-…`, and
-// since partCosts and partPriceOverrides are keyed by part id, editing a price
-// on one job silently rewrote the same-index part on the other.
-function enrichParts(raw: Array<TechGuidePart | string>, scope = ''): PartWithSuppliers[] {
-  return raw.map((part, i) => {
-    const name = typeof part === 'string' ? part : part.name
-    const qty  = typeof part === 'string' ? 1    : (part.qty       ?? 1)
-    const cost = typeof part === 'string' ? 0    : (part.unit_cost ?? 0)
-    return {
-      name,
-      part_number_hint:  '',
-      qty,
-      price_estimate:    cost,
-      id:                `part-${scope}-${i}-${name.slice(0, 8).replace(/\s/g, '')}`,
-      included:          true,
-      // ONE price, the shop's own, starting at the estimate. There used to be four
-      // invented "retailer" prices here (the estimate x 1.06 / 1.02 / 1.10 / 0.76,
-      // labelled AutoZone, O'Reilly, NAPA, RockAuto) with O'Reilly preselected. NWI has
-      // no retailer partnerships, and no store name may sit beside a price.
-      selected_supplier: 'custom' as Supplier,
-      custom_price:      cost,
-    }
-  })
-}
-
-function partPrice(p: PartWithSuppliers): number {
-  return p.custom_price
 }
 
 // ─── Category icons ───────────────────────────────────────────────────────────
@@ -1000,7 +971,7 @@ function JobTypeTab({
 
 // ─── Tech guide content (shared by single and accordion) ─────────────────────
 
-function TechGuideContent({ guide, job }: { guide: TechGuide; job: SelectedJob }) {
+export function TechGuideContent({ guide, job, parts }: { guide: TechGuide; job: SelectedJob; parts: PartWithSuppliers[] }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <div className="nwi-card">
@@ -1047,6 +1018,24 @@ function TechGuideContent({ guide, job }: { guide: TechGuide; job: SelectedJob }
           </div>
         )}
 
+        {/* PARTS NEEDED (Nov 7) - what used to be its own Parts screen. Names and
+            quantities only: no price and no part number, because neither has a source
+            (enrichParts drops both). These are the lines the Quote screen opens with,
+            cost blank. Inside the page's AI-generated disclaimer, like the rest of it. */}
+        {parts.length > 0 && (
+          <div className="nwi-card" data-testid="qw-parts-needed">
+            <p className="text-white/40 text-xs uppercase tracking-widest mb-3">Parts Needed</p>
+            <div className="space-y-1.5">
+              {parts.map(p => (
+                <div key={p.id} className="flex items-start justify-between gap-3 py-1 border-b border-dark-border last:border-0">
+                  <p className="text-white text-sm" data-testid="qw-parts-needed-name">{p.name}</p>
+                  <span className="text-white/50 text-xs whitespace-nowrap flex-shrink-0" data-testid="qw-parts-needed-qty">Qty {p.qty}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {guide.warning && (
           <div className="nwi-card border-danger/20 bg-danger/5">
             <p className="text-danger/70 text-xs uppercase tracking-widest mb-2">⚠ Warning</p>
@@ -1060,10 +1049,11 @@ function TechGuideContent({ guide, job }: { guide: TechGuide; job: SelectedJob }
 
 // ─── Tab 3: Tech Guide ────────────────────────────────────────────────────────
 
-function TechGuideTab({
+export function TechGuideTab({
   vehicle,
   jobs,
   techGuides,
+  partsByJob,
   loading,
   error,
   onRetry,
@@ -1072,6 +1062,8 @@ function TechGuideTab({
   vehicle:    QWVehicle | null
   jobs:       SelectedJob[]
   techGuides: Record<string, TechGuide>
+  /** The parts the Quote screen opens with - shown here as Parts Needed. */
+  partsByJob: Record<string, PartWithSuppliers[]>
   loading:    boolean
   error:      string | null
   onRetry:    () => void
@@ -1090,12 +1082,12 @@ function TechGuideTab({
             Loading tech guide{jobs.length > 1 ? 's' : ''} for {vehicle?.year} {vehicle?.make} {vehicle?.model}…
           </p>
         </div>
-        {/* Safety net — advance to Parts without waiting for the guide to finish */}
+        {/* Safety net — advance to the Quote without waiting for the guide to finish */}
         <button
           onClick={onNext}
           className="w-full py-3 border border-white/15 text-white/70 hover:text-white hover:border-white/30 font-condensed font-bold text-sm tracking-wide rounded-xl transition-colors"
         >
-          Skip to Parts →
+          Skip to Quote →
         </button>
       </div>
     )
@@ -1116,7 +1108,7 @@ function TechGuideTab({
             onClick={onNext}
             className="text-white/50 hover:text-white text-sm underline transition-colors"
           >
-            Skip to Parts →
+            Skip to Quote →
           </button>
         </div>
       </div>
@@ -1146,7 +1138,7 @@ function TechGuideTab({
           </span>
         </div>
 
-        <TechGuideContent guide={guide} job={j} />
+        <TechGuideContent guide={guide} job={j} parts={partsByJob[jobKey(j)] ?? []} />
 
         <p className="text-white/25 text-[10px] leading-relaxed">
           AI-generated specifications for reference only. Results may omit vehicle-specific steps or torque values. Always verify against OEM service documentation before beginning work. National Wrench Index&#8482; assumes no liability for inaccuracies.
@@ -1156,7 +1148,7 @@ function TechGuideTab({
           onClick={onNext}
           className="w-full py-4 bg-orange hover:bg-orange-hover text-white font-condensed font-bold text-base tracking-wide rounded-xl transition-colors"
         >
-          View Parts List →
+          Build Quote →
         </button>
       </div>
     )
@@ -1204,7 +1196,7 @@ function TechGuideTab({
 
               {isExp && (
                 <div className="mt-4 pt-4 border-t border-dark-border">
-                  <TechGuideContent guide={guide} job={j} />
+                  <TechGuideContent guide={guide} job={j} parts={partsByJob[jobKey(j)] ?? []} />
                 </div>
               )}
             </div>
@@ -1220,199 +1212,13 @@ function TechGuideTab({
         onClick={onNext}
         className="w-full py-4 bg-orange hover:bg-orange-hover text-white font-condensed font-bold text-base tracking-wide rounded-xl transition-colors"
       >
-        View Parts List →
+        Build Quote →
       </button>
     </div>
   )
 }
 
-// ─── Tab 4: Parts ─────────────────────────────────────────────────────────────
-
-function PartCard({
-  p,
-  onChange,
-}: {
-  p:        PartWithSuppliers
-  onChange: (updated: PartWithSuppliers) => void
-}) {
-  function toggle()                       { onChange({ ...p, included: !p.included }) }
-  function setCustomPrice(val: string)    { onChange({ ...p, selected_supplier: 'custom', custom_price: Number(val) || 0 }) }
-  function setQty(val: string)            { onChange({ ...p, qty: Math.max(1, Number(val) || 1) }) }
-
-  return (
-    <div className={`nwi-card transition-opacity ${p.included ? '' : 'opacity-40'}`}>
-      <div className="flex items-start gap-3">
-        <input
-          type="checkbox"
-          checked={p.included}
-          onChange={toggle}
-          className="mt-1 w-4 h-4 accent-orange flex-shrink-0"
-        />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-start justify-between gap-2 flex-wrap">
-            <div>
-              <p className="text-white font-medium text-sm">{p.name}</p>
-              {p.part_number_hint && (
-                <p className="text-white/30 text-xs font-mono">{p.part_number_hint}</p>
-              )}
-            </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <label className="text-white/30 text-xs">Qty</label>
-              <input
-                type="number"
-                min={1}
-                value={p.qty}
-                onChange={e => setQty(e.target.value)}
-                className="nwi-input w-16 text-center text-sm py-1"
-              />
-            </div>
-          </div>
-
-          <label className="mt-3 flex items-center gap-2">
-            <span className="text-white/40 text-xs">Price each</span>
-            <input
-              type="number"
-              min={0}
-              step={0.01}
-              value={p.custom_price}
-              onChange={e => setCustomPrice(e.target.value)}
-              className="nwi-input w-24 text-sm py-1"
-            />
-          </label>
-
-          <div className="mt-2 flex items-center justify-between">
-            <span className="text-white/30 text-xs">{p.qty} × {fmt(partPrice(p))}</span>
-            <span className="font-condensed font-bold text-sm text-white">{fmt(partPrice(p) * p.qty)}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function PartsTab({
-  selectedJobs,
-  partsByJob,
-  onPartsChange,
-  onNext,
-}: {
-  selectedJobs:  SelectedJob[]
-  partsByJob:    Record<string, PartWithSuppliers[]>
-  onPartsChange: (key: string, p: PartWithSuppliers[]) => void
-  onNext:        () => void
-}) {
-  const allParts  = selectedJobs.flatMap(j => partsByJob[jobKey(j)] ?? [])
-  const totalParts = allParts.filter(p => p.included).reduce((s, p) => s + partPrice(p) * p.qty, 0)
-
-  if (allParts.length === 0) {
-    return (
-      <div className="text-center py-16">
-        <p className="text-white/30 text-sm">No parts data — go back and load the tech guide first.</p>
-      </div>
-    )
-  }
-
-  // Single-job: flat display (same UX as before)
-  if (selectedJobs.length === 1) {
-    const j   = selectedJobs[0]
-    const key = jobKey(j)
-    const parts = partsByJob[key] ?? []
-    const included = parts.filter(p => p.included)
-
-    return (
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <p className="text-white/40 text-xs uppercase tracking-widest">
-            {parts.length} part{parts.length !== 1 ? 's' : ''} · {included.length} selected
-          </p>
-          <span className="font-condensed font-bold text-lg text-white">
-            Parts Est: <span className="text-orange">{fmt(totalParts)}</span>
-          </span>
-        </div>
-
-        <div className="space-y-3">
-          {parts.map(p => (
-            <PartCard
-              key={p.id}
-              p={p}
-              onChange={updated => onPartsChange(key, parts.map(x => x.id === p.id ? updated : x))}
-            />
-          ))}
-        </div>
-
-        <div className="pt-2 space-y-3">
-          <div className="text-white/40 text-sm text-right">
-            Parts subtotal: <span className="text-white font-medium">{fmt(totalParts)}</span>
-          </div>
-          <button
-            onClick={onNext}
-            className="w-full py-4 bg-orange hover:bg-orange-hover text-white font-condensed font-bold text-base tracking-wide rounded-xl transition-colors"
-          >
-            Build Quote →
-          </button>
-        </div>
-      </div>
-    )
-  }
-
-  // Multi-job: grouped by job
-  return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <p className="text-white/40 text-xs uppercase tracking-widest">Parts by Job</p>
-        <span className="font-condensed font-bold text-lg text-white">
-          Total: <span className="text-orange">{fmt(totalParts)}</span>
-        </span>
-      </div>
-
-      {selectedJobs.map((j, ji) => {
-        const key   = jobKey(j)
-        const parts = partsByJob[key] ?? []
-        const jobTotal = parts.filter(p => p.included).reduce((s, p) => s + partPrice(p) * p.qty, 0)
-
-        return (
-          <div key={key} className="space-y-2">
-            <div className="flex items-center gap-2 px-1">
-              <span className="w-5 h-5 rounded-full bg-orange/15 border border-orange/30 flex items-center justify-center text-orange text-[10px] font-bold flex-shrink-0">
-                {ji + 1}
-              </span>
-              <p className="text-white font-semibold text-sm flex-1">{j.name}</p>
-              <span className="text-orange text-xs font-medium">{fmt(jobTotal)}</span>
-            </div>
-
-            {parts.length > 0 ? (
-              <div className="space-y-2 pl-7">
-                {parts.map(p => (
-                  <PartCard
-                    key={p.id}
-                    p={p}
-                    onChange={updated => onPartsChange(key, parts.map(x => x.id === p.id ? updated : x))}
-                  />
-                ))}
-              </div>
-            ) : (
-              <p className="text-white/30 text-sm pl-7">No parts for this job.</p>
-            )}
-          </div>
-        )
-      })}
-
-      <div className="pt-2 space-y-3 border-t border-dark-border">
-        <div className="text-white/40 text-sm text-right">
-          All parts subtotal: <span className="text-white font-medium">{fmt(totalParts)}</span>
-        </div>
-        <button
-          onClick={onNext}
-          className="w-full py-4 bg-orange hover:bg-orange-hover text-white font-condensed font-bold text-base tracking-wide rounded-xl transition-colors"
-        >
-          Build Quote →
-        </button>
-      </div>
-    </div>
-  )
-}
-
-// ─── Tab 5: Quote ─────────────────────────────────────────────────────────────
+// ─── Tab 4: Quote ─────────────────────────────────────────────────────────────
 
 // A row from the shared repair-items labor library (hd_repair_items).
 interface LibItem {
@@ -1556,7 +1362,7 @@ function LaborDescInput({
 
 interface ExtraLaborLine { id: string; description: string; hours: number }
 
-function QuoteTab({
+export function QuoteTab({
   vehicle,
   selectedJobs,
   techGuides,
@@ -1736,7 +1542,7 @@ function QuoteTab({
     ...selectedJobs.map(j => {
       const key = jobKey(j)
       return (partsByJob[key] ?? []).filter(p => p.included)
-        .map(p => `${p.id}:${p.qty}:${partPrice(p)}`).join(',')
+        .map(p => `${p.id}:${p.qty}`).join(',')
     })
   ].join(':')
   const isSaved = !!quoteNumber && savedHash === quoteHash
@@ -2175,8 +1981,7 @@ const TABS = [
   { label: 'Vehicle',    short: '1' },
   { label: 'Job Type',   short: '2' },
   { label: 'Tech Guide', short: '3' },
-  { label: 'Parts',      short: '4' },
-  { label: 'Quote',      short: '5' },
+  { label: 'Quote',      short: '4' },
 ]
 
 interface LoadedQuoteDefaults {
@@ -2432,15 +2237,14 @@ export default function QuickWrenchClient({
     loadAllTechGuides(vehicle, missing)
   }, [activeTab, vehicle, selectedJobs, techGuides, guidesLoading, guidesError, loadAllTechGuides])
 
-  // Reseed parts from a loaded guide when the Parts tab has none.
+  // Reseed parts from a loaded guide when the Quote tab (3) has none.
   //
   // partsByJob is only written when a guide finishes loading, so any route that
-  // reaches Parts without that happening — Skip to Parts during load or after an
-  // error, or a guide that arrived without parts — leaves the step empty with no
-  // way back into a loading path: the effect above only runs on tab 2, and it
-  // short-circuits because the guide itself is present. The step then tells the
-  // tech to "go back and load the tech guide first" for a guide they already
-  // loaded. This closes that trap by deriving parts from the guide we hold.
+  // reaches the Quote without that happening — Skip to Quote during load or after
+  // an error, or a guide that arrived without parts — would open it with no part
+  // lines: the effect above only runs on tab 2, and it short-circuits because the
+  // guide itself is present. This derives the parts from the guide we hold. (Until
+  // Nov 7 this ran on the separate Parts screen, which was tab 3.)
   useEffect(() => {
     if (activeTab !== 3 || selectedJobs.length === 0) return
     const seedable = selectedJobs.filter(j => {
@@ -2478,10 +2282,6 @@ export default function QuickWrenchClient({
     }
   }
 
-  function handlePartsChange(key: string, updated: PartWithSuppliers[]) {
-    setPartsByJob(prev => ({ ...prev, [key]: updated }))
-  }
-
   function handleFindTires(sizes: { front: string | null; rear: string | null }) {
     const tireJob: SelectedJob = {
       category:      'tires_wheels',
@@ -2504,6 +2304,7 @@ export default function QuickWrenchClient({
     setSelectedJobs(prev => prev.some(j => jobKey(j) === key) ? prev : [...prev, tireJob])
     setPartsByJob(prev => ({ ...prev, [key]: enrichParts(items, key) }))
     setGuidesError(null)
+    // Straight to the Quote (tab 3), where the tire lines wait with cost blank.
     setActiveTab(3)
   }
 
@@ -2543,8 +2344,8 @@ export default function QuickWrenchClient({
     setSelectedJobs(prev => prev.some(j => jobKey(j) === key) ? prev : [...prev, selectedJob])
     setGuidesError(null)
 
-    // If parts exist advance to Parts tab, otherwise straight to Quote tab.
-    setActiveTab(job.parts.length > 0 ? 3 : 4)
+    // Straight to the Quote tab (3); its parts, if any, are already lines there.
+    setActiveTab(3)
     // Let React render the new tab, then scroll to the top so the tech lands on
     // the form rather than a mid-page blank scroll.
     setTimeout(() => { window.scrollTo({ top: 0, behavior: 'smooth' }) }, 100)
@@ -2552,14 +2353,12 @@ export default function QuickWrenchClient({
 
   const isJobsComplete   = selectedJobs.length > 0
   const isGuidesComplete = selectedJobs.length > 0 && selectedJobs.every(j => !!techGuides[jobKey(j)])
-  const isPartsComplete  = Object.values(partsByJob).some(p => p.length > 0)
 
   const canGoTo = (tab: number) => {
     if (tab === 0) return true
     if (tab === 1) return !!vehicle
     if (tab === 2) return !!vehicle && isJobsComplete
     if (tab === 3) return !!vehicle && isJobsComplete
-    if (tab === 4) return !!vehicle && isJobsComplete
     return false
   }
 
@@ -2567,7 +2366,7 @@ export default function QuickWrenchClient({
     setActiveTab(t => Math.min(t + 1, TABS.length - 1))
   }
 
-  const STEP_LABELS = ['Vehicle', 'Job Type', 'Tech Guide', 'Parts', 'Quote']
+  const STEP_LABELS = ['Vehicle', 'Job Type', 'Tech Guide', 'Quote']
 
   return (
     <div className="space-y-5">
@@ -2578,8 +2377,7 @@ export default function QuickWrenchClient({
           const isComplete =
             (i === 0 && !!vehicle) ||
             (i === 1 && isJobsComplete) ||
-            (i === 2 && isGuidesComplete) ||
-            (i === 3 && isPartsComplete)
+            (i === 2 && isGuidesComplete)
           return (
             <div key={i} className="flex items-center flex-1 last:flex-none">
               <div className="flex flex-col items-center gap-1 flex-shrink-0">
@@ -2609,8 +2407,7 @@ export default function QuickWrenchClient({
           const isComplete =
             (i === 0 && !!vehicle) ||
             (i === 1 && isJobsComplete) ||
-            (i === 2 && isGuidesComplete) ||
-            (i === 3 && isPartsComplete)
+            (i === 2 && isGuidesComplete)
           const isLocked = !canGoTo(i)
 
           return (
@@ -2694,15 +2491,8 @@ export default function QuickWrenchClient({
             techGuides={techGuides}
             loading={guidesLoading}
             error={guidesError}
-            onRetry={() => vehicle && loadAllTechGuides(vehicle, selectedJobs.filter(j => !techGuides[jobKey(j)]))}
-            onNext={goNext}
-          />
-        )}
-        {activeTab === 3 && (
-          <PartsTab
-            selectedJobs={selectedJobs}
             partsByJob={partsByJob}
-            onPartsChange={handlePartsChange}
+            onRetry={() => vehicle && loadAllTechGuides(vehicle, selectedJobs.filter(j => !techGuides[jobKey(j)]))}
             onNext={() => {
               goNext()
               // Let React render the Quote tab, then scroll to the top of the form.
@@ -2710,7 +2500,7 @@ export default function QuickWrenchClient({
             }}
           />
         )}
-        {activeTab === 4 && (
+        {activeTab === 3 && (
           <QuoteTab
             workOrdersEnabled={workOrdersEnabled}
             vehicle={vehicle}
