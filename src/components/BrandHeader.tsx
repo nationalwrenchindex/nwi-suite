@@ -14,8 +14,15 @@ export function BrandHeader({
   branding,
   subtitle,
   className = '',
+  logoAlt,
 }: {
   branding:  Branding
+  /**
+   * The logo's alt text. Defaults to the business name. Pass '' where the name is
+   * printed beside the logo anyway: a browser that does not show the image prints its
+   * alt text, and the name then appears twice in a row (the HD work order, Nov 6).
+   */
+  logoAlt?: string
   /** Document type, e.g. "Invoice INV-2026-0001" or "DOT Annual Inspection". */
   subtitle?: string
   className?: string
@@ -28,7 +35,7 @@ export function BrandHeader({
            every host allow-listed and buys nothing on a print document. */
         <img
           src={branding.logoUrl}
-          alt={branding.name}
+          alt={logoAlt ?? branding.name}
           className="h-12 w-auto object-contain flex-shrink-0"
           style={{ maxWidth: 220 }}
         />

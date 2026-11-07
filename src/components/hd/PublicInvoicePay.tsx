@@ -224,6 +224,9 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
             <div className="sm:text-right text-sm" style={{ color: MUTED }}>
               <p>Date: {fmtDate(inv.created_at)}</p>
               {inv.work_order_number && <p>Work Order: {inv.work_order_number}</p>}
+              {/* The quote it was billed from (lib/hd/invoice-source): the trail back to
+                  what the customer approved. */}
+              {inv.source_quote_number && <p data-testid="invoice-source-quote">Quote: {String(inv.source_quote_number)}</p>}
               {/* The customer's own PO (migration 157). This is the page their accounts
                   payable actually opens, and a PO invoice with no PO on it is the one
                   that gets set aside. */}

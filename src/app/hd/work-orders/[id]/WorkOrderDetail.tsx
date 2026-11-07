@@ -18,6 +18,7 @@ import WorkOrderDiscount from '@/components/hd/WorkOrderDiscount'
 import WorkOrderExtras from '@/components/hd/WorkOrderExtras'
 import WorkOrderUnitHours from '@/components/hd/WorkOrderUnitHours'
 import { lastKnownHours } from '@/lib/hd/unit-hours'
+import { flushPending } from '@/lib/hd/wo-pending'
 import type { Branding } from '@/lib/branding'
 import { money } from '@/lib/format'
 import { textTone, tint } from '@/lib/hd/text-tone'
@@ -259,6 +260,15 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
     setInvoicing(true)
     setInvoiceError(null)
     try {
+      // WHAT IS ON THE SCREEN IS WHAT IS BILLED. The converter reads the stored work
+      // order, so unsaved lines and unsaved drive time / mileage / fees are saved first
+      // (lib/hd/wo-pending) - and nothing is converted if either save fails. Before
+      // this, WO-2026-1571's typed 1.0 h and 50 miles were left off INV-2026-0027.
+      const pendingError = await flushPending(workOrderId)
+      if (pendingError) {
+        setInvoiceError(`Not invoiced: your unsaved changes could not be saved first. ${pendingError}`)
+        return
+      }
       const built = await fetch(`/api/hd/work-orders/${workOrderId}/convert`, { cache: 'no-store' })
       const builtJson = await built.json().catch(() => ({}))
 
@@ -378,7 +388,7 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
         className="rounded-xl px-5 py-4 mb-5 text-white"
         style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}
       >
-        <BrandHeader branding={branding} subtitle={`Work Order ${woLabel}`} />
+        <BrandHeader branding={branding} subtitle={`Work Order ${woLabel}`} logoAlt="" />
       </div>
 
       {/* Header */}
@@ -495,6 +505,19 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
               recorded={(wo as { unit_hours?: number | string | null }).unit_hours != null ? Number((wo as { unit_hours?: number | string | null }).unit_hours) : null}
               lastKnown={lastKnownHours(wo.unit as Record<string, unknown> | null)}
               available={'unit_hours' in (wo as object)}
+              locked={status === 'invoiced'}
+            />
+          </div>
+
+          {/* Migration 183: the truck or trailer's odometer at this service - the warranty
+              record. Carried from the quote when it recorded one; prints on the invoice. */}
+          <div>
+            <span className="text-xs uppercase tracking-wider block mb-0.5" style={{ color: 'var(--hd-text-faint)', fontSize: 10 }}>Odometer</span>
+            <WorkOrderUnitHours
+              kind="odometer"
+              workOrderId={workOrderId}
+              recorded={(wo as { vehicle_odometer?: number | string | null }).vehicle_odometer != null ? Number((wo as { vehicle_odometer?: number | string | null }).vehicle_odometer) : null}
+              available={'vehicle_odometer' in (wo as object)}
               locked={status === 'invoiced'}
             />
           </div>

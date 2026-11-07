@@ -34,8 +34,8 @@ import { documentTotalsRows } from '../src/lib/document-totals'
 import { serviceCallOf } from '../src/lib/service-call'
 import { documentMoney, documentExtras } from '../src/lib/document-money'
 import { openInvoiceEdit, invoiceSaveBody, invoiceDoesNotAddUp, correctionBody } from '../src/lib/hd/invoice-edit-save'
-import { documentTaxSettings, parseBreakdown, breakdownTaxTotal } from '../src/lib/tax'
-import { EXTRAS_OFF, partsBaseFromLines, computeExtras } from '../src/lib/billable-extras'
+import { documentTaxSettings, parseBreakdown, breakdownTaxTotal, taxSettingsFrom } from '../src/lib/tax'
+import { EXTRAS_OFF, partsBaseFromLines, computeExtras, extrasColumns } from '../src/lib/billable-extras'
 import { applyDiscount, laborFromLines, normalizeDiscount, parseDiscount, discountPrintLabel } from '../src/lib/document-discount'
 import { hdApplyDiscount } from '../src/lib/hd/hd-discount'
 import { termsSnapshotFrom, parseTermsSnapshot } from '../src/lib/document-terms'
@@ -44,6 +44,12 @@ import { REEFER_STANDALONE_MODULES } from '../src/lib/reefer-standalone'
 import { loadRollupInput } from '../src/lib/hd/equipment-rollup-load'
 import { jobsFor, rollupByCategory, rollupByUnit } from '../src/lib/hd/equipment-rollup'
 import { loadEnv, openSession, visibleText } from './lib/smoke-session'
+import { extrasTotalsState, feeInputsAfterReload, flushPending, registerPending } from '../src/lib/hd/wo-pending'
+import { hdExtrasSettingsFrom, hdServiceCallFrom, serviceCallColumns } from '../src/lib/hd/hd-extras'
+import { hdLaborRateFrom } from '../src/lib/hd/labor-rate'
+import { sellPrice, lineAmount } from '../src/lib/hd/parts-pricing'
+import { hdDocumentTax, hdTaxableBase } from '../src/lib/hd/document-tax'
+import { modelMatches } from '../src/lib/parts/search'
 
 loadEnv()
 
@@ -439,6 +445,306 @@ async function flowQw(): Promise<void> {
   const inv = (await rest(`invoices?select=vehicle_id,customer_id,total&id=eq.${invId}`))[0]
   record(F, 'the invoice still has the unit', !!inv && inv.vehicle_id === q.vehicle_id && inv.customer_id === custId, inv ? String(inv.vehicle_id) : 'not found')
   record(F, 'the invoice totals what was quoted', !!inv && r2(Number(inv.total)) === r2(Number(q.grand_total)), inv ? `${usd(inv.total)} vs ${usd(q.grand_total)}` : '')
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FLOW Hw - the HD work order keeps drive time and mileage; one job, two doors
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Nov 6, 2026, Brock on HD: WO-2026-1571 had 1.0 h of drive time and 50 miles typed and
+// saved, and INV-2026-0027 billed neither - $366.13 where $647.36 was owed - while the
+// same charges on a quote reached INV-2026-0028 intact. The work order is three cards
+// with three saves and "+ Create Invoice" converted only what was stored; Save Lines
+// also reloaded the fees panel and wiped what was typed in it, and the panel printed an
+// "Invoice total" priced on lines that were not saved yet.
+//
+// PROVES, through the real routes as the shop, against its own HD settings:
+//   * the same job billed quote -> invoice and work order -> invoice: all four documents'
+//     money agrees to the cent, drive time and mileage included
+//   * the panel's two rules (lib/hd/wo-pending): a reload keeps typed fees; no total
+//     prints while lines are unsaved; Create Invoice saves pending cards lines-first.
+//     Pure functions, because the suite drives no browser - said here, not hidden.
+//   * unit hours and the odometer carry quote -> work order -> invoice (needs 183)
+//   * a description search on a document with a unit returns only parts that fit it
+//   * then the same on a throwaway Reefer Standalone account, through /reefer.
+// Every row it makes is deleted in cleanup().
+
+const HW_JOB = { partCost: 6, qty: 1, laborHours: 2, travelHours: 1, miles: 50, hours: 20351, odometer: 123000 }
+
+/** One document's money, as the rows a tech reads. */
+function hwMoney(doc: Record<string, unknown>): Array<[string, number]> {
+  const tb = parseBreakdown(doc.tax_breakdown)
+  return [
+    ['Labor', r2(Number(doc.subtotal_labor ?? 0))],
+    ['Parts', r2(Number(doc.subtotal_parts ?? 0))],
+    ['Service call fee', r2(Number(doc.service_call_fee ?? 0))],
+    ['Drive time', r2(Number(doc.travel_amount ?? 0))],
+    ['Mileage', r2(Number(doc.mileage_amount ?? 0))],
+    ['Shop supplies', r2(Number(doc.shop_supplies_fee ?? 0))],
+    ['Tax on parts', r2(Number(tb?.parts?.amount ?? 0))],
+    ['Tax on labor', r2(Number(tb?.labor?.amount ?? 0))],
+    ['Total', r2(Number(doc.total ?? doc.total_amount ?? 0))],
+  ]
+}
+
+function hwTable(title: string, docs: Array<[string, Record<string, unknown>]>): void {
+  console.log(`\n  ${title}`)
+  console.log('  ' + ''.padEnd(18) + docs.map(([n]) => n.padStart(20)).join(''))
+  const all = docs.map(([, d]) => hwMoney(d))
+  for (let i = 0; i < all[0].length; i++) {
+    console.log('  ' + all[0][i][0].padEnd(18) + all.map(m => usd(m[i][1]).padStart(20)).join(''))
+  }
+}
+
+/** The job priced the way the HD quote form prices it, on a profile's HD settings. */
+function hwQuoteBody(profile: Record<string, unknown>, name: string): { body: Record<string, unknown>; total: number } {
+  const rate = hdLaborRateFrom(profile) ?? 0
+  const markup = Number(profile.hd_parts_markup_percent ?? 30)
+  const sell = sellPrice(HW_JOB.partCost, markup)
+  const parts = lineAmount(HW_JOB.qty, HW_JOB.partCost, markup)
+  const labor = r2(HW_JOB.laborHours * rate)
+  const sc = hdServiceCallFrom(profile)
+  const fee = sc.bill && sc.fee != null ? sc.fee : 0
+  const ex = computeExtras(parts, { travelHours: HW_JOB.travelHours, mileageMiles: HW_JOB.miles }, hdExtrasSettingsFrom(profile), rate)
+  const taxSettings = taxSettingsFrom(profile)
+  const tax = hdDocumentTax(hdTaxableBase({
+    partsLines: parts, laborLines: labor, taxedFees: sc.tax === 'none' ? 0 : fee,
+    travel: ex.travel.amount, supplies: ex.shopSupplies.amount,
+  }), taxSettings)
+  const subtotal = r2(labor + parts + fee + ex.total)
+  const total = r2(subtotal + tax.taxAmount)
+  return {
+    total,
+    body: {
+      customer_name: name, customer_phone: '+15555550177', status: 'sent',
+      unit_manufacturer: 'Thermo King', unit_model: 's-600', unit_serial: 'ZZ-HW-TEST', unit_number: 'ZZHW1',
+      truck_make: 'Freightliner', truck_model: 'Cascadia', truck_year: '2020', vin: '1FUJGLDR0CLBP8834',
+      labor_rate: rate, parts_markup_percent: markup,
+      line_items: [
+        { id: 'zz-hw-0', type: 'labor', description: `${MARK} hw labor`, book_hours: HW_JOB.laborHours, book_hours_max: HW_JOB.laborHours,
+          mobile_hours: HW_JOB.laborHours, mobile_hours_max: HW_JOB.laborHours, requires_refrigeration: false, recharge_added: false,
+          part_number: '', quantity: 0, unit_cost: 0, amount: labor, amount_max: labor },
+        { id: 'zz-hw-1', type: 'parts', description: `${MARK} hw belt`, book_hours: 0, book_hours_max: 0, mobile_hours: 0, mobile_hours_max: 0,
+          requires_refrigeration: false, recharge_added: false, part_number: '', quantity: HW_JOB.qty,
+          unit_cost: sell, unit_cost_base: HW_JOB.partCost, markup_percent: markup, amount: parts, amount_max: parts },
+      ],
+      subtotal_labor: labor, subtotal_parts: parts, diagnostic_fee: 0, road_call_fee: 0,
+      ...serviceCallColumns(fee, sc.tax),
+      ...extrasColumns(ex),
+      tax_rate: taxSettings.tax_rate_parts, tax_breakdown: tax.breakdown, tax_amount: tax.taxAmount, total,
+      unit_hours: HW_JOB.hours, vehicle_odometer: HW_JOB.odometer,
+    },
+  }
+}
+
+/** Both doors for one account. `surface` is '/hd' or '/reefer'. Returns false when a step could not run. */
+async function hwDoors(F: string, profile: Record<string, unknown>, surface: '/hd' | '/reefer'): Promise<void> {
+  // ── DOOR 1: quote -> invoice ("Bill Directly") ──
+  const { body, total: expected } = hwQuoteBody(profile, `${MARK} hw quote`)
+  let made = await api('POST', '/api/hd/quotes', body)
+  const readingsOnQuote = made.status === 201
+  if (!readingsOnQuote) {
+    record(F, 'a quote saves with unit hours and the odometer', false,
+      `-> ${made.status} ${String(made.json.error ?? '')} (migration 183 adds hd_quotes.unit_hours and vehicle_odometer)`)
+    const { unit_hours: _h, vehicle_odometer: _o, ...without } = body
+    void _h; void _o
+    made = await api('POST', '/api/hd/quotes', without)
+  } else {
+    record(F, 'a quote saves with unit hours and the odometer', true)
+  }
+  await adoptSmokeCustomer(made.json.customer_id)
+  const quoteId = String((made.json.quote as Record<string, unknown> | undefined)?.id ?? '')
+  if (quoteId) created.hdQuotes.add(quoteId)
+  if (!record(F, 'the quote is saved', made.status === 201 && !!quoteId, `-> ${made.status} ${String(made.json.error ?? '')}`)) return
+  const q = (await rest<Record<string, unknown>>(`hd_quotes?id=eq.${quoteId}&select=*`))[0] ?? {}
+  record(F, 'the quote total is the job priced on these settings', usd(q.total) === usd(expected) && Number(q.travel_hours) === HW_JOB.travelHours && Number(q.mileage_miles) === HW_JOB.miles,
+    `${usd(q.total)} (priced ${usd(expected)}), ${q.travel_hours} h, ${q.mileage_miles} mi`)
+
+  const direct = await api('POST', '/api/hd/invoices', invoiceBodyFromQuote(q))
+  await adoptSmokeCustomer(direct.json.customer_id)
+  const qInvId = String((direct.json.invoice as Record<string, unknown> | undefined)?.id ?? '')
+  if (qInvId) created.hdInvoices.add(qInvId)
+  if (!record(F, 'the quote bills directly to an invoice', (direct.status === 201 || direct.status === 200) && !!qInvId, `-> ${direct.status} ${String(direct.json.error ?? '')}`)) return
+  const qInv = (await rest<Record<string, unknown>>(`hd_invoices?id=eq.${qInvId}&select=*`))[0] ?? {}
+  const ip = await page(`${surface}/invoices/${qInvId}`)
+  record(F, `the invoice from the quote cites the quote number (${surface})`, !!ip && ip.text.includes(`Quote: ${q.quote_number}`), ip ? String(q.quote_number) : 'did not load')
+
+  // ── readings: quote -> work order -> invoice ──
+  const token = String(q.public_token ?? '')
+  const ok = await fetch(`${BASE}/api/hd/quotes/public/${token}/respond`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision: 'approve' }) })
+  const qWo = (await rest<Record<string, unknown>>(`hd_work_orders?quote_id=eq.${quoteId}&select=*`))[0]
+  if (qWo) created.hdWorkOrders.add(String(qWo.id))
+  if (record(F, 'the customer approves the quote into a work order', ok.ok && !!qWo, `-> ${ok.status}`)) {
+    const conv = await api('GET', `/api/hd/work-orders/${qWo!.id}/convert`)
+    const pay = (conv.json.invoice_payload ?? {}) as Record<string, unknown>
+    record(F, 'unit hours carry quote -> work order -> invoice',
+      readingsOnQuote && Number(qWo!.unit_hours) === HW_JOB.hours && Number(pay.unit_hours) === HW_JOB.hours && Number(qInv.unit_hours) === HW_JOB.hours,
+      `quote ${q.unit_hours ?? 'none'}, work order ${qWo!.unit_hours ?? 'none'}, its invoice ${pay.unit_hours ?? 'none'}, direct invoice ${qInv.unit_hours ?? 'none'}`)
+    record(F, 'the odometer carries quote -> work order -> invoice',
+      readingsOnQuote && Number(qWo!.vehicle_odometer) === HW_JOB.odometer && Number(pay.vehicle_odometer) === HW_JOB.odometer && Number(qInv.vehicle_odometer) === HW_JOB.odometer,
+      `quote ${q.vehicle_odometer ?? 'none'}, work order ${qWo!.vehicle_odometer ?? 'none'}, its invoice ${pay.vehicle_odometer ?? 'none'}, direct invoice ${qInv.vehicle_odometer ?? 'none'}`)
+    record(F, 'both readings print on the customer invoice', !!ip && ip.text.includes('Hours: 20,351') && ip.text.includes('Odometer: 123,000 mi'),
+      ip ? `hours ${ip.text.includes('Hours: 20,351')}, odometer ${ip.text.includes('Odometer: 123,000 mi')}` : '')
+  }
+
+  // ── DOOR 2: work order -> invoice ──
+  const wc = await api('POST', '/api/hd/work-orders', {
+    scheduled_date: new Date().toISOString().slice(0, 10), customer_name: `${MARK} hw work order`,
+    unit_manufacturer: 'Thermo King', unit_model: 's-600', unit_serial: 'ZZ-HW-TEST', unit_number: 'ZZHW1',
+  })
+  const woId = String((wc.json.work_order as Record<string, unknown> | undefined)?.id ?? '')
+  if (woId) created.hdWorkOrders.add(woId)
+  if (!record(F, 'an HD work order is created', wc.status === 201 && !!woId, `-> ${wc.status} ${String(wc.json.error ?? '')}`)) return
+  const markup = Number(profile.hd_parts_markup_percent ?? 30)
+  const rate = hdLaborRateFrom(profile) ?? 0
+  // No part number: a stocked number would be reserved by the line save (see walk-hd-extras).
+  const lines = await api('PUT', `/api/hd/work-orders/${woId}/line-items`, { line_items: [
+    { type: 'labor', description: `${MARK} hw labor`, quantity: HW_JOB.laborHours, unit_price: rate },
+    { type: 'part', description: `${MARK} hw belt`, quantity: HW_JOB.qty, unit_cost: HW_JOB.partCost, markup_percent: markup },
+  ] })
+  record(F, 'its labor and part lines save', lines.status === 200, `-> ${lines.status}`)
+  const sc = hdServiceCallFrom(profile)
+  const fee = sc.bill && sc.fee != null ? sc.fee : null
+  const put = await api('PUT', `/api/hd/work-orders/${woId}/extras`, { travel_hours: HW_JOB.travelHours, mileage_miles: HW_JOB.miles, service_call_fee: fee })
+  const stored = (await rest<Record<string, unknown>>(`hd_work_orders?id=eq.${woId}&select=*`))[0] ?? {}
+  record(F, 'drive time and mileage save on the work order', put.status === 200 && Number(stored.travel_hours) === HW_JOB.travelHours && Number(stored.mileage_miles) === HW_JOB.miles,
+    `-> ${put.status}, stored ${stored.travel_hours} h / ${stored.mileage_miles} mi ${String(put.json.error ?? '')}`)
+  const hrs = await api('PATCH', `/api/hd/work-orders/${woId}`, { unit_hours: String(HW_JOB.hours) })
+  record(F, 'unit hours save on the work order', hrs.status === 200, `-> ${hrs.status} ${String(hrs.json.error ?? '')}`)
+  const odo = await api('PATCH', `/api/hd/work-orders/${woId}`, { vehicle_odometer: '123,000' })
+  record(F, 'the odometer saves on the work order', odo.status === 200, `-> ${odo.status} ${String(odo.json.error ?? '')}`)
+
+  // The work order's own money: what its totals block prints (the converter's preview).
+  const panel = await api('GET', `/api/hd/work-orders/${woId}/extras`)
+  const woMoney = (panel.json.invoice ?? {}) as Record<string, unknown>
+  const wp = await page(`${surface}/work-orders/${woId}`)
+  record(F, `the work order screen renders the fees panel, the readings and the parts lookup (${surface})`,
+    !!wp && wp.text.includes('DRIVE TIME, MILEAGE & FEES') && wp.text.includes('Unit Hours') && wp.text.includes('Odometer') && wp.html.includes('data-testid="wo-find-part"'),
+    wp ? missingControls(wp.text, ['DRIVE TIME, MILEAGE & FEES', 'Unit Hours', 'Odometer']).join(', ') : 'did not load')
+  // A shop with no logo renders no <img> at all, so its name already prints once; with a
+  // logo, the img must carry no alt text (the name printed beside it is the name).
+  const hasLogo = !!wp && /<img[^>]*class="h-12/.test(wp.html)
+  record(F, 'the work order header prints the shop name once (logo alt is empty)',
+    !!wp && !/<img[^>]*alt="[^"]+"[^>]*class="h-12/.test(wp.html),
+    wp ? (hasLogo ? 'logo present' : 'no logo on this account') : 'did not load')
+
+  const built = await api('GET', `/api/hd/work-orders/${woId}/convert`)
+  const inv = await api('POST', '/api/hd/invoices', built.json.invoice_payload)
+  await adoptSmokeCustomer(inv.json.customer_id)
+  const wInvId = String((inv.json.invoice as Record<string, unknown> | undefined)?.id ?? '')
+  if (wInvId) created.hdInvoices.add(wInvId)
+  if (!record(F, 'the work order converts to an invoice', (inv.status === 201 || inv.status === 200) && !!wInvId, `-> ${built.status}/${inv.status} ${String(inv.json.error ?? built.json.error ?? '')}`)) return
+  const wInv = (await rest<Record<string, unknown>>(`hd_invoices?id=eq.${wInvId}&select=*`))[0] ?? {}
+  record(F, 'drive time and mileage reach the invoice', Number(wInv.travel_hours) === HW_JOB.travelHours && Number(wInv.mileage_miles) === HW_JOB.miles &&
+    r2(Number(wInv.travel_amount)) === r2(Number(q.travel_amount)) && r2(Number(wInv.mileage_amount)) === r2(Number(q.mileage_amount)),
+    `${wInv.travel_hours} h ${usd(wInv.travel_amount)}, ${wInv.mileage_miles} mi ${usd(wInv.mileage_amount)}`)
+
+  record(F, "the work order's readings reach its invoice", Number(wInv.unit_hours) === HW_JOB.hours && Number(wInv.vehicle_odometer) === HW_JOB.odometer,
+    `hours ${wInv.unit_hours ?? 'none'}, odometer ${wInv.vehicle_odometer ?? 'none'}`)
+
+  // ── the four documents ──
+  const docs: Array<[string, Record<string, unknown>]> = [['Quote', q], ['Invoice (quote)', qInv], ['Work order', woMoney], ['Invoice (WO)', wInv]]
+  hwTable(`${F}: ${q.quote_number} -> ${qInv.invoice_number}  |  ${stored.work_order_number} -> ${wInv.invoice_number}`, docs)
+  const m = docs.map(([, d]) => JSON.stringify(hwMoney(d)))
+  record(F, 'all four documents agree on every money line', m.every(x => x === m[0]),
+    docs.map(([n, d]) => `${n} ${usd(d.total ?? d.total_amount)}`).join(', '))
+}
+
+async function flowHw(): Promise<void> {
+  const F = 'Hw HD doors'
+
+  // ── the panel's rules, pure (no browser drives this suite) ──
+  const typed = { hours: '1', miles: '50', fee: '45' }, savedBox = { hours: '', miles: '', fee: '45' }
+  const after = feeInputsAfterReload(typed, savedBox, { hours: '', miles: '', fee: '45' }, true)
+  record(F, 'Save Lines: the reload keeps typed drive time and mileage', after.hours === '1' && after.miles === '50' && after.kept, JSON.stringify(after))
+  const fresh = feeInputsAfterReload(savedBox, savedBox, { hours: '2', miles: '10', fee: '45' }, true)
+  record(F, 'and shows the server value in a box nobody typed in', fresh.hours === '2' && fresh.miles === '10' && !fresh.kept, JSON.stringify(fresh))
+  record(F, 'no "Invoice total" prints while the lines are unsaved',
+    extrasTotalsState({ linesDirty: true, feesDirty: false, pricedFor: 'x', showing: 'x' }) === 'lines-unsaved' &&
+    extrasTotalsState({ linesDirty: false, feesDirty: true, pricedFor: 'old', showing: 'new' }) === 'updating' &&
+    extrasTotalsState({ linesDirty: false, feesDirty: true, pricedFor: 'new', showing: 'new' }) === 'priced', '')
+  const order: string[] = []
+  const unreg = [
+    registerPending('zz-hw', 'extras', { dirty: () => true, flush: async () => { order.push('extras'); return null } }),
+    registerPending('zz-hw', 'lines', { dirty: () => true, flush: async () => { order.push('lines'); return null } }),
+    registerPending('zz-hw', 'odometer', { dirty: () => false, flush: async () => { order.push('odometer'); return null } }),
+  ]
+  const flushed = await flushPending('zz-hw')
+  record(F, 'Create Invoice saves every unsaved card first, lines before fees', flushed === null && order.join(',') === 'lines,extras', order.join(','))
+  unreg.forEach(u => u())
+  const stop: string[] = []
+  const u2 = [
+    registerPending('zz-hw2', 'lines', { dirty: () => true, flush: async () => { stop.push('lines'); return 'boom' } }),
+    registerPending('zz-hw2', 'extras', { dirty: () => true, flush: async () => { stop.push('extras'); return null } }),
+  ]
+  record(F, 'and converts nothing when a save fails', (await flushPending('zz-hw2')) === 'boom' && stop.join(',') === 'lines', stop.join(','))
+  u2.forEach(u => u())
+
+  // ── the parts lookup on a document's unit ──
+  const belt = await api('GET', '/api/parts/search?manufacturer=Thermo%20King&model=s-600&q=belt')
+  const res = (belt.json.results ?? []) as Array<Record<string, unknown>>
+  const offUnit = res.filter(r => !((r.fitment as Array<Record<string, unknown>>) ?? []).some(f => modelMatches(f.unit_model as string | null, 's-600')))
+  record(F, '"belt" on an S-600 document returns only parts that fit an S-600', belt.status === 200 && res.length > 0 && offUnit.length === 0,
+    `${res.length} parts, ${offUnit.length} off the unit: ${offUnit.slice(0, 3).map(r => r.part_number).join(', ')}`)
+  record(F, 'and 78-1876 (Belt Generator to Alternator - Precedent S-600) is among them', res.some(r => r.part_number === '78-1876'), '')
+  record(F, 'every result carries its trust tier', res.length > 0 && res.every(r => r.trust && typeof (r.trust as Record<string, unknown>).verified === 'boolean'),
+    [...new Set(res.map(r => String((r.trust as Record<string, unknown> | null)?.tier ?? 'none')))].join(', '))
+  const exact = await api('GET', '/api/parts/search?manufacturer=Thermo%20King&model=SB-III&q=78-1876')
+  const ex = ((exact.json.results ?? []) as Array<Record<string, unknown>>).find(r => r.part_number === '78-1876')
+  record(F, 'an exact part number is never filtered by the unit, and says it does not fit', !!ex && ex.matched_by === 'number' && ex.fits_unit === false,
+    ex ? `matched_by ${ex.matched_by}, fits_unit ${ex.fits_unit}` : 'not returned')
+  const head = await api('GET', `/api/parts/search?manufacturer=Thermo%20King&model=s-600&heading=${encodeURIComponent('Belts & Drives')}`)
+  const hr = (head.json.results ?? []) as Array<Record<string, unknown>>
+  record(F, "browsing the unit by a counter heading returns only that heading", head.status === 200 && hr.length > 0 && hr.every(r => r.category === 'Belts & Drives'),
+    `${hr.length} parts`)
+
+  // ── the HD quote form in both themes: the paper scope reaches the shared inputs ──
+  const qf = await page('/hd/quotes/new')
+  const css = qf ? [...qf.html.matchAll(/href="([^"]+\.css)"/g)].map(x => x[1]) : []
+  let cssText = ''
+  for (const c of css) cssText += await (await fetch(c.startsWith('http') ? c : `${BASE}${c}`)).text()
+  record(F, 'the HD quote form is a paper surface and the stylesheet scopes its inputs',
+    !!qf && qf.html.includes('class="paper-surface"') && cssText.includes('.paper-surface .nwi-input') && cssText.includes('.paper-surface input:-webkit-autofill'),
+    qf ? `${css.length} stylesheet(s)` : 'did not load')
+  record(F, 'the quote form has Unit Hours and Odometer fields', !!qf && qf.text.includes('Unit Hours') && qf.text.includes('Odometer (miles)'), '')
+
+  // ── both doors, the owner on /hd ──
+  const ownerProfile = (await rest<Record<string, unknown>>(`profiles?id=eq.${OWNER}&select=*`))[0] ?? {}
+  await hwDoors(F, ownerProfile, '/hd')
+
+  // ── both doors again, a Reefer Standalone account on /reefer ──
+  const FR = 'Hw reefer doors'
+  const email = `smoke-reefer-${Date.now()}@example.com`
+  const mk = await fetch(`${SUPA}/auth/v1/admin/users`, {
+    method: 'POST', headers: SVC_H,
+    body: JSON.stringify({ email, password: `Smk-${Date.now()}-x9!`, email_confirm: true,
+      user_metadata: { full_name: `${MARK} reefer doors`, business_name: `${MARK} Reefer Doors` } }),
+  })
+  const u = await mk.json().catch(() => ({})) as { id?: string }
+  if (!record(FR, 'a throwaway reefer account is created', mk.ok && !!u.id, `-> ${mk.status}`)) return
+  created.reeferUsers.add(u.id!)
+  const sub = await fetch(`${SUPA}/rest/v1/subscriptions`, {
+    method: 'POST', headers: SVC_H,
+    body: JSON.stringify({ user_id: u.id, tier: 'reefer_standalone', status: 'active', is_comped: false,
+      vertical: 'heavy_duty', modules: [...REEFER_STANDALONE_MODULES], cancel_at_period_end: false }),
+  })
+  // The same billing settings as the owner's, so the same job must price the same.
+  const copy: Record<string, unknown> = {}
+  for (const k of Object.keys(ownerProfile)) if (/^hd_(labor_rate|parts_markup_percent|bill_|travel_rate|mileage_rate|shop_supplies|service_call)|^tax_|^default_tax_percent$/.test(k)) copy[k] = ownerProfile[k]
+  const prof = await fetch(`${SUPA}/rest/v1/profiles?id=eq.${u.id}`, { method: 'PATCH', headers: SVC_H, body: JSON.stringify(copy) })
+  if (!record(FR, 'it gets a reefer_standalone subscription and the same HD billing settings', sub.ok && prof.ok, `-> ${sub.status}/${prof.status} (${Object.keys(copy).length} settings)`)) return
+  const ownerCookie = cookie
+  try {
+    cookie = (await openSession(u.id!)).cookie
+    const rq = await page('/reefer/quotes/new')
+    record(FR, '/reefer/quotes/new is the same paper form with the readings fields',
+      !!rq && rq.html.includes('class="paper-surface"') && rq.text.includes('Unit Hours') && rq.text.includes('Odometer (miles)'), rq ? '' : 'did not load')
+    const reeferProfile = (await rest<Record<string, unknown>>(`profiles?id=eq.${u.id}&select=*`))[0] ?? {}
+    await hwDoors(FR, reeferProfile, '/reefer')
+  } finally {
+    cookie = ownerCookie
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -4383,6 +4689,7 @@ async function main(): Promise<void> {
     await flowTerms()
     await flowDiscount()
     await flowQw()
+    await flowHw()
     await flowIe()
     await flowHq()
     await flowPe()

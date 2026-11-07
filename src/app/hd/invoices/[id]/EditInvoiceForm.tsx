@@ -194,7 +194,9 @@ export default function EditInvoiceForm({ invoice, shopLaborRate, shop = null }:
   }
 
   return (
-    <div style={{ background: BG, color: TEXT, minHeight: '100dvh', padding: '24px 20px' }}>
+    // paper-surface: a white document in BOTH themes, so shared inputs inside it take
+    // the paper colours, not the app theme's (globals.css).
+    <div className="paper-surface" style={{ background: BG, color: TEXT, minHeight: '100dvh', padding: '24px 20px' }}>
       <div style={{ maxWidth: 860, margin: '0 auto' }}>
         <div className="flex items-center gap-3 mb-6">
           <Link href={`/hd/invoices/${id}`} style={{ color: MUTED, fontSize: 13 }}>← Invoice</Link>

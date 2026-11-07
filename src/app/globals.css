@@ -311,6 +311,34 @@ html.light {
     color: rgb(255 255 255 / 0.30);
   }
 
+  /* ── PAPER SURFACES ──
+     The HD quote, new invoice and invoice editor are WHITE documents in both themes
+     (--paper-*). Shared inputs inside them took the APP theme's colours instead: the
+     .nwi-input travel and mileage boxes went #2a2a2a with white text, and the global
+     autofill rule above painted autofilled Email / address / State boxes the same,
+     with their labels white on white. Inside .paper-surface every one of them takes
+     the paper colours, whatever the theme. :root raises these above html.light. */
+  :root .paper-surface .nwi-input {
+    background-color: #ffffff;
+    border-color: #E5E7EB;
+    color: var(--paper-text);
+  }
+  :root .paper-surface .nwi-input::placeholder { color: rgb(26 26 26 / 0.35); }
+  :root .paper-surface input:-webkit-autofill,
+  :root .paper-surface input:-webkit-autofill:hover,
+  :root .paper-surface input:-webkit-autofill:focus {
+    -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+    -webkit-text-fill-color: var(--paper-text) !important;
+    caret-color: var(--paper-text);
+  }
+  /* The field captions those shared inputs carry (ExtrasInputs, ServiceCallField). */
+  .nwi-field-label { color: rgb(255 255 255 / 0.50); }
+  .nwi-field-hint  { color: rgb(255 255 255 / 0.35); }
+  html.light .nwi-field-label { color: rgb(26 26 26 / 0.50); }
+  html.light .nwi-field-hint  { color: rgb(26 26 26 / 0.35); }
+  :root .paper-surface .nwi-field-label { color: var(--paper-muted); }
+  :root .paper-surface .nwi-field-hint  { color: var(--paper-muted); }
+
   .nwi-input-error {
     @apply border-danger focus:border-danger focus:ring-danger;
   }

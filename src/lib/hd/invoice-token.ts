@@ -11,6 +11,7 @@
 // by a client.
 
 import { randomBytes } from 'node:crypto'
+import { sourceQuoteNumber } from '@/lib/hd/invoice-source'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 // 32 bytes -> 64 hex chars, 256 bits of entropy. Overkill against brute force on
@@ -127,6 +128,8 @@ export async function getInvoiceByToken(
     .maybeSingle()
 
   if (error || !invoice) return null
+  // The quote a directly-billed invoice came from, so the customer copy cites it.
+  const source_quote_number = await sourceQuoteNumber(svc, invoice as Record<string, unknown>)
 
   const { data: profile } = await svc
     .from('profiles')
@@ -137,7 +140,7 @@ export async function getInvoiceByToken(
   const p = (profile ?? {}) as Partial<PublicInvoiceBranding>
 
   return {
-    invoice,
+    invoice: { ...invoice, source_quote_number },
     branding: {
       business_name:       p.business_name       ?? null,
       hd_company_logo_url: p.hd_company_logo_url ?? null,

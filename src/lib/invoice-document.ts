@@ -370,6 +370,9 @@ export function serviceUnitLines(inv: Record<string, unknown>): LabelledLine[] {
   const truck = [s(inv.truck_year), s(inv.truck_make), s(inv.truck_model)].filter(Boolean).join(' ')
   if (truck) out.push({ label: 'Truck', value: truck })
   if (s(inv.vin)) out.push({ label: 'VIN', value: s(inv.vin) })
+  // Migration 183: the truck or trailer's odometer at THIS service. None recorded, no line.
+  const odo = inv.vehicle_odometer == null || inv.vehicle_odometer === '' ? null : Number(inv.vehicle_odometer)
+  if (odo != null && Number.isFinite(odo)) out.push({ label: 'Odometer', value: `${Math.round(odo).toLocaleString('en-US')} mi` })
 
   return out
 }

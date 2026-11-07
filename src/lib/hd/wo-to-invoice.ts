@@ -347,6 +347,8 @@ export function invoiceIdentityFromWorkOrder(wo: Record<string, unknown>): Recor
     // Migration 179: the hour reading the work order recorded, frozen on the invoice.
     // Absent before 179, and then absent here, so earlier payloads are unchanged.
     ...('unit_hours' in wo ? { unit_hours: wo.unit_hours ?? null } : {}),
+    // Migration 183: the truck or trailer's odometer at this service, frozen the same way.
+    ...('vehicle_odometer' in wo ? { vehicle_odometer: wo.vehicle_odometer ?? null } : {}),
     // Migration 159. The convert route fills these from the quote for a work order
     // made before it, so the invoice states the machine the customer was quoted for.
     unit_year:         wo.unit_year ?? null,

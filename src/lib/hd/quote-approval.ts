@@ -30,6 +30,7 @@
 // copies figures the quote already computed and stored.
 
 import { createServiceClient } from '@/lib/supabase/service'
+import { isMissingReadingColumn, readingsCarry, withoutMissingReadings } from '@/lib/hd/unit-hours'
 import { isMissingPaymentTermsColumn } from '@/lib/hd/payment-terms'
 import { isMissingMigration159Column, withoutMigration159Columns } from '@/lib/hd/migration-159'
 import { insertWithWorkOrderNumber } from '@/lib/work-order-number'
@@ -423,6 +424,9 @@ export async function createWorkOrderFromQuote(
     truck_model:       quote.truck_model ?? null,
     truck_year:        quote.truck_year ?? null,
     vin:               quote.vin ?? null,
+    // The readings the quote recorded (179 + 183): the unit's hours and the truck or
+    // trailer's odometer, carried frozen. Only the columns the quote has.
+    ...readingsCarry(quote),
     // The Intel Hub links. hd_quotes gains these in migration 158; a quote saved
     // before it reads undefined here and carries null, which is what it carried before.
     fleet_account_id:  quote.fleet_account_id ?? null,
@@ -569,6 +573,11 @@ export async function createWorkOrderFromQuote(
         // rather than dropped, since its tax is already inside the carried figure.
         if (Number(row.service_call_fee ?? 0) > 0) break
         row = withoutServiceCall(row)
+      } else if (isMissingReadingColumn(res.error)) {
+        // A reading column the work order lacks: dropped when blank, refused when not.
+        const r = withoutMissingReadings(row, res.error)
+        if ('error' in r) break
+        row = r.row
       } else if (isMissingMigration159Column(res.error) && 'road_call_fee' in row) {
         console.error('[hd quote->wo] fee/unit columns missing - run migration 159', res.error.message)
         row = withoutMigration159Columns(row)

@@ -10,6 +10,16 @@
 //
 // Shop supplies has no input. It is a percentage of the parts lines from Settings, and
 // it re-prices when the parts card saves.
+//
+// NOTHING TYPED HERE IS LOST (lib/hd/wo-pending). Save Lines saves what is typed here
+// with the lines; Create Invoice saves it before it converts; and the reload after a
+// line save keeps any value typed and not yet saved. Before Nov 6 the reload re-seeded
+// these boxes from the server and Create Invoice converted only what was stored, so
+// WO-2026-1571's 1.0 h and 50 miles never reached INV-2026-0027.
+//
+// NO TOTAL FROM STALE LINES. The preview is priced on the SAVED lines, so while the
+// parts card holds unsaved edits the totals block says so instead of printing an
+// "Invoice total" that leaves them out ($281.24 shown beside $297.80 of lines).
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
@@ -17,6 +27,7 @@ import { extrasDisplayRows, extrasFromDocument, type ExtrasSettings } from '@/li
 import { feeRows } from '@/lib/invoice-document'
 import { discountPrintLabel, parseDiscount } from '@/lib/document-discount'
 import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
+import { extrasTotalsState, feeInputsAfterReload, pendingCards, registerPending, LINES_DIRTY_EVENT, LINES_SAVED_EVENT } from '@/lib/hd/wo-pending'
 
 interface Settings {
   extras: ExtrasSettings
@@ -35,6 +46,7 @@ interface Answer {
 }
 
 const usd = (n: unknown) => `$${(Number(n) || 0).toFixed(2)}`
+const key = (h: string, m: string, f: string) => `${h}|${m}|${f}`
 const field = { background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }
 
 export default function WorkOrderExtras({ workOrderId, locked }: { workOrderId: string; locked: boolean }) {
@@ -48,9 +60,17 @@ export default function WorkOrderExtras({ workOrderId, locked }: { workOrderId: 
   const [error, setError] = useState<string | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  // The parts card has unsaved edits: the preview below is priced without them.
+  const [linesDirty, setLinesDirty] = useState(false)
+  // The inputs the shown preview was priced for, so a total is never printed for
+  // values the server has not priced yet.
+  const [pricedFor, setPricedFor] = useState('')
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // The latest typed and saved values, for a reload that must keep what was typed.
+  const live = useRef({ hours: '', miles: '', fee: '', saved: { hours: '', miles: '', fee: '' } })
+  live.current = { hours, miles, fee, saved }
 
-  const seed = useCallback((a: Answer) => {
+  const seed = useCallback((a: Answer, keepTyped = false) => {
     const s = a.state
     // A work order nobody has priced extras on yet starts with the shop's service call fee.
     const prefill = a.settings.untouched && a.settings.service_call.available && a.settings.service_call.bill
@@ -60,25 +80,38 @@ export default function WorkOrderExtras({ workOrderId, locked }: { workOrderId: 
       miles: s.mileageMiles ? String(s.mileageMiles) : '',
       fee: s.serviceCallFee != null ? String(s.serviceCallFee) : '',
     }
+    // A box typed into and not saved keeps what was typed; the rest show the server's.
+    const was = live.current
+    const shown = feeInputsAfterReload(was, was.saved,
+      { ...next, fee: prefill ? String(a.settings.service_call.fee) : next.fee }, keepTyped)
     setSaved(next)
-    setHours(next.hours); setMiles(next.miles)
-    setFee(prefill ? String(a.settings.service_call.fee) : next.fee)
+    setHours(shown.hours); setMiles(shown.miles); setFee(shown.fee)
+    setPricedFor(shown.kept ? '' : key(shown.hours, shown.miles, shown.fee))
   }, [])
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (keepTyped = false) => {
     try {
       const res = await fetch(`/api/hd/work-orders/${workOrderId}/extras`)
       const j = await res.json() as Answer
       if (!res.ok) { setError(j.error ?? 'Could not load drive time and mileage.'); return }
-      setAnswer(j); seed(j)
+      setAnswer(j); seed(j, keepTyped)
     } catch { setError('Could not reach the server.') }
   }, [workOrderId, seed])
 
   useEffect(() => { void load() }, [load])
   useEffect(() => {
-    const on = (e: Event) => { if ((e as CustomEvent).detail?.workOrderId === workOrderId) void load() }
-    window.addEventListener('hd-wo-lines-saved', on)
-    return () => window.removeEventListener('hd-wo-lines-saved', on)
+    const onSaved = (e: Event) => { if ((e as CustomEvent).detail?.workOrderId === workOrderId) void load(true) }
+    const onDirty = (e: Event) => {
+      const d = (e as CustomEvent).detail
+      if (d?.workOrderId === workOrderId) setLinesDirty(!!d.dirty)
+    }
+    setLinesDirty(pendingCards(workOrderId).includes('lines'))
+    window.addEventListener(LINES_SAVED_EVENT, onSaved)
+    window.addEventListener(LINES_DIRTY_EVENT, onDirty)
+    return () => {
+      window.removeEventListener(LINES_SAVED_EVENT, onSaved)
+      window.removeEventListener(LINES_DIRTY_EVENT, onDirty)
+    }
   }, [workOrderId, load])
 
   const dirty = hours !== saved.hours || miles !== saved.miles || fee !== saved.fee
@@ -89,10 +122,12 @@ export default function WorkOrderExtras({ workOrderId, locked }: { workOrderId: 
     dry_run: dryRun,
   })
 
-  // Re-ask the server for the totals as the tech types.
+  // Re-ask the server for the totals as the tech types (and after a reload that kept
+  // typed values, which the stored preview does not include).
   useEffect(() => {
     if (!answer || !dirty) return
     if (timer.current) clearTimeout(timer.current)
+    const asked = key(hours, miles, fee)
     timer.current = setTimeout(async () => {
       try {
         const res = await fetch(`/api/hd/work-orders/${workOrderId}/extras`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: body(true) })
@@ -100,27 +135,42 @@ export default function WorkOrderExtras({ workOrderId, locked }: { workOrderId: 
         if (!res.ok) { setError(j.error ?? 'Could not price that.'); return }
         setError(null)
         setAnswer(a => (a ? { ...a, invoice: j.invoice, discount_error: j.discount_error } : a))
+        setPricedFor(asked)
       } catch { /* the save reports it */ }
     }, 300)
     return () => { if (timer.current) clearTimeout(timer.current) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hours, miles, fee])
+  }, [hours, miles, fee, answer?.state])
 
-  async function save() {
+  // Resolves to the error, or null when saved. Save Lines and Create Invoice call this
+  // through lib/hd/wo-pending when the boxes hold unsaved values.
+  async function save(): Promise<string | null> {
     setSaving(true); setError(null); setNote(null)
     try {
       const res = await fetch(`/api/hd/work-orders/${workOrderId}/extras`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: body(false) })
       const j = await res.json() as Answer
-      if (!res.ok) { setError(j.error ?? 'Nothing was saved.'); return }
+      if (!res.ok) { const msg = j.error ?? 'Nothing was saved.'; setError(msg); return msg }
       setAnswer(a => ({ ...j, locked: a?.locked })); seed({ ...j, settings: { ...j.settings, untouched: false } })
       setNote('Saved.')
       router.refresh()
+      return null
     } catch {
-      setError('Could not reach the server. Nothing was saved.')
+      const msg = 'Could not reach the server. Nothing was saved.'
+      setError(msg)
+      return msg
     } finally {
       setSaving(false)
     }
   }
+
+  const dirtyRef = useRef(false)
+  dirtyRef.current = dirty && !locked
+  const saveRef = useRef(save)
+  saveRef.current = save
+  useEffect(() => registerPending(workOrderId, 'extras', {
+    dirty: () => dirtyRef.current,
+    flush: () => saveRef.current(),
+  }), [workOrderId])
 
   if (!answer) {
     return (
@@ -133,6 +183,7 @@ export default function WorkOrderExtras({ workOrderId, locked }: { workOrderId: 
 
   const s = answer.settings
   const inv = answer.invoice
+  const totalsState = extrasTotalsState({ linesDirty, feesDirty: dirty, pricedFor, showing: key(hours, miles, fee) })
   const showTravel = s.extras.billTravel || Number(saved.hours) > 0
   const showMiles = s.extras.billMileage || Number(saved.miles) > 0
   const showFee = s.service_call.available && (s.service_call.bill || saved.fee !== '')
@@ -209,16 +260,25 @@ export default function WorkOrderExtras({ workOrderId, locked }: { workOrderId: 
       )}
 
       <div className="flex justify-end mt-4">
-        <div style={{ width: 320, maxWidth: '100%' }} data-testid="wo-extras-totals">
-          {rows.map(r => (
-            <div key={r.label} className="flex justify-between py-1 text-sm" style={{ color: 'var(--hd-text-muted)' }}>
-              <span>{r.label}</span><span>{usd(r.val)}</span>
+        {totalsState === 'lines-unsaved' ? (
+          // The preview is priced on the SAVED lines; with edits above unsaved, any total
+          // here would leave them out. Said, never computed.
+          <p className="text-sm text-right" style={{ width: 320, maxWidth: '100%', color: 'var(--hd-warn)' }} data-testid="wo-extras-totals-pending">
+            Totals appear once the parts &amp; labor lines above are saved. Save Lines saves drive time, mileage and fees with them.
+          </p>
+        ) : (
+          <div style={{ width: 320, maxWidth: '100%' }} data-testid="wo-extras-totals">
+            {rows.map(r => (
+              <div key={r.label} className="flex justify-between py-1 text-sm" style={{ color: 'var(--hd-text-muted)' }}>
+                <span>{r.label}</span><span>{usd(r.val)}</span>
+              </div>
+            ))}
+            <div className="flex justify-between py-2 mt-1 text-sm font-semibold text-white" style={{ borderTop: '1px solid var(--hd-border)' }}>
+              <span>Invoice total</span>
+              <span data-testid="wo-extras-total">{totalsState === 'priced' ? usd(inv.total) : 'updating...'}</span>
             </div>
-          ))}
-          <div className="flex justify-between py-2 mt-1 text-sm font-semibold text-white" style={{ borderTop: '1px solid var(--hd-border)' }}>
-            <span>Invoice total</span><span data-testid="wo-extras-total">{usd(inv.total)}</span>
           </div>
-        </div>
+        )}
       </div>
 
       {answer.discount_error && <p className="text-xs mt-2" style={{ color: '#FBBF24' }}>{answer.discount_error}</p>}

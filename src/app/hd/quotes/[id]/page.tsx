@@ -1,5 +1,6 @@
 import { redirect, notFound } from 'next/navigation'
 import Link from 'next/link'
+import { formatOdometer, formatUnitHours } from '@/lib/hd/unit-hours'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import QuoteDetailActions from './QuoteDetailActions'
@@ -112,6 +113,9 @@ export default async function QuoteDetailPage({ params }: { params: Promise<{ id
                 </p>
               )}
               {q.vin && <p className="text-sm" style={{ color: 'var(--paper-muted)' }}>VIN: {q.vin}</p>}
+              {/* The readings at this service (179 + 183). None recorded, no line. */}
+              {formatUnitHours(q.unit_hours) && <p className="text-sm" style={{ color: 'var(--paper-muted)' }} data-testid="quote-hours">Hours: {formatUnitHours(q.unit_hours)}</p>}
+              {formatOdometer(q.vehicle_odometer) && <p className="text-sm" style={{ color: 'var(--paper-muted)' }} data-testid="quote-odometer-print">Odometer: {formatOdometer(q.vehicle_odometer)} mi</p>}
               {/* Who is doing the work (migration 160). Shop view only - the public
                   approval page does not select it. */}
               {q.tech_name && <p className="text-sm mt-1" style={{ color: 'var(--paper-muted)' }}>Tech: {q.tech_name}</p>}

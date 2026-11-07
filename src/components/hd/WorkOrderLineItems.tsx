@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { DEFAULT_HD_PARTS_MARKUP } from '@/lib/hd/parts-pricing'
 import {
   lineTotal,
@@ -9,12 +9,13 @@ import {
   type WorkOrderLine,
   type WorkOrderLineType,
 } from '@/lib/hd/work-order-lines'
-import AddPartToWorkOrder from '@/components/parts/AddPartToWorkOrder'
+import DocumentPartLookup, { HD_PALETTE } from '@/components/parts/DocumentPartLookup'
 import type { PickedPart } from '@/components/parts/PartsFinder'
 import { money } from '@/lib/format'
 import { tint } from '@/lib/hd/text-tone'
 import { JOB_STATUSES, type JobStatus, type WorkOrderJob } from '@/lib/hd/work-order-jobs'
 import { NO_HD_LABOR_RATE } from '@/lib/hd/labor-rate'
+import { flushPending, registerPending, LINES_DIRTY_EVENT, LINES_SAVED_EVENT } from '@/lib/hd/wo-pending'
 
 // Parts and labor priced on the job itself, instead of first appearing at the
 // invoice form. Self-contained: it fetches and saves its own rows, so the work order
@@ -133,6 +134,7 @@ export default function WorkOrderLineItems({
   const [hasJobs, setHasJobs] = useState(false)
   // Where a part picked from the catalog lands.
   const [catalogJob, setCatalogJob] = useState(1)
+  const [catalogOpen, setCatalogOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving]   = useState(false)
   const [dirty, setDirty]     = useState(false)
@@ -304,7 +306,9 @@ export default function WorkOrderLineItems({
 
   const blankCount = lines.filter(isBlank).length
 
-  async function save() {
+  // Resolves to the error, or null when saved. Create Invoice saves pending lines
+  // through this before it converts (lib/hd/wo-pending).
+  async function save(): Promise<string | null> {
     setSaving(true)
     setError(null)
     try {
@@ -346,19 +350,47 @@ export default function WorkOrderLineItems({
       if (json.has_jobs) setJobs(toDraftJobs(json.jobs))
       setLines(toDrafts(json.line_items ?? [], json.has_jobs ? json.jobs : undefined))
       setDirty(false)
+      dirtyRef.current = false
+      // SAVED TOGETHER. Drive time, mileage or a fee typed on the panel below and not
+      // yet saved are saved now too, after the lines, so shop supplies prices on the
+      // parts just stored. Save Lines used to reload that panel from the server and
+      // wipe what was typed in it (WO-2026-1571).
+      const feesError = await flushPending(workOrderId, ['extras'])
       // Shop supplies is a percentage of these parts: tell the extras panel to re-price.
-      window.dispatchEvent(new CustomEvent('hd-wo-lines-saved', { detail: { workOrderId } }))
+      window.dispatchEvent(new CustomEvent(LINES_SAVED_EVENT, { detail: { workOrderId } }))
+      if (feesError) {
+        setError(`Lines saved. Drive time, mileage and fees were not: ${feesError}`)
+        return feesError
+      }
       // Said out loud. A row vanishing on save with no explanation is its own small
       // mystery, and the tech should know it was the empty one and not his part line.
       setNote(dropped > 0
         ? `Saved. ${dropped} empty ${dropped === 1 ? 'line was' : 'lines were'} dropped.`
         : 'Saved.')
+      return null
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Save failed')
+      const msg = err instanceof Error ? err.message : 'Save failed'
+      setError(msg)
+      return msg
     } finally {
       setSaving(false)
     }
   }
+
+  // What this card has unsaved, for the extras panel (which must not total stale lines)
+  // and for Create Invoice (which saves it first). Refs, because the registration lives
+  // for the card's lifetime and must read the latest rows.
+  const dirtyRef = useRef(false)
+  dirtyRef.current = dirty
+  const saveRef = useRef(save)
+  saveRef.current = save
+  useEffect(() => registerPending(workOrderId, 'lines', {
+    dirty: () => dirtyRef.current,
+    flush: () => saveRef.current(),
+  }), [workOrderId])
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent(LINES_DIRTY_EVENT, { detail: { workOrderId, dirty } }))
+  }, [workOrderId, dirty])
 
   // One summing rule for the card and for each job, so the job subtotals add up to the
   // card's LINE TOTAL by construction.
@@ -420,7 +452,7 @@ export default function WorkOrderLineItems({
             <span className="text-xs" style={{ color: 'var(--hd-warn)' }}>Unsaved changes</span>
           )}
           <button
-            type="button" onClick={save} disabled={saving || !dirty}
+            type="button" onClick={() => void save()} disabled={saving || !dirty}
             className="px-5 py-2 rounded-lg text-xs font-condensed font-bold tracking-wide text-on-accent disabled:opacity-40"
             style={{ background: HD_ORANGE }}
           >
@@ -445,11 +477,28 @@ export default function WorkOrderLineItems({
               </select>
             </label>
           )}
-          <AddPartToWorkOrder
-            unit={unit}
-            markupPercent={markupDefault}
-            onAdd={addPartFromCatalog}
-          />
+          {/* The same lookup as the HD quote's ADD PARTS LINE box: filtered to this
+              unit, the whole catalog only as a deliberate switch, an exact number never
+              filtered, and each row's trust tier shown. */}
+          {catalogOpen ? (
+            <>
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-semibold tracking-widest" style={{ color: 'var(--hd-text-muted)' }}>FIND A PART</span>
+                <button type="button" className="text-xs underline" style={{ color: 'var(--hd-text-muted)' }} onClick={() => setCatalogOpen(false)}>Close</button>
+              </div>
+              <DocumentPartLookup
+                unit={unit}
+                palette={HD_PALETTE}
+                onPick={p => addPartFromCatalog({ part_number: p.part_number, description: p.description, unit_cost: p.unit_cost, quantity: 1 })}
+              />
+            </>
+          ) : (
+            <button type="button" onClick={() => setCatalogOpen(true)} data-testid="wo-find-part"
+              className="px-4 py-2 rounded-lg text-xs font-condensed font-bold tracking-wide"
+              style={{ background: 'transparent', color: 'var(--hd-text)', border: `1px solid ${BORDER}` }}>
+              Find a part for this unit
+            </button>
+          )}
         </div>
       )}
 

@@ -58,3 +58,84 @@ export function isMissingUnitHoursColumn(error: unknown): boolean {
   const e = (error ?? {}) as { code?: string; message?: string }
   return (e.code === '42703' || e.code === 'PGRST204') && /unit_hours/.test(String(e.message ?? ''))
 }
+
+// ─── The truck or trailer's odometer (migration 183) ──────────────────────────
+//
+// The reefer unit records HOURS; the truck or trailer it is on records MILES. Same
+// rules as the hours: the reading at THIS service, frozen on the quote, the work order
+// and the invoice; NULL = none taken and nothing prints - no "0", no placeholder. For
+// warranty: a receipt at 123,000 miles is the proof of what was done and when.
+//
+// Migration 183 also gives hd_quotes the unit_hours column the work order and invoice
+// have had since 179, so a reading taken at the quote carries to both.
+
+export const MAX_ODOMETER = 9999999
+
+/** An odometer as entered: whole miles, NULL for blank, or 'invalid'. */
+export function parseOdometer(v: unknown): number | null | 'invalid' {
+  if (v === null || v === undefined || (typeof v === 'string' && v.trim() === '')) return null
+  const n = Number(typeof v === 'string' ? v.replace(/[,\s]/g, '').replace(/mi(les)?$/i, '') : v)
+  if (!Number.isFinite(n) || n < 0 || n > MAX_ODOMETER) return 'invalid'
+  return Math.round(n)
+}
+
+/** "123,000". NULL for a document with no reading. */
+export function formatOdometer(v: unknown): string | null {
+  const n = num(v)
+  return n == null ? null : Math.round(n).toLocaleString('en-US')
+}
+
+/** The two reading columns, as a document stores them. */
+export const READING_COLUMNS = ['unit_hours', 'vehicle_odometer'] as const
+
+/**
+ * The readings off a request body, parsed - only the keys the body sent, so a caller
+ * that knows nothing of them changes nothing. An unparseable value is an error, never
+ * silently stored as blank.
+ */
+export function readingsFromBody(body: Record<string, unknown>): { update: Record<string, number | null> } | { error: string } {
+  const update: Record<string, number | null> = {}
+  if ('unit_hours' in body) {
+    const h = parseUnitHours(body.unit_hours)
+    if (h === 'invalid') return { error: 'Unit hours must be a number from 0 to 999,999, or blank.' }
+    update.unit_hours = h
+  }
+  if ('vehicle_odometer' in body) {
+    const o = parseOdometer(body.vehicle_odometer)
+    if (o === 'invalid') return { error: 'The odometer must be whole miles from 0 to 9,999,999, or blank.' }
+    update.vehicle_odometer = o
+  }
+  return { update }
+}
+
+/** The readings a document carries to the next one: only the columns the source has. */
+export function readingsCarry(doc: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const k of READING_COLUMNS) if (k in doc) out[k] = doc[k] ?? null
+  return out
+}
+
+/** True for a write refused because a reading column (179 or 183) is missing. */
+export function isMissingReadingColumn(error: unknown): boolean {
+  const e = (error ?? {}) as { code?: string; message?: string }
+  return (e.code === '42703' || e.code === 'PGRST204') && /unit_hours|vehicle_odometer/.test(String(e.message ?? ''))
+}
+
+/**
+ * The row without the reading columns the database lacks, or the refusal when one of
+ * them holds a reading: a typed reading is never dropped silently (Brock, Nov 6).
+ */
+export function withoutMissingReadings(row: Record<string, unknown>, error: unknown): { row: Record<string, unknown> } | { error: string } {
+  const msg = String((error as { message?: string } | null)?.message ?? '')
+  const out = { ...row }
+  for (const k of READING_COLUMNS) {
+    if (!msg.includes(k)) continue
+    if (out[k] != null) {
+      return { error: k === 'unit_hours'
+        ? 'Unit hours on this document need a migration that is not applied yet (179 for work orders and invoices, 183 for quotes). Nothing was saved - clear the hours to save without them.'
+        : 'The odometer needs migration 183, which is not applied yet. Nothing was saved - clear the odometer to save without it.' }
+    }
+    delete out[k]
+  }
+  return { row: out }
+}

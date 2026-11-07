@@ -23,6 +23,7 @@ import { hdDocumentTax, hdTaxableBase, savedDocumentTax } from '@/lib/hd/documen
 import { parseAddress } from '@/lib/hd/address-parse'
 import { DEFAULT_HD_PARTS_MARKUP, sellPrice, lineAmount } from '@/lib/hd/parts-pricing'
 import AddressAutofill from '@/components/hd/AddressAutofill'
+import DocumentPartLookup, { type LookupPick } from '@/components/parts/DocumentPartLookup'
 import { money } from '@/lib/format'
 import PaymentTermsSelect from '@/components/hd/PaymentTermsSelect'
 import { termsDisplay } from '@/lib/hd/payment-terms'
@@ -87,12 +88,6 @@ interface PartsDraft {
   quantity: string
   unit_cost: string
   markup: string
-}
-
-interface PartResult {
-  part_number: string
-  description: string
-  category: string
 }
 
 // A row from the personal labor library (hd_repair_items)
@@ -326,8 +321,8 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
     editing && Array.isArray(initial.line_items) ? initial.line_items as LineItem[] : [])
   const [qwAvailable, setQwAvailable]     = useState(false)
   const [qwPulledNote, setQwPulledNote]   = useState('')
-  const [partsResults, setPartsResults]   = useState<PartResult[]>([])
-  const [partsSearching, setPartsSearching] = useState(false)
+  // A number typed in the line's Part Number box, handed to the lookup by "Lookup".
+  const [partLookup, setPartLookup]       = useState<{ text: string; nonce: number } | null>(null)
 
   // ===========================================================================
   // LABOR MODAL STATE — ONE BILLABLE NUMBER
@@ -393,6 +388,9 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
     payment_terms: '',
     unit_number: '', unit_manufacturer: '', unit_model: '', unit_serial: '', unit_year: '',
     truck_make: '', truck_model: '', truck_year: '', vin: '',
+    // The readings at THIS service (migrations 179 + 183): the reefer unit's hour meter
+    // and the truck or trailer's odometer. Optional; blank records none and prints none.
+    unit_hours: '', vehicle_odometer: '',
     complaint: '', diagnosis: '',
     // include_diagnostic STARTS OFF, and diagnostic_fee starts at 0.
     //
@@ -550,6 +548,9 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
         labor_rate?: number
         unit_manufacturer?: string; unit_model?: string; unit_serial?: string; unit_year?: string
         truck_make?: string; truck_model?: string; truck_year?: string; vin?: string
+        /** Taken at the point the VIN was entered in QuickWrench. */
+        vehicle_odometer?: number | string | null
+        unit_hours?: number | string | null
         lineItems?: Array<{
           description: string
           book_hours: number; book_hours_max: number
@@ -575,6 +576,8 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
         ...(prefill.truck_model ? { truck_model: prefill.truck_model } : {}),
         ...(prefill.truck_year  ? { truck_year:  prefill.truck_year  } : {}),
         ...(prefill.vin         ? { vin:         prefill.vin         } : {}),
+        ...(prefill.vehicle_odometer != null && String(prefill.vehicle_odometer).trim() !== '' ? { vehicle_odometer: String(prefill.vehicle_odometer) } : {}),
+        ...(prefill.unit_hours != null && String(prefill.unit_hours).trim() !== '' ? { unit_hours: String(prefill.unit_hours) } : {}),
         labor_rate: rate,
       }))
       if (prefill.lineItems?.length) {
@@ -1294,29 +1297,28 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
   }
 
   // ── Parts modal ──
-  async function searchParts() {
-    const q = parts.part_number.trim() || parts.description.trim()
-    if (!q) return
-    setPartsSearching(true)
-    try {
-      const res  = await fetch(`/api/hd/parts?search=${encodeURIComponent(q)}&manufacturer=${encodeURIComponent(form.unit_manufacturer)}`)
-      const data = await res.json()
-      setPartsResults((data.parts ?? []).slice(0, 6) as PartResult[])
-    } finally {
-      setPartsSearching(false)
-    }
-  }
-
-  function selectPartResult(p: PartResult) {
-    setParts(d => ({ ...d, part_number: p.part_number, description: p.description }))
-    setPartsResults([])
+  //
+  // SEARCHING AND NAMING ARE TWO FIELDS. The lookup (components/parts/DocumentPartLookup)
+  // searches the catalog filtered to this quote's unit; the Description box below is
+  // only the line's name. Before Nov 6 one Description box was both the search text
+  // and the line's name, against the old hd_parts table filtered by make alone.
+  function pickPart(p: LookupPick) {
+    // The catalog's own description and number, and the shop's last cost when it has
+    // one. Every field stays editable; the markup is the quote's.
+    setParts(d => ({
+      ...d,
+      part_number: p.part_number,
+      description: p.description,
+      ...(p.unit_cost != null ? { unit_cost: p.unit_cost.toFixed(2) } : {}),
+    }))
   }
 
   function addPartsItem() {
     const qty    = parseFloat(parts.quantity)  || 1
     const cost   = parseFloat(parts.unit_cost) || 0
     const markup = parseFloat(parts.markup)    || 0
-    if (!parts.description.trim()) { setToast('Enter a part description.'); return }
+    // The LINE's description - its own box now, never the search text.
+    if (!parts.description.trim()) { setToast('Enter the line description, or pick a part to fill it.'); return }
     const amount = lineAmount(qty, cost, markup)
     const item: LineItem = {
       id: crypto.randomUUID(),
@@ -1336,7 +1338,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
     }
     setLineItems(l => [...l, item])
     setParts({ part_number: '', description: '', quantity: '1', unit_cost: '0.00', markup: String(partsMarkupDefault) })
-    setPartsResults([])
+    setPartLookup(null)
     setPartsModal(false)
   }
 
@@ -1399,6 +1401,11 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
         truck_model:       form.truck_model || null,
         truck_year:        form.truck_year || null,
         vin:               form.vin || null,
+        // The readings, as typed: the route parses them and refuses one it cannot read.
+        // A new quote sends a key only when there is a reading; an edit always sends
+        // both, so clearing one records none.
+        ...(editing || form.unit_hours.trim() ? { unit_hours: form.unit_hours.trim() || null } : {}),
+        ...(editing || form.vehicle_odometer.trim() ? { vehicle_odometer: form.vehicle_odometer.trim() || null } : {}),
         complaint:         form.complaint || null,
         diagnosis:         form.diagnosis || null,
         line_items:        lineItems,
@@ -1474,7 +1481,9 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <div style={{ background: BG, color: TEXT, minHeight: '100dvh', padding: '24px 20px' }}>
+    // paper-surface: a white document in BOTH themes, so shared inputs inside it take
+    // the paper colours, not the app theme's (globals.css).
+    <div className="paper-surface" style={{ background: BG, color: TEXT, minHeight: '100dvh', padding: '24px 20px' }}>
       <div style={{ maxWidth: 860, margin: '0 auto' }}>
 
         {/* Page header */}
@@ -1681,6 +1690,11 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
             <Field label="Unit Year">
               <input style={inp} value={form.unit_year} onChange={e => setField('unit_year', e.target.value)} placeholder="e.g. 2018" />
             </Field>
+            {/* The reefer unit's hour meter at this service. Optional; carries to the work
+                order and the invoice and prints on the customer copy. */}
+            <Field label="Unit Hours">
+              <input style={inp} value={form.unit_hours} onChange={e => setField('unit_hours', e.target.value)} placeholder="Hour meter (optional)" inputMode="decimal" data-testid="quote-unit-hours" />
+            </Field>
             {/* Said at the point of entry, not only after conversion. The work order
                 carries the same flag, so this is a heads-up rather than the record. */}
             {!isTruckUnit && !form.unit_serial.trim() && (
@@ -1702,6 +1716,11 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
             </Field>
             <Field label="VIN">
               <input style={inp} value={form.vin} onChange={e => setField('vin', e.target.value)} placeholder="17-digit VIN" />
+            </Field>
+            {/* The truck or trailer's odometer at this service - the warranty record.
+                Optional; carries to the work order and the invoice. */}
+            <Field label="Odometer (miles)">
+              <input style={inp} value={form.vehicle_odometer} onChange={e => setField('vehicle_odometer', e.target.value)} placeholder="Truck / trailer miles (optional)" inputMode="numeric" data-testid="quote-odometer" />
             </Field>
           </div>
         </div>
@@ -2590,45 +2609,38 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
       {/* ─ Parts Modal ─ */}
       {partsModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.4)' }}>
-          <div style={{ background: CARD, borderRadius: 12, padding: 24, width: '100%', maxWidth: 520 }}>
+          <div style={{ background: CARD, borderRadius: 12, padding: 24, width: '100%', maxWidth: 620, maxHeight: '92vh', overflowY: 'auto' }}>
             <h3 className="font-condensed font-bold text-xl mb-4" style={{ color: TEXT }}>ADD PARTS LINE</h3>
             <div className="flex flex-col gap-4">
+              {/* 1. FIND IT - filtered to the unit on this quote. */}
+              <DocumentPartLookup
+                unit={{ manufacturer: form.unit_manufacturer || null, model: form.unit_model || null, serial: form.unit_serial || null }}
+                onPick={pickPart}
+                numberQuery={partLookup}
+              />
+
+              {/* 2. THE LINE - what prints on the quote. Filled from the pick, editable. */}
               <div className="flex gap-2">
                 <div className="flex-1">
                   <Field label="Part Number">
-                    <input style={inp} value={parts.part_number} onChange={e => setParts(d => ({ ...d, part_number: e.target.value }))} placeholder="11-9959 or 30-60143-01" autoFocus />
+                    <input style={inp} value={parts.part_number} onChange={e => setParts(d => ({ ...d, part_number: e.target.value }))} placeholder="11-9959 or 30-60143-01"
+                      onKeyDown={e => { if (e.key === 'Enter' && parts.part_number.trim()) setPartLookup({ text: parts.part_number, nonce: Date.now() }) }} />
                   </Field>
                 </div>
                 <div className="flex flex-col justify-end">
                   <button
-                    onClick={searchParts}
-                    disabled={partsSearching}
+                    type="button"
+                    onClick={() => parts.part_number.trim() && setPartLookup({ text: parts.part_number, nonce: Date.now() })}
                     className="px-4 py-2.5 rounded-lg text-sm font-semibold text-on-fill disabled:opacity-50"
                     style={{ background: BLUE, minHeight: 44 }}
                   >
-                    {partsSearching ? '...' : 'Lookup'}
+                    Lookup
                   </button>
                 </div>
               </div>
 
-              {partsResults.length > 0 && (
-                <div style={{ border: `1px solid ${BORDER}`, borderRadius: 8, overflow: 'hidden' }}>
-                  {partsResults.map(p => (
-                    <button
-                      key={p.part_number}
-                      onClick={() => selectPartResult(p)}
-                      className="w-full text-left px-3 py-2 hover:bg-gray-50 flex items-start gap-3"
-                      style={{ borderBottom: `1px solid #F9FAFB` }}
-                    >
-                      <span className="font-mono text-xs font-semibold" style={{ color: 'var(--paper-text)', minWidth: 100 }}>{p.part_number}</span>
-                      <span className="text-sm" style={{ color: TEXT }}>{p.description}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              <Field label="Description">
-                <input style={inp} value={parts.description} onChange={e => setParts(d => ({ ...d, description: e.target.value }))} placeholder="Part description" />
+              <Field label="Line description (prints on the quote)">
+                <input style={inp} value={parts.description} onChange={e => setParts(d => ({ ...d, description: e.target.value }))} placeholder="Filled from the part you pick" data-testid="part-line-description" />
               </Field>
               {/* Cost is what the tech paid; sell is what the customer is billed. The
                   sell column is read-only so the two can never be typed out of step. */}
@@ -2656,7 +2668,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
               </p>
               <div className="flex gap-3">
                 <button
-                  onClick={() => { setPartsModal(false); setParts({ part_number: '', description: '', quantity: '1', unit_cost: '0.00', markup: String(partsMarkupDefault) }); setPartsResults([]) }}
+                  onClick={() => { setPartsModal(false); setParts({ part_number: '', description: '', quantity: '1', unit_cost: '0.00', markup: String(partsMarkupDefault) }); setPartLookup(null) }}
                   className="flex-1 py-2.5 rounded-lg font-semibold text-sm"
                   style={{ background: '#F3F4F6', color: '#374151' }}
                 >

@@ -1389,6 +1389,9 @@ export default function HDQuickWrenchPage() {
 
   // ── Truck state ──
   const [vin,               setVin]               = useState('')
+  // The truck or trailer's odometer, taken where the VIN is entered and carried to the
+  // quote / invoice as the reading at this service (migration 183). Optional.
+  const [odometer,          setOdometer]          = useState('')
   const [vinLoading,        setVinLoading]        = useState(false)
   const [vinError,          setVinError]          = useState<string | null>(null)
   const [vinDecoded,        setVinDecoded]        = useState<string | null>(null)
@@ -1977,6 +1980,9 @@ export default function HDQuickWrenchPage() {
       truck_make:        vehicleMake.trim(),
       truck_model:       vehicleModel.trim(),
       truck_year:        vehicleYear.trim(),
+      // The VIN typed above, and the odometer taken with it - carried, not retyped.
+      vin:               vin.trim(),
+      vehicle_odometer:  odometer.trim() || null,
       service_type:      'Truck Engine Diagnostic',
       ...diagFeeFields(dest),
       lineItems: [
@@ -3281,6 +3287,17 @@ export default function HDQuickWrenchPage() {
                 {vinDecoded && !vinError && (
                   <p className="text-xs mt-1.5" style={{ color: 'var(--hd-positive)' }}>✓ {vinDecoded} — confirm or edit below before running.</p>
                 )}
+                {/* The odometer at this service, beside the VIN it belongs to. Carried to the
+                    quote or invoice and printed there - the warranty record. */}
+                <label className="block text-xs uppercase tracking-widest mt-3 mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
+                  Odometer <span style={{ color: 'var(--hd-text-faint)' }}>(optional — miles, carries to the quote and invoice)</span>
+                </label>
+                <input
+                  type="text" inputMode="numeric" value={odometer} onChange={e => setOdometer(e.target.value)}
+                  placeholder="e.g. 123000" data-testid="qw-odometer"
+                  className="w-full sm:w-56 px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+                  style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
+                />
               </div>
 
               {/* Vehicle — Year / Make / Model / Engine (editable; override decoded values) */}

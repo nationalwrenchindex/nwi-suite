@@ -10,7 +10,8 @@ import { resolveLateFeeSettings, assessLateFee, lateFeeBlockMessage } from '@/li
 import type { AerialInspectionType } from '@/types/aerial'
 import { money } from '@/lib/format'
 import { feeRows } from '@/lib/invoice-document'
-import { formatUnitHours } from '@/lib/hd/unit-hours'
+import { formatOdometer, formatUnitHours } from '@/lib/hd/unit-hours'
+import { sourceQuoteNumber } from '@/lib/hd/invoice-source'
 import { shopTimeZone, fmtShopDate } from '@/lib/shop-time'
 import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
 import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
@@ -74,6 +75,8 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   ])
 
   if (!inv) notFound()
+  // The quote a directly-billed invoice came from, so it cites what was approved.
+  const quoteNumber = await sourceQuoteNumber(supabase, inv as Record<string, unknown>)
 
   const shopTz = shopTimeZone((profile as { state?: string | null } | null)?.state)
   const fmtDate = (s: string | null | undefined) => fmtShopDate(s, shopTz)
@@ -202,6 +205,9 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
               {inv.work_order_number && (
                 <p className="text-sm" style={{ color: 'var(--paper-muted)' }}>Work Order: {inv.work_order_number}</p>
               )}
+              {quoteNumber && (
+                <p className="text-sm" style={{ color: 'var(--paper-muted)' }} data-testid="invoice-source-quote">Quote: {quoteNumber}</p>
+              )}
               {/* The customer's PO (migration 157), carried from the work order and
                   before that the approved quote. A fleet that pays on PO does not pay
                   a bill without one printed on it - this is the field their accounts
@@ -277,6 +283,10 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                   </p>
                 )}
                 {inv.vin && <p className="text-sm" style={{ color: 'var(--paper-muted)' }}>VIN: {inv.vin}</p>}
+                {/* Migration 183: the truck or trailer's odometer at this service, frozen. */}
+                {formatOdometer((inv as Record<string, unknown>).vehicle_odometer) && (
+                  <p className="text-sm" style={{ color: 'var(--paper-muted)' }} data-testid="invoice-odometer">Odometer: {formatOdometer((inv as Record<string, unknown>).vehicle_odometer)} mi</p>
+                )}
               </div>
             </div>
 

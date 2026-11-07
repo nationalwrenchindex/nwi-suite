@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { isMissingServiceCallColumn } from '@/lib/hd/hd-extras'
-import { isMissingUnitHoursColumn } from '@/lib/hd/unit-hours'
+import { isMissingReadingColumn, READING_COLUMNS, readingsFromBody, withoutMissingReadings } from '@/lib/hd/unit-hours'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { logHDCustomer } from '@/lib/hd/customer-logging'
@@ -123,6 +123,10 @@ export async function POST(req: NextRequest) {
   // well-formed record whose parts add up, the recorded terms only as a valid snapshot.
   const discountError = checkDiscountWrite(invoiceBody)
   if (discountError) return NextResponse.json({ error: discountError }, { status: 400 })
+  // The readings at this service (179 + 183), parsed; an unreadable one is refused.
+  const readings = readingsFromBody(invoiceBody)
+  if ('error' in readings) return NextResponse.json({ error: readings.error }, { status: 400 })
+  Object.assign(invoiceBody, readings.update)
   checkTermsSnapshotWrite(invoiceBody)
 
   const { count } = await supabase
@@ -169,13 +173,15 @@ export async function POST(req: NextRequest) {
     .select()
     .single()
 
-  // Migration 179 not applied: the reading cannot be stored. Refused when there is one
-  // rather than dropped; an absent reading just drops the empty key.
-  if (error && isMissingUnitHoursColumn(error)) {
-    if ((invoiceBody as Record<string, unknown>).unit_hours != null) {
-      return NextResponse.json({ error: 'Unit hours need migration 179. Nothing was saved.' }, { status: 409 })
+  // Migration 179 (unit hours) or 183 (odometer) not applied: the reading cannot be
+  // stored. Refused when there is one rather than dropped; an absent reading just drops
+  // the empty key. Twice, because PostgREST names one missing column at a time.
+  for (let i = 0; i < 2 && error && isMissingReadingColumn(error); i++) {
+    const r = withoutMissingReadings(insertRow, error)
+    if ('error' in r) return NextResponse.json({ error: r.error }, { status: 409 })
+    for (const row of [baseRow, insertRow] as Array<Record<string, unknown>>) {
+      for (const k of READING_COLUMNS) if (!(k in r.row)) delete row[k]
     }
-    for (const row of [baseRow, insertRow] as Array<Record<string, unknown>>) delete row.unit_hours
     ;({ data, error } = await supabase.from('hd_invoices').insert(insertRow).select().single())
   }
 

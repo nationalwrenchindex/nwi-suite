@@ -10,6 +10,8 @@
 // Everything is COPIED off the quote row, never recomputed. The quote is what the
 // customer saw; the bill must say the same thing to the cent.
 
+import { readingsCarry } from '@/lib/hd/unit-hours'
+
 export function invoiceBodyFromQuote(q: Record<string, unknown>): Record<string, unknown> {
   const corp = !!q.has_corp_address
   return {
@@ -42,6 +44,8 @@ export function invoiceBodyFromQuote(q: Record<string, unknown>): Record<string,
     truck_model:        q.truck_model,
     truck_year:         q.truck_year,
     vin:                q.vin,
+    // The readings the quote recorded (179 + 183), frozen - only the columns it has.
+    ...readingsCarry(q),
     complaint:          q.complaint,
     diagnosis:          q.diagnosis,
     line_items:         q.line_items,

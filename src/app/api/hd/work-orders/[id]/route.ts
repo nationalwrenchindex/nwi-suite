@@ -28,7 +28,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { isMissingMigration159Column, withoutMigration159Columns } from '@/lib/hd/migration-159'
-import { isMissingUnitHoursColumn, parseUnitHours, unitIdentityFill } from '@/lib/hd/unit-hours'
+import { isMissingReadingColumn, readingsFromBody, unitIdentityFill } from '@/lib/hd/unit-hours'
 
 export const dynamic = 'force-dynamic'
 
@@ -106,13 +106,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
   }
 
-  // THE HOUR READING AT THE TIME OF SERVICE (migration 179). Blank saves NULL: no
-  // reading, and the documents print no hours.
-  if ('unit_hours' in body) {
-    const h = parseUnitHours(body.unit_hours)
-    if (h === 'invalid') return NextResponse.json({ error: 'Unit hours must be a number from 0 to 999,999, or blank.' }, { status: 400 })
-    update.unit_hours = h
-  }
+  // THE READINGS AT THE TIME OF SERVICE: the unit's hours (migration 179) and the truck
+  // or trailer's odometer (183). Blank saves NULL: no reading, and the documents print
+  // none.
+  const readings = readingsFromBody(body)
+  if ('error' in readings) return NextResponse.json({ error: readings.error }, { status: 400 })
+  Object.assign(update, readings.update)
 
   if (Object.keys(update).length === 0) {
     return NextResponse.json({ error: 'Nothing to update.' }, { status: 400 })
@@ -158,8 +157,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .maybeSingle()
 
   let { data, error } = await write(update)
-  if (error && isMissingUnitHoursColumn(error)) {
-    return NextResponse.json({ error: 'Unit hours need migration 179. Nothing was saved.' }, { status: 409 })
+  if (error && isMissingReadingColumn(error)) {
+    return NextResponse.json({ error: /vehicle_odometer/.test(error.message ?? '')
+      ? 'The odometer needs migration 183. Nothing was saved.'
+      : 'Unit hours need migration 179. Nothing was saved.' }, { status: 409 })
   }
   // Migration 159 (unit year, truck fields, VIN) is applied by hand. Until it is, the
   // rest of the header saves and the response says which fields could not.

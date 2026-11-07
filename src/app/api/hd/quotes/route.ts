@@ -4,6 +4,7 @@ import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { logHDCustomer } from '@/lib/hd/customer-logging'
 import { missingMigration142Column, withoutMigration142Columns } from '@/lib/migration-142'
 import { isMissingTaxBreakdownColumn, withoutTaxBreakdown } from '@/lib/tax'
+import { isMissingReadingColumn, readingsFromBody, withoutMissingReadings } from '@/lib/hd/unit-hours'
 import { checkDiscountWrite } from '@/lib/hd/hd-discount'
 import { recordTermsSnapshot } from '@/lib/document-terms'
 import { addressFrom } from '@/lib/address'
@@ -85,6 +86,11 @@ export async function POST(req: NextRequest) {
   delete quoteBody.terms_snapshot
   const discountError = checkDiscountWrite(quoteBody)
   if (discountError) return NextResponse.json({ error: discountError }, { status: 400 })
+  // The unit hours and odometer at this service (migrations 179 + 183), parsed; an
+  // unreadable one is refused, never stored as blank.
+  const readings = readingsFromBody(quoteBody)
+  if ('error' in readings) return NextResponse.json({ error: readings.error }, { status: 400 })
+  Object.assign(quoteBody, readings.update)
 
   const { count } = await supabase
     .from('hd_quotes')
@@ -121,13 +127,23 @@ export async function POST(req: NextRequest) {
   const linkedCustomerId =
     (typeof clientCustomerId === 'string' && clientCustomerId) || customer_id || null
 
-  const quoteRow = { ...quoteBody, user_id: user.id, quote_number, customer_id: linkedCustomerId }
+  let quoteRow: Record<string, unknown> = { ...quoteBody, user_id: user.id, quote_number, customer_id: linkedCustomerId }
 
   let { data, error } = await supabase
     .from('hd_quotes')
     .insert(quoteRow)
     .select()
     .single()
+
+  // Migration 183 not applied: a blank reading drops its key and the quote saves; a
+  // typed one is refused with the reason rather than silently lost. Twice, because
+  // PostgREST names one missing column at a time.
+  for (let i = 0; i < 2 && error && isMissingReadingColumn(error); i++) {
+    const r = withoutMissingReadings(quoteRow, error)
+    if ('error' in r) return NextResponse.json({ error: r.error }, { status: 409 })
+    quoteRow = r.row
+    ;({ data, error } = await supabase.from('hd_quotes').insert(quoteRow).select().single())
+  }
 
   // Migration 140 is applied by hand and a preview deploy runs against the same
   // database, so there is a window where this writes tax_breakdown and the column

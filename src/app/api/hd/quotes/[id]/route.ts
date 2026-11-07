@@ -4,6 +4,7 @@ import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 
 import { mintQuoteToken } from '@/lib/hd/quote-approval'
 import { EDITABLE_QUOTE_STATUSES, isQuoteEditable, quoteEditUpdate, quoteLockReason } from '@/lib/hd/quote-edit'
+import { isMissingReadingColumn, readingsFromBody, withoutMissingReadings } from '@/lib/hd/unit-hours'
 import { checkDiscountWrite } from '@/lib/hd/hd-discount'
 import { recordTermsSnapshot } from '@/lib/document-terms'
 
@@ -75,12 +76,16 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   // Draft may become sent; sent stays sent. Nothing else is reachable from here -
   // approval and decline belong to the customer's link and the verbal-approval path.
   const status = current.status === 'sent' || body.status === 'sent' ? 'sent' : 'draft'
-  const update: Record<string, unknown> = {
+  let update: Record<string, unknown> = {
     ...quoteEditUpdate(body), status, updated_at: new Date().toISOString(),
   }
   // Migration 168: only a well-formed discount whose parts add up is written.
   const discountError = checkDiscountWrite(update)
   if (discountError) return NextResponse.json({ error: discountError }, { status: 400 })
+  // The readings at this service (179 + 183), parsed; an unreadable one is refused.
+  const readings = readingsFromBody(body)
+  if ('error' in readings) return NextResponse.json({ error: readings.error }, { status: 400 })
+  Object.assign(update, readings.update)
 
   const write = (row: Record<string, unknown>) => supabase
     .from('hd_quotes')
@@ -92,6 +97,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     .maybeSingle()
 
   let { data, error } = await write(update)
+  // Migration 183 not applied: a blank reading drops its key; a typed one is refused.
+  for (let i = 0; i < 2 && error && isMissingReadingColumn(error); i++) {
+    const r = withoutMissingReadings(update, error)
+    if ('error' in r) return NextResponse.json({ error: r.error }, { status: 409 })
+    update = r.row
+    ;({ data, error } = await write(update))
+  }
   // Migration 160 (tech_name) is applied by hand; the edit saves without the tech.
   if (error && /tech_name/i.test(error.message)) {
     console.error('[hd/quotes PUT] tech_name missing - run migration 160', error.message)

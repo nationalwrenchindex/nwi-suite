@@ -50,28 +50,28 @@ export function ExtrasInputs({
     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       {showTravel && (
         <label className="block">
-          <span className="text-white/50 text-xs">Travel hours</span>
+          <span className="nwi-field-label text-xs">Travel hours</span>
           <input
             type="number" min="0" step="0.25" inputMode="decimal" disabled={disabled}
             className="nwi-input text-sm w-full mt-1"
             value={travelHours || ''}
             onChange={e => onTravelHours(Math.max(0, Number(e.target.value) || 0))}
           />
-          <span className="block text-white/35 text-[11px] mt-1">
+          <span className="block nwi-field-hint text-[11px] mt-1">
             {loaded ? `${fmt(settings.travelRatePerHour ?? laborRate ?? 0)}/hr` : 'rate loading...'}
           </span>
         </label>
       )}
       {showMileage && (
         <label className="block">
-          <span className="text-white/50 text-xs">Miles</span>
+          <span className="nwi-field-label text-xs">Miles</span>
           <input
             type="number" min="0" step="1" inputMode="decimal" disabled={disabled}
             className="nwi-input text-sm w-full mt-1"
             value={mileageMiles || ''}
             onChange={e => onMileageMiles(Math.max(0, Number(e.target.value) || 0))}
           />
-          <span className="block text-white/35 text-[11px] mt-1">
+          <span className="block nwi-field-hint text-[11px] mt-1">
             {loaded ? `${fmt(settings.mileageRatePerMile ?? 0)}/mi, not taxed` : 'rate loading...'}
           </span>
         </label>

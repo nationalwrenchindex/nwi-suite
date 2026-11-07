@@ -11,6 +11,7 @@
 // they cannot see the inside of is how a dispute starts.
 
 import { useState } from 'react'
+import { formatOdometer, formatUnitHours } from '@/lib/hd/unit-hours'
 import { discountPrintLabel, parseDiscount } from '@/lib/document-discount'
 import { documentPaymentTerms, hdTermsBlockRows, parseTermsSnapshot } from '@/lib/document-terms'
 import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
@@ -46,6 +47,9 @@ export interface PublicHDQuote {
   truck_make: string | null
   truck_model: string | null
   vin: string | null
+  /** Migrations 179 + 183: the readings at this service. Absent before 183. */
+  unit_hours?: number | string | null
+  vehicle_odometer?: number | string | null
   complaint: string | null
   diagnosis: string | null
   notes: string | null
@@ -203,6 +207,8 @@ export default function HDQuoteApprovalClient({
               quote.unit_number && `Unit ${quote.unit_number}`,
               quote.unit_serial && `Serial ${quote.unit_serial}`,
               quote.vin && `VIN ${quote.vin}`,
+              formatUnitHours(quote.unit_hours) && `Hours ${formatUnitHours(quote.unit_hours)}`,
+              formatOdometer(quote.vehicle_odometer) && `Odometer ${formatOdometer(quote.vehicle_odometer)} mi`,
             ].filter(Boolean).join(' · ')}
           </p>
         </div>

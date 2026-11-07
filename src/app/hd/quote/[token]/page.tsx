@@ -71,9 +71,11 @@ export default async function HDPublicQuotePage(
     notFound()
   }
   if (!data) notFound()
+  // The readings (179 + 183), read on their own so the page still loads before 183.
+  const { data: readings } = await read('unit_hours, vehicle_odometer')
 
   // hd_quotes lines: unit_cost is the SELL price, unit_cost_base the cost (lib/customer-copy).
-  const raw = data as unknown as PublicHDQuote & { user_id: string }
+  const raw = { ...(data as unknown as PublicHDQuote & { user_id: string }), ...((readings ?? {}) as Partial<PublicHDQuote>) }
   const quote = { ...raw, line_items: customerLines(raw.line_items, false) }
   const business = await businessNameFor(quote.user_id)
 

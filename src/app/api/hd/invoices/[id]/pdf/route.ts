@@ -28,6 +28,7 @@ import {
 } from '@/lib/invoice-document'
 import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
 import { invoiceJobGroups } from '@/lib/hd/work-order-jobs'
+import { sourceQuoteNumber } from '@/lib/hd/invoice-source'
 
 /** Everything interpolated into the HTML below goes through this first. */
 function esc(v: unknown): string {
@@ -83,6 +84,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     .single()
 
   if (error || !inv) return new NextResponse('Not found', { status: 404 })
+  // The quote a directly-billed invoice came from, so the print cites it.
+  const quoteNumber = await sourceQuoteNumber(supabase, inv as Record<string, unknown>)
 
   // Reports attached to this invoice. The customer should end up holding one
   // document that references everything performed, so the printed invoice carries
@@ -394,6 +397,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     <div class="inv-meta">
       <div class="inv-number">${inv.invoice_number}</div>
       <p>Date: ${fmtDate(inv.created_at, shopTz)}</p>
+      ${inv.work_order_number ? `<p>Work Order: ${esc(String(inv.work_order_number))}</p>` : ''}
+      ${quoteNumber ? `<p data-testid="invoice-source-quote">Quote: ${esc(quoteNumber)}</p>` : ''}
       ${termsCode ? `<p${inv.due_date && inv.status === 'overdue' ? ' class="due-highlight"' : ''} data-testid="payment-terms">Terms: ${esc(termsWithDueDate(termsCode, inv.due_date))}</p>` : ''}
       <p>Status: <span class="status-badge status-${inv.status}">${inv.status}</span></p>
       ${inv.late_fee_applied && Number(inv.late_fee_amount) > 0 ? `<p class="due-highlight">Late Fee: ${fmt(inv.late_fee_amount)}</p>` : ''}

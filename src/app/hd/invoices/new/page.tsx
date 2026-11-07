@@ -125,6 +125,8 @@ export default function NewInvoicePage() {
     payment_terms: '',
     unit_number: '', unit_manufacturer: '', unit_model: '', unit_serial: '', unit_year: '',
     truck_make: '', truck_model: '', truck_year: '', vin: '',
+    // The readings at this service (179 + 183). Optional; blank records none.
+    unit_hours: '', vehicle_odometer: '',
     complaint: '', diagnosis: '',
     // 0 until the shop's HD rate arrives (seeded below) - never a borrowed 125.
     labor_rate: 0, diagnostic_fee: 125, include_diagnostic: false,
@@ -288,6 +290,7 @@ export default function NewInvoicePage() {
         unit_number?: string
         unit_manufacturer?: string; unit_model?: string; unit_serial?: string; unit_year?: string
         truck_make?: string; truck_model?: string; truck_year?: string; vin?: string
+        vehicle_odometer?: number | string | null; unit_hours?: number | string | null
         labor_rate?: number; include_diagnostic?: boolean; diagnostic_fee?: number
         lineItems?: Array<{ description: string; mobile_hours: number }>
       }
@@ -310,6 +313,8 @@ export default function NewInvoicePage() {
         ...(p.truck_model ? { truck_model: p.truck_model } : {}),
         ...(p.truck_year  ? { truck_year:  p.truck_year  } : {}),
         ...(p.vin         ? { vin:         p.vin         } : {}),
+        ...(p.vehicle_odometer != null && String(p.vehicle_odometer).trim() !== '' ? { vehicle_odometer: String(p.vehicle_odometer) } : {}),
+        ...(p.unit_hours != null && String(p.unit_hours).trim() !== '' ? { unit_hours: String(p.unit_hours) } : {}),
         labor_rate:         rate,
         include_diagnostic: !!p.include_diagnostic,
         diagnostic_fee:     Number.isFinite(p.diagnostic_fee) ? p.diagnostic_fee as number : f.diagnostic_fee,
@@ -506,6 +511,9 @@ export default function NewInvoicePage() {
         truck_model:       form.truck_model || null,
         truck_year:        form.truck_year || null,
         vin:               form.vin || null,
+        // Sent only when there is a reading, so a database without 183 is unaffected.
+        ...(form.unit_hours.trim() ? { unit_hours: form.unit_hours.trim() } : {}),
+        ...(form.vehicle_odometer.trim() ? { vehicle_odometer: form.vehicle_odometer.trim() } : {}),
         complaint:         form.complaint || null,
         diagnosis:         form.diagnosis || null,
         line_items:        lineItems,
@@ -548,7 +556,9 @@ export default function NewInvoicePage() {
   const billingAddr = [form.address_line1, form.address_line2, [form.city, form.state].filter(Boolean).join(', '), form.zip].filter(Boolean).join(', ')
 
   return (
-    <div style={{ background: BG, color: TEXT, minHeight: '100dvh', padding: '24px 20px' }}>
+    // paper-surface: a white document in BOTH themes, so shared inputs inside it take
+    // the paper colours, not the app theme's (globals.css).
+    <div className="paper-surface" style={{ background: BG, color: TEXT, minHeight: '100dvh', padding: '24px 20px' }}>
       <div style={{ maxWidth: 860, margin: '0 auto' }}>
 
         {/* Header */}
@@ -661,12 +671,14 @@ export default function NewInvoicePage() {
             <Field label="Unit Model"><input style={inp} value={form.unit_model} onChange={e => setField('unit_model', e.target.value)} placeholder="e.g. S-600" /></Field>
             <Field label="Serial Number"><input style={inp} value={form.unit_serial} onChange={e => setField('unit_serial', e.target.value)} placeholder="10-digit serial" /></Field>
             <Field label="Unit Year"><input style={inp} value={form.unit_year} onChange={e => setField('unit_year', e.target.value)} placeholder="e.g. 2018" /></Field>
+            <Field label="Unit Hours"><input style={inp} value={form.unit_hours} onChange={e => setField('unit_hours', e.target.value)} placeholder="Hour meter (optional)" inputMode="decimal" /></Field>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <Field label="Truck Make"><input style={inp} value={form.truck_make} onChange={e => setField('truck_make', e.target.value)} placeholder="e.g. Freightliner" /></Field>
             <Field label="Truck Model"><input style={inp} value={form.truck_model} onChange={e => setField('truck_model', e.target.value)} placeholder="e.g. Cascadia" /></Field>
             <Field label="Truck Year"><input style={inp} value={form.truck_year} onChange={e => setField('truck_year', e.target.value)} placeholder="e.g. 2020" /></Field>
             <Field label="VIN"><input style={inp} value={form.vin} onChange={e => setField('vin', e.target.value)} placeholder="17-digit VIN" /></Field>
+            <Field label="Odometer (miles)"><input style={inp} value={form.vehicle_odometer} onChange={e => setField('vehicle_odometer', e.target.value)} placeholder="Truck / trailer miles (optional)" inputMode="numeric" /></Field>
           </div>
         </div>
 
