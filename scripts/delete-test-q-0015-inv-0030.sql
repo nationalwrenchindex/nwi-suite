@@ -98,4 +98,4 @@ UNION ALL SELECT 'hd_work_orders', count(*) FROM public.hd_work_orders WHERE id 
 UNION ALL SELECT 'hd_work_order_line_items', count(*) FROM public.hd_work_order_line_items WHERE work_order_id = 'aa46a8d4-c1aa-42cf-81b0-a728586d4889'
 UNION ALL SELECT 'hd_work_order_jobs', count(*) FROM public.hd_work_order_jobs WHERE work_order_id = 'aa46a8d4-c1aa-42cf-81b0-a728586d4889';
 
-ROLLBACK;
+COMMIT;
