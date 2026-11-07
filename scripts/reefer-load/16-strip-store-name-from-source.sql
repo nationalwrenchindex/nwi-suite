@@ -67,4 +67,4 @@ UNION ALL
 SELECT 'part_fitment', source, count(*) FROM public.part_fitment GROUP BY source
 ORDER BY 1, 2;
 
-ROLLBACK;
+COMMIT;
