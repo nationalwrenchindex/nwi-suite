@@ -49,4 +49,4 @@ SELECT 'customers' AS tbl, count(*) AS still_doubled FROM public.customers WHERE
 UNION ALL SELECT 'hd_work_orders', count(*) FROM public.hd_work_orders WHERE pg_temp.k(address_line1) <> '' AND pg_temp.k(address_line1) = pg_temp.k(address_line2)
 UNION ALL SELECT 'hd_invoices', count(*) FROM public.hd_invoices WHERE pg_temp.k(address_line1) <> '' AND pg_temp.k(address_line1) = pg_temp.k(address_line2);
 
-ROLLBACK;
+COMMIT;
