@@ -21,8 +21,8 @@
 -- documents hold the same thing.
 --
 -- Additive only. No money column is touched; the self-checks compare every total.
--- ASCII only. Ends in ROLLBACK: run it once to see the checks pass, then change the
--- last line to COMMIT and run it again to apply. Any failed check raises.
+-- ASCII only. Ends in COMMIT (armed for Brock, Nov 8, 2026). The checks above still
+-- raise and roll everything back if anything is not as expected.
 
 BEGIN;
 
@@ -88,4 +88,4 @@ SELECT (SELECT count(*) FROM information_schema.columns WHERE table_schema = 'pu
        (SELECT count(*) FROM _wo_before b JOIN public.work_orders w ON w.id = b.id WHERE w.grand_total IS DISTINCT FROM b.grand_total) AS changed_work_order_totals,
        (SELECT count(*) FROM _inv_before b JOIN public.invoices i ON i.id = b.id WHERE i.total IS DISTINCT FROM b.total) AS changed_invoice_totals;
 
-ROLLBACK;
+COMMIT;
