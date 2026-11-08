@@ -7,6 +7,7 @@ import { isMissingTaxBreakdownColumn } from '@/lib/tax'
 import { discountForWrite, isMissing165Column, MIGRATION_165_MESSAGE } from '@/lib/document-discount'
 import { createClient } from '@/lib/supabase/server'
 import { isMissingServiceCallColumn, serviceCallFee, serviceCallFromBody, MIGRATION_180_MESSAGE } from '@/lib/service-call'
+import { odometerFromBody, withoutMissingOdometer } from '@/lib/odometer'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { splitCustomerName } from '@/lib/customer-name'
 
@@ -147,6 +148,9 @@ export async function PUT(
   // anything else must add up.
   const discount = discountForWrite((body as unknown as Record<string, unknown>).discount)
   if ('error' in discount) return NextResponse.json({ error: discount.error }, { status: 422 })
+  // The odometer at this service (migration 184): only when sent; unreadable is a 400.
+  const odometer = odometerFromBody(body as unknown as Record<string, unknown>)
+  if ('error' in odometer) return NextResponse.json({ error: odometer.error }, { status: 400 })
 
   // For detailers the service fee lives in labor_rate — strip any synthetic 'Service' line item
   // so it can never be double-counted regardless of what the client sends.
@@ -198,6 +202,7 @@ export async function PUT(
     po_number:            body.po_number?.trim() || null,
   }
   if (body.jobs !== undefined) updatePayload.jobs = body.jobs
+  Object.assign(updatePayload, odometer.update)
   // THE EXTRAS. The editor has always sent these and this route dropped every one, so
   // a quote whose travel hours were edited stored a grand_total that included travel
   // its own travel columns did not record. Written only when sent, as tax_breakdown is.
@@ -274,6 +279,23 @@ export async function PUT(
       .eq('user_id', user.id)
       .select(QUOTE_SELECT)
       .single())
+  }
+
+  // Before 184: a reading is refused, naming the migration; a cleared one that cannot
+  // exist is dropped and the save retried. After the other retries, so it is reached
+  // whichever missing column PostgREST named first.
+  if (updateErr) {
+    const r = withoutMissingOdometer(updatePayload, updateErr)
+    if ('error' in r) return NextResponse.json({ error: r.error }, { status: 409 })
+    if (!('mileage_at_service' in r.row) && 'mileage_at_service' in updatePayload) {
+      ;({ data: updated, error: updateErr } = await supabase
+        .from('quotes')
+        .update(r.row)
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .select(QUOTE_SELECT)
+        .single())
+    }
   }
 
   if (updateErr || !updated) {

@@ -29,6 +29,7 @@ import { splitCustomerName } from '@/lib/customer-name'
 import { loadDocumentDefaults } from '@/lib/document-defaults.server'
 import { newDocumentServiceCall } from '@/lib/document-defaults'
 import { quickwrenchMoney, partsCostTotal, type QwJob } from '@/lib/quickwrench-money'
+import { readLaborEstimate } from '@/lib/labor-estimate'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -195,7 +196,11 @@ export async function POST(req: NextRequest) {
   // The jobs as priced. The single-job legacy request is folded into one job, its
   // supplier price as the store cost, marked up - exactly as it priced before.
   const qwJobs: QwJob[] = isMultiJob
-    ? (jobs as MultiJobEntry[]).map(j => ({ subtype: j.subtype, labor_hours: n0(j.labor_hours), parts: j.parts }))
+    ? (jobs as MultiJobEntry[]).map(j => ({
+        subtype: j.subtype, labor_hours: n0(j.labor_hours), parts: j.parts,
+        // An AI estimate the hours started from - re-read, never trusted as sent.
+        labor_estimate: readLaborEstimate(j.labor_estimate),
+      }))
     : [{
         subtype: job.name, labor_hours: n0(body.labor_hours),
         parts: (parts ?? []).filter(p => p.included).map(p => {

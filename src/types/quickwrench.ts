@@ -32,6 +32,8 @@ export interface SelectedJob {
   categoryLabel: string
   name:          string
   hours:         number
+  /** Set when the hours came from an AI estimate (lib/labor-estimate): shown beside them. */
+  labor_estimate?: import('@/lib/labor-estimate').LaborEstimate | null
 }
 
 // ─── Tech guide ───────────────────────────────────────────────────────────────
@@ -45,8 +47,8 @@ export interface TorqueSpec {
 export interface TechGuidePart {
   name:       string
   qty:        number
-  unit_cost:  number   // supplier cost (demo)
-  unit_price: number   // retail price (demo, ~15-25% above unit_cost)
+  unit_cost:  number   // always 0 from the AI: the tech enters the cost (lib/tech-guide)
+  unit_price: number   // always 0 from the AI: priced from the typed cost
 }
 
 export interface TechGuide {
@@ -127,6 +129,8 @@ export interface MultiJobEntry {
   labor_rate:  number
   parts:       MultiJobPart[]
   notes:       string
+  /** The AI estimate the hours started from, when they did (lib/labor-estimate). */
+  labor_estimate?: import('@/lib/labor-estimate').LaborEstimate | null
 }
 
 // ─── API payloads ─────────────────────────────────────────────────────────────

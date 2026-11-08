@@ -16,6 +16,7 @@ import { insertWithWorkOrderNumber } from '@/lib/work-order-number'
 import { WORK_ORDER_SELECT } from '@/app/api/work-orders/list'
 import { parseDiscount } from '@/lib/document-discount'
 import { serviceCallColumns, serviceCallOf, writeToleratingServiceCall } from '@/lib/service-call'
+import { odometerCarry, odometerRefusal, writeToleratingOdometer } from '@/lib/odometer'
 
 export const dynamic = 'force-dynamic'
 
@@ -111,10 +112,15 @@ export async function POST(
       // The discount the customer agreed to (migration 165), only when there is one.
       ...(parseDiscount(quote.discount) ? { discount: parseDiscount(quote.discount) } : {}),
       ...(call.fee > 0 ? serviceCallColumns(call.fee, call.tax) : {}),
+      // The odometer taken at the quote (migration 184), frozen - never re-read from
+      // the vehicle. Only when there is one, so a quote without one converts as before.
+      ...odometerCarry(quote as Record<string, unknown>),
       source:               'quote',
       source_quote_id:      quote.id,
-    }, row => supabase.from('work_orders').insert(row).select(WORK_ORDER_SELECT).single()))
+    }, row => writeToleratingOdometer(row, r => supabase.from('work_orders').insert(r).select(WORK_ORDER_SELECT).single())))
 
+  const refused = odometerRefusal(insertErr)
+  if (refused) return NextResponse.json({ error: refused }, { status: 409 })
   if (insertErr || !wo) {
     console.error('[POST /api/quotes/[id]/to-work-order]', insertErr)
     return NextResponse.json({ error: (insertErr as { message?: string } | null)?.message ?? 'Failed to create work order' }, { status: 500 })

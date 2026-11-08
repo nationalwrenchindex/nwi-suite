@@ -1,5 +1,5 @@
 // POST /api/inspections/[id]/generate-quote
-// Generates a fully-priced draft quote from failed/needs-attention inspection items.
+// Generates a draft quote (labor priced, part costs left blank for the tech) from failed/needs-attention inspection items.
 // Calls the same Gemini tech-guide system as QuickWrench, with parallel execution.
 
 import { NextResponse } from 'next/server'
@@ -14,6 +14,7 @@ import { getMappedService } from '@/lib/mpi-catalog'
 import { callTechGuideGemini } from '@/lib/tech-guide'
 import { isGeminiConfigured } from '@/lib/gemini/client'
 import type { TechGuidePart } from '@/types/quickwrench'
+import { partNameOnly } from '@/lib/quickwrench-parts'
 
 // Parallel Gemini tech-guide calls (grounded, up to 55s each); 60s prevents Vercel's default timeout kill.
 export const maxDuration = 60
@@ -200,7 +201,11 @@ export async function POST(_req: Request, { params }: RouteContext) {
   // labour as lines, does not read.
   const qwJobs: QwJob[] = results.map(r => ({
     subtype: r.serviceName, labor_hours: r2(r.hours),
-    parts: r.parts.map(p => ({ name: p.name, qty: p.qty, unit_cost: p.unit_cost, unit_price: r2(p.unit_price) })),
+    // Name and quantity only; cost and price BLANK (0) for the tech to fill from their
+    // own supplier. The model's prices used to be billed here as the customer price -
+    // the same decision as QuickWrench's Nov 7 change. lib/tech-guide no longer returns
+    // a price at all; partNameOnly drops any part number or dollar figure in a name.
+    parts: r.parts.map(p => ({ name: partNameOnly(p.name), qty: Number(p.qty) || 1, unit_cost: 0, unit_price: 0 })),
   }))
   const qm = quickwrenchMoney({
     jobs: qwJobs, extraLabor: [], laborRate, markupPct, taxPct,
@@ -235,7 +240,7 @@ export async function POST(_req: Request, { params }: RouteContext) {
       notes: `Generated from 25-Point Multi-Point Inspection (${completedDate}).${
         usedFallback
           ? ' AI pricing unavailable — please add parts and pricing manually.'
-          : ' Pricing provided by AI — review before sending to customer.'
+          : ' Parts are listed by name and quantity only - enter the cost of each part before sending. Labor hours are an AI estimate - check them.'
       }`,
   }
 

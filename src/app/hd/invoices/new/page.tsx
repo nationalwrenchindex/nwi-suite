@@ -21,6 +21,7 @@ import { money } from '@/lib/format'
 import PaymentTermsSelect from '@/components/hd/PaymentTermsSelect'
 import FeeInput from '@/components/hd/FeeInput'
 import { addressLine } from '@/lib/hd/address-print'
+import { deliverHDDocument, hasDeliveryTarget } from '@/lib/hd/deliver-document'
 
 // Direct-invoice fast path: skip the quote/approval step and bill a trusted
 // customer directly. Mirrors the quote form but posts straight to /api/hd/invoices.
@@ -473,9 +474,20 @@ export default function NewInvoicePage() {
     if (!form.customer_name.trim()) { setToast('Customer name is required.'); return }
     // Refuse rather than bill a figure that does not add up. Loud on purpose.
     if (extrasMismatch) { setToast('Cannot save: ' + extrasMismatch); return }
+    // "Save & Send" SENDS. It used to insert the invoice as 'sent' with a sent_at and
+    // deliver nothing. Now it saves the invoice unsent and hands it to the send route,
+    // which marks it sent only once the email or text is confirmed
+    // (lib/hd/deliver-document).
+    const sendAfterSave = status === 'sent'
+    if (sendAfterSave && !hasDeliveryTarget(form.customer_phone, form.customer_email)) {
+      setToast('Add the customer\'s email or mobile number to send this invoice - or Save as Unpaid.')
+      return
+    }
     setSaving(true)
     try {
-      const sentAt = status === 'sent' ? new Date().toISOString() : null
+      // The due date runs from today when the tech asked to send - that is a fact about
+      // the terms, not a claim of delivery. sent_at is the send route's to write.
+      const dueFrom = sendAfterSave ? new Date().toISOString() : null
       const body = {
         // Only sent when this invoice was converted from a work order. The POST route
         // spreads the body straight into the insert, so omitting these keys entirely
@@ -536,15 +548,28 @@ export default function NewInvoicePage() {
         // Computed, stored with the rate in force so a reopen cannot re-price them.
         ...extrasColumns(extrasResult),
         notes:             form.notes || null,
-        status,
-        // On direct send, stamp the sent timestamp + due date now (POST inserts as-is;
-        // no quote→invoice PUT transition happens on this fast path).
-        // No terms, no due date: nothing to be late against.
-        ...(sentAt ? { sent_at: sentAt, due_date: computeDueDate(sentAt, form.payment_terms) } : {}),
+        status:            'unpaid',
+        // On Save & Send, stamp the due date now (POST inserts as-is; no quote→invoice
+        // PUT transition happens on this fast path). No terms, no due date.
+        ...(dueFrom ? { due_date: computeDueDate(dueFrom, form.payment_terms) } : {}),
       }
       const res  = await fetch('/api/hd/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const data = await res.json()
-      if (data.invoice?.id) {
+      if (data.invoice?.id && sendAfterSave) {
+        const result = await deliverHDDocument('invoice', String(data.invoice.id), {
+          phone: form.customer_phone, email: form.customer_email,
+        })
+        const num = (data.invoice.invoice_number as string | null) ?? ''
+        if (!result.delivered.length) {
+          window.alert(
+            `Invoice ${num} was saved as UNPAID and was NOT sent.\n\n${result.errors.join('\n')}\n\n` +
+            'Use Send Invoice on the next screen to try again.',
+          )
+        } else if (result.errors.length) {
+          window.alert(`Invoice ${num} was sent by ${result.delivered.join(' and ')}.\n\nBut:\n${result.errors.join('\n')}`)
+        }
+        router.push(`/hd/invoices/${data.invoice.id}`)
+      } else if (data.invoice?.id) {
         router.push(`/hd/invoices/${data.invoice.id}`)
       } else {
         setToast(data.error ?? 'Save failed')

@@ -47,6 +47,7 @@ import type { Metadata } from 'next'
 import type { MultiJobEntry } from '@/types/financials'
 import { money } from '@/lib/format'
 import { customerUnitPrice } from '@/lib/customer-copy'
+import { odometerLine } from '@/lib/odometer'
 
 // internal_notes is DELIBERATELY ABSENT and must stay absent. It is the shop-only
 // field added by migration 142 precisely so a tech's notes have somewhere to go that
@@ -357,6 +358,13 @@ export default async function PublicInvoicePage(
     (typeof inv.vehicle?.unit_number === 'string' && inv.vehicle.unit_number.trim()
       ? inv.vehicle.unit_number.trim() : null)
 
+  // The odometer recorded on THIS invoice (mileage_at_service, since 098): carried from
+  // the quote or work order, or entered in the editor or the send dialog. Never the
+  // vehicle's current mileage. Its own read, like the discount below. None, no line.
+  const { data: odoRow } = await sc
+    .from('invoices').select('mileage_at_service').eq('id', inv.id).maybeSingle()
+  const odometer = odometerLine(odoRow as Record<string, unknown> | null)
+
   const isPaid = inv.invoice_status === 'paid'
 
   // Phase 8: multi-job support
@@ -580,7 +588,7 @@ export default async function PublicInvoicePage(
                 customer matches this invoice against in their own records — the
                 VIN is for a title or a warranty claim. Taken from the invoice's
                 own snapshot first, then the vehicle record. */}
-            {(unitNumber || vehicleLabel) && (
+            {(unitNumber || vehicleLabel || odometer) && (
               <div>
                 <SectionLabel>{unitNumber ? 'Unit' : 'Vehicle'}</SectionLabel>
                 {unitNumber && (
@@ -591,6 +599,9 @@ export default async function PublicInvoicePage(
                 )}
                 {inv.vehicle?.vin && (
                   <p className="text-xs font-mono mt-0.5" style={{ color: MUTED }}>VIN: {inv.vehicle.vin}</p>
+                )}
+                {odometer && (
+                  <p className="text-xs mt-0.5" style={{ color: MUTED }} data-testid="invoice-odometer-print">{odometer}</p>
                 )}
               </div>
             )}

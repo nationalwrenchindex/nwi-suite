@@ -51,6 +51,8 @@ import { hdLaborRateFrom } from '../src/lib/hd/labor-rate'
 import { sellPrice, lineAmount } from '../src/lib/hd/parts-pricing'
 import { hdDocumentTax, hdTaxableBase } from '../src/lib/hd/document-tax'
 import { modelMatches } from '../src/lib/parts/search'
+import { deliverHDDocument } from '../src/lib/hd/deliver-document'
+import { parseLaborEstimate, estimateLabel } from '../src/lib/labor-estimate'
 
 loadEnv()
 
@@ -449,6 +451,121 @@ async function flowQw(): Promise<void> {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// FLOW Sd - "Send" SENDS, and nothing reads "sent" that was not delivered
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Nov 8, 2026: the HD quote form's "Send Quote" and the new-invoice "Save & Send Invoice"
+// saved the row as 'sent' and delivered NOTHING. Both forms now save the document unsent
+// and hand it to lib/hd/deliver-document, which calls the real send routes. This drives
+// that same function, against the real routes as the shop:
+//   * a quote and an invoice sent to Resend's test inbox (delivered@resend.dev) are
+//     delivered, and only THEN read sent with a send recorded;
+//   * a quote whose address the mail service refuses is NOT marked sent, and the
+//     failure comes back in words a person can read.
+// The button itself is client code and the suite drives no browser - said here, not hidden.
+//
+// And the AI labor range (lib/labor-estimate): "2.5 - 4.0 hours" starts at 3.25, not
+// the 2.5 it used to take, and a QuickWrench save stores the line marked ESTIMATED with
+// the range it came from.
+
+async function flowSd(): Promise<void> {
+  const F = 'Sd send sends'
+  const fetcher = ((url: string, init?: RequestInit) =>
+    fetch(`${BASE}${url}`, { ...init, headers: { ...(init?.headers as Record<string, string> ?? {}), cookie } })) as typeof fetch
+  const quoteBody = (name: string, email: string) => ({
+    customer_name: name, customer_email: email,
+    unit_manufacturer: 'Carrier Transicold', unit_model: 'Supra 660',
+    complaint: `${MARK} - send check`, status: 'draft', line_items: [],
+    labor_rate: 100, subtotal_labor: 0, subtotal_parts: 0, tax_rate: 0, tax_amount: 0, total: 0,
+  })
+
+  // 1. Delivered: the quote is sent, and only after the delivery is it recorded as sent.
+  const ok = await api('POST', '/api/hd/quotes', quoteBody(`${MARK} send ok`, 'delivered@resend.dev'))
+  await adoptSmokeCustomer(ok.json.customer_id)
+  const okId = String((ok.json.quote as Record<string, unknown> | undefined)?.id ?? '')
+  if (okId) created.hdQuotes.add(okId)
+  if (!record(F, 'a draft HD quote saves', ok.status === 201 && !!okId, `-> ${ok.status} ${String(ok.json.error ?? '')}`)) return
+  const before = (await rest(`hd_quotes?id=eq.${okId}&select=status,last_sent_at`))[0] ?? {}
+  record(F, 'saving is not sending: the new quote reads draft, nothing recorded', before.status === 'draft' && !before.last_sent_at,
+    `${before.status}, last_sent_at ${before.last_sent_at ?? 'null'}`)
+  const sent = await deliverHDDocument('quote', okId, { email: 'delivered@resend.dev' }, fetcher)
+  const after = (await rest(`hd_quotes?id=eq.${okId}&select=status,last_sent_at,sent_count,sent_to_email`))[0] ?? {}
+  record(F, 'Send Quote delivers the email (the mail service accepted it)', sent.delivered.includes('email') && sent.errors.length === 0,
+    sent.errors.join('; ') || sent.delivered.join(','))
+  record(F, 'and only then is the quote sent, with the send recorded', after.status === 'sent' && !!after.last_sent_at &&
+    Number(after.sent_count) === 1 && after.sent_to_email === 'delivered@resend.dev',
+    `${after.status}, count ${after.sent_count}, to ${after.sent_to_email}`)
+
+  // 2. Refused: the quote stays a draft and the reason is readable.
+  const bad = await api('POST', '/api/hd/quotes', quoteBody(`${MARK} send bad`, 'not-an-email'))
+  await adoptSmokeCustomer(bad.json.customer_id)
+  const badId = String((bad.json.quote as Record<string, unknown> | undefined)?.id ?? '')
+  if (badId) created.hdQuotes.add(badId)
+  if (record(F, 'a draft HD quote with a bad address saves', bad.status === 201 && !!badId, `-> ${bad.status}`)) {
+    const failed = await deliverHDDocument('quote', badId, { email: 'not-an-email' }, fetcher)
+    const still = (await rest(`hd_quotes?id=eq.${badId}&select=status,last_sent_at,sent_count`))[0] ?? {}
+    record(F, 'a send the mail service refuses is NOT marked sent', failed.delivered.length === 0 && still.status === 'draft' &&
+      !still.last_sent_at && !Number(still.sent_count), `${still.status}, count ${still.sent_count ?? 0}`)
+    record(F, 'and the failure comes back in words', failed.errors.length === 1 && /Email to not-an-email failed: \S/.test(failed.errors[0]),
+      failed.errors.join('; '))
+  }
+  const none = await deliverHDDocument('quote', okId, {}, fetcher)
+  record(F, 'with no email or number nothing is attempted, and it says so', none.delivered.length === 0 && /no email address or phone/i.test(none.errors[0] ?? ''),
+    none.errors.join('; '))
+
+  // 3. Save & Send Invoice: saved unpaid, delivered, then sent.
+  const inv = await api('POST', '/api/hd/invoices', {
+    customer_name: `${MARK} send invoice`, customer_email: 'delivered@resend.dev', status: 'unpaid', line_items: [],
+    labor_rate: 100, subtotal_labor: 0, subtotal_parts: 0, tax_rate: 0, tax_amount: 0, total: 0,
+  })
+  await adoptSmokeCustomer(inv.json.customer_id)
+  const invId = String((inv.json.invoice as Record<string, unknown> | undefined)?.id ?? '')
+  if (invId) created.hdInvoices.add(invId)
+  if (record(F, 'an unpaid HD invoice saves', inv.status === 201 && !!invId, `-> ${inv.status} ${String(inv.json.error ?? '')}`)) {
+    const iSent = await deliverHDDocument('invoice', invId, { email: 'delivered@resend.dev' }, fetcher)
+    const i = (await rest(`hd_invoices?id=eq.${invId}&select=status,last_sent_at,sent_count`))[0] ?? {}
+    record(F, 'Send Invoice delivers, and only then reads sent', iSent.delivered.includes('email') && i.status === 'sent' && Number(i.sent_count) === 1,
+      `${iSent.errors.join('; ') || 'delivered'}; ${i.status}, count ${i.sent_count}`)
+  }
+
+  // 4. The AI labor range.
+  const F2 = 'Sd labor estimate'
+  const e = parseLaborEstimate('2.5 - 4.0 hours mobile labor')
+  record(F2, '"2.5 - 4.0 hours" starts at the midpoint 3.25, not the low end 2.5', e?.suggested === 3.25 && e.low === 2.5 && e.high === 4,
+    JSON.stringify(e))
+  record(F2, 'and is labelled with the range it came from', !!e && estimateLabel(e) === 'estimated 2.5-4.0 hours', e ? estimateLabel(e) : 'null')
+  const forms: Array<[string, number | null]> = [['2.5 to 4.0 hours', 3.25], ['1.0–1.5 hrs', 1.25], ['3 hours', 3], ['1.5-2.0 hours (book 1.2)', 1.75], ['see a shop', null]]
+  const got = forms.map(([t]) => parseLaborEstimate(t)?.suggested ?? null)
+  record(F2, 'to/dash/en-dash ranges, a single figure, and no figure at all', got.every((g, k) => g === forms[k][1]), JSON.stringify(got))
+
+  const p = (await rest(`profiles?select=*&id=eq.${OWNER}`))[0] ?? {}
+  const d = documentDefaultsFrom(p as Record<string, unknown>)
+  const save = await api('POST', '/api/quickwrench/quote', {
+    vehicle: { year: '2015', make: 'GMC', model: 'Yukon XL', engine: '5.3L V8', trim: 'SLT' },
+    job: { category: 'diagnostics', categoryLabel: 'Diagnostics', name: `${MARK} P0420 estimate`, hours: e?.suggested ?? 0 },
+    jobs: [{ id: 'diag:p0420', category: 'diagnostics', subtype: `${MARK} P0420 estimate`, labor_hours: e?.suggested ?? 0,
+      labor_rate: d.laborRate, parts: [], notes: '', labor_estimate: e }],
+    extra_labor: [], parts: [],
+    labor_rate: d.laborRate, markup_percent: d.markupPct, tax_percent: d.taxPct,
+    travel_hours: 0, mileage_miles: 0, send_sms: false, save_quote: true,
+  })
+  const qId = save.json.quoteId as string | undefined
+  const logId = (save.json.quote as { id?: string } | undefined)?.id
+  if (logId) created.qwLogs.add(logId)
+  if (qId) created.quotes.add(qId)
+  if (!record(F2, 'a QuickWrench quote with the estimated job saves', save.status === 200 && !!qId, `-> ${save.status} ${JSON.stringify(save.json).slice(0, 140)}`)) return
+  const q = (await rest(`quotes?select=line_items,labor_subtotal&id=eq.${qId}`))[0] as Record<string, unknown>
+  // No customer on this save, so the route makes no vehicle (quickwrench/quote: no customer, no vehicle).
+  // Stored LD lines carry no 'kind': a labor line is the one whose description starts 'Labor'.
+  const labor = ((q?.line_items ?? []) as Array<Record<string, unknown>>).find(l => String(l.description ?? '').startsWith('Labor'))
+  const est = labor?.labor_estimate as Record<string, unknown> | undefined
+  record(F2, 'the labor line bills 3.25 h, not 2.5 h', Number(labor?.quantity) === 3.25 && r2(Number(q?.labor_subtotal)) === r2(3.25 * d.laborRate),
+    `${labor?.quantity} h, labor ${usd(q?.labor_subtotal)} at ${usd(d.laborRate)}/h`)
+  record(F2, 'and is stored marked ESTIMATED with its range', !!est && est.source === 'ai' && Number(est.low) === 2.5 && Number(est.high) === 4 && Number(est.suggested) === 3.25,
+    JSON.stringify(est ?? null))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // FLOW Hw - the HD work order keeps drive time and mileage; one job, two doors
 // ═══════════════════════════════════════════════════════════════════════════
 //
@@ -679,6 +796,133 @@ async function hwDoors(F: string, profile: Record<string, unknown>, surface: '/h
   const m = docs.map(([, d]) => JSON.stringify(hwMoney(d)))
   record(F, 'all four documents agree on every money line', m.every(x => x === m[0]),
     docs.map(([n, d]) => `${n} ${usd(d.total ?? d.total_amount)}`).join(', '))
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// FLOW Od - the LD odometer: saved on the quote, carried, printed (migration 184)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// LD documents record the vehicle's odometer at THAT service in one column,
+// mileage_at_service (invoices since 098; quotes and work orders since 184). Driven as
+// the shop: a quote saved with "123,000 mi" stores 123000; it carries quote -> work
+// order -> invoice and quote -> invoice; each customer copy prints "Odometer: 123,000
+// mi"; 0 is a reading and prints; no reading prints nothing; an unreadable value is a
+// 400. Without 184 a reading must be REFUSED naming 184 (never dropped), and the rest
+// of the flow is a FAILURE that says the migration is not applied - never a skip.
+// Every row it makes is registered in `created` and deleted by cleanup().
+async function flowOd(): Promise<void> {
+  const F = 'Od LD odometer'
+  const partsSell = r2(PART_BASE * (1 + shop.markup / 100))
+  const labor     = r2(LABOR_HRS * shop.labor_rate)
+  const quoteBody = (tag: string, extra: Record<string, unknown> = {}) => ({
+    notes: `${MARK} Od - ${tag}`,
+    parts_markup_percent: shop.markup, labor_hours: LABOR_HRS, labor_rate: shop.labor_rate,
+    tax_percent: shop.taxParts, parts_subtotal: PART_BASE, labor_subtotal: labor,
+    line_items: [
+      { type: 'parts', description: `${MARK} part`, part_number: 'SMOKE-OD', quantity: 1, unit_price: partsSell, total: partsSell },
+      { type: 'labor', description: 'Labor', quantity: LABOR_HRS, unit_price: shop.labor_rate, total: labor },
+    ],
+    grand_total: r2(partsSell + labor),
+    ...extra,
+  })
+  const createQuote = async (tag: string, extra: Record<string, unknown> = {}) => {
+    const c = await api('POST', '/api/quotes', quoteBody(tag, extra))
+    const id = (c.json.quote as { id?: string } | undefined)?.id
+    if (id) created.quotes.add(id)
+    return { status: c.status, id, error: String(c.json.error ?? '') }
+  }
+  const customerText = async (path: string): Promise<string | null> => {
+    const res = await fetch(`${BASE}${path}`) // NO COOKIE: the customer's view
+    return res.ok ? visibleText(await res.text()) : null
+  }
+  const quoteCopy = async (qId: string): Promise<string | null> => {
+    const sent = await api('POST', `/api/quotes/${qId}/send`, { method: 'link' })
+    const token = String(sent.json.quote_url ?? '').split('/quote/')[1]
+    return token ? customerText(`/quote/${token}`) : null
+  }
+
+  // Is 184 on this database? Read, not assumed: the column either selects or it does not.
+  let applied = true
+  try { await rest('quotes?select=mileage_at_service&limit=1') } catch { applied = false }
+  console.log(`  note  quotes.mileage_at_service is ${applied ? 'PRESENT - migration 184 IS applied' : 'ABSENT - migration 184 is not applied'}.`)
+
+  // ── True on any database ──
+  const bad = await createQuote('unreadable', { mileage_at_service: 'about 120k' })
+  record(F, 'an unreadable odometer is refused with 400, nothing saved', bad.status === 400 && !bad.id, `-> ${bad.status} ${bad.error}`)
+
+  const none = await createQuote('no reading')
+  if (record(F, 'a quote with no reading saves', none.status === 201 && !!none.id, `-> ${none.status} ${none.error}`)) {
+    const text = await quoteCopy(none.id!)
+    record(F, 'and its customer copy prints no odometer at all', text != null && !text.includes('Odometer'),
+      text == null ? 'customer copy did not load' : text.includes('Odometer') ? 'prints an Odometer line' : 'none')
+  }
+
+  if (!applied) {
+    const refused = await createQuote('refused', { mileage_at_service: '123,000 mi' })
+    record(F, 'a reading on a database without 184 is refused, naming 184', refused.status === 409 && !refused.id && refused.error.includes('184'),
+      `-> ${refused.status} ${refused.error}`)
+    record(F, 'the odometer saves on a quote, carries to a work order and an invoice, and prints', false,
+      'migration 184 not applied - quotes/work_orders.mileage_at_service do not exist, so the reading cannot be saved or carried')
+    return
+  }
+
+  // ── 184 applied: the whole chain ──
+  const q1 = await createQuote('carry', { mileage_at_service: '123,000 mi' })
+  if (!record(F, 'a quote saves with "123,000 mi"', q1.status === 201 && !!q1.id, `-> ${q1.status} ${q1.error}`)) return
+  const q1Row = (await rest(`quotes?select=mileage_at_service&id=eq.${q1.id}`))[0]
+  record(F, 'the quote stores 123000', q1Row?.mileage_at_service === 123000, String(q1Row?.mileage_at_service))
+  const q1Text = await quoteCopy(q1.id!)
+  record(F, 'the customer quote prints "Odometer: 123,000 mi"', !!q1Text?.includes('Odometer: 123,000 mi'),
+    q1Text == null ? 'customer copy did not load' : 'not in the rendered page')
+
+  const toWo = await api('POST', `/api/quotes/${q1.id}/to-work-order`)
+  const woId = toWo.json.work_order_id as string | undefined
+  if (woId) created.workOrders.add(woId)
+  if (!record(F, 'the quote becomes a work order', toWo.status === 201 && !!woId, `-> ${toWo.status} ${String(toWo.json.error ?? '')}`)) return
+  const wo = (await rest(`work_orders?select=mileage_at_service&id=eq.${woId}`))[0]
+  record(F, 'the work order carries 123000', wo?.mileage_at_service === 123000, String(wo?.mileage_at_service))
+  // The LD work order's customer view is reached by its token, which only a segment send
+  // issues (and that texts the customer). This run's own row gets a token directly.
+  const woToken = `zzod${crypto.randomUUID().replace(/-/g, '')}`
+  await fetch(`${SUPA}/rest/v1/work_orders?id=eq.${woId}`, { method: 'PATCH', headers: SVC_H, body: JSON.stringify({ public_token: woToken }) })
+  const woText = await customerText(`/work-order/${woToken}`)
+  record(F, 'the customer work order prints "Odometer: 123,000 mi"', !!woText?.includes('Odometer: 123,000 mi'),
+    woText == null ? 'customer copy did not load' : 'not in the rendered page')
+
+  await api('POST', `/api/work-orders/${woId}/status`, { status: 'complete', notify: false })
+  await sleep(1200)
+  const conv = await api('POST', `/api/work-orders/${woId}/convert`)
+  const invId = (conv.json.invoice as { id?: string } | undefined)?.id
+  if (invId) created.invoices.add(invId)
+  if (!record(F, 'the work order converts to an invoice', conv.status === 201 && !!invId, `-> ${conv.status} ${String(conv.json.error ?? '')}`)) return
+  const inv = (await rest(`invoices?select=mileage_at_service&id=eq.${invId}`))[0]
+  record(F, 'the invoice carries 123000', inv?.mileage_at_service === 123000, String(inv?.mileage_at_service))
+  const fin = await api('POST', `/api/invoices/${invId}/finalize`)
+  await sleep(1200)
+  const invTok = (await rest(`invoices?select=public_token&id=eq.${invId}`))[0]?.public_token as string | null
+  const invText = invTok ? await customerText(`/invoice/${invTok}`) : null
+  record(F, 'the customer invoice prints "Odometer: 123,000 mi"', !!invText?.includes('Odometer: 123,000 mi'),
+    !invTok ? `finalize -> ${fin.status}, no public token` : invText == null ? 'customer copy did not load' : 'not in the rendered page')
+
+  // Quote -> invoice directly, with a reading of 0: a real reading, and it prints.
+  const q2 = await createQuote('zero', { mileage_at_service: '0' })
+  if (!record(F, 'a quote saves with a reading of 0', q2.status === 201 && !!q2.id, `-> ${q2.status} ${q2.error}`)) return
+  const q2Text = await quoteCopy(q2.id!)
+  record(F, 'a reading of 0 prints "Odometer: 0 mi"', !!q2Text?.includes('Odometer: 0 mi'),
+    q2Text == null ? 'customer copy did not load' : 'not in the rendered page')
+  await api('POST', `/api/quotes/${q2.id}/respond`, { action: 'approve' })
+  const qConv = await api('POST', `/api/quotes/${q2.id}/convert`)
+  const inv2Id = (qConv.json.invoice as { id?: string } | undefined)?.id
+  if (inv2Id) created.invoices.add(inv2Id)
+  if (!record(F, 'the approved quote converts straight to an invoice', qConv.status === 201 && !!inv2Id, `-> ${qConv.status} ${String(qConv.json.error ?? '')}`)) return
+  const inv2 = (await rest(`invoices?select=mileage_at_service&id=eq.${inv2Id}`))[0]
+  record(F, 'quote -> invoice carries the 0', inv2?.mileage_at_service === 0, String(inv2?.mileage_at_service))
+
+  // The invoice editor writes the same column.
+  const ed = await api('PATCH', `/api/invoices/${inv2Id}/progress`, { mileage_at_service: '45,210' })
+  const inv2b = (await rest(`invoices?select=mileage_at_service&id=eq.${inv2Id}`))[0]
+  record(F, 'the invoice editor saves the odometer to mileage_at_service', ed.status === 200 && inv2b?.mileage_at_service === 45210,
+    `-> ${ed.status} ${String(ed.json.error ?? '')}, stored ${inv2b?.mileage_at_service}`)
 }
 
 async function flowHw(): Promise<void> {
@@ -4740,6 +4984,8 @@ async function main(): Promise<void> {
     await flowTerms()
     await flowDiscount()
     await flowQw()
+    await flowSd()
+    await flowOd()
     await flowHw()
     await flowIe()
     await flowHq()

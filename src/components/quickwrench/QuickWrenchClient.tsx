@@ -19,6 +19,7 @@ import type {
 import { money } from '@/lib/format'
 import { splitCustomerName } from '@/lib/customer-name'
 import { enrichParts } from '@/lib/quickwrench-parts'
+import { estimateLabel, readLaborEstimate } from '@/lib/labor-estimate'
 
 // ─── Job catalog ──────────────────────────────────────────────────────────────
 
@@ -1514,7 +1515,7 @@ export function QuoteTab({
   // same way under the same settings, so what is stored is what is on screen. This used
   // to total parts + labor + tax here, with none of the extras, and the route stored it.
   const qwJobs: QwJob[] = jobBreakdowns.map(b => ({
-    subtype: b.desc, labor_hours: b.laborHrs,
+    subtype: b.desc, labor_hours: b.laborHrs, labor_estimate: b.j.labor_estimate ?? null,
     parts: b.jParts.map(p => ({ name: p.name, qty: p.qty, unit_cost: partCostOf(p), unit_price: customerUnitPrice(p) })),
   }))
   const qwExtraLabor = extraLaborLines
@@ -1561,6 +1562,7 @@ export function QuoteTab({
         category:    b.j.category,
         subtype:     b.desc,          // tech-edited description
         labor_hours: b.laborHrs,      // tech-edited hours
+        labor_estimate: b.j.labor_estimate ?? null,   // the AI range they started from, if any
         labor_rate:  laborRate,
         parts:       b.jParts.map(p => ({
           name:       p.name,
@@ -1786,6 +1788,13 @@ export function QuoteTab({
                         style={{ width: 60, background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.15)' }}
                       />
                       <span className="text-white/30 text-xs">h × {fmt(laborRate)}/hr</span>
+                      {/* An AI range: say where the number came from. ESTIMATED until the tech's
+                          own figure replaces it on the closed work order (lib/labor-estimate). */}
+                      {b.j.labor_estimate && (
+                        <span data-testid="qw-labor-estimate" className="text-amber-300/80 text-[10px] uppercase tracking-wide">
+                          {estimateLabel(b.j.labor_estimate)}
+                        </span>
+                      )}
                     </div>
                     <span className="text-white/70 text-xs whitespace-nowrap">{fmt(b.laborTotal)}</span>
                   </div>
@@ -2101,6 +2110,8 @@ export default function QuickWrenchClient({
               categoryLabel: matchedCat?.label ?? entry.category,
               name:          entry.subtype,
               hours:         entry.labor_hours ?? 1,
+              // A reopened quote keeps the ESTIMATED mark its hours were saved with.
+              labor_estimate: readLaborEstimate(entry.labor_estimate),
             }
             restoredJobs.push(sj)
             const key = jobKey(sj)
@@ -2318,6 +2329,7 @@ export default function QuickWrenchClient({
       categoryLabel,
       name:          `${job.code} — ${job.name}`,
       hours:         job.laborHours,
+      labor_estimate: job.laborEstimate ?? null,
     }
     const key = jobKey(selectedJob)
 

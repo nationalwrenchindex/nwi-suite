@@ -33,6 +33,8 @@ import { useServiceCallSettingsState } from '@/lib/use-service-call-settings'
 import { hasServiceCallColumn, serviceCallColumns, serviceCallOf, serviceCallSeed } from '@/lib/service-call'
 import ServiceCallField from '@/components/shared/ServiceCallField'
 import DocumentTotals from '@/components/shared/DocumentTotals'
+import OdometerField from '@/components/shared/OdometerField'
+import { hasOdometerColumn, odometerBody, odometerText } from '@/lib/odometer'
 
 export default function WorkOrderForm({
   workOrder,
@@ -60,6 +62,10 @@ export default function WorkOrderForm({
   const [jobDesc,    setJobDesc]    = useState(workOrder?.job_description ?? '')
   const [poNumber,   setPoNumber]   = useState(workOrder?.po_number ?? '')
   const [techNotes,  setTechNotes]  = useState(workOrder?.tech_notes ?? '')
+  // The odometer at this service (migration 184): this work order's own reading, or
+  // carried from its quote - never the vehicle's current mileage.
+  const woRow = workOrder as unknown as Record<string, unknown> | undefined
+  const [odometer,   setOdometer]   = useState(odometerText(woRow))
 
   // ── Pricing mode ────────────────────────────────────────────────────────────
   // On a NEW work order the tech chooses before any money exists. Nothing was wrong
@@ -197,6 +203,7 @@ export default function WorkOrderForm({
       job_description: jobDesc,
       po_number:       poNumber,
       tech_notes:      techNotes,
+      ...odometerBody(odometer, hasOdometerColumn(woRow)),
     }
     // Segments own the money on a segment-priced work order. Sending the parent
     // columns anyway is how a record ends up with two totals.
@@ -329,6 +336,8 @@ export default function WorkOrderForm({
             Carries onto the invoice, the emailed invoice and the customer&apos;s copy.
           </p>
         </div>
+
+        <OdometerField value={odometer} onChange={setOdometer} disabled={isLocked} testId="wo-odometer" />
       </section>
 
       {/* Rendered only when this form owns pricing. A segment-priced work order gets

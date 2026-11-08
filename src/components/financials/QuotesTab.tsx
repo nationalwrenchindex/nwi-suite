@@ -27,6 +27,8 @@ import { hasServiceCallColumn, serviceCallOf } from '@/lib/service-call'
 import ServiceCallField from '@/components/shared/ServiceCallField'
 import { useDocumentDefaults } from '@/lib/use-document-defaults'
 import DocumentTotals from '@/components/shared/DocumentTotals'
+import OdometerField from '@/components/shared/OdometerField'
+import { hasOdometerColumn, odometerBody, odometerLine, odometerText } from '@/lib/odometer'
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -245,7 +247,9 @@ function SendQuoteModal({
   const [copied,       setCopied]       = useState(false)
   const [qrDataUrl,    setQrDataUrl]    = useState<string | null>(null)
   const [generatingQr, setGeneratingQr] = useState(false)
-  const [smsWarn,      setSmsWarn]      = useState(false)
+  // What a failed send said. Shown in the modal, which stays open: closing on a failure
+  // is how a tech came to believe a quote reached a customer it never reached.
+  const [sendError,    setSendError]    = useState<string | null>(null)
 
   // Pre-load quote URL when switching to link tab if token not yet known.
   // preview: the tech is looking at the link, not sending it. Without this flag the
@@ -273,11 +277,15 @@ function SendQuoteModal({
 
       if (json.quote_url) setQuoteUrl(json.quote_url)
 
-      if (sendMethod === 'sms' && !json.sms_sent) setSmsWarn(true)
-
       // A preview hands back the quote untouched, so pushing it into the list would
-      // only overwrite good state with identical state. The real sends update it.
-      if (!json.preview) onSent(json.quote)
+      // only overwrite good state with identical state. Only a CONFIRMED send updates
+      // it: the route answers 200 with sent: false when no channel delivered.
+      if (json.preview) return json
+      if (!json.sent) {
+        setSendError(json.error ?? 'The quote could not be sent.')
+        return null
+      }
+      onSent(json.quote)
       return json
     } finally {
       setSending(false)
@@ -286,15 +294,22 @@ function SendQuoteModal({
 
   async function handleSendSms() {
     if (!phone.trim()) return
-    setSmsWarn(false)
-    const json = await callSend('sms').catch(() => null)
+    setSendError(null)
+    const json = await callSend('sms').catch((e: unknown) => {
+      setSendError(e instanceof Error ? e.message : 'The quote could not be sent.')
+      return null
+    })
     if (json) onClose()
   }
 
   async function handleSendEmail() {
     if (!email.trim()) return
-    await callSend('email').catch(() => null)
-    onClose()
+    setSendError(null)
+    const json = await callSend('email').catch((e: unknown) => {
+      setSendError(e instanceof Error ? e.message : 'The quote could not be sent.')
+      return null
+    })
+    if (json) onClose()
   }
 
   async function handleCopyLink() {
@@ -421,15 +436,6 @@ function SendQuoteModal({
                 <p className="text-white/30 text-[10px] uppercase tracking-widest">SMS Preview</p>
                 <p className="text-white/60 text-xs leading-relaxed">{smsPreviw}</p>
               </div>
-              {smsWarn && (
-                <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg border border-orange/30 bg-orange/10 text-orange text-xs">
-                  <svg className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                    <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-                  </svg>
-                  Quote marked as sent. SMS delivery pending A2P approval — please contact the customer directly for now.
-                </div>
-              )}
               <button
                 onClick={handleSendSms}
                 disabled={sending || !phone.trim()}
@@ -465,6 +471,16 @@ function SendQuoteModal({
                 {sending ? 'Sending…' : 'Send Email'}
               </button>
             </>
+          )}
+
+          {sendError && method !== 'link' && (
+            <div
+              role="alert"
+              data-testid="ld-quote-send-error"
+              className="px-3 py-2.5 rounded-lg border border-red-500/40 bg-red-500/10 text-red-300 text-xs"
+            >
+              Not sent: {sendError}
+            </div>
           )}
 
           {/* ── Copy Link tab ── */}
@@ -596,6 +612,11 @@ function QuoteDetailModal({
   const [taxPct,      setTaxPct]      = useState(initTaxPct)
   const [notes,       setNotes]       = useState(initNotes)
   const [poNumber,    setPoNumber]    = useState(initialQuote.po_number ?? '')
+  // The odometer this quote recorded (migration 184), as typed text; '' for none.
+  const quoteRow      = initialQuote as unknown as Record<string, unknown>
+  const initOdometer  = odometerText(quoteRow)
+  const odoColumn     = hasOdometerColumn(quoteRow)
+  const [odometer,    setOdometer]    = useState(initOdometer)
   const [custName,    setCustName]    = useState(initCustName)
   const [custPhone,   setCustPhone]   = useState(initCustPhone)
   const [vehicleId,   setVehicleId]   = useState<string | null>(initialQuote.vehicle_id)
@@ -695,11 +716,11 @@ function QuoteDetailModal({
   const [savedHash, setSavedHash] = useState(() =>
     isDetailer
       ? makeDetHash(initServiceLines, initAdjustments, initTaxPct, initNotes, initCustName, initCustPhone, initialQuote.vehicle_id)
-      : makeHash(initialItems, initLaborHours, initLaborRate, initMarkup, initTaxPct, initNotes, initCustName, initCustPhone, initialQuote.vehicle_id, discountKey(initDiscount) + '|sc' + storedCall.fee)
+      : makeHash(initialItems, initLaborHours, initLaborRate, initMarkup, initTaxPct, initNotes, initCustName, initCustPhone, initialQuote.vehicle_id, discountKey(initDiscount) + '|sc' + storedCall.fee + '|od' + initOdometer)
   )
   const currentHash = isDetailer
     ? makeDetHash(serviceLines, adjustments, taxPct, notes, custName, custPhone, vehicleId)
-    : makeHash(items, laborHours, laborRate, markupPct, taxPct, notes, custName, custPhone, vehicleId, discountKey(discountDraft) + '|sc' + callFee)
+    : makeHash(items, laborHours, laborRate, markupPct, taxPct, notes, custName, custPhone, vehicleId, discountKey(discountDraft) + '|sc' + callFee + '|od' + odometer.trim())
   const isDirty = isDraft && currentHash !== savedHash
 
   // Live status for polling-driven updates
@@ -852,6 +873,7 @@ function QuoteDetailModal({
           customer_phone:       custPhone,
           vehicle_id:           vehicleId,
           po_number:            poNumber,
+          ...odometerBody(odometer, odoColumn),
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
           service_lines:        serviceLines.map(({ _id, ...sl }) => sl),
           // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -872,6 +894,7 @@ function QuoteDetailModal({
           customer_id:          initialQuote.customer_id ?? null,
           vehicle_id:           vehicleId,
           po_number:            poNumber,
+          ...odometerBody(odometer, odoColumn),
           // tax_breakdown rides in docMoney.columns: what was taxed, extras included.
         }
       }
@@ -910,6 +933,7 @@ function QuoteDetailModal({
     setServiceLines(initServiceLines)
     setAdjustments(initAdjustments)
     setDiscountDraft(initDiscount)
+    setOdometer(initOdometer)
     // LineItemEditor owns its own inline-edit state, so a discard clears it by
     // remounting rather than by reaching in — same visible behaviour as before.
     setEditorNonce(n => n + 1)
@@ -1628,6 +1652,13 @@ function QuoteDetailModal({
                 </div>
               </div>
             )}
+
+            {/* ── Odometer at this service (migration 184) ── */}
+            {isDraft ? (
+              <OdometerField value={odometer} onChange={setOdometer} disabled={saving} testId="quote-odometer" />
+            ) : odometerLine(quoteRow) ? (
+              <p className="text-white/70 text-sm" data-testid="quote-odometer">{odometerLine(quoteRow)}</p>
+            ) : null}
 
             {/* ── PO number ── */}
             <div className="space-y-2">

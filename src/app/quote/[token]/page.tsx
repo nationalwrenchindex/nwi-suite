@@ -40,6 +40,7 @@ import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
 import { serviceCallOf } from '@/lib/service-call'
 import { parseTermsSnapshot, termsBlockRows } from '@/lib/document-terms'
 import { discountLabel, parseDiscount } from '@/lib/document-discount'
+import { odometerLine } from '@/lib/odometer'
 
 const QUOTE_SELECT = `
   id, quote_number, status, public_token,
@@ -157,6 +158,16 @@ export default async function PublicQuotePage(
     ? [q.vehicle.year, q.vehicle.make, q.vehicle.model].filter(Boolean).join(' ')
     : null
 
+  // The odometer this quote recorded (migration 184), never the vehicle's current
+  // mileage. Its own read, so a database without 184 loses the line, never the page.
+  // Nothing recorded prints nothing.
+  const { data: odoRow } = await sc
+    .from('quotes')
+    .select('mileage_at_service')
+    .eq('id', q.id)
+    .maybeSingle()
+  const odometer = odometerLine(odoRow as Record<string, unknown> | null)
+
   const fmt = (n: number | null | undefined) =>
     n == null ? '$0.00' : money(n)
 
@@ -218,12 +229,15 @@ export default async function PublicQuotePage(
         </div>
 
         {/* Vehicle */}
-        {vehicleLabel && (
+        {(vehicleLabel || odometer) && (
           <div className="bg-white/5 rounded-xl px-4 py-3 space-y-0.5">
             <p className="text-white/40 text-xs uppercase tracking-widest">Vehicle</p>
-            <p className="text-white font-medium">{vehicleLabel}</p>
+            {vehicleLabel && <p className="text-white font-medium">{vehicleLabel}</p>}
             {q.vehicle?.vin && (
               <p className="text-white/30 text-xs font-mono">VIN: {q.vehicle.vin}</p>
+            )}
+            {odometer && (
+              <p className="text-white/50 text-xs" data-testid="quote-odometer-print">{odometer}</p>
             )}
           </div>
         )}

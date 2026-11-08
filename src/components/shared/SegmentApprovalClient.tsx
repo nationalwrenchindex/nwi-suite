@@ -36,6 +36,8 @@ interface WorkOrderHead {
   job_description:   string | null
   customer_name:     string | null
   vehicle_label:     string | null
+  /** "Odometer: 123,000 mi" as recorded on the work order (lib/odometer), or none. */
+  odometer_line?:    string | null
 }
 
 /** Parts and labour, described without exposing what the shop paid. `unit_cost` and
@@ -137,6 +139,9 @@ export default function SegmentApprovalClient({
           {business.name ?? 'The shop'} needs your OK before doing the work below
           {workOrder.vehicle_label ? ` on your ${workOrder.vehicle_label}` : ''}.
         </p>
+        {workOrder.odometer_line && (
+          <p className="text-xs" style={s.muted} data-testid="wo-odometer-print">{workOrder.odometer_line}</p>
+        )}
         <p className="text-xs font-mono pt-1" style={s.faint}>
           {workOrder.work_order_number}
           {workOrder.po_number ? ` · PO # ${workOrder.po_number}` : ''}

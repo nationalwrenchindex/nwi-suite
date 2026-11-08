@@ -32,6 +32,7 @@ import { documentExtras } from '@/lib/document-money'
 import { discountPrintLabel, parseDiscount } from '@/lib/document-discount'
 import { hdApplyDiscount } from '@/lib/hd/hd-discount'
 import { addressLine } from '@/lib/hd/address-print'
+import { deliverHDDocument, hasDeliveryTarget } from '@/lib/hd/deliver-document'
 import {
   DiscountEditor, draftFrom, discountFromDraft, type DiscountDraft,
 } from '@/components/shared/DiscountEditor'
@@ -1394,6 +1395,40 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
     if (discountError) { setToast('Cannot save: ' + discountError); return }
     // One diagnostic charge unless the tech ticked "Bill both" (lib/hd/diagnostic-charge).
     if (doubleDiagnostic) { setToast('Cannot save: ' + doubleDiagnostic); return }
+
+    // "Send Quote" SENDS. It used to save the row as 'sent' and deliver nothing, so a
+    // quote read "sent" that no customer ever received. Now the quote is saved as a
+    // draft and handed to the send route, which marks it sent only after the email or
+    // text is confirmed (lib/hd/deliver-document). An already-sent quote's "Save
+    // Changes" is not a send and keeps its status, as before.
+    const sendAfterSave = status === 'sent' && editingStatus !== 'sent'
+    if (sendAfterSave && !hasDeliveryTarget(form.customer_phone, form.customer_email)) {
+      setToast('Add the customer\'s email or mobile number to send this quote - or Save as Draft.')
+      return
+    }
+    const saveStatus: 'draft' | 'sent' = sendAfterSave ? 'draft' : status
+
+    // After the save: deliver, and say plainly when nothing arrived. The quote stays a
+    // draft and the send dialog opens so the link can still be copied by hand.
+    async function deliverOrExplain(id: string, number: string | null) {
+      const result = await deliverHDDocument('quote', id, {
+        phone: form.customer_phone, email: form.customer_email,
+      })
+      if (!result.delivered.length) {
+        window.alert(
+          `Quote ${number ?? ''} was saved as a DRAFT and was NOT sent.\n\n` +
+          result.errors.join('\n') +
+          '\n\nThe send window will open so you can try again or copy the link.',
+        )
+        router.push(`/hd/quotes/${id}?resend=1`)
+        return false
+      }
+      if (result.errors.length) {
+        window.alert(`Quote ${number ?? ''} was sent by ${result.delivered.join(' and ')}.\n\nBut:\n${result.errors.join('\n')}`)
+      }
+      return true
+    }
+
     setSaving(true)
     try {
       const body = {
@@ -1464,19 +1499,25 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
         // because the invoice prints a PO row only when there is one.
         customer_po_number: form.customer_po_number.trim() || null,
         tech_name:         form.tech_name.trim() || null,
-        status,
+        status:            saveStatus,
       }
       if (editing) {
         // PUT, not POST: the same quote, same number, same customer link. A SENT quote
         // stays sent - its token is never rotated (see the route) - and the tech is
         // offered the re-send rather than having it happen behind their back.
-        const keepStatus = editingStatus === 'sent' ? 'sent' : status
+        const keepStatus = editingStatus === 'sent' ? 'sent' : saveStatus
         const res  = await fetch(`/api/hd/quotes/${quoteId}`, {
           method: 'PUT', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ...body, status: keepStatus }),
         })
         const data = await res.json()
         if (!res.ok || !data.quote?.id) { setToast(data.error ?? 'Save failed'); return }
+        if (sendAfterSave) {
+          if (await deliverOrExplain(String(quoteId), (data.quote.quote_number as string | null) ?? null)) {
+            router.push(`/hd/quotes/${quoteId}`)
+          }
+          return
+        }
         const resend = keepStatus === 'sent' && editingStatus === 'sent' && window.confirm(
           'Saved. The customer already has a link to this quote, and it now shows the changes.\n\n' +
           'Send it to them again so they know it changed?',
@@ -1486,6 +1527,12 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
       }
       const res  = await fetch('/api/hd/quotes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const data = await res.json()
+      if (data.quote?.id && sendAfterSave) {
+        if (await deliverOrExplain(String(data.quote.id), (data.quote.quote_number as string | null) ?? null)) {
+          router.push(`/hd/quotes/${data.quote.id}`)
+        }
+        return
+      }
       if (data.quote?.id) {
         if (data.customer_id) {
           // Green confirmation that the customer was logged; auto-dismiss at 3s.

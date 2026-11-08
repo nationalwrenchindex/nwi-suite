@@ -30,6 +30,8 @@ import { useServiceCallSettingsState } from '@/lib/use-service-call-settings'
 import { serviceCallSeed } from '@/lib/service-call'
 import ServiceCallField from '@/components/shared/ServiceCallField'
 import DocumentTotals from '@/components/shared/DocumentTotals'
+import OdometerField from '@/components/shared/OdometerField'
+import { odometerBody } from '@/lib/odometer'
 
 export default function NewQuoteForm({
   defaults,
@@ -75,6 +77,8 @@ export default function NewQuoteForm({
   const [vehicleId,  setVehicleId]  = useState<string | null>(seed.vehicleId ?? null)
   const [unitLabel,  setUnitLabel]  = useState('')
   const [notes,      setNotes]      = useState(seedNotes(seed))
+  // The odometer at this service (migration 184). Optional; sent only when typed.
+  const [odometer,   setOdometer]   = useState('')
 
   // Parts and labour are LINES, in the same editor the quote and the work order use -
   // several labour lines if the job has several, each with what the work involves.
@@ -147,6 +151,7 @@ export default function NewQuoteForm({
           // the order arranged, labour hours summed off the labour lines, the extras
           // inside tax_amount and grand_total, and what was taxed.
           ...docMoney.columns,
+          ...odometerBody(odometer, false),
         }),
       })
       const json = await res.json()
@@ -194,6 +199,8 @@ export default function NewQuoteForm({
           {[customer.phone, customer.email].filter(Boolean).join('  ·  ')}
         </p>
       )}
+
+      <OdometerField value={odometer} onChange={setOdometer} disabled={saving} testId="quote-odometer" />
 
       {/* ── Lines: labour and parts ── */}
       <div className="space-y-2">

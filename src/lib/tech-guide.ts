@@ -10,11 +10,9 @@ const SYSTEM_PROMPT = `You are an automotive technician. Respond ONLY with raw J
 CRITICAL: Output ONLY valid JSON. No markdown code fences. No explanations before or after. No "Here is your response" text. Start your response with { and end with }. Nothing else.
 
 Schema (all fields required):
-{"torque":[{"part":"","spec":""}],"steps":[""],"tools":[""],"warning":"","hours":1,"parts":[{"name":"","qty":1,"unit_cost":0.00,"unit_price":0.00}]}
+{"torque":[{"part":"","spec":""}],"steps":[""],"tools":[""],"warning":"","hours":1,"parts":[{"name":"","qty":1}]}
 
-For each part, include realistic demo pricing:
-- unit_cost: what a mechanic pays at a supplier (use these ranges: motor oil $8-12/qt, oil filter $10-25, air filter $15-35, brake pads $45-95/set, brake rotor $65-150 each, brake hardware kit $15-30, trans filter kit $30-80, trans fluid $12-18/qt, coolant $18-25/gal, spark plug $8-25 each, power steering/brake fluid $12-20, grease/cleaners $4-15, drain plugs/gaskets $2-10, tires $80-180 each passenger/LT, TPMS sensor $20-45 each)
-- unit_price: retail price customer pays — 15-25% above unit_cost, rounded to realistic cents (e.g. 45.99 not 45.38)
+For each part give ONLY its plain name and quantity. Do NOT include any price, cost or dollar amount, and do NOT invent a part number. The technician enters every cost from their own supplier.
 
 Limits: max 3 torque, max 5 steps, max 3 tools, 1 warning sentence, max 4 parts. Be concise.
 
@@ -82,8 +80,11 @@ export function normaliseGuide(raw: unknown): TechGuide {
       return {
         name,
         qty:        Number(q.qty ?? q.quantity ?? 1) || 1,
-        unit_cost:  Number(q.unit_cost  ?? q.cost  ?? 0) || 0,
-        unit_price: Number(q.unit_price ?? q.price ?? 0) || 0,
+        // NEVER the model's figure. A price the model makes up is a guess, and a guess
+        // that reaches a quote is billed. Every consumer (QuickWrench, MPI Generate
+        // Quote) gets a blank cost the tech fills from their own supplier (Nov 8, 2026).
+        unit_cost:  0,
+        unit_price: 0,
       }
     })
     .filter((p): p is NonNullable<typeof p> => p !== null)

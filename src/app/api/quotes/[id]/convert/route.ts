@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { writeToleratingMigration142 } from '@/lib/migration-142'
 import { carriedTerms } from '@/lib/document-terms'
 import { serviceCallColumns, serviceCallOf, writeToleratingServiceCall } from '@/lib/service-call'
+import { odometerCarry } from '@/lib/odometer'
 
 const INVOICE_SELECT = `
   *,
@@ -165,6 +166,9 @@ export async function POST(
     // the shop has to retype it, and a fleet that cannot match invoice to PO does
     // not pay it.
     po_number:       quote.po_number ?? null,
+    // The odometer taken at the quote (migration 184), frozen. invoices has had the
+    // column since 098; only written when the quote recorded one.
+    ...odometerCarry(q),
     source_quote_id: quote.id,
     job_notes:       null,
     shop_supplies:   [],

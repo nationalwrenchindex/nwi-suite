@@ -9,6 +9,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { writeToleratingMigration142 } from '@/lib/migration-142'
 import { serviceCallFromBody, writeToleratingServiceCall } from '@/lib/service-call'
+import { odometerFromBody, odometerRefusal, writeToleratingOdometer } from '@/lib/odometer'
 import { syncParentExtrasQuietly } from '@/lib/segments/parent-extras'
 import { hasWorkOrders } from '@/lib/work-orders'
 import { WORK_ORDER_SELECT } from '../list'
@@ -144,6 +145,10 @@ export async function PATCH(
   // either pricing mode, like the drive time.
   const serviceCall = serviceCallFromBody(body as Record<string, unknown>)
   if (serviceCall) Object.assign(updates, serviceCall)
+  // The odometer at this service (migration 184): only when sent; unreadable is a 400.
+  const odometer = odometerFromBody(body)
+  if ('error' in odometer) return NextResponse.json({ error: odometer.error }, { status: 400 })
+  Object.assign(updates, odometer.update)
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'No valid fields to update.' }, { status: 400 })
@@ -151,15 +156,19 @@ export async function PATCH(
 
   const write = (u: Record<string, unknown>) => writeToleratingMigration142<Record<string, unknown>, Record<string, unknown>>(
     u,
-    row => writeToleratingServiceCall(row, r => supabase
+    row => writeToleratingServiceCall(row, r => writeToleratingOdometer(r, r2 => supabase
       .from('work_orders')
-      .update(r)
+      .update(r2)
       .eq('id', id)
       .eq('user_id', user.id)
       .select(WORK_ORDER_SELECT)
-      .single()),
+      .single())),
   )
   let { data, error } = await write(updates)
+
+  // Before 184: a reading is refused with the migration named, never dropped silently.
+  const refused = odometerRefusal(error)
+  if (refused) return NextResponse.json({ error: refused }, { status: 409 })
 
   // Before 165: clearing a discount that cannot exist is dropped and retried; setting
   // one is refused, never stored as a discounted total with no record of why.

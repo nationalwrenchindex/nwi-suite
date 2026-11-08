@@ -17,6 +17,8 @@ import { useServiceCallSettingsState } from '@/lib/use-service-call-settings'
 import { hasServiceCallColumn, serviceCallBuckets, serviceCallColumns, serviceCallOf, serviceCallRow } from '@/lib/service-call'
 import ServiceCallField from '@/components/shared/ServiceCallField'
 import { LineDetail } from '@/components/shared/LineItemEditor'
+import OdometerField from '@/components/shared/OdometerField'
+import { odometerBody, odometerText } from '@/lib/odometer'
 import { applyDiscount, discountLabel, laborFromLines, parseDiscount } from '@/lib/document-discount'
 import {
   DiscountEditor, draftFrom, discountFromDraft, type DiscountDraft,
@@ -508,6 +510,9 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
   const [paymentTerms,    setPaymentTerms]    = useState(invoice.payment_terms ?? '')
   const [shopDefaultTerms, setShopDefaultTerms] = useState<string>('')
   const [poNumber,        setPoNumber]        = useState(invoice.po_number ?? '')
+  // The odometer at this service: invoices.mileage_at_service (since 098), the column the
+  // send dialog writes too. Carried from the quote or work order; editable here.
+  const [odometer,        setOdometer]        = useState(odometerText(invoice as unknown as Record<string, unknown>))
   // The ONLY extras inputs. Shop supplies has none on purpose - it is a percentage
   // from Settings, not a question anybody answers per invoice.
   const { settings: extrasSettings, loaded: extrasLoaded } = useExtrasSettingsState()
@@ -987,6 +992,7 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
           internal_notes:   internalNotes || null,
           payment_terms:    paymentTerms || null,
           po_number:        poNumber || null,
+          ...odometerBody(odometer, true),
           shop_supplies:    shopSupplies,
           // Computed, stored with the rate in force so a reopen cannot re-price it -
           // only when they changed (extrasPayload).
@@ -1037,6 +1043,7 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
           internal_notes:   internalNotes || null,
           payment_terms:    paymentTerms || null,
           po_number:        poNumber || null,
+          ...odometerBody(odometer, true),
           shop_supplies:    shopSupplies,
           // Computed, stored with the rate in force so a reopen cannot re-price it -
           // only when they changed (extrasPayload).
@@ -1505,6 +1512,11 @@ export default function InvoiceInProgressClient({ invoice, isDetailer = false }:
           </div>
         </Section>
       )}
+
+      {/* ── Odometer at this service ── */}
+      <Section label="Odometer">
+        <OdometerField value={odometer} onChange={setOdometer} testId="invoice-odometer" />
+      </Section>
 
       {/* ── PO number ── */}
       <Section label="PO Number">

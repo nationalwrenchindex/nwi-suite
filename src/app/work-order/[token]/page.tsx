@@ -6,6 +6,7 @@ import SegmentApprovalClient from '@/components/shared/SegmentApprovalClient'
 import { BRANDING_SELECT, resolveBranding, type BrandingSource } from '@/lib/branding'
 import { publicDocumentMetadata } from '@/lib/public-metadata'
 import { customerSegments } from '@/lib/customer-copy'
+import { odometerLine } from '@/lib/odometer'
 
 // Public. No auth, no AppNav — the token is the credential, same arrangement as
 // /quote/[token] and /invoice/[token]. Read with the service client so no anon policy
@@ -84,6 +85,11 @@ export default async function PublicWorkOrderPage({
       .eq('id', wo.id)
   }
 
+  // The odometer this work order recorded (migration 184), never the vehicle's current
+  // mileage. Its own read, so a database without 184 loses the line, never the page.
+  const { data: odoRow } = await sc
+    .from('work_orders').select('mileage_at_service').eq('id', wo.id).maybeSingle()
+
   const customer = wo.customer as unknown as { first_name: string; last_name: string } | null
   const vehicle  = wo.vehicle  as unknown as { year: number | null; make: string; model: string } | null
 
@@ -99,6 +105,7 @@ export default async function PublicWorkOrderPage({
           job_description:   (wo.job_description as string | null) ?? null,
           customer_name:     customer ? `${customer.first_name} ${customer.last_name}`.trim() : null,
           vehicle_label:     vehicle ? [vehicle.year, vehicle.make, vehicle.model].filter(Boolean).join(' ') : null,
+          odometer_line:     odometerLine(odoRow as Record<string, unknown> | null),
         }}
         business={(() => {
           const b = resolveBranding(profile as BrandingSource | null)

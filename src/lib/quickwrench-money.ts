@@ -18,11 +18,18 @@ import type { EditItem } from '@/components/shared/line-items'
 import { documentMoney, type DocumentMoney } from '@/lib/document-money'
 import type { DocumentDefaults } from '@/lib/document-defaults'
 import type { TaxSettings } from '@/lib/tax'
+import type { LaborEstimate } from '@/lib/labor-estimate'
 
 /** One part on a job: the tech's store cost and the customer's per-unit price. */
 export interface QwPart { name: string; qty: number; unit_cost: number; unit_price: number }
 /** One job: its labour hours, under the quote's one labour rate, and its parts. */
-export interface QwJob { subtype: string; labor_hours: number; parts: QwPart[] }
+/**
+ * labor_estimate: set when the hours came from an AI estimate (lib/labor-estimate). It is
+ * written onto that job's stored labor line, so the line reads as ESTIMATED - not as a
+ * figure the tech entered - and can be compared with the real hours when the work order
+ * closes. It never changes the money: the hours are labor_hours, whatever they are.
+ */
+export interface QwJob { subtype: string; labor_hours: number; parts: QwPart[]; labor_estimate?: LaborEstimate | null }
 export interface QwExtraLabor { description: string; hours: number }
 
 /**
@@ -35,7 +42,8 @@ export interface QwExtraLabor { description: string; hours: number }
  */
 export function quickwrenchItems(
   jobs: QwJob[], extraLabor: QwExtraLabor[], laborRate: number, markupPct: number,
-): { items: EditItem[]; costs: Array<number | null> } {
+): { items: EditItem[]; costs: Array<number | null>; estimates: Array<LaborEstimate | null> } {
+  const estimates: Array<LaborEstimate | null> = []
   const factor = 1 + (markupPct > 0 ? markupPct : 0) / 100
   const items: EditItem[] = []
   const costs: Array<number | null> = []
@@ -47,6 +55,7 @@ export function quickwrenchItems(
       })
       costs.push(Math.round((Number(p.unit_cost) || 0) * 100) / 100)
     })
+    estimates[items.length] = j.labor_estimate ?? null
     items.push({
       _id: `qw-${ji}-labor`, kind: 'labor', description: `Labor — ${j.subtype}`, part_number: '',
       quantity: Number(j.labor_hours) || 0, unit_price: laborRate,
@@ -60,12 +69,18 @@ export function quickwrenchItems(
     })
     costs.push(null)
   })
-  return { items, costs }
+  for (let k = 0; k < items.length; k++) estimates[k] ??= null
+  return { items, costs, estimates }
 }
 
 /** The stored line_items with each part's store cost put back on it, as QuickWrench always stored them. */
 export function withPartCosts<T extends object>(lines: T[], costs: Array<number | null>): T[] {
   return lines.map((l, i) => (costs[i] != null ? { ...l, unit_cost: costs[i] } : l))
+}
+
+/** Marks each AI-estimated labor line with the estimate it started from. */
+export function withLaborEstimates<T extends object>(lines: T[], estimates: Array<LaborEstimate | null>): T[] {
+  return lines.map((l, i) => (estimates[i] ? { ...l, labor_estimate: estimates[i] } : l))
 }
 
 /** Store cost across every part: the quote's parts_cost_total (COGS). */
@@ -93,7 +108,7 @@ export interface QuickwrenchMoneyInput {
 
 /** The quote's money and every column to store, part costs kept on their lines. */
 export function quickwrenchMoney(i: QuickwrenchMoneyInput): { money: DocumentMoney; columns: Record<string, unknown> } {
-  const { items, costs } = quickwrenchItems(i.jobs, i.extraLabor, i.laborRate, i.markupPct)
+  const { items, costs, estimates } = quickwrenchItems(i.jobs, i.extraLabor, i.laborRate, i.markupPct)
   const money = documentMoney({
     items, markupPct: i.markupPct, laborRate: i.laborRate, taxPct: i.taxPct,
     taxSettings:    i.taxSettings,
@@ -102,5 +117,5 @@ export function quickwrenchMoney(i: QuickwrenchMoneyInput): { money: DocumentMon
     serviceCall:    i.defaults.serviceCallAvailable ? { fee: i.serviceCallFee, tax: i.defaults.serviceCall.tax } : null,
   })
   const lines = Array.isArray(money.columns.line_items) ? money.columns.line_items as object[] : []
-  return { money, columns: { ...money.columns, line_items: withPartCosts(lines, costs) } }
+  return { money, columns: { ...money.columns, line_items: withLaborEstimates(withPartCosts(lines, costs), estimates) } }
 }

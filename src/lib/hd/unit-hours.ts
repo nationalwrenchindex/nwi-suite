@@ -10,7 +10,9 @@
 // the document left EMPTY, at the moment the document is written - so it is frozen
 // there from then on, and a later edit to the unit record changes no document.
 
-const num = (v: unknown): number | null => {
+import { parseOdometer, ODOMETER_INVALID_MESSAGE } from '@/lib/odometer'
+
+const num =(v: unknown): number | null => {
   if (v === null || v === undefined || v === '') return null
   const n = Number(v)
   return Number.isFinite(n) ? n : null
@@ -69,21 +71,9 @@ export function isMissingUnitHoursColumn(error: unknown): boolean {
 // Migration 183 also gives hd_quotes the unit_hours column the work order and invoice
 // have had since 179, so a reading taken at the quote carries to both.
 
-export const MAX_ODOMETER = 9999999
-
-/** An odometer as entered: whole miles, NULL for blank, or 'invalid'. */
-export function parseOdometer(v: unknown): number | null | 'invalid' {
-  if (v === null || v === undefined || (typeof v === 'string' && v.trim() === '')) return null
-  const n = Number(typeof v === 'string' ? v.replace(/[,\s]/g, '').replace(/mi(les)?$/i, '') : v)
-  if (!Number.isFinite(n) || n < 0 || n > MAX_ODOMETER) return 'invalid'
-  return Math.round(n)
-}
-
-/** "123,000". NULL for a document with no reading. */
-export function formatOdometer(v: unknown): string | null {
-  const n = num(v)
-  return n == null ? null : Math.round(n).toLocaleString('en-US')
-}
+// The parser and formatter are shared with LD (lib/odometer), re-exported here so every
+// HD caller is unchanged.
+export { MAX_ODOMETER, parseOdometer, formatOdometer } from '@/lib/odometer'
 
 /** The two reading columns, as a document stores them. */
 export const READING_COLUMNS = ['unit_hours', 'vehicle_odometer'] as const
@@ -102,7 +92,7 @@ export function readingsFromBody(body: Record<string, unknown>): { update: Recor
   }
   if ('vehicle_odometer' in body) {
     const o = parseOdometer(body.vehicle_odometer)
-    if (o === 'invalid') return { error: 'The odometer must be whole miles from 0 to 9,999,999, or blank.' }
+    if (o === 'invalid') return { error: ODOMETER_INVALID_MESSAGE }
     update.vehicle_odometer = o
   }
   return { update }

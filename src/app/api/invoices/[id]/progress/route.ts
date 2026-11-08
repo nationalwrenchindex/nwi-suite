@@ -4,6 +4,7 @@ import { missingMigration142Column, withoutMigration142Columns } from '@/lib/mig
 import { createClient } from '@/lib/supabase/server'
 import { discountForWrite, isMissing165Column, MIGRATION_165_MESSAGE } from '@/lib/document-discount'
 import { isMissingServiceCallColumn, serviceCallFee, serviceCallFromBody, withoutServiceCall, MIGRATION_180_MESSAGE } from '@/lib/service-call'
+import { odometerFromBody } from '@/lib/odometer'
 
 const INVOICE_SELECT = `
   *,
@@ -92,6 +93,12 @@ export async function PATCH(
   // The service call fee (migration 180) and how it is taxed - only when sent.
   const serviceCall = serviceCallFromBody(body)
   if (serviceCall) Object.assign(updates, serviceCall)
+
+  // The odometer at this service: the same invoices.mileage_at_service the send dialog
+  // writes (column since 098). Only when sent; unreadable is a 400; blank clears it.
+  const odometer = odometerFromBody(body)
+  if ('error' in odometer) return NextResponse.json({ error: odometer.error }, { status: 400 })
+  Object.assign(updates, odometer.update)
 
   // ── THE DISCOUNT (migration 165) ──
   // An in-progress invoice takes a discount without being recreated: it is its own

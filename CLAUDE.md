@@ -184,6 +184,34 @@ Not covered by the rules, so never guessed at: other suffixes (`SL`, `RM`, `PB`,
 `KIT`, `SS`, `FA`, `E`), and shapes that fit no rule (`18-00091-105`, `96-153-01K`, `203-0799-2`) -
 those stay exactly as written and are matched as written.
 
+## Learning from completed work - test accounts are EXCLUDED (Brock, Nov 8, 2026)
+
+Any feature that learns from completed work - labor time history, job averages, estimate
+accuracy, "jobs like this took N hours", anything that turns past documents into a number -
+counts **real subscriber work only**.
+
+- **`4a8c046f-7db3-42bb-8422-fd47efb7678c` (edwardfleeman57@gmail.com) is a DEMO and TEST
+  account.** Its ~1,578 work orders and invoices are not real jobs and its labor hours are
+  meaningless. Always excluded, however real its customer names look.
+- Also excluded: Brock's other accounts and test signups - `cec4e82c` (edwardfleeman57+@),
+  every `edwardfleem*` / `edwardflee*` address, `nationalwrenchindex@gmail.com`,
+  `shoptech@nwidemo.com`, `testmechanic.qa.2026@gmail.com`, `test01@gmail.com`, the bare-digit
+  gmail signups (`157@`, `174@`, `351@`, `651q@`, `957@`) - and the junk signups (dotted
+  random gmail addresses with no business name and no subscription).
+- Smoke and walk rows (`SMOKE` markers, "test" customers and descriptions) are excluded
+  wherever they sit, including inside a real account.
+- Kurt's (`a560c8b6`, C&K) 1,740 `service_type = 'Fullbay Import'` rows are imported
+  history with no labor, no total and no completion - not completed work.
+- When an account cannot be told apart (e.g. `nwiwrench@gmail.com`, `grok@getnwiwrench.com`),
+  **ask Brock** - never include it by default. Prefer an explicit allowlist of real accounts
+  over a blocklist, so a new junk signup is excluded until someone says otherwise.
+- Brock will open a fresh account for his own shop and use it properly. That one counts once
+  he names it.
+
+Measured Nov 8, 2026, excluding the above: **4 completed work orders with real labor hours,
+in 1 account** (Kurt: HD WO-2026-0002, 0004, 0006, 0007 - 3, 3, 8 and 8 hours; 0006 and 0007
+are the same customer on the same day). Zero on LD. Too thin to learn from.
+
 ## Money rules that are settled, do not re-litigate
 
 - **Tax is rounded per bucket where it is first agreed, then summed — never recomputed.**

@@ -6,6 +6,7 @@ import { isMissingTaxBreakdownColumn, withoutTaxBreakdown } from '@/lib/tax'
 import { discountForWrite, isMissing165Column, MIGRATION_165_MESSAGE } from '@/lib/document-discount'
 import { createClient } from '@/lib/supabase/server'
 import { isMissingServiceCallColumn, serviceCallFee, serviceCallFromBody, MIGRATION_180_MESSAGE } from '@/lib/service-call'
+import { odometerFromBody, withoutMissingOdometer } from '@/lib/odometer'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 async function genQuoteNumber(supabase: SupabaseClient, userId: string): Promise<string> {
@@ -132,6 +133,11 @@ export async function POST(req: NextRequest) {
   const discount = discountForWrite(body.discount)
   if ('error' in discount) return NextResponse.json({ error: discount.error }, { status: 422 })
 
+  // The odometer at this service (migration 184), parsed; unreadable is a 400. Written
+  // only when there is a reading, so a quote without one saves on a database without 184.
+  const odometer = odometerFromBody(body)
+  if ('error' in odometer) return NextResponse.json({ error: odometer.error }, { status: 400 })
+
   const lineItems = Array.isArray(body.line_items) ? body.line_items : null
 
   // What was taxed, so the customer copy can say "Labor — not taxable" and a
@@ -214,6 +220,7 @@ export async function POST(req: NextRequest) {
   if (taxBreakdown) insertData.tax_breakdown = taxBreakdown
   if (!discount.skip && discount.value) insertData.discount = discount.value
   if (body.po_number) insertData.po_number = String(body.po_number)
+  if (odometer.update.mileage_at_service != null) insertData.mileage_at_service = odometer.update.mileage_at_service
 
   if (prePopLaborRate  !== null) insertData.labor_rate           = prePopLaborRate
   if (prePopLaborHours !== null) insertData.labor_hours          = prePopLaborHours
@@ -256,6 +263,14 @@ export async function POST(req: NextRequest) {
   // shortfall, so before 165 a quote WITH a discount is refused, not trimmed.
   if (error && isMissing165Column(error)) {
     return NextResponse.json({ error: MIGRATION_165_MESSAGE }, { status: 409 })
+  }
+
+  // Before 184: a quote WITH a reading is refused, naming the migration, rather than
+  // saved without the reading the tech typed. Checked after the other retries so it is
+  // reached whichever missing column PostgREST named first.
+  if (error) {
+    const r = withoutMissingOdometer(insertData, error)
+    if ('error' in r) return NextResponse.json({ error: r.error }, { status: 409 })
   }
 
   if (error) {

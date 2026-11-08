@@ -23,6 +23,7 @@ import {
   extrasFromDocument, extrasDelta, extrasAgree, extrasColumns, partsBaseFromLines,
 } from '@/lib/billable-extras'
 import { serviceCallBuckets, serviceCallColumns, serviceCallOf, writeToleratingServiceCall } from '@/lib/service-call'
+import { odometerCarry } from '@/lib/odometer'
 
 export const dynamic = 'force-dynamic'
 
@@ -365,6 +366,9 @@ export async function POST(
     // Everything the work order carried, including the PO the fleet will match the
     // payment against. Retyping it is how invoice and PO stop agreeing.
     po_number:        wo.po_number ?? null,
+    // The odometer recorded on the work order (migration 184), frozen - never re-read
+    // from the vehicle. invoices has had the column since 098; only when there is one.
+    ...odometerCarry(wo as unknown as Record<string, unknown>),
     // What was DONE, carried from the segments and labelled by segment rather than
     // retyped. Customer-visible (/invoice/[token] renders job_notes) and fully
     // editable afterwards — nothing here is locked. Parent-priced work orders have

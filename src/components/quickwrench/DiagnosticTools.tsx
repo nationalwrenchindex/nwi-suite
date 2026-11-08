@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { parseLaborEstimate, estimateLabel, type LaborEstimate } from '@/lib/labor-estimate'
 import type { QWVehicle } from '@/types/quickwrench'
 import PartsOnTheWay, { type PartInput } from '@/components/parts-delivery/PartsOnTheWay'
 import PartText from '@/components/parts/PartText'
@@ -144,6 +145,8 @@ export interface DTCJobPayload {
   name:            string
   suggestedRepair: string
   laborHours:      number
+  /** The AI range the hours started from, when the result gave one. */
+  laborEstimate?:  LaborEstimate | null
   parts:           string[]
   category:        string
 }
@@ -154,11 +157,13 @@ function stripStepNumber(step: string): string {
   return step.trim().replace(/^(?:\d+\.\s+)+/, '').trim()
 }
 
-// Pull the first number out of a labor estimate ("3.0 - 5.0 hours..." → 3.0).
-function parseLaborHours(laborEstimate: string): number {
-  const m = laborEstimate.match(/\d+(?:\.\d+)?/)
-  const n = m ? parseFloat(m[0]) : NaN
-  return Number.isFinite(n) && n > 0 ? n : 1.5
+// The hours a DTC result starts the quote at. A range starts at its MIDPOINT to the
+// quarter hour (lib/labor-estimate). This used to take the first number, so
+// "2.5 - 4.0 hours" silently quoted 2.5. With no number at all it still falls back to
+// 1.5h, unmarked, as before (reported, not changed: Nov 8, 2026).
+export function startingHours(laborEstimate: string): { hours: number; estimate: LaborEstimate | null } {
+  const e = parseLaborEstimate(laborEstimate)
+  return e ? { hours: e.suggested, estimate: e } : { hours: 1.5, estimate: null }
 }
 
 // Map Gemini's free-text category to a JOB_CATEGORIES id in QuickWrenchClient.
@@ -204,6 +209,13 @@ function DTCPanel({ vehicle, onAddDTCJob }: {
   const [result,         setResult]         = useState<DTCResult | null>(null)
   const [cached,         setCached]         = useState(false)
   const [error,          setError]          = useState<string | null>(null)
+  // The hours Add to Quote will use: the estimate's midpoint, the tech's to change
+  // before it reaches the quote. Re-seeded whenever a new result arrives.
+  const [hoursText,      setHoursText]      = useState('')
+  const start = startingHours(result?.labor_estimate || '')
+  useEffect(() => {
+    setHoursText(result ? String(startingHours(result.labor_estimate || '').hours) : '')
+  }, [result])
 
   async function lookup(overrideCode?: string) {
     const code    = (overrideCode ?? input).trim().toUpperCase()
@@ -457,12 +469,35 @@ function DTCPanel({ vehicle, onAddDTCJob }: {
           )}
 
           {onAddDTCJob && (
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <label htmlFor="dtc-labor-hours" className="text-white/50 uppercase tracking-widest text-[10px]">Labor hours</label>
+              <input
+                id="dtc-labor-hours"
+                data-testid="dtc-labor-hours"
+                type="number" min={0} step={0.25} inputMode="decimal"
+                value={hoursText}
+                onChange={e => setHoursText(e.target.value)}
+                className="w-20 text-right text-white rounded px-2 py-1.5 outline-none"
+                style={{ background: '#1a1a2e', border: '1px solid rgba(255,255,255,0.15)' }}
+              />
+              {start.estimate && (
+                <span data-testid="dtc-labor-estimate" className="text-amber-300/80 uppercase tracking-wide text-[10px]">
+                  {estimateLabel(start.estimate)}
+                </span>
+              )}
+            </div>
+          )}
+
+          {onAddDTCJob && (
             <button
               onClick={() => onAddDTCJob({
                 code:            result.code || input,
                 name:            result.name || result.code || input,
                 suggestedRepair: result.suggested_repair || '',
-                laborHours:      parseLaborHours(result.labor_estimate || ''),
+                // What the tech left in the box - the midpoint unless they changed it.
+                laborHours:      Number.isFinite(parseFloat(hoursText)) && parseFloat(hoursText) >= 0
+                                   ? parseFloat(hoursText) : start.hours,
+                laborEstimate:   start.estimate,
                 parts:           result.parts_needed || [],
                 category:        mapCategory(result.category || ''),
               })}
