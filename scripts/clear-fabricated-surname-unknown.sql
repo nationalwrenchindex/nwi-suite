@@ -22,7 +22,7 @@
 --
 -- The count check refuses the whole file unless the set is exactly 29.
 --
--- ENDS IN ROLLBACK. Read the counts it prints, then change the last line to COMMIT.
+-- ENDS IN COMMIT (armed for Brock, Nov 8, 2026). The count checks still refuse the whole file.
 -- Preview and production share one database.
 
 BEGIN;
@@ -57,4 +57,4 @@ SELECT id, user_id, first_name, last_name
   FROM public.customers
  WHERE id = '9398bc26-1f94-4935-96d1-e01046b43b28';
 
-ROLLBACK;
+COMMIT;
