@@ -24,7 +24,8 @@
 import fs from 'fs'
 import { LEGAL_VERSION } from '../src/lib/legal'
 import { invoiceBodyFromQuote } from '../src/lib/hd/quote-to-invoice'
-import { billedHoursFromLibrary } from '../src/lib/hd/labor-library'
+import { billedHoursFromLibrary, billedHighFromLibrary, cardBilledPrefill } from '../src/lib/hd/labor-library'
+import { formatUnitHours } from '../src/lib/hd/unit-hours'
 import { editableLines } from '../src/lib/hd/invoice-edit-lines'
 import { stripLeadingZeros, parseFee } from '../src/components/hd/FeeInput'
 import { fmtShopDate, shopTimeZone } from '../src/lib/shop-time'
@@ -467,6 +468,94 @@ async function flowQw(): Promise<void> {
 // And the AI labor range (lib/labor-estimate): "2.5 - 4.0 hours" starts at 3.25, not
 // the 2.5 it used to take, and a QuickWrench save stores the line marked ESTIMATED with
 // the range it came from.
+
+// ── Ur: a reading box never fills itself (HD quote + new invoice, Nov 9) ──────
+//
+// The HD quote form put the QuickWrench unit profile's last hours (12,345, saved Jul 1)
+// into Unit Hours with nothing saying it was old. Now the quote and the new invoice use
+// the work order's box (ReadingBox): empty unless this document recorded a reading, the
+// state in words, the unit's last reading offered beneath it, never put in it.
+function readingBox(html: string, testId: string): { state: string | null; value: string | null } {
+  const box = html.match(new RegExp(`<div[^>]*data-testid="${testId}"[^>]*>`))?.[0] ?? ''
+  const state = box.match(/data-reading-state="([a-z]+)"/)?.[1] ?? null
+  const input = html.match(new RegExp(`<input[^>]*data-testid="${testId}-input"[^>]*>`))?.[0] ?? ''
+  const value = input ? (input.match(/\svalue="([^"]*)"/)?.[1] ?? '') : null
+  return { state, value }
+}
+
+async function flowUr(): Promise<void> {
+  const F = 'Ur reading box'
+  const qn = await page('/hd/quotes/new')
+  const qb = qn ? readingBox(qn.html, 'quote-unit-hours') : { state: null, value: null }
+  record(F, 'a new HD quote: Unit Hours is the shared box, empty, NOT RECORDED',
+    !!qn && qb.state === 'none' && qb.value === '' && qn.text.includes('NOT RECORDED ON THIS JOB - the quote will show no hours.'),
+    qn ? `state ${qb.state}, value "${qb.value}"` : 'did not load')
+
+  const inv = await page('/hd/invoices/new')
+  const ib = inv ? readingBox(inv.html, 'invoice-unit-hours') : { state: null, value: null }
+  record(F, 'a new HD invoice: the same box, empty, NOT RECORDED',
+    !!inv && ib.state === 'none' && ib.value === '' && inv.text.includes('NOT RECORDED ON THIS JOB - the invoice will show no hours.'),
+    inv ? `state ${ib.state}, value "${ib.value}"` : 'did not load')
+
+  // A quote that DID record hours reopens showing them as recorded - the box is not
+  // simply always empty.
+  const q = await api('POST', '/api/hd/quotes', {
+    customer_name: `${MARK} reading`, unit_manufacturer: 'Thermo King', unit_model: 'SB-230', unit_serial: '1234567890',
+    complaint: `${MARK} - reading box`, status: 'draft', line_items: [], unit_hours: 20352.5,
+    labor_rate: 100, subtotal_labor: 0, subtotal_parts: 0, tax_rate: 0, tax_amount: 0, total: 0,
+  })
+  await adoptSmokeCustomer(q.json.customer_id)
+  const qid = String((q.json.quote as Record<string, unknown> | undefined)?.id ?? '')
+  if (qid) created.hdQuotes.add(qid)
+  if (!record(F, 'a draft HD quote with unit hours saves', q.status === 201 && !!qid, `-> ${q.status} ${String(q.json.error ?? '')}`)) return
+  const ed = await page(`/hd/quotes/${qid}/edit`)
+  const eb = ed ? readingBox(ed.html, 'quote-unit-hours') : { state: null, value: null }
+  const want = `RECORDED ON THIS JOB: ${formatUnitHours(20352.5)} h - prints on the quote.`
+  record(F, 'reopened, the quote shows its own reading as RECORDED ON THIS JOB',
+    !!ed && eb.state === 'recorded' && Number(eb.value) === 20352.5 && ed.text.includes(want),
+    ed ? `state ${eb.state}, value "${eb.value}"` : 'did not load')
+}
+
+// ── Lp: a labor card pre-fills Hours (billed) - range midpoint, single as is ──
+//
+// Brock, Nov 8: a card with a field RANGE pre-fills the midpoint to the quarter hour
+// (the same rangeMidpoint the AI ranges use), a single field value pre-fills as is, and
+// a card with only shop time pre-fills NOTHING (shop time is reference; "Bill shop time"
+// is the button). Checked on fixed shapes and on every real card the owner can pick.
+async function flowLp(): Promise<void> {
+  const F = 'Lp labor pre-fill'
+  const cases: Array<[number | null, number | null, string]> = [
+    [2, 3, '2.5'], [2.5, 3.25, '3'], [2, null, '2'], [2, 2, '2'], [1.75, null, '1.75'], [0, null, ''], [null, 3, ''],
+  ]
+  const wrong = cases.filter(([lo, hi, want]) => cardBilledPrefill(lo, hi).value !== want)
+  record(F, 'range -> midpoint to the quarter hour; single -> itself; no field time -> blank',
+    wrong.length === 0, wrong.length ? wrong.map(([l, h, w]) => `(${l}, ${h}) -> "${cardBilledPrefill(l, h).value}" want "${w}"`).join('; ') : `${cases.length} shapes`)
+
+  // Real rows, through the route the picker reads - the fields it hands the form.
+  const lib = await api('GET', '/api/hd/repair-items?limit=100')
+  const items = (lib.json.items ?? []) as Array<Record<string, unknown>>
+  if (!record(F, 'the labor library route returns the cards the picker shows', lib.status === 200 && items.length > 0,
+    `-> ${lib.status}, ${items.length} card(s)`)) return
+  const shape = (i: Record<string, unknown>): 'range' | 'single' | 'shop' => {
+    const lo = billedHoursFromLibrary(i.mobile_hours as number | null)
+    return !lo ? 'shop' : billedHighFromLibrary(i.mobile_hours as number | null, i.mobile_hours_high as number | null) ? 'range' : 'single'
+  }
+  const bad: string[] = []
+  const n = { range: 0, single: 0, shop: 0 }
+  for (const i of items) {
+    const k = shape(i); n[k]++
+    const lo = Number(i.mobile_hours), hi = Number(i.mobile_hours_high)
+    const v = cardBilledPrefill(i.mobile_hours as number | null, i.mobile_hours_high as number | null).value
+    const ok = k === 'shop' ? v === ''
+      : k === 'single' ? Number(v) === lo
+      : Number(v) >= lo && Number(v) <= hi && Number(v) === Math.round(((lo + hi) / 2) * 4) / 4
+    if (!ok) bad.push(`${String(i.description)} (${i.mobile_hours}-${i.mobile_hours_high}) -> "${v}"`)
+  }
+  record(F, 'every real card pre-fills by its shape, never from shop time', bad.length === 0,
+    bad.length ? bad.slice(0, 4).join('; ') : `${n.range} range, ${n.single} single, ${n.shop} shop-only`)
+  record(F, 'the route carries the field range high end (else a range could never reach the form)',
+    items.every(i => 'mobile_hours_high' in i), '')
+}
 
 async function flowSd(): Promise<void> {
   const F = 'Sd send sends'
@@ -1035,6 +1124,9 @@ async function flowHw(): Promise<void> {
     const rq = await page('/reefer/quotes/new')
     record(FR, '/reefer/quotes/new is the same paper form with the readings fields',
       !!rq && rq.html.includes('class="paper-surface"') && rq.text.includes('Unit Hours') && rq.text.includes('Odometer (miles)'), rq ? '' : 'did not load')
+    const rb = rq ? readingBox(rq.html, 'quote-unit-hours') : { state: null, value: null }
+    record(FR, 'and its Unit Hours is the shared box, empty, NOT RECORDED', !!rq && rb.state === 'none' && rb.value === '',
+      rq ? `state ${rb.state}, value "${rb.value}"` : 'did not load')
     const reeferProfile = (await rest<Record<string, unknown>>(`profiles?id=eq.${u.id}&select=*`))[0] ?? {}
     await hwDoors(FR, reeferProfile, '/reefer')
   } finally {
@@ -4985,6 +5077,8 @@ async function main(): Promise<void> {
     await flowDiscount()
     await flowQw()
     await flowSd()
+    await flowUr()
+    await flowLp()
     await flowOd()
     await flowHw()
     await flowIe()

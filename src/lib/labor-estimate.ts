@@ -36,6 +36,15 @@ export function toQuarterHour(h: number): number {
   return Math.round(h * 4) / 4
 }
 
+/**
+ * THE range rule (Brock, Nov 2026): a range bills its midpoint, rounded to the nearest
+ * quarter hour - 2.0-3.0 is 2.5, 2.5-3.25 is 3.0. The one place it is computed: the AI
+ * estimates below and the HD labor-card pick (QuoteForm) both call this.
+ */
+export function rangeMidpoint(low: number, high: number): number {
+  return toQuarterHour((low + high) / 2)
+}
+
 // "2.5 - 4.0", "2.5-4", "2.5 to 4.0", "2.5–4.0" (en dash), "2.5 — 4" (em dash).
 const RANGE = /(\d+(?:\.\d+)?)\s*(?:-|–|—|to)\s*(\d+(?:\.\d+)?)/i
 const SINGLE = /(\d+(?:\.\d+)?)/
@@ -56,7 +65,7 @@ export function parseLaborEstimate(text: string | null | undefined): LaborEstima
     const a = parseFloat(r[1]), b = parseFloat(r[2])
     if (Number.isFinite(a) && Number.isFinite(b) && a >= 0 && b > 0) {
       const low = Math.min(a, b), high = Math.max(a, b)
-      return { source: 'ai', low, high, suggested: toQuarterHour((low + high) / 2), text: t }
+      return { source: 'ai', low, high, suggested: rangeMidpoint(low, high), text: t }
     }
   }
   if (s) {
@@ -85,7 +94,7 @@ export function readLaborEstimate(v: unknown): LaborEstimate | null {
   if (!Number.isFinite(low) || !Number.isFinite(high)) return null
   return {
     source: 'ai', low, high,
-    suggested: Number.isFinite(suggested) ? suggested : toQuarterHour((low + high) / 2),
+    suggested: Number.isFinite(suggested) ? suggested : rangeMidpoint(low, high),
     text: typeof o.text === 'string' ? o.text : '',
   }
 }

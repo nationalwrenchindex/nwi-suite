@@ -8,10 +8,30 @@
 // that bills the shop figure when pressed. A 0 counts as missing: "test labor" was
 // saved with mobile 0 and a pick once priced it at 0 hrs x $135.00 = $0.00.
 
+import { rangeMidpoint } from '@/lib/labor-estimate'
+
 const positive = (v: number | string | null | undefined): number | null => {
   if (v == null || v === '') return null
   const n = Number(v)
   return Number.isFinite(n) && n > 0 ? n : null
+}
+
+/**
+ * What a card pick puts in Hours (billed), as ONE editable number (Brock, Nov 8): a field
+ * RANGE pre-fills its midpoint to the quarter hour (rangeMidpoint, the same rule as the
+ * AI labor ranges) - 2.0-3.0 is 2.5; a single field value pre-fills as is; no field time
+ * pre-fills nothing (''), and shop time is never used. `from` says where the number came
+ * from, for the "PRE-FILLED, NOT ON THE QUOTE YET" note.
+ */
+export function cardBilledPrefill(
+  mobileHours: number | string | null | undefined,
+  mobileHoursHigh: number | string | null | undefined,
+): { value: string; from: string } {
+  const lo = billedHoursFromLibrary(mobileHours)
+  const hi = billedHighFromLibrary(mobileHours, mobileHoursHigh)
+  if (!lo) return { value: '', from: '' }
+  if (hi) return { value: String(rangeMidpoint(Number(lo), Number(hi))), from: `midpoint of this card's field time, ${lo} to ${hi} hr` }
+  return { value: lo, from: "this card's field time" }
 }
 
 /** The billed-hours pre-fill for a pick: the field figure, else ''. Never shop time. */

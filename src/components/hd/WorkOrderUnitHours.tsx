@@ -36,14 +36,12 @@ export default function WorkOrderUnitHours({ workOrderId, recorded, lastKnown = 
   const router = useRouter()
   const column = kind === 'hours' ? 'unit_hours' : 'vehicle_odometer'
   const format = kind === 'hours' ? formatUnitHours : formatOdometer
-  const unitWord = kind === 'hours' ? 'h' : 'mi'
   const [value, setValue] = useState(recorded != null ? String(recorded) : '')
   const [saved, setSaved] = useState(recorded != null ? String(recorded) : '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const dirty = value.trim() !== saved
-  const offerLastKnown = kind === 'hours' && lastKnown != null && saved === '' && value.trim() === ''
 
   async function save(): Promise<string | null> {
     setSaving(true); setError(null)
@@ -81,39 +79,91 @@ export default function WorkOrderUnitHours({ workOrderId, recorded, lastKnown = 
   if (!available) return <span style={{ color: 'var(--hd-text-faint)' }}>Needs migration {kind === 'hours' ? '179' : '183'}</span>
   if (locked) return <span style={{ color: 'rgba(var(--hd-ink-rgb), 0.85)' }}>{format(recorded) ?? '—'}</span>
 
-  const test = kind === 'hours' ? 'wo-unit-hours' : 'wo-odometer'
+  return (
+    <ReadingBox kind={kind} value={value} onChange={setValue} saved={saved} lastKnown={lastKnown}
+      testId={kind === 'hours' ? 'wo-unit-hours' : 'wo-odometer'} document="work order"
+      onSave={() => void save()} saving={saving} error={error} />
+  )
+}
+
+/** Which document the box is on - only the wording of the state line changes. */
+type ReadingDocument = 'work order' | 'quote' | 'invoice'
+
+const STATE_WORDS: Record<ReadingDocument, { prints: string; typed: string; cleared: string }> = {
+  'work order': {
+    prints:  'prints on the invoice',
+    typed:   'Typed, not saved yet - Save, or Create Invoice saves it first.',
+    cleared: 'Cleared, not saved yet - Create Invoice saves it as no reading.',
+  },
+  quote: {
+    prints:  'prints on the quote',
+    typed:   'Typed, not saved yet - saved when you save the quote.',
+    cleared: 'Cleared, not saved yet - saving the quote records no reading.',
+  },
+  invoice: {
+    prints:  'prints on the invoice',
+    typed:   'Typed, not saved yet - saved when you save the invoice.',
+    cleared: 'Cleared, not saved yet - saving the invoice records no reading.',
+  },
+}
+
+/**
+ * The reading box itself, controlled - the ONE version, shared by the work order (above,
+ * which saves it on its own) and the HD quote and new-invoice forms (which save it with
+ * the form). It never fills itself: `value` is only what the tech typed or this document
+ * already recorded, and the unit's last known reading is offered UNDER it, labelled
+ * "(not this job's)", with a Use it button.
+ */
+export function ReadingBox({ kind = 'hours', value, onChange, saved, lastKnown = null, testId, document, onSave, saving = false, error = null }: {
+  kind?: 'hours' | 'odometer'
+  value: string
+  onChange: (v: string) => void
+  /** What this document has stored. '' = none recorded. */
+  saved: string
+  /** The unit's last known reading, offered beside the box - never put in it. Hours only. */
+  lastKnown?: number | null
+  testId: string
+  document: ReadingDocument
+  /** Work order only: its own Save button. The forms save the box with everything else. */
+  onSave?: () => void
+  saving?: boolean
+  error?: string | null
+}) {
+  const format = kind === 'hours' ? formatUnitHours : formatOdometer
+  const unitWord = kind === 'hours' ? 'h' : 'mi'
+  const words = STATE_WORDS[document]
+  const dirty = value.trim() !== saved
+  const offerLastKnown = kind === 'hours' && lastKnown != null && saved === '' && value.trim() === ''
   // The state, in words that cannot be mistaken for one another.
   const state: 'recorded' | 'unsaved' | 'none' = dirty ? 'unsaved' : saved !== '' ? 'recorded' : 'none'
   return (
-    <div data-testid={test} data-reading-state={state}>
+    <div data-testid={testId} data-reading-state={state}>
       <div className="flex items-center gap-2">
-        <input type="text" inputMode={kind === 'hours' ? 'decimal' : 'numeric'} value={value} onChange={e => setValue(e.target.value)}
+        <input type="text" inputMode={kind === 'hours' ? 'decimal' : 'numeric'} value={value} onChange={e => onChange(e.target.value)}
           placeholder={kind === 'hours' ? 'Hour meter' : 'Truck / trailer miles'}
           aria-label={kind === 'hours' ? 'Unit hours on this job' : 'Odometer on this job'}
           className="w-32 px-2 py-1.5 rounded-lg text-base sm:text-sm"
-          style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)', color: 'var(--hd-text)' }} data-testid={`${test}-input`} />
-        {dirty && (
-          <button type="button" onClick={() => void save()} disabled={saving}
+          style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)', color: 'var(--hd-text)' }} data-testid={`${testId}-input`} />
+        {dirty && onSave && (
+          <button type="button" onClick={onSave} disabled={saving}
             className="px-3 py-1.5 rounded-lg text-xs font-semibold disabled:opacity-50"
             style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)', color: 'var(--hd-text)' }}>
             {saving ? 'Saving...' : 'Save'}
           </button>
         )}
       </div>
-      <span className="block text-[11px] mt-1" data-testid={`${test}-state`}
+      <span className="block text-[11px] mt-1" data-testid={`${testId}-state`}
         style={{ color: state === 'unsaved' ? 'var(--hd-warn)' : state === 'recorded' ? 'var(--hd-positive)' : 'var(--hd-text-faint)', fontWeight: state === 'none' ? 400 : 600 }}>
         {state === 'recorded'
-          ? `RECORDED ON THIS JOB: ${format(Number(saved))} ${unitWord} - prints on the invoice.`
+          ? `RECORDED ON THIS JOB: ${format(Number(saved))} ${unitWord} - ${words.prints}.`
           : state === 'unsaved'
-            ? (value.trim() === ''
-              ? 'Cleared, not saved yet - Create Invoice saves it as no reading.'
-              : 'Typed, not saved yet - Save, or Create Invoice saves it first.')
-            : `NOT RECORDED ON THIS JOB - the invoice will show no ${kind === 'hours' ? 'hours' : 'odometer'}.`}
+            ? (value.trim() === '' ? words.cleared : words.typed)
+            : `NOT RECORDED ON THIS JOB - the ${document === 'quote' ? 'quote' : 'invoice'} will show no ${kind === 'hours' ? 'hours' : 'odometer'}.`}
       </span>
       {offerLastKnown && (
-        <span className="block text-[11px] mt-1" data-testid={`${test}-last-known`} style={{ color: 'var(--hd-text-muted)' }}>
+        <span className="block text-[11px] mt-1" data-testid={`${testId}-last-known`} style={{ color: 'var(--hd-text-muted)' }}>
           {`Unit record's last reading: ${format(lastKnown)} ${unitWord} (not this job's). `}
-          <button type="button" onClick={() => setValue(String(lastKnown))}
+          <button type="button" onClick={() => onChange(String(lastKnown))}
             className="underline font-semibold" style={{ color: 'var(--hd-text)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
             Use it
           </button>

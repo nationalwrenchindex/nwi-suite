@@ -22,6 +22,7 @@ import PaymentTermsSelect from '@/components/hd/PaymentTermsSelect'
 import FeeInput from '@/components/hd/FeeInput'
 import { addressLine } from '@/lib/hd/address-print'
 import { deliverHDDocument, hasDeliveryTarget } from '@/lib/hd/deliver-document'
+import { ReadingBox } from '@/components/hd/WorkOrderUnitHours'
 
 // Direct-invoice fast path: skip the quote/approval step and bill a trusted
 // customer directly. Mirrors the quote form but posts straight to /api/hd/invoices.
@@ -94,6 +95,9 @@ export default function NewInvoicePage() {
   const router = useRouter()
 
   const [saving, setSaving]       = useState(false)
+  // The QuickWrench unit profile's LAST reading when a hand-off brought one - offered
+  // under Unit Hours as "(not this job's)", never put in the box.
+  const [unitLastHours, setUnitLastHours] = useState<number | null>(null)
   // HD gets the same three extras as LD, same tax treatment, same cap. Hours and
   // miles are the only inputs; the percentage is never a question.
   // HD's own defaults (migration 178), or LD's before it - what this form always read.
@@ -293,6 +297,7 @@ export default function NewInvoicePage() {
         unit_manufacturer?: string; unit_model?: string; unit_serial?: string; unit_year?: string
         truck_make?: string; truck_model?: string; truck_year?: string; vin?: string
         vehicle_odometer?: number | string | null; unit_hours?: number | string | null
+        unit_hours_last_known?: number | null
         labor_rate?: number; include_diagnostic?: boolean; diagnostic_fee?: number
         lineItems?: Array<{ description: string; mobile_hours: number }>
       }
@@ -300,6 +305,8 @@ export default function NewInvoicePage() {
       // here. None set anywhere: the lines arrive unpriced and the rate box says so.
       const sent = Number.isFinite(p.labor_rate) && (p.labor_rate as number) > 0 ? p.labor_rate as number : null
       const rate = sent ?? await shopHdLaborRate() ?? 0
+      const lastIn = Number(p.unit_hours_last_known)
+      if (Number.isFinite(lastIn) && lastIn > 0) setUnitLastHours(lastIn)
 
       setForm(f => ({
         ...f,
@@ -697,7 +704,7 @@ export default function NewInvoicePage() {
             <Field label="Unit Model"><input style={inp} value={form.unit_model} onChange={e => setField('unit_model', e.target.value)} placeholder="e.g. S-600" /></Field>
             <Field label="Serial Number"><input style={inp} value={form.unit_serial} onChange={e => setField('unit_serial', e.target.value)} placeholder="10-digit serial" /></Field>
             <Field label="Unit Year"><input style={inp} value={form.unit_year} onChange={e => setField('unit_year', e.target.value)} placeholder="e.g. 2018" /></Field>
-            <Field label="Unit Hours"><input style={inp} value={form.unit_hours} onChange={e => setField('unit_hours', e.target.value)} placeholder="Hour meter (optional)" inputMode="decimal" /></Field>
+            <Field label="Unit Hours"><ReadingBox value={form.unit_hours} onChange={v => setField('unit_hours', v)} saved="" lastKnown={unitLastHours} testId="invoice-unit-hours" document="invoice" /></Field>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
             <Field label="Truck Make"><input style={inp} value={form.truck_make} onChange={e => setField('truck_make', e.target.value)} placeholder="e.g. Freightliner" /></Field>

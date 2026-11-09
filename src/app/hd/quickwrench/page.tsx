@@ -1336,6 +1336,9 @@ export default function HDQuickWrenchPage() {
   const [bmNumber,             setBmNumber]             = useState('')   // TK build number
   const [modelNumber,          setModelNumber]          = useState('')   // Carrier build number
   const [engineHours,          setEngineHours]          = useState('')
+  // The hours the tech's saved unit profile held when it was looked up - the unit's LAST
+  // known reading, not this job's. Kept apart so the hand-off can tell the two apart.
+  const [profileEngineHours,   setProfileEngineHours]   = useState<string | null>(null)
   const [profileNotes,         setProfileNotes]         = useState('')
   const [includeDiagFee,       setIncludeDiagFee]       = useState(true)
 
@@ -1549,6 +1552,7 @@ export default function HDQuickWrenchPage() {
     if (!build && !serial) return
 
     setUnitLookupLoading(true)
+    setProfileEngineHours(null)
     try {
       const params = new URLSearchParams({ manufacturer: manufCode })
       if (build)  params.set('bm_number', build)
@@ -1574,7 +1578,10 @@ export default function HDQuickWrenchPage() {
       if (data.profile) {
         // The tech's own saved unit — fill engine hours / notes (and model, if
         // the global map didn't already provide one).
-        if (data.profile.engine_hours != null) setEngineHours(String(data.profile.engine_hours))
+        if (data.profile.engine_hours != null) {
+          setEngineHours(String(data.profile.engine_hours))
+          setProfileEngineHours(String(data.profile.engine_hours))
+        }
         if (data.profile.notes) setProfileNotes(data.profile.notes)
         if (!data.bmMap && data.profile.unit_model) setModel(data.profile.unit_model)
       }
@@ -1940,9 +1947,14 @@ export default function HDQuickWrenchPage() {
       truck_model:       '',
       truck_year:        '',
       vin:               '',
-      // The hour meter typed above is the reading at this service: carried to whichever
-      // document this becomes, not left only in the notes.
-      unit_hours:        engineHours.trim() || null,
+      // The hour meter TYPED above is the reading at this service: carried to whichever
+      // document this becomes. A figure that is still exactly what the saved unit profile
+      // filled in is that profile's last reading (12,345 on the founder's test TK, saved
+      // Jul 1), not this job's - it travels as unit_hours_last_known and the forms offer
+      // it under the box, "(not this job's)", with a Use it button. Never recorded as is.
+      ...(engineHours.trim() && engineHours.trim() === profileEngineHours
+        ? { unit_hours: null, unit_hours_last_known: Number(profileEngineHours) }
+        : { unit_hours: engineHours.trim() || null }),
       service_type:      'Reefer Diagnostic',
       ...diagFeeFields(dest),
       lineItems: [

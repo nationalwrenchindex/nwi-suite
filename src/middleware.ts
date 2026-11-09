@@ -67,7 +67,7 @@ export async function middleware(request: NextRequest) {
   const requestHeaders = new Headers(request.headers)
   requestHeaders.set('x-pathname', effectivePath)
   // The reefer layout gates before the dashboard page can provision from a fresh Stripe
-  // session, so it is handed the session id to provision first (src/app/reefer/layout.tsx).
+  // session, so it is handed the session id to provision first (src/app/reefer/(app)/layout.tsx).
   requestHeaders.delete('x-reefer-checkout-session')
   const reeferCheckoutSession = isReeferSurface ? request.nextUrl.searchParams.get('session_id') : null
   if (reeferCheckoutSession) requestHeaders.set('x-reefer-checkout-session', reeferCheckoutSession)

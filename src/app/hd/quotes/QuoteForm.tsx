@@ -11,7 +11,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { LABOR_GUIDE, type LaborGuideItem } from '@/lib/hd/labor-guide'
 import {
-  billedHighFromLibrary, billedHoursFromLibrary, shopReferenceText, trimmedNotice,
+  billedHighFromLibrary, billedHoursFromLibrary, cardBilledPrefill, shopReferenceText, trimmedNotice,
 } from '@/lib/hd/labor-library'
 import { hoursText, sameOperationName } from '@/lib/hd/labor-cards'
 import FeeInput from '@/components/hd/FeeInput'
@@ -33,6 +33,8 @@ import { discountPrintLabel, parseDiscount } from '@/lib/document-discount'
 import { hdApplyDiscount } from '@/lib/hd/hd-discount'
 import { addressLine } from '@/lib/hd/address-print'
 import { deliverHDDocument, hasDeliveryTarget } from '@/lib/hd/deliver-document'
+import { ReadingBox } from '@/components/hd/WorkOrderUnitHours'
+import { lastKnownHours } from '@/lib/hd/unit-hours'
 import {
   DiscountEditor, draftFrom, discountFromDraft, type DiscountDraft,
 } from '@/components/shared/DiscountEditor'
@@ -162,6 +164,8 @@ interface FleetUnitHit {
   model: string | null
   serial_number: string | null
   year: number | null
+  /** The unit record's last known hours - offered under the box, never put in it. */
+  total_hours?: number | string | null
 }
 
 // One Gemini-suggested labor line
@@ -368,6 +372,10 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
   // The library card this line was picked from, if any. While the name is unchanged
   // the line IS that card: it is counted by id when added and never re-saved.
   const [laborPicked, setLaborPicked]       = useState<LibraryItem | null>(null)
+  // What a card pick put in Hours (billed), and from what. Shown under the box while the
+  // box still holds exactly that, so a pre-filled figure never reads as this job's
+  // settled hours - it is a starting number, and nothing is on the quote until Add.
+  const [laborPrefill, setLaborPrefill]     = useState<{ value: string; from: string } | null>(null)
   const [laborSelectedKey, setLaborSelectedKey] = useState('')
   // Set only when a library item carries explicit refrigeration_hours — its
   // recovery time becomes a SEPARATE labor line (matches buildRepairLines()).
@@ -518,6 +526,14 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
   const [showCustomerResults, setShowCustomerResults] = useState(false)
   // Units on a linked fleet account, when there is more than one to choose from.
   const [fleetUnits, setFleetUnits]               = useState<FleetUnitHit[]>([])
+  // The unit's LAST KNOWN hours (the linked unit record, or the QuickWrench unit profile a
+  // hand-off came from) - shown under Unit Hours as "(not this job's)" with a Use it
+  // button, and never put in the box. A stale reading recorded as this job's is a false
+  // record; on a warranty claim that is worse than none (Brock, Nov 8).
+  const [unitLastHours, setUnitLastHours]         = useState<number | null>(null)
+  // What this quote has recorded - '' for a new quote. The box's state line reads off it.
+  const savedUnitHours = editing && initial?.unit_hours != null && String(initial.unit_hours).trim() !== ''
+    ? String(Number(initial.unit_hours)) : ''
   // What the link did, said out loud: which account, and whether it filled the unit.
   const [fleetNote, setFleetNote]                 = useState('')
   // The linked customer's terms, when linking set this quote's. Shown beside the picker
@@ -559,6 +575,8 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
         /** Taken at the point the VIN was entered in QuickWrench. */
         vehicle_odometer?: number | string | null
         unit_hours?: number | string | null
+        /** The unit profile's last reading, NOT this job's (QuickWrench). Offered, never filled in. */
+        unit_hours_last_known?: number | null
         /** The hand-off's diagnostic fee decision (lib/hd/diagnostic-charge). */
         include_diagnostic?: boolean
         diagnostic_fee?: number | null
@@ -583,6 +601,8 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
       const diagFee = prefill.include_diagnostic
         ? (Number.isFinite(sentFee) && sentFee > 0 ? sentFee : (await shopHdDiagnosticFee()) ?? rate)
         : 0
+      const lastIn = Number(prefill.unit_hours_last_known)
+      if (Number.isFinite(lastIn) && lastIn > 0) setUnitLastHours(lastIn)
       setForm(f => ({
         ...f,
         ...(prefill.complaint ? { complaint:  prefill.complaint  } : {}),
@@ -865,6 +885,8 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
       unit_serial:       u.serial_number ?? f.unit_serial,
       unit_year:         u.year != null ? String(u.year) : f.unit_year,
     }))
+    const last = lastKnownHours(u as unknown as Record<string, unknown>)
+    if (last != null) setUnitLastHours(last)
     setFleetUnits([])
   }
 
@@ -1113,10 +1135,14 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
     setLaborDesc(i.description)
     setLaborBookMin(bookOk ? String(book) : '')
     setLaborBookMax(bookOk ? (bookHi || String(book)) : '')
-    const billed   = billedHoursFromLibrary(i.mobile_hours)
-    const billedHi = billedHighFromLibrary(i.mobile_hours, i.mobile_hours_high)
-    setLaborRange(!!billedHi)
-    setLaborMobileMin(billed); setLaborMobileMax(billedHi || billed)
+    // A field RANGE pre-fills its MIDPOINT, to the quarter hour (cardBilledPrefill ->
+    // lib/labor-estimate rangeMidpoint, the same rule as the AI ranges): 2.0-3.0 is 2.5.
+    // One number, editable; "+ add a range" is still there for a job the tech wants to
+    // quote as a spread. A single field value pre-fills as is. No field time: blank.
+    const pre = cardBilledPrefill(i.mobile_hours, i.mobile_hours_high)
+    setLaborRange(false)
+    setLaborMobileMin(pre.value); setLaborMobileMax(pre.value)
+    setLaborPrefill(pre.value ? pre : null)
     setLaborPicked(i)
     const refrigHrs = libNum(i.refrigeration_hours)
     if (i.requires_refrigeration && refrigHrs && refrigHrs > 0) {
@@ -1146,6 +1172,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
     setLaborRecharge(item.requires_refrigeration)
     setLaborSelectedKey(`guide:${item.label}`)
     setLaborPicked(null)
+    setLaborPrefill(null)
   }
 
   function closeLaborModal() {
@@ -1161,6 +1188,7 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
     setSaveToLibrary(false)
     setLaborSelectedKey('')
     setLaborPicked(null)
+    setLaborPrefill(null)
     setLaborSearch(NO_LABOR_SEARCH)
   }
 
@@ -1762,9 +1790,12 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
               <input style={inp} value={form.unit_year} onChange={e => setField('unit_year', e.target.value)} placeholder="e.g. 2018" />
             </Field>
             {/* The reefer unit's hour meter at this service. Optional; carries to the work
-                order and the invoice and prints on the customer copy. */}
+                order and the invoice and prints on the customer copy. The work order's own
+                box (ReadingBox): never pre-filled, the state said in words, the unit's last
+                reading underneath as "(not this job's)" with Use it. */}
             <Field label="Unit Hours">
-              <input style={inp} value={form.unit_hours} onChange={e => setField('unit_hours', e.target.value)} placeholder="Hour meter (optional)" inputMode="decimal" data-testid="quote-unit-hours" />
+              <ReadingBox value={form.unit_hours} onChange={v => setField('unit_hours', v)} saved={savedUnitHours}
+                lastKnown={unitLastHours} testId="quote-unit-hours" document="quote" />
             </Field>
             {/* Said at the point of entry, not only after conversion. The work order
                 carries the same flag, so this is a heads-up rather than the record. */}
@@ -2544,6 +2575,11 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
                     {bookRefText && <span className="ml-2" style={{ color: 'var(--hd-text-faint)' }}>{bookRefText}</span>}
                   </span>
                 </div>
+                {laborPrefill && !laborRange && laborMobileMin === laborPrefill.value && (
+                  <p className="text-xs mt-1" data-testid="labor-hours-prefill" style={{ color: 'var(--hd-warn)' }}>
+                    {`PRE-FILLED, NOT ON THE QUOTE YET: ${laborPrefill.value} hr, the ${laborPrefill.from}. Change it if this job differs - Add puts it on the quote.`}
+                  </p>
+                )}
                 {pickedShopOnly && (
                   <div className="flex flex-wrap items-center gap-2 mt-1 px-3 py-2 rounded-lg" style={{ background: 'color-mix(in srgb, var(--hd-warn) 14%, var(--hd-card))', border: '1px solid #6b5417' }}>
                     <p className="text-xs flex-1 min-w-[200px]" style={{ color: 'var(--hd-warn)' }}>
