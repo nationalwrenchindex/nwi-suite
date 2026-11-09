@@ -3,6 +3,9 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
+import QuickWrenchCustomer from '@/components/hd/QuickWrenchCustomer'
+import { EMPTY_QW_CUSTOMER, customerHandoff, qwManufacturer, type QwCustomer, type QwUnit } from '@/lib/hd/qw-handoff'
+import { formatUnitHours } from '@/lib/hd/unit-hours'
 import { isReeferSurfacePath } from '@/lib/reefer-standalone'
 import { runGaugeDiagnostic, SEVERITY_CONFIG } from '@/lib/hd/gauge-diagnostic'
 import type { TrailerSystem } from '@/lib/hd/trailer/types'
@@ -1335,10 +1338,25 @@ export default function HDQuickWrenchPage() {
   // ── Unit profile / BM lookup state (optional reefer fields) ──
   const [bmNumber,             setBmNumber]             = useState('')   // TK build number
   const [modelNumber,          setModelNumber]          = useState('')   // Carrier build number
+  // THIS JOB'S hour meter: only what the tech types (or puts there with Use it). It is
+  // never filled from the unit profile or the unit record (Brock, Nov 9) - a July number
+  // in this box read as today's.
   const [engineHours,          setEngineHours]          = useState('')
-  // The hours the tech's saved unit profile held when it was looked up - the unit's LAST
-  // known reading, not this job's. Kept apart so the hand-off can tell the two apart.
-  const [profileEngineHours,   setProfileEngineHours]   = useState<string | null>(null)
+  // The tech's saved unit profile's LAST reading and when it was saved - shown under
+  // Engine Hours as "(not this job's)", never put in the box.
+  const [profileLastHours,     setProfileLastHours]     = useState<{ hours: number; savedAt: string | null } | null>(null)
+  // The shared customer block above the tabs, and a unit picked from HD Intel Hub.
+  const [qwCustomer,           setQwCustomer]           = useState<QwCustomer>(EMPTY_QW_CUSTOMER)
+  const [qwUnit,               setQwUnit]               = useState<QwUnit | null>(null)
+  // The reefer unit is identified by its unit number or serial (HD is not VIN-first).
+  const [unitNumber,           setUnitNumber]           = useState('')
+  // The truck or trailer the reefer is on - a different machine, its own secondary block.
+  const [reeferTruckMake,      setReeferTruckMake]      = useState('')
+  const [reeferTruckModel,     setReeferTruckModel]     = useState('')
+  const [reeferTruckYear,      setReeferTruckYear]      = useState('')
+  const [reeferTruckVin,       setReeferTruckVin]       = useState('')
+  // Set by a unit pick: run the serial lookup once the picked serial is in state.
+  const [unitLookupPending,    setUnitLookupPending]    = useState(false)
   const [profileNotes,         setProfileNotes]         = useState('')
   const [includeDiagFee,       setIncludeDiagFee]       = useState(true)
 
@@ -1545,6 +1563,13 @@ export default function HDQuickWrenchPage() {
   // ── Unit profile / BM lookup ──
   // Fires when a BM (TK) / model number (Carrier) or serial is entered. Looks up
   // the tech's own private profile AND the global BM map, then auto-fills.
+  useEffect(() => {
+    if (!unitLookupPending) return
+    setUnitLookupPending(false)
+    void lookupUnit()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [unitLookupPending])
+
   async function lookupUnit() {
     const manufCode = manufacturer === 'Thermo King' ? 'TK' : 'Carrier'
     const build  = (manufCode === 'TK' ? bmNumber : modelNumber).trim()
@@ -1552,7 +1577,7 @@ export default function HDQuickWrenchPage() {
     if (!build && !serial) return
 
     setUnitLookupLoading(true)
-    setProfileEngineHours(null)
+    setProfileLastHours(null)
     try {
       const params = new URLSearchParams({ manufacturer: manufCode })
       if (build)  params.set('bm_number', build)
@@ -1561,7 +1586,7 @@ export default function HDQuickWrenchPage() {
       const res = await fetch(`/api/hd/unit-profile?${params}`)
       if (!res.ok) return
       const data = await res.json() as {
-        profile: { unit_model?: string | null; refrigerant_type?: string | null; engine_hours?: number | null; notes?: string | null } | null
+        profile: { unit_model?: string | null; refrigerant_type?: string | null; engine_hours?: number | null; notes?: string | null; updated_at?: string | null } | null
         bmMap:   { unit_model?: string | null; refrigerant_type?: string | null; known_parts?: string | null } | null
       }
 
@@ -1576,11 +1601,12 @@ export default function HDQuickWrenchPage() {
       }
 
       if (data.profile) {
-        // The tech's own saved unit — fill engine hours / notes (and model, if
-        // the global map didn't already provide one).
-        if (data.profile.engine_hours != null) {
-          setEngineHours(String(data.profile.engine_hours))
-          setProfileEngineHours(String(data.profile.engine_hours))
+        // The tech's own saved unit - notes (and model, if the global map didn't
+        // already provide one). Its hours are the unit's LAST reading: offered under
+        // Engine Hours with the date it was saved, NEVER put in the box.
+        const lastH = Number(data.profile.engine_hours)
+        if (data.profile.engine_hours != null && Number.isFinite(lastH) && lastH > 0) {
+          setProfileLastHours({ hours: lastH, savedAt: data.profile.updated_at ?? null })
         }
         if (data.profile.notes) setProfileNotes(data.profile.notes)
         if (!data.bmMap && data.profile.unit_model) setModel(data.profile.unit_model)
@@ -1683,7 +1709,9 @@ export default function HDQuickWrenchPage() {
               model_number:     manufCode === 'Carrier' ? (modelNumber.trim() || null) : null,
               unit_model:       model || null,
               refrigerant_type: identifiedRefrigerant,
-              engine_hours:     engineHours.trim() || null,
+              // Only a reading the tech typed. Sending null for an empty box would
+              // erase the profile's last reading and its date (unit-profile route).
+              ...(engineHours.trim() ? { engine_hours: engineHours.trim() } : {}),
               notes:            profileNotes.trim() || null,
             }),
           })
@@ -1917,6 +1945,28 @@ export default function HDQuickWrenchPage() {
     amount: 0, amount_max: 0,
   })
 
+  // The unit's last known hours: the picked Intel Hub unit's record, else the profile's.
+  function reeferLastKnown(): number | null {
+    const u = Number(qwUnit?.total_hours)
+    if (qwUnit && Number.isFinite(u) && u > 0) return u
+    return profileLastHours?.hours ?? null
+  }
+
+  // A unit picked from HD Intel Hub fills the reefer tab - number, serial, manufacturer,
+  // model, year, BM number - so none of it is retyped. Its hours do NOT go in Engine
+  // Hours. The serial lookup then runs as if the serial had been typed.
+  function applyQwUnit(u: QwUnit) {
+    setQwUnit(u)
+    setUnitNumber(u.unit_number ?? '')
+    setSerialNumber(u.serial_number ?? '')
+    const m = qwManufacturer(u.manufacturer)
+    if (m) setManufacturer(m)
+    if (u.model) setModel(u.model)
+    if (u.bm_number) setBmNumber(u.bm_number)
+    setProfileLastHours(null)
+    setUnitLookupPending(true)
+  }
+
   function pushReeferTo(dest: WorkflowDest) {
     if (analysis === null) return
     // Verified labor times aren't present on the client-side tk_sources payload,
@@ -1941,20 +1991,19 @@ export default function HDQuickWrenchPage() {
       ].filter(Boolean).join(' | ') || '',
       unit_manufacturer: manufacturer,
       unit_model:        model,
-      unit_serial:       serialNumber || '',
-      unit_year:         '',
-      truck_make:        '',
-      truck_model:       '',
-      truck_year:        '',
-      vin:               '',
-      // The hour meter TYPED above is the reading at this service: carried to whichever
-      // document this becomes. A figure that is still exactly what the saved unit profile
-      // filled in is that profile's last reading (12,345 on the founder's test TK, saved
-      // Jul 1), not this job's - it travels as unit_hours_last_known and the forms offer
-      // it under the box, "(not this job's)", with a Use it button. Never recorded as is.
-      ...(engineHours.trim() && engineHours.trim() === profileEngineHours
-        ? { unit_hours: null, unit_hours_last_known: Number(profileEngineHours) }
-        : { unit_hours: engineHours.trim() || null }),
+      // The customer and the unit (lib/hd/qw-handoff) - only the keys that are filled.
+      ...customerHandoff(qwCustomer, qwUnit, unitNumber),
+      ...(serialNumber.trim()     ? { unit_serial: serialNumber.trim() }     : {}),
+      ...(qwUnit?.year != null    ? { unit_year:   String(qwUnit.year) }     : {}),
+      ...(reeferTruckMake.trim()  ? { truck_make:  reeferTruckMake.trim() }  : {}),
+      ...(reeferTruckModel.trim() ? { truck_model: reeferTruckModel.trim() } : {}),
+      ...(reeferTruckYear.trim()  ? { truck_year:  reeferTruckYear.trim() }  : {}),
+      ...(reeferTruckVin.trim()   ? { vin:         reeferTruckVin.trim().toUpperCase() } : {}),
+      // The hour meter TYPED above is the reading at this service. The unit's last known
+      // reading (the picked unit's record, else the tech's unit profile) travels only as
+      // unit_hours_last_known, offered under the destination's box - never in it.
+      ...(engineHours.trim() ? { unit_hours: engineHours.trim() } : {}),
+      ...(!engineHours.trim() && reeferLastKnown() != null ? { unit_hours_last_known: reeferLastKnown() } : {}),
       service_type:      'Reefer Diagnostic',
       ...diagFeeFields(dest),
       lineItems: [
@@ -2001,6 +2050,9 @@ export default function HDQuickWrenchPage() {
       // The VIN typed above, and the odometer taken with it - carried, not retyped.
       vin:               vin.trim(),
       vehicle_odometer:  odometer.trim() || null,
+      // The customer only: a unit picked above is a reefer unit, and this hand-off's
+      // unit fields are the ENGINE's.
+      ...customerHandoff(qwCustomer, null, ''),
       service_type:      'Truck Engine Diagnostic',
       ...diagFeeFields(dest),
       lineItems: [
@@ -2027,6 +2079,8 @@ export default function HDQuickWrenchPage() {
   // diagnostic-fee treatment each destination expects. No second path.
   function pushAbsTo(payload: ABSPrefill, dest: WorkflowDest) {
     pushPrefill({
+      // The customer only - this hand-off's unit fields are the ABS ECU's.
+      ...customerHandoff(qwCustomer, null, ''),
       unit_serial: '', unit_year: '',
       truck_make:  '', truck_model: '', truck_year: '', vin: '',
       service_type: 'Trailer ABS Diagnostic',
@@ -2154,6 +2208,15 @@ export default function HDQuickWrenchPage() {
             Alarm codes, specs, and repair procedures from a 17-year field veteran.
           </p>
         </div>
+
+        {/* ── Customer + unit, shared by every tab's hand-off (lib/hd/qw-handoff) ── */}
+        <QuickWrenchCustomer
+          value={qwCustomer}
+          onChange={setQwCustomer}
+          unit={qwUnit}
+          onUnitPicked={applyQwUnit}
+          onUnitCleared={() => setQwUnit(null)}
+        />
 
         {/* ── Tab switcher ── */}
         <div className="flex flex-wrap gap-2">
@@ -2904,6 +2967,41 @@ export default function HDQuickWrenchPage() {
             {/* ── Reefer query form ── */}
             <form onSubmit={handleSubmit} className="rounded-xl p-6 space-y-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
 
+              {/* The reefer unit, identified the way HD identifies it: unit number or
+                  serial. Picking a unit above fills these. Editing either one unlinks
+                  the picked unit, so a typed machine is never filed under another. */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
+                    Unit Number <span style={{ color: 'var(--hd-text-faint)' }}>(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={unitNumber}
+                    onChange={e => { setUnitNumber(e.target.value); if (qwUnit) setQwUnit(null) }}
+                    placeholder="e.g. 53132"
+                    data-testid="qw-unit-number"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+                  style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
+                    Serial Number <span style={{ color: 'var(--hd-text-faint)' }}>(optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={serialNumber}
+                    onChange={e => { setSerialNumber(e.target.value); if (qwUnit) setQwUnit(null) }}
+                    onBlur={lookupUnit}
+                    placeholder="Unit serial number"
+                    data-testid="qw-unit-serial"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
+                  style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
+                  />
+                </div>
+              </div>
+
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
@@ -2974,21 +3072,6 @@ export default function HDQuickWrenchPage() {
                 </select>
               </div>
 
-              <div>
-                <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
-                  Serial Number <span style={{ color: 'var(--hd-text-faint)' }}>(optional)</span>
-                </label>
-                <input
-                  type="text"
-                  value={serialNumber}
-                  onChange={e => setSerialNumber(e.target.value)}
-                  onBlur={lookupUnit}
-                  placeholder="Unit serial number"
-                  className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
-                  style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
-                />
-              </div>
-
               {/* ── Unit identification (optional) — BM (TK) / Model number (Carrier) ── */}
               {manufacturer === 'Thermo King' ? (
                 <div>
@@ -3046,10 +3129,32 @@ export default function HDQuickWrenchPage() {
                     inputMode="decimal"
                     value={engineHours}
                     onChange={e => setEngineHours(e.target.value)}
-                    placeholder="e.g. 12450"
+                    placeholder="Hour meter today"
+                    aria-label="Engine hours on this job"
+                    data-testid="qw-engine-hours"
                     className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20"
                     style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
                   />
+                  {/* The unit's LAST readings, each labelled with where it came from - never
+                      in the box. Use it puts one there on purpose. */}
+                  {!engineHours.trim() && qwUnit && Number(qwUnit.total_hours) > 0 && (
+                    <span className="block text-[11px] mt-1" style={{ color: 'var(--hd-text-muted)' }} data-testid="qw-engine-hours-unit-record">
+                      {`Unit record's last reading: ${formatUnitHours(Number(qwUnit.total_hours))} h (not this job's). `}
+                      <button type="button" onClick={() => setEngineHours(String(Number(qwUnit.total_hours)))}
+                        className="underline font-semibold" style={{ color: 'var(--hd-text)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                        Use it
+                      </button>
+                    </span>
+                  )}
+                  {!engineHours.trim() && profileLastHours && (
+                    <span className="block text-[11px] mt-1" style={{ color: 'var(--hd-text-muted)' }} data-testid="qw-engine-hours-last-known">
+                      {`Unit profile's last reading: ${formatUnitHours(profileLastHours.hours)} h${profileLastHours.savedAt ? `, saved ${new Date(profileLastHours.savedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}` : ''} (not this job's). `}
+                      <button type="button" onClick={() => setEngineHours(String(profileLastHours.hours))}
+                        className="underline font-semibold" style={{ color: 'var(--hd-text)', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
+                        Use it
+                      </button>
+                    </span>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
@@ -3065,6 +3170,25 @@ export default function HDQuickWrenchPage() {
                   />
                 </div>
               </div>
+
+              {/* The truck or trailer the reefer sits on - a different machine from the
+                  reefer unit, so its own secondary block. All optional; carried to the
+                  quote's truck fields only when filled. */}
+              <details className="rounded-lg" style={{ border: '1px solid var(--hd-border)' }} data-testid="qw-reefer-truck">
+                <summary className="px-4 py-3 text-xs uppercase tracking-widest font-semibold cursor-pointer" style={{ color: 'var(--hd-text-faint)' }}>
+                  Truck / Trailer <span className="font-normal">(optional)</span>
+                </summary>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 px-4 pb-4">
+                  <input type="text" value={reeferTruckMake} onChange={e => setReeferTruckMake(e.target.value)} placeholder="Make" aria-label="Truck make"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20" style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }} />
+                  <input type="text" value={reeferTruckModel} onChange={e => setReeferTruckModel(e.target.value)} placeholder="Model" aria-label="Truck model"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20" style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }} />
+                  <input type="text" inputMode="numeric" value={reeferTruckYear} onChange={e => setReeferTruckYear(e.target.value)} placeholder="Year" aria-label="Truck year"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20" style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }} />
+                  <input type="text" value={reeferTruckVin} onChange={e => setReeferTruckVin(e.target.value)} placeholder="VIN" aria-label="Truck VIN"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm text-white placeholder-white/20" style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }} />
+                </div>
+              </details>
 
               <div>
                 <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>

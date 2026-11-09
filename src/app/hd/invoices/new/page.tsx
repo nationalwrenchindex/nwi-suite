@@ -23,6 +23,8 @@ import FeeInput from '@/components/hd/FeeInput'
 import { addressLine } from '@/lib/hd/address-print'
 import { deliverHDDocument, hasDeliveryTarget } from '@/lib/hd/deliver-document'
 import { ReadingBox } from '@/components/hd/WorkOrderUnitHours'
+import { readHandoffCustomer } from '@/lib/hd/qw-handoff'
+import { parseAddress } from '@/lib/hd/address-parse'
 
 // Direct-invoice fast path: skip the quote/approval step and bill a trusted
 // customer directly. Mirrors the quote form but posts straight to /api/hd/invoices.
@@ -307,9 +309,24 @@ export default function NewInvoicePage() {
       const rate = sent ?? await shopHdLaborRate() ?? 0
       const lastIn = Number(p.unit_hours_last_known)
       if (Number.isFinite(lastIn) && lastIn > 0) setUnitLastHours(lastIn)
+      // The customer and unit from QuickWrench (lib/hd/qw-handoff), only what it sent.
+      // This form has no customer or unit id - the fleet account link and the unit
+      // number are what it records.
+      const hc = readHandoffCustomer(p as Record<string, unknown>)
+      const hAddr = hc.customer_address ? parseAddress(hc.customer_address) : null
 
       setForm(f => ({
         ...f,
+        ...(hc.customer_name    ? { customer_name:  hc.customer_name }  : {}),
+        ...(hc.company_name     ? { company_name:   hc.company_name }   : {}),
+        ...(hc.customer_phone   ? { customer_phone: hc.customer_phone } : {}),
+        ...(hc.customer_email   ? { customer_email: hc.customer_email } : {}),
+        ...(hAddr ? {
+          address_line1: hAddr.address_line1 ?? '', address_line2: hAddr.address_line2 ?? '',
+          city: hAddr.city ?? '', state: hAddr.state ?? '', zip: hAddr.zip ?? '',
+        } : {}),
+        ...(hc.fleet_account_id ? { fleet_account_id: hc.fleet_account_id } : {}),
+        ...(hc.unit_number      ? { unit_number: hc.unit_number } : {}),
         ...(p.complaint ? { complaint: p.complaint } : {}),
         ...(p.diagnosis ? { diagnosis: p.diagnosis } : {}),
         ...(p.notes     ? { notes:     p.notes     } : {}),

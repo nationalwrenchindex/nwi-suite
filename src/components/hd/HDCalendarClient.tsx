@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { matchUnitBySerial } from '@/lib/hd/unit-match'
+import { readHandoffCustomer } from '@/lib/hd/qw-handoff'
 import { shopHdLaborRate } from '@/lib/hd/use-fee-settings'
 import { textTone, tint, ON_FILL } from '@/lib/hd/text-tone'
 
@@ -280,8 +281,17 @@ export default function HDCalendarClient() {
         .filter(l => l.description)
       const sentRate = Number(p.labor_rate)
       setHandoffLabor(lines.length ? { lines, rate: Number.isFinite(sentRate) && sentRate > 0 ? sentRate : null } : null)
+      // The customer and unit from QuickWrench (lib/hd/qw-handoff), only what it sent.
+      // A picked unit's id and its fleet account link the booking exactly as choosing
+      // the unit in the picker below does.
+      const hc = readHandoffCustomer(p as Record<string, unknown>)
       setBookingForm(f => ({
         ...f,
+        ...(hc.customer_name    ? { customer_name:    hc.customer_name }    : {}),
+        ...(hc.customer_phone   ? { customer_phone:   hc.customer_phone }   : {}),
+        ...(hc.fleet_account_id ? { fleet_account_id: hc.fleet_account_id } : {}),
+        ...(hc.unit_id          ? { unit_id:          hc.unit_id }          : {}),
+        ...(hc.unit_number      ? { unit_number:      hc.unit_number }      : {}),
         unit_manufacturer: p.unit_manufacturer ?? f.unit_manufacturer,
         unit_model:        p.unit_model        ?? f.unit_model,
         unit_serial:       p.unit_serial       ?? f.unit_serial,

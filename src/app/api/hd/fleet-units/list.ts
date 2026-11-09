@@ -1,3 +1,5 @@
+import { likeEscape, postgrestQuoted } from '@/lib/hd/labor-library'
+
 /**
  * Shared shape for the fleet-units list.
  *
@@ -18,6 +20,15 @@ export const FLEET_UNIT_LIST_SELECT = `
 `
 
 export const FLEET_UNIT_PAGE_SIZE = 50
+
+// ?search= - unit number, serial or BM number contains the text. Escaped the same way
+// the labor library search is (lib/hd/labor-library), so % _ , ( ) in the text are
+// literal, never a wildcard or a broken or() filter.
+export const FLEET_UNIT_SEARCH_MAX = 60
+export function fleetUnitSearchFilter(q: string): string {
+  const v = postgrestQuoted(`%${likeEscape(q)}%`)
+  return `unit_number.ilike.${v},serial_number.ilike.${v},bm_number.ilike.${v}`
+}
 
 export interface FleetUnitListRow {
   id:                string

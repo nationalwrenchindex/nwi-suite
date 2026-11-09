@@ -1,10 +1,15 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { FLEET_UNIT_LIST_SELECT, FLEET_UNIT_PAGE_SIZE } from './list'
+import { FLEET_UNIT_LIST_SELECT, FLEET_UNIT_PAGE_SIZE, FLEET_UNIT_SEARCH_MAX, fleetUnitSearchFilter } from './list'
 
 export const dynamic = 'force-dynamic'
 
 // GET /api/hd/fleet-units?fleet_account_id=&limit=&offset= — one page of the units list.
+//
+// Two optional params, for the HD QuickWrench unit picker (Nov 9). Without them the
+// route answers exactly as before (by unit number, then id):
+//   search=<text>  unit number, serial or BM number contains it.
+//   sort=recent    most recently updated first (updated_at, then created_at), id last.
 //
 // Gated on authentication only, deliberately: /hd/fleet-units itself has no tier
 // check, so requiring one here would let a tech see the first page of their own
@@ -22,6 +27,8 @@ export async function GET(req: NextRequest) {
   const fleetAccountId = sp.get('fleet_account_id')
   const limit          = Math.min(Number(sp.get('limit') ?? FLEET_UNIT_PAGE_SIZE), 200)
   const offset         = Number(sp.get('offset') ?? 0)
+  const search         = (sp.get('search') ?? '').trim().slice(0, FLEET_UNIT_SEARCH_MAX)
+  const recent         = sp.get('sort') === 'recent'
 
   let rowsQuery = supabase
     .from('hd_units')
@@ -38,11 +45,18 @@ export async function GET(req: NextRequest) {
     rowsQuery  = rowsQuery.eq('fleet_account_id', fleetAccountId)
     countQuery = countQuery.eq('fleet_account_id', fleetAccountId)
   }
+  if (search) {
+    rowsQuery  = rowsQuery.or(fleetUnitSearchFilter(search))
+    countQuery = countQuery.or(fleetUnitSearchFilter(search))
+  }
+  const ordered = recent
+    ? rowsQuery.order('updated_at', { ascending: false, nullsFirst: false }).order('created_at', { ascending: false }).order('id')
+    : rowsQuery.order('unit_number').order('id')
 
   const [{ data, error }, { count }] = await Promise.all([
     // unit_number is not unique, and offset paging over a non-deterministic order
     // drops and repeats rows between pages. id breaks every tie.
-    rowsQuery.order('unit_number').order('id').range(offset, offset + limit - 1),
+    ordered.range(offset, offset + limit - 1),
     countQuery,
   ])
 

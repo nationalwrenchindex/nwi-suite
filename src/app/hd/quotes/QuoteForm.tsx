@@ -35,6 +35,7 @@ import { addressLine } from '@/lib/hd/address-print'
 import { deliverHDDocument, hasDeliveryTarget } from '@/lib/hd/deliver-document'
 import { ReadingBox } from '@/components/hd/WorkOrderUnitHours'
 import { lastKnownHours } from '@/lib/hd/unit-hours'
+import { readHandoffCustomer } from '@/lib/hd/qw-handoff'
 import {
   DiscountEditor, draftFrom, discountFromDraft, type DiscountDraft,
 } from '@/components/shared/DiscountEditor'
@@ -603,8 +604,27 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
         : 0
       const lastIn = Number(prefill.unit_hours_last_known)
       if (Number.isFinite(lastIn) && lastIn > 0) setUnitLastHours(lastIn)
+      // The customer and unit QuickWrench linked or typed (lib/hd/qw-handoff) - only the
+      // keys it sent. A fleet account and a unit link exactly as picking them here does.
+      const hc = readHandoffCustomer(prefill as Record<string, unknown>)
+      const hAddr = hc.customer_address ? parseAddress(hc.customer_address) : null
+      if (hc.fleet_account_id || hc.customer_id) {
+        setFleetNote(`Linked ${hc.customer_name ?? 'the customer'} from QuickWrench.`)
+      }
       setForm(f => ({
         ...f,
+        ...(hc.customer_name    ? { customer_name:  hc.customer_name }  : {}),
+        ...(hc.company_name     ? { company_name:   hc.company_name }   : {}),
+        ...(hc.customer_phone   ? { customer_phone: hc.customer_phone } : {}),
+        ...(hc.customer_email   ? { customer_email: hc.customer_email } : {}),
+        ...(hAddr ? {
+          address_line1: hAddr.address_line1 ?? '', address_line2: hAddr.address_line2 ?? '',
+          city: hAddr.city ?? '', state: hAddr.state ?? '', zip: hAddr.zip ?? '',
+        } : {}),
+        ...(hc.customer_id      ? { customer_id: hc.customer_id, fleet_account_id: '' } : {}),
+        ...(hc.fleet_account_id ? { fleet_account_id: hc.fleet_account_id, customer_id: '' } : {}),
+        ...(hc.unit_id          ? { unit_id: hc.unit_id } : {}),
+        ...(hc.unit_number      ? { unit_number: hc.unit_number } : {}),
         ...(prefill.complaint ? { complaint:  prefill.complaint  } : {}),
         ...(prefill.diagnosis ? { diagnosis:  prefill.diagnosis  } : {}),
         ...(prefill.notes     ? { notes:      prefill.notes      } : {}),

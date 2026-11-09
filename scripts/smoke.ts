@@ -26,6 +26,7 @@ import { LEGAL_VERSION } from '../src/lib/legal'
 import { invoiceBodyFromQuote } from '../src/lib/hd/quote-to-invoice'
 import { billedHoursFromLibrary, billedHighFromLibrary, cardBilledPrefill } from '../src/lib/hd/labor-library'
 import { formatUnitHours } from '../src/lib/hd/unit-hours'
+import { customerHandoff, EMPTY_QW_CUSTOMER } from '../src/lib/hd/qw-handoff'
 import { editableLines } from '../src/lib/hd/invoice-edit-lines'
 import { stripLeadingZeros, parseFee } from '../src/components/hd/FeeInput'
 import { fmtShopDate, shopTimeZone } from '../src/lib/shop-time'
@@ -555,6 +556,97 @@ async function flowLp(): Promise<void> {
     bad.length ? bad.slice(0, 4).join('; ') : `${n.range} range, ${n.single} single, ${n.shop} shop-only`)
   record(F, 'the route carries the field range high end (else a range could never reach the form)',
     items.every(i => 'mobile_hours_high' in i), '')
+}
+
+// ── Qc: HD QuickWrench carries the customer and unit (Nov 9) ─────────────────
+//
+// HD QuickWrench had nowhere for a customer or a unit, so every push to a quote landed
+// with the customer empty. Now a shared block above the tabs links an Intel Hub customer
+// or fleet account, picks a unit from HD Intel Hub, and lib/hd/qw-handoff carries ONLY
+// what was filled. The unit picker reads GET /api/hd/fleet-units?search=&sort=recent.
+// The Engine Hours box is never filled from the unit profile; the profile route keeps
+// its stored reading (and date) when a save sends none.
+async function flowQc(): Promise<void> {
+  const F = 'Qc QuickWrench customer'
+
+  // 1. The hand-off rule: only filled keys, both halves optional.
+  const none = customerHandoff(EMPTY_QW_CUSTOMER, null, '   ')
+  const blank = customerHandoff({ ...EMPTY_QW_CUSTOMER, name: '  ', phone: ' ' }, null, '')
+  const full = customerHandoff({ name: 'LTL Pros INC', contactName: 'Manuel', phone: '951-255-7667', email: 'm@x.com',
+    address: '1 Main St, Fontana, CA 92337', customerId: null, fleetAccountId: 'fa-1' }, { id: 'u-1' }, '53132')
+  const cust = customerHandoff({ ...EMPTY_QW_CUSTOMER, name: 'Jesus', customerId: 'c-1' }, null, '')
+  record(F, 'an empty block sends no customer or unit keys at all', Object.keys(none).length === 0 && Object.keys(blank).length === 0,
+    JSON.stringify({ ...none, ...blank }))
+  record(F, 'a linked fleet account and unit send their ids, name, contact details and unit number',
+    full.customer_name === 'LTL Pros INC' && full.company_name === 'LTL Pros INC' && full.fleet_account_id === 'fa-1' &&
+    full.unit_id === 'u-1' && full.unit_number === '53132' && full.customer_phone === '951-255-7667' && !('customer_id' in full),
+    JSON.stringify(full))
+  record(F, 'a picked customers record links by customer_id, never as a fleet account or company',
+    cust.customer_id === 'c-1' && !('fleet_account_id' in cust) && !('company_name' in cust), JSON.stringify(cust))
+
+  // 2. The units route, on a real unit of the owner's.
+  const units = await rest<Record<string, unknown>>(`hd_units?user_id=eq.${OWNER}&select=id,unit_number,serial_number,bm_number,updated_at,created_at&order=updated_at.desc.nullslast,created_at.desc&limit=200`)
+  // Search fixtures are the owner's REAL units - never a unit an earlier flow made this
+  // run (they sit in created.fleetUnits until cleanup). Count and order use every row.
+  const realUnits = units.filter(u => !created.fleetUnits.has(String(u.id)))
+  const real = realUnits.find(u => String(u.unit_number ?? '').trim() && String(u.serial_number ?? '').trim())
+  if (!record(F, 'the owner has a unit with a number and serial to search for', !!real, `${realUnits.length} real of ${units.length} unit(s)`)) return
+  const plain = await api('GET', '/api/hd/fleet-units?limit=200')
+  const plainUnits = (plain.json.units ?? []) as Array<Record<string, unknown>>
+  // The order the database itself gives for unit_number, id - what the route did before.
+  const dbOrder = (await rest<{ id: string }>(`hd_units?user_id=eq.${OWNER}&select=id&order=unit_number,id&limit=200`)).map(u => u.id)
+  record(F, 'with no new params the route answers as before: every unit, by unit number',
+    plain.status === 200 && plainUnits.length === Math.min(units.length, 200) && Number(plain.json.count) === units.length &&
+    plainUnits.every((u, i) => String(u.id) === dbOrder[i]), `-> ${plain.status}, ${plainUnits.length} of ${String(plain.json.count)}`)
+  const byNum = await api('GET', `/api/hd/fleet-units?search=${encodeURIComponent(String(real!.unit_number))}`)
+  const byNumIds = ((byNum.json.units ?? []) as Array<Record<string, unknown>>).map(u => String(u.id))
+  record(F, 'search by unit number finds the unit', byNum.status === 200 && byNumIds.includes(String(real!.id)),
+    `"${String(real!.unit_number)}" -> ${byNumIds.length} hit(s)`)
+  const bySerial = await api('GET', `/api/hd/fleet-units?search=${encodeURIComponent(String(real!.serial_number))}`)
+  const bySerialRows = (bySerial.json.units ?? []) as Array<Record<string, unknown>>
+  record(F, 'search by serial finds it, and every hit really contains the text',
+    bySerial.status === 200 && bySerialRows.some(u => String(u.id) === String(real!.id)) &&
+    bySerialRows.every(u => [u.unit_number, u.serial_number, u.bm_number].some(v => String(v ?? '').toLowerCase().includes(String(real!.serial_number).toLowerCase()))),
+    `${bySerialRows.length} hit(s)`)
+  const withBm = realUnits.find(u => String(u.bm_number ?? '').trim())
+  if (withBm) {
+    const byBm = await api('GET', `/api/hd/fleet-units?search=${encodeURIComponent(String(withBm.bm_number))}`)
+    record(F, 'search by BM number finds it', ((byBm.json.units ?? []) as Array<Record<string, unknown>>).some(u => String(u.id) === String(withBm.id)),
+      String(withBm.bm_number))
+  }
+  const wild = await api('GET', '/api/hd/fleet-units?search=' + encodeURIComponent('%'))
+  const literalPct = units.filter(u => [u.unit_number, u.serial_number, u.bm_number].some(v => String(v ?? '').includes('%'))).length
+  record(F, 'a % in the search is literal, not a wildcard', wild.status === 200 && Number(wild.json.count) === literalPct,
+    `-> ${wild.status}, ${String(wild.json.count)} hit(s), ${literalPct} expected`)
+  const rec = await api('GET', '/api/hd/fleet-units?sort=recent&limit=6')
+  const recIds = ((rec.json.units ?? []) as Array<Record<string, unknown>>).map(u => String(u.id))
+  record(F, 'sort=recent lists the most recently updated unit first', rec.status === 200 && recIds[0] === String(units[0]?.id),
+    `first ${recIds[0] ?? 'none'}, want ${String(units[0]?.id)}`)
+
+  // 3. The screen: the block, the unit fields leading with number + serial, Engine Hours empty.
+  const qw = await page('/hd/quickwrench')
+  const eh = qw?.html.match(/<input[^>]*data-testid="qw-engine-hours"[^>]*>/)?.[0] ?? ''
+  record(F, 'HD QuickWrench renders the customer block, unit number and serial, and an EMPTY Engine Hours box',
+    !!qw && qw.html.includes('data-testid="qw-customer-block"') && qw.html.includes('data-testid="qw-unit-number"') &&
+    qw.html.includes('data-testid="qw-unit-serial"') && !!eh && !/\svalue="[^"]+"/.test(eh) && qw.text.includes('Recent Units from Intel Hub'),
+    qw ? (eh ? 'rendered' : 'no Engine Hours box') : 'did not load')
+
+  // 4. The unit profile keeps its reading when a save sends none.
+  const serial = `${MARK}-QC-${Date.now()}`
+  try {
+    const first = await api('POST', '/api/hd/unit-profile', { manufacturer: 'TK', serial_number: serial, engine_hours: 4321 })
+    const before = (await rest(`hd_unit_profiles?user_id=eq.${OWNER}&serial_number=eq.${encodeURIComponent(serial)}&select=engine_hours,updated_at`))[0] ?? {}
+    if (!record(F, 'a unit profile with hours saves', first.status < 300 && Number(before.engine_hours) === 4321, `-> ${first.status}`)) return
+    const second = await api('POST', '/api/hd/unit-profile', { manufacturer: 'TK', serial_number: serial, notes: `${MARK} no reading` })
+    const after = (await rest(`hd_unit_profiles?user_id=eq.${OWNER}&serial_number=eq.${encodeURIComponent(serial)}&select=engine_hours,updated_at,notes`))[0] ?? {}
+    record(F, 'a later save with no hours keeps the reading AND its date', second.status < 300 &&
+      Number(after.engine_hours) === 4321 && after.updated_at === before.updated_at && String(after.notes ?? '').includes('no reading'),
+      `hours ${after.engine_hours}, date ${after.updated_at === before.updated_at ? 'unchanged' : 'moved'}`)
+  } finally {
+    await fetch(`${SUPA}/rest/v1/hd_unit_profiles?user_id=eq.${OWNER}&serial_number=eq.${encodeURIComponent(serial)}`, { method: 'DELETE', headers: SVC_H })
+    const left = await rest(`hd_unit_profiles?serial_number=eq.${encodeURIComponent(serial)}&select=id`)
+    record(F, 'the test unit profile is deleted', left.length === 0, `${left.length} left`)
+  }
 }
 
 async function flowSd(): Promise<void> {
@@ -5079,6 +5171,7 @@ async function main(): Promise<void> {
     await flowSd()
     await flowUr()
     await flowLp()
+    await flowQc()
     await flowOd()
     await flowHw()
     await flowIe()

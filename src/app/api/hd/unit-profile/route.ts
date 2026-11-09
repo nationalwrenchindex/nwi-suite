@@ -139,11 +139,21 @@ export async function POST(req: NextRequest) {
     updated_at:       new Date().toISOString(),
   }
 
+  // NO HOURS SENT = KEEP THE STORED ONES, AND THEIR DATE (Nov 9). QuickWrench no longer
+  // pre-fills Engine Hours from this profile, so an empty box means "not read on this
+  // job" - writing null would erase the unit's last reading, and bumping updated_at would
+  // re-date it. QuickWrench shows updated_at beside the reading as when it was saved, so
+  // it moves only when a reading is.
+  const hoursSent = body.engine_hours !== undefined && body.engine_hours !== null && body.engine_hours !== ''
+  const { engine_hours: _h, updated_at: _u, ...rest } = row
+  void _h; void _u
+  const updateRow = hoursSent ? row : rest
+
   let savedId: string
   if (existing) {
     const { data, error } = await supabase
       .from('hd_unit_profiles')
-      .update(row)
+      .update(updateRow)
       .eq('id', existing.id)
       .select('id')
       .single()
