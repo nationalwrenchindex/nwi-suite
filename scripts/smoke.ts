@@ -260,7 +260,7 @@ async function cleanup(): Promise<void> {
     const users = (Array.isArray(usersJson) ? usersJson : usersJson.users ?? []) as Array<{ id: string; email?: string }>
     for (const u of users) if (/^smoke-reefer-\d+@example\.com$/.test(u.email ?? '')) created.reeferUsers.add(u.id)
   } catch { /* a failed sweep must not mask the real result */ }
-  const OWNED = ['stock_allocation', 'stock_movement', 'inventory', 'stock_location', 'hd_invoices', 'hd_work_orders', 'hd_quotes', 'hd_repair_items', 'reefer_unit_details', 'hd_units',
+  const OWNED = ['hd_document_counters', 'stock_allocation', 'stock_movement', 'inventory', 'stock_location', 'hd_invoices', 'hd_work_orders', 'hd_quotes', 'hd_repair_items', 'reefer_unit_details', 'hd_units',
     'hd_fleet_accounts', 'hd_equipment_categories', 'customers', 'subscriptions']
   for (const uid of created.reeferUsers) {
     for (const w of await rest<{ id: string }>(`hd_work_orders?select=id&user_id=eq.${uid}`).catch(() => [])) {
@@ -559,6 +559,113 @@ async function flowLp(): Promise<void> {
     bad.length ? bad.slice(0, 4).join('; ') : `${n.range} range, ${n.single} single, ${n.shop} shop-only`)
   record(F, 'the route carries the field range high end (else a range could never reach the form)',
     items.every(i => 'mobile_hours_high' in i), '')
+}
+
+// ── Nm: HD invoice and quote numbers come from a counter, never a count (186, Nov 12) ──
+//
+// Numbers were "rows in the account + 1": a delete made the next save reuse a number
+// already printed (INV-2026-0029 twice), and two saves at once took the same one.
+// Migration 186 numbers both in a BEFORE INSERT trigger from hd_document_counters and
+// adds unique keys. Run on a throwaway reefer account so no real account spends numbers.
+async function flowNm(): Promise<void> {
+  const F = 'Nm document numbering'
+  const email = `smoke-reefer-${Date.now()}@example.com`
+  const made = await fetch(`${SUPA}/auth/v1/admin/users`, {
+    method: 'POST', headers: SVC_H,
+    body: JSON.stringify({ email, password: `Smk-${Date.now()}-x9!`, email_confirm: true,
+      user_metadata: { full_name: `${MARK} numbering`, business_name: `${MARK} Numbering Shop` } }),
+  })
+  const u = await made.json().catch(() => ({})) as { id?: string }
+  if (!record(F, 'a throwaway account is created', made.ok && !!u.id, `-> ${made.status}`)) return
+  const uid = u.id!
+  created.reeferUsers.add(uid)
+  const sub = await fetch(`${SUPA}/rest/v1/subscriptions`, {
+    method: 'POST', headers: SVC_H,
+    body: JSON.stringify({ user_id: uid, tier: 'reefer_standalone', status: 'active', is_comped: false,
+      vertical: 'heavy_duty', modules: [...REEFER_STANDALONE_MODULES], cancel_at_period_end: false }),
+  })
+  if (!record(F, 'it gets a subscription that can save quotes and invoices', sub.ok, `-> ${sub.status}`)) return
+
+  const year = new Date().getFullYear()
+  const seq = (n: unknown, prefix: string) => {
+    const m = new RegExp(`^${prefix}-(\\d{4})-(\\d{4,})$`).exec(String(n ?? ''))
+    return m ? Number(m[2]) : NaN
+  }
+  const ownerCookie = cookie
+  try {
+    const session = await openSession(uid)
+    cookie = session.cookie
+    const quoteBody = (i: number) => ({ customer_name: `${MARK} numbering ${i}`, customer_phone: '+15555550178', status: 'draft', line_items: [], total: 0 })
+
+    // 1. Two quotes saved at the same moment get two numbers, 0001 and 0002.
+    const [q1, q2] = await Promise.all([api('POST', '/api/hd/quotes', quoteBody(1)), api('POST', '/api/hd/quotes', quoteBody(2))])
+    const r1 = (q1.json.quote ?? {}) as Record<string, unknown>, r2 = (q2.json.quote ?? {}) as Record<string, unknown>
+    for (const r of [r1, r2]) if (r.id) created.hdQuotes.add(String(r.id))
+    const pair = [seq(r1.quote_number, 'Q'), seq(r2.quote_number, 'Q')].sort((a, b) => a - b)
+    record(F, 'two quotes saved at the same moment get two different numbers (0001 and 0002 on a new account)',
+      q1.status === 201 && q2.status === 201 && pair[0] === 1 && pair[1] === 2 && String(r1.quote_number).startsWith(`Q-${year}-`),
+      `-> ${q1.status}/${q2.status} ${String(r1.quote_number ?? '')}, ${String(r2.quote_number ?? '')} ${String(q1.json.error ?? q2.json.error ?? '')}`)
+
+    // 2. Deleting the newest does not hand its number out again.
+    const newest = seq(r1.quote_number, 'Q') > seq(r2.quote_number, 'Q') ? r1 : r2
+    if (newest.id) await del('hd_quotes', String(newest.id))
+    const q3 = await api('POST', '/api/hd/quotes', quoteBody(3))
+    const q3row = (q3.json.quote ?? {}) as Record<string, unknown>
+    if (q3row.id) created.hdQuotes.add(String(q3row.id))
+    record(F, 'after the newest quote is deleted, the next quote is 0003 - the deleted number is never reused',
+      q3.status === 201 && seq(q3row.quote_number, 'Q') === 3, `-> ${q3.status} ${String(q3row.quote_number ?? '')}`)
+
+    // 3. Invoices the same: two at once, two numbers.
+    // 'unpaid', as the app saves one: hd_invoices has no 'draft' status (its CHECK refuses it).
+    const invBody = (i: number) => ({ customer_name: `${MARK} numbering inv ${i}`, customer_phone: '+15555550178', status: 'unpaid', line_items: [], total: 0 })
+    const [i1, i2] = await Promise.all([api('POST', '/api/hd/invoices', invBody(1)), api('POST', '/api/hd/invoices', invBody(2))])
+    const in1 = (i1.json.invoice ?? {}) as Record<string, unknown>, in2 = (i2.json.invoice ?? {}) as Record<string, unknown>
+    for (const r of [in1, in2]) if (r.id) created.hdInvoices.add(String(r.id))
+    const ip = [seq(in1.invoice_number, 'INV'), seq(in2.invoice_number, 'INV')].sort((a, b) => a - b)
+    record(F, 'two invoices saved at the same moment get two different numbers (0001 and 0002)',
+      i1.status === 201 && i2.status === 201 && ip[0] === 1 && ip[1] === 2,
+      `-> ${i1.status}/${i2.status} ${String(in1.invoice_number ?? '')}, ${String(in2.invoice_number ?? '')} ${String(i1.json.error ?? i2.json.error ?? '')}`)
+
+    // 4. A save that sends an already-used number in the auto form (what the old
+    //    count+1 code does) is renumbered by the trigger, not duplicated.
+    const taken = String(q3row.quote_number ?? '')
+    const raw = await fetch(`${SUPA}/rest/v1/hd_quotes`, { method: 'POST', headers: { ...SVC_H, Prefer: 'return=representation' },
+      body: JSON.stringify({ user_id: uid, customer_name: `${MARK} numbering raw`, quote_number: taken }) })
+    const rawRow = ((await raw.json().catch(() => [])) as Array<Record<string, unknown>>)[0] ?? {}
+    if (rawRow.id) created.hdQuotes.add(String(rawRow.id))
+    record(F, 'a save that sends a number already in use gets the next number instead (the trigger numbers it)',
+      raw.status === 201 && !!taken && rawRow.quote_number !== taken && seq(rawRow.quote_number, 'Q') === 4,
+      `-> ${raw.status} sent ${taken}, saved ${String(rawRow.quote_number ?? '')}`)
+
+    // 5. A number outside the auto form is kept as written, and the unique key
+    //    refuses it the second time.
+    const manual = `${MARK}-NM-${Date.now()}`
+    const put = () => fetch(`${SUPA}/rest/v1/hd_quotes`, { method: 'POST', headers: { ...SVC_H, Prefer: 'return=representation' },
+      body: JSON.stringify({ user_id: uid, customer_name: `${MARK} numbering manual`, quote_number: manual }) })
+    const m1 = await put()
+    const m1Row = ((await m1.json().catch(() => [])) as Array<Record<string, unknown>>)[0] ?? {}
+    if (m1Row.id) created.hdQuotes.add(String(m1Row.id))
+    const m2 = await put()
+    const m2Body = await m2.json().catch(() => ({})) as Record<string, unknown> | Array<Record<string, unknown>>
+    if (Array.isArray(m2Body) && m2Body[0]?.id) created.hdQuotes.add(String(m2Body[0].id))
+    record(F, 'a number not in the auto form is kept as written, and the unique key refuses a second copy',
+      m1.status === 201 && m1Row.quote_number === manual && m2.status === 409 && !Array.isArray(m2Body) && m2Body.code === '23505',
+      `-> ${m1.status} ${String(m1Row.quote_number ?? '')}, second -> ${m2.status} ${Array.isArray(m2Body) ? 'saved' : String(m2Body.code ?? '')}`)
+
+    // 6. The counter itself is closed to the browser keys: anon, and a signed-in
+    //    (authenticated) user. A refusal is 401/403; a 200 would be a leak even if empty.
+    const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+    const asAnon = await fetch(`${SUPA}/rest/v1/hd_document_counters?select=last_number`, {
+      headers: { apikey: ANON, Authorization: `Bearer ${ANON}` } })
+    record(F, 'the counter table cannot be read with the anon key', asAnon.status === 401 || asAnon.status === 403,
+      `-> ${asAnon.status}`)
+    const asUser = await fetch(`${SUPA}/rest/v1/hd_document_counters?select=last_number`, {
+      headers: { apikey: ANON, Authorization: `Bearer ${session.accessToken}` } })
+    record(F, "the counter table cannot be read with a signed-in user's key", asUser.status === 401 || asUser.status === 403,
+      `-> ${asUser.status}`)
+  } finally {
+    cookie = ownerCookie
+  }
 }
 
 // ── Cf: no compliance claim by default, the whole business name in email (Nov 11) ──
@@ -4710,10 +4817,13 @@ async function flowZ(): Promise<void> {
 
   // Invoice rows in the shape the app stores (INV-2026-0020's labor line).
   const labor = { id: 'zz-eq-l', type: 'labor', amount: 202.5, quantity: 0, unit_cost: 0, description: `${MARK} eq labor`, part_number: '', mobile_hours: 1.5 }
+  const eqRun = Date.now()
   const mkInv = async (n: string, total: number, status: string, lines: unknown[]) => {
     const r = await fetch(`${SUPA}/rest/v1/hd_invoices`, {
       method: 'POST', headers: { ...SVC_H, Prefer: 'return=representation' },
-      body: JSON.stringify({ user_id: OWNER, invoice_number: `ZZ-EQ-${n}`, customer_name: `${MARK} eq customer`,
+      // Per-run suffix: the unique key (186) would refuse a fixed number if a past
+      // run ever left its row behind.
+      body: JSON.stringify({ user_id: OWNER, invoice_number: `ZZ-EQ-${n}-${eqRun}`, customer_name: `${MARK} eq customer`,
         unit_id: unitId, status, total, subtotal_labor: lines.length ? 202.5 : 0, subtotal_parts: 0, tax_amount: 0, line_items: lines }),
     })
     const id = r.ok ? String(((await r.json()) as Record<string, unknown>[])[0]?.id ?? '') : ''
@@ -5260,6 +5370,7 @@ async function main(): Promise<void> {
     await flowLp()
     await flowQc()
     await flowCf()
+    await flowNm()
     await flowOd()
     await flowHw()
     await flowIe()

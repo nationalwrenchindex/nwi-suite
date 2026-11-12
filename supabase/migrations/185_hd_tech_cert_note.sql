@@ -36,5 +36,5 @@ BEGIN
   RAISE NOTICE '185 ok: profiles.hd_tech_cert_note exists, 0 filled';
 END $$;
 
--- Ends in ROLLBACK so a dry run changes nothing. Change to COMMIT to apply.
-ROLLBACK;
+-- Applied by hand in the Supabase SQL editor on Nov 12, 2026. Ends in COMMIT as run.
+COMMIT;
