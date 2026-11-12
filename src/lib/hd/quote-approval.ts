@@ -30,6 +30,7 @@
 // copies figures the quote already computed and stored.
 
 import { createServiceClient } from '@/lib/supabase/service'
+import { isMissingRepairItemColumn, isUuid, usableCardIds, withoutRepairItem } from '@/lib/hd/labor-card-link'
 import { isMissingReadingColumn, readingsCarry, withoutMissingReadings } from '@/lib/hd/unit-hours'
 import { isMissingPaymentTermsColumn } from '@/lib/hd/payment-terms'
 import { isMissingMigration159Column, withoutMigration159Columns } from '@/lib/hd/migration-159'
@@ -288,6 +289,9 @@ export function workOrderLinesFromQuote(
         markup_percent: null,
         total:          amount ?? Number((hours * rate).toFixed(2)),
         sort_order:     sort++,
+        // The labor card the quote line was picked from (187). Checked against the
+        // quote's owner before the insert; dropped there if it is not theirs.
+        ...(isUuid((li as { repair_item_id?: unknown }).repair_item_id) ? { repair_item_id: (li as { repair_item_id?: string }).repair_item_id } : {}),
       })
       continue
     }
@@ -632,9 +636,12 @@ export async function createWorkOrderFromQuote(
   let lineCount = 0
 
   if (lines.length) {
-    const { error: lineErr } = await supabase
-      .from('hd_work_order_line_items')
-      .insert(lines.map(l => ({ ...l, work_order_id: wo.id })))
+    // Only cards the quote's owner may use survive; the rest become no card.
+    const usable = await usableCardIds(supabase, userId, lines.map(l => l.repair_item_id))
+    const rows = lines.map(l => ({ ...l, repair_item_id: isUuid(l.repair_item_id) && usable.has(l.repair_item_id) ? l.repair_item_id : null, work_order_id: wo.id }))
+    let { error: lineErr } = await supabase.from('hd_work_order_line_items').insert(rows)
+    // Before 187: the same lines, without the card.
+    if (lineErr && isMissingRepairItemColumn(lineErr)) ({ error: lineErr } = await supabase.from('hd_work_order_line_items').insert(withoutRepairItem(rows)))
     if (lineErr) {
       console.error('[hd quote->wo] line items failed, work order kept:', lineErr.message)
       lineError = lineErr.message

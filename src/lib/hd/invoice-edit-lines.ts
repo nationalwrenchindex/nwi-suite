@@ -16,6 +16,8 @@ export interface EditLine {
   // score read (the PUT re-derives parts_cost from it).
   unit_cost_base?: number | null
   markup_percent?: number | null
+  /** The labor card this line came from (hd_repair_items.id). Carried, never edited. */
+  repair_item_id?: string
 }
 
 const num = (v: unknown, d = 0) => { const n = Number(v); return Number.isFinite(n) ? n : d }

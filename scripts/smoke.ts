@@ -29,6 +29,7 @@ import { formatUnitHours } from '../src/lib/hd/unit-hours'
 import { customerHandoff, EMPTY_QW_CUSTOMER } from '../src/lib/hd/qw-handoff'
 import { buildInvoiceEmail, buildQuoteEmail, buildInvoiceSms } from '../src/lib/hd/sms-templates'
 import { complianceLines } from '../src/lib/hd/compliance-footer'
+import { buildLaborLines, laborCategories } from '../src/lib/hd/labor-line-build'
 import { documentDisclaimers } from '../src/lib/invoice-document'
 import { editableLines } from '../src/lib/hd/invoice-edit-lines'
 import { stripLeadingZeros, parseFee } from '../src/components/hd/FeeInput'
@@ -559,6 +560,116 @@ async function flowLp(): Promise<void> {
     bad.length ? bad.slice(0, 4).join('; ') : `${n.range} range, ${n.single} single, ${n.shop} shop-only`)
   record(F, 'the route carries the field range high end (else a range could never reach the form)',
     items.every(i => 'mobile_hours_high' in i), '')
+}
+
+// ── Lm: ONE ADD LABOR LINE modal, and the labor card a line came from (187, Nov 12) ──
+//
+// The quote had the rich modal (library + guide search, card midpoint, refrigeration
+// line, save to library); the work order added a blank row and both invoice forms had
+// a bare box. Now one component (components/hd/LaborLineModal) on all four, with its
+// arithmetic in lib/hd/labor-line-build - tested here directly, because the modal is
+// client-only and never in the rendered HTML. And a work order line records the card it
+// came from (hd_work_order_line_items.repair_item_id, migration 187), checked: only the
+// shop's own card or a catalog card is stored.
+async function flowLm(): Promise<void> {
+  const F = 'Lm labor modal + card link'
+
+  // 1. The arithmetic, as each document gets it.
+  const base = { description: `${MARK} R&R alternator`, bookMin: '', bookMax: '', mobileMin: '2', mobileMax: '3',
+    range: true, recharge: false, refrig: null, rate: 100, cardId: null, allowRange: true }
+  const quote = buildLaborLines(base)
+  record(F, 'on a quote a range stays a range (2 to 3 hrs, $200 to $300) - unchanged',
+    'lines' in quote && quote.lines[0].mobile_hours === 2 && quote.lines[0].mobile_hours_max === 3 && quote.lines[0].amount === 200 && quote.lines[0].amount_max === 300,
+    'lines' in quote ? `${quote.lines[0].mobile_hours}-${quote.lines[0].mobile_hours_max} ${quote.lines[0].amount}-${quote.lines[0].amount_max}` : quote.error)
+  const onWo = buildLaborLines({ ...base, allowRange: false })
+  record(F, 'on a work order or invoice a range never reaches the line: one number (2 hrs, $200)',
+    'lines' in onWo && onWo.lines[0].mobile_hours === 2 && onWo.lines[0].mobile_hours_max === 2 && onWo.lines[0].amount_max === 200,
+    'lines' in onWo ? `${onWo.lines[0].mobile_hours}-${onWo.lines[0].mobile_hours_max}` : onWo.error)
+  const rechargeQ = buildLaborLines({ ...base, range: false, recharge: true })
+  const rechargeW = buildLaborLines({ ...base, range: false, recharge: true, allowRange: false })
+  record(F, 'the 1.5-2.5 hr recovery add-on applies on a quote only',
+    'lines' in rechargeQ && rechargeQ.lines[0].mobile_hours === 3.5 && rechargeQ.lines[0].mobile_hours_max === 4.5 && rechargeQ.lines[0].recharge_added &&
+    'lines' in rechargeW && rechargeW.lines[0].mobile_hours === 2 && !rechargeW.lines[0].recharge_added,
+    'lines' in rechargeQ && 'lines' in rechargeW ? `quote ${rechargeQ.lines[0].mobile_hours}-${rechargeQ.lines[0].mobile_hours_max}, wo ${rechargeW.lines[0].mobile_hours}` : '')
+  const card = buildLaborLines({ ...base, allowRange: false, cardId: '00000000-0000-4000-8000-000000000001', refrig: { hours: 1.5, service: 'B' } })
+  record(F, "a card's refrigeration service is its own line, and only the base line carries the card id",
+    'lines' in card && card.lines.length === 2 && card.lines[0].repair_item_id === '00000000-0000-4000-8000-000000000001' &&
+    card.lines[1].repair_item_id === undefined && card.lines[1].amount === 150 && /Refrigeration Service B/.test(card.lines[1].description),
+    'lines' in card ? `${card.lines.length} lines` : card.error)
+  const noRate = buildLaborLines({ ...base, allowRange: false, rate: null })
+  record(F, 'no labor rate: the line is added with no amount, never a made-up rate',
+    'lines' in noRate && noRate.lines[0].amount === 0 && noRate.lines[0].mobile_hours === 2, 'lines' in noRate ? String(noRate.lines[0].amount) : noRate.error)
+  const blank = buildLaborLines({ ...base, mobileMin: '' })
+  record(F, 'an empty hours box is refused, not billed as 0', 'error' in blank, 'error' in blank ? blank.error : 'accepted')
+  record(F, "the library filter follows the unit, as the quote's always did",
+    JSON.stringify(laborCategories('Thermo King')) === JSON.stringify(['refrigeration', 'electrical', 'mechanical', 'sensors']) &&
+    JSON.stringify(laborCategories('', 'Freightliner')) === JSON.stringify(['engine', 'fuel', 'electrical', 'brakes', 'suspension', 'cooling']) &&
+    laborCategories('', '', '') === null, '')
+
+  // 2. The card link, through the real routes.
+  const probe = await fetch(`${SUPA}/rest/v1/hd_work_order_line_items?select=repair_item_id&limit=1`, { headers: SVC_H })
+  const has187 = probe.ok
+  const own = (await rest<Record<string, unknown>>(`hd_repair_items?user_id=eq.${OWNER}&active=eq.true&select=id,description&limit=1`))[0]
+    ?? (await rest<Record<string, unknown>>(`hd_repair_items?is_master=eq.true&active=eq.true&select=id,description&limit=1`))[0]
+  const foreign = (await rest<Record<string, unknown>>(`hd_repair_items?is_master=eq.false&user_id=neq.${OWNER}&select=id&limit=1`))[0]
+  if (!record(F, 'a labor card the owner may use, and one of another shop, to link', !!own && !!foreign,
+    `${own ? 'usable' : 'no usable card'}, ${foreign ? 'foreign' : 'no foreign card'}`)) return
+  const cardId = String(own!.id), foreignId = String(foreign!.id), cardName = String(own!.description)
+
+  const rate = 100
+  const qLine = { id: crypto.randomUUID(), type: 'labor', description: cardName, book_hours: 0, book_hours_max: 0,
+    mobile_hours: 2, mobile_hours_max: 2, requires_refrigeration: false, recharge_added: false,
+    part_number: '', quantity: 0, unit_cost: 0, amount: 200, amount_max: 200, repair_item_id: cardId }
+  const q = await api('POST', '/api/hd/quotes', {
+    customer_name: `${MARK} Lm labor card`, customer_phone: '+15555550179', status: 'sent',
+    labor_rate: rate, line_items: [qLine], subtotal_labor: 200, subtotal_parts: 0, tax_rate: 0, tax_amount: 0, total: 200,
+  })
+  await adoptSmokeCustomer(q.json.customer_id)
+  const qid = String((q.json.quote as Record<string, unknown> | undefined)?.id ?? '')
+  if (qid) created.hdQuotes.add(qid)
+  const qRow = (await rest<Record<string, unknown>>(`hd_quotes?id=eq.${qid}&select=line_items,public_token`))[0] ?? {}
+  const savedLine = (Array.isArray(qRow.line_items) ? qRow.line_items[0] : {}) as Record<string, unknown>
+  if (!record(F, 'a quote line picked from a card keeps the card id when saved', q.status === 201 && savedLine.repair_item_id === cardId,
+    `-> ${q.status} ${String(savedLine.repair_item_id ?? 'no id')} ${String(q.json.error ?? '')}`)) return
+
+  const appr = await fetch(`${BASE}/api/hd/quotes/public/${String(qRow.public_token)}/respond`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision: 'approve' }) })
+  const wo = (await rest<Record<string, unknown>>(`hd_work_orders?quote_id=eq.${qid}&select=id`))[0]
+  if (wo) created.hdWorkOrders.add(String(wo.id))
+  if (!record(F, 'the customer approves it and the work order exists', appr.ok && !!wo, `-> ${appr.status}`)) return
+  const woId = String(wo!.id)
+  const sel = has187 ? 'type,description,quantity,unit_price,total,repair_item_id' : 'type,description,quantity,unit_price,total'
+  const fromQuote = await rest<Record<string, unknown>>(`hd_work_order_line_items?work_order_id=eq.${woId}&select=${sel}&order=sort_order`)
+  record(F, has187 ? 'approval carries the card to the work order line (187 applied)' : 'approval still makes the work order line without 187 (no card recorded)',
+    fromQuote.length === 1 && Number(fromQuote[0].quantity) === 2 && Number(fromQuote[0].total) === 200 && (!has187 || fromQuote[0].repair_item_id === cardId),
+    `${fromQuote.length} line(s) ${has187 ? String(fromQuote[0]?.repair_item_id ?? 'no card') : ''}`)
+
+  // The work order's own save: its card kept, another shop's card and a part's dropped.
+  const put = await api('PUT', `/api/hd/work-orders/${woId}/line-items`, { line_items: [
+    { type: 'labor', description: cardName, quantity: 2, unit_price: rate, repair_item_id: cardId },
+    { type: 'labor', description: `${MARK} Lm foreign card`, quantity: 1, unit_price: rate, repair_item_id: foreignId },
+    { type: 'labor', description: `${MARK} Lm not an id`, quantity: 1, unit_price: rate, repair_item_id: 'nope' },
+    { type: 'part', description: `${MARK} Lm part`, part_number: `${MARK}-LM-1`, quantity: 1, unit_cost: 10, markup_percent: 30, repair_item_id: cardId },
+  ] })
+  const back = await rest<Record<string, unknown>>(`hd_work_order_line_items?work_order_id=eq.${woId}&select=${sel}&order=sort_order`)
+  const ids = back.map(l => (l.repair_item_id ?? null) as string | null)
+  record(F, has187
+      ? "the work order save keeps its own card, and stores another shop's card, a non-id and a part's as no card"
+      : 'the work order save still saves every line without 187 (the cards are simply not recorded)',
+    put.status === 200 && back.length === 4 && (!has187 || (ids[0] === cardId && ids[1] === null && ids[2] === null && ids[3] === null)),
+    `-> ${put.status} ${back.length} line(s) ${has187 ? JSON.stringify(ids.map(i => (i === cardId ? 'own' : i))) : ''} ${String(put.json.error ?? '')}`)
+  const got = await api('GET', `/api/hd/work-orders/${woId}/line-items`)
+  const gotIds = ((got.json.line_items ?? []) as Array<Record<string, unknown>>).map(l => l.repair_item_id ?? null)
+  record(F, 'the card reads back to the work order screen', got.status === 200 && (!has187 || gotIds[0] === cardId),
+    `-> ${got.status} ${has187 ? String(gotIds[0] ?? 'none') : 'n/a before 187'}`)
+
+  // And on to the invoice: the converter's labor line keeps the card.
+  const conv = await api('GET', `/api/hd/work-orders/${woId}/convert`)
+  const invLines = (((conv.json.invoice_payload ?? {}) as Record<string, unknown>).line_items ?? []) as Array<Record<string, unknown>>
+  const linked = invLines.filter(l => l.repair_item_id != null)
+  record(F, has187 ? 'converting to an invoice carries the card on its labor line, and only there' : 'the converter adds no card key without 187',
+    conv.status === 200 && invLines.length === 4 && (has187 ? linked.length === 1 && linked[0].repair_item_id === cardId && linked[0].type === 'labor' : linked.length === 0),
+    `-> ${conv.status} ${invLines.length} line(s), ${linked.length} with a card ${String(conv.json.error ?? '')}`)
 }
 
 // ── Nm: HD invoice and quote numbers come from a counter, never a count (186, Nov 12) ──
@@ -5371,6 +5482,7 @@ async function main(): Promise<void> {
     await flowQc()
     await flowCf()
     await flowNm()
+    await flowLm()
     await flowOd()
     await flowHw()
     await flowIe()

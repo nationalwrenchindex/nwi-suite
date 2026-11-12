@@ -9,6 +9,8 @@ import Link from 'next/link'
 import { money } from '@/lib/format'
 import { taxDisplayRows } from '@/lib/tax'
 import { type EditLine } from '@/lib/hd/invoice-edit-lines'
+import LaborLineModal from '@/components/hd/LaborLineModal'
+import { laborCategories } from '@/lib/hd/labor-line-build'
 import {
   openInvoiceEdit, priceInvoiceEdit, invoiceSaveBody, invoiceExtrasSettings,
   invoiceDoesNotAddUp, doesNotAddUpMessage, correctionBody, type InvoiceEditState,
@@ -83,7 +85,6 @@ export default function EditInvoiceForm({ invoice, shopLaborRate, shop = null }:
   const [toast, setToast]   = useState('')
   const [laborModal, setLaborModal] = useState(false)
   const [partsModal, setPartsModal] = useState(false)
-  const [labor, setLabor] = useState({ description: '', hours: '1.0' })
   const [parts, setParts] = useState({ part_number: '', description: '', quantity: '1', unit_cost: '0.00' })
 
   // Every stored key survives, unit_cost_base and markup_percent above all. See
@@ -129,18 +130,6 @@ export default function EditInvoiceForm({ invoice, shopLaborRate, shop = null }:
   }
   function removeItem(itemId: string) { setLineItems(l => l.filter(i => i.id !== itemId)) }
 
-  function addLabor() {
-    const description = labor.description.trim()
-    if (!description) { setToast('Enter a labor description.'); return }
-    if (form.labor_rate == null) { setToast('This invoice has no labor rate. Enter one above first.'); return }
-    const hours = Math.max(0, parseFloat(labor.hours) || 0)
-    setLineItems(l => [...l, {
-      id: crypto.randomUUID(), type: 'labor', description,
-      mobile_hours: hours, part_number: '', quantity: 0, unit_cost: 0,
-      amount: parseFloat((hours * rate).toFixed(2)),
-    }])
-    setLabor({ description: '', hours: '1.0' }); setLaborModal(false)
-  }
   function addParts() {
     const description = parts.description.trim()
     if (!description) { setToast('Enter a part description.'); return }
@@ -259,7 +248,7 @@ export default function EditInvoiceForm({ invoice, shopLaborRate, shop = null }:
         <div style={cardStyle}>
           <SectionTitle>Line Items</SectionTitle>
           <div className="flex flex-wrap gap-3 mb-4 items-end">
-            <button onClick={() => setLaborModal(true)} className="px-4 py-2 rounded-lg text-sm font-semibold text-on-accent" style={{ background: ORANGE, minHeight: 44 }}>+ Add Labor</button>
+            <button onClick={() => { if (form.labor_rate == null) { setToast('This invoice has no labor rate. Enter one above first.'); return } setLaborModal(true) }} className="px-4 py-2 rounded-lg text-sm font-semibold text-on-accent" style={{ background: ORANGE, minHeight: 44 }}>+ Add Labor</button>
             <button onClick={() => setPartsModal(true)} className="px-4 py-2 rounded-lg text-sm font-semibold" style={{ background: '#EBF5FF', color: BLUE, border: `1px solid #BFDBFE`, minHeight: 44 }}>+ Add Parts</button>
             <div className="ml-auto">
               <Field label="Labor Rate / Hour">
@@ -422,22 +411,23 @@ export default function EditInvoiceForm({ invoice, shopLaborRate, shop = null }:
         </div>
       </div>
 
-      {laborModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.4)' }}>
-          <div style={{ background: CARD, borderRadius: 12, padding: 24, width: '100%', maxWidth: 460 }}>
-            <h3 className="font-condensed font-bold text-xl mb-4" style={{ color: TEXT }}>ADD LABOR LINE</h3>
-            <div className="flex flex-col gap-4">
-              <Field label="Description"><input style={inp} autoFocus value={labor.description} onChange={e => setLabor(d => ({ ...d, description: e.target.value }))} /></Field>
-              <Field label="Hours"><input style={inp} type="number" min={0} step={0.25} value={labor.hours} onChange={e => setLabor(d => ({ ...d, hours: e.target.value }))} /></Field>
-              <p className="text-sm" style={{ color: MUTED }}>Amount: <strong style={{ color: TEXT }}>{fmt((parseFloat(labor.hours) || 0) * rate)}</strong></p>
-              <div className="flex gap-3">
-                <button onClick={() => setLaborModal(false)} className="flex-1 py-2.5 rounded-lg font-semibold text-sm" style={{ background: '#F3F4F6', color: '#374151' }}>Cancel</button>
-                <button onClick={addLabor} className="flex-1 py-2.5 rounded-lg font-semibold text-sm text-on-accent" style={{ background: ORANGE }}>Add Line</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ADD LABOR LINE: the quote's modal (components/hd/LaborLineModal). One number,
+          no range - an invoice bills what the job took. A line picked from a labor card
+          carries the card's id. */}
+      <LaborLineModal
+        open={laborModal}
+        onClose={() => setLaborModal(false)}
+        onToast={setToast}
+        laborRate={form.labor_rate ?? null}
+        categories={laborCategories(form.unit_manufacturer)}
+        allowRange={false}
+        docName="invoice"
+        onAdd={picks => setLineItems(l => [...l, ...picks.map(p => ({
+          id: crypto.randomUUID(), type: 'labor' as const, description: p.description,
+          mobile_hours: p.mobile_hours, part_number: '', quantity: 0, unit_cost: 0, amount: p.amount,
+          ...(p.repair_item_id ? { repair_item_id: p.repair_item_id } : {}),
+        }))])}
+      />
 
       {partsModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.4)' }}>

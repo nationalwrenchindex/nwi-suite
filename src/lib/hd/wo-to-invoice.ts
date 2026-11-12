@@ -75,6 +75,8 @@ export interface WorkOrderLineRow {
   sort_order?: number | null
   /** Migration 177. Absent before it, and on a line read without it. */
   job_id?: string | null
+  /** Migration 187: the labor card the line came from. Absent before it. */
+  repair_item_id?: string | null
 }
 
 /** A line as hd_invoices.line_items stores it. */
@@ -96,6 +98,8 @@ export interface InvoiceLine {
    */
   job?: number
   job_label?: string
+  /** The labor card a labor line came from. Present only when the work order line had one. */
+  repair_item_id?: string
 }
 
 const num = (v: unknown): number | null => {
@@ -164,6 +168,7 @@ export function invoiceLinesFromWorkOrder(
         mobile_hours: hoursValue,
         amount: total ?? r2(hoursValue * rate),
         ...jobKeys,
+        ...(typeof r.repair_item_id === 'string' && r.repair_item_id ? { repair_item_id: r.repair_item_id } : {}),
       })
       continue
     }

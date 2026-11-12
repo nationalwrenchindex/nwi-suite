@@ -7,6 +7,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { isJobStatus, isMissingJobsSchema, type WorkOrderJob } from '@/lib/hd/work-order-jobs'
+import { isMissingRepairItemColumn } from '@/lib/hd/labor-card-link'
 
 export const LINE_SELECT = 'id, work_order_id, type, description, part_number, quantity, unit_cost, unit_price, markup_percent, total, sort_order'
 
@@ -26,10 +27,18 @@ export async function loadLinesAndJobs(supabase: SupabaseClient, workOrderId: st
     .eq('work_order_id', workOrderId)
     .order('sort_order', { ascending: true })
     .then(r => ({ data: r.data as unknown as Array<Record<string, unknown>> | null, error: r.error }))
-  let res = await read(`${LINE_SELECT}, job_id`)
-  if (res.error && isMissingJobsSchema(res.error)) {
-    hasJobs = false
-    res = await read(LINE_SELECT)
+  // job_id (177) and repair_item_id (187) are each dropped from the read when the
+  // database does not have them yet; the lines come back exactly as before.
+  let cols = [LINE_SELECT, 'job_id', 'repair_item_id']
+  let res = await read(cols.join(', '))
+  for (let tries = 0; res.error && tries < 2; tries++) {
+    if (cols.includes('repair_item_id') && isMissingRepairItemColumn(res.error)) {
+      cols = cols.filter(c => c !== 'repair_item_id')
+    } else if (cols.includes('job_id') && isMissingJobsSchema(res.error)) {
+      hasJobs = false
+      cols = cols.filter(c => c !== 'job_id')
+    } else break
+    res = await read(cols.join(', '))
   }
   if (res.error) return { lines: [], jobs: [], hasJobs, error: res.error }
 

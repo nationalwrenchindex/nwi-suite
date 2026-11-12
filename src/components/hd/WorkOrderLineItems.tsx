@@ -16,6 +16,9 @@ import { tint } from '@/lib/hd/text-tone'
 import { JOB_STATUSES, type JobStatus, type WorkOrderJob } from '@/lib/hd/work-order-jobs'
 import { NO_HD_LABOR_RATE } from '@/lib/hd/labor-rate'
 import { flushPending, registerPending, LINES_DIRTY_EVENT, LINES_SAVED_EVENT } from '@/lib/hd/wo-pending'
+import LaborLineModal, { type LaborLinePick } from '@/components/hd/LaborLineModal'
+import { laborCategories } from '@/lib/hd/labor-line-build'
+import { sameOperationName } from '@/lib/hd/labor-cards'
 
 // Parts and labor priced on the job itself, instead of first appearing at the
 // invoice form. Self-contained: it fetches and saves its own rows, so the work order
@@ -47,6 +50,11 @@ interface DraftLine {
   markup_percent: string
   /** The rate a new labor row opened with, so a row left at it is still blank. */
   seededRate?: string
+  /** The labor card this line came from (migration 187), and the name it came with. The
+   *  link holds while the line keeps that name; renamed, it is a different job and the
+   *  link is dropped, so the card never learns hours from work it did not describe. */
+  repair_item_id?: string | null
+  card_name?: string
 }
 
 function fmt(n: number) { return `${money(n)}` }
@@ -85,7 +93,13 @@ function toDraft(l: WorkOrderLine, jobNumber: number): DraftLine {
     unit_cost:      l.unit_cost      == null ? '' : String(l.unit_cost),
     unit_price:     l.unit_price     == null ? '' : String(l.unit_price),
     markup_percent: l.markup_percent == null ? '' : String(l.markup_percent),
+    ...cardLinkOf(l),
   }
+}
+
+function cardLinkOf(l: WorkOrderLine): Pick<DraftLine, 'repair_item_id' | 'card_name'> {
+  const id = (l as WorkOrderLine & { repair_item_id?: string | null }).repair_item_id
+  return typeof id === 'string' && id ? { repair_item_id: id, card_name: l.description ?? '' } : {}
 }
 
 // The same rule the server applies, run locally so the tech sees the number that
@@ -162,6 +176,10 @@ export default function WorkOrderLineItems({
   // because dropping a blank line is not a failure.
   const [note, setNote]       = useState<string | null>(null)
   const [markupDefault, setMarkupDefault] = useState(DEFAULT_HD_PARTS_MARKUP)
+  // The job the ADD LABOR LINE modal is adding to, or null when it is closed.
+  const [laborFor, setLaborFor] = useState<number | null>(null)
+  const [toast, setToast] = useState('')
+  useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(''), 3500); return () => clearTimeout(t) }, [toast])
 
   useEffect(() => {
     let cancelled = false
@@ -207,12 +225,39 @@ export default function WorkOrderLineItems({
   }, [])
 
   const update = useCallback((key: string, patch: Partial<DraftLine>) => {
-    setLines(ls => ls.map(l => (l.key === key ? { ...l, ...patch } : l)))
+    setLines(ls => ls.map(l => {
+      if (l.key !== key) return l
+      const next = { ...l, ...patch }
+      if (patch.description !== undefined && next.repair_item_id && !sameOperationName(next.description, next.card_name ?? '')) {
+        next.repair_item_id = null
+      }
+      return next
+    }))
     setDirty(true)
     // A "Saved." sitting above rows that have since been edited is a lie about the
     // current state, so the first keystroke clears it.
     setNote(null)
   }, [])
+
+  // ADD LABOR LINE (the quote's modal). Labor bills by the hour, so the hours go in
+  // quantity and the work order's rate in unit_price - exactly what a hand-typed labor
+  // row stores. No rate: the price is left empty, never invented.
+  function addLaborFromModal(picks: LaborLinePick[], jobNumber: number) {
+    setLines(ls => [...ls, ...picks.map(p => ({
+      key: crypto.randomUUID(),
+      job_number: jobNumber,
+      type: 'labor' as WorkOrderLineType,
+      description: p.description,
+      part_number: '',
+      quantity: String(p.mobile_hours),
+      unit_cost: '',
+      unit_price: laborRate != null ? String(laborRate) : '',
+      markup_percent: '',
+      ...(p.repair_item_id ? { repair_item_id: p.repair_item_id, card_name: p.description } : {}),
+    }))])
+    setDirty(true)
+    setNote(null)
+  }
 
   function addLine(type: WorkOrderLineType, jobNumber: number) {
     // A labor row opens at the rate, editable on the line. It used to open empty, so
@@ -353,6 +398,7 @@ export default function WorkOrderLineItems({
         unit_cost:      d.unit_cost.trim()      === '' ? null : num(d.unit_cost),
         unit_price:     d.unit_price.trim()     === '' ? null : num(d.unit_price),
         markup_percent: d.markup_percent.trim() === '' ? null : num(d.markup_percent),
+        repair_item_id: d.type === 'labor' ? (d.repair_item_id ?? null) : null,
       }))
       const res = await fetch(`/api/hd/work-orders/${workOrderId}/line-items`, {
         method: 'PUT',
@@ -424,6 +470,21 @@ export default function WorkOrderLineItems({
 
   return (
     <div className="rounded-xl overflow-hidden mb-6" style={{ border: `1px solid ${BORDER}` }}>
+      <LaborLineModal
+        open={laborFor != null}
+        onClose={() => setLaborFor(null)}
+        onToast={setToast}
+        laborRate={laborRate}
+        categories={laborCategories(unit?.manufacturer)}
+        allowRange={false}
+        docName="work order"
+        onAdd={picks => { if (laborFor != null) addLaborFromModal(picks, laborFor) }}
+      />
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] px-4 py-2 rounded-lg text-sm font-semibold text-on-accent" style={{ background: HD_ORANGE }} role="status">
+          {toast}
+        </div>
+      )}
       <div className="px-5 py-3 flex flex-wrap items-center justify-between gap-2" style={{ background: 'var(--hd-sunken)', borderBottom: `1px solid ${BORDER}` }}>
         <p className="font-condensed font-bold text-white text-sm tracking-widest">PARTS &amp; LABOR</p>
         <span className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>
@@ -446,7 +507,7 @@ export default function WorkOrderLineItems({
           ) : (
             <>
               <button
-                type="button" onClick={() => addLine('labor', jobs[0].job_number)}
+                type="button" onClick={() => setLaborFor(jobs[0].job_number)}
                 className="px-4 py-2 rounded-lg text-xs font-condensed font-bold tracking-wide"
                 style={{ background: `${tint(HD_ORANGE, 9)}`, color: 'var(--hd-text)', border: `1px solid ${tint(HD_ORANGE, 33)}` }}
               >
@@ -597,7 +658,7 @@ export default function WorkOrderLineItems({
                           </select>
                           {canEdit && (
                             <>
-                              <button type="button" onClick={() => addLine('labor', job.job_number)}
+                              <button type="button" onClick={() => setLaborFor(job.job_number)}
                                 className="px-3 py-1.5 rounded-lg text-xs font-condensed font-bold tracking-wide"
                                 style={{ background: `${tint(HD_ORANGE, 9)}`, color: 'var(--hd-text)', border: `1px solid ${tint(HD_ORANGE, 33)}` }}>
                                 + Labor

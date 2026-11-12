@@ -10,6 +10,7 @@ import {
 import { allocateForWorkOrder, partLinesFromRows } from '@/lib/inventory/ledger'
 import { isJobStatus, isMissingJobsSchema, type WorkOrderJob } from '@/lib/hd/work-order-jobs'
 import { LINE_SELECT, loadLinesAndJobs } from '@/lib/hd/work-order-jobs-load'
+import { isMissingRepairItemColumn, isUuid, usableCardIds, withoutRepairItem } from '@/lib/hd/labor-card-link'
 
 export const dynamic = 'force-dynamic'
 
@@ -128,6 +129,16 @@ export async function PUT(
   const ids = jobIds.ids
   if (ids) rows.forEach((r, i) => { r.job_id = ids.get(lineJob[i]) ?? null })
 
+  // THE LABOR CARD each labor line came from (migration 187). Kept only when it is a
+  // card this shop may use - its own or the catalog's; anything else is stored as no
+  // card, never refused (lib/hd/labor-card-link).
+  const sentCards = raw.map(r => (r as { repair_item_id?: unknown } | null)?.repair_item_id)
+  const usable = await usableCardIds(supabase, gate.userId, sentCards)
+  rows.forEach((r, i) => {
+    const c = sentCards[i]
+    r.repair_item_id = r.type === 'labor' && isUuid(c) && usable.has(c) ? c : null
+  })
+
   // Delete-then-insert. Supabase's REST client has no multi-statement transaction, so
   // the window between the two is real: a failed insert leaves the set empty. The
   // insert is checked and reported rather than swallowed so the tech re-saves from a
@@ -144,11 +155,15 @@ export async function PUT(
 
   let lines: Array<Record<string, unknown>> = []
   if (rows.length > 0) {
-    const { data, error } = await supabase
+    const base = ids ? `${LINE_SELECT}, job_id` : LINE_SELECT
+    const insert = (rs: Array<Record<string, unknown>>, sel: string) => supabase
       .from('hd_work_order_line_items')
-      .insert(rows)
-      .select(ids ? `${LINE_SELECT}, job_id` : LINE_SELECT)
+      .insert(rs)
+      .select(sel)
       .order('sort_order', { ascending: true })
+    let { data, error } = await insert(rows, `${base}, repair_item_id`)
+    // Before 187: the same lines, without the card. Nothing else changes.
+    if (error && isMissingRepairItemColumn(error)) ({ data, error } = await insert(withoutRepairItem(rows), base))
 
     if (error) {
       console.error('[hd/work-orders/line-items PUT insert]', error)

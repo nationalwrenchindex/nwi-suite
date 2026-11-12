@@ -25,6 +25,8 @@ import { deliverHDDocument, hasDeliveryTarget } from '@/lib/hd/deliver-document'
 import { ReadingBox } from '@/components/hd/WorkOrderUnitHours'
 import { readHandoffCustomer } from '@/lib/hd/qw-handoff'
 import { parseAddress } from '@/lib/hd/address-parse'
+import LaborLineModal from '@/components/hd/LaborLineModal'
+import { laborCategories } from '@/lib/hd/labor-line-build'
 
 // Direct-invoice fast path: skip the quote/approval step and bill a trusted
 // customer directly. Mirrors the quote form but posts straight to /api/hd/invoices.
@@ -61,6 +63,8 @@ interface LineItem {
   unit_cost_base?: number
   markup_percent?: number
   amount: number
+  /** The labor card this line came from (hd_repair_items.id), when it was picked from one. */
+  repair_item_id?: string
 }
 
 interface CustomerHit {
@@ -113,7 +117,6 @@ export default function NewInvoicePage() {
   const [laborModal, setLaborModal] = useState(false)
   const [partsModal, setPartsModal] = useState(false)
 
-  const [labor, setLabor] = useState({ description: '', hours: '1.0' })
   const [parts, setParts] = useState({ part_number: '', description: '', quantity: '1', unit_cost: '0.00', markup: String(DEFAULT_HD_PARTS_MARKUP) })
   const [partsMarkupDefault, setPartsMarkupDefault] = useState(DEFAULT_HD_PARTS_MARKUP)
 
@@ -407,19 +410,6 @@ export default function NewInvoicePage() {
     rateTyped.current = true
     setField('labor_rate', rate)
     setLineItems(l => l.map(i => (i.type === 'labor' ? pricedLabor(i, rate) : i)))
-  }
-
-  function addLabor() {
-    const description = labor.description.trim()
-    if (!description) { setToast('Enter a labor description.'); return }
-    const hours = Math.max(0, parseFloat(labor.hours) || 0)
-    setLineItems(l => [...l, {
-      id: crypto.randomUUID(), type: 'labor', description,
-      mobile_hours: hours, part_number: '', quantity: 0, unit_cost: 0,
-      amount: parseFloat((hours * form.labor_rate).toFixed(2)),
-    }])
-    setLabor({ description: '', hours: '1.0' })
-    setLaborModal(false)
   }
 
   function addParts() {
@@ -962,27 +952,23 @@ export default function NewInvoicePage() {
         </div>
       </div>
 
-      {/* Labor modal */}
-      {laborModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.4)' }}>
-          <div style={{ background: CARD, borderRadius: 12, padding: 24, width: '100%', maxWidth: 460 }}>
-            <h3 className="font-condensed font-bold text-xl mb-4" style={{ color: TEXT }}>ADD LABOR LINE</h3>
-            <div className="flex flex-col gap-4">
-              <Field label="Description">
-                <input style={inp} autoFocus value={labor.description} onChange={e => setLabor(d => ({ ...d, description: e.target.value }))} placeholder="e.g. R&R Fuel Filter Primary" />
-              </Field>
-              <Field label="Hours">
-                <input style={inp} type="number" min={0} step={0.25} value={labor.hours} onChange={e => setLabor(d => ({ ...d, hours: e.target.value }))} />
-              </Field>
-              <p className="text-sm" style={{ color: MUTED }}>Amount: <strong style={{ color: TEXT }}>{fmt((parseFloat(labor.hours) || 0) * form.labor_rate)}</strong></p>
-              <div className="flex gap-3">
-                <button onClick={() => setLaborModal(false)} className="flex-1 py-2.5 rounded-lg font-semibold text-sm" style={{ background: '#F3F4F6', color: '#374151' }}>Cancel</button>
-                <button onClick={addLabor} className="flex-1 py-2.5 rounded-lg font-semibold text-sm text-on-accent" style={{ background: ORANGE }}>Add Line</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* ADD LABOR LINE: the quote's modal (components/hd/LaborLineModal). One number,
+          no range - an invoice bills what the job took. A line picked from a labor card
+          carries the card's id. */}
+      <LaborLineModal
+        open={laborModal}
+        onClose={() => setLaborModal(false)}
+        onToast={setToast}
+        laborRate={form.labor_rate}
+        categories={laborCategories(form.unit_manufacturer, form.truck_make, form.truck_model)}
+        allowRange={false}
+        docName="invoice"
+        onAdd={picks => setLineItems(l => [...l, ...picks.map(p => ({
+          id: crypto.randomUUID(), type: 'labor' as const, description: p.description,
+          mobile_hours: p.mobile_hours, part_number: '', quantity: 0, unit_cost: 0, amount: p.amount,
+          ...(p.repair_item_id ? { repair_item_id: p.repair_item_id } : {}),
+        }))])}
+      />
 
       {/* Parts modal */}
       {partsModal && (
