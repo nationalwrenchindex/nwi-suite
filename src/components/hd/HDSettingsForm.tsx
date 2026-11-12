@@ -16,12 +16,18 @@ interface Props {
   initialRoadCallFee?:   string | null
   /** False when migration 156 has not been applied, so the fees cannot be saved. */
   feesAvailable?: boolean
+  /** profiles.hd_tech_cert_note (migration 185). null = never set. */
+  initialTechCertNote?: string | null
+  /** False when migration 185 has not been applied, so the note cannot be saved. */
+  techCertAvailable?: boolean
 }
 
 export default function HDSettingsForm({
   initialLaborRate, initialTechName, initialEpaCert, initialLogoUrl,
   initialDiagnosticFee = null, initialRoadCallFee = null, feesAvailable = true,
+  initialTechCertNote = null, techCertAvailable = false,
 }: Props) {
+  const [techCertNote, setTechCertNote] = useState(initialTechCertNote ?? '')
   const [laborRate, setLaborRate] = useState(initialLaborRate ?? '')
   // BLANK IS A REAL STATE and means "I never said", which leaves the forms on their
   // own fallbacks - 125 for the diagnostic, 0 for the road call. It is NOT the same as
@@ -89,7 +95,8 @@ export default function HDSettingsForm({
         body:    JSON.stringify({
           hd_labor_rate:        laborRate ? Number(laborRate) : null,
           hd_tech_name:         techName  || null,
-          hd_epa_cert_number:   epaCert   || null,
+          hd_epa_cert_number:   epaCert.trim() || null,
+          ...(techCertAvailable ? { hd_tech_cert_note: techCertNote.trim() || null } : {}),
           // trim() rather than a truthiness check: '0' is truthy but '' is not, and
           // `fee ? Number(fee) : null` would turn a typed 0 into "never set" and put
           // the $125 fallback back on a shop that charges nothing to diagnose.
@@ -208,9 +215,31 @@ export default function HDSettingsForm({
           style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
         />
         <p className="text-xs mt-1" style={{ color: 'var(--hd-text-faint)' }}>
-          Auto-populates EPA 608 log entries
+          Optional. Auto-populates EPA 608 log entries, and prints on refrigeration
+          invoices as &quot;EPA Section 608 certification: (your number)&quot;. Blank prints nothing.
         </p>
       </div>
+
+      {techCertAvailable && (
+        <div>
+          <label className="block text-xs uppercase tracking-widest mb-1.5" style={{ color: 'var(--hd-text-faint)' }}>
+            Technician Certification Note
+          </label>
+          <input
+            type="text"
+            value={techCertNote}
+            onChange={e => setTechCertNote(e.target.value)}
+            maxLength={300}
+            placeholder="Optional"
+            data-testid="hd-tech-cert-note"
+            className="w-full px-3 py-2.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20"
+            style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}
+          />
+          <p className="text-xs mt-1" style={{ color: 'var(--hd-text-faint)' }}>
+            Optional. Printed on your invoices exactly as you type it. Blank prints nothing.
+          </p>
+        </div>
+      )}
 
       {/* Company logo — a real upload, not a URL field.
           Asking a mobile mechanic to host an image somewhere and paste a link is

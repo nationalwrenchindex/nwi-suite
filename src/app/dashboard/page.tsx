@@ -137,14 +137,19 @@ function KpiCard({
   const borders = { orange: 'border-orange/30', blue: 'border-blue/30', success: 'border-success/30', danger: 'border-danger/30', muted: 'border-white/10' }
   const texts   = { orange: 'text-orange', blue: 'text-blue-light', success: 'text-success', danger: 'text-danger', muted: 'text-white/60' }
   return (
-    <div className={`nwi-card kpi-card border ${borders[accent]} flex items-start gap-4`}>
+    // PHONE WIDTH (Nov 11). Two cards across a 360px phone leave each ~156px, and
+    // .nwi-card's 24px padding plus the 40px icon and its 16px gap left ~52px for
+    // "$2,403.80" and "OUTSTANDING" - both ran past the card edge. Below sm the icon
+    // sits ABOVE the figure, the padding is 16px, and the figure steps down one size,
+    // so the card grows taller instead of clipping. The labels are never shortened.
+    <div className={`nwi-card kpi-card border ${borders[accent]} p-4 sm:p-6 flex flex-col sm:flex-row items-start gap-3 sm:gap-4 min-w-0`}>
       <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 bg-current/10`}
         style={{ background: 'rgba(255,255,255,0.04)' }}>
         <span className={texts[accent]}>{icon}</span>
       </div>
-      <div className="min-w-0">
-        <p className={`font-condensed font-bold text-3xl leading-none ${texts[accent]}`}>{value}</p>
-        <p className="text-white/40 text-xs uppercase tracking-widest mt-1">{label}</p>
+      <div className="min-w-0 max-w-full">
+        <p className={`font-condensed font-bold text-2xl sm:text-3xl leading-none break-words ${texts[accent]}`}>{value}</p>
+        <p className="text-white/40 text-xs uppercase tracking-wider sm:tracking-widest mt-1 break-words">{label}</p>
         {sub && <p className="text-white/25 text-xs mt-0.5">{sub}</p>}
       </div>
     </div>
@@ -414,8 +419,11 @@ export default async function DashboardPage({
           <div className="absolute -right-10 -top-10 w-44 h-44 rounded-full bg-white/5 pointer-events-none" />
           <div className="absolute right-8 bottom-0 w-20 h-20 rounded-full bg-orange/20 pointer-events-none" />
           <div className="relative z-10 flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <p className="text-white/50 text-xs uppercase tracking-widest mb-1">
+            {/* min-w-0 + wrapping: "TECHNICIAN · WEDNESDAY, NOVEMBER 11" at
+                tracking-widest is ~295px against ~280px inside the banner on a phone,
+                and the banner's overflow-hidden clipped it. Now it wraps. */}
+            <div className="min-w-0 max-w-full">
+              <p className="text-white/50 text-xs uppercase tracking-wider sm:tracking-widest mb-1 leading-snug break-words">
                 {roleLabel} · {dayLabel}
               </p>
               <h1 className="font-condensed font-bold text-3xl sm:text-4xl text-white tracking-wide mb-0.5">

@@ -27,6 +27,9 @@ import { invoiceBodyFromQuote } from '../src/lib/hd/quote-to-invoice'
 import { billedHoursFromLibrary, billedHighFromLibrary, cardBilledPrefill } from '../src/lib/hd/labor-library'
 import { formatUnitHours } from '../src/lib/hd/unit-hours'
 import { customerHandoff, EMPTY_QW_CUSTOMER } from '../src/lib/hd/qw-handoff'
+import { buildInvoiceEmail, buildQuoteEmail, buildInvoiceSms } from '../src/lib/hd/sms-templates'
+import { complianceLines } from '../src/lib/hd/compliance-footer'
+import { documentDisclaimers } from '../src/lib/invoice-document'
 import { editableLines } from '../src/lib/hd/invoice-edit-lines'
 import { stripLeadingZeros, parseFee } from '../src/components/hd/FeeInput'
 import { fmtShopDate, shopTimeZone } from '../src/lib/shop-time'
@@ -556,6 +559,87 @@ async function flowLp(): Promise<void> {
     bad.length ? bad.slice(0, 4).join('; ') : `${n.range} range, ${n.single} single, ${n.shop} shop-only`)
   record(F, 'the route carries the field range high end (else a range could never reach the form)',
     items.every(i => 'mobile_hours_high' in i), '')
+}
+
+// ── Cf: no compliance claim by default, the whole business name in email (Nov 11) ──
+//
+// The HD invoice footer claimed "EPA Section 608 certified refrigeration work - All work
+// performed by certified technicians" for every subscriber, and the PDF and pay page
+// claimed "performed by an EPA Section 608 certified technician" when no number was
+// set. Now a line prints only from what the shop typed (lib/hd/compliance-footer).
+// Separately, the invoice and quote EMAILS cut the business name at the SMS budget's
+// 40 characters: "Refrigerated Transportation Service and".
+async function flowCf(): Promise<void> {
+  const F = 'Cf compliance + email name'
+  const prof = (await rest<Record<string, unknown>>(`profiles?id=eq.${OWNER}&select=business_name,phone,hd_epa_cert_number`))[0] ?? {}
+  const biz = String(prof.business_name ?? '').trim()
+
+  // 1. The email keeps the whole name - on the owner's real name, which is over 40.
+  if (record(F, "the owner's real business name is longer than the SMS cap (the case that broke)", biz.length > 40, `${biz.length} chars: ${biz}`)) {
+    const ie = buildInvoiceEmail({ businessName: biz, businessPhone: String(prof.phone ?? ''), invoiceNumber: 'INV-2026-0029', total: 486.81, url: 'https://x/pay/t' })
+    record(F, 'the invoice email prints the whole name in the subject, the body and the footer',
+      ie.subject.includes(`from ${biz} `) && ie.text.includes(`Your invoice from ${biz} is ready.`) && ie.text.includes(`Call ${biz} at`),
+      ie.subject)
+    const qe = buildQuoteEmail({ businessName: biz, businessPhone: String(prof.phone ?? ''), quoteNumber: 'Q-2026-0001', total: 100, url: 'https://x/q/t' })
+    record(F, 'the quote email prints the whole name in the subject, the body and the footer',
+      qe.subject.includes(`from ${biz} `) && qe.text.includes(`Your quote from ${biz} is ready`) && qe.text.includes(`Call ${biz} at`),
+      qe.subject)
+    const sms = buildInvoiceSms({ businessName: biz, businessPhone: String(prof.phone ?? ''), invoiceNumber: 'INV-2026-0029', total: 486.81, url: 'https://x/pay/t' })
+    record(F, 'the SMS still trims a long name to its segment budget', !sms.includes(biz) && sms.length <= 320, `${sms.length} chars`)
+    const smsName = sms.split(': Invoice ')[0]
+    record(F, 'the trimmed SMS name never ends on a joining word (and, of, &, the)',
+      smsName.length > 0 && biz.startsWith(smsName) && !/\s(and|of|&|the|for|in|at|on|to|or|by|with)$/i.test(smsName), smsName)
+    record(F, 'invoice email and SMS say "View invoice", never "View and pay" (the pay page takes no payment)',
+      ie.text.includes('View invoice: ') && sms.includes('View invoice: ') && !/view and pay/i.test(`${ie.subject}\n${ie.text}\n${sms}`),
+      ie.text.includes('View invoice: ') ? 'View invoice' : 'still View and pay')
+  }
+
+  // 2. The documents: a real refrigeration invoice of the owner's, with a pay link.
+  const invs = await rest<Record<string, unknown>>(`hd_invoices?user_id=eq.${OWNER}&public_token=not.is.null&select=*&order=created_at.desc&limit=20`)
+  const inv = invs.find(i => documentDisclaimers(i).epa608)
+  if (!record(F, 'the owner has a refrigeration invoice with a pay link to check', !!inv, `${invs.length} tokened invoice(s)`)) return
+  // The note column (migration 185) - probed, so the check follows the database.
+  const probe = await fetch(`${SUPA}/rest/v1/profiles?id=eq.${OWNER}&select=hd_tech_cert_note`, { headers: SVC_H })
+  const noteAvailable = probe.ok
+  const note = noteAvailable ? String(((await probe.json()) as Array<Record<string, unknown>>)[0]?.hd_tech_cert_note ?? '').trim() : ''
+  const want = complianceLines({ refrigerationWork: true, epaCertNumber: prof.hd_epa_cert_number as string | null, techCertNote: note })
+  const claims = (t: string) => /certified technician|certified refrigeration work|by certified/i.test(t)
+  const hasWanted = (t: string) => want.every(l => t.includes(l))
+
+  const screen = await page(`/hd/invoices/${String(inv!.id)}`)
+  record(F, 'the invoice screen keeps "National Wrench Index HD Suite" and claims nothing the shop did not enter',
+    !!screen && screen.text.includes('National Wrench Index HD Suite') && !claims(screen.text) && hasWanted(screen.text) &&
+    (want.length > 0 || !screen.html.includes('data-testid="hd-compliance-line"')),
+    !screen ? 'did not load' : claims(screen.text) ? 'still claims certification' : `${want.length} entered line(s)`)
+  const pdf = await page(`/api/hd/invoices/${String(inv!.id)}/pdf`)
+  record(F, 'the invoice PDF claims nothing the shop did not enter', !!pdf && !claims(pdf.text) && hasWanted(pdf.text),
+    !pdf ? 'did not load' : claims(pdf.text) ? 'still claims certification' : `${want.length} entered line(s)`)
+  const pay = await page(`/hd/invoices/pay/${String(inv!.public_token)}`)
+  record(F, "the customer's pay page claims nothing the shop did not enter",
+    !!pay && pay.text.includes(String(inv!.invoice_number)) && !claims(pay.text) && hasWanted(pay.text),
+    !pay ? 'did not load' : claims(pay.text) ? 'still claims certification' : `${want.length} entered line(s)`)
+
+  // 3. The settings field follows migration 185: offered only where it can be saved.
+  const settings = await page('/hd/settings')
+  const field = !!settings && settings.html.includes('data-testid="hd-tech-cert-note"')
+  record(F, `HD Settings ${noteAvailable ? 'offers' : 'does not offer'} the technician certification note (185 ${noteAvailable ? 'applied' : 'not applied'})`,
+    !!settings && field === noteAvailable, settings ? (field ? 'field shown' : 'field absent') : 'did not load')
+  if (!noteAvailable) {
+    const refused = await api('POST', '/api/hd/settings', { hd_tech_cert_note: `${MARK} note` })
+    record(F, 'saving the note before 185 is refused out loud, not dropped', refused.status === 503 && /185/.test(String(refused.json.error ?? '')),
+      `-> ${refused.status} ${String(refused.json.error ?? '')}`)
+    return
+  }
+  try {
+    const saved = await api('POST', '/api/hd/settings', { hd_tech_cert_note: `${MARK} all techs EPA 608 Universal` })
+    const pay2 = await page(`/hd/invoices/pay/${String(inv!.public_token)}`)
+    record(F, 'a typed note prints on the pay page exactly as typed', saved.status === 200 && !!pay2 && pay2.text.includes(`${MARK} all techs EPA 608 Universal`),
+      `-> ${saved.status}`)
+  } finally {
+    await api('POST', '/api/hd/settings', { hd_tech_cert_note: note || null })
+    const back = (await rest<Record<string, unknown>>(`profiles?id=eq.${OWNER}&select=hd_tech_cert_note`))[0] ?? {}
+    record(F, 'the note is put back as it was', String(back.hd_tech_cert_note ?? '') === note, String(back.hd_tech_cert_note ?? '(blank)'))
+  }
 }
 
 // ── Qc: HD QuickWrench carries the customer and unit (Nov 9) ─────────────────
@@ -4945,6 +5029,9 @@ async function flowReefer(): Promise<void> {
       mileage_miles: pick('mileage_miles'), mileage_rate: pick('mileage_rate'), mileage_amount: pick('mileage_amount'),
       shop_supplies_percent_applied: pick('shop_supplies_percent_applied'), shop_supplies_cap_applied: pick('shop_supplies_cap_applied'),
       shop_supplies_fee: pick('shop_supplies_fee'),
+      // The service call fee (178) is part of the money shape: without it a real quote
+      // that bills one copies its total but not the fee inside it (Nov 11, Q-2026-0016).
+      ...('service_call_fee' in real! ? { service_call_fee: pick('service_call_fee'), service_call_tax: pick('service_call_tax') } : {}),
       tax_rate: pick('tax_rate'), tax_amount: pick('tax_amount'), tax_breakdown: pick('tax_breakdown'), total: pick('total'),
     }
     const q = await api('POST', '/api/hd/quotes', body)
@@ -4954,7 +5041,7 @@ async function flowReefer(): Promise<void> {
     if (quoteId) created.hdQuotes.add(quoteId)
     if (!record(F, 'the reefer account saves a quote', q.status === 201 && !!quoteId, `-> ${q.status} ${String(q.json.error ?? '')}`)) return
     const qRow = (await rest<Record<string, unknown>>(`hd_quotes?id=eq.${quoteId}&select=*`))[0] ?? {}
-    const moneyKeys = ['subtotal_labor', 'subtotal_parts', 'diagnostic_fee', 'road_call_fee', 'travel_amount', 'mileage_amount', 'shop_supplies_fee', 'tax_amount', 'total']
+    const moneyKeys = ['subtotal_labor', 'subtotal_parts', 'diagnostic_fee', 'road_call_fee', 'travel_amount', 'mileage_amount', 'shop_supplies_fee', 'service_call_fee', 'tax_amount', 'total']
     const qDiff = moneyKeys.filter(k => usd(qRow[k]) !== usd(real![k]))
     record(F, 'read back: the quote is the reefer account\'s, every money field to the cent',
       qRow.user_id === uid && qDiff.length === 0 && JSON.stringify(parseBreakdown(qRow.tax_breakdown)) === JSON.stringify(parseBreakdown(real!.tax_breakdown)),
@@ -5172,6 +5259,7 @@ async function main(): Promise<void> {
     await flowUr()
     await flowLp()
     await flowQc()
+    await flowCf()
     await flowOd()
     await flowHw()
     await flowIe()

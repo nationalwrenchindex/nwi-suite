@@ -9,7 +9,8 @@ import { findInvoicePMChecklists } from '@/lib/hd/pm-report-attachment'
 import { resolveLateFeeSettings, assessLateFee, lateFeeBlockMessage } from '@/lib/hd/late-fee'
 import type { AerialInspectionType } from '@/types/aerial'
 import { money } from '@/lib/format'
-import { feeRows } from '@/lib/invoice-document'
+import { feeRows, documentDisclaimers } from '@/lib/invoice-document'
+import { complianceLines, readTechCertNote, HD_SUITE_FOOTER } from '@/lib/hd/compliance-footer'
 import { formatOdometer, formatUnitHours } from '@/lib/hd/unit-hours'
 import { sourceQuoteNumber } from '@/lib/hd/invoice-source'
 import { shopTimeZone, fmtShopDate } from '@/lib/shop-time'
@@ -70,12 +71,18 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
     supabase.from('hd_invoices').select('*').eq('id', id).eq('user_id', user.id).single(),
     // state, for the shop's time zone: the server renders in UTC, so an invoice made at
     // 11 pm Eastern printed the next day's date. See src/lib/shop-time.ts.
-    supabase.from('profiles').select('business_name, phone, state').eq('id', user.id).single(),
+    supabase.from('profiles').select('business_name, phone, state, hd_epa_cert_number').eq('id', user.id).single(),
     supabase.from('hd_dot_inspections').select('id, inspection_id, overall_result').eq('invoice_id', id).eq('user_id', user.id).maybeSingle(),
     supabase.from('hd_aerial_inspections').select('id, inspection_type, overall_result, removed_from_service').eq('invoice_id', id).eq('user_id', user.id).maybeSingle(),
   ])
 
   if (!inv) notFound()
+  const { note: techCertNote } = await readTechCertNote(supabase, user.id)
+  const compliance = complianceLines({
+    refrigerationWork: documentDisclaimers(inv as Record<string, unknown>).epa608,
+    epaCertNumber:     (profile as { hd_epa_cert_number?: string | null } | null)?.hd_epa_cert_number,
+    techCertNote,
+  })
   // The quote a directly-billed invoice came from, so it cites what was approved.
   const quoteNumber = await sourceQuoteNumber(supabase, inv as Record<string, unknown>)
 
@@ -536,10 +543,15 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
               </div>
             )}
 
-            {/* Footer */}
-            <p className="text-center text-xs" style={{ color: 'var(--paper-muted)' }}>
-              National Wrench Index HD Suite &bull; EPA Section 608 certified refrigeration work &bull; All work performed by certified technicians
+            {/* Footer. The neutral attribution, then ONLY the certification lines the
+                shop typed in HD Settings (lib/hd/compliance-footer). It used to claim
+                EPA 608 certified work and certified technicians for every subscriber. */}
+            <p className="text-center text-xs" style={{ color: 'var(--paper-muted)' }} data-testid="hd-invoice-footer">
+              {HD_SUITE_FOOTER}
             </p>
+            {compliance.map((l, i) => (
+              <p key={i} className="text-center text-xs mt-1" style={{ color: 'var(--paper-muted)' }} data-testid="hd-compliance-line">{l}</p>
+            ))}
           </div>
         </div>
       </div>

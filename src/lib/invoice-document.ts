@@ -502,13 +502,10 @@ export function documentDisclaimers(inv: Record<string, unknown>): DocDisclaimer
   return { manufacturers, epa608 }
 }
 
-/** The certification sentence, with the real cert number when the shop set one. */
-export function epa608Line(certNumber: string | null | undefined): string {
-  const n = certNumber?.trim()
-  return n
-    ? `Refrigeration work performed under EPA Section 608 certification ${n}.`
-    : 'Refrigeration work performed by an EPA Section 608 certified technician.'
-}
+// The certification line itself lives in lib/hd/compliance-footer (complianceLines):
+// it prints only what the subscriber typed, and nothing when that is blank. The old
+// epa608Line printed "performed by an EPA Section 608 certified technician" whenever
+// no number was set - a claim about the subscriber nobody had made (Nov 11).
 
 // ─── Attached inspections ─────────────────────────────────────────────────────
 

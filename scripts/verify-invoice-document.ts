@@ -20,12 +20,12 @@ import {
   lineMeta,
   serviceUnitLines,
   documentDisclaimers,
-  epa608Line,
   inspectionOutcome,
   feeRows,
   SHOP_BLOCK_SELECT,
 } from '../src/lib/invoice-document'
 import { parseBreakdown, taxDisplayRows } from '../src/lib/tax'
+import { complianceLines } from '../src/lib/hd/compliance-footer'
 
 for (const line of fs.readFileSync('.env.local', 'utf8').split('\n')) {
   const m = line.match(/^\s*([A-Z0-9_]+)\s*=\s*(.*)$/)
@@ -248,8 +248,13 @@ async function main() {
   } else {
     ok(false, 'expected a Thermo King invoice in production')
   }
-  console.log(`\n  cert line with a number set    : ${epa608Line('ABC-12345')}`)
-  console.log(`  cert line with none set        : ${epa608Line(null)}`)
+  // Nov 11: nothing is claimed unless the shop typed it (lib/hd/compliance-footer).
+  const withNum = complianceLines({ refrigerationWork: true, epaCertNumber: 'ABC-12345', techCertNote: null })
+  const noneSet = complianceLines({ refrigerationWork: true, epaCertNumber: null, techCertNote: '  ' })
+  const notRef  = complianceLines({ refrigerationWork: false, epaCertNumber: 'ABC-12345', techCertNote: 'All techs EPA 608 Universal' })
+  ok(withNum.length === 1 && withNum[0] === 'EPA Section 608 certification: ABC-12345', `cert line with a number set: ${withNum.join(' | ')}`)
+  ok(noneSet.length === 0, `with no number and no note, NO certification line prints (${noneSet.length})`)
+  ok(notRef.length === 1 && notRef[0] === 'All techs EPA 608 Universal', 'a non-refrigeration invoice prints the note as typed and no EPA number')
   const epaProfiles = profiles.filter(p => (p as { hd_epa_cert_number?: string }).hd_epa_cert_number)
   console.log(`  profiles with hd_epa_cert_number set: ${epaProfiles.length} of ${profiles.length}`)
 

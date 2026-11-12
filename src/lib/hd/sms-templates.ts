@@ -66,9 +66,36 @@ export function normalizeBusinessName(name: string | null | undefined): string {
 
   // Cut on a word boundary. A mid-word chop ("Smith & Sons Heavy Equipment Serv")
   // looks like a corrupted message; dropping the trailing word does not.
+  // A cut name never ends on a joining word (Nov 11): "Refrigerated Transportation
+  // Service and" reads as a broken message. Trailing "and", "of", "&", "the" (and
+  // the like) come off until the name ends on a real word.
   const cut  = clean.slice(0, MAX_BUSINESS_NAME)
   const gap  = cut.lastIndexOf(' ')
-  return (gap > MAX_BUSINESS_NAME / 2 ? cut.slice(0, gap) : cut).trimEnd()
+  let out = (gap > MAX_BUSINESS_NAME / 2 ? cut.slice(0, gap) : cut).trimEnd()
+  const words = out.split(' ')
+  while (words.length > 1 && isDangling(words[words.length - 1])) words.pop()
+  out = words.join(' ').replace(/[,;:&+-]+$/, '').trimEnd()
+  return out || cut.trimEnd()
+}
+
+function isDangling(word: string): boolean {
+  const w = word.toLowerCase().replace(/[,.;:]+$/, '')
+  return w === '' || DANGLING.has(w) || /^[^a-z0-9]+$/.test(w)
+}
+
+/** Words a trimmed SMS name must never end on. */
+const DANGLING = new Set(['and', '&', '+', 'of', 'the', 'a', 'an', 'for', 'in', 'at', 'on', 'to', 'or', 'by', 'with', '-'])
+
+/**
+ * The business name for an EMAIL: the whole name, never cut. The 40-character cap in
+ * normalizeBusinessName exists for the SMS segment budget only - an email has no such
+ * budget, and reusing it printed "Refrigerated Transportation Service and" in the
+ * subject, body and footer (Nov 11). Whitespace (a newline would break a subject
+ * header) is collapsed; the characters are left as typed.
+ */
+export function emailBusinessName(name: string | null | undefined): string {
+  const clean = String(name ?? '').replace(/\s+/g, ' ').trim()
+  return clean || 'Your service provider'
 }
 
 export interface InvoiceSmsInput {
@@ -88,7 +115,7 @@ export interface InvoiceSmsInput {
  * order until it fits TWO_SEGMENTS, so the two things that must never be lost
  * — the amount and the pay link — survive every trim.
  *
- * Budget, worst case: business name 40 + " is ready. View and pay: " etc. 40 +
+ * Budget, worst case: business name 40 + " is ready. View invoice: " etc. 40 +
  * invoice number ~12 + total ~10 + URL ~120 (the token is 64 hex chars) = ~222.
  * With the report note (36) and callback (32) and STOP line (23) a fully loaded
  * message lands near 313 — over the 306 two-segment line, which is exactly why
@@ -104,7 +131,7 @@ export function buildInvoiceSms(input: InvoiceSmsInput): string {
   const url   = input.url.trim()
   const phone = formatBusinessPhone(input.businessPhone)
 
-  const lead    = `${biz}: Invoice ${num} for ${total} is ready. View and pay: ${url}`
+  const lead    = `${biz}: Invoice ${num} for ${total} is ready. View invoice: ${url}`
   const reports = input.hasReports ? ' Your inspection report is included.' : ''
   const callMe  = phone ? ` Questions? Call ${phone}.` : ''
   const optOut  = ' Reply STOP to opt out.'
@@ -127,7 +154,7 @@ export function buildInvoiceSms(input: InvoiceSmsInput): string {
  * rule has exactly one home. Same white-label constraint as the SMS.
  */
 export function buildInvoiceEmail(input: InvoiceSmsInput): { subject: string; text: string } {
-  const biz   = normalizeBusinessName(input.businessName)
+  const biz   = emailBusinessName(input.businessName)
   const total = formatInvoiceTotal(input.total)
   const phone = formatBusinessPhone(input.businessPhone)
 
@@ -139,7 +166,9 @@ export function buildInvoiceEmail(input: InvoiceSmsInput): { subject: string; te
       `Invoice: ${input.invoiceNumber}`,
       `Total due: ${total}`,
       '',
-      `View and pay: ${input.url}`,
+      // "View invoice", not "View and pay": the HD pay page cannot take a payment
+      // yet (Nov 11). Change it back only when online payment exists.
+      `View invoice: ${input.url}`,
       ...(input.hasReports ? ['', 'Your inspection report is attached to the invoice.'] : []),
       '',
       phone ? `Questions? Call ${biz} at ${phone}.` : `Questions? Contact ${biz}.`,
@@ -193,7 +222,7 @@ export function buildQuoteSms(input: QuoteSmsInput): string {
 
 /** Subject + plain-text body for a quote sent by email. Same white-label rule. */
 export function buildQuoteEmail(input: QuoteSmsInput): { subject: string; text: string } {
-  const biz   = normalizeBusinessName(input.businessName)
+  const biz   = emailBusinessName(input.businessName)
   const total = formatInvoiceTotal(input.total)
   const phone = formatBusinessPhone(input.businessPhone)
 

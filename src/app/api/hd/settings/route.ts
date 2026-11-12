@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { HD_EXTRAS_SELECT, LD_EXTRAS_SELECT } from '@/lib/hd/hd-extras'
+import { TECH_CERT_NOTE_MAX } from '@/lib/hd/compliance-footer'
 
 // GET /api/hd/settings — the tech's HD profile settings. Client surfaces that are
 // not server-rendered (QuickWrench) need the configured labor rate so the quotes,
@@ -86,6 +87,22 @@ export async function POST(req: NextRequest) {
   if ('hd_epa_cert_number'   in body) updates.hd_epa_cert_number   = body.hd_epa_cert_number
   if ('hd_company_logo_url'  in body) updates.hd_company_logo_url  = body.hd_company_logo_url
 
+  // The technician certification note (migration 185): free text the shop prints on
+  // its own invoices, blank by default. Written on its own below, so a database
+  // without 185 refuses only this field - loudly - and never the labor rate.
+  let techCertNote: string | null | undefined
+  if ('hd_tech_cert_note' in body) {
+    const raw = body.hd_tech_cert_note
+    if (raw != null && typeof raw !== 'string') {
+      return NextResponse.json({ error: 'hd_tech_cert_note must be text' }, { status: 400 })
+    }
+    const clean = (raw ?? '').replace(/\s+/g, ' ').trim()
+    if (clean.length > TECH_CERT_NOTE_MAX) {
+      return NextResponse.json({ error: `The technician certification note is limited to ${TECH_CERT_NOTE_MAX} characters.` }, { status: 400 })
+    }
+    techCertNote = clean || null
+  }
+
   // The two fees (migration 156).
   //
   // NULL SURVIVES. Clearing the field means "I never said", and the forms fall back to
@@ -157,6 +174,18 @@ export async function POST(req: NextRequest) {
         }, { status: 503 })
       }
       return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+  }
+
+  if (techCertNote !== undefined) {
+    const { error } = await supabase.from('profiles').update({ hd_tech_cert_note: techCertNote }).eq('id', user.id)
+    if (error) {
+      const missing = /hd_tech_cert_note/.test(error.message ?? '')
+      return NextResponse.json({
+        error: missing
+          ? 'The technician certification note is not available on this database yet (migration 185). Your other settings were saved.'
+          : error.message,
+      }, { status: missing ? 503 : 500 })
     }
   }
 

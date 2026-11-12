@@ -6,6 +6,7 @@
 // rules live in src/lib/invoice-document.ts so the two cannot drift again.
 
 import { NextResponse, type NextRequest } from 'next/server'
+import { complianceLines, readTechCertNote } from '@/lib/hd/compliance-footer'
 import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
 import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
@@ -22,7 +23,6 @@ import {
   shopBlockFrom,
   serviceUnitLines,
   documentDisclaimers,
-  epa608Line,
   inspectionOutcome,
   feeRows,
 } from '@/lib/invoice-document'
@@ -219,6 +219,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   const unitLines = serviceUnitLines(inv as Record<string, unknown>)
   const disclaimers = documentDisclaimers(inv as Record<string, unknown>)
   const epaCert = (profile as { hd_epa_cert_number?: string | null } | null)?.hd_epa_cert_number ?? null
+  // The shop's own technician certification note (migration 185), read on its own.
+  const { note: techCertNote } = await readTechCertNote(supabase, user.id)
 
   const shopLogo = shop.logoUrl
     ? `<img src="${esc(shop.logoUrl)}" alt="${esc(shop.name)}" class="brand-logo">`
@@ -258,7 +260,8 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   // certification asserted on an aerial inspection is a false statement on a
   // document the customer keeps.
   const footerLines = [
-    ...(disclaimers.epa608 ? [epa608Line(epaCert)] : []),
+    // Only what the subscriber typed in HD Settings - nothing by default.
+    ...complianceLines({ refrigerationWork: disclaimers.epa608, epaCertNumber: epaCert, techCertNote }),
     ...disclaimers.manufacturers,
   ]
   const footerHtml = footerLines.length > 0

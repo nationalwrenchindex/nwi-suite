@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { readTechCertNote } from '@/lib/hd/compliance-footer'
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { resolveBranding } from '@/lib/branding'
@@ -45,6 +46,8 @@ export default async function HDSettingsPage() {
       .eq('id', user.id)
       .maybeSingle(),
   ])
+  // The technician certification note (migration 185), its own query.
+  const techCert = await readTechCertNote(supabase, user.id)
   const docTerms = termsResult.error ? null : (termsResult.data as HDDocumentTerms | null)
 
   let profile = profileResult.data as Record<string, unknown> | null
@@ -136,6 +139,8 @@ export default async function HDSettingsPage() {
             initialLaborRate={p?.hd_labor_rate?.toString() ?? null}
             initialTechName={p?.hd_tech_name ?? null}
             initialEpaCert={p?.hd_epa_cert_number ?? null}
+            initialTechCertNote={techCert.note}
+            techCertAvailable={techCert.available}
             initialLogoUrl={resolveBranding(p).logoUrl}
             initialDiagnosticFee={feeString(p?.hd_diagnostic_fee)}
             initialRoadCallFee={feeString(p?.hd_road_call_fee)}

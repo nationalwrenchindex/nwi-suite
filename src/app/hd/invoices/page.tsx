@@ -98,27 +98,30 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
     <div style={{ background: '#F4F5F7', minHeight: '100dvh', padding: '24px 20px' }}>
       <div style={{ maxWidth: 1100, margin: '0 auto' }}>
 
-        {/* Header */}
-        <div className="flex items-center justify-between gap-4 mb-6">
-          <div>
+        {/* Header. PHONE WIDTH (Nov 11): the two buttons could not shrink, so they
+            pushed "+ New Invoice" off the right edge and squeezed the count line into
+            three. They now wrap onto their own row below the title on a phone, and each
+            part of the count line stays whole. */}
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+          <div className="min-w-0">
             <h1 className="font-condensed text-3xl font-bold" style={{ color: '#1A1A1A', letterSpacing: '0.5px' }}>
               INVOICES
             </h1>
             <p style={{ color: 'var(--paper-muted)', fontSize: 14, marginTop: 2 }}>
               {listFilter === 'overdue' && <span className="font-semibold" style={{ color: '#b91c1c' }}>Overdue · </span>}
-              {total.toLocaleString()} invoice{total !== 1 ? 's' : ''}
+              <span className="whitespace-nowrap">{total.toLocaleString()} invoice{total !== 1 ? 's' : ''}</span>
               {listFilter === 'overdue' && <Link href="/hd/invoices" className="ml-2 underline" style={{ color: 'var(--paper-muted)' }}>show all</Link>}
               {totalUnpaid > 0 && (
-                <span className="ml-3 font-semibold" style={{ color: '#b91c1c' }}>
+                <span className="ml-3 font-semibold whitespace-nowrap" style={{ color: '#b91c1c' }}>
                   {fmt(totalUnpaid)} outstanding
                 </span>
               )}
             </p>
           </div>
-          <div className="flex items-center gap-3 flex-shrink-0">
+          <div className="flex items-center gap-3 w-full sm:w-auto">
             <Link
               href="/hd/quotes/new"
-              className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold text-sm"
+              className="flex flex-1 sm:flex-none items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-lg font-semibold text-sm whitespace-nowrap"
               style={{ background: '#FFFFFF', color: 'var(--paper-accent)', border: `1px solid ${ORANGE}`, minHeight: 44 }}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
@@ -128,7 +131,7 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
             </Link>
             <Link
               href="/hd/invoices/new"
-              className="flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold text-sm text-on-accent"
+              className="flex flex-1 sm:flex-none items-center justify-center gap-2 px-4 sm:px-5 py-2.5 rounded-lg font-semibold text-sm text-on-accent whitespace-nowrap"
               style={{ background: ORANGE, minHeight: 44 }}
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">

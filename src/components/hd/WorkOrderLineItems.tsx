@@ -134,6 +134,25 @@ export default function WorkOrderLineItems({
   const [hasJobs, setHasJobs] = useState(false)
   // Where a part picked from the catalog lands.
   const [catalogJob, setCatalogJob] = useState(1)
+  // PHONE WIDTH (Nov 11). The line table is 860px wide and scrolls sideways, and each
+  // job's header row spanned all 860px of it - the job description box on the left,
+  // + Labor and + Part on the right - so on a phone a tech saw one or the other. The
+  // header now pins to the VISIBLE width of the scroll area (measured here) and wraps
+  // inside it, so the description and the buttons are on screen together. The line
+  // rows themselves keep scrolling as before.
+  const [scrollW, setScrollW] = useState<number | null>(null)
+  const scrollObserver = useRef<ResizeObserver | null>(null)
+  // A callback ref: the scroll area mounts only once the lines have loaded.
+  const scrollRef = useCallback((el: HTMLDivElement | null) => {
+    scrollObserver.current?.disconnect()
+    scrollObserver.current = null
+    if (!el) return
+    setScrollW(el.clientWidth)
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(() => setScrollW(el.clientWidth))
+    ro.observe(el)
+    scrollObserver.current = ro
+  }, [])
   const [catalogOpen, setCatalogOpen] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving]   = useState(false)
@@ -467,11 +486,13 @@ export default function WorkOrderLineItems({
       {canEdit && unit && (
         <div className="px-5 py-3" style={{ borderBottom: `1px solid ${BORDER}` }}>
           {jobs.length > 1 && (
-            <label className="flex items-center gap-2 mb-2 text-xs" style={{ color: 'var(--hd-text-muted)' }}>
-              Catalog parts go on
+            // Wraps as a whole: on a phone the label went three stacked words beside the
+            // dropdown and took the width the dropdown needs (Nov 11).
+            <label className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2 text-xs" style={{ color: 'var(--hd-text-muted)' }}>
+              <span className="whitespace-nowrap">Catalog parts go on</span>
               <select
                 value={catalogJob} onChange={e => setCatalogJob(Number(e.target.value))}
-                className="px-2 py-1 rounded text-xs text-white" style={inputStyle}
+                className="px-2 py-1 rounded text-xs text-white min-w-0 max-w-full flex-1 sm:flex-none" style={inputStyle}
               >
                 {jobs.map(j => <option key={j.job_number} value={j.job_number}>Job {j.job_number}{j.description ? ` - ${j.description}` : ''}</option>)}
               </select>
@@ -534,7 +555,7 @@ export default function WorkOrderLineItems({
             </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto" ref={scrollRef}>
             <table className="w-full text-sm" style={{ minWidth: 860 }}>
               <thead style={{ background: HEAD }}>
                 <tr style={{ color: 'var(--hd-text-faint)' }}>
@@ -557,11 +578,12 @@ export default function WorkOrderLineItems({
                   // buttons, and its subtotal. Shown once migration 177 is in.
                   const header = hasJobs ? [(
                     <tr key={`job-${job.job_number}`} style={{ borderTop: `2px solid ${BORDER}`, background: 'var(--hd-sunken)' }}>
-                      <td colSpan={cols} className="px-3 py-2">
-                        <div className="flex flex-wrap items-center gap-2">
+                      <td colSpan={cols} className="px-0 py-2">
+                        <div className="flex flex-wrap items-center gap-2 px-3" data-testid="wo-job-header"
+                          style={{ position: 'sticky', left: 0, boxSizing: 'border-box', ...(scrollW ? { width: scrollW } : {}) }}>
                           <span className="font-condensed font-bold text-sm tracking-widest text-white">JOB {job.job_number}</span>
                           <input
-                            className="flex-1 min-w-[180px] px-2 py-1.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20"
+                            className="flex-1 min-w-[160px] px-2 py-1.5 rounded-lg text-base sm:text-sm text-white placeholder-white/20"
                             style={inputStyle} disabled={!canEdit}
                             value={job.description} onChange={e => updateJob(job.job_number, { description: e.target.value })}
                             placeholder="What this repair is, e.g. Replace compressor"

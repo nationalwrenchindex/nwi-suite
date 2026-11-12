@@ -523,7 +523,7 @@ export default function InvoiceDetailActions({
               Sent to {lastChannel === 'sms' ? phone : email}.{' '}
               {feeJustApplied
                 ? `The ${money(lateFeeAmount)} late fee is on the invoice and the customer has the new total.`
-                : 'The customer can view and pay from the link.'}
+                : 'The customer can view the invoice from the link.'}
             </p>
           )}
 

@@ -11,6 +11,7 @@
 // by a client.
 
 import { randomBytes } from 'node:crypto'
+import { readTechCertNote } from '@/lib/hd/compliance-footer'
 import { sourceQuoteNumber } from '@/lib/hd/invoice-source'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
@@ -26,6 +27,9 @@ export interface PublicInvoiceBranding {
   /** The shop's default "how to pay" text. Product-neutral; LD reads the same column. */
   default_payment_instructions: string | null
   hd_epa_cert_number:  string | null
+  /** The shop's technician certification note (migration 185). null when unset or
+   *  before the column exists. */
+  hd_tech_cert_note:   string | null
   business_name:       string | null
   hd_company_logo_url: string | null
   business_logo_url:   string | null
@@ -138,6 +142,7 @@ export async function getInvoiceByToken(
     .maybeSingle()
 
   const p = (profile ?? {}) as Partial<PublicInvoiceBranding>
+  const { note: techCertNote } = await readTechCertNote(svc, String(invoice.user_id))
 
   return {
     invoice: { ...invoice, source_quote_number },
@@ -151,6 +156,7 @@ export async function getInvoiceByToken(
       state:               p.state               ?? null,
       default_payment_instructions: p.default_payment_instructions ?? null,
       hd_epa_cert_number:  p.hd_epa_cert_number   ?? null,
+      hd_tech_cert_note:   techCertNote,
     },
   }
 }

@@ -10,13 +10,13 @@
 // shop is paying for the invoice to look like theirs.
 
 import type { PublicInvoiceBranding } from '@/lib/hd/invoice-token'
+import { complianceLines } from '@/lib/hd/compliance-footer'
 import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
 import { termsDisplay, termsWithDueDate } from '@/lib/hd/payment-terms'
 import {
   addressLines,
   serviceUnitLines,
   documentDisclaimers,
-  epa608Line,
   feeRows,
 } from '@/lib/invoice-document'
 import { addressFrom } from '@/lib/address'
@@ -118,6 +118,12 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
   // Manufacturer and certification claims, conditional on what this invoice is
   // actually for. See documentDisclaimers.
   const disclaimers = documentDisclaimers(inv)
+  // Only what the subscriber typed in HD Settings - nothing claimed by default.
+  const compliance = complianceLines({
+    refrigerationWork: disclaimers.epa608,
+    epaCertNumber:     branding.hd_epa_cert_number,
+    techCertNote:      branding.hd_tech_cert_note,
+  })
 
   // Empty on a pre-140 invoice, which then keeps the single Tax line it was sent with.
   const payTaxRows = taxDisplayRows(parseBreakdown((inv as { tax_breakdown?: unknown }).tax_breakdown))
@@ -444,13 +450,11 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
         {/* ── Certification and manufacturer notices, only where they apply.
             A refrigeration certification must not appear on an aerial lift
             inspection, and Thermo King must not be named on a Carrier job. */}
-        {(disclaimers.epa608 || disclaimers.manufacturers.length > 0) && (
+        {(compliance.length > 0 || disclaimers.manufacturers.length > 0) && (
           <div className="mt-5 px-4 text-center space-y-1">
-            {disclaimers.epa608 && (
-              <p className="text-xs leading-relaxed" style={{ color: MUTED }}>
-                {epa608Line(branding.hd_epa_cert_number)}
-              </p>
-            )}
+            {compliance.map((l, i) => (
+              <p key={`c${i}`} className="text-xs leading-relaxed" style={{ color: MUTED }} data-testid="hd-compliance-line">{l}</p>
+            ))}
             {disclaimers.manufacturers.map((l, i) => (
               <p key={i} className="text-xs leading-relaxed" style={{ color: FAINT }}>{l}</p>
             ))}

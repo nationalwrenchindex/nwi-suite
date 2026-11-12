@@ -56,6 +56,29 @@ export default function AppNav({
     if (navRef.current) navRef.current.scrollTo(0, 0)
   }, [])
 
+  // WHICH WAY THE ROW CAN STILL SCROLL (Nov 11). On a phone the row showed Dashboard,
+  // Scheduler, Work Orders and then cut, and the faint edge fade did not read as
+  // "there is more". A real chevron button now sits at whichever end has more, and
+  // tapping it scrolls the row. Nothing shows when everything fits.
+  const [more, setMore] = useState<{ left: boolean; right: boolean }>({ left: false, right: false })
+  useEffect(() => {
+    const el = navRef.current
+    if (!el) return
+    const measure = () => {
+      const left  = el.scrollLeft > 4
+      const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 4
+      setMore(m => (m.left === left && m.right === right ? m : { left, right }))
+    }
+    measure()
+    el.addEventListener('scroll', measure, { passive: true })
+    window.addEventListener('resize', measure)
+    return () => { el.removeEventListener('scroll', measure); window.removeEventListener('resize', measure) }
+  }, [])
+  function scrollNav(dir: 1 | -1) {
+    const el = navRef.current
+    if (el) el.scrollBy({ left: dir * Math.max(120, el.clientWidth * 0.7), behavior: 'smooth' })
+  }
+
   // Close the account menu on outside click and on Escape. Without the keyboard
   // path the menu is a trap for anyone not using a mouse.
   useEffect(() => {
@@ -334,7 +357,18 @@ export default function AppNav({
             )
           })}
         </nav>
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-6 bg-gradient-to-l from-dark-card to-transparent" />
+        {more.left && (
+          <button type="button" onClick={() => scrollNav(-1)} aria-label="Show earlier menu items" data-testid="nav-more-left"
+            className="absolute inset-y-0 left-0 w-8 flex items-center justify-start bg-gradient-to-r from-dark-card via-dark-card to-transparent text-white/70">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6" /></svg>
+          </button>
+        )}
+        {more.right && (
+          <button type="button" onClick={() => scrollNav(1)} aria-label="Show more menu items" data-testid="nav-more-right"
+            className="absolute inset-y-0 right-0 w-10 flex items-center justify-end bg-gradient-to-l from-dark-card via-dark-card to-transparent text-orange">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6" /></svg>
+          </button>
+        )}
         </div>
 
         {/* Account menu — pinned to the right, never part of the scrolling row. */}
