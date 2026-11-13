@@ -30,6 +30,7 @@ import { customerHandoff, EMPTY_QW_CUSTOMER } from '../src/lib/hd/qw-handoff'
 import { buildInvoiceEmail, buildQuoteEmail, buildInvoiceSms } from '../src/lib/hd/sms-templates'
 import { complianceLines } from '../src/lib/hd/compliance-footer'
 import { buildLaborLines, laborCategories } from '../src/lib/hd/labor-line-build'
+import { buildInvoicePayload } from '../src/lib/hd/wo-to-invoice'
 import { documentDisclaimers } from '../src/lib/invoice-document'
 import { editableLines } from '../src/lib/hd/invoice-edit-lines'
 import { stripLeadingZeros, parseFee } from '../src/components/hd/FeeInput'
@@ -560,6 +561,87 @@ async function flowLp(): Promise<void> {
     bad.length ? bad.slice(0, 4).join('; ') : `${n.range} range, ${n.single} single, ${n.shop} shop-only`)
   record(F, 'the route carries the field range high end (else a range could never reach the form)',
     items.every(i => 'mobile_hours_high' in i), '')
+}
+
+// ── Mj: a work order's tax at convert covers EVERY line on EVERY job (Nov 13) ──
+//
+// WO-2026-1576 carried its quote's tax (labor base $1,696.50 = lines $1,551.50 + drive
+// $145; parts base $1,969.47 = $1,912.11 + supplies $57.36). A $145 labor line and a
+// second job's $76.30 of parts were added on the work order. The converter shifted the
+// carried tax for the supplies refigure only, so it billed $4,236.35, not $4,253.50.
+// The fixture is that work order's real rows, read Nov 13 2026 (fields the converter
+// reads, nothing invented). Pure: buildInvoicePayload is exactly what the convert route
+// returns for these rows.
+function flowMj(): void {
+  const F = 'Mj multi-job tax'
+  const J1 = 'job-1', J2 = 'job-2'
+  const jobs = [
+    { id: J1, work_order_id: 'wo', job_number: 1, description: null, status: 'open' },
+    { id: J2, work_order_id: 'wo', job_number: 2, description: 'R&R Belts', status: 'open' },
+  ] as never[]
+  const L = (type: string, description: string, quantity: number, unit_cost: number | null, unit_price: number, total: number, sort_order: number, job_id = J1) =>
+    ({ id: `l${sort_order}`, type, description, part_number: type === 'part' ? `P${sort_order}` : null, quantity, unit_cost, unit_price, markup_percent: null, total, sort_order, job_id })
+  const quoted = [
+    L('labor', 'Replace engine mounts', 4.2, null, 145, 609, 0),
+    L('part', 'Vibration Mount', 2, 46.13, 59.97, 119.94, 1),
+    L('part', 'Vibration Mount Snubber', 2, 17.48, 22.72, 45.44, 2),
+    L('part', 'Vibration Mount - Sentry', 2, 54.24, 70.51, 141.02, 3),
+    L('labor', 'R&R Compressor shaft seal', 6.5, null, 145, 942.5, 4),
+    L('part', 'Compressor shaft seal', 1, 335.25, 670.5, 670.5, 5),
+    L('part', 'Gasket', 1, 9.75, 21.94, 21.94, 6),
+    L('part', 'Discharge valve gasket', 3, 3.25, 6.18, 18.54, 8),
+    L('part', 'Head gasket', 1, 4.5, 20.25, 20.25, 9),
+    L('part', 'Valve Plate O-Ring', 4, 1.75, 2.28, 9.12, 10),
+    L('part', 'Head Bolt O-Ring', 24, 1.99, 2.59, 62.16, 11),
+    L('part', 'Compressor Oil', 1, 89.98, 224.95, 224.95, 12),
+    L('part', 'Dehydrator filter', 1, 37.5, 71.25, 71.25, 13),
+    L('part', 'Freon R404A', 13, 30, 39, 507, 14),
+  ]
+  const added = [
+    L('labor', 'R&R Compressor Head Gaskets', 1, null, 145, 145, 7),
+    L('part', 'Upper Belt', 1, 19, 32.3, 32.3, 15, J2),
+    L('part', 'Lower Belt', 1, 22, 44, 44, 16, J2),
+  ]
+  const carried = {
+    labor: { base: 1696.5, rate: 7.75, taxed: true, amount: 131.48 },
+    parts: { base: 1969.47, rate: 7.75, taxed: true, amount: 152.63 }, version: 1,
+  }
+  const wo = {
+    id: 'wo', work_order_number: 'WO-2026-1576', labor_rate: 145, tax_percent: 7.75, tax_amount: 284.11, tax_breakdown: carried,
+    travel_hours: 1, travel_rate: 145, travel_amount: 145, mileage_miles: 25, mileage_rate: 2.5, mileage_amount: 62.5,
+    shop_supplies_percent_applied: 3, shop_supplies_cap_applied: 100, shop_supplies_fee: 57.36,
+    diagnostic_fee: 0, road_call_fee: 0, service_call_fee: null, service_call_tax: null, discount: null,
+  }
+  const fb = { laborRate: 145, taxSettings: { tax_parts: true, tax_labor: true, tax_rate_parts: 7.75, tax_rate_labor: 7.75 } }
+  type P = { tax_amount: number; tax_breakdown: typeof carried; total: number; shop_supplies_fee: number }
+  const conv = (w: Record<string, unknown>, rows: typeof quoted, j: never[] = jobs) => buildInvoicePayload(w, rows, fb, j).payload as unknown as P
+  const fig = (p: P) => `tax ${usd(p.tax_amount)} (parts ${usd(p.tax_breakdown?.parts?.amount)}, labor ${usd(p.tax_breakdown?.labor?.amount)}), total ${usd(p.total)}`
+
+  const two = conv(wo, [...quoted, ...added])
+  record(F, 'WO-2026-1576 as billed (2 jobs, lines added after approval): parts tax $158.72, labor tax $142.72, total $4,253.50',
+    two.tax_breakdown?.parts?.amount === 158.72 && two.tax_breakdown?.labor?.amount === 142.72 && two.tax_amount === 301.44 && two.total === 4253.5, fig(two))
+  record(F, 'parts tax base = all parts on all jobs + shop supplies ($1,988.41 + $59.65)',
+    two.tax_breakdown?.parts?.base === 2048.06 && two.shop_supplies_fee === 59.65, `base ${usd(two.tax_breakdown?.parts?.base)}, supplies ${usd(two.shop_supplies_fee)}`)
+  record(F, 'labor tax base = all labor on all jobs + drive time ($1,696.50 + $145.00), mileage never in it',
+    two.tax_breakdown?.labor?.base === 1841.5, `base ${usd(two.tax_breakdown?.labor?.base)}`)
+
+  const oneJob = conv(wo, [...quoted, ...added].map(l => ({ ...l, job_id: J1 })))
+  const noJobs = conv(wo, [...quoted, ...added].map(l => ({ ...l, job_id: null as unknown as string })), [])
+  record(F, 'the same lines on ONE job, and with no jobs at all, tax and total exactly as on two jobs',
+    fig(oneJob) === fig(two) && fig(noJobs) === fig(two), `one job ${fig(oneJob)}; no jobs ${fig(noJobs)}`)
+
+  const fresh = { ...wo, tax_percent: null, tax_amount: null, tax_breakdown: null }
+  const fTwo = conv(fresh, [...quoted, ...added]), fOne = conv(fresh, [...quoted, ...added].map(l => ({ ...l, job_id: J1 })))
+  record(F, 'a work order with no carried tax: two jobs tax exactly as one, at one rounding per bucket ($301.44)',
+    fig(fTwo) === fig(fOne) && fTwo.tax_amount === 301.44 && fTwo.total === 4253.5, `two ${fig(fTwo)}; one ${fig(fOne)}`)
+
+  const unchanged = conv(wo, quoted)
+  record(F, 'lines unchanged since approval: the carried tax exactly as recorded ($284.11, same split)',
+    unchanged.tax_amount === 284.11 && JSON.stringify(unchanged.tax_breakdown) === JSON.stringify(carried), fig(unchanged))
+
+  const moreMiles = conv({ ...wo, mileage_miles: 100, mileage_amount: 250 }, [...quoted, ...added])
+  record(F, 'mileage is never taxed: 25 mi -> 100 mi moves the total by $187.50 and the tax by nothing',
+    moreMiles.tax_amount === two.tax_amount && r2(moreMiles.total - two.total) === 187.5, fig(moreMiles))
 }
 
 // ── Lm: ONE ADD LABOR LINE modal, and the labor card a line came from (187, Nov 12) ──
@@ -5482,6 +5564,7 @@ async function main(): Promise<void> {
     await flowQc()
     await flowCf()
     await flowNm()
+    flowMj()
     await flowLm()
     await flowOd()
     await flowHw()

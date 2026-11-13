@@ -60,6 +60,7 @@ import { jobLabel, type WorkOrderJob } from '@/lib/hd/work-order-jobs'
 import { computeExtras, EXTRAS_OFF } from '@/lib/billable-extras'
 import { hdFeesTotal, hdTaxableFees } from '@/lib/hd/hd-extras'
 import { recordedTaxSettings, shiftCarriedTax } from '@/lib/hd/carried-tax'
+import { hdTaxableBase } from '@/lib/hd/document-tax'
 
 /** A row out of hd_work_order_line_items. */
 export interface WorkOrderLineRow {
@@ -504,17 +505,49 @@ export function buildInvoicePayload(
 
   const { terms, source } = termsWithFallback(billed, totals, taxableExtras, fallback)
 
-  // A CARRIED tax figure (the quote's, by way of the work order) taxed the supplies fee
-  // the work order stored. When the parts billed refigure it, the carried tax moves by
-  // exactly the tax on the difference, in the parts bucket, at the rate the document
-  // recorded - and so does the pre-discount record, which the discount starts from.
-  let suppliesShift: ((c: { taxAmount: number; breakdown: ReturnType<typeof parseBreakdown> }) => { taxAmount: number; breakdown: ReturnType<typeof parseBreakdown> }) | null = null
-  if (source.taxFromDocument && supplies !== storedSupplies) {
+  // A CARRIED tax figure (the quote's, by way of the work order) was figured on the
+  // bases its split records. Lines added on the work order since - another labor line,
+  // a second job's parts - and supplies refigured on the parts billed all change those
+  // bases. The carried tax moves by exactly the tax on what changed, each bucket taxed
+  // once on its whole new base (all lines on all jobs + taxed fees + drive time in
+  // labor; all parts + supplies in parts), at the rates the document recorded. An
+  // unchanged work order converts to exactly the carried figure.
+  //
+  // WO-2026-1576 (Nov 13): only the supplies change was shifted here, so a labor line
+  // and job 2's $76.30 of parts added after approval billed at the quote's tax.
+  type Carried = { taxAmount: number; breakdown: ReturnType<typeof parseBreakdown> }
+  let carriedShift: ((c: Carried) => Carried) | null = null
+  if (source.taxFromDocument) {
     const settings = recordedTaxSettings(wo.tax_breakdown, fallback.taxSettings)
-    suppliesShift = c => shiftCarriedTax(c, { parts: storedSupplies }, { parts: supplies }, settings)
-    const shifted = suppliesShift({ taxAmount: num(terms.tax_amount) ?? 0, breakdown: parseBreakdown(terms.tax_breakdown) })
-    terms.tax_amount = shifted.taxAmount
-    terms.tax_breakdown = shifted.breakdown
+    const current = hdTaxableBase({
+      partsLines: totals.subtotal_parts,
+      laborLines: totals.subtotal_labor,
+      taxedFees:  hdTaxableFees(baseTerms),
+      travel:     num(baseTerms.travel_amount) ?? 0,
+      supplies,
+    })
+    carriedShift = c => {
+      // No stored split: no stored base to add onto. Shift what is known to have
+      // changed - the supplies refigure - as before.
+      if (!c.breakdown) {
+        return supplies === storedSupplies ? c : shiftCarriedTax(c, { parts: storedSupplies }, { parts: supplies }, settings)
+      }
+      const stored = {
+        parts: c.breakdown.parts?.base ?? 0,
+        labor: c.breakdown.labor?.base ?? 0,
+        services: c.breakdown.services?.base ?? 0,
+      }
+      // Nothing moved: the carried figure exactly as recorded, split and all.
+      if (r2(current.parts - stored.parts) === 0 && r2(current.labor - stored.labor) === 0) return c
+      return shiftCarriedTax(c, stored, { ...current, services: stored.services }, settings)
+    }
+    const input: Carried = { taxAmount: num(terms.tax_amount) ?? 0, breakdown: parseBreakdown(terms.tax_breakdown) }
+    const shifted = carriedShift(input)
+    // Unmoved: the stored columns are left exactly as recorded, byte for byte.
+    if (shifted !== input) {
+      terms.tax_amount = shifted.taxAmount
+      terms.tax_breakdown = shifted.breakdown
+    }
   }
 
   // Every extra, including the untaxed mileage, counts toward the total.
@@ -543,7 +576,7 @@ export function buildInvoicePayload(
   if (recorded) {
     const recordedBefore = { taxAmount: recorded.tax_before, breakdown: recorded.pre_tax_breakdown }
     const before = source.taxFromDocument
-      ? (suppliesShift ? suppliesShift(recordedBefore) : recordedBefore)
+      ? (carriedShift ? carriedShift(recordedBefore) : recordedBefore)
       : { taxAmount, breakdown: parseBreakdown(terms.tax_breakdown) }
     const applied = hdApplyDiscount({
       discount:   { type: recorded.type, value: recorded.value, scope: recorded.scope, reason: recorded.reason },
