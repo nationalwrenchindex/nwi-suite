@@ -21,8 +21,8 @@
 -- Until this is applied the code saves lines exactly as before and simply does not
 -- record the card.
 --
--- Plain ASCII. Ends in ROLLBACK: run it once to see the checks pass, then change the
--- last line to COMMIT and run it again to apply. Any failed check raises.
+-- Plain ASCII. Applied by hand in the Supabase SQL editor with COMMIT on Nov 14, 2026;
+-- the self-check reported "187 ok". Ends in COMMIT as run.
 
 BEGIN;
 
@@ -83,5 +83,5 @@ BEGIN
     (SELECT count(*) FROM _lines_before);
 END $$;
 
--- Ends in ROLLBACK so a dry run changes nothing. Change to COMMIT to apply.
-ROLLBACK;
+-- Applied by hand in the Supabase SQL editor on Nov 14, 2026. Ends in COMMIT as run.
+COMMIT;
