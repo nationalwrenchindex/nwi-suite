@@ -319,6 +319,148 @@ export async function deductForInvoice(opts: {
   return result
 }
 
+// ── re-bill an existing invoice: move the DIFFERENCE ───────────────────────
+
+/** One movement this document already wrote. */
+export interface DocMovement { partId: string; locationId: string; delta: number; reason: string; unitCost?: number | null }
+/** One part the refreshed document now bills, already resolved to the catalog. */
+export interface TargetPart { partId: string; partNumber: string; quantity: number; unitCost: number | null }
+export interface PlannedMovement {
+  partId: string; partNumber: string; locationId: string
+  delta: number; reason: 'used' | 'adjusted' | 'returned'; unitCost: number | null
+  was: number; now: number
+}
+
+/**
+ * The movements that bring what an invoice has taken off the shelf to what it now
+ * bills. Pure.
+ *
+ * The invoice's net use of a part is minus the sum of every movement it wrote for that
+ * part, at every location. The plan writes only the gap:
+ *   nothing taken yet          'used' for the whole quantity (what creation would write)
+ *   bills more than it took    'adjusted', minus the extra
+ *   bills less (or none)       'returned', plus the surplus
+ * A second 'used' row is never planned - the migration 151 index refuses one per
+ * (document, part, location), which is what makes a repeat refresh a no-op rather than
+ * a second deduction. The movement goes to the location the invoice already took that
+ * part from, else the default.
+ */
+export function planInvoiceStockDiff(
+  existing: DocMovement[],
+  target: TargetPart[],
+  defaultLocationId: string,
+  partNumberOf: (partId: string) => string = id => id,
+): PlannedMovement[] {
+  const taken = new Map<string, number>()
+  const where = new Map<string, Map<string, number>>()
+  const usedAt = new Set<string>()
+  // The cost the invoice took each part at, so a return carries what was paid for it.
+  const costOf = new Map<string, number>()
+  for (const m of existing) {
+    taken.set(m.partId, (taken.get(m.partId) ?? 0) - m.delta)
+    const locs = where.get(m.partId) ?? new Map<string, number>()
+    locs.set(m.locationId, (locs.get(m.locationId) ?? 0) - m.delta)
+    where.set(m.partId, locs)
+    if (m.reason === 'used') usedAt.add(`${m.partId}|${m.locationId}`)
+    if (m.unitCost != null && !costOf.has(m.partId)) costOf.set(m.partId, m.unitCost)
+  }
+  const want = new Map<string, TargetPart>()
+  for (const t of target) {
+    const cur = want.get(t.partId)
+    if (cur) { cur.quantity += t.quantity; if (cur.unitCost == null) cur.unitCost = t.unitCost }
+    else want.set(t.partId, { ...t })
+  }
+  const out: PlannedMovement[] = []
+  for (const partId of new Set([...taken.keys(), ...want.keys()])) {
+    const was = taken.get(partId) ?? 0
+    const t = want.get(partId)
+    const now = t?.quantity ?? 0
+    const gap = now - was
+    if (gap === 0) continue
+    const locs = [...(where.get(partId) ?? new Map<string, number>()).entries()].sort((a, b) => b[1] - a[1])
+    const locationId = locs[0]?.[0] ?? defaultLocationId
+    const reason: PlannedMovement['reason'] = gap < 0 ? 'returned'
+      : usedAt.has(`${partId}|${locationId}`) || was !== 0 ? 'adjusted' : 'used'
+    out.push({
+      partId, partNumber: t?.partNumber ?? partNumberOf(partId), locationId,
+      delta: -gap, reason, unitCost: t?.unitCost ?? costOf.get(partId) ?? null, was, now,
+    })
+  }
+  return out
+}
+
+/**
+ * Bring an existing invoice's stock use to its current lines - the refresh path.
+ *
+ * deductForInvoice is for creation: a second call writes nothing, so a re-billed
+ * invoice whose parts changed would keep the old deduction. Deleting and re-creating
+ * the invoice was the only way round it, and every new invoice deducted again while
+ * the deleted one's movements stayed (the ledger outlives the document): WO-2026-1576
+ * was billed three times and took its parts off the shelf three times.
+ */
+export async function reconcileInvoiceStock(opts: {
+  userId: string
+  invoiceKind: 'ld' | 'hd'
+  invoiceId: string
+  invoiceRef?: string | null
+  lineItems: unknown
+  createdBy?: string | null
+}): Promise<LedgerResult & { changes: PlannedMovement[] }> {
+  const supabase = createServiceClient()
+  const result: LedgerResult & { changes: PlannedMovement[] } = { written: 0, unmatched: [], alreadyApplied: [], errors: [], changes: [] }
+  const sourceType = opts.invoiceKind === 'ld' ? 'invoice' : 'hd_invoice'
+
+  const { data: rows, error } = await supabase
+    .from('stock_movement')
+    .select('part_id, location_id, delta, reason, unit_cost')
+    .eq('user_id', opts.userId)
+    .eq('source_type', sourceType)
+    .eq('source_id', opts.invoiceId)
+  if (error) { result.errors.push(`could not read this invoice's stock movements: ${error.message}`); return result }
+  const existing: DocMovement[] = (rows ?? []).map(r => ({
+    partId: String(r.part_id), locationId: String(r.location_id), delta: Number(r.delta), reason: String(r.reason),
+    unitCost: r.unit_cost == null ? null : Number(r.unit_cost),
+  }))
+
+  const lines = aggregateLines(partLinesFromJson(opts.lineItems))
+  const ids = await resolvePartIds(supabase, lines.map(l => l.partNumber))
+  const target: TargetPart[] = []
+  for (const l of lines) {
+    const partId = ids.get(normalizePartNumber(l.partNumber))
+    if (!partId) { result.unmatched.push(l.partNumber); continue }
+    target.push({ partId, partNumber: l.partNumber, quantity: l.quantity, unitCost: l.unitCost })
+  }
+
+  const needsDefault = target.some(t => !existing.some(m => m.partId === t.partId))
+  const locationId = needsDefault ? await defaultLocationId(supabase, opts.userId) : (existing[0]?.locationId ?? null)
+  if (!locationId && target.length) {
+    result.errors.push('No stock location available, so nothing could be moved.')
+    return result
+  }
+
+  // A part taken off the invoice has no line to name it: read its number.
+  const gone = [...new Set(existing.map(m => m.partId))].filter(pid => !target.some(t => t.partId === pid))
+  const names = new Map<string, string>()
+  if (gone.length) {
+    const { data: ps } = await supabase.from('parts').select('id, part_number').in('id', gone)
+    for (const p of ps ?? []) names.set(String(p.id), String(p.part_number))
+  }
+
+  const plan = planInvoiceStockDiff(existing, target, locationId ?? '', pid => names.get(pid) ?? pid)
+  for (const p of plan) {
+    const res = await writeMovement(supabase, {
+      userId: opts.userId, partId: p.partId, locationId: p.locationId, delta: p.delta, reason: p.reason,
+      unitCost: p.unitCost, sourceType, sourceId: opts.invoiceId, sourceRef: opts.invoiceRef ?? null,
+      createdBy: opts.createdBy ?? null,
+      note: `Refreshed ${opts.invoiceRef ?? opts.invoiceId} from its work order: billed ${p.was} -> ${p.now}`,
+    })
+    if (res.duplicate) result.alreadyApplied.push(p.partNumber)
+    else if (res.ok) { result.written++; result.changes.push(p) }
+    else result.errors.push(`${p.partNumber}: ${res.error}`)
+  }
+  return result
+}
+
 // ── allocate on an open work order ──────────────────────────────────────────
 
 /**

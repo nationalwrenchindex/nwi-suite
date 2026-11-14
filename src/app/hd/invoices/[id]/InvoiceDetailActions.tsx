@@ -73,7 +73,10 @@ export default function InvoiceDetailActions({
   lateFeePercentage = null,
   lateFeeBlockedReason = null,
   lateFeeAlreadyApplied = false,
+  locked = false,
 }: {
+  /** Paid, partially paid or void (lib/hd/invoice-lock): no Edit. The PUT refuses too. */
+  locked?: boolean
   invoiceId: string
   invoiceNumber: string
   currentStatus: string
@@ -271,7 +274,7 @@ export default function InvoiceDetailActions({
           </span>
         )}
 
-        <Link
+        {!locked && <Link
           href={`/hd/invoices/${invoiceId}/edit`}
           className="flex items-center gap-1.5 px-4 py-2 rounded-lg font-semibold text-sm"
           // Dark ink and underlined: colour must not be the only thing marking a link
@@ -283,7 +286,7 @@ export default function InvoiceDetailActions({
             <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
           </svg>
           Edit
-        </Link>
+        </Link>}
 
         {currentStatus !== 'paid' && currentStatus !== 'void' && (
           <button

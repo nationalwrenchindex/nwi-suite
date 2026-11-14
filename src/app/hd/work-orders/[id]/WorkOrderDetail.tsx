@@ -109,6 +109,16 @@ function docFirst(doc: string | number | null | undefined, record: string | numb
 }
 
 /** Status TEXT colour - AA theme tokens, so it reads on light and dark. */
+/** The invoice this work order is already billed as (the convert route's 409). */
+type ExistingInvoice = {
+  id: string
+  invoice_number: string
+  status: string
+  total: number | null
+  sent_at?: string | null
+  last_sent_at?: string | null
+}
+
 function statusColor(s: string) {
   return s === 'in_progress' ? 'var(--hd-accent-text)' : s === 'completed' ? 'var(--hd-positive)' : s === 'invoiced' ? 'var(--hd-info)' : 'var(--hd-text-faint)'
 }
@@ -161,6 +171,10 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
   }
   const [reopening, setReopening] = useState(false)
   const [invoicing, setInvoicing] = useState(false)
+  // The invoice this work order is already billed as, when it is open and can be
+  // refreshed in place (POST /api/hd/invoices/[id]/refresh).
+  const [existingInvoice, setExistingInvoice] = useState<ExistingInvoice | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
   const [invoiceError, setInvoiceError] = useState<string | null>(null)
   const fileRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
@@ -171,8 +185,10 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
   // scheduler never lists invoiced jobs, so this is the only place it can be undone.
   async function handleReopen() {
     if (!confirm(
-      'Reopen this work order?\n\nIt moves back to Completed so it can be invoiced again. ' +
-      'Any invoice already created from it is left alone — void that separately.'
+      'Reopen this work order?\n\nIt moves back to Completed so its lines can be corrected. ' +
+      'Its invoice is left alone until you refresh it from here - it keeps its number and pay link, ' +
+      'and stock moves only by the difference. Do not delete the invoice to re-bill: that spends a new number ' +
+      'and takes the parts off the shelf again.'
     )) return
 
     setReopening(true)
@@ -261,6 +277,33 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
   // is a safety net for a browser holding the surface cookie, not the way there.)
   const invoicesBase = reeferSurface ? '/reefer/invoices' : '/hd/invoices'
 
+  // REFRESH THE EXISTING INVOICE from this work order, in place. Unsaved lines are
+  // saved first, as for Create Invoice - what is on the screen is what is billed.
+  async function refreshInvoice() {
+    if (!existingInvoice) return
+    const sent = !!(existingInvoice.sent_at || existingInvoice.last_sent_at)
+    if (!confirm(
+      `Refresh ${existingInvoice.invoice_number} from this work order?\n\n` +
+      'Its lines and money are replaced with the work order\'s. It keeps its number and pay link, ' +
+      'and stock moves only by the difference. Customer, unit and notes on the invoice are kept.' +
+      (sent ? '\n\nIt has already been SENT: the customer is holding the earlier copy until you send it again.' : ''),
+    )) return
+    setRefreshing(true)
+    setInvoiceError(null)
+    try {
+      const pendingError = await flushPending(workOrderId)
+      if (pendingError) { setInvoiceError(`Not refreshed: your unsaved changes could not be saved first. ${pendingError}`); return }
+      const res = await fetch(`/api/hd/invoices/${existingInvoice.id}/refresh`, { method: 'POST' })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error ?? 'Could not refresh the invoice.')
+      window.location.href = `${invoicesBase}/${existingInvoice.id}`
+    } catch (err) {
+      setInvoiceError(err instanceof Error ? err.message : 'Could not refresh the invoice.')
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
   async function createInvoice() {
     setInvoicing(true)
     setInvoiceError(null)
@@ -277,9 +320,16 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
       const built = await fetch(`/api/hd/work-orders/${workOrderId}/convert`, { cache: 'no-store' })
       const builtJson = await built.json().catch(() => ({}))
 
-      // Already billed. Send the tech to the invoice that exists rather than letting
-      // them create a second one - WO-2026-1538 was billed twice before this existed.
+      // Already billed. Never a second invoice - WO-2026-1538 was billed twice before
+      // this existed. An OPEN invoice is offered a refresh from this work order (same
+      // number, same pay link, stock moved by the difference); a paid, partially paid
+      // or void one is opened, and the screen says why it cannot be refreshed.
       if (built.status === 409 && builtJson.invoice?.id) {
+        if (builtJson.refreshable) {
+          setExistingInvoice(builtJson.invoice as ExistingInvoice)
+          return
+        }
+        if (builtJson.refresh_refused) alert(String(builtJson.refresh_refused))
         window.location.href = `${invoicesBase}/${builtJson.invoice.id}`
         return
       }
@@ -450,6 +500,27 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
             rendered, which meant "this work order has no line items yet" - the one
             message that stops a blank invoice going out - showed the tech nothing at
             all and the button just stopped looking busy. */}
+        {existingInvoice && (
+          <div className="mt-3 text-sm rounded-lg px-3 py-3" data-refresh-invoice={existingInvoice.id}
+            style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)', color: 'rgba(var(--hd-ink-rgb), 0.85)' }}>
+            <p>
+              This work order is already billed as{' '}
+              <a href={`${invoicesBase}/${existingInvoice.id}`} style={{ textDecoration: 'underline' }}>{existingInvoice.invoice_number}</a>
+              {' '}({existingInvoice.status}). Refresh it from this work order: it keeps its number and pay link,
+              is recalculated from these lines, and stock moves only by the difference.
+            </p>
+            {(existingInvoice.sent_at || existingInvoice.last_sent_at) && (
+              <p className="mt-1" style={{ color: 'var(--hd-accent-text)' }}>
+                It has already been sent. After a refresh the customer is holding an older copy until you send it again.
+              </p>
+            )}
+            <button type="button" onClick={() => void refreshInvoice()} disabled={refreshing}
+              className="mt-2 px-3 py-1.5 rounded-lg text-xs font-condensed font-bold tracking-wide disabled:opacity-50"
+              style={{ background: '#FF6600', color: '#1A1A1A', border: '1px solid #FF6600' }}>
+              {refreshing ? 'Refreshing...' : `Refresh ${existingInvoice.invoice_number}`}
+            </button>
+          </div>
+        )}
         {invoiceError && (
           <p className="mt-3 text-sm rounded-lg px-3 py-2"
             style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: 'var(--hd-negative)' }}>

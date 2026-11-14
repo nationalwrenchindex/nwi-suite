@@ -4,6 +4,8 @@ import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import EditInvoiceForm from '../EditInvoiceForm'
 import { loadHdShopExtras } from '@/lib/hd/hd-extras-load'
 import { hdLaborRateFrom } from '@/lib/hd/labor-rate'
+import { isInvoiceLocked, lockedMessage } from '@/lib/hd/invoice-lock'
+import Link from 'next/link'
 
 export const metadata = { title: 'Edit Invoice — NWI HD Suite' }
 
@@ -24,6 +26,19 @@ export default async function EditInvoicePage({ params }: { params: Promise<{ id
     .single()
 
   if (!inv) notFound()
+
+  // Paid, partially paid and void invoices are closed. The PUT refuses them too; this
+  // says so instead of offering a form whose save would be refused.
+  if (isInvoiceLocked((inv as Record<string, unknown>).status)) {
+    return (
+      <div style={{ background: '#F4F5F7', color: '#1A1A1A', minHeight: '100dvh', padding: '24px 20px' }}>
+        <div style={{ maxWidth: 860, margin: '0 auto' }} data-invoice-locked="true">
+          <Link href={`/hd/invoices/${id}`} style={{ color: 'var(--paper-muted)', fontSize: 13 }}>&larr; Back to the invoice</Link>
+          <p className="mt-4 text-base font-semibold">{lockedMessage(inv as Record<string, unknown>)}</p>
+        </div>
+      </div>
+    )
+  }
 
   // Used ONLY when the invoice recorded no labor rate, and then shown as assumed.
   // hd_labor_rate only (hdLaborRateFrom): default_labor_rate is LD's, and would bill an

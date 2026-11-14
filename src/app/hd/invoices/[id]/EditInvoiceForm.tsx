@@ -13,7 +13,7 @@ import LaborLineModal from '@/components/hd/LaborLineModal'
 import { laborCategories } from '@/lib/hd/labor-line-build'
 import {
   openInvoiceEdit, priceInvoiceEdit, invoiceSaveBody, invoiceExtrasSettings,
-  invoiceDoesNotAddUp, doesNotAddUpMessage, correctionBody, type InvoiceEditState,
+  invoiceDoesNotAddUp, doesNotAddUpMessage, type InvoiceEditState,
 } from '@/lib/hd/invoice-edit-save'
 import { discountPrintLabel } from '@/lib/document-discount'
 import { readingEditBody } from '@/lib/hd/unit-hours'
@@ -182,11 +182,13 @@ export default function EditInvoiceForm({ invoice, shopLaborRate, shop = null }:
   }
 
   // The deliberate correction. Recalculates from the invoice's own lines, fees and
-  // extras at the rates it recorded, and records what changed in internal_notes.
+  // extras at the rates it recorded, and records what changed in internal_notes. The
+  // SERVER computes it (correctionBody, lib/hd/invoice-edit-server): a total sent from
+  // here is never taken, so this asks for the correction rather than sending figures.
   async function correct() {
     setCorrecting(true)
     try {
-      const res = await fetch(`/api/hd/invoices/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(correctionBody(invoice)) })
+      const res = await fetch(`/api/hd/invoices/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ correct_total: true }) })
       const data = await res.json()
       if (data.invoice) window.location.reload()
       else setToast(data.error ?? 'Correction failed')

@@ -8,6 +8,11 @@ import { costingFromLineItems, isMissingCostingColumn } from '@/lib/hd/invoice-c
 import { checkDiscountWrite } from '@/lib/hd/hd-discount'
 import { recordTermsSnapshot } from '@/lib/document-terms'
 import { READING_COLUMNS, readingsFromBody, withoutMissingReadings } from '@/lib/hd/unit-hours'
+import { isInvoiceLocked, lockedMessage, changedAfterSendFields } from '@/lib/hd/invoice-lock'
+import { serverPricedUpdate } from '@/lib/hd/invoice-edit-server'
+import { loadHdShopExtras } from '@/lib/hd/hd-extras-load'
+import { hdLaborRateFrom } from '@/lib/hd/labor-rate'
+import { HD_INVOICE_STATUSES } from '../list'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,36 +64,79 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   if ('error' in readings) return NextResponse.json({ error: readings.error }, { status: 400 })
   for (const k of READING_COLUMNS) delete body[k]
 
-  const update: Record<string, unknown> = { ...body, ...readings.update, updated_at: new Date().toISOString() }
+  // ---------------------------------------------------------------- THE GATE
+  //
+  // The stored row, read once: its status decides whether this PUT may run at all, and
+  // it is what the money is priced from. Before Nov 14 there was no read here - the
+  // body was spread onto the row at any status, so a paid invoice could be rewritten
+  // through the API with whatever totals the caller chose.
+  const { data: storedRow } = await supabase
+    .from('hd_invoices')
+    .select('*')
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .maybeSingle()
+  if (!storedRow) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const stored = storedRow as Record<string, unknown>
+
+  // PAID, PARTIAL, VOID: refused. The one exception is a partially paid invoice being
+  // marked paid in full - a status change that rewrites nothing the customer agreed to.
+  if (isInvoiceLocked(stored.status)) {
+    const keys = Object.keys(body)
+    const finishingPartial = String(stored.status) === 'partial' && body.status === 'paid'
+      && keys.every(k => k === 'status' || k === 'paid_at')
+    if (!finishingPartial) {
+      return NextResponse.json({ error: lockedMessage(stored), reason: 'locked', status: stored.status }, { status: 409 })
+    }
+  }
+  if ('status' in body && !(HD_INVOICE_STATUSES as readonly string[]).includes(String(body.status))) {
+    return NextResponse.json({ error: `Unknown invoice status: ${String(body.status)}` }, { status: 400 })
+  }
+
+  // ---------------------------------------------------------------- THE MONEY
+  //
+  // Priced HERE from the lines and the invoice's recorded terms. Any total in the body
+  // is dropped (lib/hd/invoice-edit-server).
+  const { data: rateProfile } = await supabase.from('profiles').select('hd_labor_rate').eq('id', user.id).maybeSingle()
+  const { shop } = await loadHdShopExtras(supabase, user.id)
+  const priced = serverPricedUpdate(stored, body, {
+    laborRate: hdLaborRateFrom(rateProfile as Record<string, unknown> | null),
+    extras: shop.extras,
+    serviceCallTax: shop.serviceCall.tax,
+  })
+  if (!priced.ok) return NextResponse.json({ error: priced.error }, { status: priced.status })
+  if (priced.ignoredTotals.length) {
+    console.warn(`[hd/invoices/:id] ignored browser totals on ${String(stored.invoice_number)}: ${priced.ignoredTotals.join(', ')}`)
+  }
+
+  const update: Record<string, unknown> = { ...priced.update, ...readings.update, updated_at: new Date().toISOString() }
   if (body.status === 'paid' && !body.paid_at) {
     update.paid_at = new Date().toISOString()
   }
 
   // Re-derive cost of goods whenever the edit rewrites the line items, so a corrected
   // invoice does not keep reporting the margin of the version it replaced. Only when
-  // line_items is actually present: a status-only PUT (mark paid, mark sent) carries
-  // no items, and recomputing from an absent array would wipe a real cost to zero.
-  if ('line_items' in body) {
-    const costing = costingFromLineItems(body.line_items, {
-      diagnostic_fee: body.diagnostic_fee as number | string | null | undefined,
-      road_call_fee:  body.road_call_fee  as number | string | null | undefined,
-      subtotal_parts: body.subtotal_parts as number | string | null | undefined,
+  // the priced update carries line_items: a status-only PUT (mark paid, mark sent)
+  // carries none, and recomputing from an absent array would wipe a real cost to zero.
+  if ('line_items' in update) {
+    const costing = costingFromLineItems(update.line_items, {
+      diagnostic_fee: (update.diagnostic_fee ?? stored.diagnostic_fee) as number | string | null | undefined,
+      road_call_fee:  (update.road_call_fee  ?? stored.road_call_fee)  as number | string | null | undefined,
+      subtotal_parts: (update.subtotal_parts ?? stored.subtotal_parts) as number | string | null | undefined,
     })
     update.parts_cost = costing.parts_cost
     update.parts_sell = costing.parts_sell
   }
 
+  // SENT BUT UNPAID: the edit stands, and the invoice records that the customer now
+  // holds an older copy (migration 188's stamp when applied, a dated note always).
+  Object.assign(update, changedAfterSendFields(stored, update, 'edit'))
+
   // When an invoice is marked SENT, stamp sent_at (once) and compute the due date
   // from its payment terms. Client may pass payment_terms in the same PUT to override.
   if (body.status === 'sent' && !body.sent_at) {
-    const { data: existing } = await supabase
-      .from('hd_invoices')
-      .select('sent_at, payment_terms')
-      .eq('id', id)
-      .eq('user_id', user.id)
-      .single()
-    const sentAt = (existing?.sent_at as string | null) ?? new Date().toISOString()
-    const terms  = (body.payment_terms as string | undefined) ?? (existing?.payment_terms as string | null)
+    const sentAt = (stored.sent_at as string | null) ?? new Date().toISOString()
+    const terms  = (body.payment_terms as string | undefined) ?? (stored.payment_terms as string | null)
     update.sent_at  = sentAt
     // No recognised terms, no due date - and a stored one is kept, never cleared.
     const due = computeDueDate(sentAt, terms)

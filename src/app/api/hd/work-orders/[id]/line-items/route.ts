@@ -87,6 +87,18 @@ export async function PUT(
   if (gate.error) return gate.error
   const supabase = gate.supabase
 
+  // AN INVOICED WORK ORDER'S LINES ARE LOCKED - on the server, not only on the screen
+  // (WorkOrderDetail's canEdit). Its lines are what the invoice billed; changing them
+  // under it leaves the two disagreeing with nothing to say so. Reopen the work order
+  // (back to completed), correct the lines, then refresh the invoice from it.
+  const { data: woStatus } = await supabase.from('hd_work_orders').select('status').eq('id', workOrderId).maybeSingle()
+  if (String(woStatus?.status ?? '') === 'invoiced') {
+    return NextResponse.json({
+      error: 'This work order is invoiced, so its lines are locked. Reopen it to correct them, then refresh the invoice from it.',
+      reason: 'invoiced',
+    }, { status: 409 })
+  }
+
   let body: { line_items?: unknown; jobs?: unknown }
   try { body = await req.json() } catch { return NextResponse.json({ error: 'Invalid body' }, { status: 400 }) }
 

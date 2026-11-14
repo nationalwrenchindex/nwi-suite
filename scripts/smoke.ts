@@ -40,7 +40,7 @@ import { documentDefaultsFrom } from '../src/lib/document-defaults'
 import { documentTotalsRows } from '../src/lib/document-totals'
 import { serviceCallOf } from '../src/lib/service-call'
 import { documentMoney, documentExtras } from '../src/lib/document-money'
-import { openInvoiceEdit, invoiceSaveBody, invoiceDoesNotAddUp, correctionBody } from '../src/lib/hd/invoice-edit-save'
+import { openInvoiceEdit, invoiceSaveBody, invoiceDoesNotAddUp } from '../src/lib/hd/invoice-edit-save'
 import { documentTaxSettings, parseBreakdown, breakdownTaxTotal, taxSettingsFrom } from '../src/lib/tax'
 import { EXTRAS_OFF, partsBaseFromLines, computeExtras, extrasColumns } from '../src/lib/billable-extras'
 import { applyDiscount, laborFromLines, normalizeDiscount, parseDiscount, discountPrintLabel } from '../src/lib/document-discount'
@@ -4620,7 +4620,11 @@ async function flowIe(): Promise<void> {
   const bpg = await page(`/hd/invoices/${id}/edit`)
   record(F, 'the edit page offers the one correction, worded with both figures',
     !!bpg && bpg.text.includes(prompt), prompt)
-  const fix = await api('PUT', `/api/hd/invoices/${id}`, correctionBody(broken))
+  // The correction is ASKED FOR, not sent as figures: since Nov 14 the PUT drops every
+  // total in a body and computes the correction itself (lib/hd/invoice-edit-server).
+  // `own` above is still this flow's own arithmetic, so the server's figure is checked
+  // against an independent one.
+  const fix = await api('PUT', `/api/hd/invoices/${id}`, { correct_total: true })
   const fixed = await readRow()
   record(F, 'taking the correction brings it to its own figure and notes it',
     fix.status === 200 && usd(fixed.total) === usd(own) && String(fixed.internal_notes ?? '').includes('corrected on purpose')
@@ -4638,6 +4642,228 @@ async function flowIe(): Promise<void> {
     const ex = computeExtras(200, { ...doc.input }, doc.settings, Number(q.labor_rate ?? 0))
     record(F, `a quote with no recorded supplies prices none on $200.00 of parts${billsSupplies ? '' : ' (shop bills none today)'} (A2)`,
       ex.shopSupplies.amount === 0, `supplies ${usd(ex.shopSupplies.amount)}`)
+  }
+}
+
+// ── Ri: refresh an invoice in place, and the PUT's status gate (Nov 14) ─────
+//
+// PART 1. The convert route refused (409) once a work order had an invoice, so the only
+// correction was delete-and-reconvert: WO-2026-1576 spent INV-2026-0055, 0056 and 0057
+// and took its parts off the shelf three times. POST /api/hd/invoices/[id]/refresh now
+// re-bills the SAME row - number and pay link kept - and moves stock by the difference.
+//
+// PART 2. The invoice PUT took a raw body at any status, totals included. Now paid,
+// partial and void refuse; a sent-but-unpaid edit is recorded; totals are the server's.
+//
+// Run in a THROWAWAY account (the smoke-reefer- pattern, removed with every row it made,
+// ledger included), because the stock checks need REAL catalog parts - 22-1101 and
+// 33-2805, two of WO-2026-1576's own - and the owner's ledger is append-only.
+async function flowRi(): Promise<void> {
+  const F = 'Ri invoice refresh + edit gate'
+  const PARTS = ['22-1101', '33-2805']
+  const real = await rest<{ id: string; part_number: string }>(`parts?select=id,part_number&part_number=in.(${PARTS.join(',')})`)
+  const partId = (pn: string) => real.find(p => p.part_number === pn)?.id ?? ''
+  if (!record(F, 'two real catalog parts to bill (22-1101, 33-2805)', PARTS.every(p => partId(p)), real.map(p => p.part_number).join(', '))) return
+
+  const email = `smoke-reefer-${Date.now()}@example.com`
+  const made = await fetch(`${SUPA}/auth/v1/admin/users`, {
+    method: 'POST', headers: SVC_H,
+    body: JSON.stringify({ email, password: `Smk-${Date.now()}-x9!`, email_confirm: true,
+      user_metadata: { full_name: `${MARK} refresh`, business_name: `${MARK} Refresh Shop` } }),
+  })
+  const u = await made.json().catch(() => ({})) as { id?: string }
+  if (!record(F, 'a throwaway account is created', made.ok && !!u.id, `-> ${made.status}`)) return
+  const uid = u.id!
+  created.reeferUsers.add(uid)
+  const sub = await fetch(`${SUPA}/rest/v1/subscriptions`, {
+    method: 'POST', headers: SVC_H,
+    body: JSON.stringify({ user_id: uid, tier: 'reefer_standalone', status: 'active', is_comped: false,
+      vertical: 'heavy_duty', modules: [...REEFER_STANDALONE_MODULES], cancel_at_period_end: false }),
+  })
+  if (!record(F, 'it gets a subscription that can bill', sub.ok, `-> ${sub.status}`)) return
+
+  let has188 = true
+  try { await rest('hd_invoices?select=changed_after_send_at&limit=1') } catch { has188 = false }
+
+  const net = async (invId: string) => {
+    const mv = await rest<{ part_id: string; delta: number; reason: string }>(`stock_movement?select=part_id,delta,reason&source_type=eq.hd_invoice&source_id=eq.${invId}`)
+    const by = (pn: string) => -mv.filter(m => m.part_id === partId(pn)).reduce((t, m) => t + Number(m.delta), 0)
+    return { mv, by }
+  }
+  const readInv = async (invId: string) => (await rest<Record<string, unknown>>(`hd_invoices?id=eq.${invId}&select=*`))[0] ?? {}
+  const sentAt = new Date(Date.now() - 3600_000).toISOString()
+  const arrangeSent = (invId: string) => fetch(`${SUPA}/rest/v1/hd_invoices?id=eq.${invId}`, {
+    // ARRANGED STATE, not a shortcut: a real send would text and email a customer. What
+    // is under test is what an edit does to an invoice that HAS been sent.
+    method: 'PATCH', headers: SVC_H, body: JSON.stringify({ status: 'sent', sent_at: sentAt, last_sent_at: sentAt, sent_count: 1 }),
+  })
+  const labor = { type: 'labor', description: `${MARK} recharge`, quantity: 2, unit_price: 100, total: 200 }
+  const part = (pn: string, qty: number) => ({ type: 'part', description: `${MARK} ${pn}`, part_number: pn,
+    quantity: qty, unit_cost: 10, unit_price: 13, markup_percent: 30, total: r2(qty * 13) })
+
+  const ownerCookie = cookie
+  try {
+    cookie = (await openSession(uid)).cookie
+
+    // ── PART 1: bill, reopen, correct, refresh ──────────────────────────────
+    const wo = await api('POST', '/api/hd/work-orders', {
+      customer_name: `${MARK} refresh`, customer_phone: '+15555550179',
+      service_type: `${MARK} refresh`, scheduled_date: new Date().toISOString().slice(0, 10), scheduled_time: '09:00',
+    })
+    const woId = String(((wo.json.work_order ?? wo.json) as Record<string, unknown>).id ?? '')
+    if (!record(F, 'a work order is created', !!woId, `-> ${wo.status}`)) return
+    created.hdWorkOrders.add(woId)
+    const put1 = await api('PUT', `/api/hd/work-orders/${woId}/line-items`, { line_items: [labor, part('22-1101', 1), part('33-2805', 3)] })
+    if (!record(F, 'labor, 22-1101 x1 and 33-2805 x3 saved on it', put1.status === 200, `-> ${put1.status} ${String(put1.json.error ?? '')}`)) return
+    const built = await api('GET', `/api/hd/work-orders/${woId}/convert`)
+    if (!record(F, 'the converter builds the invoice', built.status === 200, `-> ${built.status} ${String(built.json.error ?? '')}`)) return
+    const inv = await api('POST', '/api/hd/invoices', built.json.invoice_payload)
+    const invId = String(((inv.json.invoice ?? {}) as Record<string, unknown>).id ?? '')
+    if (!record(F, 'the invoice is created', inv.status === 201 && !!invId, `-> ${inv.status}`)) return
+    created.hdInvoices.add(invId)
+    const s0 = await net(invId)
+    record(F, 'billing takes 22-1101 x1 and 33-2805 x3 off the shelf', s0.by('22-1101') === 1 && s0.by('33-2805') === 3,
+      `22-1101 ${s0.by('22-1101')}, 33-2805 ${s0.by('33-2805')}`)
+
+    const tok = await api('POST', `/api/hd/invoices/${invId}/token`)
+    const before = await readInv(invId)
+    record(F, 'it has a pay link token', tok.status === 200 && !!before.public_token, `-> ${tok.status}`)
+    await arrangeSent(invId)
+
+    const locked = await api('PUT', `/api/hd/work-orders/${woId}/line-items`, { line_items: [labor] })
+    record(F, "an invoiced work order's lines are refused by the server, not only the screen", locked.status === 409,
+      `-> ${locked.status} ${String(locked.json.error ?? '').slice(0, 60)}`)
+
+    const reopen = await api('PATCH', `/api/hd/work-orders/${woId}/status`, { status: 'completed' })
+    record(F, 'the work order reopens', reopen.status === 200, `-> ${reopen.status}`)
+    const put2 = await api('PUT', `/api/hd/work-orders/${woId}/line-items`, { line_items: [labor, part('22-1101', 2)] })
+    record(F, 'reopened, its lines are corrected: 22-1101 x2, 33-2805 removed', put2.status === 200, `-> ${put2.status} ${String(put2.json.error ?? '')}`)
+
+    const again = await api('GET', `/api/hd/work-orders/${woId}/convert`)
+    record(F, 'convert still refuses a second invoice, and offers the refresh', again.status === 409 && again.json.refreshable === true,
+      `-> ${again.status} refreshable ${String(again.json.refreshable)}`)
+    const ref = await api('POST', `/api/hd/invoices/${invId}/refresh`)
+    record(F, 'the refresh is accepted', ref.status === 200, `-> ${ref.status} ${String(ref.json.error ?? '')}`)
+
+    const after = await readInv(invId)
+    const count = await rest(`hd_invoices?work_order_id=eq.${woId}&select=id`)
+    record(F, 'still ONE invoice, with the same number and the same pay link',
+      count.length === 1 && after.invoice_number === before.invoice_number && !!after.public_token && after.public_token === before.public_token,
+      `${count.length} invoice(s), ${String(before.invoice_number)} -> ${String(after.invoice_number)}, token ${after.public_token === before.public_token ? 'kept' : 'CHANGED'}`)
+    const lines = (after.line_items ?? []) as Array<Record<string, unknown>>
+    record(F, 'it bills the corrected lines, priced on the server: parts 26.00, labor 200.00, total adds up',
+      lines.length === 2 && usd(after.subtotal_parts) === '26.00' && usd(after.subtotal_labor) === '200.00'
+        && usd(after.total) === usd(r2(226 + Number(after.tax_amount ?? 0))),
+      `${lines.length} lines, parts ${usd(after.subtotal_parts)}, labor ${usd(after.subtotal_labor)}, tax ${usd(after.tax_amount)}, total ${usd(before.total)} -> ${usd(after.total)}`)
+    const s1 = await net(invId)
+    record(F, 'stock moved by the DIFFERENCE: 22-1101 now 2 taken, 33-2805 all 3 back',
+      s1.by('22-1101') === 2 && s1.by('33-2805') === 0,
+      `22-1101 ${s1.by('22-1101')}, 33-2805 ${s1.by('33-2805')}; ${s1.mv.map(m => `${m.delta} ${m.reason}`).join(', ')}`)
+    record(F, "no second 'used' deduction was written for a part already billed",
+      s1.mv.filter(m => m.part_id === partId('22-1101') && m.reason === 'used').length === 1)
+    const onHand = await rest<{ part_id: string; on_hand: number }>(`inventory?select=part_id,on_hand&user_id=eq.${uid}`)
+    const oh = (pn: string) => onHand.filter(r => r.part_id === partId(pn)).reduce((t, r) => t + Number(r.on_hand), 0)
+    record(F, 'on hand follows: 22-1101 at -2, 33-2805 back to 0', oh('22-1101') === -2 && oh('33-2805') === 0,
+      `22-1101 ${oh('22-1101')}, 33-2805 ${oh('33-2805')}`)
+    const woAfter = (await rest<Record<string, unknown>>(`hd_work_orders?id=eq.${woId}&select=status`))[0]
+    record(F, 'the work order is invoiced again', woAfter?.status === 'invoiced', String(woAfter?.status))
+
+    record(F, 'refreshing a SENT invoice notes that the customer holds the earlier copy',
+      String(after.internal_notes ?? '').includes('Changed after it was sent') && String(after.internal_notes ?? '').includes('Refreshed from'),
+      String(after.internal_notes ?? '').split('\n').pop()?.slice(0, 110))
+    const pg = await page(`/reefer/invoices/${invId}`)
+    if (has188) {
+      record(F, 'and stamps it (188 applied), and the invoice screen says the customer holds an older copy',
+        !!after.changed_after_send_at && !!pg && pg.text.includes('Changed after it was sent') && pg.text.includes('holding an older copy'),
+        `stamp ${String(after.changed_after_send_at ?? 'none')}, page ${pg ? (pg.text.includes('holding an older copy') ? 'shows it' : 'banner absent') : 'did not load'}`)
+    } else {
+      record(F, 'without 188 the invoice screen renders and the note carries the record (apply 188 for the banner)',
+        !!pg && !pg.text.includes('holding an older copy'), pg ? '' : 'did not load')
+    }
+
+    const ref2 = await api('POST', `/api/hd/invoices/${invId}/refresh`)
+    const s2 = await net(invId)
+    record(F, 'a second refresh with nothing changed writes nothing and moves no stock',
+      ref2.status === 200 && Array.isArray(ref2.json.changed) && (ref2.json.changed as unknown[]).length === 0 && s2.mv.length === s1.mv.length,
+      `-> ${ref2.status} changed ${JSON.stringify(ref2.json.changed)}, movements ${s1.mv.length} -> ${s2.mv.length}`)
+
+    // ── PAID refuses everything ─────────────────────────────────────────────
+    const paid = await api('PUT', `/api/hd/invoices/${invId}`, { status: 'paid' })
+    record(F, 'the invoice is marked paid', paid.status === 200, `-> ${paid.status} ${String(paid.json.error ?? '')}`)
+    const paidRow = await readInv(invId)
+    const refPaid = await api('POST', `/api/hd/invoices/${invId}/refresh`)
+    const editPaid = await api('PUT', `/api/hd/invoices/${invId}`, { line_items: [], total: 1 })
+    const totalOnly = await api('PUT', `/api/hd/invoices/${invId}`, { total: 1 })
+    const paidAfter = await readInv(invId)
+    record(F, 'a PAID invoice refuses a refresh, an edit, and a bare total (all 409), and nothing moved',
+      refPaid.status === 409 && editPaid.status === 409 && totalOnly.status === 409 && usd(paidAfter.total) === usd(paidRow.total)
+        && JSON.stringify(paidAfter.line_items) === JSON.stringify(paidRow.line_items),
+      `refresh ${refPaid.status}, edit ${editPaid.status}, total ${totalOnly.status}; total ${usd(paidRow.total)} -> ${usd(paidAfter.total)}`)
+    const ep = await page(`/reefer/invoices/${invId}/edit`)
+    record(F, "the paid invoice's edit page says it cannot be edited instead of offering a form",
+      !!ep && ep.text.includes('is paid, so it cannot be edited'), ep ? ep.text.replace(/^.*?Back to the invoice/, '').slice(0, 120) : 'did not load')
+
+    // ── PART 2 on invoices billed directly (no work order) ──────────────────
+    const direct = async (tag: string) => {
+      const r = await api('POST', '/api/hd/invoices', {
+        customer_name: `${MARK} gate ${tag}`, customer_phone: '+15555550179', status: 'unpaid', labor_rate: 100, tax_rate: 0,
+        line_items: [
+          { id: 'l1', type: 'labor', description: `${MARK} labor`, mobile_hours: 1, part_number: '', quantity: 0, unit_cost: 0, amount: 100 },
+          { id: 'p1', type: 'parts', description: `${MARK} part`, mobile_hours: 0, part_number: '', quantity: 1, unit_cost: 50, amount: 50 },
+        ],
+        subtotal_labor: 100, subtotal_parts: 50, tax_amount: 0, total: 150,
+      })
+      const id = String(((r.json.invoice ?? {}) as Record<string, unknown>).id ?? '')
+      if (id) created.hdInvoices.add(id)
+      return id
+    }
+    const dId = await direct('open')
+    if (!record(F, 'an unpaid invoice billed directly (lines 150.00)', !!dId)) return
+    const bare = await api('PUT', `/api/hd/invoices/${dId}`, { total: 1, tax_amount: 0, subtotal_parts: 0 })
+    const dBare = await readInv(dId)
+    record(F, 'a PUT carrying only totals changes no money - the browser\'s total is never taken',
+      bare.status === 200 && usd(dBare.total) === '150.00' && usd(dBare.subtotal_parts) === '50.00', `-> ${bare.status} total ${usd(dBare.total)}`)
+    const opened = openInvoiceEdit(dBare, null)
+    const edited = { ...opened.state, lines: [...opened.state.lines, {
+      id: 'p2', type: 'parts' as const, description: `${MARK} second part`, mobile_hours: 0, part_number: '', quantity: 2, unit_cost: 10, amount: 999,
+    }] }
+    const forged = { ...invoiceSaveBody(dBare, opened, { ...edited, lines: edited.lines.map(l => (l.id === 'p2' ? { ...l, amount: 20 } : l)) }), line_items: edited.lines, total: 5, subtotal_parts: 1 }
+    const fput = await api('PUT', `/api/hd/invoices/${dId}`, forged)
+    const dEdit = await readInv(dId)
+    const p2 = ((dEdit.line_items ?? []) as Array<Record<string, unknown>>).find(l => l.id === 'p2')
+    record(F, 'an edit is priced on the server from its lines: part 2 x 10.00 = 20.00 (sent 999), total 170.00 (sent 5)',
+      fput.status === 200 && Number(p2?.amount) === 20 && usd(dEdit.subtotal_parts) === '70.00' && usd(dEdit.total) === '170.00',
+      `-> ${fput.status} line ${String(p2?.amount)}, parts ${usd(dEdit.subtotal_parts)}, total ${usd(dEdit.total)} ${String(fput.json.error ?? '')}`)
+    record(F, 'an edit to an invoice never sent records no "changed after sending"',
+      !String(dEdit.internal_notes ?? '').includes('Changed after it was sent') && dEdit.changed_after_send_at == null)
+
+    await arrangeSent(dId)
+    const sput = await api('PUT', `/api/hd/invoices/${dId}`, { customer_phone: '+15555550180' })
+    const dSent = await readInv(dId)
+    record(F, 'a SENT but unpaid invoice may still be edited, and records that it changed after sending',
+      sput.status === 200 && dSent.customer_phone === '+15555550180' && String(dSent.internal_notes ?? '').includes('Changed after it was sent')
+        && (!has188 || !!dSent.changed_after_send_at),
+      `-> ${sput.status} ${has188 ? `stamp ${String(dSent.changed_after_send_at ?? 'none')}` : '(188 not applied: note only)'}; ${String(dSent.internal_notes ?? '').split('\n').pop()?.slice(0, 90)}`)
+
+    const vId = await direct('void')
+    await fetch(`${SUPA}/rest/v1/hd_invoices?id=eq.${vId}`, { method: 'PATCH', headers: SVC_H, body: JSON.stringify({ status: 'void' }) })
+    const vEdit = await api('PUT', `/api/hd/invoices/${vId}`, { customer_phone: '+15555550181' })
+    const vUnvoid = await api('PUT', `/api/hd/invoices/${vId}`, { status: 'unpaid' })
+    const vRow = await readInv(vId)
+    record(F, 'a VOID invoice refuses an edit and a status change (409), and nothing moved',
+      vEdit.status === 409 && vUnvoid.status === 409 && vRow.status === 'void' && vRow.customer_phone === '+15555550179',
+      `edit ${vEdit.status}, unvoid ${vUnvoid.status}, status ${String(vRow.status)}`)
+
+    const ptId = await direct('partial')
+    await fetch(`${SUPA}/rest/v1/hd_invoices?id=eq.${ptId}`, { method: 'PATCH', headers: SVC_H, body: JSON.stringify({ status: 'partial' }) })
+    const ptEdit = await api('PUT', `/api/hd/invoices/${ptId}`, { line_items: [] })
+    const ptPaid = await api('PUT', `/api/hd/invoices/${ptId}`, { status: 'paid' })
+    const ptRow = await readInv(ptId)
+    record(F, 'a PARTIALLY PAID invoice refuses an edit, but can be marked paid in full',
+      ptEdit.status === 409 && ptPaid.status === 200 && ptRow.status === 'paid' && ((ptRow.line_items ?? []) as unknown[]).length === 2,
+      `edit ${ptEdit.status}, mark paid ${ptPaid.status}, status ${String(ptRow.status)}`)
+  } finally {
+    cookie = ownerCookie
   }
 }
 
@@ -5569,6 +5795,7 @@ async function main(): Promise<void> {
     await flowOd()
     await flowHw()
     await flowIe()
+    await flowRi()
     await flowHq()
     await flowPe()
     await flowY()

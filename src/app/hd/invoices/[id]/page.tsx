@@ -20,6 +20,7 @@ import { discountPrintLabel, parseDiscount } from '@/lib/document-discount'
 import { invoiceJobGroups } from '@/lib/hd/work-order-jobs'
 import { addressLine } from '@/lib/hd/address-print'
 import { Fragment } from 'react'
+import { isInvoiceLocked, holdsOlderCopy, lastSentAt } from '@/lib/hd/invoice-lock'
 
 const ORANGE = '#FF6600'
 const BLUE   = '#2969B0'
@@ -165,6 +166,7 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             )}
           </div>
           <InvoiceDetailActions
+            locked={isInvoiceLocked(inv.status)}
             invoiceId={inv.id}
             invoiceNumber={inv.invoice_number}
             currentStatus={inv.status}
@@ -189,6 +191,19 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
             lastSentAt={(inv.last_sent_at as string | null) ?? null}
           />
         </div>
+
+        {/* CHANGED AFTER SENDING. The invoice was edited or refreshed after the customer
+            last received it (migration 188's stamp), so the copy they hold - and the
+            figure they may pay from - is not this one until it is sent again. */}
+        {holdsOlderCopy(inv as Record<string, unknown>) && (
+          <div data-older-copy="true" className="mb-4 rounded-lg px-4 py-3 text-sm"
+            style={{ background: '#FEF3C7', border: '1px solid #F59E0B', color: '#78350F' }}>
+            <strong>Changed after it was sent.</strong>{' '}
+            This invoice was changed on {fmtDate(String(inv.changed_after_send_at))}, after it was last sent
+            {lastSentAt(inv as Record<string, unknown>) ? ` on ${fmtDate(lastSentAt(inv as Record<string, unknown>))}` : ''}.
+            {' '}The customer is holding an older copy. Send it again so they have this one.
+          </div>
+        )}
 
         {/* Invoice document */}
         <div style={{ background: '#FFFFFF', borderRadius: 12, border: '1px solid #E5E7EB', overflow: 'hidden' }}>
