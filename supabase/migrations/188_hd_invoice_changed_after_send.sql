@@ -15,7 +15,8 @@
 --
 -- No money column is touched; the self-check compares every invoice total.
 --
--- Until this is applied the code writes the internal note only, and the banner does
+-- APPLIED by hand Nov 14, 2026 (dry run in ROLLBACK, then COMMIT; self-check ok both times).
+-- Before that the code wrote the internal note only, and the banner did
 -- not show.
 --
 -- Plain ASCII. Ends in ROLLBACK: run it once to see the checks pass, then change the
@@ -66,5 +67,5 @@ BEGIN
     (SELECT count(*) FROM _inv_before);
 END $$;
 
--- Ends in ROLLBACK so a dry run changes nothing. Change to COMMIT to apply.
-ROLLBACK;
+-- Ends in COMMIT as run Nov 14, 2026. Change to ROLLBACK for a dry run.
+COMMIT;
