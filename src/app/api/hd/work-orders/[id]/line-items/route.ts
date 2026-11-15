@@ -11,6 +11,9 @@ import { allocateForWorkOrder, partLinesFromRows } from '@/lib/inventory/ledger'
 import { isJobStatus, isMissingJobsSchema, type WorkOrderJob } from '@/lib/hd/work-order-jobs'
 import { LINE_SELECT, loadLinesAndJobs } from '@/lib/hd/work-order-jobs-load'
 import { isMissingRepairItemColumn, isUuid, usableCardIds, withoutRepairItem } from '@/lib/hd/labor-card-link'
+import { workOrderLinesTaxUpdate } from '@/lib/hd/work-order-tax-refresh'
+import { loadHdShopExtras } from '@/lib/hd/hd-extras-load'
+import type { WorkOrderLineRow } from '@/lib/hd/wo-to-invoice'
 
 export const dynamic = 'force-dynamic'
 
@@ -151,6 +154,10 @@ export async function PUT(
     r.repair_item_id = r.type === 'labor' && isUuid(c) && usable.has(c) ? c : null
   })
 
+  // The lines as they stand, BEFORE the replace: the work order's carried tax and quoted
+  // total move by what this save changes (item 20, lib/hd/work-order-tax-refresh).
+  const before = await loadLinesAndJobs(supabase, workOrderId)
+
   // Delete-then-insert. Supabase's REST client has no multi-statement transaction, so
   // the window between the two is real: a failed insert leaves the set empty. The
   // insert is checked and reported rather than swallowed so the tech re-saves from a
@@ -188,7 +195,11 @@ export async function PUT(
   if (ids && sentJobs) await dropUnsentJobs(supabase, workOrderId, sentJobs)
   const jobs = ids ? (await loadLinesAndJobs(supabase, workOrderId)).jobs : []
 
-  if (lines.length === 0) return NextResponse.json({ line_items: [], jobs, has_jobs: !!ids, totals: totalsOf([]) })
+  // THE WORK ORDER'S OWN TAX follows its lines. Best-effort after the lines are saved:
+  // a failure here is logged and never costs the tech the lines they just typed.
+  const tax = await moveWorkOrderTax(supabase, gate.userId, workOrderId, before, lines, jobs)
+
+  if (lines.length === 0) return NextResponse.json({ line_items: [], jobs, has_jobs: !!ids, totals: totalsOf([]), work_order_tax: tax })
 
   // ------------------------------------------------------------ ALLOCATE
   //
@@ -211,7 +222,37 @@ export async function PUT(
       err instanceof Error ? err.message : String(err))
   }
 
-  return NextResponse.json({ line_items: lines, jobs, has_jobs: !!ids, totals: totalsOf(lines) })
+  return NextResponse.json({ line_items: lines, jobs, has_jobs: !!ids, totals: totalsOf(lines), work_order_tax: tax })
+}
+
+/**
+ * Write the work order's carried tax (and quoted total) as the converter now prices
+ * them. Null when nothing moved or the work order carries no tax of its own.
+ */
+async function moveWorkOrderTax(
+  supabase: Supabase, userId: string, workOrderId: string,
+  before: Awaited<ReturnType<typeof loadLinesAndJobs>>,
+  lines: Array<Record<string, unknown>>, jobs: WorkOrderJob[],
+): Promise<Record<string, unknown> | null> {
+  try {
+    const { data: wo } = await supabase.from('hd_work_orders').select('*').eq('id', workOrderId).eq('user_id', userId).maybeSingle()
+    if (!wo || before.error) return null
+    const { shop } = await loadHdShopExtras(supabase, userId)
+    const update = workOrderLinesTaxUpdate(
+      wo as Record<string, unknown>,
+      { rows: (before.lines ?? []) as unknown as WorkOrderLineRow[], jobs: before.jobs ?? [] },
+      { rows: lines as unknown as WorkOrderLineRow[], jobs },
+      { laborRate: shop.laborRate, taxSettings: shop.taxSettings },
+    )
+    if (!update) return null
+    const { error } = await supabase.from('hd_work_orders').update(update)
+      .eq('id', workOrderId).eq('user_id', userId).neq('status', 'invoiced')
+    if (error) { console.error('[hd/work-orders/line-items PUT] tax move failed, lines still saved:', error.message); return null }
+    return update
+  } catch (err) {
+    console.error('[hd/work-orders/line-items PUT] tax move threw, lines still saved:', err instanceof Error ? err.message : String(err))
+    return null
+  }
 }
 
 /** The jobs the card sent, checked. null when it sent none (an older page). */

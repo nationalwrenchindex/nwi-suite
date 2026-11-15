@@ -4867,6 +4867,262 @@ async function flowRi(): Promise<void> {
   }
 }
 
+// ── Rd: invoice delete guard, return parts to stock, negative stock, WO tax ────
+//
+// Nov 15. In a THROWAWAY smoke-reefer- account (nothing received, so every deduction
+// takes stock negative - which is the warning under test), billing REAL catalog parts
+// 22-1101 and 33-2805. Everything it makes goes with the account in cleanup.
+//   - DELETE: refused on sent, paid, partial and void; a never-sent draft deletes and
+//     its stock comes back - after two refreshes, to exactly zero net.
+//   - RETURN (migration 189): by part, capped at what the ledger holds NOW (after a
+//     refresh), twice cannot exceed it, and the bill does not move.
+//   - NEGATIVE: the deduction warns, names the part and the count, and completes.
+//   - ITEM 20: a work order carrying its tax moves it when its lines change.
+async function flowRd(): Promise<void> {
+  const F = 'Rd invoice delete + return to stock'
+  const PARTS = ['22-1101', '33-2805']
+  const real = await rest<{ id: string; part_number: string }>(`parts?select=id,part_number&part_number=in.(${PARTS.join(',')})`)
+  const partId = (pn: string) => real.find(p => p.part_number === pn)?.id ?? ''
+  if (!record(F, 'two real catalog parts to bill (22-1101, 33-2805)', PARTS.every(p => partId(p)), real.map(p => p.part_number).join(', '))) return
+
+  const email = `smoke-reefer-${Date.now()}@example.com`
+  const made = await fetch(`${SUPA}/auth/v1/admin/users`, {
+    method: 'POST', headers: SVC_H,
+    body: JSON.stringify({ email, password: `Smk-${Date.now()}-x9!`, email_confirm: true,
+      user_metadata: { full_name: `${MARK} return`, business_name: `${MARK} Return Shop` } }),
+  })
+  const u = await made.json().catch(() => ({})) as { id?: string }
+  if (!record(F, 'a throwaway account is created', made.ok && !!u.id, `-> ${made.status}`)) return
+  const uid = u.id!
+  created.reeferUsers.add(uid)
+  const sub = await fetch(`${SUPA}/rest/v1/subscriptions`, {
+    method: 'POST', headers: SVC_H,
+    body: JSON.stringify({ user_id: uid, tier: 'reefer_standalone', status: 'active', is_comped: false,
+      vertical: 'heavy_duty', modules: [...REEFER_STANDALONE_MODULES], cancel_at_period_end: false }),
+  })
+  if (!record(F, 'it gets a subscription that can bill', sub.ok, `-> ${sub.status}`)) return
+
+  const ledger = async (invId: string) => {
+    const mv = await rest<{ part_id: string; delta: number; reason: string; note: string | null }>(
+      `stock_movement?select=part_id,delta,reason,note&source_type=eq.hd_invoice&source_id=eq.${invId}&order=created_at`)
+    const by = (pn: string) => -mv.filter(m => m.part_id === partId(pn)).reduce((t, m) => t + Number(m.delta), 0)
+    return { mv, by }
+  }
+  const onHand = async (pn: string) => (await rest<{ on_hand: number }>(`inventory?select=on_hand&user_id=eq.${uid}&part_id=eq.${partId(pn)}`))
+    .reduce((t, r) => t + Number(r.on_hand), 0)
+  const readInv = async (invId: string) => (await rest<Record<string, unknown>>(`hd_invoices?id=eq.${invId}&select=*`))[0]
+  const arrange = (invId: string, patch: Record<string, unknown>) => fetch(`${SUPA}/rest/v1/hd_invoices?id=eq.${invId}`, {
+    // ARRANGED STATE: a real send texts a customer, a real payment moves money. What is
+    // under test is what delete and return do to an invoice already in that state.
+    method: 'PATCH', headers: SVC_H, body: JSON.stringify(patch),
+  })
+  const sentAt = new Date(Date.now() - 3600_000).toISOString()
+  const SENT = { status: 'sent', sent_at: sentAt, last_sent_at: sentAt, sent_count: 1 }
+  const labor = { type: 'labor', description: `${MARK} recharge`, quantity: 2, unit_price: 100, total: 200 }
+  const part = (pn: string, qty: number) => ({ type: 'part', description: `${MARK} ${pn}`, part_number: pn,
+    quantity: qty, unit_cost: 10, unit_price: 13, markup_percent: 30, total: r2(qty * 13) })
+
+  const ownerCookie = cookie
+  try {
+    cookie = (await openSession(uid)).cookie
+
+    const billWorkOrder = async (tag: string, lines: unknown[]) => {
+      const wo = await api('POST', '/api/hd/work-orders', {
+        customer_name: `${MARK} return ${tag}`, customer_phone: '+15555550179',
+        service_type: `${MARK} return`, scheduled_date: new Date().toISOString().slice(0, 10), scheduled_time: '09:00',
+      })
+      const woId = String(((wo.json.work_order ?? wo.json) as Record<string, unknown>).id ?? '')
+      if (!woId) return null
+      created.hdWorkOrders.add(woId)
+      const put = await api('PUT', `/api/hd/work-orders/${woId}/line-items`, { line_items: lines })
+      if (put.status !== 200) return null
+      const built = await api('GET', `/api/hd/work-orders/${woId}/convert`)
+      if (built.status !== 200) return null
+      const inv = await api('POST', '/api/hd/invoices', built.json.invoice_payload)
+      const invId = String(((inv.json.invoice ?? {}) as Record<string, unknown>).id ?? '')
+      if (!invId) return null
+      created.hdInvoices.add(invId)
+      return { woId, invId, inv }
+    }
+    const correct = async (woId: string, invId: string, lines: unknown[]) => {
+      const reopen = await api('PATCH', `/api/hd/work-orders/${woId}/status`, { status: 'completed' })
+      const put = await api('PUT', `/api/hd/work-orders/${woId}/line-items`, { line_items: lines })
+      const ref = await api('POST', `/api/hd/invoices/${invId}/refresh`)
+      return reopen.status === 200 && put.status === 200 && ref.status === 200 ? null : `reopen ${reopen.status}, lines ${put.status}, refresh ${ref.status} ${String(ref.json.error ?? '')}`
+    }
+
+    // ── 1. NEGATIVE STOCK: the deduction warns and completes ───────────────────
+    const a = await billWorkOrder('draft', [labor, part('22-1101', 1), part('33-2805', 3)])
+    if (!record(F, 'a work order is billed: 22-1101 x1, 33-2805 x3 (nothing was ever received)', !!a)) return
+    const neg = (((a!.inv.json.stock ?? {}) as Record<string, unknown>).negative ?? []) as Array<{ partNumber: string; onHand: number }>
+    record(F, 'a deduction taking parts below zero completes, and warns with the part and the count',
+      a!.inv.status === 201 && neg.some(n => n.partNumber === '33-2805' && n.onHand === -3) && neg.some(n => n.partNumber === '22-1101' && n.onHand === -1),
+      `-> ${a!.inv.status} ${neg.map(n => `${n.partNumber} ${n.onHand}`).join(', ') || 'no warning'}`)
+    const apg = await page(`/reefer/invoices/${a!.invId}`)
+    record(F, 'the invoice screen shows the below-zero warning naming the part and the count',
+      !!apg && apg.html.includes('data-negative-stock="true"') && apg.text.includes('33-2805 is now at -3 on hand'),
+      apg ? (apg.html.includes('data-negative-stock') ? '' : 'warning absent') : 'did not load')
+    record(F, 'a never-sent draft shows Delete, and no Return parts to stock',
+      !!apg && apg.html.includes('data-delete-invoice="true"') && !apg.html.includes('data-return-parts'),
+      apg ? '' : 'did not load')
+    const draftReturn = await api('POST', `/api/hd/invoices/${a!.invId}/return`, { returns: [{ part_id: partId('33-2805'), quantity: 1 }], note: `${MARK} refused` })
+    record(F, 'return to stock is refused on an unsent draft (Refresh is the tool there)',
+      draftReturn.status === 409 && /Refresh/.test(String(draftReturn.json.error ?? '')), `-> ${draftReturn.status} ${String(draftReturn.json.error ?? '').slice(0, 70)}`)
+
+    // ── 2. REFRESH TWICE, THEN DELETE: exactly zero net ─────────────────────
+    const r1 = await correct(a!.woId, a!.invId, [labor, part('22-1101', 2)])
+    const r2x = r1 ? r1 : await correct(a!.woId, a!.invId, [labor, part('22-1101', 3), part('33-2805', 1)])
+    if (!record(F, 'the draft is refreshed twice (22-1101 x2, 33-2805 off; then 22-1101 x3, 33-2805 x1)', !r1 && !r2x, r1 ?? r2x ?? '')) return
+    const preDel = await ledger(a!.invId)
+    record(F, 'after two refreshes the ledger holds 22-1101 3 and 33-2805 1 for it', preDel.by('22-1101') === 3 && preDel.by('33-2805') === 1,
+      `22-1101 ${preDel.by('22-1101')}, 33-2805 ${preDel.by('33-2805')}; ${preDel.mv.length} movements`)
+    const del = await api('DELETE', `/api/hd/invoices/${a!.invId}`)
+    const postDel = await ledger(a!.invId)
+    const goneRow = await readInv(a!.invId)
+    record(F, 'the never-sent draft deletes', del.status === 200 && !goneRow, `-> ${del.status} ${String(del.json.error ?? '')}`)
+    record(F, 'REFRESH THEN DELETE: the ledger for it ends at exactly zero net, per part',
+      postDel.by('22-1101') === 0 && postDel.by('33-2805') === 0 && postDel.mv.length > preDel.mv.length,
+      `22-1101 ${postDel.by('22-1101')}, 33-2805 ${postDel.by('33-2805')}; ${preDel.mv.length} -> ${postDel.mv.length} movements`)
+    record(F, 'nothing was edited or deleted: every earlier movement is still there, in order, plus the reversal',
+      preDel.mv.every((m, i) => postDel.mv[i] && postDel.mv[i].delta === m.delta && postDel.mv[i].reason === m.reason)
+        && postDel.mv.filter(m => m.reason === 'used').length === preDel.mv.filter(m => m.reason === 'used').length)
+    const oh1 = await onHand('22-1101'), oh2 = await onHand('33-2805')
+    record(F, 'the stock comes back: on hand 0 for both (the account never had any)', oh1 === 0 && oh2 === 0, `22-1101 ${oh1}, 33-2805 ${oh2}`)
+    const woA = (await rest<Record<string, unknown>>(`hd_work_orders?id=eq.${a!.woId}&select=status`))[0]
+    record(F, 'its work order is open again (completed), not stuck invoiced with no invoice', woA?.status === 'completed', String(woA?.status))
+
+    // ── 3. DELETE REFUSED on sent, paid, partial and void ────────────────────
+    const direct = async (tag: string) => {
+      const r = await api('POST', '/api/hd/invoices', {
+        customer_name: `${MARK} del ${tag}`, customer_phone: '+15555550179', status: 'unpaid', labor_rate: 100, tax_rate: 0,
+        line_items: [{ id: 'l1', type: 'labor', description: `${MARK} labor`, mobile_hours: 1, part_number: '', quantity: 0, unit_cost: 0, amount: 100 }],
+        subtotal_labor: 100, subtotal_parts: 0, tax_amount: 0, total: 100,
+      })
+      const id = String(((r.json.invoice ?? {}) as Record<string, unknown>).id ?? '')
+      if (id) created.hdInvoices.add(id)
+      return id
+    }
+    const refused: string[] = []
+    for (const [tag, patch] of [
+      ['sent', SENT], ['paid', { status: 'paid', paid_at: sentAt }], ['partial', { status: 'partial', paid_at: sentAt }], ['void', { status: 'void' }],
+    ] as Array<[string, Record<string, unknown>]>) {
+      const id = await direct(tag)
+      if (!id) { refused.push(`${tag}: not created`); continue }
+      await arrange(id, patch)
+      const d = await api('DELETE', `/api/hd/invoices/${id}`)
+      const still = await readInv(id)
+      const msg = String(d.json.error ?? '')
+      if (!(d.status === 409 && !!still && /Refresh/.test(msg) && /Return parts to stock/.test(msg))) refused.push(`${tag}: -> ${d.status} ${still ? 'kept' : 'DELETED'} ${msg.slice(0, 50)}`)
+    }
+    record(F, 'delete is refused on sent, paid, partial and void (409, kept), and the message names Refresh and Return parts to stock',
+      refused.length === 0, refused.join('; '))
+
+    // ── 4. REFRESH THEN RETURN ────────────────────────────────────────────────
+    const b = await billWorkOrder('return', [labor, part('22-1101', 2), part('33-2805', 3)])
+    if (!record(F, 'a second job is billed: 22-1101 x2, 33-2805 x3', !!b)) return
+    const rb = await correct(b!.woId, b!.invId, [labor, part('22-1101', 2), part('33-2805', 2)])
+    record(F, 'refreshed to 33-2805 x2 before it goes out (the ledger now holds 2, not the original 3)', !rb && (await ledger(b!.invId)).by('33-2805') === 2, rb ?? '')
+    await arrange(b!.invId, SENT)
+    const tok = await api('POST', `/api/hd/invoices/${b!.invId}/token`)
+    const frozen = await readInv(b!.invId)
+    const view = await api('GET', `/api/hd/invoices/${b!.invId}/return`)
+    const p2805 = ((view.json.parts ?? []) as Array<Record<string, unknown>>).find(p => p.part_number === '33-2805')
+    record(F, 'sent, it offers the return, by part, with the lines each part is on',
+      view.status === 200 && view.json.can_return === true && Number(p2805?.taken) === 2 && Array.isArray(p2805?.lines) && (p2805!.lines as unknown[]).length === 1,
+      `-> ${view.status} can_return ${String(view.json.can_return)}, 33-2805 taken ${String(p2805?.taken)} on ${((p2805?.lines ?? []) as unknown[]).length} line(s)`)
+
+    const ret = (qty: number, note = `${MARK} job 2 refused`) => api('POST', `/api/hd/invoices/${b!.invId}/return`, { returns: [{ part_id: partId('33-2805'), quantity: qty }], note })
+    // The cap is checked before anything is written, so this refusal holds with or
+    // without 189; the first return that WRITES is what needs it.
+    const orig = await ret(3)
+    record(F, 'REFRESH THEN RETURN: asking for the ORIGINAL 3 is refused - the ledger holds 2 now',
+      orig.status === 409 && /only 2 off the shelf/.test(String(orig.json.error ?? '')), `-> ${orig.status} ${String(orig.json.error ?? '').slice(0, 80)}`)
+    const one = await ret(1)
+    if (/migration 189/.test(String(one.json.error ?? ''))) {
+      // A step that cannot run is a FAILURE, and says what is missing.
+      const l0 = await ledger(b!.invId)
+      record(F, 'RETURN needs migration 189, which is not applied - the return, its cap, the money freeze, the screen and the refresh backstop cannot run', false,
+        `-> ${one.status} ${String(one.json.error ?? '')} (ledger untouched: 33-2805 ${l0.by('33-2805')}); apply 189 and run again`)
+    } else {
+      const l1 = await ledger(b!.invId)
+      record(F, 'one of the two comes back: a new customer_returned +1 row with the note, and the ledger holds 1',
+        one.status === 201 && l1.by('33-2805') === 1 && l1.mv.some(m => m.reason === 'customer_returned' && m.delta === 1 && String(m.note ?? '').includes(`${MARK} job 2 refused`)),
+        `-> ${one.status} ${String(one.json.error ?? '')}; ledger 33-2805 ${l1.by('33-2805')}`)
+      const twice = await ret(2)
+      record(F, 'a second return on the same part cannot exceed what is left (2 of 1 refused)',
+        twice.status === 409 && /only 1 off the shelf/.test(String(twice.json.error ?? '')) && (await ledger(b!.invId)).by('33-2805') === 1,
+        `-> ${twice.status} ${String(twice.json.error ?? '').slice(0, 80)}`)
+      const last = await ret(1)
+      const none = await ret(1)
+      record(F, 'the last one comes back, and then nothing is left to return',
+        last.status === 201 && none.status === 409 && (await ledger(b!.invId)).by('33-2805') === 0,
+        `last -> ${last.status}, then -> ${none.status} ${String(none.json.error ?? '').slice(0, 60)}`)
+      record(F, 'a return needs a note saying which job', (await ret(1, '')).status === 422)
+      const usedRows = (await ledger(b!.invId)).mv.filter(m => m.reason === 'used' && m.part_id === partId('33-2805'))
+      record(F, "the original 'used' deduction is untouched", usedRows.length === 1 && Number(usedRows[0].delta) === -3, usedRows.map(m => m.delta).join(','))
+      const oh = await onHand('33-2805')
+      record(F, 'on hand follows the ledger: 33-2805 back to 0', oh === 0, String(oh))
+
+      const thawed = await readInv(b!.invId)
+      const keys = ['total', 'tax_amount', 'tax_breakdown', 'subtotal_parts', 'subtotal_labor', 'invoice_number', 'public_token', 'status', 'line_items', 'updated_at', 'internal_notes']
+      const moved = keys.filter(k => JSON.stringify(thawed?.[k] ?? null) !== JSON.stringify(frozen?.[k] ?? null))
+      record(F, 'a return does not change the invoice: total, tax, lines, number, pay link, status (the row is not written at all)',
+        !!thawed && tok.status === 200 && !!frozen?.public_token && moved.length === 0,
+        moved.length ? `MOVED: ${moved.join(', ')}` : `total ${usd(thawed?.total)}, ${String(thawed?.invoice_number)}, ${String(thawed?.status)}`)
+      const rpg = await page(`/reefer/invoices/${b!.invId}`)
+      record(F, 'the invoice screen shows the parts returned, how many and when',
+        !!rpg && rpg.html.includes('data-returned-to-stock="true"') && rpg.text.includes('1 x 33-2805') && rpg.text.includes('Parts returned to stock'),
+        rpg ? (rpg.html.includes('data-returned-to-stock') ? '' : 'section absent') : 'did not load')
+      record(F, 'a sent invoice shows Return parts to stock, and no Delete',
+        !!rpg && rpg.html.includes('data-return-parts="true"') && !rpg.html.includes('data-delete-invoice'))
+      const refBack = await api('POST', `/api/hd/invoices/${b!.invId}/refresh`)
+      record(F, 'refresh refuses an invoice carrying a customer return (it would take the parts again)',
+        refBack.status === 409 && refBack.json.reason === 'customer_returned' && (await ledger(b!.invId)).by('33-2805') === 0,
+        `-> ${refBack.status} ${String(refBack.json.reason ?? '')}`)
+    }
+
+    // ── 5. ITEM 20: the work order's own tax follows its lines ──────────────
+    // Arranged: the shop taxes parts 10% and labor 5%, and the work order carries the
+    // tax its approved quote would have - the converter's own figure for these lines.
+    await fetch(`${SUPA}/rest/v1/profiles?id=eq.${uid}`, { method: 'PATCH', headers: SVC_H,
+      body: JSON.stringify({ tax_parts: true, tax_labor: true, tax_rate_parts: 10, tax_rate_labor: 5 }) })
+    const wo = await api('POST', '/api/hd/work-orders', {
+      customer_name: `${MARK} return tax`, customer_phone: '+15555550179',
+      service_type: `${MARK} return`, scheduled_date: new Date().toISOString().slice(0, 10), scheduled_time: '09:00',
+    })
+    const woId = String(((wo.json.work_order ?? wo.json) as Record<string, unknown>).id ?? '')
+    if (woId) created.hdWorkOrders.add(woId)
+    const t0 = await api('PUT', `/api/hd/work-orders/${woId}/line-items`, { line_items: [labor, part('22-1101', 1)] })
+    const c0 = await api('GET', `/api/hd/work-orders/${woId}/convert`)
+    const p0 = (c0.json.invoice_payload ?? {}) as Record<string, unknown>
+    await fetch(`${SUPA}/rest/v1/hd_work_orders?id=eq.${woId}`, { method: 'PATCH', headers: SVC_H,
+      body: JSON.stringify({ tax_amount: p0.tax_amount, tax_breakdown: p0.tax_breakdown, total_amount: p0.total }) })
+    if (!record(F, 'a work order carrying its tax (labor 200 @5%, parts 13 @10%)', !!woId && t0.status === 200 && c0.status === 200 && usd(p0.tax_amount) === '11.30',
+      `tax ${usd(p0.tax_amount)}, total ${usd(p0.total)}`)) return
+    const t1 = await api('PUT', `/api/hd/work-orders/${woId}/line-items`, { line_items: [labor, part('22-1101', 1), part('33-2805', 2)] })
+    const w1 = (await rest<Record<string, unknown>>(`hd_work_orders?id=eq.${woId}&select=tax_amount,total_amount,tax_breakdown`))[0] ?? {}
+    record(F, "adding a line moves the work order's own tax and quoted total (parts +26.00, tax +2.60)",
+      t1.status === 200 && usd(w1.tax_amount) === '13.90' && usd(w1.total_amount) === usd(r2(Number(p0.total) + 26 + 2.6)),
+      `tax ${usd(p0.tax_amount)} -> ${usd(w1.tax_amount)}, total ${usd(p0.total)} -> ${usd(w1.total_amount)}`)
+    const c1 = await api('GET', `/api/hd/work-orders/${woId}/convert`)
+    const ex1 = await api('GET', `/api/hd/work-orders/${woId}/extras`)
+    record(F, 'the work order, its totals panel and the invoice it would bill agree',
+      usd(((c1.json.invoice_payload ?? {}) as Record<string, unknown>).tax_amount) === usd(w1.tax_amount)
+        && usd(((ex1.json.invoice ?? {}) as Record<string, unknown>).tax_amount) === usd(w1.tax_amount),
+      `convert ${usd(((c1.json.invoice_payload ?? {}) as Record<string, unknown>).tax_amount)}, panel ${usd(((ex1.json.invoice ?? {}) as Record<string, unknown>).tax_amount)}, stored ${usd(w1.tax_amount)}`)
+    const t2 = await api('PUT', `/api/hd/work-orders/${woId}/line-items`, { line_items: [labor, part('22-1101', 1), part('33-2805', 2)] })
+    const w2 = (await rest<Record<string, unknown>>(`hd_work_orders?id=eq.${woId}&select=tax_amount,total_amount`))[0] ?? {}
+    record(F, 'saving the same lines again moves nothing', t2.status === 200 && t2.json.work_order_tax == null && usd(w2.tax_amount) === usd(w1.tax_amount) && usd(w2.total_amount) === usd(w1.total_amount),
+      `tax ${usd(w2.tax_amount)}, total ${usd(w2.total_amount)}`)
+    const t3 = await api('PUT', `/api/hd/work-orders/${woId}/line-items`, { line_items: [labor, part('22-1101', 1)] })
+    const w3 = (await rest<Record<string, unknown>>(`hd_work_orders?id=eq.${woId}&select=tax_amount,total_amount`))[0] ?? {}
+    record(F, 'taking the line off puts the tax and total back to the cent', t3.status === 200 && usd(w3.tax_amount) === usd(p0.tax_amount) && usd(w3.total_amount) === usd(p0.total),
+      `tax ${usd(w3.tax_amount)}, total ${usd(w3.total_amount)}`)
+  } finally {
+    cookie = ownerCookie
+  }
+}
+
 // ── Hq: the HD discount and terms, quote -> work order -> invoice ───────────
 //
 // Migration 168 end to end through the routes and screens a shop uses. The quote is
@@ -5796,6 +6052,7 @@ async function main(): Promise<void> {
     await flowHw()
     await flowIe()
     await flowRi()
+    await flowRd()
     await flowHq()
     await flowPe()
     await flowY()

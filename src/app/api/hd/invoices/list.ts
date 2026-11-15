@@ -8,7 +8,7 @@
  */
 
 export const HD_INVOICE_LIST_SELECT =
-  'id, invoice_number, customer_name, unit_manufacturer, unit_model, total, status, payment_terms, due_date, created_at, paid_at'
+  'id, invoice_number, customer_name, unit_manufacturer, unit_model, total, status, payment_terms, due_date, created_at, paid_at, sent_at, last_sent_at, sent_count'
 
 /** What the /hd/invoices list asks for per "Load More". */
 export const HD_INVOICE_PAGE_SIZE = 50
@@ -38,6 +38,10 @@ export interface HDInvoiceListRow {
   due_date:          string | null
   created_at:        string
   paid_at:           string | null
+  /** The send stamps, so the list can tell a deletable draft (isDeletableDraft). */
+  sent_at?:          string | null
+  last_sent_at?:     string | null
+  sent_count?:       number | null
 }
 
 /** Minimal structural shape of a PostgREST builder, so this can take either a row

@@ -8,7 +8,8 @@ import { costingFromLineItems, isMissingCostingColumn } from '@/lib/hd/invoice-c
 import { checkDiscountWrite } from '@/lib/hd/hd-discount'
 import { recordTermsSnapshot } from '@/lib/document-terms'
 import { READING_COLUMNS, readingsFromBody, withoutMissingReadings } from '@/lib/hd/unit-hours'
-import { isInvoiceLocked, lockedMessage, changedAfterSendFields } from '@/lib/hd/invoice-lock'
+import { isInvoiceLocked, lockedMessage, changedAfterSendFields, isDeletableDraft, deleteRefusedMessage } from '@/lib/hd/invoice-lock'
+import { reverseInvoiceStock, reconcileInvoiceStock } from '@/lib/inventory/ledger'
 import { serverPricedUpdate } from '@/lib/hd/invoice-edit-server'
 import { loadHdShopExtras } from '@/lib/hd/hd-extras-load'
 import { hdLaborRateFrom } from '@/lib/hd/labor-rate'
@@ -238,12 +239,61 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const hasAccess = (await checkHDAccess(user.id)) || (await reeferStandaloneCan(user.id, 'reefer_invoices'))
   if (!hasAccess) return NextResponse.json({ error: 'HD subscription required' }, { status: 403 })
 
-  const { error } = await supabase
+  // ONLY A DRAFT THAT NEVER LEFT THE SHOP (isDeletableDraft): unpaid, never sent, no
+  // payment. Everything else is permanent, refused here whatever the screen shows.
+  // Before Nov 15 this deleted any invoice at any status and put no stock back - how
+  // WO-2026-1576 lost two invoice numbers and had its parts taken three times.
+  const { data: stored } = await supabase
+    .from('hd_invoices')
+    .select('*')
+    .eq('id', id)
+    .eq('user_id', user.id)
+    .maybeSingle()
+  if (!stored) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  const inv = stored as Record<string, unknown>
+  if (!isDeletableDraft(inv)) {
+    return NextResponse.json({ error: deleteRefusedMessage(inv), reason: 'permanent' }, { status: 409 })
+  }
+
+  // THE STOCK IT TOOK GOES BACK FIRST: the exact net the ledger holds for this
+  // invoice, per part and location, after every refresh - so its movements sum to
+  // zero. New rows only; the deduction rows stay. If any fails, nothing is deleted.
+  const invoiceRef = (inv.invoice_number as string | null) ?? null
+  const reversed = await reverseInvoiceStock({ userId: user.id, invoiceId: id, invoiceRef, createdBy: user.id })
+  if (!reversed.ok) {
+    return NextResponse.json({
+      error: `The parts this draft took could not all be put back, so it was not deleted: ${reversed.errors.join('; ')}`,
+      stock: reversed,
+    }, { status: 500 })
+  }
+
+  // Deleted only while it is still a draft - a send between the read and here wins.
+  const { data: gone, error } = await supabase
     .from('hd_invoices')
     .delete()
     .eq('id', id)
     .eq('user_id', user.id)
+    .eq('status', 'unpaid')
+    .is('sent_at', null)
+    .is('last_sent_at', null)
+    .is('paid_at', null)
+    .select('id')
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ success: true })
+  if (error || !gone?.length) {
+    // Not deleted after all: take the parts again so the shelf matches the invoice.
+    await reconcileInvoiceStock({
+      userId: user.id, invoiceKind: 'hd', invoiceId: id, invoiceRef,
+      lineItems: inv.line_items, createdBy: user.id,
+    }).catch(() => undefined)
+    return NextResponse.json({ error: error?.message ?? 'The invoice changed (sent or paid) while it was being deleted, so it was kept.' }, { status: error ? 500 : 409 })
+  }
+
+  // Its work order is no longer billed: open it again (completed), so its lines can be
+  // corrected and invoiced afresh. Only when it is still marked invoiced.
+  if (typeof inv.work_order_id === 'string' && inv.work_order_id) {
+    await supabase.from('hd_work_orders').update({ status: 'completed' })
+      .eq('id', inv.work_order_id).eq('user_id', user.id).eq('status', 'invoiced')
+  }
+
+  return NextResponse.json({ success: true, stock: { returned: reversed.written } })
 }

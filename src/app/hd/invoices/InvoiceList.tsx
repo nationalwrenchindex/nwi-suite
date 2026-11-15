@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { HD_INVOICE_PAGE_SIZE, type HDInvoiceListRow } from '@/app/api/hd/invoices/list'
 import InvoiceListActions from './InvoiceListActions'
 import { money } from '@/lib/format'
+import { isDeletableDraft } from '@/lib/hd/invoice-lock'
 
 const ORANGE = '#FF6600'
 
@@ -152,7 +153,7 @@ export default function InvoiceList({
                 <span className="text-xs" style={{ color: 'var(--paper-muted)' }}>
                   {inv.status === 'paid' && inv.paid_at ? fmtDate(inv.paid_at) : fmtDate(inv.created_at)}
                 </span>
-                <InvoiceListActions invoiceId={inv.id} invoiceNumber={inv.invoice_number} currentStatus={inv.status} />
+                <InvoiceListActions invoiceId={inv.id} invoiceNumber={inv.invoice_number} currentStatus={inv.status} deletable={isDeletableDraft(inv as unknown as Record<string, unknown>)} />
               </div>
             )
           })}
@@ -176,7 +177,7 @@ export default function InvoiceList({
                   <span style={{ color: 'var(--paper-muted)' }}> • {inv.status === 'paid' && inv.paid_at ? fmtDate(inv.paid_at) : fmtDate(inv.created_at)}</span>
                 </p>
                 <div className="mt-3">
-                  <InvoiceListActions invoiceId={inv.id} invoiceNumber={inv.invoice_number} currentStatus={inv.status} />
+                  <InvoiceListActions invoiceId={inv.id} invoiceNumber={inv.invoice_number} currentStatus={inv.status} deletable={isDeletableDraft(inv as unknown as Record<string, unknown>)} />
                 </div>
               </div>
             )

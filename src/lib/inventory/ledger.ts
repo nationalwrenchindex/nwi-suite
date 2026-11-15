@@ -32,6 +32,20 @@ import { normalizePartNumber } from '@/lib/parts/search'
 export type MovementReason =
   | 'received' | 'used' | 'adjusted'
   | 'transferred_in' | 'transferred_out' | 'returned' | 'opening'
+  // Migration 189. The customer refused the repair and the parts came back, on an
+  // invoice whose money is frozen. Distinct from 'returned' (a refresh billing fewer,
+  // or a deleted draft) so a refresh can refuse an invoice carrying one.
+  | 'customer_returned'
+
+export const CUSTOMER_RETURN_REASON = 'customer_returned' as const
+
+/** A part this movement left below zero. Warned about, never blocked. */
+export interface NegativeStock {
+  partId: string
+  partNumber: string
+  onHand: number
+  locationName: string | null
+}
 
 export type WorkOrderKind = 'ld' | 'hd'
 
@@ -51,6 +65,12 @@ export interface LedgerResult {
   /** Already deducted - the ledger refused a duplicate. Not an error. */
   alreadyApplied: string[]
   errors: string[]
+  /**
+   * Parts a deduction here left below zero, with the count they now stand at. A
+   * warning for the screen, never a refusal: the tech is at the truck and the job is
+   * real. Absent on a call that took nothing off the shelf.
+   */
+  negative?: NegativeStock[]
 }
 
 type Supabase = ReturnType<typeof createServiceClient>
@@ -286,6 +306,7 @@ export async function deductForInvoice(opts: {
   }
 
   const ids = await resolvePartIds(supabase, lines.map(l => l.partNumber))
+  const deducted: string[] = []
 
   for (const line of lines) {
     const partId = ids.get(normalizePartNumber(line.partNumber))
@@ -312,10 +333,11 @@ export async function deductForInvoice(opts: {
     })
 
     if (res.duplicate) result.alreadyApplied.push(line.partNumber)
-    else if (res.ok) result.written++
+    else if (res.ok) { result.written++; deducted.push(partId) }
     else result.errors.push(`${line.partNumber}: ${res.error}`)
   }
 
+  result.negative = await negativeStock(supabase, opts.userId, deducted)
   return result
 }
 
@@ -458,7 +480,262 @@ export async function reconcileInvoiceStock(opts: {
     else if (res.ok) { result.written++; result.changes.push(p) }
     else result.errors.push(`${p.partNumber}: ${res.error}`)
   }
+  // Read after the plan is written, and only for parts this refresh took MORE of:
+  // the warning is about a deduction, not about a part already negative before.
+  result.negative = await negativeStock(supabase, opts.userId, result.changes.filter(c => c.delta < 0).map(c => c.partId))
   return result
+}
+
+// ── what the ledger holds for an invoice, per part ─────────────────────────
+
+/** One movement an invoice wrote, with what the screen shows of it. */
+export interface InvoiceMovement extends DocMovement {
+  id: string
+  note: string | null
+  createdBy: string | null
+  createdAt: string
+}
+
+/** What the ledger holds for one part on one invoice, right now. */
+export interface InvoicePartStock {
+  partId: string
+  partNumber: string
+  /** Net off the shelf for this invoice now: minus the sum of every movement it wrote
+   *  for the part - the first 'used', every refresh, every customer return. */
+  taken: number
+  /** How many came back by customer return so far (migration 189). */
+  customerReturned: number
+  /** Net taken per location, largest first - where a return goes back to. */
+  byLocation: Array<{ locationId: string; taken: number }>
+  /** The cost the invoice took it at (its first movement carrying one). */
+  unitCost: number | null
+}
+
+/**
+ * Group an invoice's movements by part. Pure.
+ *
+ * READ FROM THE LEDGER, never from the invoice's lines: after a refresh the lines say
+ * what is billed, but only the ledger says what is off the shelf for this document.
+ */
+export function summarizeInvoiceStock(
+  movements: DocMovement[],
+  partNumberOf: (partId: string) => string = id => id,
+): InvoicePartStock[] {
+  const by = new Map<string, InvoicePartStock & { locs: Map<string, number> }>()
+  for (const m of movements) {
+    let s = by.get(m.partId)
+    if (!s) {
+      s = { partId: m.partId, partNumber: partNumberOf(m.partId), taken: 0, customerReturned: 0, byLocation: [], unitCost: null, locs: new Map() }
+      by.set(m.partId, s)
+    }
+    s.taken -= m.delta
+    s.locs.set(m.locationId, (s.locs.get(m.locationId) ?? 0) - m.delta)
+    if (m.reason === CUSTOMER_RETURN_REASON) s.customerReturned += m.delta
+    if (s.unitCost == null && m.unitCost != null) s.unitCost = m.unitCost
+  }
+  return [...by.values()]
+    .map(({ locs, ...s }) => ({ ...s, byLocation: [...locs.entries()].map(([locationId, taken]) => ({ locationId, taken })).sort((a, b) => b.taken - a.taken) }))
+    .sort((a, b) => a.partNumber.localeCompare(b.partNumber))
+}
+
+/** One movement a return or a reversal will write. */
+export interface PlannedReturn {
+  partId: string; partNumber: string; locationId: string
+  delta: number; reason: 'customer_returned' | 'returned' | 'adjusted'; unitCost: number | null
+}
+
+/**
+ * A customer return, checked against what the ledger holds. Pure.
+ *
+ * Per PART, with a quantity - one refused repair out of three is the normal case. It
+ * can never put back more than this invoice has off the shelf for that part now
+ * (after every refresh and every earlier return); asking for more refuses the whole
+ * request, so nothing is half-returned. Goes back to the locations it was taken from,
+ * the largest first, at the cost it was taken at.
+ */
+export function planCustomerReturn(
+  stock: InvoicePartStock[],
+  requests: Array<{ partId: string; quantity: number }>,
+): { ok: true; movements: PlannedReturn[] } | { ok: false; errors: string[] } {
+  const errors: string[] = []
+  const asked = new Map<string, number>()
+  for (const r of requests) {
+    if (!Number.isInteger(r.quantity) || r.quantity < 0) { errors.push('Each quantity must be a whole number, zero or more.'); continue }
+    if (r.quantity === 0) continue
+    asked.set(r.partId, (asked.get(r.partId) ?? 0) + r.quantity)
+  }
+  if (!errors.length && asked.size === 0) errors.push('Enter how many of at least one part came back.')
+  const movements: PlannedReturn[] = []
+  for (const [partId, qty] of asked) {
+    const s = stock.find(x => x.partId === partId)
+    if (!s) { errors.push('That part was never taken off the shelf for this invoice, so it cannot be returned to stock from it.'); continue }
+    if (qty > s.taken) {
+      errors.push(s.taken <= 0
+        ? `${s.partNumber}: nothing is left to return - this invoice has none of it off the shelf now.`
+        : `${s.partNumber}: you asked to return ${qty}, but this invoice has only ${s.taken} off the shelf now (after refreshes and earlier returns). Return ${s.taken} or fewer.`)
+      continue
+    }
+    let left = qty
+    for (const loc of s.byLocation) {
+      if (left === 0) break
+      if (loc.taken <= 0) continue
+      const n = Math.min(left, loc.taken)
+      movements.push({ partId, partNumber: s.partNumber, locationId: loc.locationId, delta: n, reason: CUSTOMER_RETURN_REASON, unitCost: s.unitCost })
+      left -= n
+    }
+  }
+  return errors.length ? { ok: false, errors } : { ok: true, movements }
+}
+
+/**
+ * Put back everything an invoice has off the shelf - a deleted draft. Pure.
+ *
+ * Per part and location, the exact net the ledger holds, so after it the document's
+ * movements sum to zero: nothing it ever took stays taken, however many refreshes ran.
+ */
+export function planInvoiceReversal(stock: InvoicePartStock[]): PlannedReturn[] {
+  const out: PlannedReturn[] = []
+  for (const s of stock) {
+    for (const loc of s.byLocation) {
+      if (loc.taken === 0) continue
+      out.push({
+        partId: s.partId, partNumber: s.partNumber, locationId: loc.locationId,
+        delta: loc.taken, reason: loc.taken > 0 ? 'returned' : 'adjusted', unitCost: s.unitCost,
+      })
+    }
+  }
+  return out
+}
+
+/** Every movement an invoice wrote, oldest first. */
+export async function readInvoiceMovements(
+  supabase: Supabase, userId: string, invoiceKind: 'ld' | 'hd', invoiceId: string,
+): Promise<{ movements: InvoiceMovement[]; partNumbers: Map<string, string>; error?: string }> {
+  const { data, error } = await supabase
+    .from('stock_movement')
+    .select('id, part_id, location_id, delta, reason, unit_cost, note, created_by, created_at')
+    .eq('user_id', userId)
+    .eq('source_type', invoiceKind === 'ld' ? 'invoice' : 'hd_invoice')
+    .eq('source_id', invoiceId)
+    .order('created_at', { ascending: true })
+  if (error) return { movements: [], partNumbers: new Map(), error: error.message }
+  const movements: InvoiceMovement[] = (data ?? []).map(r => ({
+    id: String(r.id), partId: String(r.part_id), locationId: String(r.location_id), delta: Number(r.delta),
+    reason: String(r.reason), unitCost: r.unit_cost == null ? null : Number(r.unit_cost),
+    note: r.note == null ? null : String(r.note), createdBy: r.created_by == null ? null : String(r.created_by),
+    createdAt: String(r.created_at),
+  }))
+  const partNumbers = new Map<string, string>()
+  const ids = [...new Set(movements.map(m => m.partId))]
+  if (ids.length) {
+    const { data: ps } = await supabase.from('parts').select('id, part_number').in('id', ids)
+    for (const p of ps ?? []) partNumbers.set(String(p.id), String(p.part_number))
+  }
+  return { movements, partNumbers }
+}
+
+/** Does this invoice carry a customer return? Refresh refuses one that does. */
+export function hasCustomerReturn(movements: Array<{ reason: string }>): boolean {
+  return movements.some(m => m.reason === CUSTOMER_RETURN_REASON)
+}
+
+/** A check violation on reason: migration 189 is not applied. */
+function isMissingCustomerReturnReason(message: string | undefined): boolean {
+  return !!message && /stock_movement_reason_check|violates check constraint/i.test(message)
+}
+
+/**
+ * Return parts to stock from a permanent invoice. STOCK ONLY: writes new
+ * 'customer_returned' movements against the invoice and touches nothing else - not
+ * the invoice, its lines, its money, its number, its pay link or its status. The
+ * original deduction rows are never edited or deleted.
+ */
+export async function returnInvoiceStock(opts: {
+  userId: string
+  invoiceId: string
+  invoiceRef: string | null
+  requests: Array<{ partId: string; quantity: number }>
+  note: string
+  createdBy: string
+}): Promise<{ ok: true; written: PlannedReturn[] } | { ok: false; status: number; errors: string[]; written: PlannedReturn[] }> {
+  const supabase = createServiceClient()
+  const read = await readInvoiceMovements(supabase, opts.userId, 'hd', opts.invoiceId)
+  if (read.error) return { ok: false, status: 500, errors: [`Could not read this invoice's stock: ${read.error}`], written: [] }
+  const stock = summarizeInvoiceStock(read.movements, id => read.partNumbers.get(id) ?? id)
+  const plan = planCustomerReturn(stock, opts.requests)
+  if (!plan.ok) return { ok: false, status: 409, errors: plan.errors, written: [] }
+
+  const written: PlannedReturn[] = []
+  for (const p of plan.movements) {
+    const res = await writeMovement(supabase, {
+      userId: opts.userId, partId: p.partId, locationId: p.locationId, delta: p.delta, reason: p.reason,
+      unitCost: p.unitCost, sourceType: 'hd_invoice', sourceId: opts.invoiceId, sourceRef: opts.invoiceRef,
+      createdBy: opts.createdBy,
+      note: `Returned to stock from ${opts.invoiceRef ?? opts.invoiceId}: ${opts.note}`,
+    })
+    if (!res.ok) {
+      if (!written.length && isMissingCustomerReturnReason(res.error)) {
+        return { ok: false, status: 409, errors: ['Returning parts to stock needs migration 189, which is not applied yet. Nothing was returned.'], written }
+      }
+      return { ok: false, status: 500, errors: [`${p.partNumber}: ${res.error}`], written }
+    }
+    written.push(p)
+  }
+  return { ok: true, written }
+}
+
+/**
+ * Put back everything a deleted draft took. Written BEFORE the delete; if any row
+ * fails the delete must not go ahead.
+ */
+export async function reverseInvoiceStock(opts: {
+  userId: string
+  invoiceId: string
+  invoiceRef: string | null
+  createdBy: string
+}): Promise<{ ok: boolean; written: PlannedReturn[]; errors: string[] }> {
+  const supabase = createServiceClient()
+  const read = await readInvoiceMovements(supabase, opts.userId, 'hd', opts.invoiceId)
+  if (read.error) return { ok: false, written: [], errors: [`Could not read this invoice's stock: ${read.error}`] }
+  const plan = planInvoiceReversal(summarizeInvoiceStock(read.movements, id => read.partNumbers.get(id) ?? id))
+  const written: PlannedReturn[] = []
+  for (const p of plan) {
+    const res = await writeMovement(supabase, {
+      userId: opts.userId, partId: p.partId, locationId: p.locationId, delta: p.delta, reason: p.reason,
+      unitCost: p.unitCost, sourceType: 'hd_invoice', sourceId: opts.invoiceId, sourceRef: opts.invoiceRef,
+      createdBy: opts.createdBy,
+      note: `Draft ${opts.invoiceRef ?? opts.invoiceId} deleted before it was sent: its parts back on the shelf`,
+    })
+    if (!res.ok) return { ok: false, written, errors: [`${p.partNumber}: ${res.error}`] }
+    written.push(p)
+  }
+  return { ok: true, written, errors: [] }
+}
+
+/** The parts among these now below zero, with the count, at any location. */
+export async function negativeStock(supabase: Supabase, userId: string, partIds: string[]): Promise<NegativeStock[]> {
+  const ids = [...new Set(partIds)]
+  if (!ids.length) return []
+  const { data, error } = await supabase
+    .from('inventory')
+    .select('part_id, on_hand, location_name')
+    .eq('user_id', userId)
+    .in('part_id', ids)
+    .lt('on_hand', 0)
+  if (error || !data?.length) return []
+  const { data: ps } = await supabase.from('parts').select('id, part_number').in('id', [...new Set(data.map(r => String(r.part_id)))])
+  const num = new Map((ps ?? []).map(p => [String(p.id), String(p.part_number)]))
+  return data.map(r => ({
+    partId: String(r.part_id), partNumber: num.get(String(r.part_id)) ?? String(r.part_id),
+    onHand: Number(r.on_hand), locationName: r.location_name == null ? null : String(r.location_name),
+  })).sort((a, b) => a.partNumber.localeCompare(b.partNumber))
+}
+
+/** "33-2805 is now at -3 on hand." - one sentence per part, for any screen. */
+export function negativeStockWarning(neg: NegativeStock[] | undefined | null): string | null {
+  if (!neg?.length) return null
+  const parts = neg.map(n => `${n.partNumber} is now at ${n.onHand} on hand${n.locationName ? ` (${n.locationName})` : ''}`)
+  return `Stock below zero: ${parts.join('; ')}. The invoice went through - count or receive these parts.`
 }
 
 // ── allocate on an open work order ──────────────────────────────────────────
@@ -733,5 +1010,6 @@ export async function transferStock(opts: {
     }
     out.written += 2
   }
+  out.negative = await negativeStock(supabase, opts.userId, opts.lines.map(l => l.partId))
   return out
 }

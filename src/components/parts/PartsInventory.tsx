@@ -39,6 +39,14 @@ const money = (n: number | null | undefined) => (n == null ? '--' : `$${Number(n
 const REASON_LABEL: Record<string, string> = {
   received: 'Received', used: 'Used on invoice', adjusted: 'Count adjustment',
   transferred_in: 'Transfer in', transferred_out: 'Transfer out', returned: 'Returned', opening: 'Opening stock',
+  customer_returned: 'Customer return',
+}
+
+/** "33-2805 is at -9 on hand (Shop)" for each negative row - warned, never blocked. */
+function negativeLine(rows: StockRow[]): string | null {
+  const neg = rows.filter(r => r.on_hand < 0)
+  if (!neg.length) return null
+  return neg.map(r => `${r.part_number} is at ${r.on_hand} on hand (${r.location_name ?? 'Shop'})`).join('; ')
 }
 
 function Label({ children }: { children: React.ReactNode }) {
@@ -92,7 +100,16 @@ export default function PartsInventory({ scope }: { scope: 'all' | 'reefer' }) {
       {notice && <p className="text-sm" style={{ color: 'var(--hd-positive)' }}>{notice}</p>}
       {error && <p className="text-sm" style={{ color: 'var(--hd-negative)' }}>{error}</p>}
 
-      {panel === 'receive' && <ReceivePanel scope={scope} locations={locations} onDone={done} onCancel={() => setPanel(null)} />}
+      {/* BELOW ZERO. Invoices take parts off whether or not they were received, so a
+          count can go negative; it is shown, never refused. Receive or count to fix. */}
+      {data && negativeLine(data.stock) && (
+        <div data-negative-stock-list="true" className="rounded-lg px-4 py-3 text-sm"
+          style={{ background: 'rgba(245, 158, 11, 0.12)', border: '1px solid var(--hd-warn)', color: 'var(--hd-text)' }}>
+          <strong>Stock below zero.</strong> {negativeLine(data.stock)}. Invoices took more than was received - receive the parts or count them.
+        </div>
+      )}
+
+      {panel === 'receive' && <ReceivePanel scope={scope} locations={locations} stock={data?.stock ?? []} onDone={done} onCancel={() => setPanel(null)} />}
       {panel === 'location' && <LocationPanel onDone={done} onCancel={() => setPanel(null)} />}
 
       {data && data.stock.length === 0 && (
@@ -193,8 +210,8 @@ function useSave(onDone: (msg: string) => Promise<void>) {
   return { busy, err, run }
 }
 
-function ReceivePanel({ scope, locations, onDone, onCancel }: {
-  scope: 'all' | 'reefer'; locations: Location[]; onDone: (m: string) => Promise<void>; onCancel: () => void
+function ReceivePanel({ scope, locations, stock, onDone, onCancel }: {
+  scope: 'all' | 'reefer'; locations: Location[]; stock: StockRow[]; onDone: (m: string) => Promise<void>; onCancel: () => void
 }) {
   const [number, setNumber] = useState('')
   const [hits, setHits] = useState<PartHit[] | null>(null)
@@ -242,6 +259,12 @@ function ReceivePanel({ scope, locations, onDone, onCancel }: {
       {part && (
         <>
           <p className="text-sm text-white"><span className="font-mono font-bold">{part.part_number}</span> - {part.description ?? part.part_type} ({part.manufacturer})</p>
+          {stock.filter(r => r.part_id === part.id && r.on_hand < 0).map(r => (
+            <p key={r.inventory_id} data-receive-negative="true" className="text-sm" style={{ color: 'var(--hd-warn)' }}>
+              {part.part_number} is at {r.on_hand} on hand ({r.location_name ?? 'Shop'}) - invoices took more than was received.
+              {Number(qty) > 0 && r.location_id === (loc || r.location_id) ? ` Receiving ${qty} brings it to ${r.on_hand + Number(qty)}.` : ''}
+            </p>
+          ))}
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
             <label className="block"><Label>Quantity</Label>
               <input value={qty} onChange={e => setQty(e.target.value)} inputMode="numeric" className={inputCls} style={field} /></label>

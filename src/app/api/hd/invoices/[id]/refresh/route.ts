@@ -25,7 +25,7 @@ import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { buildWorkOrderInvoice } from '@/lib/hd/convert-build'
 import { isInvoiceLocked, lockedMessage, changedAfterSendFields, customerFacingChanges, appendDatedNote, wasSent } from '@/lib/hd/invoice-lock'
-import { reconcileInvoiceStock, releaseAllocations } from '@/lib/inventory/ledger'
+import { reconcileInvoiceStock, releaseAllocations, CUSTOMER_RETURN_REASON } from '@/lib/inventory/ledger'
 
 export const dynamic = 'force-dynamic'
 
@@ -72,6 +72,21 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
   if (isInvoiceLocked(stored.status)) {
     return NextResponse.json({ error: lockedMessage(stored, 'refreshed'), reason: 'locked', status: stored.status }, { status: 409 })
   }
+  // BACKSTOP: an invoice the customer returned parts against is never refreshed. The
+  // refresh moves stock by the difference between the ledger and the lines, and a
+  // customer return lowers the ledger without touching the lines - so a refresh would
+  // take the returned parts off the shelf again. (The return is offered only on
+  // invoices that already went out; this holds even if one is made some other way.)
+  const { data: custReturn, error: crErr } = await supabase.from('stock_movement').select('id')
+    .eq('user_id', user.id).eq('source_type', 'hd_invoice').eq('source_id', id).eq('reason', CUSTOMER_RETURN_REASON).limit(1)
+  if (crErr) return NextResponse.json({ error: `Could not read this invoice's stock: ${crErr.message}` }, { status: 500 })
+  if (custReturn?.length) {
+    return NextResponse.json({
+      error: `${String(stored.invoice_number)} has parts the customer returned to stock, so it cannot be refreshed - a refresh would take them off the shelf again. Its bill stays as it is.`,
+      reason: 'customer_returned',
+    }, { status: 409 })
+  }
+
   const woId = typeof stored.work_order_id === 'string' ? stored.work_order_id : ''
   if (!woId) {
     return NextResponse.json({ error: `${String(stored.invoice_number)} was not made from a work order, so there is nothing to refresh it from.`, reason: 'no_work_order' }, { status: 422 })

@@ -74,9 +74,13 @@ export default function InvoiceDetailActions({
   lateFeeBlockedReason = null,
   lateFeeAlreadyApplied = false,
   locked = false,
+  deletable = false,
 }: {
   /** Paid, partially paid or void (lib/hd/invoice-lock): no Edit. The PUT refuses too. */
   locked?: boolean
+  /** A draft that never left the shop (isDeletableDraft): the only kind with a Delete
+   *  button. The DELETE route refuses every other invoice whatever this says. */
+  deletable?: boolean
   invoiceId: string
   invoiceNumber: string
   currentStatus: string
@@ -165,10 +169,16 @@ export default function InvoiceDetailActions({
   }
 
   async function deleteInvoice() {
-    if (!confirm(`Delete invoice ${invoiceNumber}? This cannot be undone.`)) return
+    if (!confirm(`Delete draft ${invoiceNumber}? It has never been sent. Any parts it took go back on the shelf. This cannot be undone.`)) return
     setBusy(true)
     try {
-      await fetch(`/api/hd/invoices/${invoiceId}`, { method: 'DELETE' })
+      const res = await fetch(`/api/hd/invoices/${invoiceId}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({})) as { error?: string }
+        alert(j.error ?? 'The invoice was not deleted.')
+        router.refresh()
+        return
+      }
       router.push('/hd/invoices')
     } finally {
       setBusy(false)
@@ -331,14 +341,15 @@ export default function InvoiceDetailActions({
           {count > 0 ? 'Resend Invoice' : 'Send Invoice'}
         </button>
 
-        <button
+        {deletable && <button
           onClick={deleteInvoice}
           disabled={busy}
+          data-delete-invoice="true"
           className="px-4 py-2 rounded-lg font-semibold text-sm disabled:opacity-50"
           style={{ background: '#FEE2E2', color: '#b91c1c', minHeight: 44 }}
         >
-          Delete
-        </button>
+          Delete draft
+        </button>}
       </div>
 
       {/* Sits directly under the send button, because it is the fact that

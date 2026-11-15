@@ -10,10 +10,13 @@ export default function InvoiceListActions({
   invoiceId,
   invoiceNumber,
   currentStatus,
+  deletable = false,
 }: {
   invoiceId: string
   invoiceNumber: string
   currentStatus: string
+  /** A never-sent draft (isDeletableDraft). The route refuses any other. */
+  deletable?: boolean
 }) {
   const router = useRouter()
   const [busy, setBusy] = useState(false)
@@ -33,10 +36,14 @@ export default function InvoiceListActions({
   }
 
   async function deleteInvoice() {
-    if (!confirm(`Delete invoice ${invoiceNumber}? This cannot be undone.`)) return
+    if (!confirm(`Delete draft ${invoiceNumber}? It has never been sent. Any parts it took go back on the shelf. This cannot be undone.`)) return
     setBusy(true)
     try {
-      await fetch(`/api/hd/invoices/${invoiceId}`, { method: 'DELETE' })
+      const res = await fetch(`/api/hd/invoices/${invoiceId}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({})) as { error?: string }
+        alert(j.error ?? 'The invoice was not deleted.')
+      }
       router.refresh()
     } finally {
       setBusy(false)
@@ -70,14 +77,15 @@ export default function InvoiceListActions({
       >
         PDF
       </Link>
-      <button
+      {deletable && <button
         onClick={deleteInvoice}
         disabled={busy}
+        data-delete-invoice="true"
         className="text-xs font-medium px-2.5 py-1.5 rounded-lg disabled:opacity-50"
         style={{ background: '#FEE2E2', color: '#b91c1c', minHeight: 32 }}
       >
         Delete
-      </button>
+      </button>}
     </div>
   )
 }

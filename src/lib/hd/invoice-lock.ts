@@ -40,6 +40,54 @@ export function wasSent(invoice: Record<string, unknown>): boolean {
   return s === 'sent' || s === 'overdue'
 }
 
+/** Has any payment been recorded against it? HD keeps no payments table: paid_at and
+ *  the paid / partial statuses are the whole record. */
+export function hadPayment(invoice: Record<string, unknown>): boolean {
+  const s = str(invoice.status).toLowerCase()
+  return !!invoice.paid_at || s === 'paid' || s === 'partial'
+}
+
+/**
+ * DELETABLE: a draft that never left the shop. Status unpaid, no send stamp of any
+ * kind, no payment ever recorded. Everything else is permanent - a customer may hold
+ * it, or money was taken against it - and is changed by Refresh (unsent) or has its
+ * parts put back by Return parts to stock, never deleted. (Nov 15: before this the
+ * route deleted any invoice at any status and put no stock back.)
+ */
+export function isDeletableDraft(invoice: Record<string, unknown>): boolean {
+  if (str(invoice.status).toLowerCase() !== 'unpaid') return false
+  if (wasSent(invoice) || Number(invoice.sent_count ?? 0) > 0) return false
+  return !hadPayment(invoice)
+}
+
+/** Why it cannot be deleted, and what to use instead. */
+export function deleteRefusedMessage(invoice: Record<string, unknown>): string {
+  const num = str(invoice.invoice_number) || 'This invoice'
+  const s = str(invoice.status).toLowerCase()
+  const why = s === 'paid' ? 'is paid'
+    : s === 'partial' ? 'is partially paid'
+    : s === 'void' ? 'is void'
+    : hadPayment(invoice) ? 'has a payment recorded against it'
+    : 'has been sent to the customer'
+  return `${num} ${why}, so it is permanent and cannot be deleted. To change what it bills, reopen the work order and use Refresh${s === 'unpaid' || s === 'sent' || s === 'overdue' ? '' : ' (not possible on a paid, partially paid or void invoice)'}. If the parts came back, use Return parts to stock - the invoice stays exactly as it is.`
+}
+
+/**
+ * CUSTOMER RETURN is offered only on invoices refresh cannot correct for you: sent,
+ * paid, partial, void, overdue (or any invoice carrying a send stamp). An unpaid
+ * never-sent invoice is a draft - Refresh already puts back by the difference there.
+ */
+export function canCustomerReturn(invoice: Record<string, unknown>): boolean {
+  const s = str(invoice.status).toLowerCase()
+  if (['sent', 'paid', 'partial', 'void', 'overdue'].includes(s)) return true
+  return wasSent(invoice)
+}
+
+export function customerReturnRefusedMessage(invoice: Record<string, unknown>): string {
+  const num = str(invoice.invoice_number) || 'This invoice'
+  return `${num} has not been sent, so it is still a draft. Reopen the work order, take the parts off it and use Refresh - that puts them back on the shelf and corrects the bill. Return parts to stock is for an invoice the customer already has.`
+}
+
 /** When the customer last received it: the latest send, else the first. */
 export function lastSentAt(invoice: Record<string, unknown>): string | null {
   const v = invoice.last_sent_at ?? invoice.sent_at

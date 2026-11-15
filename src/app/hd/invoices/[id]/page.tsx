@@ -20,7 +20,9 @@ import { discountPrintLabel, parseDiscount } from '@/lib/document-discount'
 import { invoiceJobGroups } from '@/lib/hd/work-order-jobs'
 import { addressLine } from '@/lib/hd/address-print'
 import { Fragment } from 'react'
-import { isInvoiceLocked, holdsOlderCopy, lastSentAt } from '@/lib/hd/invoice-lock'
+import { isInvoiceLocked, holdsOlderCopy, lastSentAt, isDeletableDraft, canCustomerReturn } from '@/lib/hd/invoice-lock'
+import { CUSTOMER_RETURN_REASON, negativeStockWarning } from '@/lib/inventory/ledger'
+import ReturnPartsPanel from './ReturnPartsPanel'
 
 const ORANGE = '#FF6600'
 const BLUE   = '#2969B0'
@@ -97,6 +99,39 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
   const pmChecklists = await findInvoicePMChecklists(
     supabase, user.id, id, (inv.work_order_id as string | null) ?? null,
   )
+
+  // PARTS RETURNED TO STOCK (migration 189), read off the ledger - the invoice row is
+  // never written by a return, so this is the only place it shows. Read through RLS:
+  // stock_movement's SELECT policy scopes it to this account.
+  const { data: movementRows } = await supabase.from('stock_movement')
+    .select('part_id, delta, reason, note, created_at')
+    .eq('user_id', user.id).eq('source_type', 'hd_invoice').eq('source_id', id)
+    .order('created_at', { ascending: true })
+  const returnRows = (movementRows ?? []).filter(r => r.reason === CUSTOMER_RETURN_REASON)
+  // Parts this invoice has off the shelf now - for the below-zero warning.
+  const takenNow = new Map<string, number>()
+  for (const r of movementRows ?? []) takenNow.set(String(r.part_id), (takenNow.get(String(r.part_id)) ?? 0) - Number(r.delta))
+  const takenIds = [...takenNow.entries()].filter(([, n]) => n > 0).map(([pid]) => pid)
+  const movedPartIds = [...new Set((movementRows ?? []).map(r => String(r.part_id)))]
+  const [{ data: movedParts }, { data: negRows }] = await Promise.all([
+    movedPartIds.length
+      ? supabase.from('parts').select('id, part_number').in('id', movedPartIds)
+      : Promise.resolve({ data: [] as Array<{ id: string; part_number: string }> }),
+    takenIds.length
+      ? supabase.from('inventory').select('part_id, on_hand, location_name').eq('user_id', user.id).in('part_id', takenIds).lt('on_hand', 0)
+      : Promise.resolve({ data: [] as Array<{ part_id: string; on_hand: number; location_name: string | null }> }),
+  ])
+  const partNo = new Map((movedParts ?? []).map(p => [String(p.id), String(p.part_number)]))
+  const customerReturns = returnRows.map(r => ({
+    partNumber: partNo.get(String(r.part_id)) ?? 'part', quantity: Number(r.delta),
+    at: String(r.created_at), note: r.note == null ? '' : String(r.note),
+  }))
+  // NEGATIVE STOCK: a warning, never a block - the invoice went through.
+  const negativeWarning = negativeStockWarning((negRows ?? []).map(r => ({
+    partId: String(r.part_id), partNumber: partNo.get(String(r.part_id)) ?? 'part',
+    onHand: Number(r.on_hand), locationName: r.location_name == null ? null : String(r.location_name),
+  })).sort((a, b) => a.partNumber.localeCompare(b.partNumber)))
+  const invRecord = inv as Record<string, unknown>
 
   const items: LineItem[] = Array.isArray(inv.line_items) ? inv.line_items : []
   // Grouped by work order job when there are two or more; otherwise one plain group,
@@ -189,8 +224,38 @@ export default async function InvoiceDetailPage({ params }: { params: Promise<{ 
                yields undefined, which these defaults absorb — the page renders either way. */
             sentCount={(inv.sent_count as number) ?? 0}
             lastSentAt={(inv.last_sent_at as string | null) ?? null}
+            deletable={isDeletableDraft(invRecord)}
           />
         </div>
+
+        {negativeWarning && (
+          <div data-negative-stock="true" className="mb-4 rounded-lg px-4 py-3 text-sm"
+            style={{ background: '#FEF3C7', border: '1px solid #F59E0B', color: '#78350F' }}>
+            {negativeWarning}
+          </div>
+        )}
+
+        {/* PARTS BACK ON THE SHELF. Every customer return against this invoice, from
+            the ledger: what, how many, when, and the note saying which job. The bill
+            above is unchanged by any of them. */}
+        {customerReturns.length > 0 && (
+          <div data-returned-to-stock="true" className="mb-4 rounded-lg px-4 py-3 text-sm"
+            style={{ background: '#EFF6FF', border: '1px solid #93C5FD', color: '#1E3A8A' }}>
+            <strong>Parts returned to stock.</strong>{' '}
+            The bill is unchanged; only the shelf count moved.
+            <ul className="mt-1 list-disc pl-5">
+              {customerReturns.map((r, i) => (
+                <li key={i} data-returned-line="true">
+                  {r.quantity} x {r.partNumber} on {fmtDate(r.at)}{r.note ? ` - ${r.note.replace(/^Returned to stock from [^:]*: /, '')}` : ''}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {canCustomerReturn(invRecord) && (
+          <ReturnPartsPanel invoiceId={inv.id} invoiceNumber={inv.invoice_number} />
+        )}
 
         {/* CHANGED AFTER SENDING. The invoice was edited or refreshed after the customer
             last received it (migration 188's stamp), so the copy they hold - and the

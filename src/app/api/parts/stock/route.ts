@@ -185,7 +185,7 @@ export async function POST(request: NextRequest) {
       lines: [{ partId, quantity }],
     })
     if (res.errors.length) return NextResponse.json({ error: res.errors.join('; ') }, { status: 422 })
-    return NextResponse.json({ ok: true, transfer_id: res.transferId })
+    return NextResponse.json({ ok: true, transfer_id: res.transferId, negative: res.negative ?? [] })
   }
 
   if (action === 'settings') {
