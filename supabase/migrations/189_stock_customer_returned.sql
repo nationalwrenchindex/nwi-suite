@@ -28,7 +28,7 @@
 -- inline, so Postgres named it stock_movement_reason_check, but a hand-run change could
 -- have renamed it. The block refuses to run if it does not find exactly one.
 --
--- Plain ASCII. Ends in ROLLBACK so a dry run changes nothing.
+-- Plain ASCII. Ends in COMMIT as run; change the last line to ROLLBACK for a dry run.
 
 BEGIN;
 
