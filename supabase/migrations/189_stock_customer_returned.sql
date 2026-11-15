@@ -30,29 +30,34 @@
 
 BEGIN;
 
--- Before: every movement and every reason it uses, to compare after.
+-- Before: every reason the ledger uses and how many rows each has, to compare after.
+-- NAMING RULE for the two blocks below: every PL/pgSQL variable starts with v_, and
+-- every column is qualified by its table alias, so no variable can shadow a column
+-- (the first dry run failed with 42702: a variable n collided with _mv_before.n).
 CREATE TEMP TABLE _mv_before ON COMMIT DROP AS
-  SELECT reason, count(*) AS n FROM public.stock_movement GROUP BY reason;
+  SELECT m.reason AS reason, count(*) AS mv_rows
+  FROM public.stock_movement m
+  GROUP BY m.reason;
 
 DO $$
 DECLARE
-  found_name TEXT;
-  found_count INTEGER;
+  v_found_name  TEXT;
+  v_found_count INTEGER;
 BEGIN
-  SELECT count(*), min(conname)
-    INTO found_count, found_name
-  FROM pg_constraint
-  WHERE conrelid = 'public.stock_movement'::regclass
-    AND contype = 'c'
-    AND pg_get_constraintdef(oid) LIKE '%reason%'
-    AND pg_get_constraintdef(oid) LIKE '%opening%';
+  SELECT count(*), min(c.conname)
+    INTO v_found_count, v_found_name
+  FROM pg_constraint c
+  WHERE c.conrelid = 'public.stock_movement'::regclass
+    AND c.contype = 'c'
+    AND pg_get_constraintdef(c.oid) LIKE '%reason%'
+    AND pg_get_constraintdef(c.oid) LIKE '%opening%';
 
-  IF found_count <> 1 THEN
-    RAISE EXCEPTION '189: expected exactly one reason CHECK on stock_movement, found %', found_count;
+  IF v_found_count <> 1 THEN
+    RAISE EXCEPTION '189: expected exactly one reason CHECK on stock_movement, found %', v_found_count;
   END IF;
 
-  RAISE NOTICE '189: replacing %', found_name;
-  EXECUTE format('ALTER TABLE public.stock_movement DROP CONSTRAINT %I', found_name);
+  RAISE NOTICE '189: replacing %', v_found_name;
+  EXECUTE format('ALTER TABLE public.stock_movement DROP CONSTRAINT %I', v_found_name);
 END $$;
 
 ALTER TABLE public.stock_movement
@@ -73,32 +78,41 @@ COMMENT ON CONSTRAINT stock_movement_reason_check ON public.stock_movement IS
 -- Self-check.
 DO $$
 DECLARE
-  def TEXT;
-  n INTEGER;
-  changed INTEGER;
+  v_def    TEXT;
+  v_checks INTEGER;
+  v_diff   INTEGER;
 BEGIN
-  SELECT count(*), min(pg_get_constraintdef(oid)) INTO n, def
-  FROM pg_constraint
-  WHERE conrelid = 'public.stock_movement'::regclass
-    AND contype = 'c'
-    AND pg_get_constraintdef(oid) LIKE '%reason%'
-    AND pg_get_constraintdef(oid) LIKE '%opening%';
-  IF n <> 1 THEN RAISE EXCEPTION '189 self-check: % reason CHECKs, expected 1', n; END IF;
-  IF def NOT LIKE '%customer_returned%' THEN RAISE EXCEPTION '189 self-check: customer_returned missing: %', def; END IF;
-  IF def NOT LIKE '%''received''%' OR def NOT LIKE '%''used''%' OR def NOT LIKE '%''adjusted''%'
-     OR def NOT LIKE '%''transferred_in''%' OR def NOT LIKE '%''transferred_out''%'
-     OR def NOT LIKE '%''returned''%' OR def NOT LIKE '%''opening''%' THEN
-    RAISE EXCEPTION '189 self-check: an old reason was lost: %', def;
+  SELECT count(*), min(pg_get_constraintdef(c.oid))
+    INTO v_checks, v_def
+  FROM pg_constraint c
+  WHERE c.conrelid = 'public.stock_movement'::regclass
+    AND c.contype = 'c'
+    AND pg_get_constraintdef(c.oid) LIKE '%reason%'
+    AND pg_get_constraintdef(c.oid) LIKE '%opening%';
+  IF v_checks <> 1 THEN RAISE EXCEPTION '189 self-check: % reason CHECKs, expected 1', v_checks; END IF;
+  IF v_def NOT LIKE '%''customer_returned''%' THEN RAISE EXCEPTION '189 self-check: customer_returned missing: %', v_def; END IF;
+  IF v_def NOT LIKE '%''received''%' OR v_def NOT LIKE '%''used''%' OR v_def NOT LIKE '%''adjusted''%'
+     OR v_def NOT LIKE '%''transferred_in''%' OR v_def NOT LIKE '%''transferred_out''%'
+     OR v_def NOT LIKE '%''returned''%' OR v_def NOT LIKE '%''opening''%' THEN
+    RAISE EXCEPTION '189 self-check: an old reason was lost: %', v_def;
   END IF;
 
-  -- Every existing row still passes and nothing moved.
-  SELECT count(*) INTO changed FROM (
-    SELECT reason, count(*) AS n FROM public.stock_movement GROUP BY reason
-    EXCEPT SELECT reason, n FROM _mv_before
+  -- Nothing in the ledger moved: the reason counts after are exactly the counts
+  -- before, compared BOTH ways, so a reason gained, lost or recounted all fail.
+  SELECT count(*) INTO v_diff FROM (
+    ( SELECT a.reason, count(*) AS mv_rows
+      FROM public.stock_movement a GROUP BY a.reason
+      EXCEPT
+      SELECT b.reason, b.mv_rows FROM _mv_before b )
+    UNION ALL
+    ( SELECT b.reason, b.mv_rows FROM _mv_before b
+      EXCEPT
+      SELECT a.reason, count(*) AS mv_rows
+      FROM public.stock_movement a GROUP BY a.reason )
   ) d;
-  IF changed <> 0 THEN RAISE EXCEPTION '189 self-check: ledger rows changed'; END IF;
+  IF v_diff <> 0 THEN RAISE EXCEPTION '189 self-check: ledger rows changed (% reason counts differ)', v_diff; END IF;
 
-  RAISE NOTICE '189 ok: %', def;
+  RAISE NOTICE '189 ok: %', v_def;
 END $$;
 
 -- Ends in ROLLBACK so a dry run changes nothing. Change to COMMIT to apply.
