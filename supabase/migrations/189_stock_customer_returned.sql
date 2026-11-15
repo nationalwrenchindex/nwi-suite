@@ -19,7 +19,9 @@
 --     moves on_hand like any other positive movement.
 --   - The one-'used'-per-document index is untouched: it covers reason = 'used' only.
 --
--- The app refuses a customer return until this is applied (it never writes an
+-- APPLIED by hand Nov 15, 2026 (dry run in ROLLBACK, then COMMIT; "189 ok" both times).
+--
+-- The app refused a customer return until this was applied (it never writes an
 -- ambiguous 'returned' row in its place).
 --
 -- The constraint is found by its definition, not trusted by name: migration 151 made it
@@ -115,5 +117,5 @@ BEGIN
   RAISE NOTICE '189 ok: %', v_def;
 END $$;
 
--- Ends in ROLLBACK so a dry run changes nothing. Change to COMMIT to apply.
-ROLLBACK;
+-- Ends in COMMIT as run Nov 15, 2026. Change to ROLLBACK for a dry run.
+COMMIT;
