@@ -1,5 +1,9 @@
 -- Reefer parts: restore three lost leading zeros in hd_parts. Brock approved Nov 16, 2026.
 --
+-- APPLIED by hand by Brock, Nov 16, 2026: dry run clean, then the COMMIT copy run.
+-- This file now ends in COMMIT as run. Do not run it again (its guards refuse anyway:
+-- the damaged numbers are gone).
+--
 --   78-679 -> 78-0679     78-700 -> 78-0700     78-684 -> 78-0684
 --
 -- CLAUDE.md rule 6: a lost leading zero is damaged data, not a different part. A TK number
@@ -21,7 +25,7 @@
 -- Each row is matched by id, old number, manufacturer and category, so a row that is not
 -- what was read makes the whole file refuse. No INSERT, no DELETE.
 --
--- Plain ASCII. Ends in ROLLBACK for a dry run; change the last line to COMMIT to apply.
+-- Plain ASCII. Ends in COMMIT, as applied Nov 16, 2026.
 
 BEGIN;
 
@@ -72,5 +76,5 @@ SELECT h.id, h.part_number, h.manufacturer, h.category, h.unit_models
   FROM public.hd_parts h
  WHERE h.id IN ('33e9914b-5abd-49ea-be10-438d0f9f09c2', 'a8acd730-4229-4184-947c-42ca527b2358', 'fabd8797-e13c-4bdc-ad37-597b6d2e18cc');
 
--- Dry run. Change to COMMIT to apply.
-ROLLBACK;
+-- Applied by hand Nov 16, 2026.
+COMMIT;
