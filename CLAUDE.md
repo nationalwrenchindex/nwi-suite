@@ -172,9 +172,10 @@ Settled field facts (Nov 4, 2026, Brock from the field - a source that disagrees
 - **`78-1968` is the ENGINE CRANK TO WATER PUMP belt on Precedent units** (Nov 6, Brock from
   the field). Store description `Belt Engine Crank to Water Pump - Precedent`, `verified = true`,
   `confidence = 'confirmed'`, source `brock-field-correction-2026-11-06`
-  (`scripts/reefer-load/17-field-correction-78-1968.sql`). Whether it supersedes `78-1340` is
-  NOT settled - `78-1340`, `78-1341` and `78-1968` are one digit apart across model generations;
-  link nothing until Brock decides.
+  (`scripts/reefer-load/17-field-correction-78-1968.sql`). **`78-1968` supersedes `78-1340`**:
+  Brock's belt and filter chart decided it (Nov 16, 2026; `scripts/data/nwi-fitment-belts-filters.csv`,
+  marked verified by `scripts/reefer-load/20-chart-supersessions.sql`). `78-1341` is a different
+  belt (alternator/water pump) and is linked to neither.
 - **Counter headings Brock set** (`TYPE_HEADINGS` in `src/lib/parts/counter.ts`): EGR valve,
   Piston, Crankshaft, Glow plug -> Engine; Valve stem seal, Receiver tank, Heat exchanger,
   Condenser/radiator coil -> Refrigeration; Solenoid coil -> Electrical & Controls. The oil rule
