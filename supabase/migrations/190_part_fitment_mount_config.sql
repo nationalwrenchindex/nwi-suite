@@ -45,7 +45,8 @@
 -- the wrong values, a part_fitment.equipment_type column exists, the row count moved,
 -- or any existing row has a value in a new column.
 --
--- Plain ASCII. Ends in ROLLBACK for a dry run; change the last line to COMMIT to apply.
+-- APPLIED by hand Nov 16, 2026 (dry run in ROLLBACK, then COMMIT; "190 ok").
+-- Plain ASCII. Ends in COMMIT as run; change the last line to ROLLBACK for a dry run.
 
 BEGIN;
 
@@ -124,5 +125,5 @@ BEGIN
   RAISE NOTICE '190 ok: mount_type + configuration added, part_fitment rows unchanged at %', v_after;
 END $$;
 
--- Dry run. Change to COMMIT to apply.
-ROLLBACK;
+-- Ends in COMMIT as run Nov 16, 2026. Change to ROLLBACK for a dry run.
+COMMIT;
