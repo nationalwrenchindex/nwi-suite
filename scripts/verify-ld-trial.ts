@@ -117,14 +117,17 @@ async function main(): Promise<void> {
   const n = trialNotice({ status: 'trialing', trialEnd: '2026-11-04T15:00:00Z', amountCents: 9900, currency: 'usd',
     planName: 'NWI Full Suite Plus', planPriceCents: 9900, now, timeZone: 'UTC' })
   check('notice: 15 days left, ends November 4, 2026, charges $99.00',
-    !!n && n.title === 'Free trial - 15 days left' && n.endDate === 'November 4, 2026' && n.amount === '$99.00', JSON.stringify(n))
+    !!n && n.title === '15-day trial - card required - 15 days left' && n.endDate === 'November 4, 2026' && n.amount === '$99.00', JSON.stringify(n))
   const html = renderToStaticMarkup(React.createElement(TrialBanner, {
     status: 'trialing', currentPeriodEnd: '2026-11-04T15:00:00Z',
     trialBilling: { amountCents: 9900, currency: 'usd', trialEnd: '2026-11-04T15:00:00Z' },
     planName: 'NWI Full Suite Plus', planPriceCents: 9900, onCancel: () => {},
   }))
   check('rendered: the banner is on the page', html.includes('data-testid="trial-banner"'))
-  check('rendered: says it is a free trial', html.includes('Free trial'))
+  // Copy changed Nov 22, 2026 (Brock): "free" -> "15-day trial - card required". The
+  // check is as strict as before, against the new words; "free" must be gone.
+  check('rendered: says it is a 15-day trial, card required', html.includes('15-day trial - card required'))
+  check('rendered: does not call it free', !/\bfree\b/i.test(html))
   check('rendered: shows the end date', /data-testid="trial-end">November [34], 2026</.test(html), html.match(/trial-end">([^<]+)/)?.[1] ?? 'missing')
   check('rendered: shows what it will bill', html.includes('data-testid="trial-amount">$99.00<'), html.match(/trial-amount">([^<]+)/)?.[1] ?? 'missing')
   check('rendered: names the plan', html.includes('NWI Full Suite Plus'))

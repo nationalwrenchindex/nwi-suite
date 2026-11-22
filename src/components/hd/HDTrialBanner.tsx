@@ -46,7 +46,7 @@ export default function HDTrialBanner({
       <span className="text-xl leading-none mt-0.5" aria-hidden>🎉</span>
       <div className="flex-1 min-w-0">
         <p className="font-semibold text-sm text-white">
-          Free Trial Active — {daysLeft} day{daysLeft !== 1 ? 's' : ''} remaining
+          15-day trial - card required — {daysLeft} day{daysLeft !== 1 ? 's' : ''} remaining
         </p>
         <p className="text-xs mt-0.5" style={{ color: 'var(--hd-text-muted)' }}>
           Your first payment of ${monthlyPrice}/month will be on {dateFmt}.

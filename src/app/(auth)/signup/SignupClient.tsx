@@ -10,6 +10,7 @@ import { useCaptcha } from '@/components/auth/CaptchaField'
 import { PLANS, SELECTABLE_MODULES, MODULE_LABELS, MODULE_DESCRIPTIONS } from '@/lib/stripe-plans'
 import type { PlanTier, SelectableModule } from '@/lib/stripe-plans'
 import { resolveLdSlug, ldSlugNeedsModulePick, describeSlugResolution } from '@/lib/plan-slugs'
+import { LD_TRIAL_TIER, LD_TRIAL_DAYS } from '@/lib/ld-trial'
 
 type SignupPlan = PlanTier | 'foreman'
 type ProfessionType = 'mobile_mechanic' | 'other'
@@ -51,6 +52,20 @@ const SelectedDot = () => (
     </svg>
   </div>
 )
+
+// Full Suite Plus is the one LD plan with a trial (src/lib/ld-trial.ts: 15 days, card
+// required, new customers only). Its terms, as Brock worded them Nov 22, 2026, wherever
+// the plan is shown on this page. The price is read from PLANS so it cannot drift.
+function FspTrialTerms() {
+  const cents = PLANS.find(p => p.tier === LD_TRIAL_TIER)?.price
+  const price = typeof cents === 'number' ? `$${(cents / 100).toFixed(0)}/mo` : 'The monthly price'
+  return (
+    <p className="text-xs text-white/60 mt-1.5" data-testid="fsp-trial-terms">
+      {LD_TRIAL_DAYS}-day trial. Card required. {price} begins day {LD_TRIAL_DAYS + 1} unless you cancel.
+      {' '}Cancel any time from your billing settings.
+    </p>
+  )
+}
 
 interface Props {
   foremanAvailable: boolean
@@ -320,6 +335,7 @@ function SignupForm({ foremanAvailable }: Props) {
               return typeof price === 'number' ? ` — $${(price / 100).toFixed(0)}/mo` : ''
             })()}
           </p>
+          {preselected === LD_TRIAL_TIER && <FspTrialTerms />}
         </div>
       )}
 
@@ -506,6 +522,8 @@ function SignupForm({ foremanAvailable }: Props) {
                       </li>
                     ))}
                   </ul>
+
+                  {p.tier === LD_TRIAL_TIER && <FspTrialTerms />}
 
                   {isSelected && <SelectedDot />}
                 </button>

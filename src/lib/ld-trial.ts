@@ -201,5 +201,5 @@ export function trialNotice(input: {
   } else {
     detail = `Your trial ends on ${endDate}. ${plan} then bills monthly unless you cancel before then.`
   }
-  return { title: `Free trial - ${days} day${days !== 1 ? 's' : ''} left`, detail, endDate, amount }
+  return { title: `15-day trial - card required - ${days} day${days !== 1 ? 's' : ''} left`, detail, endDate, amount }
 }

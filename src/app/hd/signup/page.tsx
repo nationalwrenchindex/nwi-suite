@@ -47,7 +47,7 @@ const PLANS: {
     price:    159,
     badge:    'RECOMMENDED',
     // The HD Elite free trial (82719672): 15 days, card required, once per customer.
-    trial:    '15 days free · card required',
+    trial:    '15-day trial - card required',
     // Foreman is a separately billed $59/mo add-on with its own checkout route, not
     // an Elite entitlement — listing it here promised something the subscription
     // does not grant.
@@ -71,7 +71,7 @@ const REEFER_PLAN = {
   key:      'reefer_standalone',
   name:     'NWI Reefer',
   price:    REEFER_STANDALONE_PRICE_DOLLARS,
-  trial:    '15 days free · card required',
+  trial:    '15-day trial - card required',
   features: ['Reefer Diagnostics & Alarm Codes (TK, Carrier)', 'Quotes, Work Orders & Invoices', 'Calendar, Intel Hub & Financials', 'Labor Cards & Reefer Parts Reference', 'PM Checklists'],
 }
 
@@ -190,6 +190,23 @@ function HDSignupForm() {
     createClient().auth.getUser().then(({ data }) => setSignedIn(!!data.user)).catch(() => {})
   }, [reefer])
 
+  // RETURNING CUSTOMER (Brock, Nov 22, 2026): checkout refuses the trial to an account
+  // that has had one, so a signed-in returning customer must not be shown trial wording.
+  // /api/trial-eligibility makes checkout's own decision ahead of time. null = not known
+  // (not signed in, or the check failed): the trial wording stays, because an account
+  // that does not exist yet has no history for checkout to refuse.
+  // Asked on /reefer/signup only, once signed in: the middleware sends a signed-in
+  // visitor on /hd/signup to /hd/dashboard, so there it would always be "not known".
+  const [trialEligible, setTrialEligible] = useState<boolean | null>(null)
+  useEffect(() => {
+    if (!reefer || !signedIn) return
+    fetch('/api/trial-eligibility')
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (typeof d?.eligible === 'boolean') setTrialEligible(d.eligible) })
+      .catch(() => {})
+  }, [reefer, signedIn])
+  const returningCustomer = trialEligible === false
+
   async function startCheckout(userId: string | null) {
     const body: Record<string, unknown> = { plan, userId }
     if (promotionCodeId) body.promotionCodeId = promotionCodeId
@@ -263,7 +280,11 @@ function HDSignupForm() {
   // COPY ONLY - the trial is granted or refused at checkout (src/lib/ld-trial.ts), and a
   // returning customer is refused there. Shown so ad traffic sees the offer before it
   // ever reaches Stripe. Day 15 from today is the first charge date Stripe will set.
-  const isEliteTrialPlan = reefer || (plan === 'elite' && promoStatus !== 'valid')
+  const trialPlan        = reefer || (plan === 'elite' && promoStatus !== 'valid')
+  // The trial wording shows only to a buyer checkout would give it to; a returning
+  // customer on the same plan is shown that billing starts today instead.
+  const isEliteTrialPlan = trialPlan && !returningCustomer
+  const billsTodayPlan   = trialPlan && returningCustomer
   const trialProduct = reefer ? 'NWI Reefer' : 'HD Elite'
   const trialPrice   = reefer ? REEFER_PLAN.price : 159
   const trialFirstPaymentDate = (() => {
@@ -277,13 +298,27 @@ function HDSignupForm() {
   const trialNotice = (
     <div className="rounded-xl px-4 py-3" data-testid="trial-notice"
       style={{ background: 'color-mix(in srgb, var(--hd-positive) 10%, var(--hd-card))', border: '1px solid color-mix(in srgb, var(--hd-positive) 35%, transparent)' }}>
-      <p className="text-sm font-semibold" style={{ color: 'var(--hd-positive)' }}>15-day free trial on {trialProduct}</p>
+      <p className="text-sm font-semibold" style={{ color: 'var(--hd-positive)' }}>15-day trial on {trialProduct} - card required</p>
       <p className="text-xs mt-0.5" style={{ color: 'var(--hd-text-muted)' }}>
-        Card required at checkout. You will not be charged until {trialFirstPaymentDate}, then ${trialPrice}/month.
-        Cancel before then and you pay nothing. One free trial per customer.
+        Card required at checkout. You will not be charged until {trialFirstPaymentDate}, then ${trialPrice}/month until you cancel.
+        Cancel before then and you pay nothing. Cancel any time from your billing settings. One trial per customer.
       </p>
     </div>
   )
+
+  // A returning customer gets no trial at checkout, so they are told the truth here.
+  const billingNotice = (
+    <div className="rounded-xl px-4 py-3" data-testid="billing-today-notice"
+      style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)' }}>
+      <p className="text-sm font-semibold text-white">
+        Billing starts today. ${trialPrice.toFixed(2)} now and ${trialPrice.toFixed(2)} monthly until you cancel.
+      </p>
+      <p className="text-xs mt-0.5" style={{ color: 'var(--hd-text-muted)' }}>
+        Cancel any time from your billing settings.
+      </p>
+    </div>
+  )
+  const planNotice = isEliteTrialPlan ? trialNotice : billsTodayPlan ? billingNotice : null
 
   const promoFirstPaymentDate = (() => {
     const d = new Date()
@@ -363,7 +398,7 @@ function HDSignupForm() {
                     <p className="font-condensed font-bold text-3xl mt-1 mb-3" style={{ color: 'var(--hd-accent-text)' }}>
                       {priceOf(p) === null ? '—' : `$${priceOf(p)}`}<span className="text-base font-normal" style={{ color: 'var(--hd-text-faint)' }}>/mo</span>
                     </p>
-                    {p.trial && (
+                    {p.trial && !returningCustomer && (
                       <p className="text-xs font-semibold -mt-2 mb-3" style={{ color: 'var(--hd-positive)' }} data-testid="trial-offer">
                         {p.trial} · then ${p.price}/mo
                       </p>
@@ -440,7 +475,7 @@ function HDSignupForm() {
             </div>
 
             {/* The HD Elite trial, spelled out before checkout. */}
-            {isEliteTrialPlan && <div className="mb-4">{trialNotice}</div>}
+            {planNotice && <div className="mb-4">{planNotice}</div>}
 
             {/* Continue */}
             <button
@@ -448,10 +483,10 @@ function HDSignupForm() {
               className="w-full py-3 rounded-xl font-bold text-on-accent text-sm"
               style={{ background: HD_ORANGE }}
             >
-              {isEliteTrialPlan ? 'Start your 15-day free trial →' : `Continue with ${selectedPlan.name} →`}
+              {isEliteTrialPlan ? 'Start your 15-day trial - card required →' : `Continue with ${selectedPlan.name} →`}
             </button>
             <p className="text-center text-xs mt-3" style={{ color: 'var(--hd-text-faint)' }}>
-              {promoStatus === 'valid' || isEliteTrialPlan
+              {promoStatus === 'valid' || trialPlan
                 ? 'Card required · Cancel anytime'
                 : 'Cancel anytime'}
             </p>
@@ -461,7 +496,7 @@ function HDSignupForm() {
         {/* Reefer, already signed in: no second account - straight to checkout. */}
         {reefer && signedIn && (
           <div className="max-w-md mx-auto rounded-xl p-6 space-y-4" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
-            {trialNotice}
+            {returningCustomer ? billingNotice : trialNotice}
             {error && <p className="text-sm text-red-400">{error}</p>}
             <button type="button" onClick={handleContinueCheckout} disabled={loading}
               className="w-full py-3 rounded-xl font-bold text-on-accent text-sm"
@@ -489,7 +524,7 @@ function HDSignupForm() {
                 </div>
               </div>
 
-              {isEliteTrialPlan && trialNotice}
+              {planNotice}
 
               {[
                 { label: 'Full Name',      value: name,  setter: setName,  type: 'text',     placeholder: 'John Smith'           },
@@ -538,7 +573,7 @@ function HDSignupForm() {
                 className="w-full py-3 rounded-xl font-bold text-on-accent text-sm"
                 style={{ background: HD_ORANGE, opacity: loading || captcha.pending || !acceptedTerms ? 0.6 : 1 }}
               >
-                {loading ? 'Creating Account…' : isEliteTrialPlan ? 'Start My Free Trial' : 'Start Today'}
+                {loading ? 'Creating Account…' : isEliteTrialPlan ? 'Start my 15-day trial - card required' : 'Start Today'}
               </button>
             </div>
 
