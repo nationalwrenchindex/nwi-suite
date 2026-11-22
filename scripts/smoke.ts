@@ -2114,7 +2114,11 @@ async function flowK(): Promise<void> {
   const s660 = await api('GET', '/api/parts/search?manufacturer=Carrier%20Transicold&model=Supra%20660&part_type=filter')
   const results = (s660.json.results ?? []) as Array<Record<string, unknown>>
   const numbers = results.map(r => String(r.part_number)).sort()
-  record(F, 'Supra 660 returns exactly 3 filters', results.length === 3, `${results.length}: ${numbers.join(', ')}`)
+  // Brock's chart: 30-60143-01 oil, 30-60049-20 air, 30-01090-05 fuel. The chart also lists
+  // 30-01121-00, as the OLD number 30-60143-01 replaces - never a fourth answer (Part 4).
+  record(F, 'Supra 660 returns exactly 3 filters', results.length === 3 && numbers.join() === '30-01090-05,30-60049-20,30-60143-01',
+    `${results.length}: ${numbers.join(', ')}`)
+  record(F, 'and the old number 30-01121-00 is not one of them', !numbers.includes('30-01121-00'), numbers.join(', '))
   record(F, 'and not one Thermo King part',
     !results.some(r => /thermo/i.test(String(r.manufacturer))),
     results.length ? [...new Set(results.map(r => String(r.manufacturer)))].join(', ') : 'nothing returned')
@@ -2138,8 +2142,13 @@ async function flowK(): Promise<void> {
     superseded ? `${superseded.from} -> ${superseded.to}` : 'no supersession reported')
   const supResults = (sup.json.results ?? []) as Array<Record<string, unknown>>
   record(F, 'and returns the replacement part',
-    supResults.some(r => String(r.part_number) === '30-60143-01'),
-    supResults.map(r => String(r.part_number)).join(', ') || 'nothing')
+    supResults.some(r => String(r.part_number) === '30-60143-01' && r.current === true),
+    supResults.map(r => `${r.part_number}${r.current === false ? ' (old)' : ''}`).join(', ') || 'nothing')
+  const oldHit = supResults.find(r => String(r.part_number) === '30-01121-00')
+  record(F, '30-01121-00 is still found by number, marked not current, replaced by 30-60143-01',
+    !!oldHit && oldHit.current === false &&
+      ((oldHit.replaced_by ?? []) as Array<Record<string, unknown>>).some(x => x.to === '30-60143-01'),
+    oldHit ? `current=${oldHit.current}, replaced_by ${JSON.stringify(oldHit.replaced_by)}` : 'not returned')
 
   // 4. Both spellings of a number find the same part.
   const dashed = await api('GET', '/api/parts/search?q=78-1341')
@@ -2150,13 +2159,26 @@ async function flowK(): Promise<void> {
     `${((dashed.json.results ?? []) as unknown[]).length} and ${((plain.json.results ?? []) as unknown[]).length}`)
 
   // 5. A serial narrows a split.
+  // Brock's chart: 30-01077-01 before GAG90483303, 30-00430-00 from it. Four unconfirmed
+  // filters with no bounds also name the Ultra; the chart beats them (suppressed, not lost).
   const both = await api('GET', '/api/parts/search?manufacturer=Carrier%20Transicold&model=Ultra&part_type=Filter%20-%20air')
-  const bothN = ((both.json.results ?? []) as Array<Record<string, unknown>>).length
-  record(F, 'an Ultra air filter search returns both serial sides', bothN === 2, String(bothN))
+  const bothR = (both.json.results ?? []) as Array<Record<string, unknown>>
+  const bothNums = bothR.map(r => String(r.part_number)).sort()
+  record(F, 'an Ultra air filter search returns both serial sides', bothR.length === 2 && bothNums.join() === '30-00430-00,30-01077-01',
+    `${bothR.length}: ${bothNums.join(', ')}`)
+  const held = ((both.json.suppressed ?? []) as Array<Record<string, unknown>>).map(s => String(s.part_number)).sort()
+  record(F, 'the four unconfirmed Ultra filters are held back and listed, not lost',
+    held.join() === '30-00426-20,30-00426-27,30-00430-23,30-00471-20', held.join(', ') || 'none listed')
   const narrowed = await api('GET', '/api/parts/search?manufacturer=Carrier%20Transicold&model=Ultra&part_type=Filter%20-%20air&serial=GAG90000000')
   const narrowedR = (narrowed.json.results ?? []) as Array<Record<string, unknown>>
-  record(F, 'an early serial narrows it to one', narrowedR.length === 1,
+  record(F, 'an early serial narrows it to one', narrowedR.length === 1 && String(narrowedR[0].part_number) === '30-01077-01',
     `${narrowedR.length}: ${narrowedR.map(r => String(r.part_number)).join(', ')}`)
+  const shown = await api('GET', '/api/parts/search?manufacturer=Carrier%20Transicold&model=Ultra&part_type=Filter%20-%20air&show_unconfirmed=1')
+  const shownR = (shown.json.results ?? []) as Array<Record<string, unknown>>
+  const shownHeld = shownR.filter(r => r.suppressed === true).map(r => String(r.part_number)).sort()
+  record(F, '"show unconfirmed matches" reveals exactly what was held back, marked so',
+    shownHeld.join() === held.join() && held.length > 0 && shownR.filter(r => r.suppressed !== true).length === 2,
+    `${shownHeld.join(', ')} marked; ${shownR.filter(r => r.suppressed !== true).length} confirmed`)
 
   // And the screens render.
   for (const [label, path] of [['parts catalog', '/parts/catalog'], ['find by unit', '/parts/find']] as const) {
@@ -5927,17 +5949,81 @@ async function flowPartsCounter(): Promise<void> {
   const q = (s: string) => api('GET', `/api/parts/counter?${s}`)
   const u = await q(`maker=${encodeURIComponent('Carrier Transicold')}&model=${encodeURIComponent('Supra 660')}&part_type=${encodeURIComponent('Filter - oil (engine)')}`)
   const res = (u.json.results ?? []) as Array<Record<string, unknown>>
-  record(F, 'Supra 660 + oil filter returns 30-60143-01, verified, shown plainly',
-    res.some(r => r.part_number === '30-60143-01' && r.display === 'plain' && r.badge === 'verified'),
+  // The badge was "verified" (the pre-175 brock-carrier-chart row) until Brock's belt and
+  // filter chart loaded the same claim as tier `confirmed` (Nov 16). The check was wrong
+  // about the app, not loosened: Brock, Nov 22 - keep "confirmed", fit the check to it.
+  record(F, 'Supra 660 + oil filter returns 30-60143-01, confirmed, shown plainly',
+    res.some(r => r.part_number === '30-60143-01' && r.display === 'plain' && r.badge === 'confirmed'),
     res.map(r => `${r.part_number} [${r.badge}]`).join(', ') || `-> ${u.status}`)
+  record(F, 'and 30-60143-01 is the only oil filter offered (the old 30-01121-00 is not)',
+    res.filter(r => r.current !== false).map(r => r.part_number).join() === '30-60143-01'
+      && (res.find(r => r.part_number === '30-60143-01')?.was as string[] | undefined)?.includes('30-01121-00') === true,
+    res.map(r => `${r.part_number}${r.current === false ? ' (old)' : ''} was ${(r.was as string[] | undefined)?.join(',') ?? ''}`).join('; '))
   record(F, 'a Carrier unit never returns a Thermo King part', res.length > 0 && res.every(r => /carrier/i.test(String(r.manufacturer))))
   record(F, 'the answer carries no price and no source',
     u.status === 200 && !/last_cost|sell_price|unit_cost|vendor|"source"/.test(JSON.stringify(u.json)))
   const o = await q('q=30-01121-00')
-  const first = ((o.json.results ?? []) as Array<Record<string, unknown>>)[0]
+  const oRes = (o.json.results ?? []) as Array<Record<string, unknown>>
+  const first = oRes[0]
   record(F, 'the superseded number 30-01121-00 answers with 30-60143-01, was 30-01121-00',
-    first?.part_number === '30-60143-01' && (first?.was as string[] | undefined)?.includes('30-01121-00') === true,
+    first?.part_number === '30-60143-01' && first?.current === true && (first?.was as string[] | undefined)?.includes('30-01121-00') === true,
     `${first?.part_number} was ${(first?.was as string[] | undefined)?.join(',')}`)
+  const oOld = oRes.find(r => r.part_number === '30-01121-00')
+  record(F, '30-01121-00 is findable by number but not offered as current',
+    !!oOld && oOld.current === false && ((oOld.replaced_by ?? []) as Array<Record<string, unknown>>).some(x => x.to === '30-60143-01')
+      && Number(o.json.count) === oRes.filter(r => r.current === true && r.suppressed !== true).length,
+    oOld ? `current=${oOld.current}, replaced by ${((oOld.replaced_by ?? []) as Array<Record<string, unknown>>).map(x => x.to).join(', ')}` : 'not returned')
+  const s660all = await q(`maker=${encodeURIComponent('Carrier Transicold')}&model=${encodeURIComponent('Supra 660')}`)
+  const s660cur = ((s660all.json.results ?? []) as Array<Record<string, unknown>>).filter(r => r.current !== false)
+  record(F, 'a Supra 660 search never offers 30-01121-00 as a current answer',
+    s660cur.length > 0 && !s660cur.some(r => r.part_number === '30-01121-00'), `${s660cur.length} current answers`)
+
+  // ── Brock's chart narrowing (Part 4, Nov 22, 2026) ──────────────────────────
+  const tk = encodeURIComponent('Thermo King')
+  // The belt's job on the unit is the chart's own column, loaded by migration 191 into
+  // part_fitment.role. Until 191 is applied these cannot pass, and they say why.
+  const roles = (r: { json: Record<string, unknown> }) => r.json.roles_recorded === true
+  const sbr = await q(`maker=${tk}&model=SB-200&q=${encodeURIComponent('drive belt')}`)
+  const sbCur = ((sbr.json.results ?? []) as Array<Record<string, unknown>>).filter(r => r.current !== false && r.suppressed !== true)
+  record(F, 'an SB-200 drive belt returns 78-0629 and only that',
+    sbr.status === 200 && sbCur.map(r => r.part_number).join() === '78-0629',
+    !roles(sbr) ? 'migration 191 is not applied: the chart\'s "Drive belt" is not in part_fitment.role' : sbCur.map(r => String(r.part_number)).join(', ') || `-> ${sbr.status}`)
+  const gen = (model: string, cfg: string | null) =>
+    q(`maker=${tk}&model=${encodeURIComponent(model)}&q=${encodeURIComponent('generator belt')}${cfg ? `&configuration=${encodeURIComponent(cfg)}` : ''}`)
+  const g1 = await gen('Precedent C-600', 'with smart power')
+  const g1Cur = ((g1.json.results ?? []) as Array<Record<string, unknown>>).filter(r => r.current !== false && r.suppressed !== true).map(r => String(r.part_number))
+  record(F, 'a Precedent C-600 generator belt with smart power returns 78-1858 and not 78-1859',
+    g1.status === 200 && g1Cur.join() === '78-1858',
+    !roles(g1) ? 'migration 191 is not applied: the chart\'s "Generator belt" is not in part_fitment.role' : g1Cur.join(', ') || `-> ${g1.status}`)
+  const g2 = await gen('Precedent C-600', null)
+  const g2Cur = ((g2.json.results ?? []) as Array<Record<string, unknown>>).filter(r => r.current !== false && r.suppressed !== true).map(r => String(r.part_number)).sort()
+  const g2Choice = ((g2.json.configuration_choices ?? []) as Array<Record<string, unknown>>)
+    .map(c => ((c.options ?? []) as Array<Record<string, unknown>>).map(o => `${o.configuration}=${(o.part_numbers as string[]).join('+')}`).join(' / '))
+  record(F, 'with no configuration given, both come back and the counter asks which',
+    g2Cur.join() === '78-1858,78-1859' && g2Choice.includes('with alternator=78-1859 / with smart power=78-1858'),
+    `${g2Cur.join(', ')}; asks: ${g2Choice.join(' | ') || 'nothing'}`)
+  const g3 = await gen('C-600', 'with smart power')
+  const g3Cur = ((g3.json.results ?? []) as Array<Record<string, unknown>>).filter(r => r.current !== false && r.suppressed !== true).map(r => String(r.part_number))
+  record(F, 'bare "C-600" is the same unit as "Precedent C-600"', g3.status === 200 && g3Cur.join() === g1Cur.join() && g1Cur.length > 0,
+    `${g3Cur.join(', ')} vs ${g1Cur.join(', ')}`)
+
+  // No truck-only part in a trailer unit's results. The Ultra is a trailer unit; an
+  // unconfirmed row puts 30-00302-00 (charted truck-only) on it, so this can fail.
+  const truckOnlyOnUltra = await rest<{ part_id: string }>(
+    `part_fitment?select=part_id,parts!inner(part_number)&unit_model=eq.Ultra&parts.part_number=eq.30-00302-00`)
+  const ul = await q(`maker=${encodeURIComponent('Carrier Transicold')}&model=Ultra`)
+  const ulRes = ((ul.json.results ?? []) as Array<Record<string, unknown>>).filter(r => r.suppressed !== true)
+  const ids = ulRes.map(r => String(r.id))
+  const mounts = ids.length ? await rest<{ part_id: string; mount_type: string | null }>(
+    `part_fitment?select=part_id,mount_type&mount_type=not.is.null&part_id=in.(${ids.join(',')})`) : []
+  const byPart = new Map<string, Set<string>>()
+  for (const m of mounts) byPart.set(m.part_id, (byPart.get(m.part_id) ?? new Set()).add(String(m.mount_type)))
+  const truckOnly = ulRes.filter(r => { const s = byPart.get(String(r.id)); return !!s && s.size > 0 && !s.has('trailer') })
+  record(F, 'no truck-only part appears in a trailer unit\'s results (Ultra)',
+    ul.status === 200 && ulRes.length > 0 && truckOnlyOnUltra.length > 0 && truckOnly.length === 0
+      && (ul.json.narrowed as Record<string, unknown> | null)?.unit_mount === 'trailer',
+    truckOnly.length ? `truck-only: ${truckOnly.map(r => r.part_number).join(', ')}`
+      : `${ulRes.length} parts, none truck-only; unit mount ${(ul.json.narrowed as Record<string, unknown> | null)?.unit_mount}; ${truckOnlyOnUltra.length} truck-only row(s) on the Ultra in the data`)
   const n = await q('q=306014301')
   record(F, 'a number typed without dashes finds the part',
     ((n.json.results ?? []) as Array<Record<string, unknown>>).some(r => r.part_number === '30-60143-01'))

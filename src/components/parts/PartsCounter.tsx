@@ -42,10 +42,18 @@ interface CounterResult {
   matched_on: string
   was: string[]
   reported_replaced_by: { to: string; note: string | null; badge: string } | null
+  /** False for an old number: shown so it can be found, never offered as the answer. */
+  current: boolean
+  replaced_by: Array<{ to: string; note: string | null; badge: string; followed: boolean }>
+  /** The condition on a conditional replacement (11-9958 -> 11-9965 standard duty ...). */
+  condition: string | null
+  suppressed: boolean
+  suppressed_reason: string | null
   unresolved_serial: boolean
   fitment: Array<{
     id: string; unit_model: string | null; engine: string | null; compressor_model: string | null
     serial_label: string | null; build_date_from: string | null; build_date_before: string | null; qty_per_unit: number | null
+    mount_type: string | null; configuration: string | null; role: string | null
     note: string | null; badge: string; display: string
   }>
   crosses: Array<{ brand: string; numbers: Array<{ number: string; badge: string; display: string }> }>
@@ -56,6 +64,11 @@ interface CounterResponse {
   count: number
   unresolved_serial_count: number
   bm_note: string | null
+  build_date_note: string | null
+  /** What the chart held back: weaker matches it does not support. */
+  suppressed: Array<{ part_number: string; part_type: string; reason: string }>
+  show_unconfirmed: boolean
+  configuration_choices: Array<{ part_type: string; role: string | null; options: Array<{ configuration: string; part_numbers: string[] }> }>
   results: CounterResult[]
 }
 
@@ -96,6 +109,11 @@ export default function PartsCounter({ scope }: { scope: CounterScope }) {
   const [engine, setEngine]     = useState('')
   const [partType, setPartType] = useState('')
   const [q, setQ]               = useState('')
+  const [buildDate, setBuildDate] = useState('')
+  // Set by answering the counter's "which configuration?" - never typed.
+  const [configuration, setConfiguration] = useState('')
+  // GUARD (Brock, Nov 16): reveals exactly what the chart suppressed.
+  const [showUnconfirmed, setShowUnconfirmed] = useState(false)
 
   const [data, setData]       = useState<CounterResponse | null>(null)
   const [loading, setLoading] = useState(false)
@@ -116,8 +134,10 @@ export default function PartsCounter({ scope }: { scope: CounterScope }) {
     setMaker(u.maker); setModel(u.model); setSerial(u.serial); setBm(u.bm)
   }
 
-  const run = useCallback(async () => {
+  const run = useCallback(async (over?: { configuration?: string; showUnconfirmed?: boolean }) => {
     setLoading(true); setError(null)
+    const cfg = over?.configuration ?? configuration
+    const unconf = over?.showUnconfirmed ?? showUnconfirmed
     try {
       const p = new URLSearchParams({ scope })
       if (maker)          p.set('maker', maker)
@@ -125,6 +145,9 @@ export default function PartsCounter({ scope }: { scope: CounterScope }) {
       if (serial.trim())  p.set('serial', serial.trim())
       if (bm.trim())      p.set('bm', bm.trim())
       if (engine.trim())  p.set('engine', engine.trim())
+      if (buildDate.trim()) p.set('build_date', buildDate.trim())
+      if (cfg)            p.set('configuration', cfg)
+      if (unconf)         p.set('show_unconfirmed', '1')
       if (partType)       p.set('part_type', partType)
       if (q.trim())       p.set('q', q.trim())
       const res = await fetch(`/api/parts/counter?${p}`, { cache: 'no-store' })
@@ -136,7 +159,17 @@ export default function PartsCounter({ scope }: { scope: CounterScope }) {
     } finally {
       setLoading(false)
     }
-  }, [scope, maker, model, serial, bm, engine, partType, q])
+  }, [scope, maker, model, serial, bm, engine, buildDate, configuration, showUnconfirmed, partType, q])
+
+  function chooseConfiguration(c: string) {
+    setConfiguration(c)
+    void run({ configuration: c })
+  }
+  function toggleUnconfirmed() {
+    const next = !showUnconfirmed
+    setShowUnconfirmed(next)
+    void run({ showUnconfirmed: next })
+  }
 
   const models = useMemo(() => (maker && options ? options.models[maker] ?? [] : []), [maker, options])
   const category = options?.part_types.find(g => g.types.includes(partType))?.category
@@ -201,6 +234,10 @@ export default function PartsCounter({ scope }: { scope: CounterScope }) {
             <Label>Engine <span style={{ color: 'var(--hd-text-faint)' }}>(if known)</span></Label>
             <input value={engine} onChange={e => setEngine(e.target.value)} placeholder="TK486V" className={inputCls} style={field} />
           </label>
+          <label className="block">
+            <Label>Build date <span style={{ color: 'var(--hd-text-faint)' }}>(if known)</span></Label>
+            <input value={buildDate} onChange={e => setBuildDate(e.target.value)} placeholder="2023-07" className={inputCls} style={field} />
+          </label>
         </div>
 
         {/* Step 3 - part type. A flat list; the category is a header, not a step. */}
@@ -235,10 +272,10 @@ export default function PartsCounter({ scope }: { scope: CounterScope }) {
         <div className="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-3 items-end">
           <label className="block">
             <Label>Part number, cross number or part name</Label>
-            <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && canRun) void run() }}
+            <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && canRun) { setConfiguration(''); void run({ configuration: '' }) } }}
               placeholder="11-9959 or 30-60143-01" className={inputCls} style={field} />
           </label>
-          <button type="button" onClick={() => void run()} disabled={loading || !canRun}
+          <button type="button" onClick={() => { setConfiguration(''); void run({ configuration: '' }) }} disabled={loading || !canRun}
             className="px-6 rounded-lg text-sm font-semibold text-on-accent disabled:opacity-50"
             style={{ background: PRIMARY, minHeight: 44 }}>
             {loading ? 'Searching...' : 'Find parts'}
@@ -261,6 +298,45 @@ export default function PartsCounter({ scope }: { scope: CounterScope }) {
         </p>
       )}
       {data?.bm_note && <p className="text-xs" style={{ color: 'var(--hd-warn)' }}>{data.bm_note}</p>}
+      {data?.build_date_note && <p className="text-xs" style={{ color: 'var(--hd-warn)' }}>{data.build_date_note}</p>}
+
+      {/* Parts split only by configuration: ask, rather than hand back two unexplained hits. */}
+      {data && (data.configuration_choices.length > 0 || configuration) && (
+        <div className="rounded-xl p-4 space-y-3" style={{ background: 'var(--hd-card)', border: `1px solid ${PRIMARY}` }} data-testid="configuration-choice">
+          {configuration && (
+            <p className="text-sm text-white">
+              Showing the parts for <span className="font-semibold">{configuration}</span>.{' '}
+              <button type="button" className="underline text-xs" style={{ color: 'var(--hd-text-muted)' }} onClick={() => chooseConfiguration('')}>Show every configuration</button>
+            </p>
+          )}
+          {data.configuration_choices.map(c => (
+            <div key={`${c.part_type}|${c.role ?? ''}`}>
+              <p className="text-sm text-white font-medium">Which configuration? <span style={{ color: 'var(--hd-text-muted)' }}>{c.role ?? c.part_type}</span></p>
+              <div className="flex flex-wrap gap-2 mt-2">
+                {c.options.map(o => (
+                  <button key={o.configuration} type="button" onClick={() => chooseConfiguration(o.configuration)}
+                    className="px-3 py-2 rounded-lg text-sm text-white" style={{ background: 'var(--hd-inner)', border: '1px solid var(--hd-border)', minHeight: 44 }}>
+                    {o.configuration} <span className="font-mono text-xs" style={{ color: 'var(--hd-text-muted)' }}>{o.part_numbers.join(', ')}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* GUARD: what the chart held back, and a way to see exactly that. */}
+      {data && (data.suppressed.length > 0 || showUnconfirmed) && (
+        <div className="flex flex-wrap items-center gap-3 text-xs" style={{ color: 'var(--hd-text-muted)' }}>
+          <span>
+            {data.suppressed.length} unconfirmed {data.suppressed.length === 1 ? 'match' : 'matches'} held back because Brock&apos;s chart covers this unit
+          </span>
+          <label className="inline-flex items-center gap-2 cursor-pointer text-white" style={{ minHeight: 44 }}>
+            <input type="checkbox" checked={showUnconfirmed} onChange={toggleUnconfirmed} />
+            Show unconfirmed matches
+          </label>
+        </div>
+      )}
 
       {data && data.results.length === 0 && (
         <div className="rounded-xl p-6 text-center" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
@@ -281,21 +357,40 @@ export default function PartsCounter({ scope }: { scope: CounterScope }) {
 }
 
 function ResultCard({ r }: { r: CounterResult }) {
+  const old = !r.current
   return (
     <div
       className="rounded-xl p-4"
       style={{
-        background: 'var(--hd-card)', border: '1px solid var(--hd-border)',
-        borderLeft: `4px solid ${r.display === 'conflict' ? 'var(--hd-negative)' : r.display === 'one_source' ? 'var(--hd-warn)' : PRIMARY}`,
+        background: 'var(--hd-card)', border: '1px solid var(--hd-border)', opacity: old || r.suppressed ? 0.85 : 1,
+        borderLeft: `4px solid ${old ? 'var(--hd-text-faint)' : r.display === 'conflict' ? 'var(--hd-negative)' : r.display === 'one_source' ? 'var(--hd-warn)' : PRIMARY}`,
       }}
     >
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-mono text-2xl font-bold text-white tracking-wide">{r.part_number}</span>
+            <span className={`font-mono text-2xl font-bold tracking-wide ${old ? 'line-through' : ''}`} style={{ color: old ? 'var(--hd-text-muted)' : 'white' }}>{r.part_number}</span>
+            {old && <Badge text="old number" display="one_source" />}
+            {r.suppressed && <Badge text="not in the chart" display="one_source" />}
             <Badge text={r.badge} display={r.display} />
             {r.unresolved_serial && <Badge text="serial not comparable" display="one_source" />}
           </div>
+          {old && r.replaced_by.length > 0 && (
+            <div className="text-sm mt-1 text-white">
+              <p>Not current. {r.replaced_by.length > 1 ? 'Replaced by one of these - pick by the condition:' : 'Replaced by:'}</p>
+              <ul className="mt-0.5 space-y-0.5">
+                {r.replaced_by.map(x => (
+                  <li key={x.to} className="text-xs">
+                    <span className="font-mono font-semibold">{x.to}</span>{' '}
+                    {x.note && <span style={{ color: 'var(--hd-text-muted)' }}>{x.note} </span>}
+                    {!x.followed && <span style={{ color: 'var(--hd-warn)' }}>({x.badge} link - confirm before ordering)</span>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {r.condition && <p className="text-xs mt-1 font-medium" style={{ color: 'var(--hd-warn)' }}>{r.condition}</p>}
+          {r.suppressed_reason && <p className="text-xs mt-1" style={{ color: 'var(--hd-warn)' }}>{r.suppressed_reason}</p>}
           <p className="text-sm text-white mt-1">{r.description ?? r.part_type}</p>
           <p className="text-xs mt-0.5" style={{ color: 'var(--hd-text-muted)' }}>{r.manufacturer} &middot; {r.part_type}</p>
           {r.was.length > 0 && (
@@ -333,6 +428,10 @@ function ResultCard({ r }: { r: CounterResult }) {
           {r.fitment.map(f => (
             <li key={f.id} className="text-xs flex flex-wrap items-center gap-x-2 gap-y-1 text-white">
               <span>{f.unit_model ?? (f.engine ? `engine ${f.engine}` : `compressor ${f.compressor_model}`)}</span>
+              {f.role && <span className="font-medium">{f.role}</span>}
+              {f.mount_type && <span style={{ color: 'var(--hd-text-muted)' }}>{f.mount_type} unit</span>}
+              {f.unit_model && f.engine && <span style={{ color: 'var(--hd-warn)' }}>engine {f.engine}</span>}
+              {f.configuration && <span style={{ color: 'var(--hd-warn)' }}>{f.configuration}</span>}
               {f.serial_label && <span style={{ color: 'var(--hd-warn)' }}>{f.serial_label}</span>}
               {f.build_date_from && <span style={{ color: 'var(--hd-warn)' }}>built from {f.build_date_from}</span>}
               {f.build_date_before && <span style={{ color: 'var(--hd-warn)' }}>built before {f.build_date_before}</span>}

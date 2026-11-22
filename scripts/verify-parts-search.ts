@@ -7,9 +7,13 @@
 
 import { loadEnv } from './lib/smoke-session'
 import {
-  manufacturerMatches, modelMatches, isCatchAllModel, typeMatches, textMatches,
-  serialApplies, serialLabel, normalizePartNumber,
+  manufacturerMatches, isCatchAllModel, typeMatches, textMatches,
+  serialLabel, normalizePartNumber,
 } from '../src/lib/parts/search'
+// Part 4 (Nov 22, 2026): a model search is narrowed by Brock's chart through the same pure
+// rules the route calls, and an old number's claim moves to its replacement.
+import { narrowUnitRows, partMountsOf, unitModelMatches, type NarrowRow } from '../src/lib/parts/narrow'
+import { followChain, isConfidenceTier, type SupersessionLink } from '../src/lib/parts/counter'
 
 loadEnv()
 const S = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -28,9 +32,11 @@ interface Part {
   part_type: string; description: string | null
 }
 interface Fit {
-  part_id: string; unit_model: string | null; engine_model: string | null
+  id: string; part_id: string; unit_model: string | null; engine_model: string | null
   compressor_model: string | null; serial_from: string | null; serial_before: string | null
-  verified: boolean; note: string | null
+  build_date_from: string | null; build_date_before: string | null
+  verified: boolean; note: string | null; confidence: string | null
+  mount_type: string | null; configuration: string | null; role?: string | null
 }
 
 async function all(path: string): Promise<Record<string, unknown>[]> {
@@ -51,11 +57,21 @@ async function main() {
   console.log('='.repeat(104))
 
   const parts = await all('parts?select=id,part_number,part_number_normalized,manufacturer,part_type,description') as unknown as Part[]
-  const fitment = await all('part_fitment?select=part_id,unit_model,engine_model,compressor_model,serial_from,serial_before,verified,note') as unknown as Fit[]
-  const supers = await all('part_supersession?select=old_number,new_number,old_number_normalized,new_number_normalized,manufacturer,note,verified')
+  const FIT = 'id,part_id,unit_model,engine_model,compressor_model,serial_from,serial_before,build_date_from,build_date_before,verified,note,confidence,mount_type,configuration'
+  // role arrives with migration 191; read without it until it is applied.
+  const fitment = await all(`part_fitment?select=${FIT},role`).catch(() => all(`part_fitment?select=${FIT}`)) as unknown as Fit[]
+  const supers = await all('part_supersession?select=old_number,new_number,old_number_normalized,new_number_normalized,manufacturer,note,verified,confidence')
+  const links: SupersessionLink[] = supers.map(s => ({
+    old_number: String(s.old_number), new_number: String(s.new_number),
+    old_number_normalized: String(s.old_number_normalized), new_number_normalized: String(s.new_number_normalized),
+    manufacturer: String(s.manufacturer), note: (s.note as string | null) ?? null, verified: !!s.verified,
+    confidence: isConfidenceTier(s.confidence) ? s.confidence : null,
+  }))
 
   const byPart = new Map<string, Fit[]>()
   for (const f of fitment) byPart.set(f.part_id, [...(byPart.get(f.part_id) ?? []), f])
+  const partMounts = partMountsOf(fitment)
+  const trustOf = (f: Fit) => ({ tier: isConfidenceTier(f.confidence) ? f.confidence : null, verified: !!f.verified })
 
   // The search, exactly as the route composes it from the rules.
   function search(opts: {
@@ -63,17 +79,41 @@ async function main() {
     q?: string | null; serial?: string | null
   }) {
     const out: Array<{ part: Part; fits: Fit[] }> = []
-    for (const part of parts) {
-      if (!manufacturerMatches(part.manufacturer, opts.manufacturer)) continue
-      if (!typeMatches(part.part_type, opts.partType)) continue
-      if (!textMatches(part, opts.q)) continue
-      if (!opts.model) { out.push({ part, fits: byPart.get(part.id) ?? [] }); continue }
-      const fits = (byPart.get(part.id) ?? []).filter(f => modelMatches(f.unit_model, opts.model))
-      if (!fits.length) continue
-      const kept = fits.filter(f => serialApplies(f, opts.serial) !== false)
-      if (!kept.length) continue
-      out.push({ part, fits: kept })
+    const inMfr = parts.filter(part => manufacturerMatches(part.manufacturer, opts.manufacturer))
+    if (!opts.model) {
+      for (const part of inMfr) {
+        if (!typeMatches(part.part_type, opts.partType)) continue
+        if (!textMatches(part, opts.q)) continue
+        out.push({ part, fits: byPart.get(part.id) ?? [] })
+      }
+      return out
     }
+    const byId = new Map(inMfr.map(p => [p.id, p]))
+    const unitAll = fitment.filter(f => byId.has(f.part_id) && unitModelMatches(f.unit_model, opts.model))
+    const candidates = unitAll.filter(f => {
+      const part = byId.get(f.part_id)!
+      return typeMatches(part.part_type, opts.partType) && textMatches(part, opts.q)
+    })
+    type Row = NarrowRow & { f: Fit }
+    const nr = narrowUnitRows(candidates.map((f): Row => ({
+      id: f.id, part_id: f.part_id, family: byId.get(f.part_id)!.part_type, engine: f.engine_model,
+      serial_from: f.serial_from, serial_before: f.serial_before, build_date_from: f.build_date_from, build_date_before: f.build_date_before,
+      mount_type: f.mount_type, configuration: f.configuration, role: f.role ?? null, trust: trustOf(f), f,
+    })), { serial: opts.serial }, partMounts, unitAll)
+    const grouped = new Map<string, Fit[]>()
+    for (const r of nr.kept) grouped.set(r.part_id, [...(grouped.get(r.part_id) ?? []), r.f])
+    // An old number's claim moves to its replacement, as in the route.
+    const byNorm = new Map(inMfr.map(p => [p.part_number_normalized, p]))
+    const merged = new Map<string, { part: Part; fits: Fit[] }>()
+    for (const [id, fits] of grouped) {
+      const part = byId.get(id)!
+      const chain = followChain(part.part_number, part.part_number_normalized, links)
+      const target = chain.branches.length ? null : chain.was.length ? byNorm.get(chain.currentNormalized) ?? part : part
+      const into = target ?? part
+      const prior = merged.get(into.id)
+      if (prior) prior.fits.push(...fits); else merged.set(into.id, { part: into, fits: [...fits] })
+    }
+    out.push(...merged.values())
     return out
   }
 

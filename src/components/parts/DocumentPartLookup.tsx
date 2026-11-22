@@ -43,8 +43,13 @@ interface Result {
   matched_by: string
   fits_unit?: boolean
   trust: Trust | null
-  fitment: Array<{ id: string; unit_model: string | null; serial_label: string | null; note: string | null }>
+  fitment: Array<{ id: string; unit_model: string | null; serial_label: string | null; note: string | null; configuration?: string | null; role?: string | null }>
   superseded_by: { to: string } | null
+  /** False for an old number (Part 4): found, never the answer. */
+  current?: boolean
+  replaced_by?: Array<{ to: string; note: string | null }>
+  /** The condition on a conditional replacement. */
+  condition?: string | null
 }
 
 /** The surface it sits on: the white document form, or the HD theme tokens. */
@@ -214,6 +219,16 @@ export default function DocumentPartLookup({
                   <span className="block text-[11px]" style={{ color: P.muted }}>
                     {r.part_type}{models ? ` · fits ${models}` : ''}{r.superseded_by ? ` · replaced by ${r.superseded_by.to}` : ''}
                   </span>
+                  {r.current === false && (
+                    <span className="block text-[11px] font-semibold" style={{ color: P.warn }} data-testid="part-lookup-old">
+                      Old number - not current. Use {(r.replaced_by ?? []).map(x => x.note ? `${x.to} (${x.note})` : x.to).join(' or ') || 'its replacement'}.
+                    </span>
+                  )}
+                  {r.condition && <span className="block text-[11px]" style={{ color: P.warn }}>{r.condition}</span>}
+                  {(() => {
+                    const cfg = [...new Set(r.fitment.map(f => [f.role, f.configuration].filter(Boolean).join(', ')).filter(Boolean))].join('; ')
+                    return cfg ? <span className="block text-[11px]" style={{ color: P.muted }}>{cfg}</span> : null
+                  })()}
                   {r.matched_by === 'number' && hasUnit && r.fits_unit === false && (
                     <span className="block text-[11px]" style={{ color: P.warn }}>Exact number. Not recorded as fitting {unitName}.</span>
                   )}

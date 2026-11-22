@@ -60,6 +60,9 @@ export interface PartResult {
   verified: boolean
   vendor_price?: number | null
   superseded_by: { to: string; note: string | null } | null
+  /** False for an old number (Part 4): found by number, never the current answer. */
+  current?: boolean
+  replaced_by?: Array<{ to: string; note: string | null }>
   matched_by: string
   unresolved_serial: boolean
   fitment: FitmentRow[]
@@ -305,7 +308,7 @@ export default function PartsFinder({ mode, lockedUnit, onPick, markupPercent }:
           </p>
           {data.superseded.note && <p className="text-white/50 text-xs mt-1">{data.superseded.note}</p>}
           <p className="text-white/30 text-xs mt-1">
-            Showing the replacement.{data.superseded.verified ? '' : ' The replacement link is unverified.'}
+            Showing the replacement, with the old number marked not current.{data.superseded.verified ? '' : ' The replacement link is unverified.'}
           </p>
         </div>
       )}
@@ -360,6 +363,11 @@ export default function PartsFinder({ mode, lockedUnit, onPick, markupPercent }:
                       {part.part_number}
                     </Link>
                     <VerifiedBadge verified={part.verified} />
+                    {part.current === false && (
+                      <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-warning/15 text-warning font-semibold" data-testid="old-number">
+                        old number - not current
+                      </span>
+                    )}
                     {part.unresolved_serial && (
                       <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-warning/15 text-warning font-semibold">
                         serial not comparable
@@ -390,7 +398,11 @@ export default function PartsFinder({ mode, lockedUnit, onPick, markupPercent }:
                 </div>
               </div>
 
-              {part.superseded_by && (
+              {(part.replaced_by?.length ?? 0) > 1 ? (
+                <p className="text-orange text-xs mt-2">
+                  Replaced by one of: {part.replaced_by!.map(x => x.note ? `${x.to} (${x.note})` : x.to).join('; ')}
+                </p>
+              ) : part.superseded_by && (
                 <p className="text-orange text-xs mt-2">
                   Replaced by {part.superseded_by.to}
                   {part.superseded_by.note && <span className="text-white/40"> - {part.superseded_by.note}</span>}

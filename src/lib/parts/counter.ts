@@ -72,10 +72,14 @@ export function trustRank(t: Trust): number {
   return t.verified ? 0 : CONFIDENCE_TIERS.indexOf('unconfirmed')
 }
 
-/** The most trusted of several claims (a part matched by more than one fitment row). */
+/**
+ * The most trusted of several claims (a part matched by more than one fitment row). At an
+ * equal rank a claim with a tier beats a pre-175 boolean, so the badge names the tier a
+ * row was given ("confirmed") and does not depend on which row was read first.
+ */
 export function bestTrust(ts: Trust[]): Trust | null {
   if (!ts.length) return null
-  return [...ts].sort((a, b) => trustRank(a) - trustRank(b))[0]
+  return [...ts].sort((a, b) => trustRank(a) - trustRank(b) || Number(!a.tier) - Number(!b.tier))[0]
 }
 
 // ── supersession ────────────────────────────────────────────────────────────
@@ -112,12 +116,19 @@ export interface ChainResult {
   was: string[]
   /** A weaker link out of `current`, reported but not followed. */
   reported: { to: string; note: string | null; trust: Trust } | null
+  /**
+   * More than one followable link out of `current`: a CONDITIONAL replacement (11-9958 is
+   * 11-9965 standard or 11-9966 severe duty before 7/2023, 11-9970 after). The chain stops
+   * at `current` and every option is returned with its condition (the link's note) -
+   * never one picked for the technician.
+   */
+  branches: Array<{ to: string; toNormalized: string; note: string | null; trust: Trust }>
 }
 
 /**
- * Follow the followable links forward from a number, stopping at a cycle or after
- * eight hops - a real chain is two or three long, and a loop in the data must not hang
- * the counter.
+ * Follow the followable links forward from a number, stopping at a cycle, at a number with
+ * more than one followable replacement, or after eight hops - a real chain is two or three
+ * long, and a loop in the data must not hang the counter.
  */
 export function followChain(startNumber: string, startNormalized: string, links: SupersessionLink[]): ChainResult {
   const byOld = new Map<string, SupersessionLink[]>()
@@ -127,10 +138,15 @@ export function followChain(startNumber: string, startNormalized: string, links:
   let currentNormalized = startNormalized
   const was: string[] = []
   const seen = new Set([startNormalized])
+  let branches: ChainResult['branches'] = []
 
   for (let hop = 0; hop < 8; hop++) {
-    const out = byOld.get(currentNormalized) ?? []
-    const next = out.find(followable)
+    const out = (byOld.get(currentNormalized) ?? []).filter(followable)
+    if (out.length > 1) {
+      branches = out.map(l => ({ to: l.new_number, toNormalized: l.new_number_normalized, note: l.note, trust: { tier: l.confidence, verified: l.verified } }))
+      break
+    }
+    const next = out[0]
     if (!next || seen.has(next.new_number_normalized)) break
     was.unshift(current)
     seen.add(next.new_number_normalized)
@@ -138,13 +154,20 @@ export function followChain(startNumber: string, startNormalized: string, links:
     currentNormalized = next.new_number_normalized
   }
 
-  const weak = (byOld.get(currentNormalized) ?? []).find(l => !followable(l))
+  const weak = branches.length ? undefined : (byOld.get(currentNormalized) ?? []).find(l => !followable(l))
   return {
-    current, currentNormalized, was,
+    current, currentNormalized, was, branches,
     reported: weak
       ? { to: weak.new_number, note: weak.note, trust: { tier: weak.confidence, verified: weak.verified } }
       : null,
   }
+}
+
+/** Every link out of a number, strong or weak: what an old number "shows" as its replacement. */
+export function replacementsOf(normalized: string, links: SupersessionLink[]): Array<{ to: string; toNormalized: string; note: string | null; trust: Trust; followed: boolean }> {
+  return links
+    .filter(l => l.old_number_normalized === normalized)
+    .map(l => ({ to: l.new_number, toNormalized: l.new_number_normalized, note: l.note, trust: { tier: l.confidence, verified: l.verified }, followed: followable(l) }))
 }
 
 // ── part types: category and synonyms ──────────────────────────────────────

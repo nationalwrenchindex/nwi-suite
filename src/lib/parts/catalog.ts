@@ -51,6 +51,12 @@ export interface CatalogFitment {
   tier: string | null
   bm_from: string | null
   bm_to: string | null
+  /** Migration 190: the reefer's mount on this row (truck | trailer). NOT parts.equipment_type. */
+  mount_type: string | null
+  /** Migration 190: the configuration that decides between parts (with smart power). */
+  configuration: string | null
+  /** Migration 191: what the part does on this unit, as charted (Drive belt). */
+  role: string | null
 }
 
 export interface CatalogCross {
@@ -68,6 +74,8 @@ export interface Catalog {
   crosses: CatalogCross[]
   /** True when migration 175's columns exist. */
   tiers: boolean
+  /** True when migration 191's part_fitment.role exists (it may still be empty). */
+  roles: boolean
 }
 
 // `source` is deliberately NOT read. It holds where a row came from - for the vendor
@@ -77,20 +85,28 @@ const FIT_148  = 'id, part_id, unit_model, engine_model, compressor_model, seria
 const LINK_148 = 'id, old_number, new_number, old_number_normalized, new_number_normalized, manufacturer, note, verified'
 const CROSS_148 = 'id, part_id, brand, brand_number, verified'
 
-/** Read every row, asking for the 175 columns first and retrying without them. */
+/**
+ * Read every row, asking for the newest columns first and stepping back one migration at a
+ * time. `extras` is newest first; withExtra is true when the LAST (oldest, 175) set was
+ * readable, which is what `tiers` reports.
+ */
 async function readAll<T>(
-  supabase: Supabase, table: string, base: string, extra: string,
+  supabase: Supabase, table: string, base: string, ...extras: string[]
 ): Promise<{ rows: T[]; withExtra: boolean }> {
   const run = (cols: string) => fetchAllRows<T>((from, to) =>
     supabase.from(table).select(cols).order('id').range(from, to) as unknown as PromiseLike<PageResult<T>>)
-  try {
-    return { rows: await run(`${base}, ${extra}`), withExtra: true }
-  } catch {
-    // The 175 columns are not there yet (or the read failed for another reason, which
-    // the retry will surface by throwing on its own).
-    return { rows: await run(base), withExtra: false }
+  for (const extra of extras) {
+    // A set that is not there yet (or a read that failed for another reason, which the
+    // final retry surfaces by throwing on its own) steps back to the one before it.
+    try { return { rows: await run(`${base}, ${extra}`), withExtra: true } } catch { /* next */ }
   }
+  return { rows: await run(base), withExtra: false }
 }
+
+// part_fitment, newest first: 191 (role), 190 (mount, configuration), 175.
+const FIT_175 = 'confidence, match_type, engine_code, tier, bm_from, bm_to'
+const FIT_190 = `${FIT_175}, mount_type, configuration`
+const FIT_191 = `${FIT_190}, role`
 
 const tierOf = (v: unknown): ConfidenceTier | null => (isConfidenceTier(v) ? v : null)
 const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v : null)
@@ -98,13 +114,15 @@ const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? 
 export async function readCatalog(supabase: Supabase): Promise<Catalog> {
   const [p, f, l, c] = await Promise.all([
     readAll<Record<string, unknown>>(supabase, 'parts', PART_148, 'confidence, equipment_type'),
-    readAll<Record<string, unknown>>(supabase, 'part_fitment', FIT_148, 'confidence, match_type, engine_code, tier, bm_from, bm_to'),
+    readAll<Record<string, unknown>>(supabase, 'part_fitment', FIT_148, FIT_191, FIT_190, FIT_175),
     readAll<Record<string, unknown>>(supabase, 'part_supersession', LINK_148, 'confidence'),
     readAll<Record<string, unknown>>(supabase, 'part_cross_reference', CROSS_148, 'confidence'),
   ])
 
   return {
     tiers: p.withExtra,
+    // PostgREST returns a selected column as a key even when it is null.
+    roles: f.rows.length > 0 && 'role' in f.rows[0],
     parts: p.rows.map(r => ({
       id: String(r.id),
       part_number: String(r.part_number),
@@ -139,6 +157,9 @@ export async function readCatalog(supabase: Supabase): Promise<Catalog> {
       tier: str(r.tier),
       bm_from: str(r.bm_from),
       bm_to: str(r.bm_to),
+      mount_type: str(r.mount_type),
+      configuration: str(r.configuration),
+      role: str(r.role),
     })),
     links: l.rows.map(r => ({
       old_number: String(r.old_number),
