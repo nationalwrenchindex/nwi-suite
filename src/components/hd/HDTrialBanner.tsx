@@ -50,7 +50,7 @@ export default function HDTrialBanner({
         </p>
         <p className="text-xs mt-0.5" style={{ color: 'var(--hd-text-muted)' }}>
           Your first payment of ${monthlyPrice}/month will be on {dateFmt}.
-          {' '}Cancel anytime before then — you will never be charged.
+          {' '}Cancel before then and you won&apos;t be charged.
         </p>
         <button
           onClick={handleCancel}

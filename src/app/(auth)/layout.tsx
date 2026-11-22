@@ -54,7 +54,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
                 href="/signup"
                 className="block text-center py-3.5 bg-orange hover:bg-orange/90 text-white font-condensed font-bold text-sm rounded-xl tracking-wide transition-colors"
               >
-                GET STARTED · 15-DAY TRIAL - CARD REQUIRED →
+                GET STARTED →
               </Link>
               <p className="text-white/60 text-xs text-center">
                 Already have an account?{' '}
