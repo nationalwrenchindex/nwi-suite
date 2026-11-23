@@ -3,18 +3,8 @@ import { generateText } from '@/lib/gemini/client'
 import { createClient } from '@/lib/supabase/server'
 import { isReeferStandaloneUser } from '@/lib/hd-access'
 
-const UNIT_FIELDS = [
-  { key: 'unit_number',   label: 'Unit Number',        required: true  },
-  { key: 'manufacturer',  label: 'Manufacturer / Make', required: true  },
-  { key: 'model',         label: 'Model',               required: false },
-  { key: 'year',          label: 'Year',                required: false },
-  { key: 'serial_number', label: 'Serial / VIN',        required: false },
-  { key: 'engine_hours',  label: 'Engine Hours',        required: false },
-  { key: 'total_hours',   label: 'Total Hours / SMH',   required: false },
-  { key: 'fleet_name',    label: 'Fleet / Customer',    required: false },
-  { key: 'unit_type',     label: 'Equipment type (matches a category name)', required: false },
-  { key: 'notes',         label: 'Notes',               required: false },
-]
+// The unit fields, in ONE list shared with the import wizard's pre-flight check.
+import { UNIT_FIELDS } from '@/lib/hd/import-columns'
 
 export async function POST(req: NextRequest) {
   const supabase = await createClient()

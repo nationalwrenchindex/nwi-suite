@@ -2,6 +2,9 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import { isReeferStandaloneUser } from '@/lib/hd-access'
+// The headings read below live in ONE table, shared with the import wizard's pre-flight check.
+// Read exactly as written, case included, as this route always has.
+import { exactCell, INVOICES } from '@/lib/hd/import-columns'
 
 function normalize(name: string) {
   return name.toLowerCase().trim().replace(/\s+/g, ' ')
@@ -72,7 +75,7 @@ export async function POST(req: NextRequest) {
   const newFleetInserts: { user_id: string; fleet_name: string }[] = []
 
   for (const row of rows) {
-    const client = row['CLIENT']?.trim()
+    const client = exactCell(row, INVOICES.customer)?.trim()
     if (!client) continue
     const key = normalize(client)
     if (fleetMap.has(key)) {
@@ -100,19 +103,19 @@ export async function POST(req: NextRequest) {
   const dates: string[] = []
 
   for (const row of rows) {
-    const client = row['CLIENT']?.trim()
+    const client = exactCell(row, INVOICES.customer)?.trim()
     if (!client) continue
 
-    const invNo = row['INV NO']?.trim() || null
+    const invNo = exactCell(row, INVOICES.invoiceNumber)?.trim() || null
     if (invNo && (existingWONums.has(invNo) || importedWONums.has(invNo))) {
       wosSkipped++
       continue
     }
     if (invNo) importedWONums.add(invNo)
 
-    const total   = parseAmount(row['TOTAL'])
-    const paid    = parseAmount(row['PAID'])
-    const invDate = parseDate(row['INV DATE'])
+    const total   = parseAmount(exactCell(row, INVOICES.total))
+    const paid    = parseAmount(exactCell(row, INVOICES.paid))
+    const invDate = parseDate(exactCell(row, INVOICES.invoiceDate))
     const fleetId = fleetMap.get(normalize(client)) ?? null
 
     const status = (paid !== null && total !== null && total > 0 && Math.abs(paid - total) < 0.01)

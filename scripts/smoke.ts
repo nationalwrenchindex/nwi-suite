@@ -59,6 +59,7 @@ import { sellPrice, lineAmount } from '../src/lib/hd/parts-pricing'
 import { hdDocumentTax, hdTaxableBase } from '../src/lib/hd/document-tax'
 import { modelMatches } from '../src/lib/parts/search'
 import { unitModelMatches } from '../src/lib/parts/narrow'
+import { FULLBAY_COLUMNS, parseCSV, preflightColumns } from '../src/lib/hd/import-columns'
 import { deliverHDDocument } from '../src/lib/hd/deliver-document'
 import { parseLaborEstimate, estimateLabel } from '../src/lib/labor-estimate'
 
@@ -5931,6 +5932,87 @@ async function flowReefer(): Promise<void> {
 // The end-to-end money walk (receive -> work order -> invoice) is
 // scripts/walk-parts-stock.ts, which prints every figure.
 // ═══════════════════════════════════════════════════════════════════════════
+// ── Ip: the import pre-flight check (Nov 23, 2026) ──────────────────────────────────────
+// A customer imported 1,740 Fullbay rows on Oct 20 with only the customer column
+// recognized, and it "succeeded". The wizard now checks the headings against the importer's
+// own table first. The screen is client state, so the check itself is asserted on the real
+// function and the real component in scripts/verify-import-preflight.ts; THIS flow proves
+// the deployed Fullbay route, now reading that shared table, still imports a good file the
+// same way - and that a file with no Make/Model/VIN still imports, blank where it says.
+async function flowImportPreflight(): Promise<void> {
+  const F = 'Ip import pre-flight'
+  const run = Date.now().toString(36).toUpperCase()
+  const PFX = `SMOKE-PF-${run}`
+  const FLEET = `SMOKE PF ${run}`
+  const sweep = async (prefix: string, fleetPrefix: string) => {
+    // Work orders, then units, then fleet accounts: the work orders point at both.
+    for (const w of await rest<{ id: string }>(`hd_work_orders?select=id&user_id=eq.${OWNER}&work_order_number=like.${encodeURIComponent(prefix)}*`)) await del('hd_work_orders', w.id)
+    for (const u of await rest<{ id: string }>(`hd_units?select=id&user_id=eq.${OWNER}&unit_number=like.${encodeURIComponent(prefix)}*`)) await del('hd_units', u.id)
+    for (const a of await rest<{ id: string }>(`hd_fleet_accounts?select=id&user_id=eq.${OWNER}&fleet_name=like.${encodeURIComponent(fleetPrefix)}*`)) await del('hd_fleet_accounts', a.id)
+  }
+  // An earlier crashed run's rows go first, so a trail cannot accumulate.
+  await sweep('SMOKE-PF-', 'SMOKE PF ')
+  const rowsOf = (csvText: string) => {
+    const p = parseCSV(csvText)
+    return p.rows.map(r => Object.fromEntries(p.headers.map((h, i) => [h, r[i] ?? ''])))
+  }
+  try {
+    const pg = await page('/hd/import')
+    record(F, 'the import page loads', !!pg && /IMPORT DATA/i.test(pg.text), pg ? '' : 'did not load')
+
+    // The same three files as scripts/verify-import-preflight.ts, with this run's markers.
+    const head = 'Work Order Number,Customer Name,Unit Number,Service Date,Completed Date,Status,Technician,Service Description,Internal Notes,Total,Labor Total,Parts Total,Tax,Amount Paid,Balance Due'
+    const fileA = `${head},Make,Model,VIN,Year,Engine Hours,Unit Type\r\n` +
+      `${PFX}-A1,${FLEET} A,${PFX}-UA,10/01/2026,10/02/2026,Completed,Dana,Replaced belt,none,410.50,250.00,140.50,20.00,410.50,0,Thermo King,S-600,${PFX}VIN,2019,12000,Trailer\r\n` +
+      `${PFX}-A2,${FLEET} A,${PFX}-UA,10/15/2026,10/15/2026,Invoiced,Dana,Oil and filter,,180.00,100.00,70.00,10.00,0,180.00,Thermo King,S-600,${PFX}VIN,2019,12100,Trailer\r\n`
+    const fileB = `Customer\r\n${FLEET} B\r\n`
+    const fileC = `${head},Year,Engine Hours,Unit Type\r\n${PFX}-C1,${FLEET} C,${PFX}-UC,11/01/2026,11/01/2026,Completed,Lee,Defrost check,,95.00,95.00,0,0,95.00,0,2021,8000,Trailer\r\n`
+
+    const pa = preflightColumns(parseCSV(fileA).headers, FULLBAY_COLUMNS)
+    const pb = preflightColumns(parseCSV(fileB).headers, FULLBAY_COLUMNS)
+    const pc = preflightColumns(parseCSV(fileC).headers, FULLBAY_COLUMNS)
+    record(F, '(a) every column: the check passes it with nothing missing', !pa.blocked && pa.missing.length === 0, `${pa.recognized.length} recognized`)
+    record(F, '(b) Customer only: the check blocks it - work order number, unit number, service date missing',
+      pb.blocked && pb.missingRequired.map(f => f.label).join(', ') === 'Work order number, Unit number, Service date', pb.missingRequired.map(f => f.label).join(', '))
+    record(F, '(c) no VIN/Make/Model: the check passes it with a warning for exactly those three',
+      !pc.blocked && pc.missingOptional.map(f => f.label).join(', ') === 'Make, Model, VIN / serial', pc.missingOptional.map(f => f.label).join(', '))
+
+    // (a) through the deployed route.
+    const ia = await api('POST', '/api/hd/import/fullbay', { rows: rowsOf(fileA) })
+    record(F, '(a) the deployed route imports both work orders and creates the one unit',
+      ia.status === 200 && ia.json.work_orders_imported === 2 && ia.json.units_created === 1 && ia.json.fleet_accounts_created === 1,
+      `-> ${ia.status} ${JSON.stringify(ia.json).slice(0, 160)}`)
+    const woA = await rest<{ work_order_number: string; unit_id: string | null; fleet_account_id: string | null; status: string; total_amount: number | null; tech_name: string | null; started_at: string | null }>(
+      `hd_work_orders?select=work_order_number,unit_id,fleet_account_id,status,total_amount,tech_name,started_at&user_id=eq.${OWNER}&work_order_number=like.${encodeURIComponent(PFX)}-A*&order=work_order_number`)
+    const unitA = await rest<{ id: string; manufacturer: string; model: string; serial_number: string | null; fleet_account_id: string | null }>(
+      `hd_units?select=id,manufacturer,model,serial_number,fleet_account_id&user_id=eq.${OWNER}&unit_number=eq.${encodeURIComponent(PFX)}-UA`)
+    record(F, '(a) both work orders attach to that unit and its fleet',
+      woA.length === 2 && unitA.length === 1 && woA.every(w => w.unit_id === unitA[0].id && w.fleet_account_id === unitA[0].fleet_account_id && !!w.fleet_account_id),
+      `${woA.length} work orders, ${unitA.length} unit`)
+    record(F, '(a) every column landed: number, status, total, technician, date, make, model, VIN',
+      woA[0]?.status === 'completed' && woA[1]?.status === 'invoiced' && Number(woA[0]?.total_amount) === 410.5 && woA[0]?.tech_name === 'Dana' &&
+      String(woA[0]?.started_at).startsWith('2026-10-01') && unitA[0]?.manufacturer === 'Thermo King' && unitA[0]?.model === 'S-600' && unitA[0]?.serial_number === `${PFX}VIN`,
+      JSON.stringify({ wo: woA[0], unit: unitA[0] }).slice(0, 220))
+
+    // (c) through the deployed route: imports, unit details blank exactly as the warning said.
+    const ic = await api('POST', '/api/hd/import/fullbay', { rows: rowsOf(fileC) })
+    const unitC = await rest<{ id: string; manufacturer: string; model: string; serial_number: string | null }>(
+      `hd_units?select=id,manufacturer,model,serial_number&user_id=eq.${OWNER}&unit_number=eq.${encodeURIComponent(PFX)}-UC`)
+    const woC = await rest<{ unit_id: string | null }>(`hd_work_orders?select=unit_id&user_id=eq.${OWNER}&work_order_number=eq.${encodeURIComponent(PFX)}-C1`)
+    record(F, '(c) the deployed route imports it, attached to its unit',
+      ic.status === 200 && ic.json.work_orders_imported === 1 && woC.length === 1 && unitC.length === 1 && woC[0].unit_id === unitC[0].id,
+      `-> ${ic.status} ${JSON.stringify(ic.json).slice(0, 120)}`)
+    record(F, '(c) and Make, Model and VIN are blank on the unit, as the warning said (route default "Unknown", no serial)',
+      unitC[0]?.manufacturer === 'Unknown' && unitC[0]?.model === 'Unknown' && unitC[0]?.serial_number === null, JSON.stringify(unitC[0] ?? null))
+  } finally {
+    await sweep(PFX, FLEET)
+    const left = (await rest(`hd_work_orders?select=id&user_id=eq.${OWNER}&work_order_number=like.${encodeURIComponent(PFX)}*`)).length +
+      (await rest(`hd_units?select=id&user_id=eq.${OWNER}&unit_number=like.${encodeURIComponent(PFX)}*`)).length +
+      (await rest(`hd_fleet_accounts?select=id&user_id=eq.${OWNER}&fleet_name=like.${encodeURIComponent(FLEET)}*`)).length
+    record(F, 'cleanup: every work order, unit and fleet account this flow made is gone', left === 0, `${left} left`)
+  }
+}
+
 async function flowPartsCounter(): Promise<void> {
   const F = 'Pc parts counter'
   const pg = await page('/hd/parts')
@@ -6149,6 +6231,7 @@ async function main(): Promise<void> {
     await flowZ()
     await flowReefer()
     await flowPartsCounter()
+    await flowImportPreflight()
   } finally {
     await cleanup()
   }

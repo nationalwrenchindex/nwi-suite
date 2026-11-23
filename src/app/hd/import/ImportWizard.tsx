@@ -3,16 +3,17 @@
 import { useState, useRef } from 'react'
 import Link from 'next/link'
 import { textTone, tint, ON_FILL } from '@/lib/hd/text-tone'
+// The column headings the importers read, the CSV parser and the pre-flight check: ONE copy,
+// shared with /api/hd/import/fullbay and /api/hd/import/invoices.
+import {
+  FULLBAY, FULLBAY_COLUMNS, INVOICE_COLUMNS, parseCSV, preflightColumns, preflightMapping, type ParsedCSV,
+} from '@/lib/hd/import-columns'
+import ImportPreflight from './ImportPreflight'
 
 const HD_ORANGE = '#E85D24'
 
 type Format = 'invoices' | 'fullbay' | 'custom'
 type Step   = 'format' | 'upload' | 'preview' | 'importing' | 'results'
-
-interface ParsedCSV {
-  headers: string[]
-  rows: string[][]
-}
 
 interface Mapping {
   csv_header: string
@@ -78,61 +79,11 @@ const FORMATS = [
   },
 ]
 
-const FULLBAY_FIELD_MAP = [
-  ['Work Order Number', 'Work Order Number'],
-  ['Customer Name',     'Fleet Account Name'],
-  ['Unit Number',       'Unit Number'],
-  ['Year',              'Unit Year'],
-  ['Make',              'Manufacturer'],
-  ['Model',             'Unit Model'],
-  ['VIN',               'Serial Number / VIN'],
-  ['Engine Hours',      'Engine Hours'],
-  ['Service Date',      'Work Order Date'],
-  ['Completed Date',    'Completion Date'],
-  ['Labor Total',       'Labor Amount'],
-  ['Parts Total',       'Parts Amount'],
-  ['Total',             'Total Amount'],
-  ['Amount Paid',       'Paid Amount'],
-  ['Balance Due',       'Outstanding Balance'],
-  ['Service Description', 'Work Order Comments'],
-  ['Internal Notes',    'Internal Notes'],
-  ['Technician',        'Tech Name'],
-  ['Status',            'Status'],
-]
+// The Fullbay reference panel reads the shared table, so it can never list a heading the
+// importer does not read (or miss one it does).
+const FULLBAY_FIELD_MAP: Array<[string, string]> = Object.values(FULLBAY).map(c => [c.aliases.join(' / '), c.label + (c.required ? ' (required)' : '')])
 
-// Robust CSV parser
-function parseCSV(text: string): ParsedCSV {
-  // Normalize line endings, strip BOM
-  const clean = text.replace(/^﻿/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n')
-  const lines = clean.split('\n')
-  if (lines.length === 0) return { headers: [], rows: [] }
-
-  function parseLine(line: string): string[] {
-    const cells: string[] = []
-    let cur = ''
-    let inQ = false
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i]
-      if (ch === '"') {
-        if (inQ && line[i + 1] === '"') { cur += '"'; i++ }
-        else inQ = !inQ
-      } else if (ch === ',' && !inQ) {
-        cells.push(cur.trim()); cur = ''
-      } else {
-        cur += ch
-      }
-    }
-    cells.push(cur.trim())
-    return cells
-  }
-
-  const nonEmpty = lines.filter(l => l.trim())
-  if (nonEmpty.length === 0) return { headers: [], rows: [] }
-
-  const headers = parseLine(nonEmpty[0])
-  const rows    = nonEmpty.slice(1).map(parseLine)
-  return { headers, rows }
-}
+// parseCSV moved, unchanged, to src/lib/hd/import-columns.ts.
 
 function rowToObj(headers: string[], row: string[]): Record<string, string> {
   const obj: Record<string, string> = {}
@@ -286,6 +237,8 @@ export default function ImportWizard() {
 
   async function handleImport() {
     if (!csv || !format) return
+    // The pre-flight decides, not just the button: a file missing a required column is never posted.
+    if (!preflight || preflight.blocked) return
     setStep('importing')
     setError(null)
 
@@ -354,6 +307,15 @@ export default function ImportWizard() {
 
   const selectedFormat = FORMATS.find(f => f.id === format)
 
+  // The column check, run on the parsed file BEFORE anything is posted: the same heading
+  // table the server route reads (Fullbay, invoices), or the mapping on screen (custom).
+  const preflight = !csv || !format ? null
+    : format === 'fullbay'  ? preflightColumns(csv.headers, FULLBAY_COLUMNS)
+    : format === 'invoices' ? preflightColumns(csv.headers, INVOICE_COLUMNS)
+    : fields.length ? preflightMapping(csv.headers, mapping, fields)
+    : null
+  const chooseFile = () => fileRef.current?.click()
+
   return (
     <div className="p-4 sm:p-6 max-w-3xl">
       {/* Header */}
@@ -363,6 +325,9 @@ export default function ImportWizard() {
       </div>
 
       <StepIndicator step={step} />
+
+      {/* One file input for every step, so "Choose a different file" works from the column check. */}
+      <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFile} data-testid="import-file-input" />
 
       {error && (
         <div className="mb-5 px-4 py-3 rounded-lg text-sm text-red-300" style={{ background: '#7f1d1d40', border: '1px solid #EF444440' }}>
@@ -441,7 +406,6 @@ export default function ImportWizard() {
             <p className="text-sm font-medium text-white mb-1">Click to upload CSV</p>
             <p className="text-xs" style={{ color: 'var(--hd-text-faint)' }}>or drag and drop — CSV files only</p>
           </div>
-          <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={handleFile} />
 
           {/* Expected columns for the selected format */}
           {selectedFormat && format !== 'custom' && (
@@ -554,18 +518,23 @@ export default function ImportWizard() {
             <PreviewTable headers={csv.headers} rows={csv.rows} />
           </div>
 
-          {/* Warning if key columns missing (invoices/fullbay) */}
-          {format === 'invoices' && !csv.headers.some(h => h.toUpperCase().includes('CLIENT')) && (
-            <div className="px-4 py-3 rounded-lg text-xs" style={{ background: '#7f1d1d30', border: '1px solid #EF444430', color: 'var(--hd-negative)' }}>
-              Warning: No CLIENT column detected. Fleet accounts cannot be created without client names.
-            </div>
+          {/* The column check: recognized, not recognized, missing - and refuse when a required one is missing. */}
+          {preflight && (
+            <ImportPreflight
+              preflight={preflight}
+              kind={format === 'custom' ? 'units' : 'work_orders'}
+              readsNoUnit={format === 'invoices'}
+              onChooseFile={chooseFile}
+            />
           )}
 
           <div className="flex gap-3 pt-2">
             <button
               onClick={handleImport}
-              className="px-6 py-2.5 rounded-lg text-sm font-semibold text-on-accent"
-              style={{ background: HD_ORANGE }}
+              disabled={!preflight || preflight.blocked}
+              data-testid="import-submit"
+              className="px-6 py-2.5 rounded-lg text-sm font-semibold text-on-accent disabled:cursor-not-allowed"
+              style={{ background: HD_ORANGE, opacity: !preflight || preflight.blocked ? 0.4 : 1 }}
             >
               Import {csv.rows.length} {format === 'invoices' ? 'Invoice' : format === 'fullbay' ? 'Work Order' : 'Unit'}{csv.rows.length !== 1 ? 's' : ''}
             </button>

@@ -4,6 +4,8 @@ import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import { isReeferStandaloneUser } from '@/lib/hd-access'
 import { getEquipmentCategories } from '@/lib/hd/equipment-categories'
 import { summarizeTypes, typeColumns } from '@/lib/hd/equipment-type-match'
+// The headings read below live in ONE table, shared with the import wizard's pre-flight check.
+import { col, FULLBAY } from '@/lib/hd/import-columns'
 
 function normalize(name: string) {
   return name.toLowerCase().trim().replace(/\s+/g, ' ')
@@ -37,17 +39,6 @@ function mapStatus(s: string | undefined): string {
   if (['invoiced', 'closed', 'paid', 'finalized'].some(k => v.includes(k))) return 'invoiced'
   if (['in progress', 'in-progress', 'inprogress', 'active', 'open wo'].some(k => v.includes(k))) return 'in_progress'
   return 'open'
-}
-
-// Flexible column lookup — handles minor header variations
-function col(row: Record<string, string | undefined>, ...keys: string[]): string {
-  for (const k of keys) {
-    const found = Object.entries(row).find(
-      ([h]) => h.toLowerCase().trim() === k.toLowerCase().trim()
-    )?.[1]
-    if (found !== undefined) return found.trim()
-  }
-  return ''
 }
 
 type FullbayRow = Record<string, string | undefined>
@@ -98,7 +89,7 @@ export async function POST(req: NextRequest) {
   const newFleetInserts: { user_id: string; fleet_name: string }[] = []
 
   for (const row of rows) {
-    const customer = col(row, 'Customer Name', 'Customer', 'Fleet', 'Client')
+    const customer = col(row, ...FULLBAY.customer.aliases)
     if (!customer) continue
     const key = normalize(customer)
     if (fleetMap.has(key)) {
@@ -127,8 +118,8 @@ export async function POST(req: NextRequest) {
   const newUnitInserts: Record<string, unknown>[] = []
 
   for (const row of rows) {
-    const customer   = col(row, 'Customer Name', 'Customer', 'Fleet', 'Client')
-    const unitNumber = col(row, 'Unit Number', 'Unit #', 'Unit No', 'Unit')
+    const customer   = col(row, ...FULLBAY.customer.aliases)
+    const unitNumber = col(row, ...FULLBAY.unitNumber.aliases)
     if (!unitNumber) continue
 
     const fleetId = customer ? (fleetMap.get(normalize(customer)) ?? null) : null
@@ -137,10 +128,10 @@ export async function POST(req: NextRequest) {
     if (!unitMap.has(unitKey) && !newUnitKeys.has(unitKey)) {
       newUnitKeys.add(unitKey)
 
-      const year  = parseInt(col(row, 'Year')) || null
-      const hours = parseAmount(col(row, 'Engine Hours', 'Hours'))
+      const year  = parseInt(col(row, ...FULLBAY.year.aliases)) || null
+      const hours = parseAmount(col(row, ...FULLBAY.engineHours.aliases))
       // Not a bare "Type": in a work-order export that can be the job's type, not the unit's.
-      const type  = col(row, 'Unit Type', 'Equipment Type', 'Asset Type', 'Vehicle Type')
+      const type  = col(row, ...FULLBAY.unitType.aliases)
       newUnitTypes.push(type)
 
       newUnitInserts.push({
@@ -148,10 +139,10 @@ export async function POST(req: NextRequest) {
         user_id:         user.id,
         fleet_account_id: fleetId,
         unit_number:     unitNumber,
-        manufacturer:    col(row, 'Make', 'Manufacturer', 'Brand') || 'Unknown',
-        model:           col(row, 'Model')                         || 'Unknown',
+        manufacturer:    col(row, ...FULLBAY.make.aliases) || 'Unknown',
+        model:           col(row, ...FULLBAY.model.aliases) || 'Unknown',
         year,
-        serial_number:   col(row, 'VIN', 'Serial Number', 'Serial') || null,
+        serial_number:   col(row, ...FULLBAY.serial.aliases) || null,
         engine_hours:    hours,
         total_hours:     hours,
       })
@@ -177,9 +168,9 @@ export async function POST(req: NextRequest) {
   const dates: string[] = []
 
   for (const row of rows) {
-    const woNum      = col(row, 'Work Order Number', 'Work Order #', 'WO Number', 'WO#', 'Work Order')
-    const customer   = col(row, 'Customer Name', 'Customer', 'Fleet', 'Client')
-    const unitNumber = col(row, 'Unit Number', 'Unit #', 'Unit No', 'Unit')
+    const woNum      = col(row, ...FULLBAY.workOrderNumber.aliases)
+    const customer   = col(row, ...FULLBAY.customer.aliases)
+    const unitNumber = col(row, ...FULLBAY.unitNumber.aliases)
 
     if (woNum && (existingWONums.has(woNum) || importedWONums.has(woNum))) {
       wosSkipped++
@@ -191,18 +182,18 @@ export async function POST(req: NextRequest) {
     const unitKey = unitNumber ? `${fleetId ?? 'none'}_${normalize(unitNumber)}` : null
     const unitId  = unitKey ? (unitMap.get(unitKey) ?? null) : null
 
-    const total       = parseAmount(col(row, 'Total', 'Grand Total', 'Invoice Total'))
-    const laborTotal  = parseAmount(col(row, 'Labor Total', 'Labor'))
-    const partsTotal  = parseAmount(col(row, 'Parts Total', 'Parts'))
-    const tax         = parseAmount(col(row, 'Tax'))
-    const amountPaid  = parseAmount(col(row, 'Amount Paid', 'Paid', 'Payment'))
-    const balanceDue  = parseAmount(col(row, 'Balance Due', 'Balance', 'Owed'))
-    const serviceDate = parseDate(col(row, 'Service Date', 'Date', 'Start Date', 'Work Date'))
-    const completedDate = parseDate(col(row, 'Completed Date', 'Completion Date', 'End Date'))
-    const status      = mapStatus(col(row, 'Status'))
-    const tech        = col(row, 'Technician', 'Tech', 'Tech Name', 'Assigned To')
-    const serviceDesc = col(row, 'Service Description', 'Description', 'Services', 'Work Done')
-    const internalNotes = col(row, 'Internal Notes', 'Notes', 'Comments')
+    const total       = parseAmount(col(row, ...FULLBAY.total.aliases))
+    const laborTotal  = parseAmount(col(row, ...FULLBAY.laborTotal.aliases))
+    const partsTotal  = parseAmount(col(row, ...FULLBAY.partsTotal.aliases))
+    const tax         = parseAmount(col(row, ...FULLBAY.tax.aliases))
+    const amountPaid  = parseAmount(col(row, ...FULLBAY.amountPaid.aliases))
+    const balanceDue  = parseAmount(col(row, ...FULLBAY.balanceDue.aliases))
+    const serviceDate = parseDate(col(row, ...FULLBAY.serviceDate.aliases))
+    const completedDate = parseDate(col(row, ...FULLBAY.completedDate.aliases))
+    const status      = mapStatus(col(row, ...FULLBAY.status.aliases))
+    const tech        = col(row, ...FULLBAY.technician.aliases)
+    const serviceDesc = col(row, ...FULLBAY.description.aliases)
+    const internalNotes = col(row, ...FULLBAY.internalNotes.aliases)
 
     if (total && total > 0) totalRevenue += total
     if (serviceDate) dates.push(serviceDate)
