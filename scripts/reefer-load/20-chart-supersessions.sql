@@ -43,7 +43,7 @@
 -- read makes the whole file refuse. 175's CHECK on part_supersession.confidence admits
 -- 'confirmed'; the first check refuses if the live constraint does not. No DELETE.
 --
--- Plain ASCII. Ends in ROLLBACK for a dry run; change the last line to COMMIT to apply.
+-- APPLIED by hand Nov 23, 2026 (Brock: dry run clean, all six rows read correctly, then the COMMIT copy). Plain ASCII.
 
 BEGIN;
 
@@ -133,5 +133,5 @@ SELECT x.old_number, x.new_number, x.verified, x.confidence, x.source, x.note
  WHERE x.old_number_normalized IN ('781340', '119958')
  ORDER BY x.old_number, x.new_number;
 
--- Dry run. Change to COMMIT to apply.
-ROLLBACK;
+-- Applied by hand Nov 23, 2026.
+COMMIT;
