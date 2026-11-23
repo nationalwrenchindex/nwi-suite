@@ -29,7 +29,10 @@ export default function QuoteListActions({
       const body = invoiceBodyFromQuote(quote)
 
       const iRes   = await fetch('/api/hd/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
-      const { invoice } = await iRes.json()
+      const { invoice, unit_link_notice } = await iRes.json()
+      // The serial matched a unit whose model disagrees (or several units pass): saved with
+      // NO unit. Said before leaving, never silent (lib/hd/unit-match).
+      if (unit_link_notice) window.alert(String(unit_link_notice))
       if (invoice?.id) router.push(`/hd/invoices/${invoice.id}`)
     } finally {
       setBusy(false)

@@ -22,6 +22,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
+import { UNIT_SERIAL_MISMATCH_NOTICE } from '@/lib/hd/unit-match'
 import { requireFleetProMember } from '@/lib/fleet-pro/access'
 import { canViewCosts } from '@/types/fleet-pro'
 import {
@@ -103,8 +104,8 @@ async function matchUnit(
   svc:      ReturnType<typeof createServiceClient>,
   fleetId:  string,
   identity: ExtractedInvoiceIdentity,
-): Promise<UnitMatch | null> {
-  if (!identity.unit_number) return null
+): Promise<{ match: UnitMatch | null; notice: string | null }> {
+  if (!identity.unit_number) return { match: null, notice: null }
 
   const { data, error } = await svc
     .from('hd_units')
@@ -114,7 +115,7 @@ async function matchUnit(
 
   if (error || !data) {
     if (error) console.error('[fleet-pro/service-entries/extract] unit match load failed:', error.message)
-    return null
+    return { match: null, notice: null }
   }
 
   const rows   = data as {
@@ -123,22 +124,25 @@ async function matchUnit(
   }[]
   const wanted = foldIdentifier(identity.unit_number)
 
-  const columns = ['serial_number', 'unit_number', 'truck_trailer_number'] as const
-  for (const column of columns) {
-    const matches = rows.filter(r => {
-      const stored = r[column]
-      return !!stored && foldIdentifier(stored) === wanted
-    })
-    if (matches.length === 1) {
+  // A SERIAL ALONE NEVER LINKS (lib/hd/unit-match, Nov 23, 2026): a serial links a unit
+  // only when the model agrees too, and an invoice photo gives no model here. So a hit on
+  // a unit's serial never preselects that unit. The unit-number columns still match as
+  // before - unless the printed number is ALSO another unit's serial, which is ambiguous
+  // and preselects nothing. Either way a serial hit with no link is said, never silent.
+  const on = (column: 'serial_number' | 'unit_number' | 'truck_trailer_number') =>
+    rows.filter(r => { const stored = r[column]; return !!stored && foldIdentifier(stored) === wanted })
+  const serialHits = on('serial_number')
+  for (const column of ['unit_number', 'truck_trailer_number'] as const) {
+    const matches = on(column)
+    if (matches.length === 1 && serialHits.every(s => s.id === matches[0].id)) {
       return {
-        unit_id:     matches[0].id,
-        unit_number: matches[0].unit_number,
-        matched_on:  column,
+        match: { unit_id: matches[0].id, unit_number: matches[0].unit_number, matched_on: column },
+        notice: null,
       }
     }
   }
 
-  return null
+  return { match: null, notice: serialHits.length ? UNIT_SERIAL_MISMATCH_NOTICE : null }
 }
 
 export async function POST(req: NextRequest) {
@@ -290,6 +294,7 @@ export async function POST(req: NextRequest) {
   // The model's output is treated exactly as hostile as the browser's.
   const extracted = normalizeExtraction(parsed)
   const identity  = normalizeIdentity(parsed)
+  const unitFound = await matchUnit(svc, gate.membership.fleet_account_id, identity)
 
   return NextResponse.json({
     ok:         true,
@@ -300,6 +305,9 @@ export async function POST(req: NextRequest) {
     identity,
     // Null when nothing matched or a unit number was ambiguous. The client falls
     // back to the unit whose page this is, and always shows the dropdown.
-    unit_match: await matchUnit(svc, gate.membership.fleet_account_id, identity),
+    unit_match: unitFound.match,
+    // Set when the printed number is a unit's serial: a serial alone never preselects a
+    // unit (no model is read off the invoice), so the manager is told to pick it himself.
+    unit_match_notice: unitFound.notice,
   })
 }

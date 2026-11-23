@@ -146,6 +146,7 @@ export async function POST(req: NextRequest) {
     work_order_id: typeof body.work_order_id === 'string' ? body.work_order_id : null,
     unit_id:       typeof body.unit_id       === 'string' ? body.unit_id       : null,
     unit_serial:   typeof body.unit_serial   === 'string' ? body.unit_serial   : null,
+    unit_model:    typeof body.unit_model    === 'string' ? body.unit_model    : null,
   })
 
   // Cost of goods, lifted out of line_items and onto real columns at write time.
@@ -164,7 +165,7 @@ export async function POST(req: NextRequest) {
   // service call fee drops the empty keys and saves; one WITH a fee is refused below
   // rather than billed without a charge its total includes.
   const serviceCallFeeSent = Number((invoiceBody as Record<string, unknown>).service_call_fee ?? 0) > 0
-  const baseRow   = { ...invoiceBody, user_id: user.id, invoice_number, ...fleetLinks }
+  const baseRow   = { ...invoiceBody, user_id: user.id, invoice_number, unit_id: fleetLinks.unit_id, fleet_account_id: fleetLinks.fleet_account_id }
   const insertRow = { ...baseRow, parts_cost: costing.parts_cost, parts_sell: costing.parts_sell }
 
   let { data, error } = await supabase
@@ -391,5 +392,7 @@ export async function POST(req: NextRequest) {
       err instanceof Error ? err.message : String(err))
   }
 
-  return NextResponse.json({ invoice: { ...data, customer_id }, customer_id, stock }, { status: 201 })
+  // unit_link_notice: the serial found a unit but its model disagrees (or several pass), so
+  // the invoice was saved with NO unit - the form tells the user instead of staying silent.
+  return NextResponse.json({ invoice: { ...data, customer_id }, customer_id, stock, unit_link_notice: fleetLinks.notice ?? null }, { status: 201 })
 }

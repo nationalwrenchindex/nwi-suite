@@ -118,6 +118,8 @@ export default function ScanInvoiceClient({
   const [unread,    setUnread]    = useState<ServiceEntryFieldKey[]>([])
   const [identity,  setIdentity]  = useState<ExtractedInvoiceIdentity | null>(null)
   const [match,     setMatch]     = useState<UnitMatch | null>(null)
+  // The printed number is a unit's serial: never preselected (a serial alone never links).
+  const [matchNotice, setMatchNotice] = useState<string | null>(null)
   const [targetId,  setTargetId]  = useState(unitId)
   const [units,     setUnits]     = useState<FleetProUnitRow[]>([])
 
@@ -193,6 +195,7 @@ export default function ScanInvoiceClient({
         unread:     ServiceEntryFieldKey[]
         identity:   ExtractedInvoiceIdentity
         unit_match: UnitMatch | null
+        unit_match_notice?: string | null
       }
 
       rawRef.current = payload.extracted
@@ -201,6 +204,7 @@ export default function ScanInvoiceClient({
       setUnread(payload.unread ?? [])
       setIdentity(payload.identity ?? null)
       setMatch(payload.unit_match ?? null)
+      setMatchNotice(payload.unit_match_notice ?? null)
       // A match only moves the selection; it never files on its own.
       if (payload.unit_match) setTargetId(payload.unit_match.unit_id)
       setStage('confirm')
@@ -398,7 +402,10 @@ export default function ScanInvoiceClient({
                     Matched the {MATCH_LABEL[match.matched_on]} printed on the invoice.
                   </p>
                 )}
-                {!match && identity?.unit_number && (
+                {!match && matchNotice && (
+                  <p role="alert" data-testid="scan-unit-notice" className="text-xs mt-2" style={{ color: ACCENT }}>{matchNotice}</p>
+                )}
+                {!match && !matchNotice && identity?.unit_number && (
                   <p className="text-xs mt-2" style={{ color: ACCENT }}>
                     The invoice reads “{identity.unit_number}”, which did not match one unit in this
                     fleet. Check the selection above.

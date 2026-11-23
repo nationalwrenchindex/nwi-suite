@@ -37,6 +37,7 @@ import { isMissingMigration159Column, withoutMigration159Columns } from '@/lib/h
 import { insertWithWorkOrderNumber } from '@/lib/work-order-number'
 import { isMissingServiceCallColumn, withoutServiceCall } from '@/lib/hd/hd-extras'
 import { serviceLocationFromQuote, workOrderNotesFromQuote } from '@/lib/hd/document-carry'
+import { findUnitBySerialAndModel } from '@/lib/hd/unit-match-server'
 
 /** 32 hex characters, the same shape LD's quote token uses. */
 export function generateQuoteToken(): string {
@@ -362,6 +363,8 @@ export interface ConversionResult {
   /** Set when the quote already had a work order and this call returned that one. */
   alreadyExisted: boolean
   lineError?: string
+  /** Set when the quote's serial found a unit but the link was refused (model disagrees, or several units pass). */
+  unitNotice?: string
 }
 
 /**
@@ -532,24 +535,22 @@ export async function createWorkOrderFromQuote(
   // THE UNIT, resolved when the quote did not record which hd_units row it was.
   //
   // Quotes saved before migration 158 have no unit_id, and neither does one where the
-  // tech typed the serial rather than picking the unit. A serial that matches EXACTLY
-  // ONE of this shop's units is that unit; zero or several and nothing is guessed.
-  // The fleet comes with it only when the quote did not name one.
+  // tech typed the serial rather than picking the unit. The serial must match AND the
+  // quote's model must agree, and only one unit may pass - the one rule in
+  // lib/hd/unit-match.ts. A serial alone links nothing: 6001241923 quotes reading "s-600"
+  // were linked to a C-600M that way. The fleet comes with it only when the quote did
+  // not name one. A refused link is reported back as unitNotice, never guessed.
+  let unitNotice: string | null = null
   if (!insertRow.unit_id) {
-    const serial = String(quote.unit_serial ?? '').trim()
-    if (serial) {
-      const { data: matches } = await supabase
-        .from('hd_units')
-        .select('id, fleet_account_id, unit_number')
-        .eq('user_id', userId)
-        .eq('serial_number', serial)
-        .limit(2)
-      if (matches?.length === 1) {
-        const u = matches[0]
-        insertRow.unit_id = u.id
-        if (!insertRow.fleet_account_id) insertRow.fleet_account_id = u.fleet_account_id ?? null
-        if (!insertRow.unit_number)      insertRow.unit_number      = u.unit_number ?? null
-      }
+    const found = await findUnitBySerialAndModel(supabase, { userId }, quote.unit_serial as string | null, quote.unit_model as string | null)
+    if (found.unit) {
+      const u = found.unit
+      insertRow.unit_id = u.id
+      if (!insertRow.fleet_account_id) insertRow.fleet_account_id = u.fleet_account_id ?? null
+      if (!insertRow.unit_number)      insertRow.unit_number      = u.unit_number ?? null
+    } else if (found.notice) {
+      unitNotice = found.notice
+      console.warn(`[hd quote->wo] quote ${quoteId}: serial matched a unit but the link was refused (${found.reason}) - work order left with no unit`)
     }
   }
 
@@ -659,6 +660,7 @@ export async function createWorkOrderFromQuote(
       alreadyExisted: false,
       lineCount,
       lineError,
+      ...(unitNotice ? { unitNotice } : {}),
     },
   }
 }

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import { matchUnitBySerial } from '@/lib/hd/unit-match'
+import { matchUnitBySerialAndModel, UNIT_SERIAL_MISMATCH_NOTICE } from '@/lib/hd/unit-match'
 import { readHandoffCustomer } from '@/lib/hd/qw-handoff'
 import { shopHdLaborRate } from '@/lib/hd/use-fee-settings'
 import { textTone, tint, ON_FILL } from '@/lib/hd/text-tone'
@@ -47,7 +47,7 @@ const BLANK_BOOKING = {
   customer_name: '', customer_phone: '',
   // THE UNIT LINK. This form sent only free text, so every job booked from the
   // calendar landed with unit_id NULL and could never appear in a per-unit history.
-  // Set by the picker, or by a typed serial that matches exactly one unit.
+  // Set by the picker, or by a typed serial whose unit's model agrees (exactly one unit).
   unit_id: '', fleet_account_id: '', unit_number: '',
   unit_manufacturer: '', unit_model: '', unit_serial: '',
   service_type: 'Diagnostic', job_description: '',
@@ -115,6 +115,9 @@ export default function HDCalendarClient() {
   const [bookingDate,   setBookingDate]   = useState('')
   const [bookingSaving, setBookingSaving] = useState(false)
   const [bookingError,  setBookingError]  = useState('')
+  // The serial + model the "serial found a unit, model disagrees" notice was shown for. A
+  // second press with the same serial and model books the job with NO unit, deliberately.
+  const [unitNoticeKey, setUnitNoticeKey] = useState<string | null>(null)
   // A QuickWrench "Create Work Order" push carries its labor estimate. Those lines go
   // onto the work order once it is booked, so they are not retyped on the job.
   const [handoffLabor, setHandoffLabor] = useState<{ lines: Array<{ description: string; hours: number }>; rate: number | null } | null>(null)
@@ -155,6 +158,7 @@ export default function HDCalendarClient() {
   }
 
   function openBooking(date: string) {
+    setUnitNoticeKey(null)
     setBookingForm(BLANK_BOOKING)
     // A new booking starts with no hand-off; the QuickWrench consumer sets it after this.
     setHandoffLabor(null)
@@ -186,16 +190,22 @@ export default function HDCalendarClient() {
     }
   }
 
+  const bookingUnitKey = `${bookingForm.unit_serial.trim().toUpperCase()}|${bookingForm.unit_model.trim()}`
+  const showUnitNotice = !bookingForm.unit_id && unitNoticeKey === bookingUnitKey
+
   async function submitBooking() {
     if (!bookingForm.customer_name.trim()) { setBookingError('Customer name is required.'); return }
     if (!bookingDate) { setBookingError('Pick a scheduled date.'); return }
+    // No unit picked: a typed serial links a unit ONLY when that unit's model agrees with
+    // the model typed, and only one unit passes (lib/hd/unit-match). A serial alone never
+    // links. When the serial finds a unit but the model disagrees - or several pass -
+    // nothing is selected and the tech is told; pressing Book again books with no unit.
+    const typed = !bookingForm.unit_id ? matchUnitBySerialAndModel(units, bookingForm.unit_serial, bookingForm.unit_model) : null
+    if (typed?.notice && unitNoticeKey !== bookingUnitKey) { setUnitNoticeKey(bookingUnitKey); setBookingError(''); return }
     setBookingSaving(true); setBookingError('')
     try {
-      // No unit picked, but the serial typed is exactly one of the shop's units: that
-      // is the unit. Zero or several matches link nothing - see matchUnitBySerial.
-      const typedMatch = !bookingForm.unit_id ? matchUnitBySerial(units, bookingForm.unit_serial) : null
-      const body = typedMatch
-        ? { ...bookingForm, unit_id: typedMatch.id, fleet_account_id: typedMatch.fleet_account_id ?? '' }
+      const body = typed?.unit
+        ? { ...bookingForm, unit_id: typed.unit.id, fleet_account_id: typed.unit.fleet_account_id ?? '' }
         : bookingForm
       const res = await fetch('/api/hd/work-orders', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -571,6 +581,9 @@ export default function HDCalendarClient() {
                   {[handoffReadings.unit_hours && `unit hours ${handoffReadings.unit_hours}`, handoffReadings.vehicle_odometer && `odometer ${handoffReadings.vehicle_odometer} mi`].filter(Boolean).join(', ')}
                 </p>
               )}
+              {showUnitNotice && (
+                <p role="alert" data-testid="booking-unit-notice" className="text-sm px-3 py-2 rounded-lg" style={{ background: 'rgba(245,158,11,0.12)', color: 'var(--hd-warning, #F59E0B)', border: '1px solid rgba(245,158,11,0.35)' }}>{UNIT_SERIAL_MISMATCH_NOTICE}</p>
+              )}
               {bookingError && (
                 <p className="text-sm px-3 py-2 rounded-lg" style={{ background: 'rgba(239,68,68,0.12)', color: 'var(--hd-negative)', border: '1px solid rgba(239,68,68,0.3)' }}>{bookingError}</p>
               )}
@@ -652,7 +665,7 @@ export default function HDCalendarClient() {
             <div className="flex gap-3 px-5 pb-5 pt-3 shrink-0" style={{ borderTop: '1px solid var(--hd-border)' }}>
               <button onClick={() => setBooking(false)} className="flex-1 py-2.5 rounded-lg font-semibold text-sm" style={{ background: 'var(--hd-inner)', color: '#c9d5e0', border: '1px solid var(--hd-border)' }}>Cancel</button>
               <button onClick={submitBooking} disabled={bookingSaving} className="flex-1 py-2.5 rounded-lg font-semibold text-sm text-on-accent disabled:opacity-50" style={{ background: HD_ORANGE }}>
-                {bookingSaving ? 'Booking…' : 'Book Job'}
+                {bookingSaving ? 'Booking…' : showUnitNotice ? 'Book without a unit' : 'Book Job'}
               </button>
             </div>
           </div>

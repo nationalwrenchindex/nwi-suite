@@ -148,15 +148,17 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   // so re-resolve the links whenever the edit touches something they derive from.
   // Fields the PUT left out are read back off the row, so a serial-only edit cannot
   // throw away a link that came from a work order or a hand-set unit_id.
+  // Set when the serial found a unit but its model disagrees: the invoice keeps NO unit.
+  let unitLinkNotice: string | null = null
   if ('work_order_id' in body || 'unit_id' in body || 'unit_serial' in body) {
     const { data: current } = await supabase
       .from('hd_invoices')
-      .select('work_order_id, unit_id, unit_serial')
+      .select('work_order_id, unit_id, unit_serial, unit_model')
       .eq('id', id)
       .eq('user_id', user.id)
       .maybeSingle()
 
-    const pick = (key: 'work_order_id' | 'unit_id' | 'unit_serial'): string | null => {
+    const pick = (key: 'work_order_id' | 'unit_id' | 'unit_serial' | 'unit_model'): string | null => {
       const value = key in body ? body[key] : (current as Record<string, unknown> | null)?.[key]
       return typeof value === 'string' ? value : null
     }
@@ -165,9 +167,11 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       work_order_id: pick('work_order_id'),
       unit_id:       pick('unit_id'),
       unit_serial:   pick('unit_serial'),
+      unit_model:    pick('unit_model'),
     })
     update.unit_id          = fleetLinks.unit_id
     update.fleet_account_id = fleetLinks.fleet_account_id
+    unitLinkNotice          = fleetLinks.notice ?? null
   }
 
   let { data, error } = await supabase
@@ -227,7 +231,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   // Marked sent: the shop's terms are recorded on it now, unless it already carries
   // its quote's. Never fails the save.
   if (body.status === 'sent') await recordTermsSnapshot(supabase, 'hd_invoices', id, user.id)
-  return NextResponse.json({ invoice: data })
+  return NextResponse.json({ invoice: data, unit_link_notice: unitLinkNotice })
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

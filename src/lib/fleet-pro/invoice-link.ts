@@ -12,28 +12,26 @@
 // the invoice.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { findUnitBySerialAndModel } from '@/lib/hd/unit-match-server'
 
 export interface InvoiceLinkInput {
   work_order_id?: string | null
   unit_id?:       string | null
   unit_serial?:   string | null
+  /** The model typed on the invoice. A serial links a unit only when this agrees (lib/hd/unit-match). */
+  unit_model?:    string | null
 }
 
 export interface InvoiceFleetLinks {
   unit_id:          string | null
   fleet_account_id: string | null
+  /** Set when the serial found a unit but the link was refused - shown to the user, never silent. */
+  notice?:          string | null
 }
 
 const NO_LINKS: InvoiceFleetLinks = { unit_id: null, fleet_account_id: null }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
-
-// Serials are typed by hand and get compared case-insensitively, so ilike is the right
-// operator — but '%' and '_' are wildcards to it. A serial containing either would
-// silently widen the match, which is exactly the failure this module exists to prevent.
-function escapeLike(value: string): string {
-  return value.replace(/[\\%_]/g, m => `\\${m}`)
-}
 
 /**
  * Work out which unit and fleet account an invoice belongs to.
@@ -41,9 +39,13 @@ function escapeLike(value: string): string {
  * Resolution order, most reliable first — the first source that yields anything wins:
  *   1. work_order_id — the work order already carries verified unit_id/fleet_account_id.
  *   2. an explicitly supplied unit_id, after confirming the unit belongs to this user.
- *   3. a case-insensitive match on unit_serial against this user's units.
+ *   3. unit_serial against this user's units - AND unit_model must agree (Nov 23, 2026).
  *
- * AMBIGUITY RULE: step 3 accepts a serial match ONLY when exactly one unit matches.
+ * SERIAL + MODEL RULE (lib/hd/unit-match, the same rule as the calendar and quote
+ * approval): a serial alone never links. The serial must match, the model must agree,
+ * and exactly one unit may pass; otherwise nothing links and `notice` says why.
+ *
+ * AMBIGUITY RULE: step 3 accepts a match ONLY when exactly one unit passes.
  * Two units sharing a serial (duplicate entry, or the same serial reused across two
  * departments the mechanic services) resolve to null, never to a best guess. Guessing
  * wrong publishes one department's service record and cost figures on another
@@ -103,36 +105,19 @@ export async function resolveInvoiceFleetLinks(
     }
 
     // 3. Serial match — the only path available when a tech types the unit in by hand.
+    //    Serial AND model, one unit only (lib/hd/unit-match). A wrong link would put this
+    //    invoice and its cost on another unit's Fleet Pro history; a refused one says so.
     if (serial) {
-      const { data, error } = await svc
-        .from('hd_units')
-        .select('id, fleet_account_id, serial_number')
-        .eq('user_id', userId)
-        .ilike('serial_number', escapeLike(serial))
-        .limit(5)
-
-      if (error) {
-        console.error('[fleet-pro invoice-link] serial lookup failed', error)
-        return NO_LINKS
-      }
-
-      // Re-check in JS: ilike does not trim, so a stored serial with stray whitespace
-      // still has to be normalized before it counts as a match.
-      const wanted  = serial.toLowerCase()
-      const matches = (data ?? []).filter(
-        u => str(u.serial_number).toLowerCase() === wanted,
-      )
-
-      if (matches.length === 1) {
+      const found = await findUnitBySerialAndModel(svc, { userId }, serial, str(input.unit_model))
+      if (found.unit) {
         return {
-          unit_id:          matches[0].id as string,
-          fleet_account_id: (matches[0].fleet_account_id as string | null) ?? null,
+          unit_id:          found.unit.id,
+          fleet_account_id: found.unit.fleet_account_id ?? null,
         }
       }
-      if (matches.length > 1) {
-        console.warn(
-          `[fleet-pro invoice-link] serial "${serial}" matched ${matches.length} units — leaving invoice unlinked`,
-        )
+      if (found.notice) {
+        console.warn(`[fleet-pro invoice-link] serial "${serial}" found a unit but the link was refused (${found.reason}) — leaving invoice unlinked`)
+        return { ...NO_LINKS, notice: found.notice }
       }
     }
 

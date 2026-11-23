@@ -174,6 +174,9 @@ export default function EditInvoiceForm({ invoice, shopLaborRate, shop = null }:
     try {
       const res = await fetch(`/api/hd/invoices/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const data = await res.json()
+      // The serial matched a unit whose model disagrees (or several units pass): saved with
+      // NO unit. Said before leaving, never silent (lib/hd/unit-match).
+      if (data.unit_link_notice) window.alert(String(data.unit_link_notice))
       if (data.invoice) router.push(`/hd/invoices/${id}`)
       else setToast(data.error ?? 'Save failed')
     } finally {

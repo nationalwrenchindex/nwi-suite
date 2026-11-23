@@ -375,6 +375,9 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
       if (!made.ok) throw new Error(madeJson.error ?? 'Could not create the invoice.')
 
       const id = (madeJson.invoice as Record<string, unknown> | undefined)?.id
+      // The serial matched a unit whose model disagrees (or several units pass): saved with
+      // NO unit. Said before leaving, never silent (lib/hd/unit-match).
+      if (madeJson.unit_link_notice) window.alert(String(madeJson.unit_link_notice))
       window.location.href = id ? `${invoicesBase}/${String(id)}` : invoicesBase
     } catch (err) {
       setInvoiceError(err instanceof Error ? err.message : 'Could not create the invoice.')

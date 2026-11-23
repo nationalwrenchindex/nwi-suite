@@ -178,6 +178,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       already_existed: conv.result.alreadyExisted,
       line_count:      conv.result.lineCount,
       line_error:      conv.result.lineError ?? null,
+      // The quote's serial found a unit but its model disagrees (or several units pass):
+      // the work order has NO unit, and the tech is told so instead of finding out later.
+      unit_notice:     conv.result.unitNotice ?? null,
     },
     approval_method: String(workingQuote.approval_method ?? ''),
     po_number:       (workingQuote.customer_po_number as string | null) ?? null,

@@ -344,6 +344,9 @@ export default function QuoteDetailActions({
       // already_existed is not an error. The quote had a work order - the customer
       // approved it at the link, or someone clicked twice - so go to the one that
       // exists rather than reporting a failure for a job that is open.
+      // A serial on the quote matched a unit whose model disagrees: the work order was made
+      // with no unit. Said before leaving, so the tech picks the unit on the work order.
+      if (data.work_order.unit_notice) alert(String(data.work_order.unit_notice))
       router.push(`/hd/work-orders/${data.work_order.id}`)
     } catch {
       setToast('Could not create the work order. Check the connection and try again.')
@@ -392,6 +395,9 @@ export default function QuoteDetailActions({
       const body = invoiceBodyFromQuote(quoteData as unknown as Record<string, unknown>)
       const res  = await fetch('/api/hd/invoices', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const data = await res.json()
+      // The serial matched a unit whose model disagrees (or several units pass): saved with
+      // NO unit. Said before leaving, never silent (lib/hd/unit-match).
+      if (data.unit_link_notice) window.alert(String(data.unit_link_notice))
       if (data.invoice?.id) router.push(`/hd/invoices/${data.invoice.id}`)
       else setToast(data.error ?? 'Failed to create invoice')
     } finally {
