@@ -1,5 +1,6 @@
 -- Reefer parts: what Brock's belt and filter chart (brock-belt-filter-chart-2026-11-16)
 -- contradicts. Brock's ruling, Nov 16, 2026: mark, do not delete.
+-- Rewritten Nov 22, 2026 with Brock's wording for the part descriptions.
 --
 -- PART A - 10 fitment rows MARKED contradicted (confidence -> 'conflict', note set).
 --   Each links a chart part to a unit on the mount the chart does not give that part. The
@@ -10,25 +11,44 @@
 --     30-00471-20  chart: trailer only  ->  Supra 550, Supra 650, Supra 950
 --     30-00302-00  chart: truck only    ->  Ultra, Ultra XL, Vector 1800
 --
---   All 10 read Nov 16, 2026: confidence 'unconfirmed', verified false, source
---   'reefer-parts-master', match_type 'unit_model', note NULL, no engine, serial or date.
+--   All 10 read Nov 16 and again Nov 22, 2026: confidence 'unconfirmed', verified false,
+--   source 'reefer-parts-master', match_type 'unit_model', note NULL, no engine, serial or
+--   date.
 --
--- PART B - 4 part_types and 1 description corrected to the chart.
---   78-0803  part_type Compressor               -> Belt   description -> chart wording
---   78-0903  part_type Electric motor (standby) -> Belt   description -> chart wording
---   78-1134  part_type Electric motor (standby) -> Belt   description -> chart wording
+-- PART B - 4 part_types and 4 descriptions corrected to the chart.
+--   78-0803  part_type Compressor               -> Belt
+--            description -> 'Motor (jackshaft to compressor) belt; compressor to motor belt'
+--   78-0903  part_type Electric motor (standby) -> Belt
+--            description -> 'Motor to jackshaft (compressor) belt'
+--   78-1134  part_type Electric motor (standby) -> Belt
+--            description -> 'Motor to compressor belt'
 --   10-0458  part_type Hardware                 -> Fuel filter kit (description kept:
---                                                  "Strainer and O-ring kit" matches the
---                                                  chart's note "KIT - strainer and o-ring")
---   11-9961  description "Oil Filter Severe Duty - Precedent SLX"
---                                   -> "Oil Filter Severe Duty - Precedent S-series"
+--                                                  'Strainer and O-ring kit' matches the
+--                                                  chart's note 'KIT - strainer and o-ring')
+--   11-9961  description 'Oil Filter Severe Duty - Precedent SLX' -> 'Oil Filter - Severe Duty'
+--
+--   Brock, Nov 22, 2026: each description is the chart's own part_type wording and names NO
+--   unit model. 11-9961 fits the C-600 group, the whole S-series AND the S-750i, so any unit
+--   name in its text would be wrong. 78-0803 does two jobs in the chart (RD-II and RD-II MAX:
+--   motor (jackshaft to compressor); RD-II SR: compressor to motor), so both are named.
 --   'Belt' is the part_type every other chart belt already carries in the catalog (160 of
 --   them), so these three group and search with the rest.
 --   78-0679 is NOT touched (held for Brock's ruling). confidence, verified and source on
 --   these parts are left as they are.
 --
--- Every row is matched by id and every field read on Nov 16 that this changes, so a row
--- that is not what was read makes the whole file refuse. No INSERT, no DELETE.
+-- THE 12 ROWS ALREADY MARKED 'conflict' (read Nov 22, 2026) are NOT these 10 and this file
+-- does not touch them: 11-9954 and 11-9959 on SLXi-100, SLXi-200, SLXi-300, SLXi-400,
+-- SLXi Spectrum and Whisper Pro, loaded Nov 4 by reefer-load 02 (source
+-- seed-fitment-2026-10-23, seed rows 609-614 and 621-626), marked conflict because the seed
+-- itself says "CONFLICT with 11-9342" (fuel) and "CONFLICT with 11-9182" (oil). After this
+-- file, part_fitment holds 22 'conflict' rows.
+--
+-- The first check refuses unless every CHECK on part_fitment that names confidence admits
+-- 'conflict' (175 defines one that does), so a constraint that excludes it stops the file
+-- before anything changes.
+--
+-- Every row is matched by id and every field read that this changes, so a row that is not
+-- what was read makes the whole file refuse. No INSERT, no DELETE.
 --
 -- Plain ASCII. Ends in ROLLBACK for a dry run; change the last line to COMMIT to apply.
 
@@ -52,6 +72,18 @@ DECLARE
   v_n     BIGINT;
   v_total BIGINT;
 BEGIN
+  -- 'conflict' must be an allowed confidence on part_fitment, or nothing below can work.
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint k
+     WHERE k.conrelid = 'public.part_fitment'::regclass AND k.contype = 'c'
+       AND pg_get_constraintdef(k.oid) ILIKE '%confidence%'
+       AND pg_get_constraintdef(k.oid) NOT LIKE '%''conflict''%') THEN
+    RAISE EXCEPTION '19: a CHECK on part_fitment.confidence does not admit conflict - nothing applied';
+  END IF;
+  IF (SELECT count(*) FROM public.part_fitment pf WHERE pf.confidence = 'conflict') <> 12 THEN
+    RAISE EXCEPTION '19: part_fitment does not hold the 12 conflict rows read Nov 22 - nothing applied';
+  END IF;
+
   SELECT count(*) INTO v_total FROM public.part_fitment pf;
 
   -- PART A. Refuse unless all 10 rows are exactly as read.
@@ -70,26 +102,26 @@ BEGIN
      SET confidence = 'conflict',
          note = 'Contradicted by brock-belt-filter-chart-2026-11-16: the chart fits ' || c.pn
                 || ' to ' || c.chart_mount || ' units only; ' || c.unit || ' is a '
-                || c.unit_mount || ' unit. Marked Nov 16, 2026, not deleted.'
+                || c.unit_mount || ' unit. Marked, not deleted.'
     FROM _c19 c
    WHERE pf.id = c.fid AND pf.confidence = 'unconfirmed' AND pf.note IS NULL;
   GET DIAGNOSTICS v_n = ROW_COUNT;
   IF v_n <> 10 THEN RAISE EXCEPTION '19 A: marked % rows, not 10 - nothing applied', v_n; END IF;
 
   -- PART B.
-  UPDATE public.parts p SET part_type = 'Belt', description = 'Belt - motor (jackshaft to compressor), compressor to motor'
+  UPDATE public.parts p SET part_type = 'Belt', description = 'Motor (jackshaft to compressor) belt; compressor to motor belt'
    WHERE p.id = 'fb93cbc3-e56d-4ed7-8c37-0173c9b33c61' AND p.part_number = '78-0803' AND p.manufacturer = 'Thermo King'
      AND p.part_type = 'Compressor' AND p.description = 'Compressor - electric motor';
   GET DIAGNOSTICS v_n = ROW_COUNT;
   IF v_n <> 1 THEN RAISE EXCEPTION '19 B: 78-0803 updated % rows, not 1 - nothing applied', v_n; END IF;
 
-  UPDATE public.parts p SET part_type = 'Belt', description = 'Belt - motor to jackshaft (compressor)'
+  UPDATE public.parts p SET part_type = 'Belt', description = 'Motor to jackshaft (compressor) belt'
    WHERE p.id = '4dfd3ae2-1064-493b-8766-cc1b9a27e9ab' AND p.part_number = '78-0903' AND p.manufacturer = 'Thermo King'
      AND p.part_type = 'Electric motor (standby)' AND p.description = 'Electric/fan motor - compressor, jackshaft, electric motor';
   GET DIAGNOSTICS v_n = ROW_COUNT;
   IF v_n <> 1 THEN RAISE EXCEPTION '19 B: 78-0903 updated % rows, not 1 - nothing applied', v_n; END IF;
 
-  UPDATE public.parts p SET part_type = 'Belt', description = 'Belt - motor to compressor'
+  UPDATE public.parts p SET part_type = 'Belt', description = 'Motor to compressor belt'
    WHERE p.id = 'b4758d5b-8fe9-4919-95e4-3d6b227f10af' AND p.part_number = '78-1134' AND p.manufacturer = 'Thermo King'
      AND p.part_type = 'Electric motor (standby)' AND p.description = 'Electric/fan motor - compressor, electric motor';
   GET DIAGNOSTICS v_n = ROW_COUNT;
@@ -101,7 +133,7 @@ BEGIN
   GET DIAGNOSTICS v_n = ROW_COUNT;
   IF v_n <> 1 THEN RAISE EXCEPTION '19 B: 10-0458 updated % rows, not 1 - nothing applied', v_n; END IF;
 
-  UPDATE public.parts p SET description = 'Oil Filter Severe Duty - Precedent S-series'
+  UPDATE public.parts p SET description = 'Oil Filter - Severe Duty'
    WHERE p.id = 'b2e60ec7-55a0-4a86-bfd3-abf282deff9c' AND p.part_number = '11-9961' AND p.manufacturer = 'Thermo King'
      AND p.part_type = 'Filter - oil (engine)' AND p.description = 'Oil Filter Severe Duty - Precedent SLX';
   GET DIAGNOSTICS v_n = ROW_COUNT;
@@ -113,10 +145,19 @@ BEGIN
   IF (SELECT count(*) FROM public.part_fitment pf JOIN _c19 c ON c.fid = pf.id WHERE pf.confidence = 'conflict') <> 10 THEN
     RAISE EXCEPTION '19 self-check: not all 10 rows are marked conflict';
   END IF;
+  IF (SELECT count(*) FROM public.part_fitment pf WHERE pf.confidence = 'conflict') <> 22 THEN
+    RAISE EXCEPTION '19 self-check: part_fitment should hold 22 conflict rows (12 from the Nov 4 seed + these 10)';
+  END IF;
+  IF EXISTS (SELECT 1 FROM public.parts p
+              WHERE p.id IN ('fb93cbc3-e56d-4ed7-8c37-0173c9b33c61', '4dfd3ae2-1064-493b-8766-cc1b9a27e9ab',
+                             'b4758d5b-8fe9-4919-95e4-3d6b227f10af', 'b2e60ec7-55a0-4a86-bfd3-abf282deff9c')
+                AND (p.description ILIKE '%precedent%' OR p.description ~ '[A-Z]-[0-9]')) THEN
+    RAISE EXCEPTION '19 self-check: a corrected description names a unit model';
+  END IF;
   IF (SELECT count(*) FROM public.part_fitment pf WHERE pf.source = 'brock-belt-filter-chart-2026-11-16') <> 758 THEN
     RAISE EXCEPTION '19 self-check: the chart load is not 758 rows';
   END IF;
-  RAISE NOTICE '19 ok: 10 fitment rows marked conflict, 5 parts corrected, nothing deleted';
+  RAISE NOTICE '19 ok: 10 fitment rows marked conflict (22 in all), 5 parts corrected, nothing deleted';
 END $$;
 
 SELECT p.part_number, pf.unit_model, pf.confidence, pf.note

@@ -10,7 +10,7 @@ import {
   buildDateApplies, narrowUnitRows, parseBuildDate, partMountsOf, roleMatches, unitModelMatches, unitMountOf,
   PRECEDENT_MODELS, type NarrowRow,
 } from '../src/lib/parts/narrow'
-import { followChain, bestTrust, badgeOf, CONFIDENCE_TIERS, displayOf, type SupersessionLink } from '../src/lib/parts/counter'
+import { followChain, branchesCarried, bestTrust, badgeOf, CONFIDENCE_TIERS, displayOf, type SupersessionLink } from '../src/lib/parts/counter'
 
 let pass = 0, fail = 0
 function check(step: string, ok: boolean, detail = ''): void {
@@ -171,15 +171,31 @@ const L = (o: string, nw: string, note: string): SupersessionLink => ({
   old_number: o, new_number: nw, old_number_normalized: o.replace(/-/g, ''), new_number_normalized: nw.replace(/-/g, ''),
   manufacturer: 'Thermo King', note, verified: true, confidence: 'confirmed',
 })
-const three = [
-  L('11-9958', '11-9965', 'standard duty, built before 7/2023'),
-  L('11-9958', '11-9966', 'severe duty, built before 7/2023'),
-  L('11-9958', '11-9970', 'built 7/2023 and after'),
+// The notes are exactly what scripts/reefer-load/20-chart-supersessions.sql writes (Brock, Nov 22).
+const GA = 'Precedent C-600, C-600M, and S-600DE / S-600M with the Peugeot engine'
+const GB = 'Precedent S-600, S-600M, S-600DE, S-610M, S-610DE, S-700 with other engines'
+const TAIL = ' (Brock, Nov 22, 2026. 11-9958 has five replacements by unit and build date; show all.)'
+const five = [
+  L('11-9958', '11-9965', `Standard duty. ${GA}: built before 7/2023. ${GB}: built before 6/2021.${TAIL}`),
+  L('11-9958', '11-9966', `Severe duty. ${GA}: built before 7/2023. ${GB}: built before 6/2021.${TAIL}`),
+  L('11-9958', '11-9967', `Secondary, EMI 3000. ${GB}: built 6/2021 and after. Not for ${GA}.${TAIL}`),
+  L('11-9958', '11-9969', `Primary, EMI 3000. ${GB}: built 6/2021 and after. Not for ${GA}.${TAIL}`),
+  L('11-9958', '11-9970', `Primary. ${GA}: built 7/2023 and after. Not for ${GB}.${TAIL}`),
 ]
-const ch = followChain('11-9958', '119958', three)
-check('the chain stops at 11-9958 and offers all three', ch.current === '11-9958' && ch.branches.map(b => b.to).join() === '11-9965,11-9966,11-9970',
+const ch = followChain('11-9958', '119958', five)
+check('the chain stops at 11-9958 and offers all five', ch.current === '11-9958' && ch.branches.map(b => b.to).join() === '11-9965,11-9966,11-9967,11-9969,11-9970',
   ch.branches.map(b => b.to).join())
-check('each with its condition', ch.branches.every(b => !!b.note))
+check('every note names a unit group AND a date break (part_supersession has no unit scope)',
+  ch.branches.every(b => !!b.note && /C-600|S-600/.test(b.note) && /\d\/20\d\d/.test(b.note)))
+// A unit search: only the replacements the unit's own narrowed rows carry.
+const carried = (...n: string[]) => new Set(n.map(x => x.replace(/-/g, '')))
+check('S-700 built 2022: 11-9967 and 11-9969, never 11-9970',
+  branchesCarried(ch.branches, carried('11-9958', '11-9967', '11-9969')).map(b => b.to).join() === '11-9967,11-9969')
+check('C-600 built 2024: 11-9970 only',
+  branchesCarried(ch.branches, carried('11-9958', '11-9970')).map(b => b.to).join() === '11-9970')
+check('a unit that carries none of them gets none (the old number shows, not current, with every option)',
+  branchesCarried(ch.branches, carried('11-9958')).length === 0)
+check('searched by number: all five', branchesCarried(ch.branches, null).length === 5)
 const one = followChain('30-01121-00', '300112100', [{ old_number: '30-01121-00', new_number: '30-60143-01', old_number_normalized: '300112100',
   new_number_normalized: '306014301', manufacturer: 'Carrier Transicold', note: null, verified: true, confidence: null }])
 check('one followable link is still followed', one.current === '30-60143-01' && one.branches.length === 0)

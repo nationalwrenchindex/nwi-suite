@@ -38,7 +38,7 @@ import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { manufacturerMatches, modelMatches, serialLabel, normalizePartNumber, textMatches } from '@/lib/parts/search'
 import {
-  adviceOf, badgeOf, bestTrust, bmInRange, displayOf, followChain, inScope, replacementsOf, trustRank,
+  adviceOf, badgeOf, bestTrust, bmInRange, branchesCarried, displayOf, followChain, inScope, replacementsOf, trustRank,
   typeSynonymMatches, type CounterScope, type Trust,
 } from '@/lib/parts/counter'
 import {
@@ -255,6 +255,12 @@ export async function GET(request: NextRequest) {
     const pt = byNumber.get(normalized)
     return pt && byId.has(pt.id) ? pt : null
   }
+  // A conditional replacement (11-9958 has five, split by unit group AND build date) is
+  // the answer for a unit only when that unit's own narrowed rows carry it. part_supersession
+  // has no unit scope, so following every branch would put 11-9970 (C-600 group and Peugeot
+  // units) on an S-700. With no branch carried, the old number is shown not current, with
+  // every option and its note.
+  const unitCarries = byUnit ? new Set(cards.filter(c => !c.suppressedReason).map(c => c.part.part_number_normalized)) : null
   for (const card of cards) {
     const links = replacementsOf(card.part.part_number_normalized, catalog.links)
     if (!links.length) { put(card); continue }
@@ -265,7 +271,7 @@ export async function GET(request: NextRequest) {
     if (chain.branches.length) {
       // The chain stopped at the number with several replacements: it and everything
       // before it are what each option replaces, newest first.
-      for (const b of chain.branches) {
+      for (const b of branchesCarried(chain.branches, unitCarries)) {
         const pt = usable(b.toNormalized)
         if (pt) leads.push({ part: pt, was: [chain.current, ...chain.was], condition: b.note, reported: null })
       }

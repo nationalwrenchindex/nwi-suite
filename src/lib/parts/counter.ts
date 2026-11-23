@@ -163,6 +163,17 @@ export function followChain(startNumber: string, startNormalized: string, links:
   }
 }
 
+/**
+ * Which conditional replacements stand in for an old number in a UNIT search: only those the
+ * unit's own narrowed rows carry (`carried`, normalized numbers). part_supersession has no
+ * unit scope - 11-9958's five replacements split by unit group AND build date, and following
+ * all of them would put 11-9970 (C-600 group, Peugeot units) on an S-700. `carried` null =
+ * not a unit search: every branch.
+ */
+export function branchesCarried<T extends { toNormalized: string }>(branches: T[], carried: Set<string> | null): T[] {
+  return carried ? branches.filter(b => carried.has(b.toNormalized)) : branches
+}
+
 /** Every link out of a number, strong or weak: what an old number "shows" as its replacement. */
 export function replacementsOf(normalized: string, links: SupersessionLink[]): Array<{ to: string; toNormalized: string; note: string | null; trust: Trust; followed: boolean }> {
   return links

@@ -59,7 +59,7 @@ import {
 } from '@/lib/parts/search'
 import { partNumberSearchKeys } from '@/lib/parts/part-number'
 import {
-  badgeOf, bestTrust, categoryOf, followChain, isConfidenceTier, replacementsOf, trustRank,
+  badgeOf, bestTrust, branchesCarried, categoryOf, followChain, isConfidenceTier, replacementsOf, trustRank,
   type SupersessionLink, type Trust,
 } from '@/lib/parts/counter'
 import { narrowUnitRows, parseBuildDate, partMountsOf, roleMatches, unitModelMatches, type Mount, type NarrowRow } from '@/lib/parts/narrow'
@@ -415,14 +415,18 @@ export async function GET(request: NextRequest) {
     if (!r.suppressedReason) prior.suppressedReason = null
     if (r.matchedBy === 'number') prior.matchedBy = 'number'
   }
+  // A conditional replacement is the answer for a unit only when the unit's own narrowed
+  // rows carry it (see the counter route: part_supersession has no unit scope).
+  const unitCarries = new Set(results.filter(r => !r.suppressedReason).map(r => normOf(r.part)))
   for (const r of results) {
     const outs = replacementsOf(normOf(r.part), links)
     if (!outs.length) { put(r); continue }
     const replacedBy = outs.map(o => ({ to: o.to, note: o.note, badge: badgeOf(o.trust), followed: o.followed }))
     const chain = followChain(r.part.part_number, normOf(r.part), links)
+    const forUnit = r.matchedBy === 'unit' || r.matchedBy === 'engine' || r.matchedBy === 'compressor'
     const leads: Array<{ part: PartRow; was: string[]; condition: string | null }> = []
     if (chain.branches.length) {
-      for (const b of chain.branches) {
+      for (const b of branchesCarried(chain.branches, forUnit ? unitCarries : null)) {
         const pt = partByNumber.get(b.toNormalized)
         if (pt) leads.push({ part: pt, was: [chain.current, ...chain.was], condition: b.note })
       }
@@ -430,7 +434,6 @@ export async function GET(request: NextRequest) {
       const pt = partByNumber.get(chain.currentNormalized)
       if (pt) leads.push({ part: pt, was: chain.was, condition: null })
     }
-    const forUnit = r.matchedBy === 'unit' || r.matchedBy === 'engine' || r.matchedBy === 'compressor'
     if (forUnit) {
       // The old number is never the answer for a unit; its fitment moves to the replacement.
       if (leads.length) for (const l of leads) put({ ...r, part: l.part, replaces: l.was, condition: l.condition, current: true, replacedBy: [] })
