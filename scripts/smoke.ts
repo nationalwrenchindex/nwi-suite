@@ -244,6 +244,15 @@ async function cleanup(): Promise<void> {
   try {
     const strays = await rest<{ id: string }>(`hd_units?select=id&user_id=eq.${OWNER}&serial_number=like.ZZSERIAL*`)
     for (const s of strays) created.fleetUnits.add(s.id)
+    // Since Nov 23 a saved HD document turns its typed customer into a fleet account and its
+    // typed unit into a unit on it (lib/hd/document-links). Every HD document smoke saves
+    // names a SMOKE customer, so those accounts - and the units on them - are swept here.
+    // Read Nov 23: no real fleet account on this owner is named SMOKE*.
+    const smokeFleets = await rest<{ id: string }>(`hd_fleet_accounts?select=id&user_id=eq.${OWNER}&fleet_name=like.${MARK}*`)
+    for (const a of smokeFleets) {
+      created.fleetAccounts.add(a.id)
+      for (const u of await rest<{ id: string }>(`hd_units?select=id&user_id=eq.${OWNER}&fleet_account_id=eq.${a.id}`)) created.fleetUnits.add(u.id)
+    }
     const cats = await rest<{ id: string }>(`hd_equipment_categories?select=id&user_id=eq.${OWNER}&name=like.${MARK}*`)
     for (const c of cats) created.equipmentCategories.add(c.id)
   } catch { /* a failed sweep must not mask the real result */ }
@@ -3230,14 +3239,29 @@ async function flowT(): Promise<void> {
   const tWos = await rest<Record<string, unknown>>(`hd_work_orders?quote_id=eq.${typedId}&select=id,unit_id,fleet_account_id`)
   tWos.forEach(w => created.hdWorkOrders.add(String(w.id)))
   if (!record(F, 'the typed quote converts', tWos.length === 1, `${tWos.length} wo`)) return
-  record(F, 'a serial matching no unit links nothing (no guess)',
-    tWos[0].unit_id == null && tWos[0].fleet_account_id == null, `unit ${tWos[0].unit_id}, fleet ${tWos[0].fleet_account_id}`)
+  // Corrected Nov 23, 2026 - the old assertion (unit and fleet both null) was wrong about the
+  // app once a saved document puts its typed customer and unit into Intel Hub
+  // (lib/hd/document-links). What must still hold is the point of the check: nothing is
+  // GUESSED. The serial matches no unit, so the typed quote is not put on this flow's
+  // existing unit ZZ-UNIT-T7 - it gets its OWN unit, ZZ-TYPED-7, on its own new customer.
+  const tUnit = tWos[0].unit_id
+    ? (await rest<{ unit_number: string; fleet_account_id: string | null }>(`hd_units?id=eq.${String(tWos[0].unit_id)}&select=unit_number,fleet_account_id`))[0]
+    : null
+  const tFleet = tWos[0].fleet_account_id
+    ? (await rest<{ fleet_name: string }>(`hd_fleet_accounts?id=eq.${String(tWos[0].fleet_account_id)}&select=fleet_name`))[0]
+    : null
+  record(F, 'a serial matching no unit is never guessed onto one: the typed unit becomes its own, on its own customer',
+    tWos[0].unit_id !== unitId && tUnit?.unit_number === 'ZZ-TYPED-7' && tUnit?.fleet_account_id === tWos[0].fleet_account_id &&
+    tWos[0].fleet_account_id !== accountId && tFleet?.fleet_name === `${MARK} carry typed`,
+    `unit ${tUnit?.unit_number ?? 'none'} on ${tFleet?.fleet_name ?? 'no account'}`)
   const tPage = await page(`/hd/work-orders/${tWos[0].id}`)
   if (record(F, 'the typed work order renders', !!tPage, tPage ? 'loaded' : 'did not load')) {
-    record(F, 'Inspections names the typed unit instead of "No unit"',
-      !tPage!.text.includes('No unit on this work order') && tPage!.text.includes('is not linked to a fleet unit record'),
+    // Corrected with the one above: the typed unit is now a linked record, so the page
+    // names it as linked - neither "No unit" nor "not linked to a fleet unit record".
+    record(F, 'the typed unit shows as a linked unit - no "No unit", no "not linked" note',
+      !tPage!.text.includes('No unit on this work order') && !tPage!.text.includes('is not linked to a fleet unit record') && tPage!.text.includes('ZZ-TYPED-7'),
       tPage!.text.includes('No unit on this work order') ? '"No unit" still renders under a named unit'
-        : tPage!.text.includes('is not linked to a fleet unit record') ? 'names the unit' : 'new note absent')
+        : tPage!.text.includes('is not linked to a fleet unit record') ? 'still says not linked' : tPage!.text.includes('ZZ-TYPED-7') ? 'linked' : 'unit number absent')
   }
 }
 
@@ -3309,6 +3333,105 @@ async function flowUnitSerialModel(): Promise<void> {
   } else {
     record(F, 'an invoice whose serial matches but whose model disagrees gets NO unit, and says so', false, 'no work order to build it from')
   }
+}
+
+// ── Ia: a typed customer and unit land in Intel Hub (Nov 23, 2026) ─────────
+// Q-2026-0276 -> WO-2026-1584 -> INV-2026-0183 ("test xyz", unit "test 002") created
+// neither a fleet account nor a unit. Now saving the document does (lib/hd/document-links):
+// found first, created only when nothing matches, never twice.
+async function flowIntelAutoAdd(): Promise<void> {
+  const F = 'Ia intel auto-add'
+  const run = Date.now().toString(36).toUpperCase()
+  const CUST = `${MARK} autoadd ${run}`
+  const UNIT_NO = `${MARK}-AA-${run}`
+  const SERIAL = `ZZSERIALAA${run}`
+  const line = { id: 'zz-ia1', type: 'labor', amount: 100, quantity: 0, unit_cost: 0, amount_max: 100, book_hours: 0,
+    description: `${MARK} autoadd`, part_number: '', mobile_hours: 1, book_hours_max: 0, recharge_added: false,
+    mobile_hours_max: 1, requires_refrigeration: false }
+  const quote = (extra: Record<string, unknown>) => ({
+    customer_name: CUST, customer_phone: '+15555550199', status: 'draft', payment_terms: 'net30',
+    line_items: [line], labor_rate: 100, subtotal_labor: 100, subtotal_parts: 0, tax_rate: 0, tax_amount: 0, total: 100,
+    ...extra,
+  })
+  const keep = async (r: { json: Record<string, unknown> }) => {
+    const q = (r.json.quote ?? {}) as Record<string, unknown>
+    if (q.id) created.hdQuotes.add(String(q.id))
+    await adoptSmokeCustomer(r.json.customer_id)
+    return q
+  }
+  const fleetsNamed = () => rest<{ id: string }>(`hd_fleet_accounts?select=id&user_id=eq.${OWNER}&fleet_name=eq.${encodeURIComponent(CUST)}`)
+  const unitsNumbered = (no: string) => rest<{ id: string; fleet_account_id: string | null; manufacturer: string; model: string; year: number | null; serial_number: string | null }>(
+    `hd_units?select=id,fleet_account_id,manufacturer,model,year,serial_number&user_id=eq.${OWNER}&unit_number=eq.${encodeURIComponent(no)}`)
+  const unitFields = { unit_number: UNIT_NO, unit_manufacturer: 'Thermo King', unit_model: 'S-600', unit_year: '2018', unit_serial: SERIAL }
+
+  // 1. A new quote, a new customer, a new unit: both are created, and linked.
+  const r1 = await api('POST', '/api/hd/quotes', quote(unitFields))
+  const q1 = await keep(r1)
+  const fleets1 = await fleetsNamed()
+  const units1 = await unitsNumbered(UNIT_NO)
+  if (!record(F, 'a new quote with a new customer creates that customer in Intel Hub', r1.status === 201 && fleets1.length === 1 && q1.fleet_account_id === fleets1[0]?.id,
+    `-> ${r1.status}, ${fleets1.length} account(s), quote on ${String(q1.fleet_account_id)}`)) return
+  record(F, 'and creates the unit on THAT customer, from what was typed (no "Unknown")',
+    units1.length === 1 && q1.unit_id === units1[0].id && units1[0].fleet_account_id === fleets1[0].id &&
+    units1[0].manufacturer === 'Thermo King' && units1[0].model === 'S-600' && units1[0].year === 2018 && units1[0].serial_number === SERIAL,
+    JSON.stringify(units1[0] ?? null))
+
+  // 2. The same quote saved again: nothing new.
+  const r2 = await api('PUT', `/api/hd/quotes/${String(q1.id)}`, quote({ ...unitFields, fleet_account_id: '', unit_id: '' }))
+  const q2 = (r2.json.quote ?? {}) as Record<string, unknown>
+  const fleets2 = await fleetsNamed(); const units2 = await unitsNumbered(UNIT_NO)
+  record(F, 'saving the same quote again creates no second customer and no second unit',
+    r2.status === 200 && fleets2.length === 1 && units2.length === 1 && q2.unit_id === units1[0].id && q2.fleet_account_id === fleets1[0].id,
+    `-> ${r2.status}, ${fleets2.length} account(s), ${units2.length} unit(s)`)
+
+  // 3. Another quote naming that unit: linked, not created. The unit number alone finds it.
+  const r3 = await api('POST', '/api/hd/quotes', quote({ unit_number: ` ${UNIT_NO.toLowerCase()} `, unit_manufacturer: 'Thermo King', unit_model: 'S-600' }))
+  const q3 = await keep(r3)
+  const units3 = await unitsNumbered(UNIT_NO)
+  record(F, 'a quote naming a unit that already exists links it instead of creating one (number trimmed, any case)',
+    r3.status === 201 && q3.unit_id === units1[0].id && units3.length === 1 && (await fleetsNamed()).length === 1,
+    `unit ${String(q3.unit_id)}, ${units3.length} unit(s)`)
+
+  // 4. A unit number with no manufacturer or model: nothing is created, and it is said.
+  const BARE = `${MARK}-AB-${run}`
+  const r4 = await api('POST', '/api/hd/quotes', quote({ unit_number: BARE, unit_manufacturer: '', unit_model: '' }))
+  const q4 = await keep(r4)
+  const units4 = await unitsNumbered(BARE)
+  record(F, 'a quote with a unit number but no manufacturer or model creates no unit',
+    r4.status === 201 && units4.length === 0 && !q4.unit_id, `${units4.length} unit(s), quote unit ${String(q4.unit_id)}`)
+  record(F, 'and the save says why', /needs a unit number, a manufacturer and a model/.test(String(r4.json.unit_link_notice ?? '')), String(r4.json.unit_link_notice))
+
+  // 5. Re-invoicing: quote -> work order -> invoice, then invoices typed for the same unit
+  //    twice more. Every one lands on the one unit; nothing is created again.
+  const conv = await api('POST', `/api/hd/quotes/${String(q1.id)}/work-order`, { record_verbal_approval: true, note: `${MARK} autoadd` })
+  const woId = String(((conv.json.work_order ?? {}) as Record<string, unknown>).id ?? '')
+  if (woId) created.hdWorkOrders.add(woId)
+  const wo = (await rest<{ unit_id: string | null; fleet_account_id: string | null }>(`hd_work_orders?id=eq.${woId}&select=unit_id,fleet_account_id`))[0]
+  record(F, 'the work order built from it carries the unit and the customer', !!wo && wo.unit_id === units1[0].id && wo.fleet_account_id === fleets1[0].id,
+    `unit ${String(wo?.unit_id)}, fleet ${String(wo?.fleet_account_id)}`)
+  const built = await api('GET', `/api/hd/work-orders/${woId}/convert`)
+  const payload = (built.json.invoice_payload ?? {}) as Record<string, unknown>
+  const invIds: string[] = []
+  for (const body of [payload, { ...payload, work_order_id: null, unit_id: null, fleet_account_id: null }, { ...payload, work_order_id: null, unit_id: null, fleet_account_id: null }]) {
+    const inv = await api('POST', '/api/hd/invoices', body)
+    await adoptSmokeCustomer(inv.json.customer_id)
+    const row = (inv.json.invoice ?? {}) as Record<string, unknown>
+    if (row.id) { created.hdInvoices.add(String(row.id)); invIds.push(String(row.id)) }
+  }
+  const invs = invIds.length ? await rest<{ unit_id: string | null; fleet_account_id: string | null }>(`hd_invoices?id=in.(${invIds.join(',')})&select=unit_id,fleet_account_id`) : []
+  record(F, 're-invoicing three times: every invoice on the one unit and customer, and still ONE unit, ONE customer',
+    invs.length === 3 && invs.every(i => i.unit_id === units1[0].id && i.fleet_account_id === fleets1[0].id) &&
+    (await unitsNumbered(UNIT_NO)).length === 1 && (await fleetsNamed()).length === 1,
+    `${invs.length} invoice(s): ${invs.map(i => i.unit_id === units1[0].id ? 'unit ok' : `unit ${i.unit_id}`).join(', ')}`)
+
+  // 6. A work order typed on the calendar's route for the same customer and unit: linked, not created.
+  const w = await api('POST', '/api/hd/work-orders', { customer_name: CUST, scheduled_date: '2026-12-01', unit_number: UNIT_NO, unit_manufacturer: 'Thermo King', unit_model: 'S-600' })
+  const wId = String(((w.json.work_order ?? {}) as Record<string, unknown>).id ?? '')
+  if (wId) created.hdWorkOrders.add(wId)
+  const w1 = (await rest<{ unit_id: string | null; fleet_account_id: string | null }>(`hd_work_orders?id=eq.${wId}&select=unit_id,fleet_account_id`))[0]
+  record(F, 'a typed work order for the same customer and unit links both, creating neither',
+    w.status === 201 && w1?.unit_id === units1[0].id && w1?.fleet_account_id === fleets1[0].id && (await unitsNumbered(UNIT_NO)).length === 1 && (await fleetsNamed()).length === 1,
+    `-> ${w.status}, unit ${String(w1?.unit_id)}`)
 }
 
 // ── U: both flat fees survive quote -> work order -> invoice, to the cent ───
@@ -6275,6 +6398,7 @@ async function main(): Promise<void> {
     await flowS()
     await flowT()
     await flowUnitSerialModel()
+    await flowIntelAutoAdd()
     await flowU()
     await flowV()
     await flowLaborCards()

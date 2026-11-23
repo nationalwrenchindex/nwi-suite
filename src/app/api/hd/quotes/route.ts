@@ -10,6 +10,7 @@ import { recordTermsSnapshot } from '@/lib/document-terms'
 import { addressFrom } from '@/lib/address'
 
 import { generateQuoteToken } from '@/lib/hd/quote-approval'
+import { linkDocumentFleetAndUnit, type DocumentLinkInput } from '@/lib/hd/document-links'
 
 export const dynamic = 'force-dynamic'
 
@@ -127,7 +128,18 @@ export async function POST(req: NextRequest) {
   const linkedCustomerId =
     (typeof clientCustomerId === 'string' && clientCustomerId) || customer_id || null
 
-  let quoteRow: Record<string, unknown> = { ...quoteBody, user_id: user.id, quote_number, customer_id: linkedCustomerId }
+  // THE CUSTOMER AND THE UNIT INTO INTEL HUB (lib/hd/document-links). A typed customer
+  // becomes this shop's fleet account (found by name first) and a typed unit becomes a
+  // unit on it (found by number or serial first) - so the quote, and the work order and
+  // invoice built from it, land on that unit's history. Never blocks the save.
+  const links = await linkDocumentFleetAndUnit(supabase, user.id, {
+    ...(quoteBody as DocumentLinkInput), company_name: typeof company_name === 'string' ? company_name : null,
+  })
+
+  let quoteRow: Record<string, unknown> = {
+    ...quoteBody, user_id: user.id, quote_number, customer_id: linkedCustomerId,
+    fleet_account_id: links.fleet_account_id, unit_id: links.unit_id,
+  }
 
   let { data, error } = await supabase
     .from('hd_quotes')
@@ -248,5 +260,6 @@ export async function POST(req: NextRequest) {
     await recordTermsSnapshot(supabase, 'hd_quotes', String(quote.id), user.id)
   }
 
-  return NextResponse.json({ quote, customer_id: linkedCustomerId }, { status: 201 })
+  // unit_link_notice: a customer or unit that could not be linked, said to the user.
+  return NextResponse.json({ quote, customer_id: linkedCustomerId, unit_link_notice: links.notices.join(' ') || null }, { status: 201 })
 }

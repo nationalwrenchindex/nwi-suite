@@ -7,6 +7,7 @@ import { EDITABLE_QUOTE_STATUSES, isQuoteEditable, quoteEditUpdate, quoteLockRea
 import { isMissingReadingColumn, readingsFromBody, withoutMissingReadings } from '@/lib/hd/unit-hours'
 import { checkDiscountWrite } from '@/lib/hd/hd-discount'
 import { recordTermsSnapshot } from '@/lib/document-terms'
+import { linkDocumentFleetAndUnit, type DocumentLinkInput } from '@/lib/hd/document-links'
 
 export const dynamic = 'force-dynamic'
 
@@ -64,7 +65,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   // so a customer approving between the read and the write cannot be overwritten.
   const { data: current } = await supabase
     .from('hd_quotes')
-    .select('status')
+    .select('status, fleet_account_id, unit_id, customer_name, customer_phone, customer_email, address_line1, address_line2, city, state, zip, unit_number, unit_manufacturer, unit_model, unit_year, unit_serial')
     .eq('id', id)
     .eq('user_id', user.id)
     .maybeSingle()
@@ -86,6 +87,22 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const readings = readingsFromBody(body)
   if ('error' in readings) return NextResponse.json({ error: readings.error }, { status: 400 })
   Object.assign(update, readings.update)
+
+  // THE CUSTOMER AND THE UNIT INTO INTEL HUB (lib/hd/document-links), on an edit that
+  // touches them. What the edit left out is read off the quote, so a partial edit still
+  // matches - and finds the account and unit the first save made, creating nothing new.
+  let linkNotice: string | null = null
+  const touches = ['customer_name', 'fleet_account_id', 'unit_id', 'unit_number', 'unit_manufacturer', 'unit_model', 'unit_serial', 'unit_year']
+    .some(k => k in body)
+  if (touches) {
+    const doc = { ...(current as Record<string, unknown>), ...update } as DocumentLinkInput
+    const links = await linkDocumentFleetAndUnit(supabase, user.id, {
+      ...doc, company_name: typeof body.company_name === 'string' ? body.company_name : null,
+    })
+    update.fleet_account_id = links.fleet_account_id
+    update.unit_id = links.unit_id
+    linkNotice = links.notices.join(' ') || null
+  }
 
   const write = (row: Record<string, unknown>) => supabase
     .from('hd_quotes')
@@ -134,7 +151,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       console.error('[hd/quotes PUT] could not issue public_token:', err instanceof Error ? err.message : String(err))
     }
   }
-  return NextResponse.json({ quote })
+  return NextResponse.json({ quote, unit_link_notice: linkNotice })
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

@@ -7,6 +7,7 @@ import { workOrderDefaultColumns } from '@/lib/hd/work-order-extras'
 import { isMissingReadingColumn, readingsFromBody, unitIdentityFill, withoutMissingReadings } from '@/lib/hd/unit-hours'
 import { isMissingServiceCallColumn, withoutServiceCall } from '@/lib/hd/hd-extras'
 import { WORK_ORDER_LIST_SELECT, WORK_ORDER_PAGE_SIZE } from './list'
+import { linkDocumentFleetAndUnit, type DocumentLinkInput } from '@/lib/hd/document-links'
 
 export const dynamic = 'force-dynamic'
 
@@ -94,6 +95,18 @@ export async function POST(req: NextRequest) {
     if (!acct) return NextResponse.json({ error: 'That fleet account was not found in your accounts.' }, { status: 400 })
   }
 
+  // THE CUSTOMER AND THE UNIT INTO INTEL HUB (lib/hd/document-links): a typed customer
+  // becomes this shop's fleet account (found by name first), a typed unit becomes a unit
+  // on it (found by number or serial first). A picked unit or account is kept as picked.
+  const links = await linkDocumentFleetAndUnit(supabase, user.id, {
+    fleet_account_id: fleetId, unit_id: unitId, customer_name: customerName,
+    company_name: str(body.company_name), customer_phone: str(body.customer_phone),
+    unit_number: str(body.unit_number), unit_manufacturer: str(body.unit_manufacturer),
+    unit_model: str(body.unit_model), unit_serial: str(body.unit_serial), unit_year: str(body.unit_year),
+    address_line1: str(body.address_line1), address_line2: str(body.address_line2),
+    city: str(body.city), state: str(body.state), zip: str(body.zip),
+  })
+
   // The readings at the time of service (179 hours, 183 odometer), sent by a
   // QuickWrench push. Only the keys sent; an unparseable value is refused.
   const readings = readingsFromBody(body)
@@ -118,8 +131,8 @@ export async function POST(req: NextRequest) {
       status:                   'open',
       scheduled_at,
       // Optional links to existing fleet records (so the list joins show them).
-      unit_id:                  unitId,
-      fleet_account_id:         fleetId,
+      unit_id:                  links.unit_id,
+      fleet_account_id:         links.fleet_account_id,
       customer_name:            customerName,
       customer_phone:           str(body.customer_phone),
       unit_number:              str(body.unit_number),
@@ -165,5 +178,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  return NextResponse.json({ work_order: data }, { status: 201 })
+  // unit_link_notice: a customer or unit that could not be linked, said to the user.
+  return NextResponse.json({ work_order: data, unit_link_notice: links.notices.join(' ') || null }, { status: 201 })
 }

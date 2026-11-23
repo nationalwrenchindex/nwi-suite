@@ -97,6 +97,8 @@ export default function EditWorkOrderForm({ workOrder: wo }: { workOrder: Record
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) { setMessage(String(data.error ?? 'Could not save the work order.')); return }
+      // A customer or unit that could not be linked in Intel Hub (lib/hd/document-links), said.
+      if (data.unit_link_notice) window.alert(String(data.unit_link_notice))
       const notSaved = Array.isArray(data.not_saved) ? data.not_saved as string[] : []
       if (notSaved.length) {
         setMessage(`Saved, except ${notSaved.join(', ')} - those need migration 159 applied first.`)

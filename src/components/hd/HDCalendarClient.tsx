@@ -213,6 +213,8 @@ export default function HDCalendarClient() {
       })
       const data = await res.json()
       if (!res.ok) { setBookingError(data.error ?? 'Could not book the job.'); return }
+      // A customer or unit that could not be linked in Intel Hub (lib/hd/document-links), said.
+      if (data.unit_link_notice) window.alert(String(data.unit_link_notice))
       const woId = (data.work_order as { id?: string } | undefined)?.id
       if (woId && handoffLabor?.lines.length) await addHandoffLabor(woId, handoffLabor)
       setHandoffLabor(null)

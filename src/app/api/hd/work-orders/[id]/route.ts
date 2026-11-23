@@ -29,6 +29,7 @@ import { createClient } from '@/lib/supabase/server'
 import { checkHDAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { isMissingMigration159Column, withoutMigration159Columns } from '@/lib/hd/migration-159'
 import { isMissingReadingColumn, readingsFromBody, unitIdentityFill } from '@/lib/hd/unit-hours'
+import { linkDocumentFleetAndUnit, type DocumentLinkInput } from '@/lib/hd/document-links'
 
 export const dynamic = 'force-dynamic'
 
@@ -121,7 +122,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // indistinguishable from one that does not exist.
   const { data: current } = await supabase
     .from('hd_work_orders')
-    .select('status, unit_id, unit_number, unit_manufacturer, unit_model, unit_serial')
+    .select('status, unit_id, fleet_account_id, customer_name, customer_phone, unit_number, unit_manufacturer, unit_model, unit_serial, address_line1, address_line2, city, state, zip')
     .eq('id', id)
     .eq('user_id', user.id)
     .maybeSingle()
@@ -144,6 +145,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       error: 'This work order has been invoiced, so it is locked. Edit the invoice, or reopen the work order first.',
       reason: 'locked',
     }, { status: 409 })
+  }
+
+  // THE CUSTOMER AND THE UNIT INTO INTEL HUB (lib/hd/document-links) - FILLED, NEVER
+  // MOVED. Only a link the work order does not have yet is set: retyping a name or a
+  // unit never moves a job off the account or unit it is already on (the rule above).
+  // A unit picked in this same edit (unit_id in the body) is the tech's choice and wins.
+  let linkNotice: string | null = null
+  const touchesLinks = ['customer_name', 'unit_number', 'unit_manufacturer', 'unit_model', 'unit_serial', 'unit_year'].some(k => k in body)
+  if (touchesLinks && !('unit_id' in body) && (!current.unit_id || !current.fleet_account_id)) {
+    const links = await linkDocumentFleetAndUnit(supabase, user.id, { ...current, ...update } as DocumentLinkInput)
+    if (!current.fleet_account_id && links.fleet_account_id) update.fleet_account_id = links.fleet_account_id
+    if (!current.unit_id && links.unit_id && (!current.fleet_account_id || links.fleet_account_id === current.fleet_account_id)) update.unit_id = links.unit_id
+    linkNotice = links.notices.join(' ') || null
   }
 
   // '*' back, not a column list: the migration-159 columns may not exist yet.
@@ -177,5 +191,5 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: error?.message ?? 'Work order not found.' }, { status: error ? 500 : 409 })
   }
 
-  return NextResponse.json({ work_order: data, not_saved: notSaved })
+  return NextResponse.json({ work_order: data, not_saved: notSaved, unit_link_notice: linkNotice })
 }

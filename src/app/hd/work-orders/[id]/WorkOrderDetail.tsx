@@ -17,6 +17,7 @@ import { newLaborLineRate } from '@/lib/hd/labor-rate'
 import WorkOrderDiscount from '@/components/hd/WorkOrderDiscount'
 import WorkOrderExtras from '@/components/hd/WorkOrderExtras'
 import WorkOrderUnitHours from '@/components/hd/WorkOrderUnitHours'
+import { documentUnitView, unitLabelOf } from '@/lib/hd/document-unit'
 import { lastKnownHours } from '@/lib/hd/unit-hours'
 import { flushPending } from '@/lib/hd/wo-pending'
 import type { Branding } from '@/lib/branding'
@@ -100,13 +101,6 @@ const CATEGORIES = [
   { id: 'after',   label: 'After Service' },
 ]
 
-/** The document's value when it has one, the linked record's when it does not. */
-function docFirst(doc: string | number | null | undefined, record: string | number | null | undefined): string | null {
-  const d = doc == null ? '' : String(doc).trim()
-  if (d) return d
-  const r = record == null ? '' : String(record).trim()
-  return r || null
-}
 
 /** Status TEXT colour - AA theme tokens, so it reads on light and dark. */
 /** The invoice this work order is already billed as (the convert route's 409). */
@@ -401,18 +395,10 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
   // row whenever one was linked, so the work order printed the unit RECORD's year
   // rather than what the quote said - the same "recorded beats current" rule the
   // rates, the tax and the terms already follow.
-  const unitView = {
-    number:       docFirst(wo.unit_number,       wo.unit?.unit_number),
-    manufacturer: docFirst(wo.unit_manufacturer, wo.unit?.manufacturer),
-    model:        docFirst(wo.unit_model,        wo.unit?.model),
-    year:         docFirst(wo.unit_year,         wo.unit?.year),
-    serial:       docFirst(wo.unit_serial,       wo.unit?.serial_number),
-    vin:          docFirst(wo.vin,               null),
-  }
-  const unitLabel = [
-    unitView.number,
-    [unitView.manufacturer, unitView.model].filter(Boolean).join(' ') + (unitView.year ? ` (${unitView.year})` : '') || null,
-  ].filter(s => s && s.trim()).join(' — ') || '—'
+  // One definition (lib/hd/document-unit), shared with the save path that links or creates
+  // the unit, so "is not linked to a fleet unit record" means the same thing in both.
+  const unitView = documentUnitView(wo, wo.unit)
+  const unitLabel = unitLabelOf(unitView)
 
   // Hours and rate are two facts, and the row used to print "—" unless BOTH were
   // there. A job billing $135/hr with the hours still on the lines should say so.

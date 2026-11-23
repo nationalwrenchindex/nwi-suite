@@ -14,6 +14,7 @@ import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import { HD_INVOICE_LIST_SELECT, HD_INVOICE_DEFAULT_LIMIT, applyHDInvoiceListFilter } from './list'
 
 import { deductForInvoice, releaseAllocations } from '@/lib/inventory/ledger'
+import { linkDocumentFleetAndUnit, type DocumentLinkInput } from '@/lib/hd/document-links'
 
 export const dynamic = 'force-dynamic'
 
@@ -165,7 +166,17 @@ export async function POST(req: NextRequest) {
   // service call fee drops the empty keys and saves; one WITH a fee is refused below
   // rather than billed without a charge its total includes.
   const serviceCallFeeSent = Number((invoiceBody as Record<string, unknown>).service_call_fee ?? 0) > 0
-  const baseRow   = { ...invoiceBody, user_id: user.id, invoice_number, unit_id: fleetLinks.unit_id, fleet_account_id: fleetLinks.fleet_account_id }
+  // THE CUSTOMER AND THE UNIT INTO INTEL HUB (lib/hd/document-links), after the links the
+  // invoice already has: a typed customer becomes this shop's fleet account (found by name
+  // first) and a typed unit becomes a unit on it (found by number or serial first). A unit
+  // the serial + model check refused is not linked or created here either. A second
+  // invoice from the same work order finds what the first made, and creates nothing.
+  const docLinks = await linkDocumentFleetAndUnit(supabase, user.id, {
+    ...(invoiceBody as DocumentLinkInput), company_name: typeof company_name === 'string' ? company_name : null,
+    fleet_account_id: fleetLinks.fleet_account_id, unit_id: fleetLinks.unit_id,
+  }, { skipUnit: !!fleetLinks.notice })
+  const unitLinkNotice = [fleetLinks.notice, ...docLinks.notices].filter(Boolean).join(' ') || null
+  const baseRow   = { ...invoiceBody, user_id: user.id, invoice_number, unit_id: docLinks.unit_id, fleet_account_id: docLinks.fleet_account_id }
   const insertRow = { ...baseRow, parts_cost: costing.parts_cost, parts_sell: costing.parts_sell }
 
   let { data, error } = await supabase
@@ -394,5 +405,5 @@ export async function POST(req: NextRequest) {
 
   // unit_link_notice: the serial found a unit but its model disagrees (or several pass), so
   // the invoice was saved with NO unit - the form tells the user instead of staying silent.
-  return NextResponse.json({ invoice: { ...data, customer_id }, customer_id, stock, unit_link_notice: fleetLinks.notice ?? null }, { status: 201 })
+  return NextResponse.json({ invoice: { ...data, customer_id }, customer_id, stock, unit_link_notice: unitLinkNotice }, { status: 201 })
 }

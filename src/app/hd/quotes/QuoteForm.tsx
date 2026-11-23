@@ -1198,6 +1198,8 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
         })
         const data = await res.json()
         if (!res.ok || !data.quote?.id) { setToast(data.error ?? 'Save failed'); return }
+        // A customer or unit that could not be linked in Intel Hub (lib/hd/document-links), said.
+        if (data.unit_link_notice) window.alert(String(data.unit_link_notice))
         if (sendAfterSave) {
           if (await deliverOrExplain(String(quoteId), (data.quote.quote_number as string | null) ?? null)) {
             router.push(`/hd/quotes/${quoteId}`)
@@ -1213,6 +1215,8 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
       }
       const res  = await fetch('/api/hd/quotes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       const data = await res.json()
+      // A customer or unit that could not be linked in Intel Hub (lib/hd/document-links), said.
+      if (data.quote?.id && data.unit_link_notice) window.alert(String(data.unit_link_notice))
       if (data.quote?.id && sendAfterSave) {
         if (await deliverOrExplain(String(data.quote.id), (data.quote.quote_number as string | null) ?? null)) {
           router.push(`/hd/quotes/${data.quote.id}`)
@@ -1455,6 +1459,14 @@ export default function QuoteForm({ initial = null }: { initial?: Record<string,
               <ReadingBox value={form.unit_hours} onChange={v => setField('unit_hours', v)} saved={savedUnitHours}
                 lastKnown={unitLastHours} testId="quote-unit-hours" document="quote" />
             </Field>
+            {/* A typed unit is saved to this customer's units in Intel Hub when the quote
+                saves (lib/hd/document-links) - found first by number or serial, created only
+                with a unit number, manufacturer and model. Said here so the tech knows. */}
+            {!form.unit_id && !!form.unit_number.trim() && (
+              <p className="col-span-2 sm:col-span-4 text-xs" data-testid="quote-unit-saved-note" style={{ color: MUTED }}>
+                Saved to this customer&apos;s units when you save.
+              </p>
+            )}
             {/* Said at the point of entry, not only after conversion. The work order
                 carries the same flag, so this is a heads-up rather than the record. */}
             {!isTruckUnit && !form.unit_serial.trim() && (

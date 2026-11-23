@@ -64,6 +64,8 @@ export async function resolveInvoiceFleetLinks(
     const workOrderId = str(input.work_order_id)
     const unitId      = str(input.unit_id)
     const serial      = str(input.unit_serial)
+    // The work order's account, kept when the work order names no unit (see step 1).
+    let woFleetOnly: string | null = null
 
     // 1. Work order — authoritative. Scoped to the caller's own rows so a forged id
     //    from the request body cannot pull another mechanic's fleet through.
@@ -79,9 +81,11 @@ export async function resolveInvoiceFleetLinks(
 
       const woUnit  = (data?.unit_id          as string | null) ?? null
       const woFleet = (data?.fleet_account_id as string | null) ?? null
-      // Only a hit if the work order actually carries a link. An unlinked work order
-      // tells us nothing, so fall through rather than discarding a usable serial.
-      if (woUnit || woFleet) return { unit_id: woUnit, fleet_account_id: woFleet }
+      // A work order ON A UNIT is authoritative. One with only an account (now the usual
+      // case: a typed customer becomes a fleet account) keeps that account and falls
+      // through, so the unit is still looked for - it used to stop here with no unit.
+      if (woUnit) return { unit_id: woUnit, fleet_account_id: woFleet }
+      woFleetOnly = woFleet
     }
 
     // 2. Explicit unit_id — trusted only after an ownership check. An id we cannot
@@ -112,14 +116,16 @@ export async function resolveInvoiceFleetLinks(
       if (found.unit) {
         return {
           unit_id:          found.unit.id,
-          fleet_account_id: found.unit.fleet_account_id ?? null,
+          fleet_account_id: found.unit.fleet_account_id ?? woFleetOnly,
         }
       }
       if (found.notice) {
         console.warn(`[fleet-pro invoice-link] serial "${serial}" found a unit but the link was refused (${found.reason}) — leaving invoice unlinked`)
-        return { ...NO_LINKS, notice: found.notice }
+        return { ...NO_LINKS, fleet_account_id: woFleetOnly, notice: found.notice }
       }
     }
+
+    if (woFleetOnly) return { unit_id: null, fleet_account_id: woFleetOnly }
 
     return NO_LINKS
   } catch (err) {

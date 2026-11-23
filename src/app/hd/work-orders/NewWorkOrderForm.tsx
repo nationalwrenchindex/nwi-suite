@@ -106,6 +106,8 @@ export default function NewWorkOrderForm({ units, fleetAccounts, presetAccountId
       })
       const data = await res.json()
       if (!res.ok) { setError(data.error ?? 'Could not create work order.'); return }
+      // A customer or unit that could not be linked in Intel Hub (lib/hd/document-links), said.
+      if (data.unit_link_notice) window.alert(String(data.unit_link_notice))
       // Show in the list.
       router.push('/hd/work-orders')
       router.refresh()

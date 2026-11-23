@@ -14,6 +14,7 @@ import { serverPricedUpdate } from '@/lib/hd/invoice-edit-server'
 import { loadHdShopExtras } from '@/lib/hd/hd-extras-load'
 import { hdLaborRateFrom } from '@/lib/hd/labor-rate'
 import { HD_INVOICE_STATUSES } from '../list'
+import { linkDocumentFleetAndUnit, type DocumentLinkInput } from '@/lib/hd/document-links'
 
 export const dynamic = 'force-dynamic'
 
@@ -150,10 +151,12 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   // throw away a link that came from a work order or a hand-set unit_id.
   // Set when the serial found a unit but its model disagrees: the invoice keeps NO unit.
   let unitLinkNotice: string | null = null
-  if ('work_order_id' in body || 'unit_id' in body || 'unit_serial' in body) {
+  // A customer or unit retyped on the invoice also re-resolves them (lib/hd/document-links).
+  const LINK_FIELDS = ['work_order_id', 'unit_id', 'unit_serial', 'unit_model', 'unit_number', 'unit_manufacturer', 'unit_year', 'customer_name']
+  if (LINK_FIELDS.some(k => k in body)) {
     const { data: current } = await supabase
       .from('hd_invoices')
-      .select('work_order_id, unit_id, unit_serial, unit_model')
+      .select('work_order_id, unit_id, fleet_account_id, unit_serial, unit_model, unit_number, unit_manufacturer, unit_year, customer_name, customer_phone, customer_email, address_line1, address_line2, city, state, zip')
       .eq('id', id)
       .eq('user_id', user.id)
       .maybeSingle()
@@ -169,9 +172,18 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
       unit_serial:   pick('unit_serial'),
       unit_model:    pick('unit_model'),
     })
-    update.unit_id          = fleetLinks.unit_id
-    update.fleet_account_id = fleetLinks.fleet_account_id
-    unitLinkNotice          = fleetLinks.notice ?? null
+    // Then the customer and the unit into Intel Hub, from the invoice as it will read
+    // after this edit. A re-save finds what an earlier save made and creates nothing.
+    const doc = { ...(current as Record<string, unknown> | null ?? {}), ...body } as DocumentLinkInput
+    const docLinks = await linkDocumentFleetAndUnit(supabase, user.id, {
+      ...doc,
+      // The account the invoice is already on stays, unless a work order or unit says otherwise.
+      fleet_account_id: fleetLinks.fleet_account_id ?? ((current as Record<string, unknown> | null)?.fleet_account_id as string | null ?? null),
+      unit_id: fleetLinks.unit_id,
+    }, { skipUnit: !!fleetLinks.notice })
+    update.unit_id          = docLinks.unit_id
+    update.fleet_account_id = docLinks.fleet_account_id
+    unitLinkNotice          = [fleetLinks.notice, ...docLinks.notices].filter(Boolean).join(' ') || null
   }
 
   let { data, error } = await supabase
