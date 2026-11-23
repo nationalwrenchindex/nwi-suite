@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { fetchAllRows } from '@/lib/supabase/fetch-all'
 import { checkHDStarterAccess, reeferStandaloneCan } from '@/lib/hd-access'
 import { textTone, tint } from '@/lib/hd/text-tone'
+import FleetManagerAccess from './FleetManagerAccess'
 
 export const metadata = { title: 'Fleet Account — NWI HD Suite' }
 
@@ -266,6 +267,8 @@ export default async function FleetAccountDetailPage({
               <p className="text-sm leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.7)' }}>{account.notes}</p>
             </div>
           )}
+          {/* The fleet's own login: units, PM due, repair history, sheets - never money. */}
+          <FleetManagerAccess fleetAccountId={account.id} />
         </div>
 
         {/* Units + work orders */}

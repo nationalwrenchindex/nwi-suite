@@ -23,6 +23,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { getFleetProMembership } from '@/lib/fleet-pro/access'
 import { getPartner, partnerOwnsAccount } from '@/lib/fleet-pro/partner-access'
+import { fleetManagerMaySee } from '@/lib/fleet-view/access'
 import { renderPMReportDocumentForChecklists } from '@/lib/hd/pm-report-attachment'
 
 export const dynamic = 'force-dynamic'
@@ -71,6 +72,9 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       }
     }
   }
+
+  // The fleet manager of the unit's fleet (lib/fleet-view/access).
+  if (!allowed) allowed = await fleetManagerMaySee(user, { shopUserId: str(pm.user_id), unitId: str(pm.unit_id) })
 
   if (!allowed) return new NextResponse('Forbidden', { status: 403 })
 

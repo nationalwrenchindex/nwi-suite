@@ -15,6 +15,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { getFleetProMembership } from '@/lib/fleet-pro/access'
 import { getPartner, partnerOwnsAccount } from '@/lib/fleet-pro/partner-access'
+import { fleetManagerMaySee } from '@/lib/fleet-view/access'
 import {
   INSPECTION_CATEGORIES,
   CATEGORY_ITEMS,
@@ -115,6 +116,10 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     const partner = await getPartner(user.id)
     if (partner && await partnerOwnsAccount(partner.id, fleetId)) allowed = true
   }
+
+  // The fleet manager of this fleet (lib/fleet-view/access): the shop's record, on his
+  // fleet - by the inspection's own fleet, or its unit's when it carries none.
+  if (!allowed) allowed = await fleetManagerMaySee(user, { shopUserId: str(insp.user_id), fleetAccountId: fleetId, unitId: str(insp.unit_id) })
 
   if (!allowed) return new NextResponse('Forbidden', { status: 403 })
 

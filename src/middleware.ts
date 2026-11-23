@@ -157,12 +157,19 @@ export async function middleware(request: NextRequest) {
     effectivePath.startsWith('/fleet-pro') &&
     !effectivePath.startsWith('/fleet-pro/accept-invite')
 
-  const isProtected = isHDProtected || isLegacyProtected || isFleetProProtected || isReeferProtected
+  // The fleet manager dashboard (lib/fleet-view). Its login and the invitation landing
+  // page are reached without a session. Not an isAuthRoute: a signed-in visitor on its
+  // login page is sent on by the page itself, to the dashboard rather than /dashboard.
+  const isFleetManagerSurface = !isHD && (path === '/fleet-manager' || path.startsWith('/fleet-manager/'))
+  const isFleetManagerProtected = isFleetManagerSurface &&
+    !path.startsWith('/fleet-manager/login') && !path.startsWith('/fleet-manager/accept')
+
+  const isProtected = isHDProtected || isLegacyProtected || isFleetProProtected || isReeferProtected || isFleetManagerProtected
   const isAuthRoute  = isHDAuthRoute || isLegacyAuthRoute || isReeferAuthRoute
 
   if (!user && isProtected) {
     const loginUrl = request.nextUrl.clone()
-    loginUrl.pathname = isHD ? '/hd/login' : isReeferSurface ? '/reefer/login' : '/login'
+    loginUrl.pathname = isHD ? '/hd/login' : isReeferSurface ? '/reefer/login' : isFleetManagerSurface ? '/fleet-manager/login' : '/login'
     loginUrl.searchParams.set('redirect', effectivePath)
     return NextResponse.redirect(loginUrl)
   }

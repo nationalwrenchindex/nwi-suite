@@ -3,24 +3,13 @@ import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { money } from '@/lib/format'
 import { tint } from '@/lib/hd/text-tone'
+// The PM rule lives in lib/hd/pm-due so the fleet manager dashboard reads the same one.
+import { getPMDateStatus, isPmAlert } from '@/lib/hd/pm-due'
 
 export const metadata = { title: 'Intel Hub — NWI HD Suite' }
 
 const HD_ORANGE = '#E85D24'
 const HD_BLUE   = '#1A6BAF'
-
-// Approximate TK/Carrier PM interval: 180 days
-const PM_INTERVAL_DAYS = 180
-
-function getPMDateStatus(lastPmDate: string | null): 'overdue' | 'due_soon' | null {
-  if (!lastPmDate) return null
-  const last     = new Date(lastPmDate)
-  const nextDue  = new Date(last.getTime() + PM_INTERVAL_DAYS * 24 * 60 * 60 * 1000)
-  const daysLeft = Math.floor((nextDue.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
-  if (daysLeft < 0) return 'overdue'
-  if (daysLeft <= 30) return 'due_soon'
-  return null
-}
 
 export default async function IntelHubPage({
   searchParams,
@@ -89,14 +78,7 @@ export default async function IntelHubPage({
   }
 
   // PM alert count across all units
-  const pmAlertCount = (units ?? []).filter(u => {
-    const hoursUntil = u.next_pm_due_hours !== null && u.total_hours !== null
-      ? Number(u.next_pm_due_hours) - Number(u.total_hours)
-      : null
-    const hoursAlert = hoursUntil !== null && hoursUntil <= 200
-    const dateStatus = getPMDateStatus(u.last_pm_date as string | null)
-    return hoursAlert || dateStatus !== null
-  }).length
+  const pmAlertCount = (units ?? []).filter(u => isPmAlert(u)).length
 
   return (
     <main className="flex-1 p-4 sm:p-6">

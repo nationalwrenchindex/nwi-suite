@@ -149,6 +149,11 @@ const created = {
   // Flow Rf's throwaway Reefer Standalone accounts (auth user + everything it made).
   // Removed LAST, after every document above, so no foreign key still points at them.
   reeferUsers: new Set<string>(),
+  // Flow Fm: the throwaway fleet manager logins (auth users with a fleet_manager grant,
+  // no rows of their own), and the PM / DOT sheets it attaches to its jobs. Sheets go
+  // BEFORE the work orders and units they point at.
+  fleetManagerUsers: new Set<string>(),
+  inspections: [] as Array<[string, string]>,
 }
 
 async function del(table: string, id: string): Promise<void> {
@@ -216,6 +221,14 @@ async function cleanup(): Promise<void> {
     const strayInvoices = await rest<{ id: string }>(`hd_invoices?select=id&customer_name=like.${MARK}*`)
     for (const i of strayInvoices) created.hdInvoices.add(i.id)
   } catch { /* a failed sweep must not mask the real result */ }
+
+  // Flow Fm's PM and DOT sheets, and any a crashed run left (by its SMOKE customer name).
+  try {
+    for (const t of ['hd_pm_checklists', 'hd_dot_inspections']) {
+      for (const r of await rest<{ id: string }>(`${t}?select=id&user_id=eq.${OWNER}&customer_name=like.${MARK}*`)) created.inspections.push([t, r.id])
+    }
+  } catch { /* a failed sweep must not mask the real result */ }
+  for (const [t, id] of created.inspections) await del(t, id)
 
   // ORDER MATTERS. Line items reference the work order; the work order references the
   // quote. Deleting the quote first would hit the foreign key - or, worse, succeed via
@@ -293,6 +306,23 @@ async function cleanup(): Promise<void> {
     }
     record('Rf reefer standalone', 'cleanup: the throwaway account and every row it made are gone',
       gone.ok && left.length === 0, gone.ok ? left.join(', ') : `auth delete -> ${gone.status}`)
+  }
+
+  // Flow Fm: the fleet manager logins, and any a crashed run left (by the smoke-fleetmgr-
+  // email the flow gives them - nothing else uses it). They own no rows; the auth delete
+  // takes the signup trigger's profile with it, and that is checked.
+  try {
+    for (let pg = 1; pg < 20; pg++) {
+      const usersJson = await (await fetch(`${SUPA}/auth/v1/admin/users?per_page=1000&page=${pg}`, { headers: SVC_H })).json()
+      const users = (Array.isArray(usersJson) ? usersJson : usersJson.users ?? []) as Array<{ id: string; email?: string }>
+      for (const u of users) if (/^smoke-fleetmgr-[a-z0-9]+-[ab]@example\.com$/.test(u.email ?? '')) created.fleetManagerUsers.add(u.id)
+      if (users.length < 1000) break
+    }
+  } catch { /* a failed sweep must not mask the real result */ }
+  for (const uid of created.fleetManagerUsers) {
+    const gone = await fetch(`${SUPA}/auth/v1/admin/users/${uid}`, { method: 'DELETE', headers: SVC_H })
+    const prof = await rest<{ id: string }>(`profiles?select=id&id=eq.${uid}`).catch(() => [{ id: '?' }])
+    record('Fm fleet manager', 'cleanup: the fleet manager login and its profile are gone', gone.ok && prof.length === 0, gone.ok ? `${prof.length} profile(s) left` : `auth delete -> ${gone.status}`)
   }
 
   console.log(`  removed ${created.invoices.size} invoice(s), ${created.workOrders.size} work order(s), ${created.quotes.size} quote(s)`)
@@ -3342,6 +3372,270 @@ async function flowUnitSerialModel(): Promise<void> {
 // Q-2026-0276 -> WO-2026-1584 -> INV-2026-0183 ("test xyz", unit "test 002") created
 // neither a fleet account nor a unit. Now saving the document does (lib/hd/document-links):
 // found first, created only when nothing matches, never twice.
+// ── Fm: the fleet manager dashboard - his own login, his own fleet, never money ──
+//
+// Two SMOKE fleets on the owner (A and B), each with units, finished jobs carrying
+// recognisable money (labor rate 731.47, total 4321.09, tax 88.13, part cost 61.37,
+// sell 79.78, fee 41.09), contact details, an open job, and PM / DOT sheets copied
+// from the shape of a real sheet. A manager is invited onto each through the deployed
+// invite route, then the flow reads as each of them:
+//   * he sees his own fleet's units, latest reading and PM due - and not the other's
+//   * the history is newest first with the hours AT each visit, parts with quantity
+//     only, comments, work done and the attached sheets; the open job is not in it
+//   * every forbidden field, BY NAME, is absent from every response, and none of the
+//     money values appear in any response or rendered page
+//   * his OWN session token reads nothing from hd_* through PostgREST (no back door)
+//   * the other fleet's unit and sheet answer 404 / 403
+//   * removing the grant ends access on the next request
+// Every row, both logins and their profiles are deleted in cleanup().
+async function flowFleetManager(): Promise<void> {
+  const F = 'Fm fleet manager'
+  const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  const run = Date.now().toString(36)
+  const MONEY = { rate: 731.47, total: 4321.09, tax: 88.13, cost: 61.37, sell: 79.78, fee: 41.09 }
+  const MONEY_RE = /731\.47|4,?321\.09|88\.13|61\.37|79\.78|41\.09/
+  const CONTACT = { phone: '+15555550142', email: `smoke-contact-${run}@example.com`, addr: `${MARK} 1 Contact Way` }
+  const CONTACT_RE = new RegExp(`5555550142|smoke-contact-${run}|1 Contact Way`)
+  const ins = async (t: string, row: Record<string, unknown>): Promise<Record<string, unknown> | null> => {
+    const res = await fetch(`${SUPA}/rest/v1/${t}`, { method: 'POST', headers: { ...SVC_H, Prefer: 'return=representation' }, body: JSON.stringify(row) })
+    const j = await res.json().catch(() => null)
+    if (!res.ok || !Array.isArray(j)) { console.log(`    insert ${t} -> ${res.status} ${JSON.stringify(j).slice(0, 200)}`); return null }
+    return j[0] as Record<string, unknown>
+  }
+
+  // ── the two fleets ──
+  const fleetA = await ins('hd_fleet_accounts', { user_id: OWNER, fleet_name: `${MARK} fm A ${run}`, contact_name: `${MARK} Contact A`, contact_phone: CONTACT.phone, contact_email: CONTACT.email, address: CONTACT.addr })
+  const fleetB = await ins('hd_fleet_accounts', { user_id: OWNER, fleet_name: `${MARK} fm B ${run}`, contact_name: `${MARK} Contact B`, contact_phone: CONTACT.phone, contact_email: CONTACT.email, address: CONTACT.addr })
+  for (const f of [fleetA, fleetB]) if (f) created.fleetAccounts.add(String(f.id))
+  const A = String(fleetA?.id ?? ''), B = String(fleetB?.id ?? '')
+  const tenDaysAgo = new Date(Date.now() - 10 * 86400000).toISOString().slice(0, 10)
+  const unit = async (fleet: string, no: string, extra: Record<string, unknown>) => {
+    const u = await ins('hd_units', { user_id: OWNER, fleet_account_id: fleet, unit_number: no, manufacturer: 'Thermo King', model: 'S-600',
+      serial_number: `ZZSERIALFM${run}${no.slice(-2)}`.toUpperCase(), year: 2019, status: 'active', estimated_value: MONEY.total, ...extra })
+    if (u) created.fleetUnits.add(String(u.id))
+    return u
+  }
+  const a1 = A ? await unit(A, `ZZ-FM-${run}-A1`, { total_hours: 9800, next_pm_due_hours: 9850, last_pm_date: '2025-06-01', last_pm_type: 'a_service' }) : null
+  const a2 = A ? await unit(A, `ZZ-FM-${run}-A2`, { total_hours: 9000, next_pm_due_hours: 20000, last_pm_date: tenDaysAgo }) : null
+  const b1 = B ? await unit(B, `ZZ-FM-${run}-B1`, { total_hours: 5000 }) : null
+  if (!record(F, 'two SMOKE fleets with units are set up', !!(a1 && a2 && b1))) return
+  const A1 = String(a1!.id), A2 = String(a2!.id), B1 = String(b1!.id)
+
+  // ── finished jobs carrying money, an open job, sheets ──
+  const wo = async (fleet: string, u: string, n: string, extra: Record<string, unknown>) => {
+    const w = await ins('hd_work_orders', { user_id: OWNER, fleet_account_id: fleet, unit_id: u, work_order_number: `${MARK}-FM-${run}-${n}`, customer_name: `${MARK} fm customer`,
+      customer_phone: CONTACT.phone, address_line1: CONTACT.addr, labor_rate: MONEY.rate, total_amount: MONEY.total, tax_amount: MONEY.tax, diagnostic_fee: MONEY.fee,
+      parts_markup_percent: 30, internal_notes: `${MARK} internal note`, ...extra })
+    if (w) created.hdWorkOrders.add(String(w.id))
+    return w
+  }
+  const woOld = await wo(A, A1, 'OLD', { status: 'completed', completed_at: '2025-06-01T15:00:00Z', unit_hours: 7000, service_requests: `${MARK} A-service PM`, comments: `${MARK} did the PM` })
+  const woNew = await wo(A, A1, 'NEW', { status: 'invoiced', completed_at: '2026-10-02T15:00:00Z', unit_hours: 9800, vehicle_odometer: 123000, service_requests: `${MARK} not cooling`, comments: `${MARK} belt glazed` })
+  const woOpen = await wo(A, A1, 'OPEN', { status: 'open', service_requests: `${MARK} OPEN JOB not history`, unit_hours: 9811 })
+  const woB = await wo(B, B1, 'B', { status: 'completed', completed_at: '2026-09-01T15:00:00Z', unit_hours: 5000, service_requests: `${MARK} FLEET B JOB`, comments: `${MARK} fleet B comments` })
+  const line = await ins('hd_work_order_line_items', { work_order_id: woOld?.id, type: 'part', part_number: '11-9959', description: `${MARK} oil filter`, quantity: 3,
+    unit_cost: MONEY.cost, unit_price: MONEY.sell, markup_percent: 30, total: MONEY.sell, sort_order: 1 })
+  await ins('hd_work_order_line_items', { work_order_id: woOld?.id, type: 'labor', description: `${MARK} PM labor`, quantity: 2, unit_cost: MONEY.rate, unit_price: MONEY.rate, total: MONEY.total, sort_order: 0 })
+  const inv = woNew ? await ins('hd_invoices', { user_id: OWNER, fleet_account_id: A, unit_id: A1, work_order_id: woNew.id, invoice_number: `${MARK}-FM-${run}`, status: 'sent',
+    customer_name: `${MARK} fm customer`, customer_email: CONTACT.email, customer_phone: CONTACT.phone, address_line1: CONTACT.addr,
+    labor_rate: MONEY.rate, subtotal_labor: MONEY.rate, subtotal_parts: MONEY.sell, tax_amount: MONEY.tax, total: MONEY.total, parts_cost: MONEY.cost, parts_sell: MONEY.sell,
+    diagnostic_fee: MONEY.fee, internal_notes: `${MARK} internal note`, unit_hours: 9800, vehicle_odometer: 123000, complaint: `${MARK} not cooling`, diagnosis: `${MARK} replaced the belt`,
+    line_items: [
+      { id: 'zz-fm-1', type: 'parts', part_number: '78-1968', description: `${MARK} belt`, quantity: 2, unit_cost: MONEY.sell, unit_cost_base: MONEY.cost, markup_percent: 30, amount: MONEY.sell, amount_max: MONEY.sell },
+      { id: 'zz-fm-2', type: 'labor', description: `${MARK} belt labor`, mobile_hours: 1, amount: MONEY.rate, amount_max: MONEY.rate },
+    ] }) : null
+  if (inv) created.hdInvoices.add(String(inv.id))
+  // The sheets: the shape of a real one (CLAUDE.md, fixtures from a real row), re-pointed.
+  const realPm = (await rest<Record<string, unknown>>(`hd_pm_checklists?select=*&completed_at=not.is.null&customer_name=not.like.${MARK}*&order=created_at.desc&limit=1`))[0]
+  const realDot = (await rest<Record<string, unknown>>(`hd_dot_inspections?select=*&customer_name=not.like.${MARK}*&order=created_at.desc&limit=1`))[0]
+  const sheet = async (t: string, real: Record<string, unknown> | undefined, over: Record<string, unknown>) => {
+    if (!real) return null
+    const { id: _i, created_at: _c, locked_at: _l, inspection_id: _x, ...shape } = real
+    void _i; void _c; void _l; void _x
+    const r = await ins(t, { ...shape, user_id: OWNER, customer_name: `${MARK} fm sheet`, work_order_id: null, invoice_id: null, locked: false, signature_base64: undefined, ...over })
+    if (r) created.inspections.push([t, String(r.id)])
+    return r
+  }
+  const pmA = await sheet('hd_pm_checklists', realPm, { unit_id: A1, work_order_id: woOld?.id, completed_at: '2025-06-01T16:00:00Z', unit_number: a1!.unit_number })
+  const dotA = await sheet('hd_dot_inspections', realDot, { unit_id: A1, fleet_account_id: A, invoice_id: inv?.id, inspection_date: '2026-10-02', overall_result: 'pass', unit_number: a1!.unit_number })
+  const dotB = await sheet('hd_dot_inspections', realDot, { unit_id: B1, fleet_account_id: B, inspection_date: '2026-09-01', overall_result: 'pass', unit_number: b1!.unit_number })
+  if (!record(F, 'finished jobs with money, an open job, a fleet B job, and PM + DOT sheets copied from real sheets are stored',
+    !!(woOld && woNew && woOpen && woB && line && inv && pmA && dotA && dotB),
+    `${realPm ? '' : 'no real PM sheet to copy; '}${realDot ? '' : 'no real DOT sheet to copy'}`)) return
+
+  // ── the owner invites a manager onto each fleet ──
+  const invite = async (fleet: string, who: 'a' | 'b') => {
+    const email = `smoke-fleetmgr-${run}-${who}@example.com`
+    const r = await api('POST', `/api/hd/fleet-accounts/${fleet}/managers`, { email })
+    const m = (r.json.manager ?? {}) as Record<string, unknown>
+    if (m.user_id) created.fleetManagerUsers.add(String(m.user_id))
+    return { r, email, uid: String(m.user_id ?? '') }
+  }
+  const mA = await invite(A, 'a'), mB = await invite(B, 'b')
+  if (!record(F, 'the shop invites a fleet manager onto a fleet account (deployed route)', mA.r.status === 201 && !!mA.uid && mB.r.status === 201 && !!mB.uid,
+    `-> ${mA.r.status}/${mB.r.status} ${String(mA.r.json.error ?? mB.r.json.error ?? '')}`)) return
+  record(F, 'and no email is sent to a reserved test address', mA.r.json.email_sent === false, `email_sent ${String(mA.r.json.email_sent)}`)
+  const authA = await (await fetch(`${SUPA}/auth/v1/admin/users/${mA.uid}`, { headers: SVC_H })).json() as { app_metadata?: Record<string, unknown>; user_metadata?: Record<string, unknown> }
+  const grant = authA.app_metadata?.fleet_manager as Record<string, unknown> | undefined
+  record(F, 'the grant is on his login in app_metadata (not user-editable), for that fleet and this shop',
+    grant?.fleet_account_id === A && grant?.shop_user_id === OWNER && !(authA.user_metadata ?? {}).fleet_manager, JSON.stringify(grant ?? null))
+  const list = await api('GET', `/api/hd/fleet-accounts/${A}/managers`)
+  record(F, "the fleet account lists its manager, and only its own", ((list.json.managers ?? []) as Array<Record<string, unknown>>).map(m => m.email).join() === mA.email,
+    JSON.stringify(list.json.managers ?? list.json.error))
+  const ownerPage = await page(`/hd/fleet-accounts/${A}`)
+  record(F, 'the fleet account page shows the Fleet Manager Access panel', !!ownerPage && ownerPage.html.includes('data-testid="fleet-manager-access"'), ownerPage ? '' : 'did not load')
+  const again = await invite(A, 'a')
+  record(F, 'inviting him again changes nothing (one login, one grant)', again.r.status === 201 && again.uid === mA.uid, `-> ${again.r.status}`)
+  const cross = await api('POST', `/api/hd/fleet-accounts/${B}/managers`, { email: mA.email })
+  record(F, "a manager of fleet A cannot be re-pointed at fleet B by an invite", cross.status === 409, `-> ${cross.status} ${String(cross.json.error ?? '')}`)
+
+  // ── as fleet manager A ──
+  const PASSWORD = `Fm-${run}-Yard9!`
+  const ownerCookie = cookie
+  try {
+    const sA = await openSession(mA.uid)
+    // He sets his own password, then signs in with his email and that password.
+    const setPw = await fetch(`${SUPA}/auth/v1/user`, { method: 'PUT', headers: { apikey: ANON, Authorization: `Bearer ${sA.accessToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ password: PASSWORD }) })
+    const login = await fetch(`${SUPA}/auth/v1/token?grant_type=password`, { method: 'POST', headers: { apikey: ANON, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: mA.email, password: PASSWORD }) })
+    const lj = await login.json().catch(() => ({})) as { access_token?: string; user?: { id?: string }; msg?: string; error_description?: string }
+    record(F, 'he sets his own password and signs in with his email and that password', setPw.ok && login.ok && lj.user?.id === mA.uid,
+      `set -> ${setPw.status}, sign in -> ${login.status} ${lj.msg ?? lj.error_description ?? ''}`)
+    const token = lj.access_token ?? sA.accessToken
+    cookie = sA.cookie
+
+    const fmPage = async (path: string) => {
+      const res = await fetch(`${BASE}${path}`, { headers: { cookie }, redirect: 'follow' })
+      const html = res.ok ? await res.text() : ''
+      return { status: res.status, path: new URL(res.url).pathname, html, text: visibleText(html) }
+    }
+    const units = await api('GET', '/api/fleet-manager/units')
+    const ul = (units.json.units ?? []) as Array<Record<string, unknown>>
+    const ids = ul.map(u => String(u.id)).sort()
+    record(F, 'a fleet manager sees his own units', units.status === 200 && ids.join() === [A1, A2].sort().join(), `-> ${units.status}, ${ul.length} unit(s)`)
+    record(F, "and NOTHING of fleet B: not its unit in the list", !ids.includes(B1) && !JSON.stringify(units.json).includes('FLEET B'), '')
+    const ua1 = ul.find(u => u.id === A1) ?? {}, ua2 = ul.find(u => u.id === A2) ?? {}
+    record(F, 'the list carries unit number, make, model, serial, year and the latest hours',
+      ua1.unit_number === a1!.unit_number && ua1.manufacturer === 'Thermo King' && ua1.model === 'S-600' && ua1.serial_number === a1!.serial_number && ua1.year === 2019 && ua1.latest_hours === 9800,
+      JSON.stringify(ua1).slice(0, 200))
+    const due1 = (ua1.pm_due ?? {}) as Record<string, unknown>, due2 = (ua2.pm_due ?? {}) as Record<string, unknown>
+    record(F, 'PM due is the Intel Hub rule: 50 hrs to go is DUE SOON... ', due1.status === 'overdue' || due1.status === 'due_soon', JSON.stringify(due1))
+    record(F, '...a last PM over 180 days ago makes it OVERDUE, and a fresh PM with hours to spare is not due', due1.status === 'overdue' && due2.status === null, `${due1.status} / ${due2.status}`)
+
+    const hist = await api('GET', `/api/fleet-manager/units/${A1}`)
+    const visits = (hist.json.visits ?? []) as Array<Record<string, unknown>>
+    record(F, "one unit's history comes back newest first, the open job left out",
+      hist.status === 200 && visits.length >= 2 && String(visits[0].service_date) === '2026-10-02' && visits.some(v => v.service_date === '2025-06-01') &&
+      !JSON.stringify(visits).includes('OPEN JOB') && visits.every((v, i) => i === 0 || String(visits[i - 1].service_date ?? '') >= String(v.service_date ?? '')),
+      `-> ${hist.status}, ${visits.map(v => v.service_date).join(', ')}`)
+    const vNew = visits.find(v => v.service_date === '2026-10-02') ?? {}, vOld = visits.find(v => v.service_date === '2025-06-01') ?? {}
+    record(F, 'each visit carries the hours (and miles) recorded AT that visit', vNew.hours_at_visit === 9800 && vNew.miles_at_visit === 123000 && vOld.hours_at_visit === 7000,
+      `${vNew.hours_at_visit}/${vNew.miles_at_visit}, ${vOld.hours_at_visit}`)
+    record(F, 'what was done: the request, the work order comments and the work done',
+      vNew.requested === `${MARK} not cooling` && vNew.comments === `${MARK} belt glazed` && vNew.final_comments === `${MARK} replaced the belt`, '')
+    const pNew = (vNew.parts ?? []) as Array<Record<string, unknown>>, pOld = (vOld.parts ?? []) as Array<Record<string, unknown>>
+    record(F, 'parts used: part number, description and quantity - and nothing else on a part',
+      pNew.length === 1 && pNew[0].part_number === '78-1968' && pNew[0].quantity === 2 && pOld.length === 1 && pOld[0].part_number === '11-9959' && pOld[0].quantity === 3 &&
+      [...pNew, ...pOld].every(p => Object.keys(p).sort().join() === 'description,part_number,quantity'), JSON.stringify([...pNew, ...pOld]))
+    const sNew = (vNew.sheets ?? []) as Array<Record<string, unknown>>, sOld = (vOld.sheets ?? []) as Array<Record<string, unknown>>
+    record(F, 'the PM sheet and the DOT sheet attached to the jobs are on them', sOld.some(s => s.kind === 'pm' && s.id === pmA!.id) && sNew.some(s => s.kind === 'dot' && s.id === dotA!.id),
+      `old ${JSON.stringify(sOld)}, new ${JSON.stringify(sNew)}`)
+
+    // ── the forbidden fields, BY NAME, in every response ──
+    const bodies = [JSON.stringify(units.json), JSON.stringify(hist.json)]
+    const keysIn = (v: unknown, out = new Set<string>()): Set<string> => {
+      if (Array.isArray(v)) v.forEach(x => keysIn(x, out))
+      else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) { out.add(k); keysIn(x, out) }
+      return out
+    }
+    const keys = keysIn([units.json, hist.json])
+    const FORBIDDEN: Array<[string, string[]]> = [
+      ['labor rate', ['labor_rate', 'labor_hours']],
+      ['any labor or parts subtotal', ['subtotal', 'subtotal_labor', 'subtotal_parts', 'labor_subtotal', 'parts_subtotal']],
+      ['tax', ['tax_rate', 'tax_percent', 'tax_amount', 'tax_breakdown']],
+      ['discount', ['discount']],
+      ['any fee', ['diagnostic_fee', 'road_call_fee', 'service_call_fee', 'shop_supplies_fee', 'late_fee_amount', 'travel_amount', 'travel_rate', 'mileage_amount', 'mileage_rate']],
+      ['invoice total', ['total', 'total_amount', 'grand_total', 'amount', 'amount_max']],
+      ['part cost', ['unit_cost', 'unit_cost_base', 'parts_cost', 'cost']],
+      ['markup', ['markup_percent', 'parts_markup_percent']],
+      ['sell price', ['unit_price', 'parts_sell', 'sell_price', 'price']],
+      ['customer contact details', ['customer_name', 'customer_phone', 'customer_email', 'contact_name', 'contact_phone', 'contact_email', 'address', 'address_line1', 'city', 'state', 'zip']],
+    ]
+    for (const [what, names] of FORBIDDEN) {
+      const hit = names.filter(n => keys.has(n))
+      record(F, `forbidden, absent by name: ${what} (${names.join(', ')})`, hit.length === 0, hit.join(', '))
+    }
+    record(F, 'forbidden, absent by value: none of the money figures is in any response', !bodies.some(b => MONEY_RE.test(b)), bodies.map(b => b.match(MONEY_RE)?.[0]).filter(Boolean).join(', '))
+    record(F, "forbidden, absent by value: no contact detail and no internal note is in any response", !bodies.some(b => CONTACT_RE.test(b) || b.includes('internal note')), '')
+    const otherKeys = [...keys].filter(k => ['user_id', 'customer_id', 'fleet_account_id', 'internal_notes', 'public_token', 'invoice_number', 'work_order_number'].includes(k))
+    record(F, "forbidden: any other customer's data - no owner, customer or document identities, and fleet B's job is in nothing",
+      otherKeys.length === 0 && !bodies.some(b => b.includes('FLEET B') || b.includes('fleet B comments') || b.includes(B1)), otherKeys.join(', '))
+
+    // ── the rendered pages ──
+    const home = await fmPage('/fleet-manager')
+    record(F, 'the dashboard renders his units on the phone layout, with PM due',
+      home.status === 200 && home.path === '/fleet-manager' && home.html.includes(`data-unit-id="${A1}"`) && home.html.includes(`data-unit-id="${A2}"`) &&
+      !home.html.includes(B1) && home.text.includes('PM OVERDUE') && home.text.includes('9,800 hrs'), `-> ${home.status} at ${home.path}`)
+    const up = await fmPage(`/fleet-manager/units/${A1}`)
+    const visitCount = (up.html.match(/data-testid="fm-visit"/g) ?? []).length
+    record(F, "the unit page renders the history: dates, hours at each visit, parts with Qty, sheet links",
+      up.status === 200 && visitCount === visits.length && up.text.includes('9,800 hrs') && up.text.includes('7,000 hrs') && up.text.includes('Qty 3') &&
+      up.html.includes(`/api/hd/pm-checklist/${pmA!.id}/pdf`) && up.html.includes(`/api/hd/dot-inspections/${dotA!.id}/pdf`), `-> ${up.status}, ${visitCount} visit(s)`)
+    record(F, 'no page shows a dollar sign or any money figure', ![home.text, up.text].some(t => t.includes('$') || MONEY_RE.test(t)),
+      [home.text, up.text].map(t => t.match(/.{0,30}\$.{0,20}/)?.[0]).filter(Boolean).join(' | '))
+    record(F, 'no page shows a contact detail or the internal note', ![home.html, up.html].some(h => CONTACT_RE.test(h) || h.includes('internal note')), '')
+
+    // ── the sheets open for him, the other fleet's do not ──
+    const pdf = await fetch(`${BASE}/api/hd/pm-checklist/${pmA!.id}/pdf`, { headers: { cookie } })
+    const dotOwn = await fetch(`${BASE}/api/hd/dot-inspections/${dotA!.id}/pdf`, { headers: { cookie } })
+    const dotOther = await fetch(`${BASE}/api/hd/dot-inspections/${dotB!.id}/pdf`, { headers: { cookie } })
+    record(F, 'his PM sheet and DOT sheet open', pdf.status === 200 && dotOwn.status === 200, `PM -> ${pdf.status}, DOT -> ${dotOwn.status}`)
+    const dotHtml = dotOwn.ok ? await dotOwn.text() : ''
+    record(F, 'the DOT sheet prints no money figure', dotOwn.ok && !MONEY_RE.test(dotHtml), '')
+
+    // ── isolation: fleet B from fleet A ──
+    const otherUnit = await api('GET', `/api/fleet-manager/units/${B1}`)
+    const otherPage = await fmPage(`/fleet-manager/units/${B1}`)
+    record(F, "a fleet manager on fleet A gets NOTHING from fleet B: its unit 404s, its page 404s, its DOT sheet 403s",
+      otherUnit.status === 404 && otherPage.status === 404 && dotOther.status === 403, `api ${otherUnit.status}, page ${otherPage.status}, sheet ${dotOther.status}`)
+
+    // ── no back door: his own token straight at PostgREST ──
+    const direct: string[] = []
+    for (const t of ['hd_work_orders', 'hd_invoices', 'hd_units', 'hd_fleet_accounts', 'hd_work_order_line_items', 'hd_quotes', 'hd_pm_checklists', 'hd_dot_inspections', 'fleet_pro_members']) {
+      const res = await fetch(`${SUPA}/rest/v1/${t}?select=*&limit=5`, { headers: { apikey: ANON, Authorization: `Bearer ${token}` } })
+      const j = await res.json().catch(() => null)
+      if (!Array.isArray(j) || j.length > 0) direct.push(`${t} ${Array.isArray(j) ? j.length : res.status}`)
+    }
+    record(F, 'his own login reads NOTHING from hd_* through PostgREST (the 105 policies never match him)', direct.length === 0, direct.join(', '))
+    const hdApi = await api('GET', '/api/hd/work-orders')
+    record(F, "and the shop's own HD routes refuse him", hdApi.status === 401 || hdApi.status === 403, `-> ${hdApi.status}`)
+
+    // ── and fleet B's manager gets nothing of fleet A ──
+    cookie = (await openSession(mB.uid)).cookie
+    const bUnits = await api('GET', '/api/fleet-manager/units')
+    const bIds = ((bUnits.json.units ?? []) as Array<Record<string, unknown>>).map(u => String(u.id))
+    const bOnA = await api('GET', `/api/fleet-manager/units/${A1}`)
+    record(F, "fleet B's manager sees only fleet B, and fleet A's unit 404s", bUnits.status === 200 && bIds.join() === B1 && bOnA.status === 404 && !JSON.stringify(bUnits.json).includes('not cooling'),
+      `${bIds.length} unit(s), A1 -> ${bOnA.status}`)
+
+    // ── removing the grant ends it ──
+    cookie = ownerCookie
+    const rm = await api('DELETE', `/api/hd/fleet-accounts/${A}/managers?user_id=${mA.uid}`)
+    cookie = sA.cookie
+    const after = await api('GET', '/api/fleet-manager/units')
+    const afterPage = await fmPage('/fleet-manager')
+    record(F, 'the shop removes his access, and his next request is refused', rm.status === 200 && after.status === 403 && afterPage.path === '/fleet-manager/no-access',
+      `remove -> ${rm.status}, units -> ${after.status}, page at ${afterPage.path}`)
+  } finally {
+    cookie = ownerCookie
+  }
+  const signedOut = await fetch(`${BASE}/fleet-manager`, { redirect: 'manual' })
+  record(F, 'signed out, /fleet-manager sends you to the fleet manager login', [302, 307, 308].includes(signedOut.status) && (signedOut.headers.get('location') ?? '').includes('/fleet-manager/login'),
+    `-> ${signedOut.status} ${signedOut.headers.get('location') ?? ''}`)
+  const loginPage = await fetch(`${BASE}/fleet-manager/login`)
+  const lh = loginPage.ok ? await loginPage.text() : ''
+  record(F, 'the fleet manager login page renders an email and password form', loginPage.ok && lh.includes('type="email"') && lh.includes('type="password"'), `-> ${loginPage.status}`)
+}
+
 async function flowIntelAutoAdd(): Promise<void> {
   const F = 'Ia intel auto-add'
   const run = Date.now().toString(36).toUpperCase()
@@ -6421,6 +6715,7 @@ async function main(): Promise<void> {
     await flowT()
     await flowUnitSerialModel()
     await flowIntelAutoAdd()
+    await flowFleetManager()
     await flowU()
     await flowV()
     await flowLaborCards()
