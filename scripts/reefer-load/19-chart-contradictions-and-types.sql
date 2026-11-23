@@ -50,7 +50,7 @@
 -- Every row is matched by id and every field read that this changes, so a row that is not
 -- what was read makes the whole file refuse. No INSERT, no DELETE.
 --
--- Plain ASCII. Ends in ROLLBACK for a dry run; change the last line to COMMIT to apply.
+-- APPLIED by hand Nov 23, 2026 (Brock: dry run clean, then the COMMIT copy). Plain ASCII.
 
 BEGIN;
 
@@ -170,5 +170,5 @@ SELECT p.part_number, p.part_type, p.description
                 'b2e60ec7-55a0-4a86-bfd3-abf282deff9c')
  ORDER BY p.part_number;
 
--- Dry run. Change to COMMIT to apply.
-ROLLBACK;
+-- Applied by hand Nov 23, 2026.
+COMMIT;
