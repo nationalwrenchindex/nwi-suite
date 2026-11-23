@@ -13,8 +13,13 @@
 --                Break 7/2023.
 --                  before 7/2023: 11-9965 standard duty, or 11-9966 severe duty
 --                  from   7/2023: 11-9970 primary
---      Group B - Precedent S-600, S-600M, S-600DE, S-610M, S-610DE, S-700 with other engines
---                (the chart's blank-engine rows). Break 6/2021.
+--      Group B - Precedent S-600, S-600M, S-600DE, S-610M, S-610DE, S-700 with the standard
+--                engine, not Peugeot (the chart's blank-engine rows). Break 6/2021.
+--
+--    The notes name the ENGINE, because that is what the tech checks: S-600M and S-600DE
+--    are in both groups (Brock, Nov 22, 2026). The notes read:
+--      Group A: 'C-600, C-600M, and S-600DE / S-600M with the Peugeot engine'
+--      Group B: 'S-600 / S-610 / S-700 with the standard engine (not Peugeot)'
 --                  before 6/2021: 11-9965 standard duty, or 11-9966 severe duty
 --                  from   6/2021: 11-9967 secondary EMI 3000 AND 11-9969 primary EMI 3000
 --      S-750i  - 11-9967 secondary and 11-9969 primary, no older option. The chart lists no
@@ -45,8 +50,8 @@ BEGIN;
 DO $$
 DECLARE
   v_n BIGINT;
-  ga CONSTANT TEXT := 'Precedent C-600, C-600M, and S-600DE / S-600M with the Peugeot engine';
-  gb CONSTANT TEXT := 'Precedent S-600, S-600M, S-600DE, S-610M, S-610DE, S-700 with other engines';
+  ga CONSTANT TEXT := 'C-600, C-600M, and S-600DE / S-600M with the Peugeot engine';
+  gb CONSTANT TEXT := 'S-600 / S-610 / S-700 with the standard engine (not Peugeot)';
   tail CONSTANT TEXT := ' (Brock, Nov 22, 2026. 11-9958 has five replacements by unit and build date; show all.)';
 BEGIN
   IF EXISTS (

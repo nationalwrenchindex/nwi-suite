@@ -172,8 +172,8 @@ const L = (o: string, nw: string, note: string): SupersessionLink => ({
   manufacturer: 'Thermo King', note, verified: true, confidence: 'confirmed',
 })
 // The notes are exactly what scripts/reefer-load/20-chart-supersessions.sql writes (Brock, Nov 22).
-const GA = 'Precedent C-600, C-600M, and S-600DE / S-600M with the Peugeot engine'
-const GB = 'Precedent S-600, S-600M, S-600DE, S-610M, S-610DE, S-700 with other engines'
+const GA = 'C-600, C-600M, and S-600DE / S-600M with the Peugeot engine'
+const GB = 'S-600 / S-610 / S-700 with the standard engine (not Peugeot)'
 const TAIL = ' (Brock, Nov 22, 2026. 11-9958 has five replacements by unit and build date; show all.)'
 const five = [
   L('11-9958', '11-9965', `Standard duty. ${GA}: built before 7/2023. ${GB}: built before 6/2021.${TAIL}`),
