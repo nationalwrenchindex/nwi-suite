@@ -58,6 +58,7 @@ import { hdLaborRateFrom } from '../src/lib/hd/labor-rate'
 import { sellPrice, lineAmount } from '../src/lib/hd/parts-pricing'
 import { hdDocumentTax, hdTaxableBase } from '../src/lib/hd/document-tax'
 import { modelMatches } from '../src/lib/parts/search'
+import { unitModelMatches } from '../src/lib/parts/narrow'
 import { deliverHDDocument } from '../src/lib/hd/deliver-document'
 import { parseLaborEstimate, estimateLabel } from '../src/lib/labor-estimate'
 
@@ -1544,7 +1545,10 @@ async function flowHw(): Promise<void> {
   // ── the parts lookup on a document's unit ──
   const belt = await api('GET', '/api/parts/search?manufacturer=Thermo%20King&model=s-600&q=belt')
   const res = (belt.json.results ?? []) as Array<Record<string, unknown>>
-  const offUnit = res.filter(r => !((r.fitment as Array<Record<string, unknown>>) ?? []).some(f => modelMatches(f.unit_model as string | null, 's-600')))
+  // "S-600" and "Precedent S-600" are one unit (Brock, Nov 16), so the check uses the counter's
+  // own rule. Corrected Nov 23: it compared names literally and called the chart's "Precedent
+  // S-600" rows off the unit - wrong about the app, not loosened. S-600M, S-610 still fail it.
+  const offUnit = res.filter(r => !((r.fitment as Array<Record<string, unknown>>) ?? []).some(f => unitModelMatches(f.unit_model as string | null, 's-600')))
   record(F, '"belt" on an S-600 document returns only parts that fit an S-600', belt.status === 200 && res.length > 0 && offUnit.length === 0,
     `${res.length} parts, ${offUnit.length} off the unit: ${offUnit.slice(0, 3).map(r => r.part_number).join(', ')}`)
   record(F, 'and 78-1876 (Belt Generator to Alternator - Precedent S-600) is among them', res.some(r => r.part_number === '78-1876'), '')
