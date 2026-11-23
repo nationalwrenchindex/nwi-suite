@@ -1575,7 +1575,10 @@ async function flowHw(): Promise<void> {
 
   // ── the HD quote form in both themes: the paper scope reaches the shared inputs ──
   const qf = await page('/hd/quotes/new')
-  const css = qf ? [...qf.html.matchAll(/href="([^"]+\.css)"/g)].map(x => x[1]) : []
+  // A Vercel deployment appends ?dpl=<deployment id> to every stylesheet link, so a link
+  // ending exactly in .css" matched only on a local server and found 0 on every Preview.
+  // Wrong about the deployed app, not loosened: the check still needs both rules below.
+  const css = qf ? [...qf.html.matchAll(/href="([^"]+\.css(?:\?[^"]*)?)"/g)].map(x => x[1].replace(/&amp;/g, '&')) : []
   let cssText = ''
   for (const c of css) cssText += await (await fetch(c.startsWith('http') ? c : `${BASE}${c}`)).text()
   record(F, 'the HD quote form is a paper surface and the stylesheet scopes its inputs',
