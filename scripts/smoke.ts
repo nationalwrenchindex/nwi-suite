@@ -5490,7 +5490,8 @@ async function flowHq(): Promise<void> {
 //
 // The PDF (/api/hd/invoices/[id]/pdf), the customer's quote (/hd/quote/[token]) and
 // the pay page (/hd/invoices/pay/[token]), read as HTML. Fixtures are SMOKE copies of
-// a real quote and a real invoice (their money, tax split and extras), with a discount
+// its own SMOKE quote and invoice (money, tax split and extras as the product writes
+// them), with a discount
 // priced by the shared engine and a recorded terms snapshot.
 //
 // CONTRAST. Text that IS in the HTML can still be unreadable - the quote form's Tax %
@@ -5524,13 +5525,31 @@ function hardcodedLight(html: string): string[] {
 }
 async function flowPe(): Promise<void> {
   const F = 'Pe HD print surfaces'
-  const realQ = (await rest<Record<string, unknown>>(
-    `hd_quotes?user_id=eq.${OWNER}&status=eq.approved&tax_breakdown=not.is.null&customer_name=not.like.${MARK}*&select=*&order=created_at.desc&limit=1`))[0]
-  const realI = (await rest<Record<string, unknown>>(
-    `hd_invoices?user_id=eq.${OWNER}&tax_breakdown=not.is.null&customer_name=not.like.${MARK}*&select=*&order=created_at.desc&limit=20`))
-    .find(r => !invoiceDoesNotAddUp(r))
-  if (!record(F, 'a real quote and invoice to copy the shape of', !!realQ && !!realI,
-    `${realQ?.quote_number ?? 'no quote'} / ${realI?.invoice_number ?? 'no invoice'}`)) return
+  // ITS OWN SOURCE DOCUMENTS, NEVER THE SHOP'S. This used to copy the newest approved
+  // real quote and invoice on the owner account, so whatever the owner saved last
+  // decided whether Pe could run - a test quote with no lines (Q-2026-0276) failed it.
+  // Now a SMOKE quote with known labor and parts lines, priced the way the quote form
+  // prices it (hwQuoteBody), is saved through POST /api/hd/quotes and billed through
+  // POST /api/hd/invoices, so both rows are shapes the product itself writes. No unit
+  // fields: nothing is added to Intel Hub but the SMOKE customer, which cleanup sweeps.
+  const ownerProfile = (await rest<Record<string, unknown>>(`profiles?id=eq.${OWNER}&select=*`))[0] ?? {}
+  const { body: srcBody } = hwQuoteBody(ownerProfile, `${MARK} Pe source`)
+  for (const k of ['unit_manufacturer', 'unit_model', 'unit_serial', 'unit_number', 'truck_make', 'truck_model', 'truck_year', 'vin', 'unit_hours', 'vehicle_odometer']) delete srcBody[k]
+  const madeQ = await api('POST', '/api/hd/quotes', srcBody)
+  await adoptSmokeCustomer(madeQ.json.customer_id)
+  const srcQId = String((madeQ.json.quote as Record<string, unknown> | undefined)?.id ?? '')
+  if (srcQId) created.hdQuotes.add(srcQId)
+  const realQ = srcQId ? (await rest<Record<string, unknown>>(`hd_quotes?id=eq.${srcQId}&select=*`))[0] : undefined
+  const madeI = realQ ? await api('POST', '/api/hd/invoices', invoiceBodyFromQuote(realQ)) : null
+  if (madeI) await adoptSmokeCustomer(madeI.json.customer_id)
+  const srcIId = String((madeI?.json.invoice as Record<string, unknown> | undefined)?.id ?? '')
+  if (srcIId) created.hdInvoices.add(srcIId)
+  const realI = srcIId ? (await rest<Record<string, unknown>>(`hd_invoices?id=eq.${srcIId}&select=*`))[0] : undefined
+  const lineTypes = (d?: Record<string, unknown>) => (Array.isArray(d?.line_items) ? d!.line_items as Array<Record<string, unknown>> : []).map(l => String(l.type))
+  if (!record(F, 'its own SMOKE quote and invoice, each with a labor and a parts line and a recorded tax split',
+    !!realQ && !!realI && !!realQ.tax_breakdown && !!realI.tax_breakdown && !invoiceDoesNotAddUp(realI) &&
+    ['labor', 'parts'].every(t => lineTypes(realQ).includes(t) && lineTypes(realI).includes(t)),
+    `quote -> ${madeQ.status} ${String(madeQ.json.error ?? '')} [${lineTypes(realQ).join(',')}] / invoice -> ${madeI?.status ?? 'not tried'} ${String(madeI?.json.error ?? '')} [${lineTypes(realI).join(',')}]`)) return
 
   const REASON = `${MARK} fleet`
   const TERMS = {
@@ -5560,7 +5579,7 @@ async function flowPe(): Promise<void> {
   }
 
   const dq = discounted(realQ!), di = discounted(realI!)
-  if (!record(F, 'the discount prices on both real documents', dq.ok && di.ok, dq.ok && di.ok ? '' : `${dq.ok ? '' : dq.error} ${di.ok ? '' : di.error}`)) return
+  if (!record(F, 'the discount prices on both documents', dq.ok && di.ok, dq.ok && di.ok ? '' : `${dq.ok ? '' : dq.error} ${di.ok ? '' : di.error}`)) return
   if (!dq.ok || !di.ok) return
   const money = (d: typeof dq & { ok: true }) => ({ discount: d.discount, tax_amount: d.taxAmount, tax_breakdown: d.breakdown, total: d.grandTotal })
   const q = await insert('hd_quotes', { ...strip(realQ!), ...money(dq), quote_number: `${MARK}-PE-${Date.now()}`,
