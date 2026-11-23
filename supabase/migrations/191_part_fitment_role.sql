@@ -28,7 +28,7 @@
 -- touched. Code deploys separately: the counter reads role when the column exists and runs
 -- without it (as before) when it does not.
 --
--- NOT APPLIED. Plain ASCII. Ends in ROLLBACK for a dry run; change the last line to COMMIT.
+-- APPLIED by hand Nov 23, 2026 (Brock: dry run clean - 36 roles, 758 rows - then the COMMIT copy). Plain ASCII.
 
 BEGIN;
 
@@ -858,5 +858,5 @@ SELECT pf.role, count(*) AS n
  WHERE pf.role IS NOT NULL
  GROUP BY pf.role ORDER BY n DESC, pf.role;
 
--- Dry run. Change to COMMIT to apply.
-ROLLBACK;
+-- Applied by hand Nov 23, 2026.
+COMMIT;
