@@ -3241,6 +3241,76 @@ async function flowT(): Promise<void> {
   }
 }
 
+// ── Us: a serial alone never links a unit (Nov 23, 2026) ───────────────────
+// Serial 6001241923 documents reading "s-600" were linked to a C-600M on the serial
+// alone. Now the serial must match AND the model agree (lib/hd/unit-match), and a refused
+// link is reported to the user. Asserted against the deployed routes, on a throwaway unit.
+async function flowUnitSerialModel(): Promise<void> {
+  const F = 'Us serial + model link'
+  const NOTICE = 'A unit with this serial already exists but its model does not match. Pick the unit yourself or add a new one.'
+  const SERIAL = `ZZSERIALUS${Date.now().toString(36).toUpperCase()}`
+  const unit = await fetch(`${SUPA}/rest/v1/hd_units`, {
+    method: 'POST', headers: { ...SVC_H, Prefer: 'return=representation' },
+    body: JSON.stringify({ user_id: OWNER, unit_number: `${MARK}-US`, manufacturer: 'Thermo King', model: 'S-600', serial_number: SERIAL, status: 'active' }),
+  })
+  const unitId = unit.ok ? String(((await unit.json()) as Record<string, unknown>[])[0]?.id ?? '') : ''
+  if (unitId) created.fleetUnits.add(unitId)
+  if (!record(F, 'a unit (S-600) with a known serial is arranged', !!unitId, `-> ${unit.status}`)) return
+
+  const line = { id: 'zz-us1', type: 'labor', amount: 100, quantity: 0, unit_cost: 0, amount_max: 100, book_hours: 0,
+    description: `${MARK} serial link`, part_number: '', mobile_hours: 1, book_hours_max: 0, recharge_added: false,
+    mobile_hours_max: 1, requires_refrigeration: false }
+  const convert = async (model: string) => {
+    const q = await api('POST', '/api/hd/quotes', {
+      customer_name: `${MARK} serial link`, customer_phone: '+15555550188', status: 'draft', payment_terms: 'net30',
+      unit_manufacturer: 'Thermo King', unit_model: model, unit_serial: SERIAL,
+      line_items: [line], labor_rate: 100, subtotal_labor: 100, subtotal_parts: 0, tax_rate: 0, tax_amount: 0, total: 100,
+    })
+    const quoteId = String(((q.json.quote ?? {}) as Record<string, unknown>).id ?? '')
+    if (quoteId) created.hdQuotes.add(quoteId)
+    await adoptSmokeCustomer(q.json.customer_id)
+    const c = await api('POST', `/api/hd/quotes/${quoteId}/work-order`, { record_verbal_approval: true, note: `${MARK} serial link` })
+    const wos = await rest<{ id: string; unit_id: string | null }>(`hd_work_orders?quote_id=eq.${quoteId}&select=id,unit_id`)
+    wos.forEach(w => created.hdWorkOrders.add(w.id))
+    return { quoteOk: q.status === 201 && !!quoteId, status: c.status, notice: (c.json.work_order as Record<string, unknown> | undefined)?.unit_notice ?? null, wo: wos[0] ?? null }
+  }
+
+  // Serial matches, model disagrees (the 6001241923 case): no unit, and the tech is told.
+  const bad = await convert('C-600M')
+  record(F, 'serial matches but the model disagrees: the work order gets NO unit',
+    bad.quoteOk && bad.status === 200 && !!bad.wo && bad.wo.unit_id === null, `-> ${bad.status}, unit ${bad.wo?.unit_id}`)
+  record(F, 'and the convert answer carries the notice, word for word', bad.notice === NOTICE, String(bad.notice))
+
+  // Serial matches, model agrees ("Precedent S-600" is an S-600): that unit, no notice.
+  const good = await convert('Precedent S-600')
+  record(F, 'serial matches and the model agrees: the work order links that unit',
+    good.status === 200 && good.wo?.unit_id === unitId && good.notice === null, `-> ${good.status}, unit ${good.wo?.unit_id}, notice ${good.notice}`)
+
+  // The invoice route, from the unlinked work order: still no unit, and it says so.
+  if (bad.wo) {
+    const built = await api('GET', `/api/hd/work-orders/${bad.wo.id}/convert`)
+    const payload = (built.json.invoice_payload ?? {}) as Record<string, unknown>
+    const inv = await api('POST', '/api/hd/invoices', payload)
+    await adoptSmokeCustomer(inv.json.customer_id)
+    const invRow = (inv.json.invoice ?? {}) as Record<string, unknown>
+    if (invRow.id) created.hdInvoices.add(String(invRow.id))
+    record(F, 'an invoice whose serial matches but whose model disagrees gets NO unit, and says so',
+      inv.status === 201 && invRow.unit_id == null && inv.json.unit_link_notice === NOTICE,
+      `-> ${inv.status}, unit ${String(invRow.unit_id)}, notice ${String(inv.json.unit_link_notice)}`)
+    // The same invoice typed with the right model links the unit by serial + model.
+    const typed = { ...payload, work_order_id: null, unit_model: 'S-600', customer_name: `${MARK} serial link typed` }
+    const inv2 = await api('POST', '/api/hd/invoices', typed)
+    await adoptSmokeCustomer(inv2.json.customer_id)
+    const inv2Row = (inv2.json.invoice ?? {}) as Record<string, unknown>
+    if (inv2Row.id) created.hdInvoices.add(String(inv2Row.id))
+    record(F, 'an invoice whose serial AND model agree links that unit, with no notice',
+      inv2.status === 201 && inv2Row.unit_id === unitId && (inv2.json.unit_link_notice ?? null) === null,
+      `-> ${inv2.status}, unit ${String(inv2Row.unit_id)}, notice ${String(inv2.json.unit_link_notice)}`)
+  } else {
+    record(F, 'an invoice whose serial matches but whose model disagrees gets NO unit, and says so', false, 'no work order to build it from')
+  }
+}
+
 // ── U: both flat fees survive quote -> work order -> invoice, to the cent ───
 //
 // Q-2026-0010 ($260.11) became INV-2026-0020 ($225.11): the $35.00 road call fee was
@@ -6204,6 +6274,7 @@ async function main(): Promise<void> {
     await flowR()
     await flowS()
     await flowT()
+    await flowUnitSerialModel()
     await flowU()
     await flowV()
     await flowLaborCards()
