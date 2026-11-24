@@ -1,14 +1,18 @@
 // npx tsx scripts/verify-fleet-unit-history.ts
 //
-// The safe unit-history layer's projection (src/lib/fleet-view/unit-history), fed raw
-// rows shaped like the live tables - every money and contact column filled with a
-// value that would be recognisable if it leaked - and checked that none of it comes
-// out. The deployed routes are proved by the smoke flow Fm; this proves the pure part
-// on every shape, including ones a fixture on the database cannot easily build.
+// The fleet-view layer (src/lib/fleet-view/unit-history), both tiers, fed raw rows shaped
+// like the live tables (the invoice line shape is the one lib/hd/wo-to-invoice writes:
+// unit_cost = the customer's price, unit_cost_base = the shop's cost):
+//   * CUSTOMER tier (fleet manager): the invoice as printed - lines, fees, discount, tax,
+//     total - present; the shop's cost, markup and internal notes absent by name AND value.
+//   * OUTSIDE-TECH tier (QR page): no money at all, by name and by value.
+// The deployed routes are proved by the smoke flow Fm.
 
 import {
-  buildVisits, safeUnit, forbiddenKeysIn, assertFleetSafe, FORBIDDEN_FIELD_NAMES, EXCLUDED_FROM_AGGREGATES,
+  buildVisits, safeUnit, printedInvoice, customerVisit, outsideTechVisit, outsideTechUnit,
+  marginKeysIn, moneyKeysIn, assertCustomerSafe, assertOutsideTechSafe, MARGIN_FIELD_NAMES, EXCLUDED_FROM_AGGREGATES,
 } from '../src/lib/fleet-view/unit-history'
+import { hdInvoiceSummaryRows } from '../src/lib/hd/invoice-print'
 import { pmDueOf, isPmAlert } from '../src/lib/hd/pm-due'
 
 let pass = 0, fail = 0
@@ -17,23 +21,29 @@ function check(name: string, ok: boolean, detail = '') {
   console.log(`  ${ok ? 'pass' : 'FAIL'}  ${name}${detail ? `  -- ${detail}` : ''}`)
 }
 
-// Recognisable money: if 731.47, 88.13 or 41.09 appear anywhere in the output, it leaked.
-const MONEY = { labor_rate: 731.47, total: 731.47, total_amount: 731.47, subtotal_labor: 731.47, subtotal_parts: 731.47, tax_amount: 88.13,
-  tax_breakdown: { parts: { amount: 88.13 } }, discount: { amount: 41.09 }, diagnostic_fee: 41.09, road_call_fee: 41.09, service_call_fee: 41.09,
-  shop_supplies_fee: 41.09, travel_rate: 731.47, travel_amount: 731.47, mileage_rate: 41.09, mileage_amount: 41.09, parts_cost: 731.47,
-  parts_sell: 731.47, parts_markup_percent: 41.09, internal_notes: 'SECRET-INTERNAL', customer_name: 'SECRET-CUSTOMER',
-  customer_phone: '+15550009999', customer_email: 'secret@customer.example', address_line1: 'SECRET-ADDRESS', user_id: 'shop-id', customer_id: 'cust-id' }
+// THE SHOP'S MARGIN - never in either tier: cost 61.37, parts cost 122.74, markup 37.5.
+const MARGIN = { parts_cost: 122.74, parts_markup_percent: 37.5, internal_notes: 'SECRET-INTERNAL', estimated_value: 9191.19 }
+const MARGIN_RE = /61\.37|122\.74|\b37\.5\b|9191\.19|SECRET-INTERNAL/
+// Contact and identity - never in either tier.
+const CONTACT = { customer_name: 'SECRET-CUSTOMER', customer_phone: '+15550009999', customer_email: 'secret@customer.example', address_line1: 'SECRET-ADDRESS', user_id: 'shop-id', customer_id: 'cust-id' }
+// What the customer was charged - printed on his invoice. Customer tier only.
+const PRINTED = { labor_rate: 137.11, subtotal_labor: 274.22, subtotal_parts: 168.76, diagnostic_fee: 41.09, travel_hours: 1.25, travel_rate: 96.2, travel_amount: 120.25,
+  mileage_miles: 31, mileage_rate: 2, mileage_amount: 62, shop_supplies_fee: 8.44, shop_supplies_percent_applied: 5,
+  discount: { version: 1, type: 'flat', value: 25, scope: 'document', amount: 25, labor_amount: 0, parts_amount: 0, subtotal_before: 674.76, tax_before: 0 },
+  tax_breakdown: { version: 1, parts: { base: 177.2, rate: 7.5, amount: 13.29, taxed: true }, labor: { base: 394.47, rate: 0, amount: 0, taxed: false } },
+  tax_amount: 13.29, tax_rate: 7.5, total: 663.05 }
+const PRINTED_RE = /137\.11|274\.22|168\.76|41\.09|120\.25|663\.05|13\.29|84\.38/
 
 const unit = { id: '11111111-1111-1111-1111-111111111111', unit_number: 'T-101', manufacturer: 'Thermo King', model: 'S-600', serial_number: 'SN1',
   year: 2019, total_hours: 9800, engine_hours: null, current_odometer: null, next_pm_due_hours: 9900, last_pm_date: '2026-01-01', last_pm_type: 'a_service',
-  estimated_value: 731.47, ...MONEY }
+  ...MARGIN, ...CONTACT }
 const U = unit.id
 const workOrders = [
-  { id: 'wo-new', unit_id: U, fleet_account_id: 'F', status: 'invoiced', completed_at: '2026-10-02T15:00:00Z', created_at: '2026-10-01', unit_hours: 9800, vehicle_odometer: 123000,
-    service_requests: 'Unit not cooling', comments: 'Replaced belt', ...MONEY },
-  { id: 'wo-old', unit_id: U, fleet_account_id: null, status: 'completed', completed_at: '2025-06-01T15:00:00Z', created_at: '2025-06-01', unit_hours: 7000, vehicle_odometer: null,
-    service_requests: 'PM', comments: 'Did PM', ...MONEY },
-  { id: 'wo-open', unit_id: U, fleet_account_id: 'F', status: 'open', completed_at: null, created_at: '2026-11-01', unit_hours: 9900, service_requests: 'Not done yet', comments: null, ...MONEY },
+  { id: 'wo-new', unit_id: U, fleet_account_id: 'F', work_order_number: 'WO-2026-0901', status: 'invoiced', completed_at: '2026-10-02T15:00:00Z', created_at: '2026-10-01', unit_hours: 9800, vehicle_odometer: 123000,
+    service_requests: 'Unit not cooling', comments: 'Replaced belt', ...MARGIN, ...CONTACT, labor_rate: 731.47, total_amount: 4321.09 },
+  { id: 'wo-old', unit_id: U, fleet_account_id: null, work_order_number: 'WO-2025-0100', status: 'completed', completed_at: '2025-06-01T15:00:00Z', created_at: '2025-06-01', unit_hours: 7000, vehicle_odometer: null,
+    service_requests: 'PM', comments: 'Did PM', ...MARGIN, ...CONTACT, labor_rate: 731.47, total_amount: 4321.09 },
+  { id: 'wo-open', unit_id: U, fleet_account_id: 'F', status: 'open', completed_at: null, created_at: '2026-11-01', unit_hours: 9900, service_requests: 'Not done yet', comments: null, ...MARGIN, ...CONTACT, labor_rate: 731.47, total_amount: 4321.09 },
 ]
 const woLines = [
   { id: 'l1', work_order_id: 'wo-old', type: 'part', part_number: '11-9959', description: 'Oil filter', quantity: 2, unit_cost: 731.47, unit_price: 731.47, markup_percent: 41.09, total: 731.47, sort_order: 1 },
@@ -41,12 +51,12 @@ const woLines = [
   { id: 'l3', work_order_id: 'wo-new', type: 'part', part_number: 'WO-LINE-ONLY', description: 'superseded by the invoice', quantity: 1, unit_cost: 731.47, sort_order: 0 },
 ]
 const invoices = [
-  { id: 'inv-new', unit_id: U, fleet_account_id: 'F', work_order_id: 'wo-new', created_at: '2026-10-03', unit_hours: null, vehicle_odometer: null, complaint: 'x',
-    diagnosis: 'Belt worn, replaced', ...MONEY,
-    line_items: [{ type: 'parts', part_number: '78-1968', description: 'Belt', quantity: 1, unit_cost: 731.47, unit_cost_base: 731.47, markup_percent: 41.09, amount: 731.47, amount_max: 731.47 },
-                 { type: 'labor', description: 'Belt labor', amount: 731.47, mobile_hours: 1 }] },
-  { id: 'inv-direct', unit_id: U, fleet_account_id: null, work_order_id: null, created_at: '2026-03-15', unit_hours: 8800, vehicle_odometer: 110000, complaint: 'Alarm 18',
-    diagnosis: 'Cleared, sensor', ...MONEY, line_items: [{ type: 'parts', part_number: '40-0974', description: 'Graded sensor', quantity: 1, unit_cost: 731.47, amount: 731.47 }] },
+  { id: 'inv-new', unit_id: U, fleet_account_id: 'F', work_order_id: 'wo-new', invoice_number: 'INV-2026-0901', work_order_number: 'WO-2026-0901', status: 'unpaid',
+    created_at: '2026-10-03', unit_hours: null, vehicle_odometer: null, complaint: 'x', diagnosis: 'Belt worn, replaced', ...MARGIN, ...CONTACT, ...PRINTED,
+    line_items: [{ id: 'p1', type: 'parts', part_number: '78-1968', description: 'Belt', quantity: 2, unit_cost: 84.38, unit_cost_base: 61.37, markup_percent: 37.5, amount: 168.76, mobile_hours: 0 },
+                 { id: 'l1', type: 'labor', description: 'Belt labor', quantity: 0, unit_cost: 0, amount: 274.22, mobile_hours: 2 }] },
+  { id: 'inv-direct', unit_id: U, fleet_account_id: null, work_order_id: null, invoice_number: 'INV-2026-0800', status: 'void', created_at: '2026-03-15', unit_hours: 8800, vehicle_odometer: 110000, complaint: 'Alarm 18',
+    diagnosis: 'Cleared, sensor', ...MARGIN, ...CONTACT, labor_rate: 731.47, total_amount: 4321.09, line_items: [{ type: 'parts', part_number: '40-0974', description: 'Graded sensor', quantity: 1, unit_cost: 50.5, unit_cost_base: 61.37, amount: 50.5 }] },
 ]
 const pmSheets = [
   { id: 'pm-on-wo', unit_id: U, work_order_id: 'wo-old', invoice_id: null, pm_type: 'a_service', completed_at: '2025-06-01' },
@@ -58,29 +68,58 @@ const dotSheets = [
 
 const visits = buildVisits({ workOrders, woLines, invoices, pmSheets, dotSheets })
 const su = safeUnit(unit, { hours: null, miles: 123000 }, Date.parse('2026-11-23T12:00:00Z'))
-const out = JSON.stringify({ su, visits })
+const printedById = new Map(invoices.map(i => [i.id, printedInvoice(i)]))
+const customer = { unit: su, visits: visits.map(v => customerVisit(v, v.invoice_id ? printedById.get(v.invoice_id) ?? null : null)) }
+const outside = { unit: outsideTechUnit(su), visits: visits.map(outsideTechVisit) }
+const cOut = JSON.stringify(customer), oOut = JSON.stringify(outside)
+const cNew = customer.visits.find(v => v.key === 'wo:wo-new')!
+const cOld = customer.visits.find(v => v.key === 'wo:wo-old')!
 
-console.log('\n  projection')
-check('no forbidden field name anywhere in the output', forbiddenKeysIn({ su, visits }).length === 0, forbiddenKeysIn({ su, visits }).join(', '))
-check('no money value anywhere in the output (731.47, 88.13, 41.09)', !/731\.47|88\.13|41\.09/.test(out))
-check('no contact or internal text anywhere in the output', !/SECRET|\+1555|secret@/.test(out))
-check('the unit keeps exactly its allowed fields', JSON.stringify(Object.keys(su).sort()) ===
-  JSON.stringify(['id', 'last_pm_date', 'last_pm_type', 'latest_hours', 'latest_miles', 'manufacturer', 'model', 'pm_due', 'serial_number', 'unit_number', 'year'].sort()),
-  Object.keys(su).join(','))
-check('a part keeps exactly part_number, description, quantity', visits.every(v => v.parts.every(p => JSON.stringify(Object.keys(p)) === '["part_number","description","quantity"]')))
+console.log('\n  customer tier (the fleet manager): his invoice, as printed')
+check('the invoice total, tax, labor, part price and fees are present', !!cNew.invoice && cNew.invoice.total === 663.05 &&
+  cNew.invoice.summary.some(r => r.label.startsWith('Tax on parts') && r.amount === 13.29) &&
+  cNew.invoice.summary.some(r => r.label === 'Diagnostic Fee' && r.amount === 41.09) &&
+  cNew.invoice.summary.some(r => r.label.startsWith('Travel Time') && r.amount === 120.25) &&
+  cNew.invoice.summary.some(r => r.label.startsWith('Mileage') && r.amount === 62) &&
+  cNew.invoice.summary.some(r => r.label.startsWith('Shop Supplies') && r.amount === 8.44) &&
+  cNew.invoice.summary.some(r => r.amount === -25), JSON.stringify(cNew.invoice?.summary))
+const lab = cNew.invoice?.groups[0].labor[0], prt = cNew.invoice?.groups[0].parts[0]
+check('labor prints hours x the invoice rate and its amount', lab?.hours === 2 && lab?.rate === 137.11 && lab?.amount === 274.22, JSON.stringify(lab))
+check("a part prints the price HE was charged (the line's unit_cost), never the shop's cost", prt?.unit_price === 84.38 && prt?.amount === 168.76 && prt?.quantity === 2, JSON.stringify(prt))
+check('the summary rows are exactly the customer copy\'s rows', JSON.stringify(cNew.invoice?.summary) === JSON.stringify(hdInvoiceSummaryRows(invoices[0]).map(r => ({ label: r.label, amount: r.amount }))))
+check('the work order and invoice numbers are on the visit', cNew.work_order_number === 'WO-2026-0901' && cNew.invoice_number === 'INV-2026-0901' && cOld.work_order_number === 'WO-2025-0100')
+check('a voided invoice says so', customer.visits.find(v => v.key === 'inv:inv-direct')?.invoice?.voided === true)
+check('a job never invoiced carries no money (no paper priced it)', cOld.invoice === null && !/731\.47|4321\.09/.test(cOut))
+check("absent BY NAME: parts_cost, unit_cost_base, markup, internal_notes, contact, identities", marginKeysIn(customer).length === 0, marginKeysIn(customer).join(', '))
+check("absent BY VALUE: the shop's cost (61.37 / 122.74), markup (37.5), unit value, internal note", !MARGIN_RE.test(cOut), cOut.match(MARGIN_RE)?.[0] ?? '')
+check('no contact detail by value', !/SECRET|\+1555|secret@/.test(cOut))
+check('the margin list names every field Brock listed', ['parts_cost', 'unit_cost_base', 'markup_percent', 'parts_markup_percent', 'internal_notes'].every(n => MARGIN_FIELD_NAMES.includes(n)))
+
+console.log('\n  outside-tech tier (the QR page): no money at all')
+check('no money or margin field name anywhere', moneyKeysIn(outside).length === 0, moneyKeysIn(outside).join(', '))
+check('no printed money value anywhere', !PRINTED_RE.test(oOut) && !MARGIN_RE.test(oOut) && !/731\.47|4321\.09/.test(oOut), oOut.match(PRINTED_RE)?.[0] ?? '')
+check('no document number, no complaint, no sheets: only what Brock listed', !/WO-20|INV-20|"requested"|"sheets"/.test(oOut))
+check('a part is number and quantity only', outside.visits.every(v => v.parts.every(p => JSON.stringify(Object.keys(p)) === '["part_number","quantity"]')))
+check('the unit is number, make, model, serial, year only', JSON.stringify(Object.keys(outside.unit)) === '["unit_number","manufacturer","model","serial_number","year"]')
+check('hours at each visit and the repair comments carry', outside.visits.some(v => v.hours_at_visit === 9800 && v.comments === 'Replaced belt' && v.final_comments === 'Belt worn, replaced'))
+check('handed a FULL customer visit, the stripped builder still drops every money field', moneyKeysIn(outsideTechVisit(cNew)).length === 0 && !PRINTED_RE.test(JSON.stringify(outsideTechVisit(cNew))))
+let threwO = false
+try { assertOutsideTechSafe({ visits: [{ total: 1 }] }) } catch { threwO = true }
+check('assertOutsideTechSafe throws on any money field', threwO)
 
 console.log('\n  history')
 check('newest first, open work order left out', visits.map(v => v.key).join(' ') === 'wo:wo-new pm:pm-alone inv:inv-direct wo:wo-old', visits.map(v => v.key).join(' '))
-const vNew = visits.find(v => v.key === 'wo:wo-new')!
-check('hours and miles are the ones recorded AT that visit', vNew.hours_at_visit === 9800 && vNew.miles_at_visit === 123000 &&
-  visits.find(v => v.key === 'wo:wo-old')!.hours_at_visit === 7000, `${vNew.hours_at_visit} / ${vNew.miles_at_visit}`)
-check('an invoiced job lists the invoice\'s parts, not the superseded work order line', vNew.parts.length === 1 && vNew.parts[0].part_number === '78-1968')
-check('labor lines are not parts used', visits.find(v => v.key === 'wo:wo-old')!.parts.map(p => p.part_number).join() === '11-9959')
-check('work order comments and the invoice\'s work done both carry', vNew.comments === 'Replaced belt' && vNew.final_comments === 'Belt worn, replaced' && vNew.requested === 'Unit not cooling')
+const vNew = cNew
+check('hours and miles are the ones recorded AT that visit', vNew.hours_at_visit === 9800 && vNew.miles_at_visit === 123000 && cOld.hours_at_visit === 7000, `${vNew.hours_at_visit} / ${vNew.miles_at_visit}`)
+check("an invoiced job lists the invoice's parts, not the superseded work order line", vNew.parts.length === 1 && vNew.parts[0].part_number === '78-1968')
+check('labor lines are not parts used', cOld.parts.map(p => p.part_number).join() === '11-9959')
+check("work order comments and the invoice's work done both carry", vNew.comments === 'Replaced belt' && vNew.final_comments === 'Belt worn, replaced' && vNew.requested === 'Unit not cooling')
 check('a DOT sheet attached to the invoice shows on that job', vNew.sheets.length === 1 && vNew.sheets[0].kind === 'dot' && vNew.sheets[0].result === 'pass')
-check('a PM sheet attached to the work order shows on that job', visits.find(v => v.key === 'wo:wo-old')!.sheets.map(s => s.id).join() === 'pm-on-wo')
+check('a PM sheet attached to the work order shows on that job', cOld.sheets.map(s => s.id).join() === 'pm-on-wo')
 check('a PM sheet with no job is its own visit', visits.some(v => v.key === 'pm:pm-alone' && v.sheets[0]?.kind === 'pm'))
 check('an invoice billed with no work order is its own visit', visits.some(v => v.key === 'inv:inv-direct' && v.requested === 'Alarm 18' && v.parts[0]?.part_number === '40-0974'))
+check('the unit keeps exactly its allowed fields', JSON.stringify(Object.keys(su).sort()) ===
+  JSON.stringify(['id', 'last_pm_date', 'last_pm_type', 'latest_hours', 'latest_miles', 'manufacturer', 'model', 'pm_due', 'serial_number', 'unit_number', 'year'].sort()), Object.keys(su).join(','))
 
 console.log('\n  PM due is the Intel Hub rule')
 check('100 hours to go is due soon', pmDueOf({ next_pm_due_hours: 9900, total_hours: 9800, last_pm_date: null }).status === 'due_soon')
@@ -92,11 +131,9 @@ check('isPmAlert counts exactly the badged units', isPmAlert({ next_pm_due_hours
 
 console.log('\n  the walls')
 let threw = false
-try { assertFleetSafe({ unit: { id: 'x', labor_rate: 1 } }) } catch { threw = true }
-check('assertFleetSafe throws on a leaked field', threw)
-check('the patterns catch a future column (e.g. "disposal_fee", "list_price", "core_cost")',
-  forbiddenKeysIn({ disposal_fee: 1, list_price: 1, core_cost: 1 }).length === 3)
-check('every required forbidden name is on the list', ['labor_rate', 'subtotal_labor', 'subtotal_parts', 'tax_amount', 'discount', 'diagnostic_fee', 'total', 'unit_cost', 'markup_percent', 'unit_price', 'customer_phone', 'customer_email'].every(n => FORBIDDEN_FIELD_NAMES.includes(n)))
+try { assertCustomerSafe({ unit: { id: 'x', parts_cost: 1 } }) } catch { threw = true }
+check('assertCustomerSafe throws on a leaked margin field', threw)
+check('the patterns catch a future column (e.g. "core_cost", "markup_amount", "internal_memo")', marginKeysIn({ core_cost: 1, markup_amount: 1, internal_memo: 1 }).length === 3)
 check('the demo account is excluded from aggregates', EXCLUDED_FROM_AGGREGATES.includes('4a8c046f-7db3-42bb-8422-fd47efb7678c'))
 
 console.log(`\n  ${pass} passed, ${fail} failed`)

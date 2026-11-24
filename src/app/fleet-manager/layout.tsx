@@ -1,5 +1,6 @@
 // The fleet manager dashboard: a fleet customer's own login, reading his fleet's units
-// and service history through lib/fleet-view/unit-history - never money.
+// and service history through lib/fleet-view/unit-history - the customer tier: his invoices
+// exactly as printed for him, never the shop's cost, markup or internal notes.
 //
 // PHONE FIRST. He checks this standing in a yard: one column, big tap targets, dark
 // text on a light page that stays readable in sunlight, no tables to scroll sideways.

@@ -3372,18 +3372,27 @@ async function flowUnitSerialModel(): Promise<void> {
 // Q-2026-0276 -> WO-2026-1584 -> INV-2026-0183 ("test xyz", unit "test 002") created
 // neither a fleet account nor a unit. Now saving the document does (lib/hd/document-links):
 // found first, created only when nothing matches, never twice.
-// ── Fm: the fleet manager dashboard - his own login, his own fleet, never money ──
+// ── Fm: the fleet manager dashboard - his own login, his own fleet, his own paper ──
 //
-// Two SMOKE fleets on the owner (A and B), each with units, finished jobs carrying
-// recognisable money (labor rate 731.47, total 4321.09, tax 88.13, part cost 61.37,
-// sell 79.78, fee 41.09), contact details, an open job, and PM / DOT sheets copied
-// from the shape of a real sheet. A manager is invited onto each through the deployed
-// invite route, then the flow reads as each of them:
+// REVISED Nov 23 (Brock): the fleet manager IS the customer. He sees exactly what was
+// printed on the invoice he received - and nothing that never was: the shop's parts
+// cost, markup, internal notes, any other fleet's data.
+//
+// Two SMOKE fleets on the owner (A and B), each with units, finished jobs, contact
+// details, an open job, and PM / DOT sheets copied from the shape of a real sheet.
+// Fleet A's invoiced job carries recognisable PRINTED money (labor 2h x 137.11 =
+// 274.22, part 2 x 84.38 = 168.76, diagnostic fee 41.09, travel 120.25, mileage 62.00,
+// shop supplies 8.44, discount -25.00, tax 13.29, total 663.05) and recognisable
+// MARGIN (supplier cost 61.37 a part, parts_cost 122.74, markup 37.5, an internal
+// note). Its other job was never invoiced and carries work order money (731.47 /
+// 4321.09) that no paper ever showed him. Fleet B's invoice totals 555.37. A manager
+// is invited onto each through the deployed invite route, then the flow reads as each:
 //   * he sees his own fleet's units, latest reading and PM due - and not the other's
-//   * the history is newest first with the hours AT each visit, parts with quantity
-//     only, comments, work done and the attached sheets; the open job is not in it
-//   * every forbidden field, BY NAME, is absent from every response, and none of the
-//     money values appear in any response or rendered page
+//   * the history is newest first with the work order and invoice numbers, the hours
+//     AT each visit, comments, work done, parts and the attached sheets; no open job
+//   * his invoice's figures ARE there (total, tax, labor, the part price he paid, fees)
+//   * parts_cost, markup and internal_notes are absent BY NAME and BY VALUE from every
+//     response and page; so is the never-invoiced job's money and fleet B's invoice
 //   * his OWN session token reads nothing from hd_* through PostgREST (no back door)
 //   * the other fleet's unit and sheet answer 404 / 403
 //   * removing the grant ends access on the next request
@@ -3392,8 +3401,14 @@ async function flowFleetManager(): Promise<void> {
   const F = 'Fm fleet manager'
   const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   const run = Date.now().toString(36)
-  const MONEY = { rate: 731.47, total: 4321.09, tax: 88.13, cost: 61.37, sell: 79.78, fee: 41.09 }
-  const MONEY_RE = /731\.47|4,?321\.09|88\.13|61\.37|79\.78|41\.09/
+  // Never on any paper he received: the shop's cost and markup, a never-invoiced job's figures.
+  const MARGIN = { cost: 61.37, partsCost: 122.74, markup: 37.5, value: 9191.19 }
+  const MARGIN_RE = /61\.37|122\.74|\b37\.5\b|9,?191\.19/
+  const WO_MONEY = { rate: 731.47, total: 4321.09 }
+  const WO_MONEY_RE = /731\.47|4,?321\.09/
+  const B_TOTAL_RE = /555\.37/
+  // On his invoice, printed: these MUST show.
+  const P = { rate: 137.11, labor: 274.22, sell: 84.38, parts: 168.76, fee: 41.09, travel: 120.25, mileage: 62, supplies: 8.44, disc: 25, tax: 13.29, total: 663.05 }
   const CONTACT = { phone: '+15555550142', email: `smoke-contact-${run}@example.com`, addr: `${MARK} 1 Contact Way` }
   const CONTACT_RE = new RegExp(`5555550142|smoke-contact-${run}|1 Contact Way`)
   const ins = async (t: string, row: Record<string, unknown>): Promise<Record<string, unknown> | null> => {
@@ -3411,7 +3426,7 @@ async function flowFleetManager(): Promise<void> {
   const tenDaysAgo = new Date(Date.now() - 10 * 86400000).toISOString().slice(0, 10)
   const unit = async (fleet: string, no: string, extra: Record<string, unknown>) => {
     const u = await ins('hd_units', { user_id: OWNER, fleet_account_id: fleet, unit_number: no, manufacturer: 'Thermo King', model: 'S-600',
-      serial_number: `ZZSERIALFM${run}${no.slice(-2)}`.toUpperCase(), year: 2019, status: 'active', estimated_value: MONEY.total, ...extra })
+      serial_number: `ZZSERIALFM${run}${no.slice(-2)}`.toUpperCase(), year: 2019, status: 'active', estimated_value: MARGIN.value, ...extra })
     if (u) created.fleetUnits.add(String(u.id))
     return u
   }
@@ -3424,8 +3439,8 @@ async function flowFleetManager(): Promise<void> {
   // ── finished jobs carrying money, an open job, sheets ──
   const wo = async (fleet: string, u: string, n: string, extra: Record<string, unknown>) => {
     const w = await ins('hd_work_orders', { user_id: OWNER, fleet_account_id: fleet, unit_id: u, work_order_number: `${MARK}-FM-${run}-${n}`, customer_name: `${MARK} fm customer`,
-      customer_phone: CONTACT.phone, address_line1: CONTACT.addr, labor_rate: MONEY.rate, total_amount: MONEY.total, tax_amount: MONEY.tax, diagnostic_fee: MONEY.fee,
-      parts_markup_percent: 30, internal_notes: `${MARK} internal note`, ...extra })
+      customer_phone: CONTACT.phone, address_line1: CONTACT.addr, labor_rate: WO_MONEY.rate, total_amount: WO_MONEY.total,
+      parts_markup_percent: MARGIN.markup, internal_notes: `${MARK} internal note`, ...extra })
     if (w) created.hdWorkOrders.add(String(w.id))
     return w
   }
@@ -3434,17 +3449,29 @@ async function flowFleetManager(): Promise<void> {
   const woOpen = await wo(A, A1, 'OPEN', { status: 'open', service_requests: `${MARK} OPEN JOB not history`, unit_hours: 9811 })
   const woB = await wo(B, B1, 'B', { status: 'completed', completed_at: '2026-09-01T15:00:00Z', unit_hours: 5000, service_requests: `${MARK} FLEET B JOB`, comments: `${MARK} fleet B comments` })
   const line = await ins('hd_work_order_line_items', { work_order_id: woOld?.id, type: 'part', part_number: '11-9959', description: `${MARK} oil filter`, quantity: 3,
-    unit_cost: MONEY.cost, unit_price: MONEY.sell, markup_percent: 30, total: MONEY.sell, sort_order: 1 })
-  await ins('hd_work_order_line_items', { work_order_id: woOld?.id, type: 'labor', description: `${MARK} PM labor`, quantity: 2, unit_cost: MONEY.rate, unit_price: MONEY.rate, total: MONEY.total, sort_order: 0 })
-  const inv = woNew ? await ins('hd_invoices', { user_id: OWNER, fleet_account_id: A, unit_id: A1, work_order_id: woNew.id, invoice_number: `${MARK}-FM-${run}`, status: 'sent',
+    unit_cost: MARGIN.cost, unit_price: WO_MONEY.rate, markup_percent: MARGIN.markup, total: WO_MONEY.total, sort_order: 1 })
+  await ins('hd_work_order_line_items', { work_order_id: woOld?.id, type: 'labor', description: `${MARK} PM labor`, quantity: 2, unit_cost: WO_MONEY.rate, unit_price: WO_MONEY.rate, total: WO_MONEY.total, sort_order: 0 })
+  // The invoice in the shape lib/hd/wo-to-invoice writes: on an INVOICE line unit_cost is
+  // the price the customer pays and unit_cost_base the shop's cost; labor carries its
+  // hours in mobile_hours with quantity and unit_cost pinned to 0.
+  const WO_NUMBER = `${MARK}-FM-${run}-NEW`, INV_NUMBER = `${MARK}-FM-${run}`
+  const inv = woNew ? await ins('hd_invoices', { user_id: OWNER, fleet_account_id: A, unit_id: A1, work_order_id: woNew.id, invoice_number: INV_NUMBER, work_order_number: WO_NUMBER, status: 'sent',
     customer_name: `${MARK} fm customer`, customer_email: CONTACT.email, customer_phone: CONTACT.phone, address_line1: CONTACT.addr,
-    labor_rate: MONEY.rate, subtotal_labor: MONEY.rate, subtotal_parts: MONEY.sell, tax_amount: MONEY.tax, total: MONEY.total, parts_cost: MONEY.cost, parts_sell: MONEY.sell,
-    diagnostic_fee: MONEY.fee, internal_notes: `${MARK} internal note`, unit_hours: 9800, vehicle_odometer: 123000, complaint: `${MARK} not cooling`, diagnosis: `${MARK} replaced the belt`,
+    labor_rate: P.rate, subtotal_labor: P.labor, subtotal_parts: P.parts, diagnostic_fee: P.fee,
+    travel_hours: 1.25, travel_rate: 96.2, travel_amount: P.travel, mileage_miles: 31, mileage_rate: 2, mileage_amount: P.mileage, shop_supplies_fee: P.supplies, shop_supplies_percent_applied: 5,
+    discount: { version: 1, type: 'flat', value: P.disc, scope: 'document', amount: P.disc, labor_amount: 0, parts_amount: 0, subtotal_before: 674.76, tax_before: 0 },
+    tax_breakdown: { version: 1, parts: { base: 177.2, rate: 7.5, amount: P.tax, taxed: true }, labor: { base: 394.47, rate: 0, amount: 0, taxed: false } },
+    tax_amount: P.tax, tax_rate: 7.5, total: P.total, parts_cost: MARGIN.partsCost, parts_sell: P.parts, parts_markup_percent: MARGIN.markup,
+    internal_notes: `${MARK} internal note`, unit_hours: 9800, vehicle_odometer: 123000, complaint: `${MARK} not cooling`, diagnosis: `${MARK} replaced the belt`,
     line_items: [
-      { id: 'zz-fm-1', type: 'parts', part_number: '78-1968', description: `${MARK} belt`, quantity: 2, unit_cost: MONEY.sell, unit_cost_base: MONEY.cost, markup_percent: 30, amount: MONEY.sell, amount_max: MONEY.sell },
-      { id: 'zz-fm-2', type: 'labor', description: `${MARK} belt labor`, mobile_hours: 1, amount: MONEY.rate, amount_max: MONEY.rate },
+      { id: 'zz-fm-1', type: 'parts', part_number: '78-1968', description: `${MARK} belt`, quantity: 2, unit_cost: P.sell, unit_cost_base: MARGIN.cost, markup_percent: MARGIN.markup, amount: P.parts, mobile_hours: 0 },
+      { id: 'zz-fm-2', type: 'labor', description: `${MARK} belt labor`, quantity: 0, unit_cost: 0, mobile_hours: 2, amount: P.labor },
     ] }) : null
   if (inv) created.hdInvoices.add(String(inv.id))
+  const invB = woB ? await ins('hd_invoices', { user_id: OWNER, fleet_account_id: B, unit_id: B1, work_order_id: woB.id, invoice_number: `${MARK}-FM-${run}-B`, status: 'sent',
+    customer_name: `${MARK} fm customer B`, labor_rate: 111.11, subtotal_labor: 555.37, total: 555.37, diagnosis: `${MARK} FLEET B WORK`,
+    line_items: [{ id: 'zz-fm-b1', type: 'labor', description: `${MARK} fleet B labor`, quantity: 0, unit_cost: 0, mobile_hours: 5, amount: 555.37 }] }) : null
+  if (invB) created.hdInvoices.add(String(invB.id))
   // The sheets: the shape of a real one (CLAUDE.md, fixtures from a real row), re-pointed.
   const realPm = (await rest<Record<string, unknown>>(`hd_pm_checklists?select=*&completed_at=not.is.null&customer_name=not.like.${MARK}*&order=created_at.desc&limit=1`))[0]
   const realDot = (await rest<Record<string, unknown>>(`hd_dot_inspections?select=*&customer_name=not.like.${MARK}*&order=created_at.desc&limit=1`))[0]
@@ -3460,7 +3487,7 @@ async function flowFleetManager(): Promise<void> {
   const dotA = await sheet('hd_dot_inspections', realDot, { unit_id: A1, fleet_account_id: A, invoice_id: inv?.id, inspection_date: '2026-10-02', overall_result: 'pass', unit_number: a1!.unit_number })
   const dotB = await sheet('hd_dot_inspections', realDot, { unit_id: B1, fleet_account_id: B, inspection_date: '2026-09-01', overall_result: 'pass', unit_number: b1!.unit_number })
   if (!record(F, 'finished jobs with money, an open job, a fleet B job, and PM + DOT sheets copied from real sheets are stored',
-    !!(woOld && woNew && woOpen && woB && line && inv && pmA && dotA && dotB),
+    !!(woOld && woNew && woOpen && woB && line && inv && invB && pmA && dotA && dotB),
     `${realPm ? '' : 'no real PM sheet to copy; '}${realDot ? '' : 'no real DOT sheet to copy'}`)) return
 
   // ── the owner invites a manager onto each fleet ──
@@ -3533,12 +3560,28 @@ async function flowFleetManager(): Promise<void> {
     record(F, 'what was done: the request, the work order comments and the work done',
       vNew.requested === `${MARK} not cooling` && vNew.comments === `${MARK} belt glazed` && vNew.final_comments === `${MARK} replaced the belt`, '')
     const pNew = (vNew.parts ?? []) as Array<Record<string, unknown>>, pOld = (vOld.parts ?? []) as Array<Record<string, unknown>>
-    record(F, 'parts used: part number, description and quantity - and nothing else on a part',
+    record(F, 'parts used on the record: part number, description and quantity - and nothing else on a part',
       pNew.length === 1 && pNew[0].part_number === '78-1968' && pNew[0].quantity === 2 && pOld.length === 1 && pOld[0].part_number === '11-9959' && pOld[0].quantity === 3 &&
       [...pNew, ...pOld].every(p => Object.keys(p).sort().join() === 'description,part_number,quantity'), JSON.stringify([...pNew, ...pOld]))
     const sNew = (vNew.sheets ?? []) as Array<Record<string, unknown>>, sOld = (vOld.sheets ?? []) as Array<Record<string, unknown>>
     record(F, 'the PM sheet and the DOT sheet attached to the jobs are on them', sOld.some(s => s.kind === 'pm' && s.id === pmA!.id) && sNew.some(s => s.kind === 'dot' && s.id === dotA!.id),
       `old ${JSON.stringify(sOld)}, new ${JSON.stringify(sNew)}`)
+
+    // ── his invoice, exactly as printed for him: the figures ARE there ──
+    record(F, 'the work order number and invoice number are on the visit', vNew.work_order_number === WO_NUMBER && vNew.invoice_number === INV_NUMBER,
+      `${String(vNew.work_order_number)} / ${String(vNew.invoice_number)}`)
+    const pi = (vNew.invoice ?? null) as Record<string, unknown> | null
+    const g0 = ((pi?.groups ?? []) as Array<Record<string, unknown>>)[0] ?? {}
+    const lab = ((g0.labor ?? []) as Array<Record<string, unknown>>)[0] ?? {}, prt = ((g0.parts ?? []) as Array<Record<string, unknown>>)[0] ?? {}
+    const summ = (pi?.summary ?? []) as Array<{ label: string; amount: number }>
+    const row = (re: RegExp, amt: number) => summ.some(r => re.test(r.label) && Math.abs(r.amount - amt) < 0.005)
+    record(F, 'present: the invoice total', pi?.total === P.total, String(pi?.total))
+    record(F, 'present: the tax, per category as printed', row(/^Tax on parts/, P.tax), JSON.stringify(summ))
+    record(F, 'present: the labor line - hours x the rate, and its amount, and the labor subtotal', lab.hours === 2 && lab.rate === P.rate && lab.amount === P.labor && row(/^Labor Subtotal$/, P.labor), JSON.stringify(lab))
+    record(F, 'present: the part line at the price HE was charged (not the shop\'s cost)', prt.part_number === '78-1968' && prt.quantity === 2 && prt.unit_price === P.sell && prt.amount === P.parts, JSON.stringify(prt))
+    record(F, 'present: every fee - diagnostic, drive time, mileage, shop supplies - and the discount',
+      row(/^Diagnostic Fee$/, P.fee) && row(/^Travel Time/, P.travel) && row(/^Mileage/, P.mileage) && row(/^Shop Supplies/, P.supplies) && row(/./, -P.disc), JSON.stringify(summ))
+    record(F, 'a job never invoiced shows no money: no paper ever priced it for him', vOld.invoice === null, JSON.stringify(vOld.invoice ?? null).slice(0, 120))
 
     // ── the forbidden fields, BY NAME, in every response ──
     const bodies = [JSON.stringify(units.json), JSON.stringify(hist.json)]
@@ -3549,26 +3592,25 @@ async function flowFleetManager(): Promise<void> {
     }
     const keys = keysIn([units.json, hist.json])
     const FORBIDDEN: Array<[string, string[]]> = [
-      ['labor rate', ['labor_rate', 'labor_hours']],
-      ['any labor or parts subtotal', ['subtotal', 'subtotal_labor', 'subtotal_parts', 'labor_subtotal', 'parts_subtotal']],
-      ['tax', ['tax_rate', 'tax_percent', 'tax_amount', 'tax_breakdown']],
-      ['discount', ['discount']],
-      ['any fee', ['diagnostic_fee', 'road_call_fee', 'service_call_fee', 'shop_supplies_fee', 'late_fee_amount', 'travel_amount', 'travel_rate', 'mileage_amount', 'mileage_rate']],
-      ['invoice total', ['total', 'total_amount', 'grand_total', 'amount', 'amount_max']],
-      ['part cost', ['unit_cost', 'unit_cost_base', 'parts_cost', 'cost']],
-      ['markup', ['markup_percent', 'parts_markup_percent']],
-      ['sell price', ['unit_price', 'parts_sell', 'sell_price', 'price']],
+      ["the shop's parts cost (what it paid its supplier)", ['parts_cost', 'unit_cost', 'unit_cost_base', 'cost', 'total_cost']],
+      ['markup, or anything derived from it', ['markup', 'markup_percent', 'parts_markup_percent', 'margin', 'parts_sell']],
+      ['internal notes', ['internal_notes']],
+      ["the unit's dollar value", ['estimated_value']],
       ['customer contact details', ['customer_name', 'customer_phone', 'customer_email', 'contact_name', 'contact_phone', 'contact_email', 'address', 'address_line1', 'city', 'state', 'zip']],
     ]
     for (const [what, names] of FORBIDDEN) {
       const hit = names.filter(n => keys.has(n))
       record(F, `forbidden, absent by name: ${what} (${names.join(', ')})`, hit.length === 0, hit.join(', '))
     }
-    record(F, 'forbidden, absent by value: none of the money figures is in any response', !bodies.some(b => MONEY_RE.test(b)), bodies.map(b => b.match(MONEY_RE)?.[0]).filter(Boolean).join(', '))
-    record(F, "forbidden, absent by value: no contact detail and no internal note is in any response", !bodies.some(b => CONTACT_RE.test(b) || b.includes('internal note')), '')
-    const otherKeys = [...keys].filter(k => ['user_id', 'customer_id', 'fleet_account_id', 'internal_notes', 'public_token', 'invoice_number', 'work_order_number'].includes(k))
-    record(F, "forbidden: any other customer's data - no owner, customer or document identities, and fleet B's job is in nothing",
-      otherKeys.length === 0 && !bodies.some(b => b.includes('FLEET B') || b.includes('fleet B comments') || b.includes(B1)), otherKeys.join(', '))
+    const patternHits = [...keys].filter(k => /cost|markup|margin|internal/i.test(k))
+    record(F, 'forbidden, absent by name: no key anywhere containing cost, markup, margin or internal', patternHits.length === 0, patternHits.join(', '))
+    record(F, "forbidden, absent by value: the shop's cost (61.37 a part, 122.74 parts cost), the markup (37.5) and the unit's value",
+      !bodies.some(b => MARGIN_RE.test(b)), bodies.map(b => b.match(MARGIN_RE)?.[0]).filter(Boolean).join(', '))
+    record(F, 'forbidden, absent by value: the internal note, and every contact detail', !bodies.some(b => CONTACT_RE.test(b) || b.includes('internal note')), '')
+    record(F, "forbidden, absent by value: the never-invoiced job's work order money (731.47 / 4321.09)", !bodies.some(b => WO_MONEY_RE.test(b)), '')
+    const otherKeys = [...keys].filter(k => ['user_id', 'customer_id', 'fleet_account_id', 'public_token'].includes(k))
+    record(F, "forbidden: any other customer's data - no owner or customer identities, and fleet B's job and invoice are in nothing",
+      otherKeys.length === 0 && !bodies.some(b => b.includes('FLEET B') || b.includes('fleet B comments') || b.includes(B1) || B_TOTAL_RE.test(b)), otherKeys.join(', '))
 
     // ── the rendered pages ──
     const home = await fmPage('/fleet-manager')
@@ -3580,8 +3622,14 @@ async function flowFleetManager(): Promise<void> {
     record(F, "the unit page renders the history: dates, hours at each visit, parts with Qty, sheet links",
       up.status === 200 && visitCount === visits.length && up.text.includes('9,800 hrs') && up.text.includes('7,000 hrs') && up.text.includes('Qty 3') &&
       up.html.includes(`/api/hd/pm-checklist/${pmA!.id}/pdf`) && up.html.includes(`/api/hd/dot-inspections/${dotA!.id}/pdf`), `-> ${up.status}, ${visitCount} visit(s)`)
-    record(F, 'no page shows a dollar sign or any money figure', ![home.text, up.text].some(t => t.includes('$') || MONEY_RE.test(t)),
-      [home.text, up.text].map(t => t.match(/.{0,30}\$.{0,20}/)?.[0]).filter(Boolean).join(' | '))
+    record(F, 'the unit page prints his invoice: numbers, total, tax, labor, the part price he paid, fees, discount',
+      up.html.includes('data-testid="fm-invoice"') && up.text.includes(WO_NUMBER) && up.text.includes(INV_NUMBER) &&
+      ['$663.05', '$13.29', '$137.11', '$274.22', '$84.38', '$168.76', '$41.09', '$120.25', '$62.00', '$8.44', '-$25.00'].every(m => up.text.includes(m)),
+      ['$663.05', '$13.29', '$137.11', '$274.22', '$84.38', '$168.76', '$41.09', '$120.25', '$62.00', '$8.44', '-$25.00'].filter(m => !up.text.includes(m)).join(' ') || 'no fm-invoice block')
+    record(F, "no page shows the shop's cost, markup, unit value, the never-invoiced job's money or fleet B's invoice",
+      ![home.text, up.text].some(t => MARGIN_RE.test(t) || WO_MONEY_RE.test(t) || B_TOTAL_RE.test(t)),
+      [home.text, up.text].map(t => (t.match(MARGIN_RE) ?? t.match(WO_MONEY_RE) ?? t.match(B_TOTAL_RE))?.[0]).filter(Boolean).join(' | '))
+    record(F, 'the unit list itself carries no money (it lists units, not invoices)', !home.text.includes('$'), home.text.match(/.{0,30}\$.{0,20}/)?.[0] ?? '')
     record(F, 'no page shows a contact detail or the internal note', ![home.html, up.html].some(h => CONTACT_RE.test(h) || h.includes('internal note')), '')
 
     // ── the sheets open for him, the other fleet's do not ──
@@ -3590,7 +3638,7 @@ async function flowFleetManager(): Promise<void> {
     const dotOther = await fetch(`${BASE}/api/hd/dot-inspections/${dotB!.id}/pdf`, { headers: { cookie } })
     record(F, 'his PM sheet and DOT sheet open', pdf.status === 200 && dotOwn.status === 200, `PM -> ${pdf.status}, DOT -> ${dotOwn.status}`)
     const dotHtml = dotOwn.ok ? await dotOwn.text() : ''
-    record(F, 'the DOT sheet prints no money figure', dotOwn.ok && !MONEY_RE.test(dotHtml), '')
+    record(F, 'the DOT sheet prints no money figure', dotOwn.ok && !MARGIN_RE.test(dotHtml) && !WO_MONEY_RE.test(dotHtml) && !/663\.05|137\.11/.test(dotHtml), '')
 
     // ── isolation: fleet B from fleet A ──
     const otherUnit = await api('GET', `/api/fleet-manager/units/${B1}`)
@@ -3614,8 +3662,12 @@ async function flowFleetManager(): Promise<void> {
     const bUnits = await api('GET', '/api/fleet-manager/units')
     const bIds = ((bUnits.json.units ?? []) as Array<Record<string, unknown>>).map(u => String(u.id))
     const bOnA = await api('GET', `/api/fleet-manager/units/${A1}`)
+    const bHist = await api('GET', `/api/fleet-manager/units/${B1}`)
+    const bBody = JSON.stringify(bHist.json)
     record(F, "fleet B's manager sees only fleet B, and fleet A's unit 404s", bUnits.status === 200 && bIds.join() === B1 && bOnA.status === 404 && !JSON.stringify(bUnits.json).includes('not cooling'),
       `${bIds.length} unit(s), A1 -> ${bOnA.status}`)
+    record(F, "fleet B's manager sees fleet B's own invoice, and none of fleet A's figures",
+      bHist.status === 200 && B_TOTAL_RE.test(bBody) && !/663\.05|137\.11|84\.38/.test(bBody) && !bBody.includes(INV_NUMBER), `-> ${bHist.status}`)
 
     // ── removing the grant ends it ──
     cookie = ownerCookie

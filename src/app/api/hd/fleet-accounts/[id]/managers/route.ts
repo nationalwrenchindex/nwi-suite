@@ -27,7 +27,15 @@ import { FLEET_MANAGER_KEY, grantOf } from '@/lib/fleet-view/access'
 
 export const dynamic = 'force-dynamic'
 
-const FROM = process.env.INVOICE_FROM_EMAIL ?? 'invoices@nationalwrenchindex.com'
+// NOT the invoice sender (Brock, Nov 23): an invite from invoices@ reads as a bill. Its
+// own address on the same Resend-verified domain, and a display name that says what it
+// is: "<Shop> Fleet Records <records@nationalwrenchindex.com>".
+const FROM_ADDRESS = process.env.FLEET_ACCESS_FROM_EMAIL ?? 'records@nationalwrenchindex.com'
+function inviteFrom(shopName: string): string {
+  // A display name may not carry quotes, angle brackets or line breaks.
+  const name = `${shopName.replace(/["<>\r\n\\]/g, '').trim() || 'Your service shop'} Fleet Records`.slice(0, 70)
+  return `"${name}" <${FROM_ADDRESS}>`
+}
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 /** RFC 2606 / 6761 reserved names: never deliverable, so never sent to. */
@@ -138,12 +146,13 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   } else {
     try {
       const r = await new Resend(process.env.RESEND_API_KEY).emails.send({
-        from: FROM, to: email,
-        subject: `${g.shopName} shared your fleet's service history`,
+        from: inviteFrom(g.shopName), to: email,
+        subject: `Your fleet records login from ${g.shopName}`,
         html: `<div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#111">
           <h2 style="margin:0 0 12px">${esc(g.fleetName)}</h2>
-          <p style="line-height:1.6;margin:0 0 16px">${esc(g.shopName)} has given you access to your fleet's units,
-          PM due dates, repair history and PM and DOT sheets.</p>
+          <p style="line-height:1.6;margin:0 0 16px">${esc(g.shopName)} has given you a login to your fleet's records:
+          units, PM due dates, repair history, PM and DOT sheets, and copies of the invoices already sent to you.
+          This email is not a bill.</p>
           <p style="margin:0 0 16px"><a href="${link}" style="display:inline-block;background:#E85D24;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">Set your password</a></p>
           <p style="font-size:12px;color:#555;line-height:1.6;margin:0">The link works once. After that, sign in at ${esc(origin)}/fleet-manager/login with this email address and your password.</p>
         </div>`,

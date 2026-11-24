@@ -1,7 +1,7 @@
 // GET /api/fleet-manager/units - the signed-in fleet manager's units.
 //
-// Everything comes out of lib/fleet-view/unit-history (whitelisted columns, no money,
-// no contact details), scoped to the grant on his own auth user. Anyone without a
+// Everything comes out of lib/fleet-view/unit-history (whitelisted columns; the unit
+// list carries no money and no contact details), scoped to the grant on his own auth user. Anyone without a
 // grant gets a 403 - including the shop owner, who has the HD Suite for this.
 
 import { NextResponse } from 'next/server'

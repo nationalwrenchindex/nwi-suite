@@ -267,7 +267,8 @@ export default async function FleetAccountDetailPage({
               <p className="text-sm leading-relaxed" style={{ color: 'rgba(var(--hd-ink-rgb), 0.7)' }}>{account.notes}</p>
             </div>
           )}
-          {/* The fleet's own login: units, PM due, repair history, sheets - never money. */}
+          {/* The fleet's own login: units, PM due, repair history, sheets, and his invoices
+              as printed for him - never cost, markup or internal notes. */}
           <FleetManagerAccess fleetAccountId={account.id} />
         </div>
 

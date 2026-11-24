@@ -11,18 +11,15 @@
 
 import type { PublicInvoiceBranding } from '@/lib/hd/invoice-token'
 import { complianceLines } from '@/lib/hd/compliance-footer'
-import { parseBreakdown, taxDisplayRows } from '@/lib/tax'
+import { hdInvoiceSummaryRows } from '@/lib/hd/invoice-print'
 import { termsDisplay, termsWithDueDate } from '@/lib/hd/payment-terms'
 import {
   addressLines,
   serviceUnitLines,
   documentDisclaimers,
-  feeRows,
 } from '@/lib/invoice-document'
 import { addressFrom } from '@/lib/address'
-import { extrasDisplayRows, extrasFromDocument } from '@/lib/billable-extras'
 import { money } from '@/lib/format'
-import { discountPrintLabel, parseDiscount } from '@/lib/document-discount'
 import { hdTermsBlockRows, parseTermsSnapshot } from '@/lib/document-terms'
 import DocumentTermsBlock from '@/components/hd/DocumentTermsBlock'
 import { shopTimeZone, fmtShopDate } from '@/lib/shop-time'
@@ -125,12 +122,8 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
     techCertNote:      branding.hd_tech_cert_note,
   })
 
-  // Empty on a pre-140 invoice, which then keeps the single Tax line it was sent with.
-  const payTaxRows = taxDisplayRows(parseBreakdown((inv as { tax_breakdown?: unknown }).tax_breakdown))
-
-  // Migration 168. The discount, and the terms this invoice recorded (at send, or
-  // carried from its quote). Neither exists on an older invoice, which prints as before.
-  const discount = parseDiscount(inv.discount)
+  // Migration 168. The terms this invoice recorded (at send, or carried from its quote).
+  // None on an older invoice, which prints as before.
   const snap = parseTermsSnapshot(inv.terms_snapshot)
   // A paid or voided invoice does not ask for money: no How to pay on it.
   const termsRows = hdTermsBlockRows(snap).filter(r => r.key !== 'how_to_pay' || canPay)
@@ -138,34 +131,9 @@ export default function PublicInvoicePay({ invoice: inv, branding }: Props) {
   const termsCode: string | null =
     (typeof inv.payment_terms === 'string' && inv.payment_terms.trim()) || snap?.payment_terms || null
 
-  const summaryRows = [
-    ...(Number(inv.subtotal_labor)  > 0 ? [{ label: 'Labor Subtotal',  val: inv.subtotal_labor  }] : []),
-    ...(Number(inv.subtotal_parts)  > 0 ? [{ label: 'Parts Subtotal',  val: inv.subtotal_parts  }] : []),
-    // feeRows is the shared rule: a zero fee prints no line at all. See the
-    // migration 057 DEFAULT 125.00 note on it.
-    ...feeRows(inv).map(r => ({ label: r.label, val: r.amount })),
-    // Travel, mileage and shop supplies, each as its own labelled line and never
-    // folded into labor or parts. Read from the stored columns, never recomputed.
-    // A zero prints nothing — extrasDisplayRows returns no row for it.
-    ...extrasDisplayRows(extrasFromDocument(inv)).map(r => ({
-      label: r.detail ? `${r.label} (${r.detail})` : r.label,
-      val:   r.amount,
-    })),
-    // The discount sits between the subtotal and the tax, and only when there is one.
-    ...(discount ? [
-      { label: 'Subtotal', val: discount.subtotal_before },
-      { label: discountPrintLabel(discount), val: -discount.amount, testid: 'discount-row' },
-    ] : []),
-    // tax_rate is stored as a percent (7.5 means 7.5%), not a fraction.
-    //
-    // When the invoice carries a breakdown, each category becomes its own row --
-    // including an untaxed one, which is how the customer can see that labor was not
-    // taxed rather than having to work it out from a total. Pre-140 invoices have no
-    // breakdown and keep the single Tax line they were sent with.
-    ...(payTaxRows.length > 0
-      ? payTaxRows.map(r => ({ label: r.text, val: r.taxed ? r.amount : 0, testid: 'tax-row' }))
-      : Number(inv.tax_amount) > 0 ? [{ label: `Tax (${inv.tax_rate}%)`, val: inv.tax_amount, testid: 'tax-row' }] : []),
-  ] as Array<{ label: string; val: number; testid?: string }>
+  // The money rows between the lines and the total - one shared rule (lib/hd/invoice-print)
+  // so the fleet manager's records print exactly what this copy prints.
+  const summaryRows = hdInvoiceSummaryRows(inv).map(r => ({ label: r.label, val: r.amount, testid: r.testid }))
 
   return (
     <div style={{ background: BG, color: TEXT, minHeight: '100dvh', padding: '16px 12px 40px' }}>

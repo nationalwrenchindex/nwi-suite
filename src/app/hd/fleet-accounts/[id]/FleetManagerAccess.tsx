@@ -2,7 +2,8 @@
 
 // The shop's side of the fleet manager dashboard: invite a fleet manager by email onto
 // THIS fleet account, see who has access, remove it. He gets the fleet's units, PM
-// due, repair history and PM/DOT sheets - never a price (lib/fleet-view/unit-history).
+// due, repair history, PM/DOT sheets, and his invoices exactly as printed for him -
+// never the shop's cost, markup or internal notes (lib/fleet-view/unit-history).
 
 import { useCallback, useEffect, useState } from 'react'
 
@@ -49,7 +50,7 @@ export default function FleetManagerAccess({ fleetAccountId }: { fleetAccountId:
     <div className="mt-6 pt-5 border-t" style={{ borderColor: 'var(--hd-border)' }} data-testid="fleet-manager-access">
       <p className="font-condensed font-bold text-white text-lg tracking-wide mb-1">FLEET MANAGER ACCESS</p>
       <p className="text-xs leading-relaxed mb-3" style={{ color: 'var(--hd-text-faint)' }}>
-        Their own login to this fleet&apos;s units, PM due, repair history and PM and DOT sheets. No prices, rates or totals are shown.
+        Their own login to this fleet&apos;s units, PM due, repair history, PM and DOT sheets, and the invoices you sent them, as printed. Your parts cost, markup and internal notes are never shown.
       </p>
       <form onSubmit={invite} className="flex flex-col sm:flex-row gap-2">
         <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="manager@fleet.com"
