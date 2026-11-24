@@ -11,6 +11,9 @@ import ThemeToggle from '@/components/layout/ThemeToggle'
 import TaxSettingsFields from '@/components/settings/TaxSettingsFields'
 import HDDocumentTermsForm, { type HDDocumentTerms } from '@/components/hd/HDDocumentTermsForm'
 import { onReeferSurface } from '@/lib/reefer-surface'
+import HDDocumentNumbersForm, { type DocNumberRow } from '@/components/hd/HDDocumentNumbersForm'
+import { createServiceClient } from '@/lib/supabase/service'
+import { HD_DOC_KINDS, readDocNumberState, formatDocNumber } from '@/lib/hd/document-number-start'
 
 export const metadata = { title: 'Settings — NWI HD Suite' }
 
@@ -49,6 +52,18 @@ export default async function HDSettingsPage() {
   // The technician certification note (migration 185), its own query.
   const techCert = await readTechCertNote(supabase, user.id)
   const docTerms = termsResult.error ? null : (termsResult.data as HDDocumentTerms | null)
+
+  // The next invoice, quote and work order number - this account's own counters
+  // (lib/hd/document-number-start). Its own read, so a failure costs only this card.
+  const numberYear = new Date().getFullYear()
+  let docNumbers: DocNumberRow[] | null = null
+  try {
+    const svc = createServiceClient()
+    const states = await Promise.all(HD_DOC_KINDS.map(k => readDocNumberState(svc, user.id, k)))
+    docNumbers = states.map(s => ({ kind: s.kind, next: s.next, next_formatted: formatDocNumber(s.kind, numberYear, s.next) }))
+  } catch (e) {
+    console.error('[hd settings] document numbers read failed:', e)
+  }
 
   let profile = profileResult.data as Record<string, unknown> | null
   let feesAvailable = profile != null && 'hd_diagnostic_fee' in profile
@@ -182,6 +197,20 @@ export default async function HDSettingsPage() {
           ) : (
             <p className="text-sm" style={{ color: 'var(--hd-text-muted)' }}>
               These settings could not be loaded. Refresh the page; if this stays, the terms columns (migrations 143 and 164) are missing.
+            </p>
+          )}
+        </div>
+
+        <div className="rounded-xl p-5" style={{ background: 'var(--hd-card)', border: '1px solid var(--hd-border)' }}>
+          <p className="font-condensed font-bold text-white text-lg tracking-wide mb-1">DOCUMENT NUMBERS</p>
+          <p className="text-sm mb-2" style={{ color: 'var(--hd-text-muted)' }}>
+            The number your next invoice, quote and work order will get. Numbers only move forward: you cannot pick a number at or below one you have already issued. Changing it never renumbers a document you already have.
+          </p>
+          {docNumbers ? (
+            <HDDocumentNumbersForm rows={docNumbers} year={numberYear} />
+          ) : (
+            <p className="text-sm" style={{ color: 'var(--hd-text-muted)' }}>
+              Your document numbers could not be loaded. Refresh the page to try again.
             </p>
           )}
         </div>

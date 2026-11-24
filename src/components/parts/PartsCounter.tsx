@@ -19,6 +19,7 @@
 //     store's brand next to a price; cost and sell live on the inventory screen.
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { counterStockLines, wrongCountLabel } from '@/lib/parts/stock-display'
 
 export type CounterScope = 'all' | 'reefer'
 
@@ -409,17 +410,27 @@ function ResultCard({ r }: { r: CounterResult }) {
         </div>
 
         {/* On the shelf - this shop's own stock. No price on the counter. */}
-        <div className="text-right shrink-0">
-          <p className="text-xs" style={{ color: 'var(--hd-text-muted)' }}>On hand</p>
-          <p className="text-2xl font-bold text-white">{r.stock.on_hand}</p>
-          <p className="text-xs text-white">
-            {r.stock.allocated > 0 ? `${r.stock.allocated} on open jobs - ${r.stock.available} available` : `${r.stock.available} available`}
-          </p>
-          {r.stock.locations.filter(l => l.on_hand !== 0).map(l => (
-            <p key={l.location_id} className="text-[11px]" style={{ color: 'var(--hd-text-muted)' }}>
-              {l.location_name ?? 'Shop'}{l.bin ? ` - bin ${l.bin}` : ''}: {l.on_hand}
-            </p>
-          ))}
+        {/* Display only (lib/parts/stock-display): availability never prints below 0,
+            and a negative on-hand prints as a wrong count to correct, not as stock. */}
+        <div className="text-right shrink-0" data-testid="counter-stock">
+          {(() => {
+            const s = counterStockLines(r.stock)
+            return (<>
+              <p className="text-xs" style={{ color: 'var(--hd-text-muted)' }}>On hand</p>
+              {s.onHandWrong ? (
+                <>
+                  <p className="text-sm font-bold" style={{ color: 'var(--hd-negative)' }}>{s.onHand}</p>
+                  <p className="text-[11px] max-w-[11rem]" style={{ color: 'var(--hd-negative)' }}>{wrongCountLabel(r.stock.on_hand)}</p>
+                </>
+              ) : (
+                <p className="text-2xl font-bold text-white">{s.onHand}</p>
+              )}
+              <p className="text-xs text-white">{s.availability}</p>
+              {s.locations.map((line, i) => (
+                <p key={i} className="text-[11px]" style={{ color: 'var(--hd-text-muted)' }}>{line}</p>
+              ))}
+            </>)
+          })()}
         </div>
       </div>
 

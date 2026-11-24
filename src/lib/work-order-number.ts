@@ -1,5 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { fetchAllRows } from '@/lib/supabase/fetch-all'
+import { createServiceClient } from '@/lib/supabase/service'
+import { readWorkOrderFloor } from '@/lib/hd/document-number-start'
 
 /**
  * Work order numbers: WO-YYYY-NNNN, one sequence per account, for both `work_orders`
@@ -20,6 +22,11 @@ import { fetchAllRows } from '@/lib/supabase/fetch-all'
  * insertWithWorkOrderNumber reads the highest again and retries, so the loser takes the
  * next number instead of failing. hd_work_orders gets that constraint in migration 176;
  * work_orders has had it since 135.
+ *
+ * HD ONLY: THE SHOP'S STARTING NUMBER (Settings > Document numbers, Nov 24, 2026). An
+ * HD account may set the next work order number; it is kept as a floor in
+ * hd_document_counters ('hd_work_order', migration 193) and the next number is above
+ * whichever is higher, the floor or the highest existing number. LD is unchanged.
  */
 
 const SEQUENCE = /^WO-\d{4}-(\d+)$/
@@ -32,8 +39,9 @@ export type WorkOrderTable = 'work_orders' | 'hd_work_orders'
 export function nextWorkOrderNumber(
   existing: ReadonlyArray<string | null | undefined>,
   year: number,
+  floor = 0,
 ): string {
-  let highest = 0
+  let highest = Math.max(0, Math.floor(Number(floor) || 0))
   for (const n of existing) {
     const m = SEQUENCE.exec(String(n ?? '').trim())
     if (m) highest = Math.max(highest, Number(m[1]))
@@ -65,7 +73,17 @@ export async function allocateWorkOrderNumber(
       .like('work_order_number', 'WO-%')
       .order('id', { ascending: true })
       .range(from, to))
-  return nextWorkOrderNumber(rows.map(r => r.work_order_number), new Date().getFullYear())
+  // The counter table is closed to the browser keys, so the floor is read with the
+  // service client - for this account's id only.
+  let floor = 0
+  if (table === 'hd_work_orders') {
+    try {
+      floor = await readWorkOrderFloor(createServiceClient(), userId)
+    } catch (e) {
+      console.error('[work-order-number] no service client for the floor - numbering from existing work orders only:', e)
+    }
+  }
+  return nextWorkOrderNumber(rows.map(r => r.work_order_number), new Date().getFullYear(), floor)
 }
 
 /**

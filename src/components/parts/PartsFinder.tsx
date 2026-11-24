@@ -29,6 +29,7 @@
 
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import Link from 'next/link'
+import { countIsWrong, wrongCountLabel } from '@/lib/parts/stock-display'
 
 export interface FitmentRow {
   id: string
@@ -385,7 +386,9 @@ export default function PartsFinder({ mode, lockedUnit, onPick, markupPercent }:
 
                 <div className="text-right shrink-0">
                   <p className="text-white/40 text-xs">
-                    On hand <span className="text-white font-medium">{inStock?.on_hand ?? 0}</span>
+                    {inStock && countIsWrong(inStock.on_hand)
+                      ? <span style={{ color: 'var(--hd-negative)' }}>{wrongCountLabel(inStock.on_hand)}</span>
+                      : <>On hand <span className="text-white font-medium">{inStock?.on_hand ?? 0}</span></>}
                     {inStock?.bin && <span className="text-white/30"> &middot; bin {inStock.bin}</span>}
                   </p>
                   <p className="text-white/40 text-xs mt-0.5">

@@ -5,6 +5,7 @@ import { fetchWorkOrderInspections } from '@/lib/hd/inspections'
 import { BRANDING_SELECT, resolveBranding, type BrandingSource } from '@/lib/branding'
 import WorkOrderDetail from './WorkOrderDetail'
 import { hdLaborRateFrom } from '@/lib/hd/labor-rate'
+import { findUnitBySerialAndModel } from '@/lib/hd/unit-match-server'
 
 export const metadata = { title: 'Work Order — NWI HD Suite' }
 
@@ -69,6 +70,18 @@ export default async function WorkOrderDetailPage({
     for (const k of UNIT_DOC_FIELDS) if (!woRow[k] && quote[k]) woRow[k] = quote[k]
   }
 
+  // WHY THE UNIT DID NOT LINK, when the reason is known. A work order made from an
+  // approved quote whose serial matched a unit with a different model is created with no
+  // unit (lib/hd/unit-match - that rule is unchanged here and only asked). The shop
+  // used to find out by noticing an empty unit. Asked again on each load, read-only, so
+  // the note goes away once the unit is linked or its model fixed. This page is the
+  // shop's own; the customer's approval page never receives it.
+  let unitLinkReason: 'model_mismatch' | 'ambiguous' | null = null
+  if (!woRow.unit_id && String(woRow.unit_serial ?? '').trim()) {
+    const m = await findUnitBySerialAndModel(supabase, { userId: user.id }, woRow.unit_serial as string, (woRow.unit_model as string | null) ?? null)
+    if (m.reason === 'model_mismatch' || m.reason === 'ambiguous') unitLinkReason = m.reason
+  }
+
   const branding = resolveBranding(brandingRow as BrandingSource | null)
 
   // The shop's HD labor rate, for the labor lines added on this work order. Its own read
@@ -94,6 +107,7 @@ export default async function WorkOrderDetailPage({
         workOrderId={id}
         branding={branding}
         shopLaborRate={hdLaborRateFrom(rateRow as Record<string, unknown> | null)}
+        unitLinkReason={unitLinkReason}
       />
     </main>
   )

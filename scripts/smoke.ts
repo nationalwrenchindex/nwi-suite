@@ -62,6 +62,7 @@ import { unitModelMatches } from '../src/lib/parts/narrow'
 import { FULLBAY_COLUMNS, parseCSV, preflightColumns } from '../src/lib/hd/import-columns'
 import { deliverHDDocument } from '../src/lib/hd/deliver-document'
 import { parseLaborEstimate, estimateLabel } from '../src/lib/labor-estimate'
+import { counterStockLines, wrongCountLabel, shownAvailable } from '../src/lib/parts/stock-display'
 
 loadEnv()
 
@@ -6759,6 +6760,169 @@ async function flowPartsCounter(): Promise<void> {
   record(F, 'receiving a part that is not in the catalog is refused', bad.status === 422, `-> ${bad.status}`)
 }
 
+// ── Dn: the shop sets its next invoice, quote and work order number (Nov 24, 2026) ──
+//
+// Settings > Document numbers. Three counters, each per account, FORWARD ONLY: a value at
+// or below the highest number already issued is refused and names that document. This
+// flow only ever sends values the server must REFUSE, and checks the counters did not
+// move - it never raises a real counter, because forward-only means it could not put one
+// back.
+async function flowDocNumbers(): Promise<void> {
+  const F = 'Dn document numbers'
+  const counters = async () => JSON.stringify(
+    (await rest<Record<string, unknown>>(`hd_document_counters?user_id=eq.${OWNER}&select=doc_type,last_number&order=doc_type`)))
+  const before = await counters()
+
+  const got = await api('GET', '/api/hd/settings/document-numbers')
+  const nums = (got.json.numbers ?? []) as Array<{ kind: string; next: number; next_formatted: string; highest_issued: string | null }>
+  if (!record(F, 'the route reads this account\'s next invoice, quote and work order number',
+    got.status === 200 && ['hd_invoice', 'hd_quote', 'hd_work_order'].every(k => nums.some(n => n.kind === k && n.next >= 1)),
+    `-> ${got.status} ${nums.map(n => `${n.kind}=${n.next_formatted}`).join(', ')} ${String(got.json.error ?? '')}`)) return
+
+  const pg = await page('/hd/settings')
+  const pad = (n: number) => String(n).padStart(4, '0')
+  record(F, 'Settings shows three fields, each starting at its current next number, zero-padded',
+    !!pg && pg.text.includes('DOCUMENT NUMBERS') && ['Next invoice number', 'Next quote number', 'Next work order number'].every(x => pg.text.includes(x))
+      && nums.every(n => pg.html.includes(`id="docnum-${n.kind}"`) && new RegExp(`id="docnum-${n.kind}"[^>]*value="${pad(n.next)}"|value="${pad(n.next)}"[^>]*id="docnum-${n.kind}"`).test(pg.html)),
+    pg ? nums.map(n => `${n.kind} ${pad(n.next)} ${pg.html.includes(`id="docnum-${n.kind}"`) ? 'field' : 'NO FIELD'}`).join(', ') : 'did not load')
+
+  for (const n of nums) {
+    const m = /-(\d+)$/.exec(n.highest_issued ?? '')
+    if (!m) {
+      record(F, `${n.kind}: a number at the highest already issued is refused, naming it`, false, 'the account has no issued number of this type to test against')
+      continue
+    }
+    const hi = Number(m[1])
+    const r = await api('POST', '/api/hd/settings/document-numbers', { kind: n.kind, next: hi })
+    const want = `You have already issued ${n.highest_issued}. The next number must be ${hi + 1} or higher.`
+    record(F, `${n.kind}: ${hi} (= ${n.highest_issued}, already issued) is refused, naming it`,
+      r.status === 422 && r.json.error === want, `-> ${r.status} ${String(r.json.error ?? '')}`)
+    if (hi > 1) {
+      const lower = await api('POST', '/api/hd/settings/document-numbers', { kind: n.kind, next: 1 })
+      record(F, `${n.kind}: 1 (below it) is refused too`, lower.status === 422 && lower.json.error === want, `-> ${lower.status} ${String(lower.json.error ?? '')}`)
+    }
+    // A number the counter has already handed out (a deleted document's), above every
+    // existing one: still behind the counter, so still refused.
+    if (n.next - 1 > hi) {
+      const behind = await api('POST', '/api/hd/settings/document-numbers', { kind: n.kind, next: n.next - 1 })
+      record(F, `${n.kind}: ${n.next - 1} (behind the counter) is refused`, behind.status === 422 && /only move forward/.test(String(behind.json.error)),
+        `-> ${behind.status} ${String(behind.json.error ?? '')}`)
+    }
+  }
+  for (const bad of [0, 10000, 'abc', 12.5]) {
+    const r = await api('POST', '/api/hd/settings/document-numbers', { kind: 'hd_invoice', next: bad })
+    record(F, `${JSON.stringify(bad)} is refused as not 1 to 9999`, r.status === 422 && r.json.error === 'Enter a whole number from 1 to 9999.',
+      `-> ${r.status} ${String(r.json.error ?? '')}`)
+  }
+  const odd = await api('POST', '/api/hd/settings/document-numbers', { kind: 'invoices', next: 5000 })
+  record(F, 'an unknown document type is refused', odd.status === 400, `-> ${odd.status}`)
+  const after = await counters()
+  record(F, 'no refused value moved any counter', after === before, after === before ? 'unchanged' : `${before} -> ${after}`)
+}
+
+// ── Ul: the work order says WHY a unit did not link (Nov 24, 2026) ──────────────
+//
+// A customer approves a quote at the public link; its serial matches a unit whose model
+// disagrees, so the work order has no unit (the 3f64cca1 rule, unchanged). The SHOP's
+// work order page now says why. The customer's approval page never does.
+async function flowUnitLinkReason(): Promise<void> {
+  const F = 'Ul unit link reason'
+  const NOTE = 'No unit linked: a unit with this serial exists but its model does not match. Pick the unit or add a new one.'
+  const SERIAL = `ZZSERIALUL${Date.now().toString(36).toUpperCase()}`
+  const unit = await fetch(`${SUPA}/rest/v1/hd_units`, {
+    method: 'POST', headers: { ...SVC_H, Prefer: 'return=representation' },
+    body: JSON.stringify({ user_id: OWNER, unit_number: `${MARK}-UL`, manufacturer: 'Thermo King', model: 'S-600', serial_number: SERIAL, status: 'active' }),
+  })
+  const unitId = unit.ok ? String(((await unit.json()) as Record<string, unknown>[])[0]?.id ?? '') : ''
+  if (unitId) created.fleetUnits.add(unitId)
+  if (!record(F, 'a unit (S-600) with a known serial is arranged', !!unitId, `-> ${unit.status}`)) return
+
+  const line = { id: 'zz-ul1', type: 'labor', amount: 100, quantity: 0, unit_cost: 0, amount_max: 100, book_hours: 0,
+    description: `${MARK} unit link reason`, part_number: '', mobile_hours: 1, book_hours_max: 0, recharge_added: false,
+    mobile_hours_max: 1, requires_refrigeration: false }
+  const q = await api('POST', '/api/hd/quotes', {
+    customer_name: `${MARK} unit link reason`, customer_phone: '+15555550189', status: 'sent', payment_terms: 'net30',
+    unit_manufacturer: 'Thermo King', unit_model: 'C-600M', unit_serial: SERIAL,
+    line_items: [line], labor_rate: 100, subtotal_labor: 100, subtotal_parts: 0, tax_rate: 0, tax_amount: 0, total: 100,
+  })
+  const quoteId = String(((q.json.quote ?? {}) as Record<string, unknown>).id ?? '')
+  if (quoteId) created.hdQuotes.add(quoteId)
+  await adoptSmokeCustomer(q.json.customer_id)
+  const token = String((await rest<Record<string, unknown>>(`hd_quotes?id=eq.${quoteId}&select=public_token`))[0]?.public_token ?? '')
+  if (!record(F, 'a sent quote with that serial and a DIFFERENT model (C-600M) has a public link', q.status === 201 && !!token,
+    `-> ${q.status} ${String(q.json.error ?? '')}`)) return
+
+  const pubBefore = await fetch(`${BASE}/hd/quote/${token}`, { redirect: 'follow' })
+  const pubBeforeHtml = pubBefore.ok ? await pubBefore.text() : ''
+  const appr = await fetch(`${BASE}/api/hd/quotes/public/${token}/respond`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ decision: 'approve' }) })
+  const apprText = await appr.text()
+  const wo = (await rest<{ id: string; unit_id: string | null }>(`hd_work_orders?quote_id=eq.${quoteId}&select=id,unit_id`))[0]
+  if (wo) created.hdWorkOrders.add(wo.id)
+  if (!record(F, 'the customer approves at the public link: the work order exists with NO unit',
+    appr.ok && !!wo && wo.unit_id === null, `-> ${appr.status}, unit ${wo?.unit_id}`)) return
+
+  const woPage = await page(`/hd/work-orders/${wo!.id}`)
+  record(F, 'the shop\'s work order page says why, word for word', !!woPage && woPage.text.includes(NOTE),
+    woPage ? (woPage.text.includes('is not linked to a fleet unit record') ? 'only the generic note' : 'no note') : 'did not load')
+  record(F, 'and the generic "not linked" note is not printed beside it',
+    !!woPage && !woPage.text.includes('is not linked to a fleet unit record'), woPage ? '' : 'did not load')
+
+  const pubAfter = await fetch(`${BASE}/hd/quote/${token}`, { redirect: 'follow' })
+  const pubAfterHtml = pubAfter.ok ? await pubAfter.text() : ''
+  const leaks = (s: string) => /model does not match|No unit linked|already exists but its model/i.test(s)
+  record(F, 'the customer\'s public page never says it, before or after approving',
+    pubBefore.ok && pubAfter.ok && !leaks(pubBeforeHtml) && !leaks(pubAfterHtml),
+    `before ${pubBefore.status}${leaks(pubBeforeHtml) ? ' LEAKS' : ''}, after ${pubAfter.status}${leaks(pubAfterHtml) ? ' LEAKS' : ''}`)
+  record(F, 'nor does the approval answer the customer\'s browser receives', !leaks(apprText) && !/unit_notice/.test(apprText),
+    leaks(apprText) || /unit_notice/.test(apprText) ? apprText.slice(0, 160) : 'clean')
+
+  // A control: once the shop links the unit, the reason is gone.
+  await fetch(`${SUPA}/rest/v1/hd_work_orders?id=eq.${wo!.id}`, { method: 'PATCH', headers: SVC_H, body: JSON.stringify({ unit_id: unitId }) })
+  const linked = await page(`/hd/work-orders/${wo!.id}`)
+  record(F, 'once the unit is linked the note is gone', !!linked && !linked.text.includes(NOTE), linked ? '' : 'did not load')
+}
+
+// ── Ns: no negative availability prints (Nov 24, 2026) ──────────────────────────
+//
+// Display only: no inventory row is written. The counter, inventory and part screens
+// render client-side from the stock JSON through lib/parts/stock-display, so this runs
+// the SAME function the counter renders with over the live answer for every part whose
+// stock is negative on this account, plus a fixed case so the check can fail whether
+// or not any negative row exists today.
+async function flowNegativeStock(): Promise<void> {
+  const F = 'Ns negative stock'
+  const fixed = counterStockLines({ on_hand: -1, allocated: 0, available: -1, locations: [{ location_name: 'Shop', bin: null, on_hand: -1 }] })
+  record(F, 'a -1 part prints 0 available, and its count as wrong - not as stock',
+    fixed.availability === '0 available' && fixed.onHandWrong && fixed.onHand === 'Count wrong'
+      && fixed.locations.join() === 'Shop: count wrong (recorded -1)' && wrongCountLabel(-1) === 'Count is wrong (recorded -1) - correct it in Inventory',
+    JSON.stringify(fixed))
+  const alloc = counterStockLines({ on_hand: 1, allocated: 3, available: -2, locations: [{ location_name: 'Truck 4', bin: 'A1', on_hand: 1 }] })
+  record(F, 'more on jobs than on the shelf prints 0 available, and the real on-hand',
+    alloc.availability === '3 on open jobs - 0 available' && !alloc.onHandWrong && alloc.onHand === '1' && alloc.locations.join() === 'Truck 4 - bin A1: 1',
+    JSON.stringify(alloc))
+  record(F, 'availability never prints below 0', shownAvailable(-6) === 0 && shownAvailable(0) === 0 && shownAvailable(4) === 4)
+
+  const neg = await rest<{ part_id: string }>(`inventory_position?user_id=eq.${OWNER}&available=lt.0&select=part_id`)
+  const ids = [...new Set(neg.map(r => r.part_id))].slice(0, 6)
+  const parts = ids.length ? await rest<{ id: string; part_number: string }>(`parts?id=in.(${ids.join(',')})&select=id,part_number`) : []
+  const bad: string[] = []
+  let seen = 0
+  for (const p of parts) {
+    const c = await api('GET', `/api/parts/counter?q=${encodeURIComponent(p.part_number)}`)
+    const hit = ((c.json.results ?? []) as Array<Record<string, unknown>>).find(r => r.id === p.id)
+    if (!hit?.stock) { bad.push(`${p.part_number}: not returned (-> ${c.status})`); continue }
+    seen++
+    const s = counterStockLines(hit.stock as Parameters<typeof counterStockLines>[0])
+    const text = [s.onHand, s.availability, ...s.locations].join(' | ')
+    // A minus sign may appear only inside the "recorded -N" flag, never as a quantity.
+    if ([s.onHand, s.availability, ...s.locations].some(l => /-\d/.test(l.replace(/recorded -\d+/g, '')))) bad.push(`${p.part_number}: ${text}`)
+  }
+  record(F, `live: the counter prints no negative availability for this account's negative parts (${parts.length} checked)`,
+    bad.length === 0 && seen === parts.length,
+    parts.length === 0 ? 'no negative stock on this account today - the fixed cases above still ran' : bad.join('; ') || `${seen} part(s), all 0 available with the count flagged`)
+}
+
 async function main(): Promise<void> {
   console.log('='.repeat(96))
   console.log(`SMOKE  ${BASE}`)
@@ -6845,6 +7009,9 @@ async function main(): Promise<void> {
     await flowZ()
     await flowReefer()
     await flowPartsCounter()
+    await flowNegativeStock()
+    await flowDocNumbers()
+    await flowUnitLinkReason()
     await flowImportPreflight()
   } finally {
     await cleanup()

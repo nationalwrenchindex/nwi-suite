@@ -93,7 +93,16 @@ interface Props {
   branding: Branding
   /** profiles.hd_labor_rate (hdLaborRateFrom). NULL when the shop has set none. */
   shopLaborRate?: number | null
+  /** Why the unit did not link, when known (page.tsx asks lib/hd/unit-match). Shop-only. */
+  unitLinkReason?: 'model_mismatch' | 'ambiguous' | null
 }
+
+/** Brock's words (Nov 24, 2026) for a serial that matched a unit whose model disagrees. */
+export const UNIT_MODEL_MISMATCH_WO_NOTE =
+  'No unit linked: a unit with this serial exists but its model does not match. Pick the unit or add a new one.'
+/** Serial and model both agree with more than one unit, so none was picked. */
+export const UNIT_AMBIGUOUS_WO_NOTE =
+  'No unit linked: more than one unit has this serial and model. Pick the unit.'
 
 const CATEGORIES = [
   { id: 'before',  label: 'Before Service' },
@@ -126,7 +135,7 @@ function statusLabel(s: string) {
 }
 
 
-export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, inspections, workOrderId, branding, shopLaborRate = null }: Props) {
+export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, inspections, workOrderId, branding, shopLaborRate = null, unitLinkReason = null }: Props) {
   // On /reefer only the Reefer PM inspection is offered - no aerial, DOT or equipment.
   const reeferSurface = isReeferSurfacePath(usePathname())
   const [photos, setPhotos] = useState<Photo[]>(initialPhotos)
@@ -755,11 +764,17 @@ export default function WorkOrderDetail({ workOrder: wo, photos: initialPhotos, 
           {/* Same two sources the Unit row in the details block reads. Checking only the
               joined hd_units row printed "No unit" directly under a Unit that named one. */}
           {!wo.unit && (
+            unitLinkReason ? (
+              <p className="text-xs self-center font-medium" style={{ color: 'var(--hd-warn)' }} data-testid="wo-unit-link-reason">
+                {unitLinkReason === 'model_mismatch' ? UNIT_MODEL_MISMATCH_WO_NOTE : UNIT_AMBIGUOUS_WO_NOTE}
+              </p>
+            ) : (
             <p className="text-xs self-center" style={{ color: 'var(--hd-text-faint)' }}>
               {unitLabel !== '—'
                 ? `Unit ${unitLabel} is not linked to a fleet unit record — confirm it on the form.`
                 : 'No unit on this work order — you will select one on the form.'}
             </p>
+            )
           )}
         </div>
 

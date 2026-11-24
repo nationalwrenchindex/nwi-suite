@@ -13,6 +13,7 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
+import { countIsWrong, wrongCountLabel } from '@/lib/parts/stock-display'
 
 interface Fitment {
   id: string
@@ -225,7 +226,9 @@ export default function PartDetail({ partId }: { partId: string }) {
           <ul className="space-y-1">
             {data.stock.map(s => (
               <li key={s.id} className="text-sm flex flex-wrap items-center gap-x-3">
-                <span className="text-white font-medium">{s.on_hand} on hand</span>
+                {countIsWrong(s.on_hand)
+                  ? <span className="font-medium" style={{ color: 'var(--hd-negative)' }}>{wrongCountLabel(s.on_hand)}</span>
+                  : <span className="text-white font-medium">{s.on_hand} on hand</span>}
                 <span className="text-white/50">
                   {s.location_type === 'vehicle' ? s.location_name : 'Shop'}
                   {s.bin && ` · bin ${s.bin}`}

@@ -9,6 +9,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { nextWorkOrderNumber, isWorkOrderNumberCollision, insertWithWorkOrderNumber } from '../src/lib/work-order-number'
+import { stateFrom, checkNextNumber, parseNextNumber, formatDocNumber } from '../src/lib/hd/document-number-start'
 
 let failures = 0
 let passes = 0
@@ -36,6 +37,40 @@ check('compared as numbers, not text: WO-2026-9999 and WO-2026-10000 -> WO-2026-
   nextWorkOrderNumber([wo(9999), 'WO-2026-10000'], 2026) === 'WO-2026-10001')
 check('a near-miss shape is not part of the sequence (WO-2026-0050-B, WO-50)',
   nextWorkOrderNumber([wo(3), 'WO-2026-0050-B', 'WO-50'], 2026) === 'WO-2026-0004')
+
+console.log('\nThe shop\'s starting number (Settings > Document numbers, HD floor)')
+check('a floor above every number wins: highest 0007, floor 2846 -> WO-2026-2847',
+  nextWorkOrderNumber(ck, 2026, 2846) === 'WO-2026-2847', nextWorkOrderNumber(ck, 2026, 2846))
+check('a floor below the highest is ignored: highest 1569, floor 100 -> WO-2026-1570',
+  nextWorkOrderNumber(founderHd, 2026, 100) === 'WO-2026-1570')
+check('no numbers, floor 2846 -> WO-2026-2847', nextWorkOrderNumber([], 2026, 2846) === 'WO-2026-2847')
+check('once the floor number is used, the next is above it: 2847 exists, floor 2846 -> 2848',
+  nextWorkOrderNumber([wo(2847)], 2026, 2846) === 'WO-2026-2848')
+
+console.log('\nForward only (lib/hd/document-number-start)')
+{
+  const inv = (n: number) => `INV-2026-${String(n).padStart(4, '0')}`
+  const s = stateFrom('hd_invoice', [inv(1), inv(183), 'SMOKE-INV-1', inv(12)], 183)
+  check('state: highest issued INV-2026-0183, next 184', s.next === 184 && s.highest?.number === 'INV-2026-0183')
+  const r183 = checkNextNumber(s, 183)
+  check('183 is refused, naming INV-2026-0183',
+    !r183.ok && r183.error === 'You have already issued INV-2026-0183. The next number must be 184 or higher.', r183.ok ? 'accepted' : r183.error)
+  check('1 is refused the same way', !checkNextNumber(s, 1).ok)
+  check('184 (the current next) is accepted', checkNextNumber(s, 184).ok)
+  check('2847 is accepted', checkNextNumber(s, 2847).ok)
+  const deleted = stateFrom('hd_invoice', [inv(183)], 190)
+  const r188 = checkNextNumber(deleted, 188)
+  check('a number the counter already handed out (a deleted invoice) is refused',
+    deleted.next === 191 && !r188.ok && /already 0191/.test(r188.error), r188.ok ? 'accepted' : r188.error)
+  const wos = stateFrom('hd_work_order', [wo(7), null, 'INV5001262'], null)
+  check('work orders: no counter row, highest WO-2026-0007 -> next 8', wos.next === 8 && wos.highest?.number === wo(7))
+  check('parse: "0184" is 184', (() => { const p = parseNextNumber('0184'); return p.ok && p.n === 184 })())
+  check('parse: 0, 10000, 12.5, "abc" and "" are refused',
+    [0, 10000, 12.5, 'abc', ''].every(v => !parseNextNumber(v).ok))
+  check('format: INV-2026-2847, Q-2026-0009, WO-2027-0100',
+    formatDocNumber('hd_invoice', 2026, 2847) === 'INV-2026-2847' && formatDocNumber('hd_quote', 2026, 9) === 'Q-2026-0009'
+      && formatDocNumber('hd_work_order', 2027, 100) === 'WO-2027-0100')
+}
 
 console.log('\nWhich errors are a number collision')
 check('the LD key, as the smoke run of Oct 30 saw it -> retry',

@@ -12,6 +12,7 @@
 // number. There is no supplier field, so no store's name can ever sit beside a cost.
 
 import { useCallback, useEffect, useState } from 'react'
+import { shownAvailable } from '@/lib/parts/stock-display'
 
 interface StockRow {
   inventory_id: string; part_id: string; location_id: string; location_name: string | null
@@ -142,11 +143,11 @@ export default function PartsInventory({ scope }: { scope: 'all' | 'reefer' }) {
                   <td className="px-3 py-2">{r.bin ?? '--'}</td>
                   <td className="px-3 py-2 font-semibold">
                     {r.on_hand}
-                    {r.negative && <span className="block text-xs" style={{ color: 'var(--hd-negative)' }}>negative - count it</span>}
+                    {r.negative && <span className="block text-xs" style={{ color: 'var(--hd-negative)' }}>count is wrong - use Count to correct it</span>}
                   </td>
                   <td className="px-3 py-2">{r.allocated}</td>
                   <td className="px-3 py-2">
-                    {r.available}
+                    {shownAvailable(r.available)}
                     {r.below_minimum && <span className="block text-xs" style={{ color: 'var(--hd-warn)' }}>at or below minimum</span>}
                   </td>
                   <td className="px-3 py-2">{r.min_qty ?? 'not set'}</td>
