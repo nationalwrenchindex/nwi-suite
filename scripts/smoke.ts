@@ -3667,7 +3667,8 @@ async function flowFleetManager(): Promise<void> {
     record(F, "fleet B's manager sees only fleet B, and fleet A's unit 404s", bUnits.status === 200 && bIds.join() === B1 && bOnA.status === 404 && !JSON.stringify(bUnits.json).includes('not cooling'),
       `${bIds.length} unit(s), A1 -> ${bOnA.status}`)
     record(F, "fleet B's manager sees fleet B's own invoice, and none of fleet A's figures",
-      bHist.status === 200 && B_TOTAL_RE.test(bBody) && !/663\.05|137\.11|84\.38/.test(bBody) && !bBody.includes(INV_NUMBER), `-> ${bHist.status}`)
+      bHist.status === 200 && B_TOTAL_RE.test(bBody) && !/663\.05|137\.11|84\.38/.test(bBody) && !bBody.includes(`"${INV_NUMBER}"`),
+      `-> ${bHist.status}; B total ${B_TOTAL_RE.test(bBody)}, A figure ${bBody.match(/663\.05|137\.11|84\.38/)?.[0] ?? 'none'}, A invoice ${bBody.includes(`"${INV_NUMBER}"`)}`)
 
     // ── removing the grant ends it ──
     cookie = ownerCookie
