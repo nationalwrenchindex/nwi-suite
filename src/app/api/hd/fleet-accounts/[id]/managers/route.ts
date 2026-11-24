@@ -151,7 +151,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         html: `<div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px;color:#111">
           <h2 style="margin:0 0 12px">${esc(g.fleetName)}</h2>
           <p style="line-height:1.6;margin:0 0 16px">${esc(g.shopName)} has given you a login to your fleet's records:
-          units, PM due dates, repair history, PM and DOT sheets, and copies of the invoices already sent to you.
+          your units, their repair history, PM and DOT sheets, and copies of the invoices already sent to you.
           This email is not a bill.</p>
           <p style="margin:0 0 16px"><a href="${link}" style="display:inline-block;background:#E85D24;color:#fff;padding:12px 22px;border-radius:8px;text-decoration:none;font-weight:bold">Set your password</a></p>
           <p style="font-size:12px;color:#555;line-height:1.6;margin:0">The link works once. After that, sign in at ${esc(origin)}/fleet-manager/login with this email address and your password.</p>

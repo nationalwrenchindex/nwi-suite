@@ -47,7 +47,6 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { fetchAllRowsForIds } from '@/lib/fleet-pro/fetch-scoped'
-import { pmDueOf, type PmDue } from '@/lib/hd/pm-due'
 import { hdInvoiceSummaryRows, HD_INVOICE_PRINT_COLUMNS } from '@/lib/hd/invoice-print'
 import { invoiceJobGroups } from '@/lib/hd/work-order-jobs'
 import type { FleetScope } from '@/lib/fleet-view/access'
@@ -56,7 +55,7 @@ import type { FleetScope } from '@/lib/fleet-view/access'
 export const EXCLUDED_FROM_AGGREGATES: readonly string[] = ['4a8c046f-7db3-42bb-8422-fd47efb7678c']
 
 // ── the money-free selects (both tiers) ──────────────────────────────────────
-const UNIT_COLUMNS = 'id, unit_number, manufacturer, model, serial_number, year, total_hours, engine_hours, current_odometer, next_pm_due_hours, last_pm_date, last_pm_type'
+const UNIT_COLUMNS = 'id, unit_number, manufacturer, model, serial_number, year, total_hours, engine_hours, current_odometer'
 const WO_COLUMNS = 'id, unit_id, fleet_account_id, work_order_number, status, completed_at, scheduled_at, created_at, unit_hours, vehicle_odometer, service_requests, comments'
 const WO_LINE_COLUMNS = 'id, work_order_id, type, part_number, description, quantity, sort_order'
 // line_items is the one value that carries money and must still be read here (it holds
@@ -111,9 +110,6 @@ export interface SafeUnit {
   year: number | null
   latest_hours: number | null
   latest_miles: number | null
-  pm_due: PmDue
-  last_pm_date: string | null
-  last_pm_type: string | null
 }
 
 // ── tier 1: the customer (the fleet manager) ─────────────────────────────────
@@ -223,7 +219,7 @@ export function safePart(line: Row): SafePart {
 export function isPartLine(line: Row): boolean {
   return line.type === 'part' || line.type === 'parts'
 }
-export function safeUnit(u: Row, latestVisit: { hours: number | null; miles: number | null } = { hours: null, miles: null }, now = Date.now()): SafeUnit {
+export function safeUnit(u: Row, latestVisit: { hours: number | null; miles: number | null } = { hours: null, miles: null }): SafeUnit {
   return {
     id: String(u.id),
     unit_number: txt(u.unit_number),
@@ -233,9 +229,6 @@ export function safeUnit(u: Row, latestVisit: { hours: number | null; miles: num
     year: num(u.year),
     latest_hours: num(u.total_hours) ?? num(u.engine_hours) ?? latestVisit.hours,
     latest_miles: num(u.current_odometer) ?? latestVisit.miles,
-    pm_due: pmDueOf({ next_pm_due_hours: u.next_pm_due_hours ?? null, total_hours: u.total_hours ?? null, last_pm_date: u.last_pm_date ?? null }, now),
-    last_pm_date: day(u.last_pm_date),
-    last_pm_type: txt(u.last_pm_type),
   }
 }
 export function safePmSheet(p: Row): SafeSheet {
@@ -244,6 +237,37 @@ export function safePmSheet(p: Row): SafeSheet {
 }
 export function safeDotSheet(d: Row): SafeSheet {
   return { kind: 'dot', id: String(d.id), label: 'DOT annual inspection', date: day(d.inspection_date), result: txt(d.overall_result) }
+}
+
+/**
+ * A recorded rate is printed ONLY when it multiplies out to the line it sits on, to the
+ * cent: quantity x rate = amount. Otherwise null, and the line prints its quantity and
+ * its amount with no rate. Never a rate from the shop's settings, never one worked
+ * backwards from the amount.
+ *
+ * WHY (Brock, Nov 24): INV-2026-0023 printed "6h x $135.00/hr" over a total of $870
+ * that was priced at $145/hr. The total was right and the printed rate was wrong. The
+ * converter prices a labor line at the work order line's own rate but records the
+ * invoice's labor_rate from the settings fallback when the work order had none (see
+ * the report), so the two stored figures can disagree. A fleet manager can multiply.
+ */
+export function rateThatMultiplies(quantity: number | null, rate: number | null, amount: number | null): number | null {
+  if (quantity == null || rate == null || amount == null || quantity <= 0) return null
+  return Math.abs(Math.round(quantity * rate * 100) - Math.round(amount * 100)) <= 0 ? rate : null
+}
+
+/**
+ * The invoice row with every recorded rate that does NOT multiply out set to null, so
+ * the shared print rows (lib/hd/invoice-print, unchanged) print no "x rate" for it.
+ * Travel: hours x travel_rate = travel_amount. Mileage: miles x mileage_rate =
+ * mileage_amount. A null tax_rate prints "Tax", never "Tax (null%)".
+ */
+function recordedRatesOnly(inv: Row): Row {
+  return {
+    ...inv,
+    travel_rate: rateThatMultiplies(num(inv.travel_hours), num(inv.travel_rate), num(inv.travel_amount)),
+    mileage_rate: rateThatMultiplies(num(inv.mileage_miles), num(inv.mileage_rate), num(inv.mileage_amount)),
+  }
 }
 
 /**
@@ -256,7 +280,8 @@ export function printedInvoice(inv: Row): PrintedInvoice {
   const items = (Array.isArray(inv.line_items) ? inv.line_items : []) as Row[]
   const groups = invoiceJobGroups(items) ?? [{ job: null, label: null, lines: items, subtotal: 0 }]
   const multi = groups.length > 1 || groups[0]?.label != null
-  const rate = num(inv.labor_rate)
+  // The invoice's OWN recorded rate. No settings fallback: null prints no rate.
+  const recordedRate = num(inv.labor_rate)
   return {
     invoice_number: txt(inv.invoice_number),
     work_order_number: txt(inv.work_order_number),
@@ -266,16 +291,20 @@ export function printedInvoice(inv: Row): PrintedInvoice {
       label: g.label,
       // The customer copy prints exactly these two types; so does this.
       labor: g.lines.filter(l => l.type === 'labor').map(l => ({
-        description: txt(l.description), hours: num(l.mobile_hours), rate, amount: money(l.amount),
+        description: txt(l.description), hours: num(l.mobile_hours),
+        rate: rateThatMultiplies(num(l.mobile_hours), recordedRate, num(l.amount)), amount: money(l.amount),
       })),
       parts: g.lines.filter(l => l.type === 'parts').map(l => ({
         part_number: txt(l.part_number), description: txt(l.description), quantity: num(l.quantity),
         // unit_cost on an INVOICE line is the price the customer was charged (see header).
-        unit_price: num(l.unit_cost), amount: money(l.amount),
+        unit_price: rateThatMultiplies(num(l.quantity), num(l.unit_cost), num(l.amount)), amount: money(l.amount),
       })),
       subtotal: multi && g.label ? g.subtotal : null,
     })),
-    summary: hdInvoiceSummaryRows(inv).map(r => ({ label: r.label, amount: r.amount })),
+    summary: hdInvoiceSummaryRows(recordedRatesOnly(inv)).map(r => ({
+      label: num(inv.tax_rate) == null && /^Tax \((null|undefined|)%\)$/.test(r.label) ? 'Tax' : r.label,
+      amount: r.amount,
+    })),
     total: money(inv.total),
   }
 }
@@ -451,7 +480,7 @@ async function unitAndVisits(svc: SupabaseClient, scope: FleetScope, unitId: str
   return { unit: safeUnit(u, latestReadings(visits).get(unitId)), visits }
 }
 
-/** Every unit on the fleet, with its latest reading and PM due. No money in either tier. */
+/** Every unit on the fleet, with its latest reading. No money, no PM due. */
 export async function listFleetUnits(svc: SupabaseClient, scope: FleetScope): Promise<SafeUnit[]> {
   const units = await fleetUnitRows(svc, scope)
   const visits = units.length ? buildVisits(await recordRows(svc, scope, units.map(u => String(u.id)))) : []

@@ -3,6 +3,10 @@
 // comments and work done, any PM or DOT sheet attached - and, on an invoiced visit,
 // the invoice exactly as printed for him (lines, fees, discount, tax, total). A job
 // never invoiced lists its parts with no prices: no paper ever priced it for him.
+//
+// Every figure is the one the invoice RECORDED (lib/fleet-view/unit-history): a rate
+// prints only when it multiplies out to its line, else the line prints its quantity
+// and amount with no rate. Nothing reads the shop's current settings. No PM due.
 
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
@@ -10,7 +14,7 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { resolveFleetManager } from '@/lib/fleet-view/access'
 import { getCustomerUnitHistory, type PrintedInvoice, type SafeSheet } from '@/lib/fleet-view/unit-history'
 import { money } from '@/lib/format'
-import { ACCENT, Card, Header, INK, LINE, MUTED, PmBadge, fmtDate, fmtHours, fmtMiles, pmDetail } from '@/components/fleet-manager/ui'
+import { ACCENT, Card, Header, INK, LINE, MUTED, fmtDate, fmtHours, fmtMiles } from '@/components/fleet-manager/ui'
 
 export const dynamic = 'force-dynamic'
 
@@ -49,7 +53,7 @@ function Invoice({ inv }: { inv: PrintedInvoice }) {
                 <li key={`l${i}`} data-testid="fm-invoice-line" data-kind="labor" className={row} style={{ color: INK }}>
                   <span className="min-w-0">
                     <span className="block">{l.description ?? 'Labor'}</span>
-                    <span className="block text-xs" style={{ color: MUTED }}>{qty(l.hours)}h x {money(l.rate ?? 0)}/hr</span>
+                    <span className="block text-xs" data-testid="fm-labor-hours" data-hours={l.hours ?? ''} data-rate={l.rate ?? ''} data-amount={l.amount} style={{ color: MUTED }}>{`${qty(l.hours)}h${l.rate != null ? ` x ${money(l.rate)}/hr` : ''}`}</span>
                   </span>
                   <span className="whitespace-nowrap font-semibold">{money(l.amount)}</span>
                 </li>
@@ -62,7 +66,7 @@ function Invoice({ inv }: { inv: PrintedInvoice }) {
                 <li key={`p${i}`} data-testid="fm-invoice-line" data-kind="part" className={row} style={{ color: INK }}>
                   <span className="min-w-0">
                     <span className="block">{p.part_number && <span className="font-semibold mr-2">{p.part_number}</span>}{p.description ?? ''}</span>
-                    <span className="block text-xs" style={{ color: MUTED }}>Qty {qty(p.quantity)} x {money(p.unit_price ?? 0)}</span>
+                    <span className="block text-xs" style={{ color: MUTED }}>{`Qty ${qty(p.quantity)}${p.unit_price != null ? ` x ${money(p.unit_price)}` : ''}`}</span>
                   </span>
                   <span className="whitespace-nowrap font-semibold">{money(p.amount)}</span>
                 </li>
@@ -98,21 +102,15 @@ export default async function FleetUnitPage({ params }: { params: Promise<{ id: 
   if (!h) notFound()
   const { unit, visits } = h
   const reading = [fmtHours(unit.latest_hours), fmtMiles(unit.latest_miles)].filter(Boolean).join(' / ')
-  const detail = pmDetail(unit.pm_due)
 
   return (
     <main>
       <Header back={{ href: '/fleet-manager', label: 'All units' }} title={unit.unit_number ?? 'Unit'}
         sub={[unit.year, unit.manufacturer, unit.model].filter(Boolean).join(' ') || null} />
       <Card testid="fm-unit-card">
-        <div className="flex items-start justify-between gap-3">
-          <div className="text-sm space-y-0.5" style={{ color: INK }}>
-            {unit.serial_number && <p className="break-all">Serial {unit.serial_number}</p>}
-            <p>{reading || 'No reading recorded'}</p>
-            {unit.last_pm_date && <p style={{ color: MUTED }}>Last PM {fmtDate(unit.last_pm_date)}{unit.last_pm_type ? ` (${unit.last_pm_type.replace(/_/g, ' ')})` : ''}</p>}
-            {detail && <p style={{ color: MUTED }}>{detail}</p>}
-          </div>
-          <PmBadge due={unit.pm_due} />
+        <div className="text-sm space-y-0.5" style={{ color: INK }}>
+          {unit.serial_number && <p className="break-all">Serial {unit.serial_number}</p>}
+          <p>{reading || 'No reading recorded'}</p>
         </div>
       </Card>
 

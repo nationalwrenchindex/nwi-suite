@@ -17,7 +17,7 @@ export default async function FleetManagerAccept({ searchParams }: { searchParam
       ) : (
         <form method="post" action="/api/fleet-manager/accept">
           <p className="mb-5 text-sm leading-relaxed" style={{ color: '#374151' }}>
-            Your service shop has given you access to your fleet&apos;s units, PM due dates, repair history and PM and DOT sheets.
+            Your service shop has given you access to your fleet&apos;s units, their repair history and the invoices already sent to you.
             Continue to set your password.
           </p>
           <input type="hidden" name="token_hash" value={token_hash} />

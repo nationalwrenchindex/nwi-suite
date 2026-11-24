@@ -3387,7 +3387,13 @@ async function flowUnitSerialModel(): Promise<void> {
 // note). Its other job was never invoiced and carries work order money (731.47 /
 // 4321.09) that no paper ever showed him. Fleet B's invoice totals 555.37. A manager
 // is invited onto each through the deployed invite route, then the flow reads as each:
-//   * he sees his own fleet's units, latest reading and PM due - and not the other's
+//   * he sees his own fleet's units and latest reading - and not the other's. NO PM due,
+//     PM alert or anything predictive (Nov 24: that is Fleet Pro): fleet A's unit A1 is
+//     set up OVERDUE on purpose, and no page or response may say so
+//   * every figure is the one the invoice RECORDED, never the shop's current settings:
+//     fleet A's rate (137.11) differs from the owner's hd_labor_rate, and an invoice in
+//     INV-2026-0023's shape (recorded 133.33/hr over a line priced at 147.77/hr) prints
+//     its hours and amount with NO rate - every printed rate x hours = its line total
 //   * the history is newest first with the work order and invoice numbers, the hours
 //     AT each visit, comments, work done, parts and the attached sheets; no open job
 //   * his invoice's figures ARE there (total, tax, labor, the part price he paid, fees)
@@ -3472,6 +3478,17 @@ async function flowFleetManager(): Promise<void> {
     customer_name: `${MARK} fm customer B`, labor_rate: 111.11, subtotal_labor: 555.37, total: 555.37, diagnosis: `${MARK} FLEET B WORK`,
     line_items: [{ id: 'zz-fm-b1', type: 'labor', description: `${MARK} fleet B labor`, quantity: 0, unit_cost: 0, mobile_hours: 5, amount: 555.37 }] }) : null
   if (invB) created.hdInvoices.add(String(invB.id))
+  // INV-2026-0023's shape, on unit A2: the invoice RECORDED 133.33/hr, the line was priced
+  // at 147.77/hr (6h = 886.62). Neither rate may print beside that line.
+  const R = { recorded: 133.33, priced: 147.77, hours: 6, amount: 886.62 }
+  const woR = await wo(A, A2, 'RATE', { status: 'invoiced', completed_at: '2026-11-01T15:00:00Z', unit_hours: 9000, service_requests: `${MARK} rate mismatch job` })
+  const RATE_INV = `${MARK}-FM-${run}-R`
+  const invR = woR ? await ins('hd_invoices', { user_id: OWNER, fleet_account_id: A, unit_id: A2, work_order_id: woR.id, invoice_number: RATE_INV, work_order_number: `${MARK}-FM-${run}-RATE`,
+    status: 'sent', customer_name: `${MARK} fm customer`, labor_rate: R.recorded, subtotal_labor: R.amount, total: R.amount,
+    line_items: [{ id: 'zz-fm-r1', type: 'labor', description: `${MARK} rate mismatch labor`, quantity: 0, unit_cost: 0, mobile_hours: R.hours, amount: R.amount }] }) : null
+  if (invR) created.hdInvoices.add(String(invR.id))
+  // The shop's CURRENT setting - which the fleet view must never print.
+  const settingsRate = ((await rest<Record<string, unknown>>(`profiles?id=eq.${OWNER}&select=hd_labor_rate`))[0] ?? {}).hd_labor_rate
   // The sheets: the shape of a real one (CLAUDE.md, fixtures from a real row), re-pointed.
   const realPm = (await rest<Record<string, unknown>>(`hd_pm_checklists?select=*&completed_at=not.is.null&customer_name=not.like.${MARK}*&order=created_at.desc&limit=1`))[0]
   const realDot = (await rest<Record<string, unknown>>(`hd_dot_inspections?select=*&customer_name=not.like.${MARK}*&order=created_at.desc&limit=1`))[0]
@@ -3487,7 +3504,7 @@ async function flowFleetManager(): Promise<void> {
   const dotA = await sheet('hd_dot_inspections', realDot, { unit_id: A1, fleet_account_id: A, invoice_id: inv?.id, inspection_date: '2026-10-02', overall_result: 'pass', unit_number: a1!.unit_number })
   const dotB = await sheet('hd_dot_inspections', realDot, { unit_id: B1, fleet_account_id: B, inspection_date: '2026-09-01', overall_result: 'pass', unit_number: b1!.unit_number })
   if (!record(F, 'finished jobs with money, an open job, a fleet B job, and PM + DOT sheets copied from real sheets are stored',
-    !!(woOld && woNew && woOpen && woB && line && inv && invB && pmA && dotA && dotB),
+    !!(woOld && woNew && woOpen && woB && woR && line && inv && invB && invR && pmA && dotA && dotB),
     `${realPm ? '' : 'no real PM sheet to copy; '}${realDot ? '' : 'no real DOT sheet to copy'}`)) return
 
   // ── the owner invites a manager onto each fleet ──
@@ -3544,9 +3561,7 @@ async function flowFleetManager(): Promise<void> {
     record(F, 'the list carries unit number, make, model, serial, year and the latest hours',
       ua1.unit_number === a1!.unit_number && ua1.manufacturer === 'Thermo King' && ua1.model === 'S-600' && ua1.serial_number === a1!.serial_number && ua1.year === 2019 && ua1.latest_hours === 9800,
       JSON.stringify(ua1).slice(0, 200))
-    const due1 = (ua1.pm_due ?? {}) as Record<string, unknown>, due2 = (ua2.pm_due ?? {}) as Record<string, unknown>
-    record(F, 'PM due is the Intel Hub rule: 50 hrs to go is DUE SOON... ', due1.status === 'overdue' || due1.status === 'due_soon', JSON.stringify(due1))
-    record(F, '...a last PM over 180 days ago makes it OVERDUE, and a fresh PM with hours to spare is not due', due1.status === 'overdue' && due2.status === null, `${due1.status} / ${due2.status}`)
+    void ua2
 
     const hist = await api('GET', `/api/fleet-manager/units/${A1}`)
     const visits = (hist.json.visits ?? []) as Array<Record<string, unknown>>
@@ -3584,13 +3599,14 @@ async function flowFleetManager(): Promise<void> {
     record(F, 'a job never invoiced shows no money: no paper ever priced it for him', vOld.invoice === null, JSON.stringify(vOld.invoice ?? null).slice(0, 120))
 
     // ── the forbidden fields, BY NAME, in every response ──
-    const bodies = [JSON.stringify(units.json), JSON.stringify(hist.json)]
+    const histR = await api('GET', `/api/fleet-manager/units/${A2}`)
+    const bodies = [JSON.stringify(units.json), JSON.stringify(hist.json), JSON.stringify(histR.json)]
     const keysIn = (v: unknown, out = new Set<string>()): Set<string> => {
       if (Array.isArray(v)) v.forEach(x => keysIn(x, out))
       else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) { out.add(k); keysIn(x, out) }
       return out
     }
-    const keys = keysIn([units.json, hist.json])
+    const keys = keysIn([units.json, hist.json, histR.json])
     const FORBIDDEN: Array<[string, string[]]> = [
       ["the shop's parts cost (what it paid its supplier)", ['parts_cost', 'unit_cost', 'unit_cost_base', 'cost', 'total_cost']],
       ['markup, or anything derived from it', ['markup', 'markup_percent', 'parts_markup_percent', 'margin', 'parts_sell']],
@@ -3608,15 +3624,27 @@ async function flowFleetManager(): Promise<void> {
       !bodies.some(b => MARGIN_RE.test(b)), bodies.map(b => b.match(MARGIN_RE)?.[0]).filter(Boolean).join(', '))
     record(F, 'forbidden, absent by value: the internal note, and every contact detail', !bodies.some(b => CONTACT_RE.test(b) || b.includes('internal note')), '')
     record(F, "forbidden, absent by value: the never-invoiced job's work order money (731.47 / 4321.09)", !bodies.some(b => WO_MONEY_RE.test(b)), '')
+    const pmKeys = [...keys].filter(k => /pm_due|next_pm|last_pm|due_soon|overdue|hoursUntil|nextDueDate|recommend|suggest|upcoming|predict|estimate/i.test(k))
+    record(F, 'no PM due, PM alert or predictive field in any response (pm_due, next_pm_due_hours, last_pm_*, recommendations)', pmKeys.length === 0, pmKeys.join(', '))
+
+    // ── every figure is the RECORDED one, never the current setting ──
+    const vR = ((histR.json.visits ?? []) as Array<Record<string, unknown>>)[0] ?? {}
+    const labR = ((((vR.invoice as Record<string, unknown> | null)?.groups ?? []) as Array<Record<string, unknown>>)[0]?.labor as Array<Record<string, unknown>> | undefined)?.[0] ?? {}
+    const sNum = settingsRate == null ? null : Number(settingsRate)
+    record(F, "set-up: the owner's current hd_labor_rate differs from the rate fleet A's invoice recorded", sNum !== P.rate, `settings ${String(settingsRate)}, recorded ${P.rate}`)
+    record(F, 'the labor line carries the RECORDED rate (137.11), not the current setting, and 2h x rate = the line total',
+      lab.rate === P.rate && lab.rate !== sNum && Math.round(Number(lab.hours) * Number(lab.rate) * 100) === Math.round(Number(lab.amount) * 100), `${JSON.stringify(lab)} settings ${String(settingsRate)}`)
+    record(F, "INV-2026-0023's shape: a recorded rate that does not multiply to its line carries NO rate - not the recorded, not the setting, not one worked back",
+      labR.hours === R.hours && labR.amount === R.amount && labR.rate === null, JSON.stringify(labR))
     const otherKeys = [...keys].filter(k => ['user_id', 'customer_id', 'fleet_account_id', 'public_token'].includes(k))
     record(F, "forbidden: any other customer's data - no owner or customer identities, and fleet B's job and invoice are in nothing",
       otherKeys.length === 0 && !bodies.some(b => b.includes('FLEET B') || b.includes('fleet B comments') || b.includes(B1) || B_TOTAL_RE.test(b)), otherKeys.join(', '))
 
     // ── the rendered pages ──
     const home = await fmPage('/fleet-manager')
-    record(F, 'the dashboard renders his units on the phone layout, with PM due',
+    record(F, 'the dashboard renders his units on the phone layout: a folder per unit',
       home.status === 200 && home.path === '/fleet-manager' && home.html.includes(`data-unit-id="${A1}"`) && home.html.includes(`data-unit-id="${A2}"`) &&
-      !home.html.includes(B1) && home.text.includes('PM OVERDUE') && home.text.includes('9,800 hrs'), `-> ${home.status} at ${home.path}`)
+      !home.html.includes(B1) && home.text.includes('9,800 hrs'), `-> ${home.status} at ${home.path}`)
     const up = await fmPage(`/fleet-manager/units/${A1}`)
     const visitCount = (up.html.match(/data-testid="fm-visit"/g) ?? []).length
     record(F, "the unit page renders the history: dates, hours at each visit, parts with Qty, sheet links",
@@ -3625,12 +3653,33 @@ async function flowFleetManager(): Promise<void> {
     record(F, 'the unit page prints his invoice: numbers, total, tax, labor, the part price he paid, fees, discount',
       up.html.includes('data-testid="fm-invoice"') && up.text.includes(WO_NUMBER) && up.text.includes(INV_NUMBER) &&
       ['$663.05', '$13.29', '$137.11', '$274.22', '$84.38', '$168.76', '$41.09', '$120.25', '$62.00', '$8.44', '-$25.00'].every(m => up.text.includes(m)),
-      ['$663.05', '$13.29', '$137.11', '$274.22', '$84.38', '$168.76', '$41.09', '$120.25', '$62.00', '$8.44', '-$25.00'].filter(m => !up.text.includes(m)).join(' ') || 'no fm-invoice block')
+      up.html.includes('data-testid="fm-invoice"')
+        ? ['$663.05', '$13.29', '$137.11', '$274.22', '$84.38', '$168.76', '$41.09', '$120.25', '$62.00', '$8.44', '-$25.00'].filter(m => !up.text.includes(m)).map(m => `missing ${m}`).join(' ')
+        : 'no fm-invoice block')
+    const upR = await fmPage(`/fleet-manager/units/${A2}`)
+    // Every labor line as rendered: hours, the printed rate (if any), the amount.
+    const laborCells = [...up.html.matchAll(/data-testid="fm-labor-hours"[^>]*>([^<]*)</g), ...upR.html.matchAll(/data-testid="fm-labor-hours"[^>]*>([^<]*)</g)].map(m => m[0])
+    const rateRows = laborCells.map(c => {
+      const attr = (n: string) => c.match(new RegExp(`data-${n}="([^"]*)"`))?.[1] ?? ''
+      const shown = c.match(/>([^<]*)<$/)?.[1] ?? ''
+      const printed = shown.match(/\$([\d,]+\.\d\d)\/hr/)?.[1]?.replace(/,/g, '') ?? null
+      return { hours: Number(attr('hours')), amount: Number(attr('amount')), printed: printed == null ? null : Number(printed), shown }
+    })
+    record(F, 'the unit page prints the RECORDED rate: "2h x $137.11/hr" over $274.22, and every printed rate x hours = its line total',
+      up.text.includes('2h x $137.11/hr') && rateRows.length >= 2 && rateRows.every(r => r.printed == null || Math.round(r.hours * r.printed * 100) === Math.round(r.amount * 100)) &&
+      (sNum == null || !rateRows.some(r => r.printed === sNum)), JSON.stringify(rateRows))
+    record(F, "INV-2026-0023's shape renders \"6h\" and $886.62 with no rate - neither $133.33 nor $147.77 on the page",
+      upR.status === 200 && upR.text.includes(RATE_INV) && upR.text.includes('$886.62') && rateRows.some(r => r.shown === '6h') && !upR.text.includes('133.33') && !upR.text.includes('147.77'),
+      `-> ${upR.status}; ${JSON.stringify(rateRows.filter(r => r.hours === 6))}`)
+    const PREDICTIVE_RE = /PM (OVERDUE|DUE|OK)|due soon|overdue|past due|due in \d|by date|next PM|last PM|upcoming|recommend|suggested|predict|estimat/i
+    record(F, 'NO PM due, PM alert or predictive text anywhere on his pages (unit A1 is set up overdue)',
+      ![home.text, up.text, upR.text].some(t => PREDICTIVE_RE.test(t)) && ![home.html, up.html, upR.html].some(h => h.includes('fm-pm-badge')),
+      [home.text, up.text, upR.text].map(t => t.match(PREDICTIVE_RE)?.[0]).filter(Boolean).join(' | '))
     record(F, "no page shows the shop's cost, markup, unit value, the never-invoiced job's money or fleet B's invoice",
-      ![home.text, up.text].some(t => MARGIN_RE.test(t) || WO_MONEY_RE.test(t) || B_TOTAL_RE.test(t)),
-      [home.text, up.text].map(t => (t.match(MARGIN_RE) ?? t.match(WO_MONEY_RE) ?? t.match(B_TOTAL_RE))?.[0]).filter(Boolean).join(' | '))
+      ![home.text, up.text, upR.text].some(t => MARGIN_RE.test(t) || WO_MONEY_RE.test(t) || B_TOTAL_RE.test(t)),
+      [home.text, up.text, upR.text].map(t => (t.match(MARGIN_RE) ?? t.match(WO_MONEY_RE) ?? t.match(B_TOTAL_RE))?.[0]).filter(Boolean).join(' | '))
     record(F, 'the unit list itself carries no money (it lists units, not invoices)', !home.text.includes('$'), home.text.match(/.{0,30}\$.{0,20}/)?.[0] ?? '')
-    record(F, 'no page shows a contact detail or the internal note', ![home.html, up.html].some(h => CONTACT_RE.test(h) || h.includes('internal note')), '')
+    record(F, 'no page shows a contact detail or the internal note', ![home.html, up.html, upR.html].some(h => CONTACT_RE.test(h) || h.includes('internal note')), '')
 
     // ── the sheets open for him, the other fleet's do not ──
     const pdf = await fetch(`${BASE}/api/hd/pm-checklist/${pmA!.id}/pdf`, { headers: { cookie } })

@@ -9,11 +9,10 @@
 // The deployed routes are proved by the smoke flow Fm.
 
 import {
-  buildVisits, safeUnit, printedInvoice, customerVisit, outsideTechVisit, outsideTechUnit,
+  buildVisits, safeUnit, printedInvoice, rateThatMultiplies, customerVisit, outsideTechVisit, outsideTechUnit,
   marginKeysIn, moneyKeysIn, assertCustomerSafe, assertOutsideTechSafe, MARGIN_FIELD_NAMES, EXCLUDED_FROM_AGGREGATES,
 } from '../src/lib/fleet-view/unit-history'
 import { hdInvoiceSummaryRows } from '../src/lib/hd/invoice-print'
-import { pmDueOf, isPmAlert } from '../src/lib/hd/pm-due'
 
 let pass = 0, fail = 0
 function check(name: string, ok: boolean, detail = '') {
@@ -67,7 +66,7 @@ const dotSheets = [
 ]
 
 const visits = buildVisits({ workOrders, woLines, invoices, pmSheets, dotSheets })
-const su = safeUnit(unit, { hours: null, miles: 123000 }, Date.parse('2026-11-23T12:00:00Z'))
+const su = safeUnit(unit, { hours: null, miles: 123000 })
 const printedById = new Map(invoices.map(i => [i.id, printedInvoice(i)]))
 const customer = { unit: su, visits: visits.map(v => customerVisit(v, v.invoice_id ? printedById.get(v.invoice_id) ?? null : null)) }
 const outside = { unit: outsideTechUnit(su), visits: visits.map(outsideTechVisit) }
@@ -119,15 +118,29 @@ check('a PM sheet attached to the work order shows on that job', cOld.sheets.map
 check('a PM sheet with no job is its own visit', visits.some(v => v.key === 'pm:pm-alone' && v.sheets[0]?.kind === 'pm'))
 check('an invoice billed with no work order is its own visit', visits.some(v => v.key === 'inv:inv-direct' && v.requested === 'Alarm 18' && v.parts[0]?.part_number === '40-0974'))
 check('the unit keeps exactly its allowed fields', JSON.stringify(Object.keys(su).sort()) ===
-  JSON.stringify(['id', 'last_pm_date', 'last_pm_type', 'latest_hours', 'latest_miles', 'manufacturer', 'model', 'pm_due', 'serial_number', 'unit_number', 'year'].sort()), Object.keys(su).join(','))
+  JSON.stringify(['id', 'latest_hours', 'latest_miles', 'manufacturer', 'model', 'serial_number', 'unit_number', 'year'].sort()), Object.keys(su).join(','))
 
-console.log('\n  PM due is the Intel Hub rule')
-check('100 hours to go is due soon', pmDueOf({ next_pm_due_hours: 9900, total_hours: 9800, last_pm_date: null }).status === 'due_soon')
-check('past the hours is overdue', pmDueOf({ next_pm_due_hours: 9900, total_hours: 9950, last_pm_date: null }).status === 'overdue')
-check('201 hours to go and no date is not due', pmDueOf({ next_pm_due_hours: 10001, total_hours: 9800, last_pm_date: null }).status === null)
-check('a last PM over 180 days ago is overdue', pmDueOf({ next_pm_due_hours: null, total_hours: null, last_pm_date: '2026-01-01' }, Date.parse('2026-11-23')).status === 'overdue')
-check('the unit view carries the same verdict', su.pm_due.status === 'overdue' && su.pm_due.hoursUntil === 100, JSON.stringify(su.pm_due))
-check('isPmAlert counts exactly the badged units', isPmAlert({ next_pm_due_hours: 10000, total_hours: 9800, last_pm_date: null }) && !isPmAlert({ next_pm_due_hours: 10001, total_hours: 9800, last_pm_date: null }))
+console.log('\n  no PM due, nothing predictive (Fleet Pro, not this tier)')
+check('neither tier carries PM due, a PM alert or a next-due figure', !/pm_due|next_pm|due_soon|overdue|last_pm|hoursUntil|nextDueDate/i.test(cOut + oOut))
+
+console.log('\n  every printed rate is the RECORDED one, and only when it multiplies out')
+// INV-2026-0023's shape: labor_rate recorded 135 (the settings fallback), the line priced at 145.
+const inv0023 = printedInvoice({ id: 'x', invoice_number: 'INV-2026-0023', status: 'unpaid', created_at: '2026-11-01', labor_rate: 135, subtotal_labor: 870, total: 870,
+  line_items: [{ type: 'labor', description: 'Diag + repair', quantity: 0, unit_cost: 0, amount: 870, mobile_hours: 6 }] })
+const l23 = inv0023.groups[0].labor[0]
+check('INV-2026-0023 shape: a recorded rate that does not multiply to its line prints NO rate (hours and amount only)', l23.rate === null && l23.hours === 6 && l23.amount === 870, JSON.stringify(l23))
+check('INV-2026-0023 shape: neither $135 nor a back-worked $145 appears anywhere', !/\b135\b|\b145\b/.test(JSON.stringify(inv0023)))
+check('the recorded rate prints when it multiplies (2h x 137.11 = 274.22)', lab?.rate === 137.11 && Math.round((lab.hours ?? 0) * lab.rate * 100) === Math.round(lab.amount * 100))
+const noRate = printedInvoice({ id: 'y', status: 'unpaid', labor_rate: null, total: 100, line_items: [{ type: 'labor', description: 'L', amount: 100, mobile_hours: 1 }] })
+check('an invoice that recorded no labor rate prints no rate - never a setting', noRate.groups[0].labor[0].rate === null)
+const badExtras = printedInvoice({ id: 'z', status: 'unpaid', total: 200, travel_hours: 2, travel_rate: 90, travel_amount: 200, mileage_miles: 10, mileage_rate: 2, mileage_amount: 25,
+  tax_amount: 5, tax_rate: null, line_items: [{ type: 'parts', part_number: 'P', quantity: 3, unit_cost: 10, amount: 33 }] })
+const tRow = badExtras.summary.find(r => r.label.startsWith('Travel')), mRow = badExtras.summary.find(r => r.label.startsWith('Mileage'))
+check('travel / mileage rates that do not multiply print no "x rate", amount kept', !!tRow && !/×|90/.test(tRow.label) && tRow.amount === 200 && !!mRow && !/×/.test(mRow.label) && mRow.amount === 25, JSON.stringify(badExtras.summary))
+check('travel / mileage rates that DO multiply print', cNew.invoice!.summary.some(r => /Travel Time.*96\.20\/hr/.test(r.label)) && cNew.invoice!.summary.some(r => /Mileage.*2\.0000\/mi/.test(r.label)), JSON.stringify(cNew.invoice?.summary))
+check('a part price that does not multiply to its line prints no unit price', badExtras.groups[0].parts[0].unit_price === null && badExtras.groups[0].parts[0].amount === 33)
+check('a null tax rate prints "Tax", never "Tax (null%)"', badExtras.summary.some(r => r.label === 'Tax' && r.amount === 5), JSON.stringify(badExtras.summary))
+check('rateThatMultiplies is exact to the cent', rateThatMultiplies(6, 145, 870) === 145 && rateThatMultiplies(6, 135, 870) === null && rateThatMultiplies(0, 1, 0) === null && rateThatMultiplies(1.25, 96.2, 120.25) === 96.2)
 
 console.log('\n  the walls')
 let threw = false

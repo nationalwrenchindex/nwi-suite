@@ -50,7 +50,7 @@ export default function FleetManagerAccess({ fleetAccountId }: { fleetAccountId:
     <div className="mt-6 pt-5 border-t" style={{ borderColor: 'var(--hd-border)' }} data-testid="fleet-manager-access">
       <p className="font-condensed font-bold text-white text-lg tracking-wide mb-1">FLEET MANAGER ACCESS</p>
       <p className="text-xs leading-relaxed mb-3" style={{ color: 'var(--hd-text-faint)' }}>
-        Their own login to this fleet&apos;s units, PM due, repair history, PM and DOT sheets, and the invoices you sent them, as printed. Your parts cost, markup and internal notes are never shown.
+        Their own login to this fleet&apos;s units, repair history, PM and DOT sheets, and the invoices you sent them, as printed. Your parts cost, markup and internal notes are never shown.
       </p>
       <form onSubmit={invite} className="flex flex-col sm:flex-row gap-2">
         <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="manager@fleet.com"

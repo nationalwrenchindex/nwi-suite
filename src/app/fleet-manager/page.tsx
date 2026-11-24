@@ -1,5 +1,9 @@
-// /fleet-manager - the fleet's units: number, make, model, serial, year, the latest
-// hours or miles, and what PM is due. Units needing a PM come first.
+// /fleet-manager - the fleet's units, one folder each: number, make, model, serial,
+// year and the latest hours or miles. In unit-number order.
+//
+// NO PM due, PM alerts or anything predictive (Brock, Nov 24): those are Fleet Pro,
+// which the fleet pays for. lib/hd/pm-due stays - the Intel Hub uses it - but nothing
+// in the fleet view calls it.
 
 import Link from 'next/link'
 import { redirect } from 'next/navigation'
@@ -7,14 +11,12 @@ import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import { resolveFleetManager } from '@/lib/fleet-view/access'
 import { listFleetUnits, type SafeUnit } from '@/lib/fleet-view/unit-history'
-import { Card, Header, PmBadge, fmtHours, fmtMiles, pmDetail, MUTED, INK } from '@/components/fleet-manager/ui'
+import { Card, Header, fmtHours, fmtMiles, MUTED, INK } from '@/components/fleet-manager/ui'
 import SignOut from '@/components/fleet-manager/SignOut'
 
 export const dynamic = 'force-dynamic'
 
-const RANK: Record<string, number> = { overdue: 0, due_soon: 1 }
-const byPm = (a: SafeUnit, b: SafeUnit) =>
-  (RANK[a.pm_due.status ?? ''] ?? 2) - (RANK[b.pm_due.status ?? ''] ?? 2) ||
+const byNumber = (a: SafeUnit, b: SafeUnit) =>
   String(a.unit_number ?? '').localeCompare(String(b.unit_number ?? ''), 'en-US', { numeric: true })
 
 export default async function FleetManagerHome() {
@@ -24,14 +26,13 @@ export default async function FleetManagerHome() {
   const access = await resolveFleetManager(user)
   if (!access) redirect('/fleet-manager/no-access')
 
-  const units = (await listFleetUnits(createServiceClient(), access)).sort(byPm)
-  const due = units.filter(u => u.pm_due.status).length
+  const units = (await listFleetUnits(createServiceClient(), access)).sort(byNumber)
 
   return (
     <main>
       <div className="flex items-start justify-between gap-3">
         <Header title={access.fleetName || 'Your fleet'}
-          sub={`${units.length} unit${units.length === 1 ? '' : 's'}${due ? ` - ${due} need${due === 1 ? 's' : ''} a PM` : ''}`} />
+          sub={`${units.length} unit${units.length === 1 ? '' : 's'}`} />
         <SignOut />
       </div>
       {units.length === 0 ? (
@@ -40,25 +41,18 @@ export default async function FleetManagerHome() {
         <ul className="space-y-3" data-testid="fm-unit-list">
           {units.map(u => {
             const reading = [fmtHours(u.latest_hours), fmtMiles(u.latest_miles)].filter(Boolean).join(' / ')
-            const detail = pmDetail(u.pm_due)
             return (
               <li key={u.id}>
                 <Link href={`/fleet-manager/units/${u.id}`} className="block" data-testid="fm-unit-row" data-unit-id={u.id}>
                   <Card>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
+                    <div className="min-w-0">
                         <p className="text-lg font-bold leading-tight" style={{ color: INK }}>{u.unit_number ?? 'No unit number'}</p>
                         <p className="text-sm" style={{ color: MUTED }}>
                           {[u.year, u.manufacturer, u.model].filter(Boolean).join(' ') || 'Make and model not recorded'}
                         </p>
                         {u.serial_number && <p className="text-xs mt-0.5 break-all" style={{ color: MUTED }}>Serial {u.serial_number}</p>}
-                      </div>
-                      <PmBadge due={u.pm_due} />
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm" style={{ color: INK }}>
-                      <span data-testid="fm-unit-reading">{reading || 'No reading recorded'}</span>
-                      {detail && <span style={{ color: MUTED }}>{detail}</span>}
-                    </div>
+                    <p className="mt-2 text-sm" data-testid="fm-unit-reading" style={{ color: INK }}>{reading || 'No reading recorded'}</p>
                   </Card>
                 </Link>
               </li>
